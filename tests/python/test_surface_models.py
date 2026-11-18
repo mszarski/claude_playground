@@ -244,3 +244,52 @@ def test_scenario_item_cap_and_warning():
     from gpusonar import acoustics
     drop = np.minimum(surface.bubble_saturation_db(g, fc) - acoustics.chapman_harris_db(g, wind, fc), 0.0)
     assert 10 ** (drop.min() / 10) <= capped / plain <= 10 ** (drop.max() / 10) and capped < plain
+
+
+# --- The rock type law against the Lambert energy bound, and the measured value by name (D-88) -----
+
+def test_searay_rock_exceeds_the_lambert_bound_warns_once_and_is_unchanged():
+    import warnings
+    from gpusonar.sim import bottom
+    g = np.radians(20.0)
+    bound = bottom.lambert_backscatter_db(g, bottom.LAMBERT_MAX_MU_DB)                    # -14.3 dB: all power, diffusely
+    assert float(surface.searay_bottom_db(g, 100e3, "rock")) == pytest.approx(-7.2, abs=0.05) and bound == pytest.approx(-14.3, abs=0.05)
+    for f in (6e3, 100e3, 300e3):                                                         # the rock law has no frequency dependence
+        excess, angle = surface.searay_excess_over_lambert_bound_db(f, "rock")
+        assert excess == pytest.approx(7.5, abs=0.1) and np.degrees(angle) == pytest.approx(25.0)
+        assert all(surface.searay_excess_over_lambert_bound_db(f, bt)[0] < 0.0 for bt in ("mud", "sand", "gravel"))
+    surface._warned_above_lambert_bound.clear()
+    with pytest.warns(UserWarning, match="sediment: rock") as caught:
+        fn = surface.searay_bottom_strength(100e3, "rock")
+    assert "7.5 dB above the largest Lambert" in str(caught[0].message)
+    assert fn(g, g) == pytest.approx(10 ** (surface.searay_bottom_db(g, 100e3, "rock") / 10), rel=1e-12)   # the law itself is as printed
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        surface.searay_bottom_strength(100e3, "rock")                                     # once
+        surface.searay_bottom_strength(100e3, "sand")                                     # below the bound: silent
+
+
+def test_reverberation_item_with_a_named_rock_is_lamberts_law_at_the_tabulated_value():
+    """{boundary_z, sediment: rock}: mu = -16 dB from configs/sediments.yaml (measured range -23 to -10)."""
+    from test_reverberation import HEIGHT, empty_baseband_ping
+    from gpusonar.sim import Scene, bottom, make_pose, simulate_ping
+    sonar, _ = empty_baseband_ping()
+
+    def ping(item):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            reverberation=[dict(item, boundary_z=0.0)], rng=np.random.default_rng(2))
+        return rec.samples.array.copy()
+    law = bottom.empirical_backscatter("rock")
+    assert law["mu_db"] == -16.0 and law["mu_db_range"] == [-23.0, -10.0] and law["mu_db"] < bottom.LAMBERT_MAX_MU_DB
+    assert bottom.named_lambert_mu_db("rock") == -16.0
+    named = ping({"sediment": "rock"})
+    assert np.array_equal(named, ping({"mu_db": -16.0})) and np.array_equal(named, ping({"model": "lambert", "sediment": "rock"}))
+    assert np.array_equal(ping({"sediment": "rock", "mu_db": -13.0}), ping({"mu_db": -13.0}))          # the item's own value wins
+    # Against the type law at the angles of this record: 10 to 18 dB lower.
+    surface._warned_above_lambert_bound.add("rock")
+    ratio = (np.abs(named) ** 2).mean() / (np.abs(ping({"model": "searay_bottom", "bottom_type": "rock"})) ** 2).mean()
+    g = np.radians(np.linspace(3.0, 60.0, 200))
+    change = bottom.lambert_backscatter_db(g, -16.0) - surface.searay_bottom_db(g, sonar.center_frequency, "rock")
+    assert 10 ** (change.min() / 10) <= ratio <= 10 ** (change.max() / 10) and change.max() < -10.0
+    with pytest.raises(ValueError, match="fluid sediment and has no Lambert parameter"):
+        ping({"sediment": "medium_sand"})

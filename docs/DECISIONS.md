@@ -1209,3 +1209,22 @@ maximum (the term itself peaks 3.7 dB above it at an optical depth of 0.6 along 
 e.g. -25.4 dB against -29.1 dB at 27.5 kHz, 10 m/s, 10 degrees), and it says nothing about
 facets near normal incidence. Above 70 kHz nothing that could be opened validates any of
 the three models; the warning says so.
+
+### D-88 Rock: the measured Lambert value by name; the type law warns
+
+The type law `searay_bottom` with `bottom_type: rock` gives -16.9 / -7.2 / -3.2 dB at
+10 / 20 / 45 degrees at every frequency. The brightest Lambert surface energy conservation
+allows (mu = 1 / pi, -4.97 dB) gives -20.2 / -14.3 / -8.0 dB, so the law is above the bound
+by up to 7.5 dB between 10 and 45 degrees (the literature pass found the same of the
+handbook's own rock curve, arXiv:1601.06078, introduction). Measured rock is described by
+Lambert fits of mu = -23 to -10 dB (`configs/sediments.yaml`, `rock`: -16 dB, our choice of
+the middle of the published range). The owner was shown the recommendation to move
+scenarios that use the type law for rock to that value and answered "Take your
+recommendations". Done: the reverberation item `{boundary_z, sediment: rock}` (Lambert's
+law with the table's value; `pebbles` likewise, flagged unconfirmed), and
+`searay_bottom: rock` warns once that it exceeds the bound and names the alternative; the
+law itself is unchanged for whoever names it. Scenarios changed: none. No shipped scenario
+uses `searay_bottom` at all (the scene items of type `rocks` are objects with their own
+`mu_db`, not this law). For anyone who moves, the level falls by 14.3 / 18.1 / 15.8 dB at
+10 / 20 / 45 degrees. Limits: literature only; -16 dB is a representative value inside a
+13 dB range of site fits, and smooth abraded rock is lower and not Lambertian.

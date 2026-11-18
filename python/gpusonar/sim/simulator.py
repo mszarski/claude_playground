@@ -201,6 +201,11 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             item = dict(item, boundary_z=0.5 * (top + bottom))
         elif item.get("model", "lambert") != "lambert":
             raise ValueError(f"unknown reverberation model {item['model']!r}")
+        elif "sediment" in item and "mu_db" not in item:
+            # {boundary_z, sediment: rock | pebbles}: Lambert's law with the measured parameter
+            # of a table entry that is not a fluid sediment (configs/sediments.yaml, D-88).
+            from . import bottom as bottom_model
+            item = dict(item, mu_db=bottom_model.named_lambert_mu_db(item["sediment"], item.get("sediment_file")))
         # `offset_db` moves the boundary's strength up or down whatever its model: what
         # calibration against a real log adjusts (gpusonar/simcal.py).
         offset = float(item.get("offset_db", 0.0))

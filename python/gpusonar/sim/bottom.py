@@ -688,6 +688,17 @@ def empirical_backscatter(name: str, path=None) -> dict:
     return law
 
 
+def named_lambert_mu_db(name: str, path=None) -> float:
+    """The Lambert parameter, dB, of a table entry that carries an empirical Lambert law (rock,
+    pebbles): what the reverberation item `{boundary_z, sediment: <name>}` uses. A fluid sediment
+    has no such number (its strength is not Lambert's law): the error names the model to use."""
+    entry = _entry(name, path)
+    if "empirical_backscatter" not in entry:
+        raise ValueError(f"sediment {name!r} is a fluid sediment and has no Lambert parameter: use "
+                         f"{{model: fluid_sediment, sediment: {name}}} or give mu_db")
+    return float(empirical_backscatter(name, path)["mu_db"])
+
+
 def named_backscattering_strength_db(name: str, grazing, frequency: float, sound_speed: float = 1500.0, path=None,
                                      **model):
     """Backscattering strength in dB of a named table entry: the fluid-sediment model for a

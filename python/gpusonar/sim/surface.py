@@ -343,7 +343,40 @@ def searay_bottom_db(grazing, frequency: float, bottom_type):
     return 10.0 * np.log10(3.03 * b * f ** (3.2 - 0.8 * bt) * 10.0 ** (2.8 * bt - 12.0) + 10.0**-4.42)
 
 
+LAMBERT_BOUND_ANGLES = np.radians(np.arange(10.0, 45.5, 5.0))
+"""Grazing angles at which a diffuse bottom law is compared with the Lambert energy bound
+(below the specular lobe the type law has near normal incidence)."""
+_warned_above_lambert_bound: set = set()
+
+
+def searay_excess_over_lambert_bound_db(frequency: float, bottom_type) -> tuple[float, float]:
+    """(largest excess in dB, the grazing angle in radians where it occurs) of the type law over
+    the backscattering strength of the brightest Lambert surface energy conservation allows,
+    10 log10(sin^2(t) / pi) (mu = 1 / pi, -4.97 dB: `bottom.LAMBERT_MAX_MU_DB`), over 10 to 45
+    degrees of grazing. Positive: more than all the incident power scattered diffusely."""
+    t = LAMBERT_BOUND_ANGLES
+    excess = searay_bottom_db(t, frequency, bottom_type) - 10.0 * np.log10(np.sin(t) ** 2 / np.pi)
+    k = int(np.argmax(excess))
+    return float(excess[k]), float(t[k])
+
+
 def searay_bottom_strength(frequency: float, bottom_type):
+    """`searay_bottom_db` as the function of (grazing in, grazing out) the reverberation code
+    takes. The law is unchanged; where it lies above the Lambert energy bound between 10 and 45
+    degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
+    a warning says so, once per bottom type (D-88). For rock the measured Lambert value is in
+    `configs/sediments.yaml` (`rock`: mu = -16 dB, range -23 to -10): the reverberation item
+    `{boundary_z, sediment: rock}`."""
+    excess, angle = searay_excess_over_lambert_bound_db(frequency, bottom_type)
+    if excess > 0.0 and str(bottom_type) not in _warned_above_lambert_bound:
+        _warned_above_lambert_bound.add(str(bottom_type))
+        rock = str(bottom_type) in ("rock", "4", "4.0")
+        warnings.warn(
+            f"searay_bottom type {bottom_type!r} at {float(frequency) / 1e3:g} kHz is {excess:.1f} dB above the largest Lambert "
+            f"law energy conservation allows (mu = 1/pi, -5 dB) at {np.degrees(angle):.0f} degrees of grazing"
+            + ("; measured rock is mu = -23 to -10 dB: use the reverberation item {boundary_z, sediment: rock} "
+               "(mu = -16 dB from configs/sediments.yaml) or give mu_db" if rock else "; give mu_db or a sediment for the site")
+            + ". The law is used as printed; this warning is given once per bottom type.", stacklevel=2)
     return lambda g_in, g_out: 10.0 ** (searay_bottom_db(0.5 * (g_in + g_out), frequency, bottom_type) / 10.0)
 
 
