@@ -26,7 +26,8 @@
 // than half the beam's half-power width (touching cells always do), so a target's highlights, the
 // arrivals of one multipath group and the two halves of a weak echo's beam are ONE detection, and
 // two targets further apart than that in either are two. It reports its strongest sample over the
-// background (`snr_db`), its energy-weighted position and its extent in range.
+// background (`snr_db`), its energy-weighted range, its bearing (the bearings of the group weighted
+// by their energy above half the strongest one's) and its extent in range.
 //
 // The background at the ends of the map. Near either end the training window has cells on one side
 // only, and reverberation falls with range: the mean of cells that all lie beyond the cell under test

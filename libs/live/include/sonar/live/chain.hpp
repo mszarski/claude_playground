@@ -71,10 +71,11 @@ struct ChainOptions {
   /// of them; the background is then the mean of such maxima, about the k-th harmonic number above the
   /// mean noise power. docs/DEPLOYMENT.md, "What snr_db is".
   bool cell_peak = false;
-  /// "multiscale" (detector.hpp): each cell is tested on its strongest sample, on its mean and on the mean of several
-  /// cells, each against the threshold of its own statistic at `detector.false_alarms_per_ping`; `cfar_pfa` and
-  /// `cell_peak` are then not used. false with cell_peak false: "mean", the detector as it was.
-  bool cell_multiscale = false;
+  /// "multiscale", the default (detector.hpp): each cell is tested on its strongest sample and on its mean (and on
+  /// the means of several cells when asked), each against the threshold of its own statistic at
+  /// `detector.false_alarms_per_ping`; `cfar_pfa` is then not used. false with cell_peak false: "mean", the detector
+  /// until then, line for line. cell_peak with this set is refused.
+  bool cell_multiscale = true;
   DetectorOptions detector;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.

@@ -54,7 +54,7 @@ DEFAULTS = {
              "false_alarms_per_ping": 1e-3, "integrate_cells": None, "sidelobe_margin_db": 10.0, "sidelobe_floor_db": -40.0,
              "search_factor": 2.5, "merge_m": None},
     "min_snr_db": 9.0,
-    "cell_statistic": "mean",                  # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
+    "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
                                                # against the threshold of its own statistic; "mean": its mean power against the
                                                # one-sample threshold (the detector until now); "peak": its strongest sample likewise

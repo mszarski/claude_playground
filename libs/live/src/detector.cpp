@@ -278,6 +278,11 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
   std::vector<double> sin_b(bearings.size());
   for (std::size_t b = 0; b < bearings.size(); ++b) sin_b[b] = std::sin(bearings[b]);
   const auto n_env = static_cast<std::int64_t>(plan.bearing_envelope.size());
+  // A cell inside the core of a stronger source (its half-power beam, the next range cell) is that source's own: it is
+  // not dropped by another source's sidelobe rule. Without this every strong cell of one echo ate into the others'
+  // side of the beam and the group, and its bearing, came out lopsided. It is still a source itself: a second arrival a
+  // cell behind the first has sidelobes of its own.
+  std::vector<unsigned char> owned(n, 0);
   for (std::int64_t src : sources) {
     if (!flag[static_cast<std::size_t>(src)]) continue;
     const std::int64_t b0 = src / n_cells, j0 = src % n_cells;
@@ -290,11 +295,14 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
       const double du = std::abs(sin_b[static_cast<std::size_t>(b)] - sin_b[static_cast<std::size_t>(b0)]);
       const double e_b = plan.bearing_envelope[static_cast<std::size_t>(std::min<std::int64_t>(std::llround(du / plan.u_step), n_env - 1))];
       // Off the source's bearing its energy is spread in range by the array's own length: that many cells are let off.
-      const std::int64_t smear = static_cast<std::int64_t>(std::ceil(0.25 * plan.aperture_m * du / plan.cell_m - 1e-9));
+      const std::int64_t smear = static_cast<std::int64_t>(std::floor(0.25 * plan.aperture_m * du / plan.cell_m + 0.5));   // whole cells, to the nearest
       const std::int64_t dc = std::max<std::int64_t>(std::abs(j - j0) - smear, 0);
       const double e_r = plan.range_envelope[static_cast<std::size_t>(std::min<std::int64_t>(dc, n_cells))];
-      if (e_r >= 1.0 && e_b >= 1.0) continue;                        // inside the mainlobe: part of the detection
-      if (pq <= plan.margin * e_r * e_b * p0) flag[static_cast<std::size_t>(i)] = 0;
+      if (e_r >= 1.0 && e_b >= 1.0) {                                // inside the core: part of this detection
+        owned[static_cast<std::size_t>(i)] = 1;
+        continue;
+      }
+      if (!owned[static_cast<std::size_t>(i)] && pq <= plan.margin * e_r * e_b * p0) flag[static_cast<std::size_t>(i)] = 0;
     }
   }
 
@@ -309,12 +317,15 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
     b_hi[static_cast<std::size_t>(b)] = hi;
   }
   const std::int64_t reach = plan.merge_cells + 1;
+  std::vector<double> row_energy(static_cast<std::size_t>(n_b), 0.0);
+  std::vector<std::int64_t> rows_touched;
   std::vector<Detection> out;
   std::vector<unsigned char> seen(n, 0);
   std::vector<std::int64_t> stack;
   for (std::int64_t start : flagged) {
     if (!flag[static_cast<std::size_t>(start)] || seen[static_cast<std::size_t>(start)]) continue;
-    double w_sum = 0.0, r_sum = 0.0, b_sum = 0.0, best = 0.0, nearest = 1e300, farthest = -1e300;
+    double w_sum = 0.0, r_sum = 0.0, best = 0.0, nearest = 1e300, farthest = -1e300;
+    rows_touched.clear();
     std::int64_t cells = 0;
     stack.assign(1, start);
     seen[static_cast<std::size_t>(start)] = 1;
@@ -323,11 +334,12 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
       stack.pop_back();
       const std::int64_t row = i / n_cells, col = i % n_cells;
       const float* fine_row = fine + row * fine_stride + fine_offset + col * k;
+      if (row_energy[static_cast<std::size_t>(row)] == 0.0) rows_touched.push_back(row);
       for (std::int64_t s = 0; s < k; ++s) {
         const auto w = static_cast<double>(fine_row[s]);
         w_sum += w;
         r_sum += w * fine_ranges[static_cast<std::size_t>(fine_offset + col * k + s)];
-        b_sum += w * bearings[static_cast<std::size_t>(row)];
+        row_energy[static_cast<std::size_t>(row)] += w;
       }
       nearest = std::min(nearest, cell_ranges[static_cast<std::size_t>(col)]);
       farthest = std::max(farthest, cell_ranges[static_cast<std::size_t>(col)]);
@@ -344,7 +356,28 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
         }
       }
     }
-    Detection d{r_sum / w_sum, b_sum / w_sum, 10.0 * std::log10(best), cells};
+    // Range: the energy-weighted mean of the group's samples. Bearing: the mean over its bearings weighted by what each
+    // holds, over all its range cells, above half the strongest one's energy. The group ends at the beam's half-power
+    // points on the bearing grid, and a plain energy-weighted mean over a beam cut there is pulled towards the grid;
+    // weights that fall to nothing at the cut are not. (The energy, not the strongest sample: that scallops by a
+    // decibel from beam to beam with where the echo falls between samples, which was 0.3 degrees of bearing.)
+    // The level is half the strongest bearing's energy, or what the group's outermost bearings hold when that is more
+    // (a beam wider than the modelled one is cut above its half-power points): the weights are zero at both ends.
+    std::sort(rows_touched.begin(), rows_touched.end());
+    double top = 0.0, bw_sum = 0.0, b_sum = 0.0, plain_sum = 0.0, plain_b = 0.0;
+    for (std::int64_t r : rows_touched) top = std::max(top, row_energy[static_cast<std::size_t>(r)]);
+    const double level = std::max({0.5 * top, row_energy[static_cast<std::size_t>(rows_touched.front())],
+                                   row_energy[static_cast<std::size_t>(rows_touched.back())]});
+    for (std::int64_t r : rows_touched) {
+      const double e = row_energy[static_cast<std::size_t>(r)], w = std::max(e - level, 0.0);
+      bw_sum += w;
+      b_sum += w * bearings[static_cast<std::size_t>(r)];
+      plain_sum += e;
+      plain_b += e * bearings[static_cast<std::size_t>(r)];
+      row_energy[static_cast<std::size_t>(r)] = 0.0;
+    }
+    // One or two bearings, or the strongest at an end: nothing stands above the level, the plain mean is all there is.
+    Detection d{r_sum / w_sum, bw_sum > 0.0 ? b_sum / bw_sum : plain_b / plain_sum, 10.0 * std::log10(best), cells};
     d.first_range = nearest;
     d.extent = farthest - nearest + plan.cell_m;
     out.push_back(d);

@@ -166,6 +166,9 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
     if len(fb):
         fp = peak[fb, fj]
         alive = np.ones(len(fb), dtype=bool)
+        # A cell inside the core of a stronger source (its half-power beam, the next range cell) is that source's own:
+        # not dropped by another source's sidelobe rule (it is still a source itself: a second arrival has its own sidelobes).
+        owned = np.zeros(len(fb), dtype=bool)
         sin_b = np.sin(bearings)
         env_b, env_r = np.asarray(plan["bearing_envelope"]), np.asarray(plan["range_envelope"])
         is_source = np.flatnonzero(fp >= plan["source_ratio"] * background_map[fb, fj].astype(float))
@@ -175,9 +178,12 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             du = np.abs(sin_b[fb] - sin_b[fb[q]])
             e_b = env_b[np.minimum(np.floor(du / plan["u_step"] + 0.5).astype(int), len(env_b) - 1)]
             # Off the source's bearing its energy is spread in range by the array's own length: that many cells are let off.
-            smear = np.ceil(0.25 * plan["aperture_m"] * du / plan["cell_m"] - 1e-9).astype(int)
+            smear = np.floor(0.25 * plan["aperture_m"] * du / plan["cell_m"] + 0.5).astype(int)      # whole cells, to the nearest
             e_r = env_r[np.minimum(np.maximum(np.abs(fj - fj[q]) - smear, 0), n_c)]
-            alive &= ~((fp < fp[q]) & ~((e_r >= 1.0) & (e_b >= 1.0)) & (fp <= plan["margin"] * e_r * e_b * fp[q]))
+            weaker = alive & (fp < fp[q])
+            core = (e_r >= 1.0) & (e_b >= 1.0)
+            owned |= weaker & core
+            alive &= ~(weaker & ~core & ~owned & (fp <= plan["margin"] * e_r * e_b * fp[q]))
         flag = np.zeros_like(flag)
         flag[fb[alive], fj[alive]] = True
         fb, fj = fb[alive], fj[alive]
@@ -205,7 +211,18 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             w = cells[ib, ir, :].astype(float)                                   # [cell, sample]
             r = fine_ranges[(ir[:, None] * k + np.arange(k)[None, :])]
             near, far = float(cell_ranges[ir].min()), float(cell_ranges[ir].max())
-            out.append(Detection(float((w * r).sum() / w.sum()), float((w.sum(axis=1) * bearings[ib]).sum() / w.sum()),
+            # Range: the energy-weighted mean of the group's samples. Bearing: the mean over its bearings weighted by what
+            # each holds, over all its range cells, above half the strongest one's energy (the group ends at the beam's
+            # half-power points on the bearing grid; a plain energy-weighted mean over a beam cut there is pulled towards
+            # the grid, and weights that fall to nothing at the cut are not).
+            rows_ = np.unique(ib)
+            energy = np.array([w[ib == b_].sum() for b_ in rows_])
+            # The level: half the strongest, or what the outermost bearings hold when that is more (a beam wider than the
+            # modelled one is cut above its half-power points). Nothing above it (one or two bearings): the plain mean.
+            soft = np.maximum(energy - max(0.5 * energy.max(), energy[0], energy[-1]), 0.0)
+            if soft.sum() <= 0.0:
+                soft = energy
+            out.append(Detection(float((w * r).sum() / w.sum()), float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
                                  extent=far - near + float(plan["cell_m"])))
     return out, background_map

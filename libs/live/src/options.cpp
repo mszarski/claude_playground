@@ -30,15 +30,28 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_sidelobe_floor_db") c.detector.sidelobe_floor_db = v;
   else if (key == "cfar_search_factor") c.detector.search_factor = v;
   else if (key == "cfar_merge_m") c.detector.merge_m = v;
+  // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
+  else if (key == "cell_multiscale") {
+    c.cell_multiscale = value == "1" || value == "true" || value == "True";
+    if (c.cell_multiscale) c.cell_peak = false;
+  }
+  else if (key == "cell_peak") {
+    c.cell_peak = value == "1" || value == "true" || value == "True";
+    if (c.cell_peak) c.cell_multiscale = false;
+  }
   else if (key == "cfar_integrate_cells") {
-    // Lengths in range cells, separated by commas or colons: 1,4,16
+    // Lengths in range cells: every whole number in the value (1,4,16 or [1, 4, 16]).
     c.detector.integrate_cells.clear();
     std::size_t at = 0;
     while (at < value.size()) {
-      const std::size_t end = value.find_first_of(",:", at);
+      if (value[at] < '0' || value[at] > '9') {
+        ++at;
+        continue;
+      }
+      std::size_t end = at;
+      while (end < value.size() && value[end] >= '0' && value[end] <= '9') ++end;
       c.detector.integrate_cells.push_back(std::atoll(value.substr(at, end - at).c_str()));
-      if (end == std::string::npos) break;
-      at = end + 1;
+      at = end;
     }
   }
   else if (key == "beamformer") c.beamformer = value;
