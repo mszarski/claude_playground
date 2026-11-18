@@ -1,0 +1,38 @@
+# Target classes the long-range array's builds are planned against (a build spec says `targets: reference_classes`).
+# Fields: docs/REFERENCE_DESIGN.md, "Target classes" (gpusonar.target_classes.FIELDS).
+#
+# EVERY TARGET STRENGTH, DEPTH AND SPEED HERE IS AN ASSUMED PLACEHOLDER FOR THE OWNER TO REPLACE. No measured target
+# strength of a ship, an unmanned underwater vehicle or a submarine is cited anywhere in this repository. The owner:
+# "in general I want to detect large subsurface movers as well like other xl auvs and larger". Sizes below are
+# illustrative, not anybody's vehicle.
+#
+# `cylinder` gives the geometric-acoustics figure of a bare, rigid, smooth cylinder of that size
+# (gpusonar.target_classes.cylinder_ts_db, the simulator's own glint shapes): strong in a lobe a fraction of a degree
+# wide at broadside and at the flat ends, tens of decibels lower in between. A real hull has a sail, fins, a tapered
+# stern and possibly a coating: it is higher than the cylinder off broadside and can be far lower at broadside.
+# Where a class states `target_strength_db` as well, the planner uses the stated range (low end by default) and the
+# cylinder's table is printed beside it for scale.
+targets:
+  - name: ship
+    title: "Near-surface ship (the 12 km design's ship-sized reference)"
+    target_strength_db: 25.0         # ASSUMED: the +25 dB "ship-sized target" the 12 km link budget has used from the start (docs/DESIGN.md Sec. 5)
+    depth_m: [2.0, 6.0]              # ASSUMED: around the 4 m of the popoto_12km scenario's ship; the echo may come from anywhere on the wetted hull
+    speed_m_s: [0.0, 6.0]            # the scenario's ship crosses at 6 m/s
+    status: assumed
+    note: "the budget's reference figure, not a measurement of any ship"
+  - name: xl_auv
+    title: "Extra-large unmanned underwater vehicle (illustrative: a 2 m x 10 m hull)"
+    cylinder: {length_m: 10.0, diameter_m: 2.0}       # ILLUSTRATIVE size
+    target_strength_db: [5.0, 22.0]  # ASSUMED: low = the study's small reference target (+5 dB), standing in for every aspect but broadside; high = the cylinder's broadside figure
+    depth_m: [20.0, 200.0]           # ASSUMED
+    speed_m_s: [1.0, 4.0]            # ASSUMED
+    status: assumed
+    note: "placeholder range; the bare cylinder itself is -20 to -6 dB between 15 and 75 degrees off broadside"
+  - name: large_submerged
+    title: "Larger submerged mover (illustrative: a 10 m x 100 m hull)"
+    cylinder: {length_m: 100.0, diameter_m: 10.0}     # ILLUSTRATIVE size
+    target_strength_db: [25.0, 41.5] # ASSUMED: low = the ship-sized reference figure, standing in for off-broadside aspects; high = the cylinder's broadside figure at 12 km (inside its far field)
+    depth_m: [30.0, 300.0]           # ASSUMED
+    speed_m_s: [2.0, 8.0]            # ASSUMED
+    status: assumed
+    note: "placeholder range; a coated hull can be far below either end"

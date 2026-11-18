@@ -168,7 +168,11 @@ SCHEMA = {
 }
 TOP = {"build": "name of the build: file names follow it", "title": "one line for headings", "stage": "label of the stage of a staged plan",
        "base_sonar": "a shipped sonar file the generated one extends (only what differs is written)",
-       "names": "{sonar, deploy}: file names when they must differ from the build's name"}
+       "names": "{sonar, deploy}: file names when they must differ from the build's name",
+       "targets": "target classes the build is planned against: a list ({name, target_strength_db or cylinder, depth_m, speed_m_s, status, note}) or the name of a file under configs/builds/targets/ "
+                  "(gpusonar.target_classes.FIELDS)",
+       "environments": "waters the build is planned in: a list ({name, water_depth_m, bottom, wind_speed_m_s or sea_state, rms_wave_height_m, bubble_model, profile, own_depth_limits_m, ...}) or the name of a file "
+                       "under configs/builds/environments/ (gpusonar.depthplan.ENVIRONMENT_FIELDS)"}
 ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
 DEFAULT_CHAIN = {
     "bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard", "range_cell_m": 2.0,
@@ -305,6 +309,18 @@ def validate(spec: dict) -> list[Issue]:
         for key, f in fields.items():
             if f[2] and sec.get(key) is None:
                 err(f"{section}.{key}", f"missing: {f[3]}" + (f" ({f[1]})" if f[1] else "") + f". If unknown: {f[5]}")
+    # target classes and environments (planning inputs: they change no generated sonar or deployment file)
+    from . import depthplan, target_classes
+    for key, load_items, find_problems in (("targets", target_classes.load, target_classes.problems), ("environments", depthplan.load_environments, depthplan.environment_problems)):
+        if spec.get(key) is None:
+            continue
+        try:
+            items = load_items(spec[key]) if isinstance(spec[key], (str, list)) else spec[key]
+        except FileNotFoundError as exc:
+            err(key, str(exc))
+            continue
+        for where, msg in find_problems(items):
+            err(where, msg)
     if any(i.level == "error" for i in out):
         return out
 
@@ -498,6 +514,17 @@ def validate(spec: dict) -> list[Issue]:
     if count > 64:
         warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver of the active chain (doa: sbl) takes at most 64 channels in a row and raises an error for more, on the CPU too; "
                             "bearings from the map (doa: map, the default) are unaffected")
+    for cls in target_classes_of(spec, resolve=False):
+        if cls.get("status", "assumed" if cls.get("target_strength_db") is not None else "model") != "confirmed":
+            warn(f"targets.{cls['name']}", "its target strength is " + ("a placeholder nobody vouches for (status: assumed)" if cls.get("target_strength_db") is not None else
+                                                                        "the model figure of a bare rigid cylinder (status: model)") + ": every reach and depth planned against it is conditional on it")
+    for env in environments_of(spec):
+        if env.get("illustrative", True):
+            warn(f"environments.{env['name']}", "an illustrative environment, not a measured one: the planned depths hold for it only")
+        if env.get("own_depth_limits_m") is None:
+            warn(f"environments.{env['name']}.own_depth_limits_m", "no operating depth limits given: the planner uses 5 to 300 m, a placeholder")
+        if p["kind"] == "static" and p.get("depth_m") is not None and env.get("water_depth_m") is not None and float(p["depth_m"]) >= float(env["water_depth_m"]):
+            warn(f"environments.{env['name']}.water_depth_m", f"the frame hangs at {p['depth_m']:g} m, below this environment's bottom ({env['water_depth_m']:g} m)")
     if rows * count > 64:
         warn("array.rows", f"{rows * count} channels in {rows} rows: passive listening must run with the elevation option (elevation=1, as the generated listen.options has it), which solves on rows. "
                            "Without it every channel is taken as one line: the bearings are wrong for stacked rows and the sparse Bayesian kernels (a GPU backend, or kernels=True) raise an error above 64 channels")
@@ -510,6 +537,23 @@ def check(spec: dict) -> list[Issue]:
     if any(i.level == "error" for i in issues):
         raise SpecError(issues)
     return issues
+
+
+# --- planning inputs: target classes and environments ---------------------------------------------------
+
+def target_classes_of(spec: dict, resolve: bool = True, range_m: float = 12000.0) -> list:
+    """The spec's target classes (`targets:`), resolved (target strength range, the cylinder's figures) unless told not to."""
+    from . import target_classes
+    classes = target_classes.load(spec.get("targets"))
+    if not resolve or not classes:
+        return classes
+    f_lo, f_hi = (float(x) for x in spec["projector"]["band_hz"])
+    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", 1500.0)))
+
+
+def environments_of(spec: dict) -> list:
+    from . import depthplan
+    return depthplan.load_environments(spec.get("environments"))
 
 
 # --- geometry and wiring ------------------------------------------------------------------------------
@@ -1145,20 +1189,32 @@ def rows_detection_gain_db(rows: int, pfa: float = 1e-5, pd: float = 0.5) -> flo
     return float(needed(1) - needed(rows))
 
 
-def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
-                gradient_sigma: float | None = None) -> dict:
-    """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
-    docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
-    `wind` m/s) with the row's gain against isotropic noise, and the elevation bounds of the stacked rows.
-    The same arithmetic as tools/popoto_elevation_study.py, for any geometry and band
-    (tests/python/test_buildspec.py holds the two together on the shipped stages)."""
+def budget(d: dict, wind: float = 5.0, target_strength_db: float = 0.0):
+    """(SonarEquation, gains) of a build: the link budget of docs/DESIGN.md Sec. 5 for the summed map of its rows
+    (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at `wind` m/s, the row's gain
+    against isotropic noise plus the rows' detection gain). `eq.snr(r)` is the free-field SNR at the map."""
     from .sim.noise import wenz_spectrum_db
     from .sonar_equation import SonarEquation
     c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
     n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
     noise = float(wenz_spectrum_db(np.array([fc]), wind, 0.5)[0])
-    di = directivity_db(n, pitch, fc, c)
-    g_rows = rows_detection_gain_db(rows)
+    di, g_rows = directivity_db(n, pitch, fc, c), rows_detection_gain_db(rows)
+    eq = SonarEquation(d["source_level_db"], fc, f_hi - f_lo, d["pulse_s"], n, noise, target_strength_db=target_strength_db, temperature=12.0, depth=50.0,
+                       absorption_model="ainslie_mccolm", array_gain_db=di + g_rows)
+    return eq, {"noise_spectrum_db": noise, "gain_isotropic_noise_db": di, "rows_detection_gain_db": g_rows, "wind_speed_m_s": float(wind)}
+
+
+def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
+                gradient_sigma: float | None = None, environment: dict | None = None, own_depth_m: float | None = None, classes: list | None = None) -> dict:
+    """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
+    docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
+    `wind` m/s) with the row's gain against isotropic noise, and the elevation bounds of the stacked rows.
+    The same arithmetic as tools/popoto_elevation_study.py, for any geometry and band
+    (tests/python/test_buildspec.py holds the two together on the shipped stages)."""
+    c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
+    n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
+    _, g = budget(d, wind)
+    noise, di, g_rows = g["noise_spectrum_db"], g["gain_isotropic_noise_db"], g["rows_detection_gain_db"]
     out = {"assumptions": f"spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at {wind:g} m/s wind, 13 dB at the map for detection, "
                           "target strengths +25 dB (ship) and +5 dB (small)",
            "noise_spectrum_db": noise, "beamwidth_deg": d["beamwidth_deg"], "gain_isotropic_noise_db": di, "gain_uncorrelated_noise_db": float(10 * np.log10(n)),
@@ -1166,8 +1222,7 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
            "grating_lobe_free_steering_deg": float(np.degrees(np.arcsin(min(c / f_hi / pitch - 1.0, 1.0)))) if c / f_hi / pitch > 1.0 else 0.0}
     snr = {}
     for key, ts in (("ship", 25.0), ("small", 5.0)):
-        eq = SonarEquation(d["source_level_db"], fc, f_hi - f_lo, d["pulse_s"], n, noise, target_strength_db=ts, temperature=12.0, depth=50.0,
-                           absorption_model="ainslie_mccolm", array_gain_db=di + g_rows)
+        eq, _ = budget(d, wind, ts)
         out[f"reach_{key}_m"] = float(eq.detection_range(13.0))
         snr[key] = {str(r): float(eq.snr(r)) - g_rows for r in ranges}
     out["row_snr_db"] = snr
@@ -1192,6 +1247,42 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
         out["depth_budget_inputs"] = {"roll_sigma_deg": roll, "gradient_sigma_per_s": grad}
         out["multipath_note"] = ("not in any sigma: in a shallow channel an echo that bounced once arrives within the pulse's range sidelobes of the direct one and pulls the "
                                  "elevation by tenths of a degree (docs/DESIGN.md Sec. 3)")
+    if environment is not None:
+        out["surface"] = surface_term(d, environment, own_depth_m, classes, ranges)
+    return out
+
+
+def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, classes: list | None = None, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0),
+                 threshold_db: float = 13.0) -> dict:
+    """What the free-field figures of `performance` leave out, for one environment (depthplan.ENVIRONMENT_FIELDS) and one
+    own depth (default: the shallowest allowed): the two-way propagation factor of gpusonar.lloyd (surface image, roughness,
+    bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.
+    `classes` (resolved target classes): one entry each, worst over the class's depths, at the low end of its target
+    strength. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
+    from . import depthplan
+    own = float(depthplan.own_depth_grid(environment)[0] if own_depth_m is None else own_depth_m)
+    eq, _ = budget(d, depthplan.wind_of(environment))
+    rr = np.asarray([r for r in ranges if r > d["blind_range_m"]], dtype=float)
+    f_lo, f_hi = d["band_hz"]
+    items = [dict(c) for c in (classes or [])] or [{"name": "ship", "ts_db": [25.0, 25.0], "depth_m": [4.0, 4.0]}]
+    out = {"environment": environment.get("name"), "own_depth_m": own, "wind_speed_m_s": depthplan.wind_of(environment), "rms_wave_height_m": depthplan.surface_of(environment).height(),
+           "threshold_db": threshold_db, "ranges_m": rr.tolist(), "classes": {}}
+    for c in items:
+        lo, hi = c["depth_m"]
+        if environment.get("water_depth_m") is not None:
+            hi = min(hi, float(environment["water_depth_m"]) - 1.0)
+            if lo > hi:
+                continue
+        zt = np.unique(np.linspace(lo, hi, 9))
+        fac = depthplan.factor(environment, f_lo, f_hi, [own], zt, rr, float(d["projector_m"][2]), eq.absorption_db_per_m())
+        out["method"] = fac["method"]
+        worst = fac["peak_db"][0].min(axis=0)
+        free = np.asarray(eq.snr(rr)) + c["ts_db"][0]
+        def by_range(v):
+            return {str(float(r)): float(x) for r, x in zip(rr, v)}
+        out["classes"][c["name"]] = {"ts_db": c["ts_db"][0], "depth_m": [float(lo), float(hi)], "factor_db": by_range(worst),
+                                     "factor_narrowband_db": by_range(fac["narrowband_db"][0].min(axis=0)), "factor_energy_db": by_range(fac["energy_db"][0].min(axis=0)),
+                                     "snr_free_field_db": by_range(free), "snr_db": by_range(free + worst), "margin_db": by_range(free + worst - threshold_db)}
     return out
 
 
