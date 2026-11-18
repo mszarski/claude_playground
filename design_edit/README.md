@@ -631,6 +631,56 @@ goal metric; the rubric is a sanity check that the strict misses are acceptable 
 3. Fix or drop `spread_out`; keep the big balanced sets and CIs as the standard eval.
 4. SFT data is the bigger lever for unseen edit types than RL: the base model already does `promote_button`.
 
+## Round 7: more teacher data, RL with reference answers, best checkpoint kept
+
+Three changes that the measurement pass pointed to, tried on Gemma-4-31B.
+
+**Data mix (`design-edits-v7`).** 5,782 rows: 2,500 template rows and 3,282 teacher edits from the self-healing pipeline
+(57% teacher edits, up from 20%). The "spread out" held-out type was repaired so the edit is always visible
+(`test_novel_v2`, 1,050 rows).
+
+**Reward v2 with teacher references (`rl_v2`).** The goal reward shows the judge the change list and 2x close-ups, and
+blends in agreement with teacher reference answers (365 of 400 goal prompts have at least one). In the audit this cut
+false accepts from 56% to 15%.
+
+**Checkpoints every 50 steps**, evaluated on the held-out sets; the best one is published, not the last.
+
+Exact match, with the paired difference against the v7 SFT model where it is outside the 95% interval (`*`):
+
+| Model | seen types (500) | paraphrased (490) | goal requests (450) | unseen types v2 (1,050) |
+|---|---|---|---|---|
+| Qwen3.8-27B, untuned, no-think | | | | 0.868 |
+| Gemma SFT, old mix (v6) | 0.988 | 0.933 | 0.829 | 0.802 |
+| Gemma RL step 150, old mix | 0.978 | 0.924 | 0.900 | 0.822 |
+| Gemma SFT, new mix (v7) | 0.958 | 0.900 | 0.967 | 0.700 |
+| v7 RL step 50 | 0.958 | 0.902 | 0.964 | 0.700 |
+| v7 RL step 100 | 0.962 | 0.900 | 0.962 | 0.721 * |
+| **v7 RL step 150** | 0.956 | 0.898 | **0.969** | **0.752** * |
+| v7 RL step 200 | 0.960 | 0.900 | 0.964 | 0.734 * |
+
+What this shows:
+
+- **The new mix trades unseen edit types for goal requests.** Goal exact match rose from 0.829 to 0.967, the best of any
+  model here. Unseen types fell from 0.802 to 0.700, almost all of it `promote_button` (0.59 to 0.09): the teacher data
+  taught the model to set fill and label colour without removing the outline. Seen and paraphrased types each lost 3 points.
+- **RL with reward v2 recovers part of that and does not hurt anything else.** Step 150 lifts unseen types by 5 points
+  (`promote_button` 0.09 to 0.47) with goal, seen and paraphrased scores unchanged within noise. With the v1 reward, the
+  same step count on the old mix cost about 1 point on seen types.
+- **Step 150 is the best checkpoint again**, and step 200 is slightly worse, as in the Qwen and Gemma runs before it.
+- **No fine-tune beats untuned Qwen on unseen types** (0.868). The fine-tunes win on goal requests and on the patch format.
+
+Known scoring strictness on `test_novel_v2`, not changed: `spread_out` stays near 0.30 for every model because most write
+`justify=space-between` where the format uses `justify=between`; `duplicate_setting` fails a row when the inserted
+frame is named "Show grid" instead of "Show grid row".
+
+Published models (private): `design-edit-sft-gemma-v7`, `design-edit-grpo-gemma-v7-step150`, and the step-150 checkpoints
+of the earlier runs, `design-edit-grpo27b-step150` and `design-edit-grpo-gemma-step150`.
+
+**A publishing bug worth knowing about.** The first version of `scripts/merge_adapter.py` pushed the merged weights and
+then re-uploaded the base model's cached snapshot, which overwrote them with the base weights. It was caught because two
+"different" models gave identical outputs on all 1,050 rows. The script now copies only named processor files, checks
+that the merge changed weights, and fails if the pushed weights hash the same as the base.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
