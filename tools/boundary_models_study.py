@@ -62,7 +62,7 @@ def family_order(table) -> list:
                                         else float(table[n].get("mean_grain_size_phi", 0.0))))
 
 
-def family_table(c: float = 1500.0, model: str = "perturbation") -> None:
+def family_table(c: float = 1500.0, model: str = bottom.DEFAULT_ROUGHNESS_MODEL) -> None:
     """Every named row at three angles and three frequencies, with the type law and measurements."""
     table = bottom.sediment_table()
     g = np.radians(FAMILY_ANGLES)

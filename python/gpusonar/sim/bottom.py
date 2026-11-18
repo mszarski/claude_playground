@@ -4,12 +4,14 @@ This is the kind of bottom model SST points to (`JacksonBottom`, `APLBottom`: a 
 with a power-law roughness spectrum and volume inhomogeneities, six parameters). The APL-UW
 handbook that defines those models (TR 9407) was not available, so nothing here is copied from
 it: both terms are derived below from the wave equation, and tests check them against limits
-with known answers. The default roughness term is first-order perturbation theory: use it
-below about 60 degrees of grazing and for k x rms relief (at scales near the acoustic
-wavelength) below about one. Opt-in alternatives (`roughness_model=`, see "Other regimes"
-below) add the Kirchhoff approximation near the specular direction, the small-slope
-approximation that joins the two, and the composite-roughness (large-scale slope) average at
-small grazing angles. Named sediments are in `configs/sediments.yaml` (`sediment()` reads it):
+with known answers. The default roughness term is the lowest-order small-slope approximation
+(`roughness_model="small_slope"`, D-86): first-order perturbation theory wherever that is valid
+(below about 60 degrees of grazing and for k x rms relief, at scales near the acoustic
+wavelength, below about one) and the Kirchhoff result in the specular direction, where
+perturbation theory with a power-law spectrum diverges. The alternatives (`roughness_model=`,
+see "Other regimes" below) are first-order perturbation theory alone (`"perturbation"`, the
+default before D-86), the Kirchhoff approximation near the specular direction, and the
+composite-roughness (large-scale slope) average at small grazing angles. Named sediments are in `configs/sediments.yaml` (`sediment()` reads it):
 the handbook's sediment classes from sandy gravel to clay, every parameter read from an open
 document that attributes it to the handbook (the file's header and `provenance:` entries say
 which), and the placeholder. The scattering parameters follow the mean grain size
@@ -52,7 +54,8 @@ interface, which by reciprocity costs (1/rho^2) |T(ts)|^2 exp(-2 Im(b2s) z). Int
 
 with sigma_vol = sigma2 x attenuation in dB/m = sigma2 x (20 / ln 10) k delta / nu.
 
-Other regimes (all opt-in; `roughness_model="perturbation"` is the default and is unchanged).
+Other regimes (`roughness_model="small_slope"` is the default, `DEFAULT_ROUGHNESS_MODEL`;
+`"perturbation"`, the formulas above alone, was the default before D-86 and is unchanged).
 
 Notation: q = ks - ki is the change of the (three-dimensional) wave vector, Q its horizontal
 part, qz its vertical part: Q^2 = k^2 (cos^2 ti + cos^2 ts - 2 cos ti cos ts cos phi),
@@ -477,14 +480,39 @@ def combined_strength(grazing_in, grazing_out, frequency: float, sound_speed: fl
 
 ROUGHNESS_MODELS = ("perturbation", "kirchhoff", "small_slope", "composite", "combined")
 
+DEFAULT_ROUGHNESS_MODEL = "small_slope"
+"""The roughness model used when none is named (D-86; "perturbation" before). Reasons: the
+lowest-order small-slope result is what current work uses and it is valid wherever first-order
+perturbation theory is, and beyond (Olson, J. Acoust. Soc. Am. 160, 1918-1935, 2026,
+https://hdl.handle.net/10945/76181: "PT is accurate whenever SSA(2) is accurate"); it equals
+the perturbation result for small relief and the Kirchhoff result in the specular direction
+(tests in `test_bottom_models.py`), where perturbation theory with a power-law spectrum
+diverges. Evidence is the literature (PHYSICS_NOTES Sec. 23.2), not a measurement of ours."""
+
+_warned_no_small_slope = False
+
 
 def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
-                       delta: float, w2: float, gamma2: float, azimuth=np.pi, roughness_model: str = "perturbation",
+                       delta: float, w2: float, gamma2: float, azimuth=np.pi, roughness_model: str | None = None,
                        small_scale_kh: float = 0.5, **_ignored):
     """Cross section per unit area and solid angle from interface roughness. `azimuth` is the
     angle between the horizontal directions of the incident and scattered waves: pi for
-    backscatter, 0 for forward scatter. `roughness_model`: "perturbation" (default, first
-    order), "kirchhoff", "small_slope", "composite" or "combined" (module docstring)."""
+    backscatter, 0 for forward scatter. `roughness_model`: "small_slope" (the default,
+    `DEFAULT_ROUGHNESS_MODEL`), "perturbation" (first order; the default before D-86),
+    "kirchhoff", "composite" or "combined" (module docstring). The small-slope result needs a
+    structure function, i.e. 2 < gamma2 < 4: outside that range, when no model is named, the
+    perturbation result is used and a warning says so once (naming "small_slope" raises)."""
+    global _warned_no_small_slope
+    if roughness_model is None:
+        roughness_model = DEFAULT_ROUGHNESS_MODEL
+        if not 2.0 < gamma2 < 4.0:
+            if not _warned_no_small_slope:
+                import warnings
+                warnings.warn(f"bottom roughness: gamma2 = {gamma2:g} is outside (2, 4), where the default small-slope model "
+                              "has no structure function; first-order perturbation theory is used instead "
+                              "(name roughness_model to choose)", stacklevel=2)
+                _warned_no_small_slope = True
+            roughness_model = "perturbation"
     args = (grazing_in, grazing_out, frequency, sound_speed)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=azimuth)
     if roughness_model == "perturbation":
@@ -639,6 +667,36 @@ surface that scatters all the incident power with the Lambert pattern (Olson, Ly
 arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
 
 
+DEFAULT_LAMBERT_MU_DB = -29.0
+"""The Lambert parameter of a reverberation boundary that gives neither `mu_db` nor a model nor a
+sediment (D-89; -27 dB before, written from memory as "the Mackenzie value"). The one open print
+found: Muggleworth, "Shallow water reverberation measurement and prediction", MS thesis, Naval
+Postgraduate School (1994), https://hdl.handle.net/10945/28529, p. 34: "In 1961, K. V. Mackenzie
+reported success using Lambert's law with mu_dB = -29 dB to model bottom backscattering in deep
+water at 530 and 1030 Hz", for 20 to 60 degrees of grazing (Mackenzie's paper itself was not
+opened). It is a low-frequency, deep-water value: at sonar frequencies name a sediment
+(`{model: fluid_sediment, sediment: ...}`, `{sediment: rock}`) or give the site's `mu_db`;
+measured sands at 45 degrees and 100 kHz and above are near -25 dB, i.e. mu about -22 dB.
+`default_lambert_mu_db` warns once when the bare default is used at 10 kHz or above."""
+
+DEFAULT_LAMBERT_WARN_FREQUENCY = 10e3
+_warned_default_lambert = False
+
+
+def default_lambert_mu_db(frequency: float | None = None) -> float:
+    """`DEFAULT_LAMBERT_MU_DB`, with one warning per process when `frequency` (Hz) is 10 kHz or
+    above: the value is a deep-water one from about 1 kHz."""
+    global _warned_default_lambert
+    if frequency is not None and float(frequency) >= DEFAULT_LAMBERT_WARN_FREQUENCY and not _warned_default_lambert:
+        _warned_default_lambert = True
+        import warnings
+        warnings.warn(f"reverberation boundary without mu_db at {float(frequency) / 1e3:g} kHz: the default Lambert parameter "
+                      f"{DEFAULT_LAMBERT_MU_DB:g} dB is a deep-water value measured at 0.5 and 1 kHz (Mackenzie 1961 as quoted by "
+                      "Muggleworth 1994); name a sediment ({model: fluid_sediment, sediment: ...} or {sediment: rock}) or give "
+                      "the site's mu_db. This warning is given once.", stacklevel=2)
+    return DEFAULT_LAMBERT_MU_DB
+
+
 def lambert_backscatter_db(grazing, mu_db: float):
     """Lambert's law for backscatter, 10 log10(mu sin^2(grazing)) (written as sigma = mu sin^2(theta)
     in Olson, Lyons and Saebo, arXiv:1601.06078, where the Lambert fits are reported)."""
@@ -658,6 +716,17 @@ def empirical_backscatter(name: str, path=None) -> dict:
     if law.get("model") != "lambert":
         raise ValueError(f"sediment {name!r}: unknown empirical model {law.get('model')!r}")
     return law
+
+
+def named_lambert_mu_db(name: str, path=None) -> float:
+    """The Lambert parameter, dB, of a table entry that carries an empirical Lambert law (rock,
+    pebbles): what the reverberation item `{boundary_z, sediment: <name>}` uses. A fluid sediment
+    has no such number (its strength is not Lambert's law): the error names the model to use."""
+    entry = _entry(name, path)
+    if "empirical_backscatter" not in entry:
+        raise ValueError(f"sediment {name!r} is a fluid sediment and has no Lambert parameter: use "
+                         f"{{model: fluid_sediment, sediment: {name}}} or give mu_db")
+    return float(empirical_backscatter(name, path)["mu_db"])
 
 
 def named_backscattering_strength_db(name: str, grazing, frequency: float, sound_speed: float = 1500.0, path=None,

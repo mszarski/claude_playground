@@ -20,7 +20,10 @@ ROOT = Path(__file__).resolve().parents[2]
 def synthetic(params, angles_deg, freqs, noise_db, seed):
     g, f = np.meshgrid(np.asarray(angles_deg, dtype=float), np.asarray(freqs, dtype=float))
     g, f = g.ravel(), f.ravel()
-    truth = np.concatenate([bottom.backscattering_strength_db(np.radians(g[f == v]), v, C, **params) for v in np.unique(f)])
+    # Made with the model the fit uses unless told otherwise (first-order perturbation theory; the
+    # forward default is small_slope since D-86), so that a noise-free fit can be exact.
+    truth = np.concatenate([bottom.backscattering_strength_db(np.radians(g[f == v]), v, C, roughness_model="perturbation", **params)
+                            for v in np.unique(f)])
     order = np.concatenate([np.flatnonzero(f == v) for v in np.unique(f)])
     y = np.empty(len(g))
     y[order] = truth

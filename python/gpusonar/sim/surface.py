@@ -343,7 +343,40 @@ def searay_bottom_db(grazing, frequency: float, bottom_type):
     return 10.0 * np.log10(3.03 * b * f ** (3.2 - 0.8 * bt) * 10.0 ** (2.8 * bt - 12.0) + 10.0**-4.42)
 
 
+LAMBERT_BOUND_ANGLES = np.radians(np.arange(10.0, 45.5, 5.0))
+"""Grazing angles at which a diffuse bottom law is compared with the Lambert energy bound
+(below the specular lobe the type law has near normal incidence)."""
+_warned_above_lambert_bound: set = set()
+
+
+def searay_excess_over_lambert_bound_db(frequency: float, bottom_type) -> tuple[float, float]:
+    """(largest excess in dB, the grazing angle in radians where it occurs) of the type law over
+    the backscattering strength of the brightest Lambert surface energy conservation allows,
+    10 log10(sin^2(t) / pi) (mu = 1 / pi, -4.97 dB: `bottom.LAMBERT_MAX_MU_DB`), over 10 to 45
+    degrees of grazing. Positive: more than all the incident power scattered diffusely."""
+    t = LAMBERT_BOUND_ANGLES
+    excess = searay_bottom_db(t, frequency, bottom_type) - 10.0 * np.log10(np.sin(t) ** 2 / np.pi)
+    k = int(np.argmax(excess))
+    return float(excess[k]), float(t[k])
+
+
 def searay_bottom_strength(frequency: float, bottom_type):
+    """`searay_bottom_db` as the function of (grazing in, grazing out) the reverberation code
+    takes. The law is unchanged; where it lies above the Lambert energy bound between 10 and 45
+    degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
+    a warning says so, once per bottom type (D-88). For rock the measured Lambert value is in
+    `configs/sediments.yaml` (`rock`: mu = -16 dB, range -23 to -10): the reverberation item
+    `{boundary_z, sediment: rock}`."""
+    excess, angle = searay_excess_over_lambert_bound_db(frequency, bottom_type)
+    if excess > 0.0 and str(bottom_type) not in _warned_above_lambert_bound:
+        _warned_above_lambert_bound.add(str(bottom_type))
+        rock = str(bottom_type) in ("rock", "4", "4.0")
+        warnings.warn(
+            f"searay_bottom type {bottom_type!r} at {float(frequency) / 1e3:g} kHz is {excess:.1f} dB above the largest Lambert "
+            f"law energy conservation allows (mu = 1/pi, -5 dB) at {np.degrees(angle):.0f} degrees of grazing"
+            + ("; measured rock is mu = -23 to -10 dB: use the reverberation item {boundary_z, sediment: rock} "
+               "(mu = -16 dB from configs/sediments.yaml) or give mu_db" if rock else "; give mu_db or a sediment for the site")
+            + ". The law is used as printed; this warning is given once per bottom type.", stacklevel=2)
     return lambda g_in, g_out: 10.0 ** (searay_bottom_db(0.5 * (g_in + g_out), frequency, bottom_type) / 10.0)
 
 
@@ -446,3 +479,114 @@ def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_spe
     code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
     return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,
                                                                sound_speed, extinction) / 10.0)
+
+
+# --- The empirical surface laws against the bubble layer's saturation level (D-87) ----------------
+#
+# `chapman_harris` (fitted at 0.4-6.4 kHz) and `kraus_surface` (no stated range) keep growing with
+# wind speed and frequency. The bubble term above does not: once the layer is opaque it returns
+# delta_r sin(t) / (8 pi delta) (eq. (11)), -27.9 / -29.3 / -30.4 dB at 10 degrees for 12 / 30 /
+# 68 kHz. Where a law lies above that level it claims more than an opaque bubble layer gives.
+# Lowest frequency, kHz, at which each law exceeds the level at 10 degrees of grazing
+# (`saturation_crossing_frequency`; computed, tests/python/test_surface_models.py):
+#     wind, m/s          3      5      6      8     10     15
+#     chapman_harris   416    127     84     43     26     10
+#     kraus_surface  never    511    223     74     36     12
+# What this is and is not: the level is the limit of the bubble term for a thick layer, not the
+# largest value of eq. (10) (the bracket peaks at 2.36, +3.7 dB, for an optical depth of 0.6 along
+# the ray), and not a bound on the facet term near normal incidence; the published model was
+# compared with data at 12 to 70 kHz only (+-5 dB). Above 70 kHz nothing that could be opened
+# validates any of the three models.
+SATURATION_REFERENCE_GRAZING = math.radians(10.0)
+BUBBLE_LAYER_BAND = (12e3, 70e3)
+"""Hz: the band in which the published bubble model was compared with data (3 to 15 m/s)."""
+SURFACE_CAPS = ("bubble_saturation",)
+
+_EMPIRICAL_SURFACE_LAWS = ("chapman_harris", "kraus_surface")
+_warned_above_saturation: set = set()
+
+
+def bubble_saturation_db(grazing, frequency: float):
+    """The saturated level of the bubble term, 10 log10(delta_r sin(t) / (8 pi delta)), dB (eq. (11)
+    of the comment further up: an opaque layer), at grazing angles in radians and frequency in Hz."""
+    t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
+    return 10.0 * np.log10(BUBBLE_RERADIATION_DAMPING * np.sin(t) / (8.0 * np.pi * bubble_damping_constant(frequency)))
+
+
+def _empirical_surface_db(model: str, grazing, wind_speed: float, frequency: float):
+    if model == "chapman_harris":
+        from ..acoustics import chapman_harris_db
+        return chapman_harris_db(grazing, wind_speed, frequency)
+    if model == "kraus_surface":
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")               # its own low-frequency warning is raised where the law is used
+            return kraus_surface_db(grazing, wind_speed, frequency)
+    raise ValueError(f"unknown empirical surface law {model!r}; one of {_EMPIRICAL_SURFACE_LAWS}")
+
+
+def excess_over_saturation_db(model: str, wind_speed: float, frequency: float,
+                              grazing: float = SATURATION_REFERENCE_GRAZING) -> float:
+    """dB by which an empirical law ("chapman_harris" or "kraus_surface") lies above the bubble
+    layer's saturation level at one grazing angle (10 degrees unless given)."""
+    return float(_empirical_surface_db(model, grazing, wind_speed, frequency)) - float(bubble_saturation_db(grazing, frequency))
+
+
+def saturation_crossing_frequency(model: str, wind_speed: float, grazing: float = SATURATION_REFERENCE_GRAZING,
+                                  f_min: float = 1e3, f_max: float = 1e6) -> float | None:
+    """The lowest frequency in [f_min, f_max], Hz, at which the empirical law exceeds the bubble
+    layer's saturation level at `grazing` (None: it does not in that span). Both laws rise
+    against the level with frequency, so above the returned frequency the law stays above it."""
+    f = np.geomspace(f_min, f_max, 601)
+    d = np.array([excess_over_saturation_db(model, wind_speed, v, grazing) for v in f])
+    above = np.flatnonzero(d > 0.0)
+    if len(above) == 0:
+        return None
+    k = int(above[0])
+    if k == 0:
+        return float(f[0])
+    lo, hi = float(f[k - 1]), float(f[k])
+    for _ in range(40):                                   # bisection in log frequency
+        mid = math.sqrt(lo * hi)
+        lo, hi = (lo, mid) if excess_over_saturation_db(model, wind_speed, mid, grazing) > 0.0 else (mid, hi)
+    return hi
+
+
+def empirical_surface_strength(model: str, wind_speed: float, frequency: float, cap: str | None = None):
+    """The strength function of a `chapman_harris` or `kraus_surface` reverberation item.
+
+    Without `cap` it is the law, unchanged; if at `frequency` (12 kHz or above) the law lies above
+    the bubble layer's saturation level at 10 degrees of grazing, a warning says so, once per law.
+    `cap="bubble_saturation"` (opt-in) takes the smaller of the law and that level at every
+    angle, and does not warn."""
+    if model not in _EMPIRICAL_SURFACE_LAWS:
+        raise ValueError(f"unknown empirical surface law {model!r}; one of {_EMPIRICAL_SURFACE_LAWS}")
+    if cap not in (None, *SURFACE_CAPS):
+        raise ValueError(f"unknown cap {cap!r} for a surface reverberation item; one of {SURFACE_CAPS}")
+    wind_speed, frequency = float(wind_speed), float(frequency)
+
+    def law(g_in, g_out):
+        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
+        if model == "chapman_harris":
+            from ..acoustics import chapman_harris_db
+            return chapman_harris_db(g, wind_speed, frequency)
+        return kraus_surface_db(g, wind_speed, frequency)
+
+    if cap is None:
+        excess = excess_over_saturation_db(model, wind_speed, frequency) if frequency >= BUBBLE_LAYER_BAND[0] else 0.0
+        if excess > 0.0 and model not in _warned_above_saturation:
+            _warned_above_saturation.add(model)
+            crossing = saturation_crossing_frequency(model, wind_speed)
+            inside = frequency <= BUBBLE_LAYER_BAND[1]
+            warnings.warn(
+                f"surface reverberation `{model}` at {frequency / 1e3:g} kHz and {wind_speed:g} m/s is {excess:.1f} dB above the "
+                f"level a saturated bubble layer returns at 10 degrees of grazing (it crosses that level at {crossing / 1e3:.0f} kHz "
+                "for this wind). " + ("Here `bubble_layer_surface` is the model compared with data (12-70 kHz, 3-15 m/s)."
+                                       if inside else "Above 70 kHz no model here is validated against anything we could open.")
+                + " `cap: bubble_saturation` on the item limits the law to that level; this warning is given once per law.",
+                stacklevel=2)
+        return lambda g_in, g_out: 10.0 ** (law(g_in, g_out) / 10.0)
+
+    def capped(g_in, g_out):
+        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
+        return 10.0 ** (np.minimum(law(g_in, g_out), bubble_saturation_db(g, frequency)) / 10.0)
+    return capped

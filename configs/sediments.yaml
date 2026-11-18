@@ -107,14 +107,17 @@ medium_sand:
     mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sand or Medium Sand", bulk grain size index 1.5)'
     w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.406e-4 at 1.5 phi)"
     gamma2: "tabulated (arXiv:1809.08459 Table 1)"
-    sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength); differs from the grain-size rule, see note"
+    sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength): 0.001. The grain-size rule gives 0.002; the difference is known and the tabulated value is kept (D-90: a sourced tabulated value outranks a rule), see note"
   note: >-
     Volume parameter: the paper's -20.0 dB/m with 10.0 dB/m of attenuation is sigma2 = 0.0010.
     The grain-size rule printed by Snellen et al. (2011, Table II; 2013) gives 0.002 for every
     sediment coarser than 5.5 phi, which would be -17.0 dB/m here. The very fine silt row of the
     same paper does agree with the rule (0.00099 against 0.001). Nothing read decides which is
-    the handbook's value for medium sand; the paper's number is kept (changing it would raise
-    the volume term by 3 dB) and the difference is listed for the owner in docs/REFERENCES.md.
+    the handbook's value for medium sand. The difference is known and the paper's number is
+    kept, on the owner's decision (docs/DECISIONS.md D-90): a value tabulated for this very
+    sediment in a cited source outranks a general rule. The rule's 0.002 would raise the
+    volume term by 3 dB and the row by 0 to 2.5 dB (most at 6 kHz and 45 degrees); to try it,
+    give `sigma2: 0.002` beside the name.
   status: confirmed
   source: >-
     Brown, Johnson and Brownstead, "Simulation and testing results for a sub-bottom imaging

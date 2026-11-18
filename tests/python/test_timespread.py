@@ -64,13 +64,15 @@ def test_energy_is_conserved_on_average():
 
 @pytest.mark.parametrize("point_range, source_depth", [(600.0, 30.0), (600.0, 3.0)])
 def test_decay_time_follows_the_reports_rule_of_thumb(point_range, source_depth):
-    """Mid-path bounce: mss x half the one-way time. Bounce near one end: mss x twice the short leg."""
+    """Mid-path bounce: mss x half the one-way time. Bounce near one end: mss x twice the short leg.
+    (`decay_time: rule_of_thumb`, the default until D-85; named here since `facet` became it.)"""
     inner, pts, _ = one_bounce(depth_point=30.0, rng_m=point_range)
     src = np.array([0.0, 0.0, source_depth])
     mss = 0.04
     base = inner.eigenrays(src, pts)
     j = int(np.flatnonzero(base.n_surface[0] == 1)[0])
-    out = spread(inner, {"rms_height": 0.05, "mean_square_slope": mss, "rms_vertical_speed": 0.0}, taps=12).eigenrays(src, pts)
+    out = spread(inner, {"rms_height": 0.05, "mean_square_slope": mss, "rms_vertical_speed": 0.0}, taps=12,
+                 decay_time="rule_of_thumb").eigenrays(src, pts)
     taps_a = np.abs(out.amplitude[0, 2:].reshape(2, -1)[j]) ** 2
     taps_t = out.delay[0, 2:].reshape(2, -1)[j] - base.delay[0, j]
     assert np.all(np.diff(taps_t) > 0) and taps_t[0] > 0
@@ -84,7 +86,8 @@ def test_decay_time_follows_the_reports_rule_of_thumb(point_range, source_depth)
     # The taps' mean intensities are the model's exactly; one realisation's are random about them.
     means = []
     for seed in range(300):
-        o = spread(inner, {"rms_height": 0.05, "mean_square_slope": mss, "rms_vertical_speed": 0.0}, taps=12, seed=seed).eigenrays(src, pts)
+        o = spread(inner, {"rms_height": 0.05, "mean_square_slope": mss, "rms_vertical_speed": 0.0}, taps=12, seed=seed,
+                   decay_time="rule_of_thumb").eigenrays(src, pts)
         means.append(np.abs(o.amplitude[0, 2:].reshape(2, -1)[j]) ** 2)
     w = np.mean(means, axis=0)
     assert np.sum(w * taps_t) / np.sum(w) == pytest.approx(expected, rel=0.08)
@@ -258,7 +261,8 @@ def test_the_options_off_give_the_output_of_the_version_before_them():
     pts = np.array([[500.0, 40.0, 40.0], [300.0, -20.0, 10.0]])
     kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0}, surface=True),
               bottom={"rms_height": 0.03, "mean_square_slope": 0.02, "rms_vertical_speed": 0.0},
-              surface_z=0.0, bottom_z=80.0, taps=4, seed=5, multi_bounce="sum", doppler_spectrum="lorentzian")
+              surface_z=0.0, bottom_z=80.0, taps=4, seed=5, multi_bounce="sum", doppler_spectrum="lorentzian",
+              decay_time="rule_of_thumb")
     p = TimeSpreadProvider(inner, **kw)
     p.set_ping(7.0, 1.5)
     e = p.eigenrays(SOURCE, pts)
@@ -268,8 +272,7 @@ def test_the_options_off_give_the_output_of_the_version_before_them():
     assert float(np.abs(a).sum()) == pytest.approx(0.028625828421519003, rel=1e-9)
     assert float(e.delay[e.valid].sum()) == pytest.approx(12.002601952374846, rel=1e-12)
     # Naming the defaults changes nothing, and the taps keep the specular directions.
-    q = TimeSpreadProvider(inner, angle_spread=False, doppler=False, decay_time="rule_of_thumb",
-                           doppler_lines=8, **kw)
+    q = TimeSpreadProvider(inner, angle_spread=False, doppler=False, doppler_lines=8, **kw)
     q.set_ping(7.0, 1.5)
     same = q.eigenrays(SOURCE, pts)
     assert np.array_equal(same.amplitude, e.amplitude) and np.array_equal(same.delay, e.delay)
@@ -341,7 +344,10 @@ def test_facet_decay_time_and_shape():
     lever = f * (1.0 - f) * base.delay[0, j]
     expected = mss * (1.0 + np.sin(grazing) ** 2) * lever
     assert np.sum(w * tau) / np.sum(w) == pytest.approx(expected, rel=1e-9)
-    rule = spread(inner, ROUGH, taps=taps, doppler=True, doppler_lines=lines).eigenrays(SOURCE, pts)
+    default = spread(inner, ROUGH, taps=taps, doppler=True, doppler_lines=lines)                       # the default is this option (D-85)
+    same = default.eigenrays(SOURCE, pts)
+    assert default.decay_time == "facet" and np.array_equal(same.amplitude, e.amplitude) and np.array_equal(same.delay, e.delay)
+    rule = spread(inner, ROUGH, taps=taps, decay_time="rule_of_thumb", doppler=True, doppler_lines=lines).eigenrays(SOURCE, pts)
     w_rule = (abs(bounce_taps(rule, base, j, taps, lines)[0]) ** 2).sum(axis=1)
     tau_rule = bounce_taps(rule, base, j, taps, lines)[1][:, 0] - base.delay[0, j]
     assert np.sum(w_rule * tau_rule) / np.sum(w_rule) == pytest.approx(2.0 * mss * lever, rel=1e-9)
@@ -492,6 +498,10 @@ def two_rough_bounces(**kw):
     base = inner.eigenrays(src, pts)
     two = np.flatnonzero((base.n_surface[0] == 1) & (base.n_bottom[0] == 1))
     one = np.flatnonzero(base.n_surface[0] + base.n_bottom[0] == 1)
+    # The closed forms these tests assert (exponential tails of mean 2 mss t1 t2 / (t1 + t2), their
+    # sum and their convolution) are those of TR 0702's rule, so the rule is named: it was the
+    # default when they were written (`facet` is since D-85).
+    kw.setdefault("decay_time", "rule_of_thumb")
     p = TimeSpreadProvider(inner, frequency=F, surface=kw.pop("surface", par), bottom=kw.pop("bottom", par), surface_z=0.0, bottom_z=60.0,
                            doppler=True, doppler_lines=2, **kw)
     e = p.eigenrays(src, pts)
@@ -823,3 +833,31 @@ def test_per_ray_doppler_on_the_cuda_kernel_matches_the_host():
     still = dict(quiet, time_spread=dict(quiet["time_spread"], doppler=False))
     flat = run_scenario(still, backend=core.Backend.Cuda).records[0].samples.array
     assert not np.allclose(cuda, flat, atol=1e-3 * np.abs(host).max())      # the range rates are in the device record
+
+
+def test_the_default_decay_time_is_the_facet_one_also_through_a_scenario_section():
+    """D-85: `decay_time` defaults to `facet`. One bounce, default options: the taps' mean excess
+    delay is mss (1 + sin^2 g) t1 t2 / (t1 + t2), not TR 0702's 2 mss t1 t2 / (t1 + t2); the
+    scenario section without the key gives the same provider, and `rule_of_thumb` still gives
+    the rule."""
+    inner, pts, base, j, grazing, f = steep_bounce()
+    mss, taps = ROUGH["mean_square_slope"], 30
+    lever = f * (1.0 - f) * base.delay[0, j]
+
+    def mean_excess(n_seeds=200, **kw):
+        w = np.zeros(taps)
+        for seed in range(n_seeds):
+            amp, delay, _, _ = bounce_taps(spread(inner, ROUGH, taps=taps, seed=seed, **kw).eigenrays(SOURCE, pts), base, j, taps)
+            w += abs(amp) ** 2
+        return np.sum(w * (delay - base.delay[0, j])) / np.sum(w)
+
+    default = spread(inner, ROUGH, taps=taps)
+    assert default.decay_time == "facet"
+    assert mean_excess() == pytest.approx(mss * (1.0 + np.sin(grazing) ** 2) * lever, rel=0.05)
+    assert mean_excess(decay_time="rule_of_thumb") == pytest.approx(2.0 * mss * lever, rel=0.05)
+    section = {"surface": dict(ROUGH), "taps": taps}
+    wrapped = wrap(inner, section, frequency=F)
+    assert wrapped.decay_time == "facet"
+    assert wrap(inner, dict(section, decay_time="rule_of_thumb"), frequency=F).decay_time == "rule_of_thumb"
+    a, b = wrapped.eigenrays(SOURCE, pts), default.eigenrays(SOURCE, pts)
+    assert np.array_equal(a.delay, b.delay) and np.array_equal(a.amplitude, b.amplitude)

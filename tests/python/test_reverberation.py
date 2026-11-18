@@ -11,7 +11,7 @@ from gpusonar.sim import Scene, lambert_rms_amplitude, make_pose, seafloor_patch
 from gpusonar.sonar import SonarModel
 
 C = 1500.0
-MU_DB = -27.0          # Lambert parameter (Mackenzie's classic value for the seabed)
+MU_DB = -27.0          # Lambert parameter, given explicitly throughout (the default until D-89; the default is now -29 dB)
 HEIGHT = 20.0
 PULSE = 2e-3
 
@@ -225,3 +225,35 @@ def test_scenario_volume_layer_item_scales_with_its_strength():
         return float((np.abs(rec.samples.array) ** 2).mean())
     assert power(-60.0) > 0.0
     assert 10 * np.log10(power(-60.0) / power(-70.0)) == pytest.approx(10.0, abs=0.01)      # the same random numbers, ten times the power
+
+
+def test_a_lambert_item_without_mu_db_uses_minus_29_db_and_warns_once_at_sonar_frequencies():
+    """D-89: the bare default is -29 dB (Mackenzie 1961 as quoted by Muggleworth 1994, p. 34: deep
+    water, 530 and 1030 Hz), 2 dB below the -27 dB it was; an explicit mu_db is untouched."""
+    import warnings
+    from gpusonar.sim import bottom
+    sonar, rec0 = empty_baseband_ping()
+    assert rec0.samples.center_frequency >= 10e3
+
+    def ping(item):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            reverberation=[dict(item, boundary_z=0.0)], rng=np.random.default_rng(2))
+        return rec.samples.array.copy()
+    assert bottom.DEFAULT_LAMBERT_MU_DB == -29.0
+    bottom._warned_default_lambert = False
+    with pytest.warns(UserWarning, match="deep-water value measured at 0.5 and 1 kHz"):
+        bare = ping({})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert np.array_equal(ping({}), bare)                                # once
+        named, old = ping({"mu_db": -29.0}), ping({"mu_db": MU_DB})          # an explicit value never warns
+        assert bottom.default_lambert_mu_db(8e3) == -29.0
+        bottom._warned_default_lambert = False
+        assert bottom.default_lambert_mu_db(9.9e3) == -29.0 and bottom.default_lambert_mu_db() == -29.0   # below 10 kHz: silent
+    assert np.array_equal(bare, named)
+    assert 10 * np.log10((np.abs(bare) ** 2).mean() / (np.abs(old) ** 2).mean()) == pytest.approx(-2.0, abs=1e-4)
+    # The functions that take mu_db directly have the same default.
+    import inspect
+    from gpusonar.sim import reverb_bistatic, reverb_relief
+    for fn in (reverb_bistatic.directional_power, reverb_relief.directional_power):
+        assert inspect.signature(fn).parameters["mu_db"].default == bottom.DEFAULT_LAMBERT_MU_DB
