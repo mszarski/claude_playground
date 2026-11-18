@@ -188,7 +188,11 @@ int main(int argc, char** argv) {
       const live::Report rep = chain.process(rec);
       report << rep.json() << "\n" << std::flush;
       if (out_socket) send_report(rep.datagrams(report_bytes));
-      if (done == 0) std::fprintf(stderr, "sonar_live: chain settings %s\n", chain.resolved_json().c_str());
+      if (done == 0) {
+        std::fprintf(stderr, "sonar_live: chain settings %s\n", chain.resolved_json().c_str());
+        // The detector's tests and thresholds for this map (cell_statistic multiscale; "{}" for mean and peak).
+        std::fprintf(stderr, "sonar_live: detector %s\n", chain.detector_json().c_str());
+      }
       ++done;
     };
 

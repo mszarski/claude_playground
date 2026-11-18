@@ -10,7 +10,8 @@
 #include <limits>
 #include <sstream>
 
-#include "sonar/recon/backproject.hpp"
+#include "sonar/live/chain.hpp"
+#include "sonar/live/elevation.hpp"
 
 namespace sonar::live {
 namespace {
@@ -104,7 +105,9 @@ double pattern_energy(const std::vector<double>& delay, const std::vector<cd>& a
   return out;
 }
 
-double slack_s(const MultipathGeometry& g, const MultipathOptions& o) { return 2.0 * o.range_slack / g.sound_speed + 2.0 / g.bandwidth; }
+double slack_s(const MultipathGeometry& g, const MultipathOptions& o) {
+  return 2.0 * (g.slack > 0.0 ? g.slack : o.range_slack) / g.sound_speed + 2.0 / g.bandwidth;
+}
 
 // Depth change that moves the surface-surface echo by one resolution cell, m.
 double envelope_lobe(double z, const MultipathGeometry& g) {
@@ -258,27 +261,25 @@ void multipath_window_times(const MultipathGeometry& g, const MultipathOptions& 
   n = n_noise + 2 * n_side + 1;
 }
 
-std::vector<cd> multipath_window(const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range, double t_first, double dt,
-                                 std::int64_t n, Backend backend, int device) {
-  const Vec3d tx = world_position(record.geometry.tx_pose, record.geometry.tx.lever_arm) - origin;
+std::vector<cd> multipath_window(const PingRecord& record, double bearing, double range, double t_first, double dt, std::int64_t n,
+                                 const std::vector<std::vector<std::int64_t>>& rows, Backend backend, int device) {
   const double c = record.environment.sound_speed;
-  std::vector<Vec3d> points(static_cast<std::size_t>(n));
-  for (std::int64_t k = 0; k < n; ++k) {
-    const double path = 2.0 * range + c * (t_first + dt * static_cast<double>(k));
-    const double rho = (path * path - dot(tx, tx)) / (2.0 * (path - dot(direction, tx)));
-    points[static_cast<std::size_t>(k)] = origin + direction * rho;
+  std::vector<double> ranges(static_cast<std::size_t>(n));
+  for (std::int64_t k = 0; k < n; ++k) ranges[static_cast<std::size_t>(k)] = range + 0.5 * c * (t_first + dt * static_cast<double>(k));
+  std::vector<std::complex<float>> z;
+  if (rows.size() < 2) {
+    z = beam_samples(record, ranges, bearing, false, backend, device);
+  } else {
+    z.assign(ranges.size(), {0.0F, 0.0F});
+    for (const auto& r : rows) {
+      const std::vector<std::complex<float>> one = beam_samples(row_record(record, r), ranges, bearing, false, backend, device);
+      for (std::size_t k = 0; k < z.size(); ++k) z[k] += one[k];
+    }
   }
-  recon::BpOptions bp;
-  bp.interp = recon::Interp::Sinc;
-  bp.device = device;
-  const std::vector<const PingRecord*> pings{&record};
-  const recon::BpInputs inputs = recon::make_inputs(pings);
-  std::vector<std::complex<float>> z(points.size(), {0.0F, 0.0F});
-  recon::backproject(backend, inputs, points, bp, z.data());
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
   const double fc = s.is_complex() && s.center_frequency > 0.0 ? s.center_frequency : 0.5 * (w.f_start + w.f_stop);
-  std::vector<cd> y(points.size());
+  std::vector<cd> y(ranges.size());
   for (std::int64_t k = 0; k < n; ++k) {
     const auto u = static_cast<std::size_t>(k);
     y[u] = cd(z[u].real(), z[u].imag()) * std::polar(1.0, -2.0 * kPi * fc * (t_first + dt * static_cast<double>(k)));
@@ -426,11 +427,16 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   return est;
 }
 
-MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& origin, double range, const MultipathOptions& o) {
+MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& origin, double range, const MultipathOptions& o, double first_range,
+                                     double extent) {
   const Waveform& w = record.transmit.waveform;
   const double f_lo = std::min(w.f_start, w.f_stop), f_hi = std::max(w.f_start, w.f_stop);
   MultipathGeometry g;
   g.range = range;
+  if (std::isfinite(first_range) && std::isfinite(extent) && extent >= 0.0) {
+    g.range = first_range + 0.5 * extent;
+    g.slack = o.range_slack + 0.5 * extent;
+  }
   g.array_depth = origin.z - o.surface_z;
   g.projector_depth = world_position(record.geometry.tx_pose, record.geometry.tx.lever_arm).z - o.surface_z;
   g.sound_speed = record.environment.sound_speed;
@@ -441,10 +447,11 @@ MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& orig
   return g;
 }
 
-MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range,
-                                      const MultipathOptions& o, Backend backend, int device) {
+MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, double bearing, double range, const MultipathOptions& o,
+                                      double first_range, double extent, const std::vector<std::vector<std::int64_t>>& rows, Backend backend,
+                                      int device) {
   MultipathEstimate est;
-  const MultipathGeometry g = multipath_geometry(record, origin, range, o);
+  const MultipathGeometry g = multipath_geometry(record, origin, range, o, first_range, extent);
   est.reason = "merged";
   if (!(g.array_depth > 0.0) || !(g.projector_depth > 0.0)) return est;
   const std::vector<double> depths = multipath_depth_grid(g, o);
@@ -453,13 +460,13 @@ MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& ori
   std::int64_t n = 0, n_noise = 0;
   multipath_window_times(g, o, multipath_surface_delay(depths.back(), g), t_first, dt, n, n_noise);
   const Samples& s = record.samples;
-  const double t_det = 2.0 * range / g.sound_speed;
+  const double t_det = 2.0 * g.range / g.sound_speed;
   est.reason = "window";
   if (t_det + t_first < s.start_time ||
       t_det + t_first + dt * static_cast<double>(n - 1) > s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - record.transmit.waveform.duration) {
     return est;
   }
-  const std::vector<cd> y = multipath_window(record, origin, direction, range, t_first, dt, n, backend, device);
+  const std::vector<cd> y = multipath_window(record, bearing, g.range, t_first, dt, n, rows, backend, device);
   return multipath_estimate(y.data(), n, t_first, dt, n_noise, g, o);
 }
 
@@ -551,7 +558,8 @@ MultipathEstimate MultipathDepth::track(std::int64_t id) const {
 }
 
 MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& origin, const std::vector<MultipathHit>& hits,
-                                        const std::vector<MultipathTrack>& tracks, Backend backend, int device) {
+                                        const std::vector<MultipathTrack>& tracks, const std::vector<std::vector<std::int64_t>>& rows,
+                                        Backend backend, int device) {
   const auto t_start = std::chrono::steady_clock::now();
   MultipathReport out;
   out.detections.assign(hits.size(), "");
@@ -593,7 +601,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
   };
   for (std::size_t i : order) {
     const MultipathHit& h = hits[i];
-    ests[i] = multipath_detection(record, origin, h.direction, h.range, opt_, backend, device);
+    ests[i] = multipath_detection(record, origin, h.bearing, h.range, opt_, h.first_range, h.extent, rows, backend, device);
     done[i] = 1;
     std::ostringstream s;
     s << std::setprecision(10);
@@ -616,7 +624,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     }
     if (pick >= 0) {
       const auto u = static_cast<std::size_t>(pick);
-      add(t.id, ests[u], multipath_geometry(record, origin, hits[u].range, opt_));
+      add(t.id, ests[u], multipath_geometry(record, origin, hits[u].range, opt_, hits[u].first_range, hits[u].extent));
     }
     const auto it = sums_.find(t.id);
     if (it != sums_.end()) it->second.last_ping = pings_;

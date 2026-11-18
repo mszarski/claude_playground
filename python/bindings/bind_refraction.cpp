@@ -33,6 +33,7 @@ live::MultipathGeometry multipath_geometry(const py::dict& d) {
   g.f_centre = d["f_centre"].cast<double>();
   g.bandwidth = d["bandwidth"].cast<double>();
   if (d.contains("water_depth") && !d["water_depth"].is_none()) g.water_depth = d["water_depth"].cast<double>();
+  if (d.contains("slack_m")) g.slack = d["slack_m"].cast<double>();
   return g;
 }
 
@@ -82,13 +83,14 @@ void bind_refraction(py::module_& m) {
   });
   m.def(
       "live_multipath_window",
-      [](const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range, double t_first, double dt, std::int64_t n,
-         Backend backend) {
-        const std::vector<std::complex<double>> y = live::multipath_window(record, origin, direction, range, t_first, dt, n, backend);
+      [](const PingRecord& record, double bearing, double range, double t_first, double dt, std::int64_t n,
+         const std::vector<std::vector<std::int64_t>>& rows, Backend backend) {
+        const std::vector<std::complex<double>> y = live::multipath_window(record, bearing, range, t_first, dt, n, rows, backend);
         return py::array_t<std::complex<double>>(static_cast<py::ssize_t>(y.size()), y.data());
       },
-      py::arg("record"), py::arg("origin"), py::arg("direction"), py::arg("range_m"), py::arg("t_first"), py::arg("dt"), py::arg("n"),
-      py::arg("backend") = Backend::Host, "Compressed baseband output of the array steered at a detection (multipath_depth.hpp).");
+      py::arg("record"), py::arg("bearing"), py::arg("range_m"), py::arg("t_first"), py::arg("dt"), py::arg("n"),
+      py::arg("rows") = std::vector<std::vector<std::int64_t>>{}, py::arg("backend") = Backend::Host,
+      "Compressed baseband output of the array steered at a detection (multipath_depth.hpp).");
   m.def(
       "live_multipath_estimate",
       [](const py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast>& y, double t_first, double dt, std::int64_t n_noise,
@@ -99,10 +101,12 @@ void bind_refraction(py::module_& m) {
       "Target depth from one beam window (multipath_depth.hpp).");
   m.def(
       "live_multipath_detection",
-      [](const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range, const py::dict& options, Backend backend) {
-        return estimate_dict(live::multipath_detection(record, origin, direction, range, multipath_options(options), backend));
+      [](const PingRecord& record, const Vec3d& origin, double bearing, double range, const py::dict& options, double first_range, double extent,
+         const std::vector<std::vector<std::int64_t>>& rows, Backend backend) {
+        return estimate_dict(live::multipath_detection(record, origin, bearing, range, multipath_options(options), first_range, extent, rows, backend));
       },
-      py::arg("record"), py::arg("origin"), py::arg("direction"), py::arg("range_m"), py::arg("options"), py::arg("backend") = Backend::Host,
+      py::arg("record"), py::arg("origin"), py::arg("bearing"), py::arg("range_m"), py::arg("options"), py::arg("first_range") = kNaN,
+      py::arg("extent") = kNaN, py::arg("rows") = std::vector<std::vector<std::int64_t>>{}, py::arg("backend") = Backend::Host,
       "Target depth for one detection of a conditioned record.");
   m.def("live_multipath_fuse",
         [](double depth_mp, double sigma_mp, double depth_el, double sigma_el, const std::vector<double>& alternatives, double consistency_sigma) {
@@ -120,13 +124,16 @@ void bind_refraction(py::module_& m) {
            "Options as gpusonar.multipath_depth.cpp_options makes them.")
       .def(
           "process",
-          [](live::MultipathDepth& s, const PingRecord& record, const Vec3d& origin, const py::list& hits, const py::list& tracks, Backend backend) {
+          [](live::MultipathDepth& s, const PingRecord& record, const Vec3d& origin, const py::list& hits, const py::list& tracks,
+             const std::vector<std::vector<std::int64_t>>& rows, Backend backend) {
             std::vector<live::MultipathHit> mh;
             for (const auto& item : hits) {
               const py::dict h = item.cast<py::dict>();
               live::MultipathHit x;
               x.range = h["range"].cast<double>();
-              x.direction = h["direction"].cast<Vec3d>();
+              x.bearing = h["bearing"].cast<double>();
+              if (h.contains("first_range")) x.first_range = h["first_range"].cast<double>();
+              if (h.contains("extent")) x.extent = h["extent"].cast<double>();
               x.x = h["x"].cast<double>();
               x.y = h["y"].cast<double>();
               x.snr_db = h["snr_db"].cast<double>();
@@ -155,12 +162,12 @@ void bind_refraction(py::module_& m) {
             live::MultipathReport r;
             {
               py::gil_scoped_release release;
-              r = s.process(record, origin, mh, mt, backend);
+              r = s.process(record, origin, mh, mt, rows, backend);
             }
             return py::make_tuple(r.detections, r.tracks, r.seconds);
           },
-          py::arg("record"), py::arg("origin"), py::arg("hits"), py::arg("tracks"), py::arg("backend") = Backend::Host,
-          "One ping: JSON members to add to each detection and each track (strings without braces), and the seconds it took.")
+          py::arg("record"), py::arg("origin"), py::arg("hits"), py::arg("tracks"), py::arg("rows") = std::vector<std::vector<std::int64_t>>{},
+          py::arg("backend") = Backend::Host, "One ping: JSON members to add to each detection and each track (strings without braces), and the seconds it took.")
       .def("add", [](live::MultipathDepth& s, std::int64_t track, const py::dict& estimate,
                      const py::dict& geometry) { s.add(track, estimate_from(estimate), multipath_geometry(geometry)); })
       .def("track", [](const live::MultipathDepth& s, std::int64_t id) { return estimate_dict(s.track(id)); });

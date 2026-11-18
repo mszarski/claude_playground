@@ -21,8 +21,38 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
   else if (key == "cell_statistic") {
-    if (value != "mean" && value != "peak") throw std::invalid_argument("cell_statistic: mean or peak");
+    if (value != "mean" && value != "peak" && value != "multiscale") throw std::invalid_argument("cell_statistic: mean, peak or multiscale");
     c.cell_peak = value == "peak";
+    c.cell_multiscale = value == "multiscale";
+  }
+  else if (key == "cfar_false_alarms_per_ping") c.detector.false_alarms_per_ping = v;
+  else if (key == "cfar_sidelobe_margin_db") c.detector.sidelobe_margin_db = v;
+  else if (key == "cfar_sidelobe_floor_db") c.detector.sidelobe_floor_db = v;
+  else if (key == "cfar_search_factor") c.detector.search_factor = v;
+  else if (key == "cfar_merge_m") c.detector.merge_m = v;
+  // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
+  else if (key == "cell_multiscale") {
+    c.cell_multiscale = value == "1" || value == "true" || value == "True";
+    if (c.cell_multiscale) c.cell_peak = false;
+  }
+  else if (key == "cell_peak") {
+    c.cell_peak = value == "1" || value == "true" || value == "True";
+    if (c.cell_peak) c.cell_multiscale = false;
+  }
+  else if (key == "cfar_integrate_cells") {
+    // Lengths in range cells: every whole number in the value (1,4,16 or [1, 4, 16]).
+    c.detector.integrate_cells.clear();
+    std::size_t at = 0;
+    while (at < value.size()) {
+      if (value[at] < '0' || value[at] > '9') {
+        ++at;
+        continue;
+      }
+      std::size_t end = at;
+      while (end < value.size() && value[end] >= '0' && value[end] <= '9') ++end;
+      c.detector.integrate_cells.push_back(std::atoll(value.substr(at, end - at).c_str()));
+      at = end;
+    }
   }
   else if (key == "beamformer") c.beamformer = value;
   else if (key == "doa") c.doa = value;

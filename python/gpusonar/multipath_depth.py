@@ -96,6 +96,7 @@ class Geometry:
     f_centre: float
     bandwidth: float
     water_depth: float | None = None
+    slack_m: float = 0.0             # how far range_m may be from any one arrival (0: the configuration's range_slack_m)
 
 
 @dataclass
@@ -155,7 +156,7 @@ def cpp_options(cfg: dict | None) -> dict:
 
 def geometry_dict(g: "Geometry") -> dict:
     return {"range_m": g.range_m, "array_depth": g.array_depth, "projector_depth": g.projector_depth, "sound_speed": g.sound_speed,
-            "f_centre": g.f_centre, "bandwidth": g.bandwidth, "water_depth": g.water_depth or 0.0}
+            "f_centre": g.f_centre, "bandwidth": g.bandwidth, "water_depth": g.water_depth or 0.0, "slack_m": g.slack_m}
 
 
 class ChainStage:
@@ -168,18 +169,21 @@ class ChainStage:
         self._stage = core.MultipathDepth(cpp_options(cfg))
         self.seconds = 0.0
 
-    def annotate(self, record, report: dict, origin, axis, broadside, hits, local, frame_origin, surface_z: float = 0.0,
-                 water=None, backend=None) -> None:
-        """`hits`: the engine's detections (range, cone bearing); `local`: what it gave the tracker (range, bearing about the
-        frame origin, depth alternatives). Adds members to report["detections"] and report["tracks"]."""
+    def annotate(self, record, report: dict, origin, hits, local, frame_origin, rows=None, surface_z: float = 0.0, water=None,
+                 backend=None) -> None:
+        """`hits`: the engine's detections (range, cone bearing, first_range, extent); `local`: what it gave the tracker (range,
+        bearing about the frame origin, depth alternatives). Adds members to report["detections"] and report["tracks"]."""
         import json
 
         from .elevation import fold_depth
         mh = []
         for h, m, d in zip(hits, local, report["detections"]):
-            u = np.sin(h.bearing) * np.asarray(axis) + np.cos(h.bearing) * np.asarray(broadside)
-            item = {"range": float(h.range), "direction": (float(u[0]), float(u[1]), 0.0), "x": float(m.range * np.sin(m.bearing)),
+            item = {"range": float(h.range), "bearing": float(h.bearing), "x": float(m.range * np.sin(m.bearing)),
                     "y": float(m.range * np.cos(m.bearing)), "snr_db": float(h.snr_db)}
+            for key in ("first_range", "extent"):
+                value = getattr(h, key, None)
+                if value is not None and np.isfinite(value):
+                    item[key] = float(value)
             if d.get("depth_m") is not None:
                 item.update(depth=float(d["depth_m"]) - surface_z, depth_sigma=float(d["depth_sigma_m"]),
                             depth_alternatives=[float(fold_depth(z, water, surface_z)[0]) - surface_z for z in (m.depth_alternatives or [])])
@@ -191,7 +195,7 @@ class ChainStage:
                 item.update(depth=float(t["depth_m"]) - surface_z, depth_sigma=float(t["depth_sigma_m"]))
             mt.append(item)
         kw = {} if backend is None else {"backend": backend}
-        dets, tracks, self.seconds = self._stage.process(record, tuple(float(v) for v in origin), mh, mt, **kw)
+        dets, tracks, self.seconds = self._stage.process(record, tuple(float(v) for v in origin), mh, mt, [list(map(int, r)) for r in (rows or [])], **kw)
         for d, text in zip(report["detections"], dets):
             if text:
                 d.update(json.loads("{" + text + "}"))
@@ -286,7 +290,7 @@ def window_times(g: Geometry, cfg: dict, spread: float):
     """Two-way times re the detection's own of the samples the fit needs (uniform), and the number of leading ones that
     hold only noise: `noise_cells` cells, a guard, then from the earliest the direct arrival can be to the latest echo."""
     dt = 1.0 / (float(cfg["oversample"]) * g.bandwidth)
-    slack = 2.0 * float(cfg["range_slack_m"]) / g.sound_speed + 2.0 / g.bandwidth
+    slack = 2.0 * float(g.slack_m or cfg["range_slack_m"]) / g.sound_speed + 2.0 / g.bandwidth
     guard = 4.0 / g.bandwidth
     n_noise = int(cfg["noise_cells"]) * int(cfg["oversample"])
     n_before = int(np.ceil((spread + slack + guard) / dt))
@@ -294,23 +298,25 @@ def window_times(g: Geometry, cfg: dict, spread: float):
     return dt * np.arange(-(n_noise + n_before), n_after + 1), n_noise
 
 
-def beam_window(record, origin, direction, range_m: float, t_rel, backend=None):
-    """Compressed output of the whole array steered along `direction` (world unit vector, horizontal) from `origin`, at
-    two-way times `t_rel` (s) about the two-way time of slant range `range_m`, as baseband samples (carrier removed
-    with respect to `t_rel`: an arrival delayed by tau carries the phase -2 pi fc tau). The record is conditioned
-    (`recon.prepare`). This is the one thing the estimator asks of the chain: no detection map comes into it."""
+def beam_window(record, bearing: float, range_m: float, t_rel, rows=None, backend=None):
+    """Compressed output of the array steered at cone `bearing` (rad from broadside) at two-way times `t_rel` (s) about the
+    two-way time of slant range `range_m`, as baseband samples (carrier removed with respect to `t_rel`: an arrival
+    delayed by tau carries the phase -2 pi fc tau). These are the chain's own beam samples (`core.live_beam_samples`),
+    unweighted; with `rows` (stacked rows: lists of channels) the rows' samples are added. The record is conditioned
+    (`recon.prepare`). This is the one thing the estimator asks of the chain."""
     from . import _gpusonar as core
-    from .elevation import tx_position
-    origin, u = np.asarray(origin, dtype=float), np.asarray(direction, dtype=float)
-    tx = tx_position(record) - origin
-    path = 2.0 * float(range_m) + record.environment.sound_speed * np.asarray(t_rel, dtype=float)
-    rho = (path**2 - tx @ tx) / (2.0 * (path - u @ tx))
+    from . import sync
+    t_rel = np.asarray(t_rel, dtype=float)
+    ranges = float(range_m) + 0.5 * record.environment.sound_speed * t_rel
     kw = {} if backend is None else {"backend": backend}
-    y = np.asarray(core.backproject([record], origin + rho[:, None] * u[None, :], interp="sinc", **kw)).ravel()
+    if rows is None or len(rows) < 2:
+        y = np.asarray(core.live_beam_samples(record, ranges, float(bearing), False, **kw)).ravel()
+    else:
+        y = sum(np.asarray(core.live_beam_samples(sync.select_channels(record, r), ranges, float(bearing), False, **kw)).ravel() for r in rows)
     s = record.samples
     w = record.transmit.waveform
     fc = s.center_frequency if s.is_complex() and s.center_frequency > 0.0 else 0.5 * (w.f_start + w.f_stop)
-    return y * np.exp(-2j * np.pi * fc * np.asarray(t_rel, dtype=float))
+    return y * np.exp(-2j * np.pi * fc * t_rel)
 
 
 # --- the fit --------------------------------------------------------------------------------------------------------------
@@ -346,7 +352,7 @@ def likelihood(y, t_rel, n_noise: int, g: Geometry, cfg: dict, depths=None, per_
     t_rel = np.asarray(t_rel, dtype=float)
     dt = float(t_rel[1] - t_rel[0])
     sigma2 = noise_power(y, n_noise)
-    slack = 2.0 * float(cfg["range_slack_m"]) / g.sound_speed + 2.0 / g.bandwidth
+    slack = 2.0 * float(g.slack_m or cfg["range_slack_m"]) / g.sound_speed + 2.0 / g.bandwidth
     near = np.nonzero(np.abs(t_rel) <= slack + 0.5 * dt)[0]
     k_pk = int(near[np.argmax(np.abs(y[near]) ** 2)])
     t_pk = float(t_rel[k_pk])
@@ -449,22 +455,27 @@ def estimate(y, t_rel, n_noise: int, g: Geometry, cfg: dict) -> Estimate:
     return est
 
 
-def geometry(record, origin, range_m: float, cfg: dict) -> Geometry:
-    """The fit's geometry for a detection at slant range `range_m` from `origin` (the array's centre, world)."""
+def geometry(record, origin, range_m: float, cfg: dict, first_range: float = float("nan"), extent: float = float("nan")) -> Geometry:
+    """The fit's geometry for a detection at slant range `range_m` from `origin` (the array's centre, world). `first_range`,
+    `extent`: where a merging detector says the detection's arrivals lie; the fit is then centred on that stretch."""
     from .elevation import tx_position
     w = record.transmit.waveform
     f_lo, f_hi = min(w.f_start, w.f_stop), max(w.f_start, w.f_stop)
     water = cfg.get("water_depth") or record.environment.water_depth
     water = float(water) if water and np.isfinite(water) and water > 0.0 else None
     sz = float(cfg["surface_z"])
+    slack = 0.0
+    if np.isfinite(first_range) and np.isfinite(extent) and extent >= 0.0:
+        range_m, slack = first_range + 0.5 * extent, float(cfg["range_slack_m"]) + 0.5 * extent
     return Geometry(range_m=float(range_m), array_depth=float(origin[2]) - sz, projector_depth=float(tx_position(record)[2]) - sz,
                     sound_speed=float(record.environment.sound_speed), f_centre=0.5 * (f_lo + f_hi), bandwidth=(f_hi - f_lo) or 1.0 / w.duration,
-                    water_depth=water)
+                    water_depth=water, slack_m=slack)
 
 
-def estimate_detection(record, origin, direction, range_m: float, cfg: dict, backend=None) -> Estimate:
-    """Target depth for one detection of a conditioned record: slant range `range_m` along `direction` from `origin`."""
-    g = geometry(record, origin, range_m, cfg)
+def estimate_detection(record, origin, bearing: float, range_m: float, cfg: dict, first_range: float = float("nan"),
+                       extent: float = float("nan"), rows=None, backend=None) -> Estimate:
+    """Target depth for one detection of a conditioned record: slant range `range_m` at cone `bearing` from `origin`."""
+    g = geometry(record, origin, range_m, cfg, first_range, extent)
     if g.array_depth <= 0.0 or g.projector_depth <= 0.0:
         return Estimate(reason="merged")
     depths, _, _ = depth_grid(g, cfg)
@@ -472,10 +483,10 @@ def estimate_detection(record, origin, direction, range_m: float, cfg: dict, bac
         return Estimate(reason="merged")
     t_rel, n_noise = window_times(g, cfg, float(surface_delay(depths[-1], g)))
     s = record.samples
-    t_abs = 2.0 * range_m / g.sound_speed + t_rel
+    t_abs = 2.0 * g.range_m / g.sound_speed + t_rel
     if t_abs[0] < s.start_time or t_abs[-1] > s.start_time + (s.n_samples - 1) / s.sample_rate - record.transmit.waveform.duration:
         return Estimate(reason="window")
-    return estimate(beam_window(record, origin, direction, range_m, t_rel, backend), t_rel, n_noise, g, cfg)
+    return estimate(beam_window(record, bearing, g.range_m, t_rel, rows, backend), t_rel, n_noise, g, cfg)
 
 
 # --- along a track --------------------------------------------------------------------------------------------------------

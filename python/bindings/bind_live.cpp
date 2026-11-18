@@ -489,6 +489,91 @@ void bind_live(py::module_& m) {
       py::arg("record"), py::arg("given") = py::dict(),
       "The chain settings left to be derived, resolved from this record's band, pulse and array (libs/live derive.hpp): "
       "values in the units of the C++ options (angles in rad), and `json`, the line the programs print.");
+  m.def(
+      "live_detector_plan",
+      [](const PingRecord& record, std::int64_t n_cells, std::int64_t samples_per_cell, double step, const std::vector<double>& bearings,
+         std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, const py::dict& kw) {
+        live::DetectorOptions o;
+        number(kw, "false_alarms_per_ping", o.false_alarms_per_ping);
+        number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
+        number(kw, "sidelobe_floor_db", o.sidelobe_floor_db);
+        number(kw, "search_factor", o.search_factor);
+        if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
+        double tolerance = live::kDerive;
+        number(kw, "row_tolerance_m", tolerance);
+        std::int64_t min_elements = 3;
+        if (kw.contains("min_row_elements") && !kw["min_row_elements"].is_none()) min_elements = kw["min_row_elements"].cast<std::int64_t>();
+        const live::SonarFacts facts = live::sonar_facts(record, live::row_tolerance(record, tolerance), min_elements);
+        double merge_m = 0.0;
+        number(kw, "merge_m", merge_m);
+        // The lines whose maps are added: the array's rows when the chain stacks them (rows > 1), else every channel as one.
+        std::vector<std::vector<std::int64_t>> lines;
+        if (rows > 1) lines = live::find_rows(record, live::row_tolerance(record, tolerance), min_elements);
+        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann, merge_m, lines);
+        py::dict out;
+        py::list scales;
+        for (const live::DetectorScale& s : p.scales) {
+          py::dict d;
+          d["cells"] = s.cells;
+          d["length_m"] = s.length_m;
+          d["looks"] = s.looks;
+          d["tests"] = s.tests;
+          d["pfa"] = s.pfa;
+          d["factor"] = s.factor;
+          d["weights"] = s.weights;
+          scales.append(d);
+        }
+        out["scales"] = scales;
+        out["rows"] = p.rows;
+        out["samples_per_cell"] = p.samples_per_cell;
+        out["cell_m"] = p.cell_m;
+        out["step_m"] = p.step_m;
+        out["resolution_m"] = p.resolution_m;
+        out["beams"] = p.beams;
+        out["train_looks_per_cell"] = p.train_looks_per_cell;
+        out["margin"] = p.margin;
+        out["aperture_m"] = p.aperture_m;
+        out["merge_cells"] = p.merge_cells;
+        out["merge_u"] = p.merge_u;
+        out["range_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.range_envelope.size()), p.range_envelope.data());
+        out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
+        out["u_step"] = p.u_step;
+        out["source_ratio"] = p.source_ratio;
+        out["json"] = p.json();
+        return out;
+      },
+      py::arg("record"), py::arg("n_cells"), py::arg("samples_per_cell"), py::arg("step"), py::arg("bearings"), py::arg("rows") = 1,
+      py::arg("guard_cells") = 50, py::arg("train_cells") = 150, py::arg("hann") = true, py::arg("options") = py::dict(),
+      "The multiscale detector's plan (libs/live detector.hpp) for a map of n_cells range cells of samples_per_cell samples `step` m apart: "
+      "integration lengths, their looks, tests, false-alarm probabilities and thresholds, and the sidelobe envelopes. The C++ chain uses the same function.");
+  m.def(
+      "live_detector_background",
+      [](const py::array_t<float, py::array::c_style | py::array::forcecast>& cell_mean, std::int64_t guard, std::int64_t train) {
+        if (cell_mean.ndim() != 2) throw std::invalid_argument("cell_mean must be [n_bearing, n_cells]");
+        std::vector<double> level, worth;
+        live::detector_background(cell_mean.data(), cell_mean.shape(0), cell_mean.shape(1), guard, train, level, worth);
+        py::array_t<double> out({cell_mean.shape(0), cell_mean.shape(1)});
+        std::memcpy(out.mutable_data(), level.data(), level.size() * sizeof(double));
+        return py::make_tuple(out, py::array_t<double>(static_cast<py::ssize_t>(worth.size()), worth.data()));
+      },
+      py::arg("cell_mean"), py::arg("guard"), py::arg("train"),
+      "The multiscale detector's background of each cell (libs/live detector.hpp) and, per range cell, the number of independent "
+      "training cells it is worth: the C++ reference the NumPy one (detect.background) is tested against.");
+  m.def(
+      "live_beam_samples",
+      [](const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann, Backend backend) {
+        const std::vector<std::complex<float>> z = live::beam_samples(record, ranges, bearing, hann, backend);
+        py::array_t<std::complex<float>> out(static_cast<py::ssize_t>(z.size()));
+        std::memcpy(out.mutable_data(), z.data(), z.size() * sizeof(std::complex<float>));
+        return out;
+      },
+      py::arg("record"), py::arg("ranges"), py::arg("bearing"), py::arg("hann") = true, py::arg("backend") = Backend::Host,
+      "The compressed, beamformed complex samples of a prepared record at `ranges` (m) along one bearing (rad): what the chain's map is the "
+      "squared magnitude of (libs/live chain.hpp, beam_samples). For the arrival structure inside a detection: its first_range_m, extent_m, bearing.");
+  m.def("live_sample_correlation", [](const PingRecord& record, double step, std::int64_t n) {
+          return live::sample_correlation(record.transmit.waveform, record.environment.sound_speed, step, n);
+        }, py::arg("record"), py::arg("step"), py::arg("n"),
+        "Amplitude correlation of the compressed pulse between map samples `step` m apart, lags 0..n-1.");
   m.def("live_row_tolerance", &live::row_tolerance, py::arg("record"), py::arg("given") = live::kDerive,
         "Elements within this of one line are one row: `given`, or 2 cm, or a quarter of the shortest wavelength when less.");
   m.def("live_sync_tolerance", &live::sync_tolerance, py::arg("given_us"), py::arg("top_frequency"),
@@ -564,6 +649,13 @@ void bind_live(py::module_& m) {
         if (kw.contains("starboard")) o.starboard = kw["starboard"].cast<bool>();
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
         if (kw.contains("cell_peak")) o.cell_peak = kw["cell_peak"].cast<bool>();
+        if (kw.contains("cell_multiscale")) o.cell_multiscale = kw["cell_multiscale"].cast<bool>();
+        get("cfar_false_alarms_per_ping", o.detector.false_alarms_per_ping);
+        get("cfar_sidelobe_margin_db", o.detector.sidelobe_margin_db);
+        get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
+        get("cfar_search_factor", o.detector.search_factor);
+        get("cfar_merge_m", o.detector.merge_m);
+        if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
         get("sound_speed", o.sound_speed);
@@ -647,6 +739,8 @@ void bind_live(py::module_& m) {
              return json;
            },
            "Process one ping (conditioned in place); returns the report as a JSON line.")
+      .def("detector", &live::LiveChain::detector_json,
+           "The multiscale detector's plan for the last map (detector.hpp), as a JSON line; '{}' when it is not in use.")
       .def("resolved", &live::LiveChain::resolved_json,
            "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
       .def("last_map", [](const live::LiveChain& c) {

@@ -28,10 +28,11 @@
 // pings. Sigma is the spread of exp(L) over depth. python/gpusonar/multipath_depth.py is the NumPy
 // reference of everything here and says when the method cannot work; docs/PHYSICS_NOTES.md derives it.
 //
-// The chain is asked for one thing only: the conditioned record, from which this file takes the
-// compressed output of the array steered at a detection (multipath_window). No detection map, cell
-// size or cluster comes into it, so a detector that merges a target's arrivals into one detection
-// feeds it as well as one that reports them apart.
+// The chain is asked for one thing only: the compressed complex beam samples around a detection
+// (`beam_samples`, chain.hpp). A detector that merges a target's arrivals into one detection says where
+// they lie (first_range, extent) and the fit is centred there; when the arrivals are so far apart that
+// they come as two detections, the window about either holds them all (it reaches the largest spread
+// searched either way), and each gets the same depth.
 #pragma once
 
 #include <complex>
@@ -83,6 +84,7 @@ struct MultipathGeometry {
   double array_depth = 0.0, projector_depth = 0.0;   ///< m below the surface
   double sound_speed = 1500.0, f_centre = 0.0, bandwidth = 0.0;
   double water_depth = 0.0;            ///< m; 0: unknown
+  double slack = 0.0;                  ///< m: how far `range` may be from any one arrival (0: the options' range_slack)
 };
 
 struct MultipathEstimate {
@@ -110,19 +112,25 @@ std::vector<double> multipath_depth_grid(const MultipathGeometry& g, const Multi
 /// leading samples hold only noise, for a largest spread `spread` (s).
 void multipath_window_times(const MultipathGeometry& g, const MultipathOptions& o, double spread, double& t_first, double& dt,
                             std::int64_t& n, std::int64_t& n_noise);
-/// Compressed output of the whole array steered along `direction` (world, horizontal unit vector)
-/// from `origin` at two-way times t_first + k dt about the two-way time of slant range `range`, as
-/// baseband samples (an arrival delayed by tau carries the phase -2 pi fc tau). The record is conditioned.
-std::vector<std::complex<double>> multipath_window(const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range,
-                                                   double t_first, double dt, std::int64_t n, Backend backend = Backend::Host, int device = 0);
+/// Compressed output of the array steered at cone `bearing` (rad from broadside, the map's convention) at two-way times
+/// t_first + k dt about the two-way time of slant range `range`, as baseband samples (an arrival delayed by tau carries
+/// the phase -2 pi fc tau). These are the chain's own `beam_samples` (chain.hpp), unweighted; with `rows` (stacked
+/// rows) the rows' samples are added, which holds for arrivals within a few degrees of the horizontal. The record is conditioned.
+std::vector<std::complex<double>> multipath_window(const PingRecord& record, double bearing, double range, double t_first, double dt, std::int64_t n,
+                                                   const std::vector<std::vector<std::int64_t>>& rows = {}, Backend backend = Backend::Host,
+                                                   int device = 0);
 /// Target depth from one beam window.
 MultipathEstimate multipath_estimate(const std::complex<double>* y, std::int64_t n, double t_first, double dt, std::int64_t n_noise,
                                      const MultipathGeometry& g, const MultipathOptions& o);
-/// The fit's geometry for a detection at slant range `range` from `origin`.
-MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& origin, double range, const MultipathOptions& o);
+/// The fit's geometry for a detection at slant range `range` from `origin`. `first_range`, `extent` (m; NaN: not known):
+/// where the detection's arrivals lie, as a merging detector reports them; the fit is then centred on that stretch and
+/// any sample of it may be the strongest arrival.
+MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& origin, double range, const MultipathOptions& o,
+                                     double first_range = kNaN, double extent = kNaN);
 /// Target depth for one detection of a conditioned record.
-MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, const Vec3d& direction, double range,
-                                      const MultipathOptions& o, Backend backend = Backend::Host, int device = 0);
+MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, double bearing, double range, const MultipathOptions& o,
+                                      double first_range = kNaN, double extent = kNaN, const std::vector<std::vector<std::int64_t>>& rows = {},
+                                      Backend backend = Backend::Host, int device = 0);
 
 struct MultipathFused {
   double depth = kNaN, sigma = kNaN;
@@ -138,7 +146,8 @@ MultipathFused multipath_fuse(double depth_mp, double sigma_mp, double depth_el,
 /// What the chain hands over for each detection and each track of a ping.
 struct MultipathHit {
   double range = 0.0;                  ///< slant range, m
-  Vec3d direction;                     ///< world unit vector the array is steered along (horizontal)
+  double bearing = 0.0;                ///< cone bearing, rad from broadside (the map's)
+  double first_range = kNaN, extent = kNaN;   ///< m: the stretch of range its arrivals span (a merging detector); NaN: not known
   double x = 0.0, y = 0.0;             ///< where the tracker has it (its own frame)
   double snr_db = 0.0;
   bool has_depth = false;              ///< a depth from the rows' elevation, m below the surface, with its sigma
@@ -162,7 +171,8 @@ class MultipathDepth {
  public:
   explicit MultipathDepth(const MultipathOptions& options = {}) : opt_(options) {}
   MultipathReport process(const PingRecord& record, const Vec3d& origin, const std::vector<MultipathHit>& hits,
-                          const std::vector<MultipathTrack>& tracks, Backend backend = Backend::Host, int device = 0);
+                          const std::vector<MultipathTrack>& tracks, const std::vector<std::vector<std::int64_t>>& rows = {},
+                          Backend backend = Backend::Host, int device = 0);
   /// One ping's envelope into a track's sum, and what the sum says now (for tests and the Python reference).
   void add(std::int64_t track, const MultipathEstimate& estimate, const MultipathGeometry& g);
   MultipathEstimate track(std::int64_t id) const;
