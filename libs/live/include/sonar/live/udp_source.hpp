@@ -25,7 +25,10 @@ class PingAssembler {
   /// With `decimate` (enabled) every ping is band-selected and decimated to complex baseband as
   /// its blocks arrive (decimate.hpp) and, with `reference`, its boards synchronised: the records
   /// that come out are complex, and the full-rate ping is never held.
-  explicit PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate = nullptr, const Reference* reference = nullptr);
+  /// `sample_bytes`: the size of one sample in a block (2, 3 or 4: a signed little-endian integer whose
+  /// full scale is 2^(8 bytes - 1) counts). The block header does not carry it; the sender is configured alike.
+  explicit PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate = nullptr, const Reference* reference = nullptr,
+                         int sample_bytes = 3);
   /// Take one block; append the ping records it completes (usually none or one).
   /// Returns false, and counts it, if the block is malformed.
   bool feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out);
@@ -33,7 +36,7 @@ class PingAssembler {
 
  private:
   PingRecord template_;
-  std::int64_t window_start_ = 0, window_length_ = 0, n_channels_ = 0;
+  std::int64_t window_start_ = 0, window_length_ = 0, n_channels_ = 0, sample_bytes_ = 3;
   double volts_per_count_ = 1.0;
   bool have_next_ = false, open_ = false, have_done_ = false;
   std::int64_t next_sample_ = 0, done_ping_ = 0;
@@ -52,7 +55,8 @@ class StreamAssembler {
   /// With `decimate` the stream is decimated to complex baseband as it arrives and `chunk_samples`
   /// counts decimated samples (phase continuous from chunk to chunk; no board synchronisation,
   /// as without it).
-  StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate = nullptr);
+  StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate = nullptr,
+                  int sample_bytes = 3);
   bool feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out);
   std::int64_t dropped_chunks = 0, lost_samples = 0, bad_blocks = 0, chunks = 0, blanked_samples = 0;
   /// A platform that also pings: samples from each transmit the blocks mark until `until_s` after it are
@@ -64,7 +68,7 @@ class StreamAssembler {
 
  private:
   PingRecord template_;
-  std::int64_t chunk_ = 0, n_channels_ = 0, filled_ = 0, first_ = 0, start_ns_ = 0, next_sample_ = 0;
+  std::int64_t chunk_ = 0, n_channels_ = 0, filled_ = 0, first_ = 0, start_ns_ = 0, next_sample_ = 0, sample_bytes_ = 3;
   double volts_per_count_ = 1.0;
   bool have_next_ = false;
   std::vector<float> buffer_;  ///< [n_channels][chunk]
@@ -76,19 +80,44 @@ class StreamAssembler {
   double blank_until_ = 0.0, blank_taper_ = 0.0;
 };
 
+/// One sample of a block, sign-extended: `bytes` little-endian bytes (2, 3 or 4).
+inline std::int32_t block_sample(const unsigned char* q, std::int64_t bytes) {
+  if (bytes == 3) {
+    std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
+    if (v & 0x800000) v -= 0x1000000;        // sign-extend 24 bits
+    return v;
+  }
+  if (bytes == 2) return static_cast<std::int16_t>(static_cast<std::uint16_t>(q[0]) | (static_cast<std::uint16_t>(q[1]) << 8));
+  return static_cast<std::int32_t>(static_cast<std::uint32_t>(q[0]) | (static_cast<std::uint32_t>(q[1]) << 8) |
+                                   (static_cast<std::uint32_t>(q[2]) << 16) | (static_cast<std::uint32_t>(q[3]) << 24));
+}
+/// Counts at full scale for samples of `bytes` bytes: 2^(8 bytes - 1). Throws for a size other than 2, 3 or 4.
+double block_full_scale(std::int64_t bytes);
+
+/// The largest UDP payload: a datagram longer than this cannot be sent.
+constexpr std::size_t kMaxDatagram = 65507;
+
 /// A bound UDP socket with a receive timeout. receive() returns the datagram's size, 0 on timeout.
 class UdpSocket {
  public:
-  UdpSocket(const std::string& host, int port, double timeout_s = 0.2);
+  /// `buffer_bytes`: the receive buffer asked of the system (0: 8 MB). What the system granted is
+  /// buffer_granted(); it can be less (net.core.rmem_max), and the caller should say so.
+  UdpSocket(const std::string& host, int port, double timeout_s = 0.2, std::int64_t buffer_bytes = 0);
   ~UdpSocket();
   UdpSocket(const UdpSocket&) = delete;
   UdpSocket& operator=(const UdpSocket&) = delete;
   std::size_t receive(std::vector<unsigned char>& buffer);
-  void send_to(const std::string& host, int port, const std::string& text);
+  /// False, and nothing is sent, when the text is longer than a datagram can be (it is never cut) or the
+  /// address is bad; both are counted in `refused`.
+  bool send_to(const std::string& host, int port, const std::string& text);
   int port() const { return port_; }
+  std::int64_t buffer_asked() const { return asked_; }
+  std::int64_t buffer_granted() const { return granted_; }   ///< usable bytes (Linux reports twice this; halved here)
+  std::int64_t refused = 0;
 
  private:
   int fd_ = -1, port_ = 0;
+  std::int64_t asked_ = 0, granted_ = 0;
 };
 
 /// Navigation as JSON datagrams, one fix each:

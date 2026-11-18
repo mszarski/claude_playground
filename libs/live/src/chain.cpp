@@ -1,5 +1,7 @@
 #include "sonar/live/chain.hpp"
 
+#include <utility>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -57,7 +59,7 @@ namespace {
 
 // Cell-averaged power over bearing x range for one line of hydrophones, by the beamformer chosen.
 void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, const PingRecord& record,
-              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells) {
+              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells, std::int64_t& cell_samples) {
   const double c = record.environment.sound_speed;
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
@@ -68,6 +70,7 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
     const double r1 = 0.5 * c * (s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
     const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(opt_.range_cell_m / (0.75 * c / (2.0 * band)))), 1);
     const double step = opt_.range_cell_m / static_cast<double>(k);
+    cell_samples = k;
     n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
     if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
     std::vector<double> fine(static_cast<std::size_t>(n_cells * k));
@@ -80,9 +83,13 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
       for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
       last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
       for (std::int64_t b = 0; b < n_b; ++b) {
-        double p = 0.0;
-        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
-        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+        double p = 0.0, top = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) {
+          const auto v = static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
+          p += v;
+          top = std::max(top, v);
+        }
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(opt_.cell_peak ? top : p / static_cast<double>(k));
       }
     }
   } else {
@@ -93,6 +100,7 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
                             : farfield_beamform(record, bearings, opt_.hann ? "hann" : "rect", opt_.backend, opt_.device);
     const double sample_m = map.ranges[1] - map.ranges[0];
     const auto k = std::max<std::int64_t>(std::llround(opt_.range_cell_m / sample_m), 1);
+    cell_samples = k;
     n_cells = std::min(map.n_valid, map.n_samples) / k;
     if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
     last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
@@ -105,9 +113,13 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
     parallel_for_host(n_b, [&](std::int64_t b) {
       const std::complex<float>* row = map.row(b);
       for (std::int64_t j = 0; j < n_cells; ++j) {
-        double p = 0.0;
-        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(std::norm(row[j * k + q]));
-        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+        double p = 0.0, top = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) {
+          const auto v = static_cast<double>(std::norm(row[j * k + q]));
+          p += v;
+          top = std::max(top, v);
+        }
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(opt_.cell_peak ? top : p / static_cast<double>(k));
       }
     });
   }
@@ -235,6 +247,12 @@ Report LiveChain::process(PingRecord& record) {
     drop_channels(record, opt_.dead_channels);
   }
   if (opt_.sound_speed > 0.0) record.environment.sound_speed = opt_.sound_speed;
+  if (!resolved_) {
+    // Every size the configuration left out, from this sonar's band, pulse and array (derive.hpp): once, at the first ping.
+    defaults_ = resolve(opt_, record);
+    tracker_ = Tracker(opt_.tracker);
+    resolved_ = true;
+  }
   prepare(record, opt_.backend, opt_.device);
 
   // Range grid: finer than the range resolution, then averaged into cells.
@@ -246,19 +264,19 @@ Report LiveChain::process(PingRecord& record) {
   std::int64_t n_cells = 0;
   std::vector<std::vector<std::int64_t>> rows;
   if (opt_.elevation.enabled) {
-    rows = find_rows(record, opt_.elevation.row_tolerance_m);
+    rows = find_rows(record, opt_.elevation.row_tolerance_m, opt_.elevation.min_row_elements);
     if (rows.size() < 2) rows.clear();           // one row: exactly the chain without the option
   }
   const bool stacked = !rows.empty();
   if (!stacked) {
-    line_map(opt_, bearings, record, last_power, last_ranges, n_cells);
+    line_map(opt_, bearings, record, last_power, last_ranges, n_cells, cell_samples_);
   } else {
     // Each row beamformed on its own, the rows' power added: a row's bearing response does not
     // depend on the elevation the arrival comes from.
     std::vector<float> row_power;
     for (std::size_t k = 0; k < rows.size(); ++k) {
       const PingRecord sub = row_record(record, rows[k]);
-      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells);
+      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells, cell_samples_);
       if (k > 0) {
         for (std::size_t i = 0; i < last_power.size(); ++i) last_power[i] += row_power[i];
       }
@@ -299,9 +317,14 @@ Report LiveChain::process(PingRecord& record) {
 
   if (opt_.doa == "sbl" && !hits.empty()) {
     // The map says at which ranges something is; SBL says from which bearings, at each of them.
+    // SBL's model is one line: the first row of a stacked array, with or without the elevation option
+    // (all rows as one line would be more channels than a line has and phases the model does not hold).
     PingRecord first_row;
-    if (stacked) first_row = row_record(record, rows[0]);      // SBL's model is one line: the first row
-    const PingRecord& line = stacked ? first_row : record;
+    const std::vector<std::vector<std::int64_t>> lines =
+        stacked ? rows : find_rows(record, opt_.elevation.row_tolerance_m, opt_.elevation.min_row_elements);
+    const bool several = lines.size() > 1;
+    if (several) first_row = row_record(record, lines[0]);
+    const PingRecord& line = several ? first_row : record;
     const std::vector<double> u = element_offsets(line);
     const double length = u.back() - u.front();
     std::int64_t n_fft = opt_.gate_fft;
@@ -342,7 +365,11 @@ Report LiveChain::process(PingRecord& record) {
         std::nth_element(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(sorted.size() / 2), sorted.end());
         const double median = static_cast<double>(sorted[sorted.size() / 2]);
         const double peak = static_cast<double>(*std::max_element(look.spectrum.begin(), look.spectrum.end()));
-        if (median > 0.0 && 10.0 * std::log10(peak / median) >= opt_.sbl_min_contrast_db) peaks = sbl(frame, u, c, sbl_grid, solver).peaks;
+        if (median > 0.0 && 10.0 * std::log10(peak / median) >= opt_.sbl_min_contrast_db) {
+          DoaResult solved = sbl(frame, u, c, sbl_grid, solver);
+          peaks = std::move(solved.peaks);
+          rep.sbl_fallback = rep.sbl_fallback || solved.fallback;   // more channels than the kernels take: said in the report
+        }
       }
       if (peaks.empty()) {
         for (std::size_t j : group) resolved.push_back(by_snr[j]);
@@ -387,7 +414,14 @@ Report LiveChain::process(PingRecord& record) {
         if (std::abs(last_ranges[static_cast<std::size_t>(q)] - hits[i].range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - hits[i].range)) ir = q;
       }
       const auto cell_at = static_cast<std::size_t>(ib * n_cells + ir);
-      background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) : 0.0);
+      // The mean noise power of the map: with cells holding their largest sample the detector's background is the
+      // mean of such maxima, the k-th harmonic number above it.
+      double looks = 1.0;
+      if (opt_.cell_peak) {
+        looks = 0.0;
+        for (std::int64_t q = 1; q <= cell_samples_; ++q) looks += 1.0 / static_cast<double>(q);
+      }
+      background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
       at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
     }
     double noise_weight = 0.0;
@@ -449,7 +483,11 @@ Report LiveChain::process(PingRecord& record) {
       d.elevation_sigma_deg = e.sigma / kDeg;
       d.elevation_quality = e.quality;
       d.elevation_ambiguous = e.ambiguous;
-      if (eo.correct_bearing) {
+      // An ambiguous elevation is one of several candidates, and which is picked changes from ping to ping: placing
+      // the detection by it would move it by the range times the difference between their cosines (a kilometre at
+      // 12 km) and break its track. The row's own bearing and the slant range are kept then, and the report says so.
+      d.bearing_uncorrected = eo.correct_bearing && e.ambiguous;
+      if (eo.correct_bearing && !e.ambiguous) {
         // The line array gave the cone angle; with the elevation the horizontal bearing follows.
         px = f.origin.x - origin_.x + e.range * u.x;
         py = f.origin.y - origin_.y + e.range * u.y;
@@ -539,14 +577,17 @@ Report LiveChain::process(PingRecord& record) {
   return rep;
 }
 
-std::string Report::json() const {
+std::string Report::json() const { return json_part(0, detections.size(), 0, tracks.size(), 0, 0); }
+
+std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::size_t track_first, std::size_t track_last,
+                              std::size_t part, std::size_t parts) const {
   std::ostringstream s;
   s << std::setprecision(10);
   s << "{\"ping\": " << ping << ", \"sequence\": " << sequence << ", \"time_ns\": " << time_ns << ", \"ownship_xyz\": ["
     << ownship.x << ", " << ownship.y << ", " << ownship.z << "], \"detections\": [";
-  for (std::size_t i = 0; i < detections.size(); ++i) {
+  for (std::size_t i = det_first; i < det_last; ++i) {
     const auto& d = detections[i];
-    s << (i ? ", " : "") << "{\"range_m\": " << d.range_m << ", \"bearing_deg\": " << d.bearing_deg << ", \"snr_db\": ";
+    s << (i > det_first ? ", " : "") << "{\"range_m\": " << d.range_m << ", \"bearing_deg\": " << d.bearing_deg << ", \"snr_db\": ";
     num(s, d.snr_db);
     if (rows > 0) {
       s << ", \"elevation_deg\": ";
@@ -561,6 +602,7 @@ std::string Report::json() const {
           s << "]";
         }
         if (d.bearing_corrected) s << ", \"cone_bearing_deg\": " << d.cone_bearing_deg;
+        if (d.bearing_uncorrected) s << ", \"bearing_corrected\": false";
         if (d.has_depth) {
           s << ", \"depth_m\": " << d.depth_m << ", \"depth_sigma_m\": " << d.depth_sigma_m << ", \"depth_refraction_sigma_m\": "
             << d.depth_refraction_sigma_m << ", \"image_depth_m\": "
@@ -572,9 +614,9 @@ std::string Report::json() const {
     s << "}";
   }
   s << "], \"tracks\": [";
-  for (std::size_t i = 0; i < tracks.size(); ++i) {
+  for (std::size_t i = track_first; i < track_last; ++i) {
     const auto& t = tracks[i];
-    s << (i ? ", " : "") << "{\"id\": " << t.id << ", \"kind\": \"" << t.kind << "\", \"parent\": ";
+    s << (i > track_first ? ", " : "") << "{\"id\": " << t.id << ", \"kind\": \"" << t.kind << "\", \"parent\": ";
     if (t.parent < 0) s << "null"; else s << t.parent;
     s << ", \"x\": " << t.x << ", \"y\": " << t.y << ", \"vx\": " << t.vx << ", \"vy\": " << t.vy << ", \"speed_m_s\": " << t.speed
       << ", \"range_m\": " << t.range_m << ", \"mean_snr_db\": ";
@@ -613,11 +655,71 @@ std::string Report::json() const {
     if (profile_bins > 0) s << ", \"bins\": " << profile_bins << ", \"span_m\": [" << profile_lo << ", " << profile_hi << "]";
     s << "}";
   }
-  s << ", \"processing_seconds\": " << processing_seconds << "}";
+  if (sbl_fallback) s << ", \"sbl_fallback\": true";
+  s << ", \"processing_seconds\": " << processing_seconds;
+  if (parts > 0) s << ", \"part\": [" << part << ", " << parts << "]";
+  s << "}";
   return s.str();
 }
 
-std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const PassiveOptions& o, std::vector<double>* bearings_out) {
+std::vector<std::string> Report::datagrams(std::size_t max_bytes) const {
+  std::string whole = json();
+  if (whole.size() <= max_bytes) return {std::move(whole)};
+  // Shares of the detections, then of the tracks, each as large as fits beside the fields every part repeats.
+  const std::size_t n_det = detections.size(), n_trk = tracks.size();
+  const std::size_t head = json_part(0, 0, 0, 0, 999, 999).size();
+  std::vector<std::size_t> size(n_det + n_trk);   // an item with its separator
+  for (std::size_t i = 0; i < n_det; ++i) size[i] = json_part(i, i + 1, 0, 0, 999, 999).size() - head + 2;
+  for (std::size_t i = 0; i < n_trk; ++i) size[n_det + i] = json_part(0, 0, i, i + 1, 999, 999).size() - head + 2;
+  std::vector<std::pair<std::size_t, std::size_t>> cuts;   // [first, last) over detections then tracks
+  std::size_t first = 0, used = head;
+  for (std::size_t i = 0; i < size.size(); ++i) {
+    if (i > first && used + size[i] > max_bytes) {
+      cuts.emplace_back(first, i);
+      first = i;
+      used = head;
+    }
+    used += size[i];
+  }
+  cuts.emplace_back(first, size.size());
+  std::vector<std::string> out;
+  for (std::size_t k = 0; k < cuts.size(); ++k) {
+    const std::size_t a = cuts[k].first, b = cuts[k].second;
+    out.push_back(json_part(std::min(a, n_det), std::min(b, n_det), std::max(a, n_det) - n_det, std::max(b, n_det) - n_det, k + 1, cuts.size()));
+  }
+  return out;
+}
+
+std::vector<std::string> line_datagrams(const std::string& lines, std::size_t max_bytes) {
+  std::vector<std::string> out;
+  if (lines.size() <= max_bytes) {
+    out.push_back(lines);
+    return out;
+  }
+  std::string now;
+  std::size_t at = 0;
+  while (at < lines.size()) {
+    const std::size_t end = std::min(lines.find('\n', at), lines.size() - 1) + 1;
+    if (!now.empty() && now.size() + (end - at) > max_bytes) {
+      out.push_back(std::move(now));
+      now.clear();
+    }
+    now.append(lines, at, end - at);
+    at = end;
+  }
+  if (!now.empty()) out.push_back(std::move(now));
+  return out;
+}
+
+std::int64_t passive_span(const PassiveOptions& options, const PingRecord& record) {
+  PassiveOptions o = options;
+  resolve(o, record);
+  return o.n_fft + (o.n_average - 1) * o.hop;
+}
+
+std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const PassiveOptions& options, std::vector<double>* bearings_out) {
+  PassiveOptions o = options;
+  resolve(o, record);                 // block sizes left to be derived
   const Waveform& w = record.transmit.waveform;
   double f_low = o.f_low, f_high = o.f_high;
   if (f_low <= 0.0 && f_high <= 0.0) {
@@ -626,11 +728,11 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
   }
   const std::vector<double> bearings = grid(o.bearing_first_deg, o.bearing_last_deg, o.bearing_step_deg);
   if (bearings_out) *bearings_out = bearings;
-  std::vector<std::vector<std::int64_t>> rows;
-  if (o.elevation.enabled) {
-    rows = find_rows(record, o.elevation.row_tolerance_m);
-    if (rows.size() < 2) rows.clear();
-  }
+  // The rows are looked for with or without the elevation option: the bearing solve's model is one
+  // line, and the hydrophones of several rows taken as one line are not one (the phases between rows
+  // depend on the elevation, which that model does not have: it then finds a wrong bearing or none).
+  std::vector<std::vector<std::int64_t>> rows = find_rows(record, row_tolerance(record, o.elevation.row_tolerance_m), o.elevation.min_row_elements);
+  if (rows.size() < 2) rows.clear();
   if (rows.empty()) {
     const std::vector<double> u = element_offsets(record);
     const std::vector<DoaFrame> frames = passive_frames(record, o.n_fft, o.hop, o.n_average, f_low, f_high);
@@ -639,6 +741,7 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
       const DoaResult r = o.use_sbl ? sbl(frames[i], u, record.environment.sound_speed, bearings, o.sbl)
                                     : conventional(frames[i], u, record.environment.sound_speed, bearings, o.sbl);
       out[i] = {frames[i].time, r.peaks, r.spectrum, r.noise, {}, {}};
+      out[i].sbl_fallback = r.fallback;
     }
     return out;
   }
@@ -669,6 +772,7 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
       a.n_snapshots += b.n_snapshots;
     }
   }
+  const auto n_lines = static_cast<std::int64_t>(subs.size());
   subs.clear();
   const ElevationFrame ef = elevation_frame(record, rows, o.starboard);
   const std::int64_t span = o.n_fft + (o.n_average - 1) * o.hop;
@@ -677,6 +781,12 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
     const DoaResult r = o.use_sbl ? sbl(frames[i], u, record.environment.sound_speed, bearings, o.sbl)
                                   : conventional(frames[i], u, record.environment.sound_speed, bearings, o.sbl);
     out[i] = {frames[i].time, r.peaks, r.spectrum, r.noise, {}, {}};
+    out[i].sbl_fallback = r.fallback;
+    if (!o.elevation.enabled) {
+      // Without the option: cone bearings from the rows as snapshots, and the frame says so.
+      out[i].rows_as_snapshots = n_lines;
+      continue;
+    }
     for (const DoaPeak& peak : r.peaks) {
       const PassiveElevation pe = passive_elevation(record, rows, peak.bearing, f_low, f_high, o.n_fft, o.hop,
                                                     static_cast<std::int64_t>(i) * span, o.n_average, o.elevation.first_deg,
@@ -706,7 +816,10 @@ std::string passive_json(const std::vector<PassiveFrame>& frames, std::int64_t r
       s << "], \"elevation_quality\": [";
       for (std::size_t i = 0; i < f.elevation_quality.size(); ++i) s << (i ? ", " : "") << f.elevation_quality[i];
     }
-    s << "]}\n";
+    s << "]";
+    if (f.rows_as_snapshots > 0) s << ", \"rows_as_snapshots\": " << f.rows_as_snapshots;
+    if (f.sbl_fallback) s << ", \"sbl_fallback\": true";
+    s << "}\n";
   }
   return s.str();
 }

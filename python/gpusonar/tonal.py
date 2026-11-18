@@ -44,7 +44,8 @@ import numpy as np
 DEFAULTS = {
     "bearings_deg": [-80.0, 80.0, 1.0],   # first, last, step: the beams lines and modulation are looked for on
     "window": "hann",                     # aperture weighting of each row of hydrophones ("rect": none)
-    "row_tolerance_m": 0.02,              # hydrophones within this of one line are one row (as chain.elevation)
+    "row_tolerance_m": None,              # hydrophones within this of one line are one row (as chain.elevation); None: derived
+                                          # (2 cm, or a quarter of the shortest wavelength when less: libs/live derive.hpp)
     "attach_deg": 3.0,                    # a result within this of a passive bearing is reported as that bearing's
     "goertzel": None,                     # {lines: [...], ...}: see GOERTZEL
     "demon": None,                        # {} or {...}: see DEMON
@@ -131,7 +132,9 @@ def cpp_options(config: dict | None, f_low: float = 0.0, f_high: float = 0.0) ->
     cfg = configure(config)
     b = cfg["bearings_deg"]
     o = {"tonal": 1, "tonal_bearing_first_deg": b[0], "tonal_bearing_last_deg": b[1], "tonal_bearing_step_deg": b[2],
-         "tonal_window": cfg["window"], "tonal_row_tolerance_m": cfg["row_tolerance_m"], "tonal_attach_deg": cfg["attach_deg"]}
+         "tonal_window": cfg["window"], "tonal_attach_deg": cfg["attach_deg"]}
+    if cfg["row_tolerance_m"] is not None:
+        o["tonal_row_tolerance_m"] = cfg["row_tolerance_m"]
     g = cfg["goertzel"]
     if g is not None:
         t = g["track"] or {}
@@ -407,7 +410,9 @@ class TonalAnalyzer:
         self.is_complex = bool(s.is_complex())
         self.carrier = float(s.center_frequency) if self.is_complex else 0.0
         self.c = float(record.environment.sound_speed)
-        rows = elevation.find_rows(record, cfg["row_tolerance_m"])
+        from . import _gpusonar as core
+        tolerance = cfg["row_tolerance_m"] if cfg["row_tolerance_m"] is not None else core.live_row_tolerance(record)
+        rows = elevation.find_rows(record, tolerance)
         if not rows:
             rows = [list(range(s.n_channels))]
         pos = record.rx_positions()
@@ -773,7 +778,7 @@ def passive_report(records, passive: dict, engine: str = "python") -> list[dict]
     p = dict(passive)
     tonal_cfg = p.pop("tonal", None)
     f_low, f_high = float(p.pop("f_low", 0.0)), float(p.pop("f_high", 0.0))
-    n_fft, hop, n_average = int(p.get("n_fft", 1024)), int(p.get("hop", 512)), int(p.get("n_average", 8))
+    n_average = int(p.get("n_average", 8))
     analyzer = None
     if tonal_cfg is not None:
         analyzer = (TonalAnalyzer(tonal_cfg, f_low, f_high) if engine == "python"
@@ -794,7 +799,8 @@ def passive_report(records, passive: dict, engine: str = "python") -> list[dict]
             if not out:
                 continue
             events, pending = pending, []
-            span = n_fft + (n_average - 1) * hop
+            # The frame length the bearings were cut to: block sizes left out are derived from the array and the rate.
+            span = core.live_passive_sizes(rec, int(p.get("n_fft") or 0), int(p.get("hop") or 0), n_average)[2]
             ends = [s.start_time + (i + 1) * span / s.sample_rate for i in range(len(out))]
             attach(out, events, int(rec.transmit.time_ns), ends, configure(tonal_cfg)["attach_deg"])
         lines.extend(out)

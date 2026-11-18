@@ -70,6 +70,9 @@ class UdpSourceOp : public holoscan::Operator {
   holoscan::Parameter<bool> listen_;
   holoscan::Parameter<int64_t> chunk_samples_, max_pings_;
   holoscan::Parameter<double> idle_seconds_;
+  holoscan::Parameter<std::string> options_;
+  std::size_t queue_limit_ = 0, queued_bytes_ = 0;   ///< bytes the waiting blocks may hold (0: no bound) and do hold
+  std::int64_t queue_dropped_ = 0;
   std::unique_ptr<live::PingAssembler> pings_;
   std::unique_ptr<live::StreamAssembler> stream_;
   std::unique_ptr<live::UdpSocket> socket_, nav_socket_;
@@ -139,6 +142,7 @@ class ReportSinkOp : public holoscan::Operator {
  private:
   holoscan::Parameter<std::string> path_, udp_host_;
   holoscan::Parameter<int> udp_port_;
+  holoscan::Parameter<int64_t> max_bytes_;
   std::ofstream file_;
   std::unique_ptr<live::UdpSocket> socket_;
 };

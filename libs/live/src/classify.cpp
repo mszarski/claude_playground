@@ -137,7 +137,9 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
       const std::size_t weak = order[a];
       for (std::size_t b = 0; b < a; ++b) {
         const std::size_t strong = order[b];
-        if (out[strong].kind == Kind::Multipath) continue;
+        // Only a track that is itself classed as an object explains another as its echo: not an echo, and not a
+        // track still uncertain (a weaker track beside an unproven one is not thereby explained away).
+        if (out[strong].kind != Kind::Mover && out[strong].kind != Kind::Static && out[strong].kind != Kind::Line) continue;
         double rw, bw, rs, bs;
         polar(weak, rw, bw);
         polar(strong, rs, bs);

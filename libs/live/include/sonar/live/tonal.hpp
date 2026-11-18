@@ -25,6 +25,7 @@
 #include <complex>
 #include <cstdint>
 #include <deque>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -36,7 +37,7 @@ struct TonalOptions {
   bool enabled = false;
   double bearing_first_deg = -80.0, bearing_last_deg = 80.0, bearing_step_deg = 1.0;
   bool hann = true;               ///< aperture weighting of each row of hydrophones
-  double row_tolerance_m = 0.02;  ///< hydrophones within this of one line are one row
+  double row_tolerance_m = std::numeric_limits<double>::quiet_NaN();  ///< hydrophones within this of one line are one row; NaN: derived (derive.hpp)
   double attach_deg = 3.0;        ///< a result within this of a passive bearing is reported as that bearing's
   struct Goertzel {
     bool enabled = false;

@@ -20,6 +20,10 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_guard_m") c.cfar_guard_m = v;
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
+  else if (key == "cell_statistic") {
+    if (value != "mean" && value != "peak") throw std::invalid_argument("cell_statistic: mean or peak");
+    c.cell_peak = value == "peak";
+  }
   else if (key == "beamformer") c.beamformer = value;
   else if (key == "doa") c.doa = value;
   else if (key == "mvdr_subbands") c.mvdr.n_subbands = static_cast<std::int64_t>(v);
@@ -72,6 +76,18 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "blanking_taper_s") c.blanking.taper_s = v;
   else if (key == "blanking_mode") c.blanking.zero = value != "ignore";
   else if (key == "sync_min_quality") c.reference.min_quality = v;
+  else if (key == "sync_search_time") c.reference.search_time = v;
+  else if (key == "sync_tolerance_us") c.reference.tolerance_us = v;
+  else if (key == "sync_clip_level") c.reference.clip_level = v;
+  else if (key == "elevation_min_row_elements") c.elevation.min_row_elements = p.elevation.min_row_elements = static_cast<std::int64_t>(v);
+  else if (key == "nav_history_margin_s") c.nav.history_margin_s = v;
+  // The program around the chain: the board stream, its socket and queue, the report datagrams.
+  else if (key == "stream_sample_bytes") c.stream.sample_bytes = static_cast<int>(v);
+  else if (key == "stream_buffer_bytes") c.stream.buffer_bytes = static_cast<std::int64_t>(v);
+  else if (key == "stream_queue_mb") c.stream.queue_mb = v;
+  else if (key == "idle_seconds") c.stream.idle_seconds = v;
+  else if (key == "bind") c.stream.bind = value;
+  else if (key == "report_udp_max_bytes") c.stream.report_max_bytes = static_cast<std::int64_t>(v);
   else if (key == "decimate") c.decimate.enabled = v != 0.0;
   else if (key == "decimate_streaming") c.decimate_streaming = v != 0.0;
   else if (key == "decimate_f_low") c.decimate.f_low = v;

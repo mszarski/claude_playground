@@ -19,6 +19,7 @@ so what is tested ashore is what runs at sea. Every intermediate product can be 
 
 from __future__ import annotations
 
+import copy
 import json
 import socket
 import time
@@ -40,21 +41,154 @@ DEFAULTS = {
     "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (host; C++ with engine: cpp)
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
     "look": "starboard",                       # which side of a line array the bearings are on
-    "range_cell_m": 2.0,                       # power is averaged into cells this long before detection
-    "cfar": {"pfa": 1e-5, "guard_m": 100.0, "train_m": 300.0},
+    # Sizes that follow from the sonar are None here: derived from the first ping's band, pulse and array by
+    # libs/live derive.hpp (the one source: 2 m cells, 100 m guard, 300 m training, 15 m and 1 deg tracker sigmas, 3 deg
+    # multipath gate, 60 m fit limit for a kilometre-range array of 2 kHz band or more; more for a narrower band or a
+    # wider beam). A number given in the configuration wins. `LiveChain.resolved` says what was used.
+    "range_cell_m": None,                      # power is averaged into cells this long before detection
+    "cfar": {"pfa": 1e-5, "guard_m": None, "train_m": None},
     "min_snr_db": 9.0,
+    "cell_statistic": "mean",                  # what a range cell holds of the finer map: "mean" power (as always) or its "peak"
+                                               # sample (docs/DEPLOYMENT.md, "What snr_db is": about 3 dB more for a point echo)
     "engine": "python",                        # "cpp": libs/live does every stage after recording (what build/bin/sonar_live runs)
     "doa": "map",                              # "sbl": sparse Bayesian bearings at each detected range (engine cpp)
     "sbl": {"grid_step_deg": 0.25, "max_sources": 6, "min_snr_db": 6.0, "dynamic_range_db": 20.0,
             "max_gates": 24, "min_contrast_db": 8.0, "max_iterations": 20, "tolerance": 0.01},
-    "tracker": {"range_sigma": 15.0, "bearing_sigma_deg": 1.0, "confirm_hits": 3, "max_misses": 2,
+    "tracker": {"range_sigma": None, "bearing_sigma_deg": None, "confirm_hits": 3, "max_misses": 2,
                 "initial_speed_sigma": 8.0, "process_noise": 0.05},
     "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
-    "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": 60.0,
-                 "multipath": {"max_excess_range": 800.0, "bearing_deg": 3.0, "velocity": 2.5}},
+    "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": None,
+                 "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5}},
 }
+# The derived settings: (path in the configuration, C++ option name, factor from the configuration's unit).
+DERIVED = ((("range_cell_m",), "range_cell_m", 1.0), (("cfar", "guard_m"), "cfar_guard_m", 1.0), (("cfar", "train_m"), "cfar_train_m", 1.0),
+           (("tracker", "range_sigma"), "tracker_range_sigma", 1.0), (("tracker", "bearing_sigma_deg"), "tracker_bearing_sigma", np.pi / 180.0),
+           (("classify", "max_fit_rms"), "classify_max_fit_rms", 1.0),
+           (("classify", "multipath", "bearing_deg"), "multipath_bearing", np.pi / 180.0))
+REPORT_UDP_MAX_BYTES = 65000        # a report line longer than this goes out as several datagrams (split_report)
+
+
+def _given(cfg: dict) -> dict:
+    """The derived settings the configuration gave, by C++ option name and in its units."""
+    out = {}
+    for path, name, factor in DERIVED:
+        v = cfg
+        for key in path:
+            v = v.get(key) if isinstance(v, dict) else None
+        if v is not None:
+            out[name] = float(np.radians(v)) if factor != 1.0 else float(v)
+    return out
+
+
+def split_report(report: dict, max_bytes: int = REPORT_UDP_MAX_BYTES) -> list[str]:
+    """A report as the text of its UDP datagrams, none longer than `max_bytes`: the one line when it fits.
+    Otherwise several lines, each a complete report of the same ping holding a share of the detections
+    and tracks and a field "part": [k, n] (k from 1). A reader that knows nothing of parts parses each
+    as a report with fewer detections; one that does joins the lists of the n parts of a ping
+    (`join_report_parts`). The line is never cut. libs/live Report::datagrams does the same."""
+    line = json.dumps(report)
+    if len(line.encode()) <= max_bytes:
+        return [line]
+    head = dict(report, detections=[], tracks=[], part=[999, 999])
+    room = max_bytes - len(json.dumps(head).encode())
+    items = [("detections", d) for d in report["detections"]] + [("tracks", t) for t in report["tracks"]]
+    shares, now, used = [], [], 0
+    for item in items:
+        size = len(json.dumps(item[1]).encode()) + 2
+        if now and used + size > room:
+            shares.append(now)
+            now, used = [], 0
+        now.append(item)
+        used += size
+    shares.append(now)
+    out = []
+    for k, share in enumerate(shares):
+        part = dict(report, detections=[v for key, v in share if key == "detections"], tracks=[v for key, v in share if key == "tracks"],
+                    part=[k + 1, len(shares)])
+        out.append(json.dumps(part))
+    return out
+
+
+# --- what snr_db is, and how it relates to a link budget ---------------------------------------------------------------
+#
+# A detection's `snr_db` is 10 log10 of (the power of the strongest range cell of its cluster) over (the detector's
+# background for that cell: the mean of the cells `cfar.train_m` either side along range, beyond `cfar.guard_m`), on the
+# beamformed, pulse-compressed map. A link budget (gpusonar.sonar_equation, buildspec.performance) states the peak
+# signal power over the mean noise power at the output of an unweighted beamformer. The chain's number is lower by
+#   window    the aperture weighting's loss against uncorrelated noise, N sum(w^2) / (sum w)^2: 1.76 dB for Hann;
+#   cell      what the range cell does to an echo one range resolution long. "mean": its power is averaged with the
+#             other samples of the cell (7.6 dB for a 2 m cell at 2 kHz of band). "peak": the largest sample is taken
+#             (0.4 dB of straddling), but the background is then the mean of the largest of k noise samples, the k-th
+#             harmonic number above the mean noise power (4.3 dB for k = 8).
+# An echo spread over the cell in range (a long target, multipath) loses less under "mean" than this figure, which is
+# for a point; and the budget's source level convention (peak or rms) is a separate 3 dB the budget must state.
+
+def snr_loss_db(record, range_cell_m: float, window: str = "hann", cell_statistic: str = "mean", row_elements: int | None = None) -> dict:
+    """What the chain's `snr_db` reads below a link budget's SNR (peak signal over mean noise at an unweighted
+    beamformer's output) for a point echo, dB: {"window_db", "cell_db", "total_db", "samples_per_cell"}.
+    `record` gives the band and the sound speed; `row_elements` the hydrophones of one row (default: all of them).
+    The cell figure is the mean over where the echo falls among the cell's samples (tests/python/test_hardcoded.py
+    holds it to the chain's own numbers within 1 dB)."""
+    w = record.transmit.waveform
+    c = record.environment.sound_speed
+    band = abs(w.f_stop - w.f_start) or 1.0 / w.duration
+    resolution = c / (2.0 * band)
+    n = int(row_elements or record.samples.n_channels)
+    if window == "hann":
+        # As the map lays it: across the aperture, reaching zero half a pitch beyond its ends.
+        u = (np.arange(n) - 0.5 * (n - 1)) / n
+        weights = np.cos(np.pi * u) ** 2
+    else:
+        weights = np.ones(n)
+    window_db = float(10.0 * np.log10(n * np.sum(weights**2) / np.sum(weights) ** 2))
+    k = max(int(np.ceil(range_cell_m / (0.75 * resolution))), 1)
+    step = range_cell_m / k
+    # The compressed pulse of a flat band about its peak, sampled every `step`, the echo anywhere within one cell.
+    offsets = (np.arange(400) + 0.5) / 400.0 * range_cell_m
+    samples = step * np.arange(-3 * k, 4 * k)[None, :] - offsets[:, None]
+    response = np.sinc(samples / resolution) ** 2                    # [where the echo is, fine sample]
+    cells = response.reshape(len(offsets), 7, k)
+    if cell_statistic == "peak":
+        signal = cells.max(axis=2).max(axis=1)
+        background = float(np.sum(1.0 / np.arange(1, k + 1)))        # mean of the largest of k independent noise powers
+    else:
+        signal = cells.mean(axis=2).max(axis=1)
+        background = 1.0
+    cell_db = float(-10.0 * np.log10(np.mean(signal) / background))
+    return {"window_db": window_db, "cell_db": cell_db, "total_db": window_db + cell_db, "samples_per_cell": k}
+
+
+def detection_threshold_db(cfg: dict | None = None, train_cells: int = 300) -> float:
+    """The `snr_db` a cell needs to be reported: the larger of `min_snr_db` and the detector's own threshold over its
+    background (cell-averaging CFAR at `cfar.pfa` with `train_cells` training cells: 10.7 dB at 1e-5)."""
+    cfg = _merge(DEFAULTS, cfg)
+    return float(max(cfg["min_snr_db"], 10.0 * np.log10(detect.cfar_threshold_factor(cfg["cfar"]["pfa"], int(train_cells)))))
+
+
+def budget_threshold_db(record, cfg: dict | None = None, range_cell_m: float | None = None, row_elements: int | None = None) -> float:
+    """The link-budget SNR (peak signal over mean noise at an unweighted beamformer's output, source level as the
+    record's) at which the chain as configured reports a point echo: detection_threshold_db + snr_loss_db. What a
+    range prediction should use as its detection threshold in place of a typed 13 dB. `range_cell_m`: the cell the
+    chain resolved (default: the configuration's, else the derivation's for this record)."""
+    cfg = _merge(DEFAULTS, cfg)
+    if range_cell_m is None:
+        range_cell_m = cfg["range_cell_m"] or core.live_derive(record, {})["range_cell_m"]
+    train = cfg["cfar"]["train_m"] or core.live_derive(record, {})["cfar_train_m"]
+    loss = snr_loss_db(record, float(range_cell_m), cfg["window"], cfg["cell_statistic"], row_elements)
+    return detection_threshold_db(cfg, int(round(2.0 * train / range_cell_m))) + loss["total_db"]
+
+
+def join_report_parts(parts: list[dict]) -> dict:
+    """The report the parts of one ping were split from (any order; all n must be there)."""
+    parts = sorted(parts, key=lambda p: p["part"][0])
+    if [p["part"][0] for p in parts] != list(range(1, parts[0]["part"][1] + 1)) or len({p["ping"] for p in parts}) != 1:
+        raise ValueError("report parts: not the n parts of one ping")
+    out = {k: v for k, v in parts[0].items() if k != "part"}
+    out["detections"] = [d for p in parts for d in p["detections"]]
+    out["tracks"] = [t for p in parts for t in p["tracks"]]
+    return out
 
 
 def _merge(base: dict, over: dict | None) -> dict:
@@ -70,23 +204,31 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     cfg = _merge(DEFAULTS, cfg)
     if cfg["beamformer"] not in ("backprojection", "farfield", "mvdr"):
         raise ValueError(f"beamformer: {cfg['beamformer']!r} (backprojection, farfield or mvdr)")
+    if cfg["cell_statistic"] not in ("mean", "peak"):
+        raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean or peak)")
     b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
-    o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2], "range_cell_m": cfg["range_cell_m"],
-         "cfar_pfa": cfg["cfar"]["pfa"], "cfar_guard_m": cfg["cfar"]["guard_m"], "cfar_train_m": cfg["cfar"]["train_m"],
+    o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2],
+         "cfar_pfa": cfg["cfar"]["pfa"],
          "min_snr_db": cfg["min_snr_db"], "hann": cfg["window"] == "hann", "starboard": cfg["look"] == "starboard",
          "beamformer": cfg["beamformer"], "doa": cfg["doa"], "sbl_grid_step_deg": s["grid_step_deg"], "sbl_max_sources": int(s["max_sources"]),
          "sbl_min_snr_db": s["min_snr_db"], "sbl_dynamic_range_db": s["dynamic_range_db"],
          "sbl_max_gates": int(s["max_gates"]), "sbl_min_contrast_db": s["min_contrast_db"],
          "sbl_max_iterations": int(s["max_iterations"]), "sbl_tolerance": s["tolerance"],
-         "tracker_range_sigma": t["range_sigma"], "tracker_bearing_sigma": float(np.radians(t["bearing_sigma_deg"])),
          "tracker_confirm_hits": int(t["confirm_hits"]), "tracker_max_misses": int(t["max_misses"]),
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
-         "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"], "classify_max_fit_rms": c["max_fit_rms"],
+         "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath"))}
+    if cfg["cell_statistic"] == "peak":
+        o["cell_peak"] = True
+    # The sizes that follow from the sonar go to the C++ chain only when the configuration gives them: left out,
+    # it derives them from the first ping (libs/live derive.hpp).
+    given = _given(cfg)
+    if not c.get("multipath"):
+        given.pop("multipath_bearing", None)
+    o.update(given)
     if c.get("multipath"):
         m = c["multipath"]
-        o.update(multipath_max_excess_range=m["max_excess_range"], multipath_bearing=float(np.radians(m["bearing_deg"])),
-                 multipath_velocity=m["velocity"])
+        o.update(multipath_max_excess_range=m["max_excess_range"], multipath_velocity=m["velocity"])
     if cfg.get("dead_channels"):
         o["dead_channels"] = [int(v) for v in cfg["dead_channels"]]
     if cfg.get("sound_speed"):
@@ -120,12 +262,15 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "ssp_depth": [float(v) for v in (e["ssp"] or {}).get("depth", [])],
                           "ssp_speed": [float(v) for v in (e["ssp"] or {}).get("speed", [])],
                           "roll_sigma": float(np.radians(e["roll_sigma_deg"])), "depth_process_noise": float(e["depth_process_noise"]),
-                          "row_tolerance_m": float(e["row_tolerance_m"])}
+                          "min_row_elements": int(e["min_row_elements"])}
+        if e["row_tolerance_m"] is not None:
+            o["elevation"]["row_tolerance_m"] = float(e["row_tolerance_m"])
         if e["profile"] is not None:
             o["elevation"]["profile"] = profile_options(e["profile"])
     if reference is not None:
         o["sync"] = {k: (bool(reference[k]) if k == "dedicated" else float(reference[k]))
-                     for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated", "min_quality") if reference.get(k) is not None}
+                     for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated", "min_quality", "search_time", "tolerance_us",
+                               "clip_level") if reference.get(k) is not None}
     return o
 
 
@@ -139,8 +284,11 @@ def sync_reference(cfg: dict) -> dict | None:
     else:
         from .sonar import SonarModel
         ref = SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
-    # min_quality (beside `reference` or `sonar`): a burst below it, or clipped, is not used and its board is flagged.
-    return dict(ref, min_quality=float(sc["min_quality"])) if sc.get("min_quality") is not None else ref
+    # Beside `reference` or `sonar`: min_quality (a burst below it, or clipped, is not used and its board is flagged),
+    # search_time (s either side of where a burst is expected; default 2 ms: boards that start further apart need more)
+    # and tolerance_us (what the boards must agree within; default a twentieth of a period at the top of the band).
+    extra = {k: float(sc[k]) for k in ("min_quality", "search_time", "tolerance_us") if sc.get(k) is not None}
+    return dict(ref, **extra) if extra else ref
 
 
 NAV_FIELDS = ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude", "bottom_lock",
@@ -179,7 +327,8 @@ class NavListener:
     `Navigation`."""
 
     def __init__(self, port: int | None = None, host: str = "0.0.0.0", static: dict | None = None, keep: int | None = None,
-                 water_depth: dict | None = None, keep_s: float = 120.0, surface_z: float = 0.0, profile_step_m: float = 0.5):
+                 water_depth: dict | None = None, keep_s: float = 120.0, surface_z: float = 0.0, profile_step_m: float = 0.5,
+                 history_margin_s: float = 2.0):
         import collections
         import threading
         self._fixes = collections.deque(maxlen=keep or 200000)
@@ -190,6 +339,7 @@ class NavListener:
         self.keep_ns = int(keep_s * 1e9)
         self.surface_z = float(surface_z)
         self.profile_step_m = float(profile_step_m)
+        self.history_margin_ns = int(history_margin_s * 1e9)   # a ping's attitude history reaches this far either side of its window
         self._water = None
         if water_depth and water_depth.get("source", "datagram") == "altitude":
             unknown = set(water_depth) - set(WATER_DEPTH_DEFAULTS)
@@ -210,13 +360,13 @@ class NavListener:
     @classmethod
     def from_config(cls, nav: dict) -> "NavListener":
         """From the `nav` section of a deployment file."""
-        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m")
+        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m", "history_margin_s")
         return cls(**{k: nav[k] for k in keys if nav.get(k) is not None})
 
     def _listen(self) -> None:
         while not self._stop.is_set():
             try:
-                self.push(json.loads(self.socket.recv(4096)))
+                self.push(json.loads(self.socket.recv(65535)))     # any datagram, whole
             except socket.timeout:
                 continue
             except (OSError, ValueError, KeyError, TypeError):
@@ -303,8 +453,9 @@ class NavListener:
                                           for t, x, y, z, c in samples]
         return out
 
-    def history(self, first_ns: int, last_ns: int, margin_ns: int = 2_000_000_000):
-        """The fixes from `margin_ns` before `first_ns` to as long after `last_ns`: [(time_ns, row)]."""
+    def history(self, first_ns: int, last_ns: int, margin_ns: int | None = None):
+        """The fixes from `margin_ns` (default: `history_margin_s`) before `first_ns` to as long after `last_ns`: [(time_ns, row)]."""
+        margin_ns = self.history_margin_ns if margin_ns is None else margin_ns
         with self._lock:
             return [f for f in self._fixes if first_ns - margin_ns <= f[0] <= last_ns + margin_ns]
 
@@ -438,8 +589,13 @@ class LiveChain:
     """Process ping records as they arrive. `process(record)` returns the report for that ping."""
 
     def __init__(self, config: dict | None = None, *, recording: str | None = None, report_path: str | None = None,
-                 report_udp: tuple | None = None, taps: dict | None = None, nav: NavListener | None = None):
-        self.cfg = _merge(DEFAULTS, config)
+                 report_udp: tuple | None = None, taps: dict | None = None, nav: NavListener | None = None,
+                 report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
+        self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
+        self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
+        self.report_udp_max_bytes = int(report_udp_max_bytes)
+        self.reports_split = 0                 # reports that went out as several datagrams
+        self.sbl_fallbacks = 0                 # pings whose SBL ran on the host reference (more channels than its kernels take)
         t = self.cfg["tracker"]
         self._elevation = None
         self._ladder = None                    # the sound-speed ladder (elevation.profile), Python engine
@@ -453,10 +609,7 @@ class LiveChain:
             self._elevation["ssp"] = normalise_ssp(self._elevation["ssp"])
             if self._elevation["profile"] is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
                 self._ladder = core.SoundSpeedLadder(profile_options(self._elevation["profile"]))
-        self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=np.radians(t["bearing_sigma_deg"]),
-                                      confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
-                                      initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
-                                      depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5))
+        self.tracker = None                    # built at the first ping, once its sigmas are known (Python engine)
         b = self.cfg["bearings_deg"]
         self.bearings = np.radians(np.arange(b[0], b[1] + 0.5 * b[2], b[2]))
         self._writer = core.RecordWriter(recording) if recording else None
@@ -469,6 +622,8 @@ class LiveChain:
         self.boards_out_of_sync = 0
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
+        if self.cfg["cell_statistic"] not in ("mean", "peak"):
+            raise ValueError(f"cell_statistic: {self.cfg['cell_statistic']!r} (mean or peak)")
         if self.cfg["doa"] not in ("map", "sbl"):
             raise ValueError(f"doa: {self.cfg['doa']!r} (map or sbl)")
         if self.cfg["engine"] not in ("python", "cpp"):
@@ -515,6 +670,9 @@ class LiveChain:
         cfg = self.cfg
         if self._cpp is not None:
             report = json.loads(self._cpp.process(record))
+            if self.resolved is None:
+                self.resolved = json.loads(self._cpp.resolved())
+            self.sbl_fallbacks += bool(report.get("sbl_fallback"))
             report.update(ping=index, pings_without_nav=self.pings_without_nav,
                           processing_seconds=time.perf_counter() - t_wall)
             if report.get("sync") and not report["sync"]["ok"]:
@@ -570,6 +728,8 @@ class LiveChain:
             from . import sync
             dead = {int(v) for v in cfg["dead_channels"]}
             record = sync.select_channels(record, [r for r in range(record.samples.n_channels) if r not in dead])
+        if self.resolved is None:
+            self._resolve(record)
         from . import recon
         recon.prepare([record], backend=self.backend)        # baseband and pulse compression (cuFFT on a GPU)
         if tap:
@@ -577,7 +737,7 @@ class LiveChain:
         rows = subs = None
         if self._elevation is not None:
             from . import elevation
-            rows = elevation.find_rows(record, self._elevation["row_tolerance_m"])
+            rows = elevation.find_rows(record, self._elevation["row_tolerance_m"], int(self._elevation["min_row_elements"]))
             if len(rows) < 2:
                 rows = None                    # one row: exactly the chain without the option
             else:
@@ -593,6 +753,34 @@ class LiveChain:
                 fine = f_ if fine is None else fine + f_
         self._rows, self._subs = rows, subs
         return self._after_map(record, fine, fine_ranges, k, index, tap, sync_facts, t_wall)
+
+    def _resolve(self, record) -> None:
+        """Every size the configuration left out, from this sonar's band, pulse and array: once, at the first ping
+        (libs/live derive.hpp, the same function the C++ chain calls)."""
+        cfg = self.cfg
+        given = _given(cfg)
+        given["bearing_step_deg"] = float(cfg["bearings_deg"][2])
+        if self._elevation is not None:
+            given["min_row_elements"] = int(self._elevation["min_row_elements"])
+            if self._elevation["row_tolerance_m"] is not None:
+                given["row_tolerance_m"] = float(self._elevation["row_tolerance_m"])
+        d = core.live_derive(record, given)
+        for path, name, factor in DERIVED:
+            node = cfg
+            for key in path[:-1]:
+                node = node.get(key) if isinstance(node, dict) else None
+            if isinstance(node, dict) and node.get(path[-1]) is None:
+                node[path[-1]] = float(np.degrees(d[name])) if factor != 1.0 else float(d[name])
+        if self._elevation is not None:
+            self._elevation["row_tolerance_m"] = float(d["row_tolerance_m"])
+        t = cfg["tracker"]
+        self._bearing_sigma = float(d["tracker_bearing_sigma"])      # rad, as derived: no trip through degrees
+        self._multipath_bearing = float(d["multipath_bearing"])
+        self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=self._bearing_sigma,
+                                      confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
+                                      initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
+                                      depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5))
+        self.resolved = json.loads(d["json"])
 
     def _fine_map(self, record):
         """Power over bearing x fine range for one line of hydrophones, the fine ranges and
@@ -624,7 +812,10 @@ class LiveChain:
         cfg = self.cfg
         rows, subs = self._rows, self._subs
         n = fine.shape[1] // k * k
-        power = fine[:, :n].reshape(len(self.bearings), -1, k).mean(axis=2)
+        peak = cfg["cell_statistic"] == "peak"
+        cells = fine[:, :n].reshape(len(self.bearings), -1, k)
+        power = cells.max(axis=2) if peak else cells.mean(axis=2)
+        looks = float(np.sum(1.0 / np.arange(1, k + 1))) if peak else 1.0     # mean of the largest of k noise samples over their mean
         ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
         if self._blank_range is not None:
             # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
@@ -668,7 +859,7 @@ class LiveChain:
             mean, _ = detect._window_mean(np.asarray(power, dtype=float), guard, train)
             order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
-                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) for i in order]
+                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
             got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
@@ -720,11 +911,16 @@ class LiveChain:
                 level = float(np.arcsin(np.clip(-u[2], -1.0, 1.0)))       # elevation above the horizontal, roll and pitch applied
                 extra[i] = {"elevation_deg": float(np.degrees(level)), "elevation_sigma_deg": float(np.degrees(e.sigma)),
                             "elevation_quality": e.quality, "elevation_ambiguous": e.ambiguous}
-                if el_cfg["correct_bearing"]:
+                if el_cfg["correct_bearing"] and not e.ambiguous:
                     # The line array gave the cone angle; with the elevation the horizontal bearing follows.
                     p = origin[:2] - self._origin[:2] + e.range * u[:2]
                     extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
                                     bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
+                elif el_cfg["correct_bearing"]:
+                    # An ambiguous elevation is one of several candidates, and which is picked changes from ping to ping:
+                    # placing the detection by it would move it by the range times the difference between their cosines
+                    # (a kilometre at 12 km) and break its track. The row's own bearing and the slant range are kept, and said.
+                    extra[i]["bearing_corrected"] = False
                 if e.ambiguous and e.alternatives:
                     extra[i]["elevation_alternatives_deg"] = [float(np.degrees(np.arcsin(np.clip(-w[2], -1.0, 1.0)))) for w in e.alternatives]
                 if el_cfg["depth"]:
@@ -752,7 +948,7 @@ class LiveChain:
         tracks = self.tracker.update(t, local)
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
-        mp = dict(c["multipath"], bearing=np.radians(c["multipath"]["bearing_deg"]), origin=(own[1], own[0])) if c.get("multipath") else None
+        mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=mp)
         track_extra = {}
@@ -812,11 +1008,15 @@ class LiveChain:
             self._report.write(line + "\n")
             self._report.flush()
         if self._udp:
+            # A line too long for a datagram goes out as several complete lines ("part": [k, n]); it is never cut.
             sock, addr = self._udp
-            try:
-                sock.sendto(line.encode()[:65000], addr)
-            except OSError:
-                pass                           # nobody listening is not a reason to stop
+            datagrams = [line] if len(line) <= self.report_udp_max_bytes else split_report(report, self.report_udp_max_bytes)
+            self.reports_split += len(datagrams) > 1
+            for text in datagrams:
+                try:
+                    sock.sendto(text.encode(), addr)
+                except OSError:
+                    pass                       # nobody listening is not a reason to stop
         return report
 
     def run(self, source, max_pings: int | None = None) -> list[dict]:

@@ -281,7 +281,12 @@ DoaResult sbl(const DoaFrame& frame, const std::vector<double>& u, double c, con
   const double prune = std::pow(10.0, -(o.dynamic_range_db + 15.0) / 10.0);
   std::vector<Eigen::VectorXd> num(n_f), den(n_f);
   // The kernel path (sbl_kernel.hpp): what a GPU runs, and the same code on the host when asked for.
-  const bool use_kernels = o.kernels || o.backend == Backend::Cuda;
+  // The update kernel keeps one solved steering vector on the stack, sized for kSblMaxChannels: a longer
+  // line is solved by the host reference instead, and the result says so (never an error, never silently).
+  const bool want_kernels = o.kernels || o.backend == Backend::Cuda;
+  const bool use_kernels = want_kernels && n <= kSblMaxChannels;
+  out.fallback = want_kernels && !use_kernels;
+  const Backend backend = use_kernels ? o.backend : Backend::Host;
   std::vector<Cd> a_all, y_all;
   std::vector<double> k_cov, k_z, k_num, k_den;
   const double* a_flat = nullptr;
@@ -293,7 +298,6 @@ DoaResult sbl(const DoaFrame& frame, const std::vector<double>& u, double c, con
   std::unique_ptr<SblCudaState, Closer> device;
 #endif
   if (use_kernels) {
-    if (n > kSblMaxChannels) throw std::invalid_argument("sbl: the kernel path takes at most 64 channels");
     const auto per_a = static_cast<std::size_t>(n * m_grid), per_y = static_cast<std::size_t>(n * frame.n_snapshots);
     a_all.resize(n_f * per_a);
     y_all.resize(n_f * per_y);
@@ -304,7 +308,7 @@ DoaResult sbl(const DoaFrame& frame, const std::vector<double>& u, double c, con
     }
     a_flat = reinterpret_cast<const double*>(a_all.data());   // NOLINT: std::complex<double> is two doubles
     y_flat = reinterpret_cast<const double*>(y_all.data());   // NOLINT
-    if (o.backend == Backend::Cuda) {
+    if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
       device.reset(sbl_cuda_open(n, m_grid, static_cast<std::int64_t>(n_f), frame.n_snapshots, a_flat, y_flat, o.device));
 #else
@@ -325,7 +329,7 @@ DoaResult sbl(const DoaFrame& frame, const std::vector<double>& u, double c, con
       k_num.assign(n_f * static_cast<std::size_t>(n_act), 0.0);
       k_den.assign(n_f * static_cast<std::size_t>(n_act), 0.0);
       const auto nf = static_cast<std::int64_t>(n_f);
-      if (o.backend == Backend::Cuda) {
+      if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
         sbl_cuda_step(device.get(), gamma.data(), act32.data(), n_act, sigma2.data(), k_num.data(), k_den.data());
 #endif

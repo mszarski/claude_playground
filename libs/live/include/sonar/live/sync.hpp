@@ -24,6 +24,9 @@ struct Reference {
   /// is, flagged. Either way the ping is not ok. 0: every burst is used as found (as before).
   double min_quality = 0.0;
   double clip_level = 0.0;               ///< V: |sample| at or above 0.98 of this is clipped; 0: not checked
+  /// What two boards must agree within after resampling, microseconds; 0: a twentieth of a period at the
+  /// top of the transmit band (enough for one row; stacked rows measuring elevation want less).
+  double tolerance_us = 0.0;
 };
 
 struct SyncResult {
@@ -31,7 +34,7 @@ struct SyncResult {
   std::vector<double> drift_ppm;  ///< per board, relative to the first
   std::vector<double> quality;    ///< correlation peak quality, 0..1
   std::vector<double> residual;   ///< s, misalignment measured again after resampling
-  double tolerance = 0.0;         ///< s: a twentieth of a period at the top of the band
+  double tolerance = 0.0;         ///< s: Reference::tolerance_us, or a twentieth of a period at the top of the band
   bool ok = false;
   std::vector<int> flagged;       ///< per board (Reference::min_quality): 0 both bursts, 1 one burst only, 2 none usable
 };
