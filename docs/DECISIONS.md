@@ -1373,6 +1373,12 @@ filter would change the distribution they are asked for); a K texture with a cor
 time multiplies the shared field, as in the real path. Measured against the closed form
 N^2 / sum(Gamma) for 32 hydrophones at 5 kHz: 13.0 dB at the test AUV's 0.09 m pitch
 (2.1 dB below 10 log N = 15.05 dB), 15.0 dB at 0.15 m (half a wavelength: unchanged).
+Through the C++ chain with the shipped deployment files: the target's SNR on
+`popoto_testauv_trial_1row` (0.09 m pitch) went from 53.2 to 50.8 dB (-2.4 dB; four pings,
+one track either way); on `popoto_face_2row_shallow` (0.15 m) from 37.0 to 36.7 dB
+(-0.3 dB). The record's own noise power rose 1.2 dB on both: the 8 kHz-wide baseband
+record reaches down to 1 kHz, where the sea is louder than at the centre, and a flat draw
+missed that; the matched filter removes most of it again.
 Limit: `buildspec.directivity_db` already used the closed form in the budgets, so the
 budgets do not move; `sonar_equation.SonarEquation.from_sonar` still takes 10 log N unless
 it is given the gain.
@@ -1403,5 +1409,16 @@ floor a warning says how much, and the provider keeps the figure (`truncation`,
 0.9 dB coherently and 0.04 dB in energy; why a cap: a duct over a hard bottom has no end
 (path pairs grow as the square of the arrivals). The order is chosen in Python for both
 engines, on up to 256 of the field points. Every shipped scenario states its order or its
-arrival count, so no shipped record moves; what the criterion would choose for each is in
-the report, for the owner to decide scenario by scenario.
+arrival count, so no shipped record moves. What the criterion would choose instead, at each
+scenario's own targets (arrivals per leg; incoherent two-way level against the shipped
+cut): the FLS transits (60 m, `max_order: 1`) 3 to 5 bounces, 7 to 11 arrivals, +1.3 to
++2.8 dB; the Popoto shallow scenarios (`max_order: 1` or 2) 5 to 8 bounces, 11 to 17
+arrivals, +3.8 to +12.3 dB, three of them at the cap (`popoto_face_2row_shallow`,
+`popoto_static_trial_2row`, `popoto_testauv_trial_1row`); `flank_sst_*` 6 bounces,
++3.9 dB; the SST cases 3 to 5, under +1.6 dB. Bellhop: `popoto_12km*` state 40 arrivals
+and leave out 9.7 % of a point's arrival energy (the criterion: the cap of 64, 1.2 % left
+out, +0.8 dB); `popoto_env_gravel_30m` 34 % (cap, 13.6 % left out, +2.4 dB);
+`popoto_far_mover` 4.0 % (42 arrivals, +0.35 dB); the other ten leave out under 1 % and
+would keep fewer arrivals than they state. So the shipped shallow-water Popoto records
+under-state the multipath by 4 to 12 dB of incoherent level: the owner decides scenario
+by scenario whether to drop `max_order` there.
