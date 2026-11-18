@@ -3,6 +3,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
+#include <string>
+
 #include "sonar/sim/synth.hpp"
 #include "vec_caster.hpp"
 
@@ -123,6 +126,30 @@ void bind_sim(py::module_& m) {
           params.arrival_passes_back = n.second;
         }
         if (!arrival_residual_limit.is_none()) params.arrival_residual_limit = arrival_residual_limit.cast<double>();
+        if (arrival_passes.is_none() && params.arrival_residual_limit > 0.0 && !paths.empty() &&
+            params.sound_speed > 0.0 && params.sample_rate > 0.0) {
+          // The caller left the passes to us. When the default count would leave more than the
+          // limit for this call's speeds, window and band, run as many as it takes (never
+          // fewer than the default) and say so, instead of returning a wrong phase or failing
+          // a scenario that has no key for this. A caller that states the passes gets the
+          // C++ check, which raises.
+          const auto rx = sim::elements_from_record(record);
+          const sim::ArrivalResidual left = sim::arrival_residual(params, rx, paths);
+          if (!(left.out <= params.arrival_residual_limit) || !(left.back <= params.arrival_residual_limit)) {
+            sim::SynthParams needed = params;
+            sim::set_arrival_passes(needed, rx, paths, 1e-4);
+            const int out = std::max(needed.arrival_passes_out, params.arrival_passes_out);
+            const int back = std::max(needed.arrival_passes_back, params.arrival_passes_back);
+            const std::string text =
+                "synthesize_into: (" + std::to_string(params.arrival_passes_out) + ", " +
+                std::to_string(params.arrival_passes_back) + ") passes of the arrival-time solve could leave " +
+                std::to_string(std::max(left.out, left.back)) + " rad at these speeds, window and frequency; running (" +
+                std::to_string(out) + ", " + std::to_string(back) + ") instead";
+            params.arrival_passes_out = out;
+            params.arrival_passes_back = back;
+            if (PyErr_WarnEx(PyExc_RuntimeWarning, text.c_str(), 1) != 0) throw py::error_already_set();
+          }
+        }
         py::gil_scoped_release release;
         sim::synthesize_into(backend, record, paths, &params);
       },
@@ -140,8 +167,10 @@ void bind_sim(py::module_& m) {
       "`arrival_passes` = (outbound, return) passes of the arrival-time solve; default (4, 4) for\n"
       "analytic pulses and (8, 8) for sampled ones; \"auto\" takes the fewest that leave under 1e-4 rad.\n"
       "The call raises when the bound on the phase the passes leave, T_end (v / c)^n 2 pi f_top, exceeds\n"
-      "`arrival_residual_limit` (rad; default 0.05, 0 = no check), and when the pulse holds frequencies\n"
-      "outside the absorption table by enough to change a level by more than 0.1 dB.");
+      "`arrival_residual_limit` (rad; default 0.05, 0 = no check) for passes the caller stated; with\n"
+      "`arrival_passes` left out the count is raised to what the bound needs and a RuntimeWarning says so.\n"
+      "It also raises when the pulse holds frequencies outside the absorption table by enough to change a\n"
+      "level by more than 0.1 dB.");
   m.def("synth_arrival_residual_bound", &sim::arrival_residual_bound, py::arg("window_end"), py::arg("speed"),
         py::arg("sound_speed"), py::arg("frequency"), py::arg("passes"),
         "Upper bound (rad) on the phase one arrival-time solve leaves: window_end (speed / c)^passes 2 pi f.");

@@ -129,6 +129,16 @@ def test_arrival_passes_are_checked_and_can_be_derived():
     exact = moving_ping((12, 12)).samples.array
     assert np.abs(loose - exact).max() > 100 * np.abs(auto - exact).max()
     assert np.abs(auto - exact).max() <= 2e-4 * np.abs(exact).max()
+    # Left to the binding (as the simulator calls it), a case the default cannot hold is run with
+    # more passes and says so; an ordinary case is silent and unchanged.
+    with pytest.warns(RuntimeWarning, match="passes of the arrival-time solve could leave"):
+        fast = moving_ping(speed=60.0).samples.array
+    np.testing.assert_array_equal(fast, moving_ping("auto", speed=60.0).samples.array)
+    with pytest.raises(ValueError, match="arrival-time solve may leave"):
+        moving_ping((4, 4), speed=60.0)                                              # stated and not enough: an error
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        moving_ping()
     # The bound itself: T_end (v / c)^n 2 pi f.
     assert core.synth_arrival_residual_bound(0.6, 12.0, C, 1e4, 4) == pytest.approx(0.6 * (12.0 / C) ** 4 * 2 * np.pi * 1e4)
     n = core.synth_arrival_passes_for(0.6, 12.0, C, 1e4, 1e-4)
