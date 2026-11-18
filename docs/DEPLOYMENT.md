@@ -451,6 +451,46 @@ above the inputs' full scale for the whole pulse, and the inputs then need time 
 - **Listening on a platform that also pings** (`sonar_live --listen` with `blanking=1`): the
   same window is zeroed after every transmit the blocks mark.
 
+## Refraction in operation
+
+What the vehicle should do about the water it is in, and how far to trust each depth it reports. Built so far: the
+second depth estimate (`chain.multipath_depth`) and the ray code under it (`python/gpusonar/raytrace.py`). Not built
+yet: the coverage summary on the report line and the profile ensemble (see "What is not there yet").
+
+**Measure sound speed continuously, and dive when it can.** Everything below turns on the profile between the vehicle
+and the target. The ladder (`elevation.profile`) climbs as the vehicle samples depths; a rung that only knows the water
+at the vehicle's own depth leaves the gradient prior in every depth, and at 12 km that is the whole water column.
+
+**Where depth comes from.**
+
+| Estimate | Needs | Its own error (isovelocity or a known profile) | What an unknown gradient σ_g adds |
+| --- | --- | --- | --- |
+| elevation (`depth_m`) | two or more rows; with two, several candidates | r σ_θ: 0.41° at 13 dB, 0.18° at 20 dB is 7 / 3 m at 1 km and 85 / 38 m at 12 km (`docs/design/popoto_elevation_study.json`) | r² σ_g / 2c: 17 m at 1 km, 2400 m at 12 km for 0.05 /s |
+| multipath timing (`depth_multipath_m`) | one row; a surface echo; a target deeper than 3 r c / (4 B z_own) | 0.02 to 0.7 m rms at 1 to 6 km, 0.1 to 2.8 m rms at 12 km (worst 9 m near the threshold: one delay cell), strongest arrival at 17 or 26 dB; a track of 6 pings 0.25 to 1.25 m (`docs/design/multipath_depth_study.json`) | z_t r² σ_g / (2 c (z_own + z_t)): 7 m at 1 km, 960 m at 12 km for 225 m and 150 m |
+
+So the multipath depth is not free of the profile: the same gradient that bends the ray under the elevation estimate
+stretches the surface echo's delay, by the smaller factor z_t / (z_own + z_t). What it is free of is the angle: no rows,
+no roll, no elevation ambiguity. With the profile known (a dive, a cast) it is the far finer of the two; with only the
+prior, both are indications at long range and the report's sigma says so.
+
+**How to set it.** `multipath_depth: {}` switches it on. Give `surface.rms_height_m` (and `surface.loss_db` at a high sea
+state), the vehicle's `own_depth_sigma_m`, and in shallow water `bottom` and the water depth. Give `gradient_per_s` when a
+mean gradient is known (0.017 for isothermal water) and `gradient_sigma_per_s` for what is not known of it. Read
+`depth_multipath_sigma_m`, `multipath_ambiguous`, `multipath_note` with every depth.
+
+**When it gives nothing**, and what that means: `merged` (the sonar is too shallow: at 10 m no depth is resolvable at
+12 km; at 225 m targets above 30 m are not), `no_surface_path` (bubbles or roughness), `single_arrival` (no surface echo
+found: a target above the resolvable depth, a surface path the water does not carry, or too little SNR; a track adds
+pings up), `window` (edge of the record). Through a thermocline the surface path or the direct path may not exist at
+all (`tools/multipath_depth_study.py`: no direct path beyond 1 to 3 km from 50 m under the stage-2 thermoclines); the
+flat pattern then matches whatever does arrive, or nothing.
+
+**With two rows** the multipath depth picks among the rows' candidate elevations (`elevation_selected`): at 6 km the
+candidates are 12° apart, kilometres in depth, and the multipath depth is known to under a metre in the same water.
+
+**Cost.** 20 to 45 ms per examined detection at 6 to 12 km, 80 ms at 3 km, 0.2 s at 1 km with the search to 500 m (one
+core); 0.50 against 0.54 s per ping on the 12 km test window with one detection.
+
 ## Listening without transmitting
 
 The array is for active pings; the same backend also gives passive bearings from any
@@ -753,6 +793,11 @@ them). The Holoscan report sink sees text, not lists: it groups whole lines into
 reports a single line that is too long, where `build/bin/sonar_live` splits it.
 
 ## What is not there yet
+
+- **Refraction in operation, the rest.** The coverage summary (`chain.coverage`: where the sonar can and cannot detect
+  at its present depth, the depth that would gain most) and the profile ensemble (`elevation.profile.ensemble`) are not
+  built. The ray code they need exists in Python only (`raytrace.py`); the multipath depth uses flat boundaries and a
+  mean-gradient correction, not rays through the ladder's profile.
 
 
 - The board forwarder. The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the

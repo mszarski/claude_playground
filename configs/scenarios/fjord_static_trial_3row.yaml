@@ -1,0 +1,47 @@
+# Stage 2 trial in fjord-type water: the three-row static array against a target 150 m away.
+#   tools/sonar_live.py configs/deploy/popoto_static_3row.yaml --scenario fjord_static_trial_3row --out DIR --engine cpp     (needs GPUSONAR_BELLHOP)
+#   tools/fjord_rehearsal.py                                                                       (this against the open-water rehearsal)
+# The same sonar, platform, target and window as `popoto_static_trial_3row`, in water of the kind the first comparison with measured
+# data in this band was made in (SFI Smart Ocean dataset, 4-8 kHz, a Norwegian fjord in November; PHYSICS_NOTES Sec. 21.6, 25):
+#   - a sound-speed profile with a maximum at 19 m under a fresher surface layer (sim/basin.py `stratified_profile(90, step=5)`:
+#     ILLUSTRATIVE, of the shape of that site's two casts, not the casts);
+#   - a seabed of basins and sills along the line of sight (`basin_section(..., step=100)`: ILLUSTRATIVE, of the kind charted
+#     there; Bellhop's 2-D section, the same on every bearing), over the suite's default half-space (the seabed there is not named);
+#   - the basin's late reverberation behind every echo (`basin_reverberation`: the set measured at 274 m; coherence across the array is an
+#     assumption: nothing measured it);
+#   - a calm night's noise with the tail of the quieter hydrophone there (level of a 1.9 m/s wind without shipping, K-distributed,
+#     shape 3.5). Near machinery the same site read 63 dB re 1 uPa^2/Hz, flat: `ambient_noise: {level_db: 63}`.
+# The surface is flat (measured: a mirror at 6 kHz that night). `own_ping_db` (the basin's answer to the ping itself) is NOT set:
+# nothing measured it at the source; tools/fjord_rehearsal.py runs it as a what-if.
+# Every depth, the target and the seabed are placeholders for a trial site that is not chosen.
+name: fjord_static_trial_3row
+sonar: popoto_static_3row_clocks
+fidelity: eigenray
+sonar_overrides:
+  receive: {window: {range: [90, 400]}}
+environment: {sound_speed: 1491.7, temperature: 10.0, salinity: 32.0, water_depth: 50.0}
+propagation:
+  environment:
+    depth: 90.0
+    ssp_depth: [0, 5, 10, 15, 19, 20, 25, 30, 35, 40, 45, 50, 54, 55, 60, 65, 70, 75, 80, 85, 90]
+    ssp_speed: [1480.5, 1487.1, 1491.7, 1494.4, 1495.0, 1494.9, 1494.5, 1494.1, 1493.6, 1493.2, 1492.8, 1492.3, 1492.0, 1492.0, 1492.1, 1492.2, 1492.3, 1492.4, 1492.4, 1492.5, 1492.6]
+    bottom_speed: 1600.0
+    bottom_density: 1.8
+    bottom_attenuation: 0.5
+    bathymetry: [[0, 50], [100, 57.1], [200, 72.3], [300, 84.3], [400, 84.3], [500, 72.8]]
+  frequency: 5000.0
+  min_range: 120.0
+  max_range: 180.0
+  range_step: 2.5
+  depth_step: 1.0
+  max_arrivals: 12
+platform: {position: [0, 0, 10.0], rpy: [0.0349, 0.0, 0], velocity: [0, 0, 0]}   # still; tilted 2 deg
+pings: {count: 4, interval: 3.0}
+scene:
+  - {type: points, label: target, positions: [[30.0, 147.0, 18.0]], target_strength_db: 10.0}
+basin_reverberation: {energy_db: -4.2, onset_s: 0.010, decay_s: 0.145, coherence_m: isotropic, repeatable: 0.7}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 1.9, shipping: 0.0, statistics: {model: k, shape: 3.5}}
+seed: 24

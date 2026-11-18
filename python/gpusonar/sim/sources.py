@@ -654,6 +654,8 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
                                series_carrier=carrier, spreading=spreading,
                                knot_interval=source.stream.get("knot_interval"), f_top=hi)
             added = part if added is None else added + part
+    if added is not None and getattr(provider, "basin", None) is not None:
+        added = provider.basin.one_way(record, added, scenario_time)      # `basin_reverberation` (sim/basin.py): the sources' late tail
     if added is not None:
         s = record.samples
         kind = s.kind

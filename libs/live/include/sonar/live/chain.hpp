@@ -25,6 +25,7 @@
 #include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
 #include "sonar/live/detector.hpp"
+#include "sonar/live/multipath_depth.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
@@ -104,6 +105,7 @@ struct ChainOptions {
   bool decimate_streaming = false;  ///< the receiver decimates as blocks arrive and the recording holds the decimated ping
   NavOptions nav;                   ///< the navigation receiver's settings
   StreamOptions stream;             ///< the board stream, its socket and queue, and the report datagrams
+  MultipathOptions multipath_depth;  ///< depth from multipath timing (multipath_depth.hpp); off by default
   Backend backend = Backend::Host;
   int device = 0;
 };
@@ -126,6 +128,7 @@ struct ReportDetection {
   double depth_m = 0.0, depth_sigma_m = 0.0, image_depth_m = 0.0;
   std::string path{};
   std::string profile_source{};                      ///< the rung of the sound-speed ladder this depth came by (ladder on)
+  std::string extra{};                               ///< further JSON members from opt-in stages (multipath_depth.hpp), verbatim
 };
 struct ReportTrack {
   std::int64_t id, parent;
@@ -135,6 +138,7 @@ struct ReportTrack {
   double depth_m = 0.0, depth_sigma_m = 0.0;
   std::string path{};
   std::string profile_source{};
+  std::string extra{};                               ///< further JSON members from opt-in stages, verbatim
 };
 struct Report {
   std::int64_t ping = 0, sequence = 0, time_ns = 0;
@@ -153,6 +157,7 @@ struct Report {
   std::string profile_rung{};  ///< the sound-speed ladder's rung this ping (ladder on), with what a built profile holds
   std::int64_t profile_bins = 0;
   double profile_lo = 0.0, profile_hi = 0.0;
+  std::string extra{};       ///< further JSON members of the report line from opt-in stages, verbatim
   std::string json() const;  ///< one line, the same fields as the Python chain's report
   /// The line as UDP datagrams of at most `max_bytes`: the line itself when it fits. Otherwise several
   /// lines, each a complete report of this ping holding a share of the detections and tracks and a
@@ -210,6 +215,7 @@ class LiveChain {
   bool resolved_ = false;
   Tracker tracker_;
   SoundSpeedLadder ladder_;
+  MultipathDepth multipath_;
   std::int64_t pings_ = 0;
   std::int64_t cell_samples_ = 1;   ///< fine samples per range cell in the last map
   std::vector<float> fine_;         ///< the map before it is averaged into cells (multiscale detector), rows added

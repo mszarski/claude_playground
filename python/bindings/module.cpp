@@ -61,6 +61,7 @@ void bind_detect(py::module_& m);
 void bind_live(py::module_& m);
 void bind_beamform(py::module_& m);
 void bind_tonal(py::module_& m);
+void bind_refraction(py::module_& m);
 void bind_simcpp(py::module_& m);
 #if SONAR_HAVE_MOTION
 void bind_motion(py::module_& m);
@@ -337,6 +338,7 @@ PYBIND11_MODULE(_gpusonar, m) {
   bind_live(m);
   bind_beamform(m);
   bind_tonal(m);
+  bind_refraction(m);
   bind_simcpp(m);
 #if SONAR_HAVE_MOTION
   bind_motion(m);

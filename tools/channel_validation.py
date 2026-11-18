@@ -204,6 +204,9 @@ def analyse(ch: cr.TimeVaryingChannel, groups: list, *, search: int = 5, max_tai
 
 # -- the model in the measurement's form ---------------------------------------------------------------
 
+EXTRA: dict = {}          # further `time_spread` keys for every option set (--tail-quantile, --taps)
+
+
 def simulate(geo: dict, rx: np.ndarray, *, wind: float, options: dict, seed: int, like: cr.TimeVaryingChannel, floor: float,
              direct_level: float, bubbles: bool = False, estimator: float | None = None, lead: float = 3e-3,
              rms_height: float | None = None, tap_shape: float | None = None) -> cr.TimeVaryingChannel:
@@ -216,7 +219,7 @@ def simulate(geo: dict, rx: np.ndarray, *, wind: float, options: dict, seed: int
     # (with the defaults, 6 taps of 8 lines, one seed's Doppler spectrum is a handful of lines).
     if rms_height is not None:
         surface["rms_height"] = float(rms_height)                        # in place of the wind law's
-    cfg = dict({"surface": surface, "taps": 24, "doppler_lines": 48, "seed": int(seed)}, **options)
+    cfg = dict({"surface": surface, "taps": 24, "doppler_lines": 48, "seed": int(seed)}, **options, **EXTRA)
     if tap_shape is not None and np.isfinite(tap_shape):
         cfg["tap_shape"] = float(tap_shape)
     prov = wrap(flat_provider(geo), cfg, frequency=like.fc)
@@ -591,8 +594,14 @@ def main(argv=None) -> int:
     ap.add_argument("--snapshots", type=int, default=3476, help="--synthetic only: length of the synthetic record")
     ap.add_argument("--sites", default="purple", choices=["purple", "all"],
                     help="all: after the Purple comparison, every other site and the cross-arrival tests (tools/channel_sites.py)")
+    ap.add_argument("--tail-quantile", type=float, default=None, help="time_spread.tail_quantile for every model (default: the taps span three mean decay times)")
+    ap.add_argument("--taps", type=int, default=None, help="taps per bounce ray for every model (default 24)")
     ap.add_argument("--recordings", default="0,1,2", help="which of the three Purple recordings (files 1-5, 6-10, 11-15) to use")
     args = ap.parse_args(argv)
+    if args.tail_quantile is not None:
+        EXTRA["tail_quantile"] = args.tail_quantile
+    if args.taps is not None:
+        EXTRA["taps"] = args.taps
     sites = []
     if args.synthetic:
         for system in (1, 3):

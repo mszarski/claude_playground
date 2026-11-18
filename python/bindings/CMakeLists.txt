@@ -1,4 +1,4 @@
-pybind11_add_module(_gpusonar module.cpp bind_sim.cpp bind_recon.cpp bind_detect.cpp bind_live.cpp bind_simcpp.cpp bind_beamform.cpp bind_tonal.cpp)
+pybind11_add_module(_gpusonar module.cpp bind_sim.cpp bind_recon.cpp bind_detect.cpp bind_live.cpp bind_simcpp.cpp bind_beamform.cpp bind_tonal.cpp bind_refraction.cpp)
 target_link_libraries(_gpusonar PRIVATE sonar::core sonar::io sonar::sim sonar::dsp sonar::recon sonar::detect sonar::live)
 # Build the extension straight into the Python package so `PYTHONPATH=python` works.
 set_target_properties(_gpusonar PROPERTIES

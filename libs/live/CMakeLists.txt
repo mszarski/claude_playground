@@ -1,4 +1,4 @@
-set(_live_sources src/cluster.cpp src/tracker.cpp src/classify.cpp src/doa.cpp src/chain.cpp src/udp_source.cpp src/sync.cpp src/options.cpp src/beamform.cpp src/calibrate.cpp src/elevation.cpp src/environment.cpp src/decimate.cpp src/tonal.cpp src/derive.cpp src/detector.cpp)
+set(_live_sources src/cluster.cpp src/tracker.cpp src/classify.cpp src/doa.cpp src/chain.cpp src/udp_source.cpp src/sync.cpp src/options.cpp src/beamform.cpp src/calibrate.cpp src/elevation.cpp src/environment.cpp src/decimate.cpp src/tonal.cpp src/derive.cpp src/detector.cpp src/multipath_depth.cpp)
 if(SONAR_HAVE_CUDA)
   list(APPEND _live_sources src/doa_cuda.cu src/beamform_cuda.cu)
 endif()

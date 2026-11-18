@@ -398,6 +398,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         o["decimate"] = decimate_options(cfg["decimate"])
     if cfg.get("blanking") is not None:
         o["blanking"] = blanking_options(cfg["blanking"])
+    if cfg.get("multipath_depth") is not None:          # hook: depth from multipath timing (multipath_depth.py)
+        from .multipath_depth import cpp_options as multipath_options
+        o["multipath_depth"] = multipath_options(cfg["multipath_depth"])
     if cfg.get("elevation") is not None:
         from .elevation import DEFAULTS as EL
         from .elevation import normalise_ssp, profile_options
@@ -786,6 +789,10 @@ class LiveChain:
             if self._elevation["profile"] is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
                 self._ladder = core.SoundSpeedLadder(profile_options(self._elevation["profile"]))
         self.tracker = None                    # built at the first ping, once its sigmas are known (Python engine)
+        self._multipath = None                 # hook: depth from multipath timing, Python engine (the C++ engine runs it itself)
+        if self.cfg.get("multipath_depth") is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
+            from .multipath_depth import ChainStage
+            self._multipath = ChainStage(self.cfg["multipath_depth"])
         b = self.cfg["bearings_deg"]
         self.bearings = np.radians(np.arange(b[0], b[1] + 0.5 * b[2], b[2]))
         self._writer = core.RecordWriter(recording) if recording else None
@@ -1204,6 +1211,10 @@ class LiveChain:
             report["profile"] = {"rung": ladder["rung"]}
             if ladder["bins"] > 0:
                 report["profile"].update(bins=int(ladder["bins"]), span_m=[ladder["span_lo"], ladder["span_hi"]])
+        if self._multipath is not None:        # hook: adds report members only
+            self._multipath.annotate(record, report, origin, hits, local, self._origin, rows=rows,
+                                     surface_z=el_cfg["surface_z"] if el_cfg is not None else 0.0,
+                                     water=water if el_cfg is not None else None, backend=self.backend)
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}

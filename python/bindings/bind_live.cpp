@@ -715,6 +715,13 @@ void bind_live(py::module_& m) {
           number(b, "taper_s", o.blanking.taper_s);
           if (b.contains("mode")) o.blanking.zero = b["mode"].cast<std::string>() != "ignore";
         }
+        if (kw.contains("multipath_depth") && !kw["multipath_depth"].is_none()) {   // hook: flat {member: number}, as key=value
+          o.multipath_depth.enabled = true;
+          for (const auto& item : kw["multipath_depth"].cast<py::dict>()) {
+            const std::string key = "multipath_depth_" + item.first.cast<std::string>();
+            if (!live::set_multipath_option(o.multipath_depth, key, py::str(item.second).cast<std::string>())) throw std::invalid_argument("unknown option " + key);
+          }
+        }
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();
           o.sync = true;

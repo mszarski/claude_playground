@@ -2950,3 +2950,446 @@ explained.
 *Not modelled.* Refraction in the closed form (Bellhop when the environment has a profile), the
 scattered energy's spread in delay and angle (so `peak_db` leaves it out), a rough bottom, the
 vertical offsets of stacked rows (the array is one depth), reverberation (margins are noise-limited).
+
+## 25. Depth from multipath timing; rays in a layered profile [OURS]
+
+Nothing in this section is taken from a source: the derivations are ours, checked against closed forms, an independent
+Runge-Kutta integration, the simulator's image paths, and Bellhop run as a separate program (`tests/python/test_raytrace.py`,
+`tests/python/test_multipath_depth.py`). Numbers are from `tools/multipath_depth_study.py` → `docs/design/multipath_depth_study.json`.
+
+### 25.1 The two-way arrival set
+
+Flat surface, straight rays, horizontal range r, target at depth z_t, the array at z_a and the projector at z_p
+(a vertical lever arm; 1.5 m on the face). One way, from a point at depth z:
+
+    R_d(z) = sqrt(r² + (z_t − z)²)        direct
+    R_s(z) = sqrt(r² + (z_t + z)²)        by the surface (the image of the target at −z_t)
+    τ(z)   = (R_s − R_d) / c  ≈  2 z z_t / (r c)            (exact form used; the approximation is good to 0.2% at 12 km)
+
+The echo travels every outbound path with every return path, so there are four arrivals:
+
+| Paths (out, back) | Delay after the first | Amplitude re the first |
+| --- | --- | --- |
+| direct, direct | 0 | 1 |
+| direct, surface | τ(z_a) | μ_a R_d / R_s |
+| surface, direct | τ(z_p) | μ_p R_d / R_s |
+| surface, surface | τ(z_p) + τ(z_a) | μ_p μ_a (R_d / R_s)² |
+
+μ = −ρ_c 10^(−L/20) is the surface's coefficient: −1 for a flat pressure-release surface (the echo is inverted),
+ρ_c = exp(−Γ²/2), Γ = 2 k h sin(grazing) for rms height h, L a bubble loss in dB. With z_p = z_a the middle two
+coincide and the echo is the triplet +1, −2, +1 at 0, τ, 2τ: the one-leg arrival is 6 dB above the direct one. At
+12 km from 225 m to 150 m, τ = 3.75 ms; the 1.5 m lever arm splits the middle pair by 2 × 1.5 × z_t / (r c) = 25 µs,
+an eighth of a carrier cycle, which the pattern carries. In shallow water each leg also has the bottom's images
+(reflection coefficient: Rayleigh, at each image's grazing angle), and the two-way set is the product of the two legs'.
+
+In the frequency domain the echo's transfer function is H(f) = Σ a_k exp(−i 2π f τ_k) = (1 + μ e^(−i2πfτ))² for the
+triplet, |H|² = 16 sin⁴(π f τ): the Lloyd-mirror ripple of the echo's spectrum, period 1/τ = c r / (2 z_own z_t).
+
+### 25.2 The estimator
+
+The compressed output of the beam at the detection, y(t) (baseband, band B about f_c, noise power σ² per sample), is
+A Σ_k a_k e^(−i2πf_cτ_k) χ(t − t_0 − τ_k) + noise, χ(τ) = sinc(Bτ) for a flat band. For a candidate depth z the
+generalised likelihood ratio over the unknown complex amplitude A and the time t_0 of the direct arrival is
+
+    T(z, t_0) = |Σ_k conj(a_k) e^(+i2πf_cτ_k) y(t_0 + τ_k)|² / Σ_jk a_j conj(a_k) e^(−i2πf_c(τ_j − τ_k)) sinc(B(τ_j − τ_k))
+    L(z) = max over t_0 of T / σ²,            L_1 = |y|²_peak / σ²   (one arrival)
+
+a rake over the predicted arrivals, normalised by the pattern's energy. It is one statistic for resolved arrivals and
+for overlapping ones (where it matches the spectral ripple). σ² is the median of |y|² over 128 cells ahead of the
+earliest possible arrival, over ln 2. The search over t_0 is anchored: the echo's strongest sample is one of the
+pattern's strong arrivals, so only the alignments that put one there are tried (13 values of t_0 per strong arrival).
+
+*Fringes.* L(z) oscillates with the carrier phase of the surface-surface arrival: one fringe per
+Δz = r c / (2 f_c (z_a + z_p)) (4 m at 12 km from 225 m, 0.33 m at 1 km). The envelope of the fringes has the width of
+one delay cell, r c / (2 B (z_a + z_p)) = f_c / B fringes (10 m at 12 km). Within a ping the fringe is real and gives
+the fine depth; the Cramér-Rao bound for the pattern (Fisher information of s(f; z, t_0) with A projected out) is
+centimetres at 25 dB, and the measured scatter is within the depth grid of it. Along a track the fringe envelope is
+summed over pings (target depth and surface move by more than a fringe between pings). Sigma is the spread of exp(L)
+over depth, so neighbouring fringes and envelope sidelobes widen it: near the threshold the error is at times a whole
+delay cell (9 m at 12 km) and the sigma covers 94% within two sigma there.
+
+*Decision.* A depth needs L(z) − L_1 ≥ 12. For the resolved triplet the pattern holds 6 units of energy against 4 in its
+strongest arrival, so the gain is a third of the echo's total SNR: single-ping depth needs the strongest arrival at
+about 15 dB (22% of pings at 11.9 dB, 82% at 14.7 dB, all at 17.6 dB, 12 km); a track of 8 pings at 11 dB gets it.
+
+### 25.3 When it cannot work
+
+- **Too shallow (surface cancellation).** For (τ_p + τ_a) B < about 3 the pattern is a smooth weighting of the band,
+  and so is an absorption tilt (6 dB across 4-6 kHz over 24 km), a tapered replica or a target's own response: a Hann-
+  weighted single echo is fitted by the pattern 33% of its energy better than by one flat arrival for τB up to 2, 24% at
+  2.5, and worse from 3 on (computed;
+  with τB ≥ 1 a 31 dB single echo passed as multipath in a third of pings). The search therefore starts at
+  z_t = 3 r c / (4 B z_own): 30 m at 12 km from 225 m, 135 m from 50 m, 2.5 m at 1 km from 225 m. A ship at 2 to 6 m is
+  never measurable at long range, and a sonar at 10 m measures nothing at 12 km (`merged`).
+- **No surface path.** Bubbles at a high sea state (a loss per bounce), or roughness at steep grazing: at 1 km from
+  225 m (21°) a 0.3 m rms surface leaves exp(−Γ²/2) ≈ 0, at 12 km (1.8°) it is a mirror. Told the roughness, the stage
+  says `no_surface_path`; taken for flat, one of two pings at 3 km gave 76 m for 150 m with a sigma of 0.3 m.
+- **Shallow water without the bottom in the pattern.** The surface-only pattern locked onto bottom echoes (99.7 m for
+  70 m in 100 m of water); with the bottom's images, 70.1 m. Flagged when the water depth is known.
+- **Extended targets.** Five highlights of one sign over 20 to 100 m of range, no surface: never taken for multipath
+  (gain −14 to −193); under a surface the depth came out right. Highlights that happen to lie at 0, τ, 2τ with signs
+  +, −, + would pass; a rigid body does not make them.
+- **Refraction** (next).
+
+### 25.4 Refraction: the delay is not profile-free
+
+A constant gradient g makes every ray an arc of radius c / (g cos θ). To first order this is straight rays under a
+surface that curves away by d_1 d_2 g / (2c) between points d_1 and d_2 from the reflection point, which raises both
+effective depths; with d_1 d_2 = r² z_own z_t / (z_own + z_t)²,
+
+    τ_refracted / τ_flat − 1 ≈ r² g / (2 c (z_own + z_t)).
+
+Against the ray code in isothermal water (g = 0.017 /s), vehicle at 50 m, target at 120 m: 3.4% at 1 km (rule 3.3%),
+32% at 3 km (30%), 143% at 6 km (120%); target at 20 m: 8.3%, 82%, 374%. The flat formula's depth is wrong by that
+fraction: the multipath depth is less sensitive to the gradient than the elevation depth (r² g / 2c in metres) only by
+the factor z_t / (z_own + z_t). The stage takes an assumed gradient out by this rule (120.1 m and 122.1 m for 120 m at
+1 and 3 km, 141 m at 6 km where the first order no longer holds) and puts what is not known of it,
+z_t r² σ_g / (2 c (z_own + z_t)), into the sigma. Through the stage-2 thermoclines the question is often moot: from
+50 m, in the three profiles with a thermocline, there is no direct path to either target at 6 and 12 km, and at 3 km
+in five of the six cases; and in the deep profile
+(vehicle at 225 m) the flat depth of a 150 m target is −0.2%, −2.4%, −13.5% off at 1, 3, 6 km and there is no
+surface-reflected path at 12 km. The right pattern in such water is the ray code's eigenrays through the ladder's
+profile; that is not built into the stage.
+
+### 25.5 Rays in a piecewise-linear profile
+
+`python/gpusonar/raytrace.py`. In a layer with dc/dz = g, with s the sine of the grazing angle (positive going down)
+and p = cos θ / c the Snell constant: from d(cos θ) = p g dz and dz = tan θ dr,
+
+    ds/dr = −p g          (s is linear in range, through a turning point as well)
+    c = sqrt(1 − s²) / p  (so z = z_1 + (c − c_1) / g)
+    dt = dr / (c cos θ) = −ds / (g (1 − s²)),        t_b − t_a = (atanh s_a − atanh s_b) / g
+
+and a ray is stepped from layer boundary to layer boundary in closed form, mirrored at the surface and bottom.
+Eigenrays: a fan of launch angles, brackets of the receiver depth between neighbours with the same history of
+reflections and turns (intervals whose ends differ in history are halved until they do not), bisection. Amplitude:
+the power in cos θ_0 dθ_0 dφ crosses the area r dφ |∂z/∂θ_0| dθ_0 cos θ_r, so I/I_1m = cos θ_0 / (r |∂z/∂θ_0| cos θ_r)
+(1/R² in isovelocity water); at a caustic the amplitude is clipped at ten times spherical and marked, and no caustic
+phase is applied. Checked: isovelocity image times to 0.2 µs and amplitudes to 0.2%; the Lloyd pattern to 0.05 dB;
+the circle of a constant-gradient ray to 1e-10 and its time to 1e-12; a thermocline with turns and bounces against
+Runge-Kutta to 2 cm and 2 µs; Bellhop's arrival times to 20 µs and amplitudes to 1.5 dB away from caustics;
+`elevation.ray_depth` (small Snell steps) to 2 m.
+
+
+## 26. A basin's late reverberation, a trial in fjord water, the reach of the tail, a wandering coherent arrival [OURS]
+
+Three additions that follow from the first comparison with measured data in the long-range
+array's band (Sec. 21.6). Sources: the same dataset (SFI Smart Ocean, van Walree et al., IEEE
+DataPort 2025, doi:10.21227/3aa6-4k33, CC BY 4.0; its descriptor article, read as
+hal-05793814) through the soundings of Sec. 21.6, and for 26.3 the "Purple" channels of the
+Underwater Acoustic Channel Repository (doi:10.5281/zenodo.21287414, CC BY 4.0), two files
+fetched again. No formula or coefficient here is from a paper: the decay law is fitted, the
+rest is derived below and tested against closed forms. Everything is opt-in; without the new
+keys the eigenrays and records are bit for bit what they were (tested; the time-spread module
+compared with its committed version over 128 combinations of its earlier options).
+
+**26.1 Late reverberation of a basin** (`sim/basin.py`, key `basin_reverberation`;
+`tools/basin_reverberation_fit.py`, `docs/figures/basin_reverberation_fit.md` and `.png`).
+
+*The measured curves.* For each hydrophone the share of the received energy still to come,
+against delay after the first arrival (median of 80 soundings with 0.745 s chirps), is a
+straight line in dB from 10 ms down to where the noise correction stops being safe (-40 dB):
+
+| Form, numbers fitted | R1, 274 m: rms / largest misfit, dB | R2, 1020 m |
+| --- | --- | --- |
+| exponential, 2 (energy, decay) | 0.59 / 1.33 to -30 dB; 0.81 / 2.14 to -40 dB; T = 0.145, 0.158 s | 0.55 / 1.57; 0.49 / 1.59; T = 0.160, 0.162 s |
+| power law, 3 | 0.18 / 0.47; 0.33 / 0.79; exponent 11 to 14, scale 1.1 to 1.5 s | as the exponential: it converges to its exponential limit (exponent above 400) |
+| two exponentials, 4 | 0.17 / 0.44; 0.24 / 0.51; T = 0.10 and 0.20 s, 0.83 : 0.17 | as the exponential |
+
+An exponential describes both to about half a dB with the same decay at both ranges
+(0.145 to 0.162 s; 27 to 30 dB per second; a "reverberation time" to -60 dB of 2.0 to 2.2 s):
+the decay belongs to the basin, as a room's does. A power law with an exponent of 11 to 14 is
+an exponential with a slight curvature; the gain of 0.4 dB at one range for one more number
+does not justify it, and the law implemented is the exponential alone. Fitted from 10 ms to
+-30 dB and read back as the simulator would produce it (the modelled arrivals as one arrival
+at delay 0, the tail with `energy_db` re them):
+
+| | R1, 274 m | R2, 1020 m |
+| --- | --- | --- |
+| `energy_db`, `onset_s`, `decay_s` | -4.2, 0.010, 0.145 | +0.2, 0.010, 0.160 |
+| 90 % / 99 % / 99.9 % of the energy within, ms: model (measured) | 156 (165) / 489 (465) / 823 (866) | 272 (275) / 642 (636) / 1011 (1012) |
+| rms delay spread, ms: model (measured) | 102 (100) | 143 (145) |
+| tail's energy re the source's at 1 m (source level 183 dB) | -43.1 dB | -61.1 dB |
+| share of the late energy that repeats over five chirps 3 s apart | 0.5 to 0.7 | 0.35 to 0.65 |
+
+The tail holds 27 % of the energy at 274 m and 51 % at 1 km. Relative to the source it is
+18 dB weaker at 1 km than at 274 m, more than spreading (11 dB): the late field is not that of a
+uniformly filled room, and `energy_db` is given relative to the modelled arrivals at the
+range in question, not as one level for the basin. The hydrophones were 1.2 km apart: nothing
+was measured about coherence across an array.
+
+*The model* (docstring of `sim/basin.py` for the full statement). A one-way response gets a
+tail `x * g`: the modelled signal convolved with a kernel of independent Gaussian samples of
+variance `E p(tau - onset)`, `p(u) = exp(-u / T) / T`. Closed forms: share later than t,
+`exp(-(t - onset) / T)`; mean delay `onset + T`; rms spread `T`. Two-way: an echo becomes
+`echo * (delta + g_out) * (delta + g_back)`. The term with `g_out` is the sound that reached
+the target late and came straight back: it has the echo's own wavefront (the full array gain,
+smeared in range), energy E. The terms with `g_back` arrive by way of the basin: diffuse,
+energy `E + E^2` with the variance envelope `E p + E^2 (p * p)`. An echo's tail therefore
+holds `2 E + E^2` of its energy (-0.4 dB at 274 m, +5.0 dB at 1 km). Diffuse: a sum of plane
+waves (about 1.3 k D + 16 of them for an array of extent D), each with its own kernel, from
+azimuths evenly round the horizon (`coherence_m: isotropic`: coherence `J0(k d)`) or from a
+Gaussian sector of rms width `sqrt(2) / (k L)` about `bearing_deg` (coherence `exp(-(d / L)^2)`
+across it), elevations Gaussian about the horizontal (10 degrees rms by default: an
+assumption). `repeatable` is the share of the energy that is the same on every ping; the
+frozen part belongs to places in the water, so an array that has moved sees it decorrelated
+as `J0(k x)`. `own_ping_db` adds the basin's answer to the ping itself, the transmitted pulse
+convolved with a diffuse kernel of the same law. THE DATA DO NOT GIVE THAT LEVEL: they were
+taken 274 m and 1 km from a source, not at it. It exists as a what-if.
+
+*Assumed, not measured:* the coherence across an array; the elevation spread; that the tail
+of an echo is that of two one-way legs with the measured one-way numbers; that source and
+target sit in the basin as the dataset's source and hydrophones did; no Doppler in the tail.
+
+*Tests* (`tests/python/test_basin.py`): energy, energy shares later than four delays, mean
+delay and rms spread of the generated tail against the law (complex baseband and real
+records); `J0(k d)` to the first zero and the negative lobe; `exp(-(d / L)^2)` for a sector;
+the elevation spread's vertical coherence; `2 E + E^2` with E at the target's bearing (full
+array gain) and the rest diffuse; nothing before the onset; ping-to-ping correlation equal to
+`repeatable`; `J0` for a moved array; the own-ping energy in a window against the pulse at
+1 m and the law; a radiating source's tail; both engines; raw records with board clocks;
+scenario without the key bit-identical.
+
+**26.2 A trial in fjord or harbour water against the open-water rehearsal**
+(`configs/scenarios/fjord_*_trial_*.yaml`, `tools/fjord_rehearsal.py`,
+`docs/figures/fjord_rehearsal.md`; chain as on the branch at commit 9757c94, unchanged).
+
+The three builds trialled first, each in its shipped open-water rehearsal and in the same
+geometry in fjord-type water: a sound-speed maximum at 19 m (`basin.stratified_profile`:
+five numbers of the shape of the site's casts, not the casts), basins and sills along the
+line of sight (`basin.basin_section`: of the kind charted there) through Bellhop, the late
+tail with the measured set for the range, and a calm night's heavy-tailed noise. Four pings
+each through the C++ chain of the build's deployment file. All of the water is illustrative.
+
+| Build, target | open water: SNR, dB | profile and section | + late tail | fjord as shipped (tail, calm K noise) | + own ping at -43 dB (what-if) |
+| --- | --- | --- | --- | --- | --- |
+| test AUV, one row; 10 dB at 500 m | 47.5; no other detections; track at ping 3 | 39.4; strongest arrival 19 m late; 2.5 / 1.8 other detections per ping (behind / elsewhere); 2 tracks off the target | 26.3; 3.8 / 20.2; 16 tracks off | 26.5; 3.0 / 46.5; 32 tracks off | not detected; 54 detections per ping, 46 tracks |
+| the same at 300 m | 55.8 | 52.8 | 29.9; 5.5 / 31.8; 21 off | | not detected |
+| at 1000 m | 32.3 | 31.0; 21 m late | 22.5; 6.0 / 0.2; 5 off | | not detected |
+| at 2000 m | 16.3 | 28.6 | 24.4; 0.5 / 0; none off | | 24.2: no effect left |
+| static, two rows; 15 dB at 2.6 km, 1 s pulse | 32.3 | 34.9; 41 m late: no direct path (a sill stands in it) | 15.0 | 15.1 | 15.0 |
+| static, three rows; 10 dB at 150 m | 68.6 | 64.0 | 24.6 | 24.6 | 14.0 |
+
+What the numbers say:
+
+1. *The late tail caps the SNR the detector reports, whatever the echo's strength.* The cells
+   the CFAR trains on behind the echo are filled by the echo's own tail. Per range cell the
+   tail is `(2 E + E^2) / (B T)` of the echo at its onset (B the band, T the decay): 25 dB
+   down for 2 kHz and the 274 m set, 20 dB for the 1 km set. Measured through the chain: 26,
+   30, 22, 24 and 25 dB with the 274 m set (500 m, 300 m, 1 km, 2 km; three rows at 150 m)
+   and 15 dB with the 1 km set (two rows, 1 s pulse), where the same water without the tail
+   gave 39, 53, 31, 29, 64 and 35. A strong echo loses 5 to 40 dB of reported SNR and no
+   detection; one below the cap loses nothing.
+2. *The tail is clutter.* It starts at the echo and the CFAR's window ahead of it is quiet:
+   20 to 47 detections per ping at other bearings behind a 26 to 30 dB echo, and 16 to 32
+   confirmed tracks that are not the target. None is above 15 dB. `min_snr_db: 15` (9 as
+   deployed) leaves 0.5 a ping and no track, with the target at its SNR; a short CFAR window
+   (guard 30 m, training 100 m) does the same but costs 3 to 6 dB of the target's reported
+   SNR. At 2.6 km with the 1 s pulse the target itself is at 15 dB: there `min_snr_db: 15`
+   loses it on two pings of four, and the short window (12.4 dB, all four pings, no clutter)
+   is the setting to use. Under machinery noise (63 dB re 1 uPa^2/Hz, flat, as by the
+   research station) the clutter is hidden and the target keeps 24 dB.
+3. *The profile and the seabed move the strongest arrival.* At 500 m and 1 km it is a
+   bottom-reflected path 19 to 21 m late, 4 dB above the direct one (a concave basin over a
+   reflecting half-space: that is the assumed seabed's doing); at 2.6 km with the array at
+   30 m and the target at 60 m there is no direct path at all (the 53 m sill is in the line
+   of sight) and the reported range is 28 to 41 m long. Expect the first trial's range to be
+   off by tens of metres in such water, and several detections behind the target on its
+   bearing (2 to 6 per ping here; the chain's multipath classifier is there for them).
+4. *Depth needs the profile.* Three rows at 150 m: the echo arrives 1.5 degrees steeper than
+   the straight line (-4.5 against -3.0). With the deployment file's sound-speed assumption
+   the depth is 21.3 to 21.8 m for a target at 18.0 m, stated +-2.6 m: 1.3 to 1.5 sigma off,
+   every ping the same way. With the profile given to the chain (`chain.elevation.ssp`):
+   18.0 to 18.6 m. Two rows at 2.6 km give no depth in either water (one sigma 120 m, and in
+   the fjord the arrival is a bounce, +0.9 to +2.4 degrees against -0.7).
+5. *The own-ping what-if decides short ranges, if it is anything like that.* With the late
+   field at the level it had 274 m from a source, a 10 dB target is not detected out to
+   1 km with one row (whatever the settings), is 14 dB instead of 25 dB at 150 m with three
+   rows, and is untouched at 2 km and beyond: that reverberation falls 27 to 30 dB a second.
+   Nothing measured it at a source; the first ping of a trial will (listen with the
+   projector on and no target: the level against time after the pulse is this number).
+
+*Own depth against the maximum* (`tools/fjord_depth_plan.py`, `docs/figures/fjord_depth_plan.md`:
+the planner of Sec. 24 with the illustrative profile over a FLAT 70 m seabed, a target of the
+trial's strength anywhere between 5 and 40 m; Bellhop). Two-way factor re free field, worst
+over the target's depths: one row at 500 m, +2.7 to +5.1 dB at every own depth from 5 to 59 m
+(the same water at one sound speed: +3.2 to +5.0); three rows at 150 m, +2.3 to +5.1 (-1.5 to
++0.1 at one sound speed); two rows at 2.6 km, +7.3 to +9.6 from 5 to 29 m (best at 20 m, on
+the maximum) and +5.8 to +7.7 below 30 m (one sound speed: +6.7 to +8.5 everywhere). At these
+ranges over a reflecting bottom the depth relative to the maximum is worth 3 to 4 dB at
+most, against margins of 30 to 75 dB: it is not what decides a trial. What does is the
+seabed's shape, which the planner does not have: in the rehearsal the array hung at 30 m
+loses the direct path to a target at 60 m behind a 53 m sill. Hang the array above the
+shallowest ground between it and the target, and on or above the maximum rather than far
+below it.
+
+*What to expect in such water, and how to configure for it.*
+
+- The reported range of a target is that of its strongest arrival, which can be a bounce 20
+  to 40 m behind it; several detections follow it on its bearing. Judge range against a
+  transponder or a surveyed target, not against the first ping.
+- A strong echo reads 22 to 30 dB of SNR, not 40 to 70: its own reverberation fills the
+  CFAR's window. That is not a fault of the array.
+- Clutter at other bearings for half a second behind every strong echo, up to 15 dB:
+  `chain.min_snr_db: 15` for short ranges with the 0.1 s pulse; for long pulses and weak
+  targets `chain.cfar: {guard_m: 30, train_m: 100}` instead.
+- The ping's own reverberation is not known. Measure it first: ping with no target and plot
+  the level against time; it should fall 27 to 30 dB a second if the water is like the
+  measured fjord. Until it has fallen below the expected echo, nothing is detectable:
+  `chain.blanking` to that time, and plan the first targets beyond it (in the what-if, beyond
+  1 km for a 10 dB target and one row).
+- Depth from stacked rows needs the sound-speed profile: cast one and give it as
+  `chain.elevation.ssp`. Without it expect 3 to 4 m of bias at 150 m (1.5 times the stated
+  sigma). With two rows at kilometres, no depth.
+- Noise near a quay or a vessel can be 20 dB above the open water's (63 against 44 dB re
+  1 uPa^2/Hz measured at the two hydrophones): record a minute of it and fit it
+  (`tools/fit_noise.py`, `receiver.ambient_noise: {model: fitted}`) rather than use the wind
+  curve. Its clicks are heavy-tailed (K, shape 3.5): they did not raise false alarms here.
+- Rehearse with `configs/scenarios/fjord_*_trial_*.yaml`, replacing the profile, the section
+  and the tail's three numbers by the site's as soon as a cast, a chart and one sounding of
+  a pinger exist (`tools/basin_reverberation_fit.py` shows the fit).
+
+*What to expect and how to configure* is in the report of this package and belongs in
+docs/DEPLOYMENT.md when the coordinator merges it.
+
+**26.3 How far the taps of a bounce's tail reach** (`time_spread.tail_quantile`,
+`sim/timespread.py` item 7; `tools/channel_smartocean.py tail`,
+`docs/figures/facet_tail_smartocean.md`).
+
+The facet shape `exp(-tau (a + b) / 4ab) I0(tau (a - b) / 4ab)` falls as
+`exp(-tau / 2a) / sqrt(tau)`: at low grazing angles (b << a) it is a chi-square variate of one
+degree of freedom scaled by a, with 8.3 % of its energy beyond three means (an exponential:
+5.0 %). The taps spanned three means whatever the shape. With `tail_quantile: q` they span
+the q-quantile of the gamma distribution with the tail's mean and variance (`a + b` and
+`2 (a^2 + b^2)` for one facet bounce: exact for b -> 0 and for a = b; in between the share
+actually covered is within 0.006 of q). For one rough bounce each tap is then one interval
+of delay: its weight the shape integrated over the interval (Gauss-Legendre in `sqrt(tau)`,
+which removes the singularity at the origin), its delay the interval's own mean, the last
+interval taking everything later. Energy and mean excess delay are the shape's own to 1e-9
+with no rescaling. Several bounces keep the earlier grid rule on the longer span. Cost: the
+reach grows from 3 mean delays to 6.3-6.6 (2.1 to 2.2 times; 1.54 times for an exponential), so
+the same tap spacing needs that many more taps (13 for today's 6), and the ray pairs of a
+two-way echo between two bounce rays grow as (1 + taps)^2: 196 against 49. With `taps`
+unchanged the cost is nil and each tap stands for 2.2 times the delay.
+
+*Against the measured tail of R1's surface reflection* (4-8 kHz; the model sampled like the
+soundings and passed through the same fits; two seeds; T in ms):
+
+| | exponential fit, first 0.9 ms | facet-shape fit, 0.9 ms | exponential fit, 3 ms |
+| --- | --- | --- | --- |
+| measured | 0.50 | 1.08 | 0.96 |
+| facet, three means (as shipped), 24 taps | 0.67 / 0.63 | 2.21 / 1.96 | 0.44 / 0.44 |
+| facet, `tail_quantile: 0.9`, 24 taps | 0.39 / 0.39 | 0.53 / 0.50 | 0.29 / 0.27 |
+| facet, `tail_quantile: 0.99`, 24 taps | 0.37 / 0.37 | 0.56 / 0.53 | 0.56 / 0.60 |
+| facet, 0.99, 48 taps | 0.39 / 0.37 | 0.53 / 0.47 | 0.56 / 0.60 |
+| facet, 0.999, 48 taps | 0.39 / 0.37 | 0.53 / 0.50 | 0.60 / 0.63 |
+| rule of thumb, three means | above 4 | above 4 | 0.96 / 1.02 |
+| rule of thumb, 0.99 | 1.54 / 1.45 | above 4 | 0.96 / 0.96 |
+
+Both windows are not matched: the long window moves from 0.44 to 0.56-0.63 against 0.96, the
+short one from 0.67 to 0.37-0.39 against 0.50. What changes is that the model is now wrong
+the same way everywhere: model over measured was 1.34, 2.05 and 0.46 in the three fits (too
+long early, too short late: a shape error), and is 0.74, 0.52 and 0.60 with the taps to
+99 % (a scale error). One factor then brings all three within 20 %: a mean-square slope 1.4
+to 1.9 times the Cox-Munk value assumed for a wind nobody measured (0.0105; the 1.5 m/s is at
+the bottom of that law's range). The decay time put in (0.45 ms) was never fitted. The 0.9
+point is worse than three means in the long window; 0.999 adds little to 0.99.
+
+*Against the 12.5 kHz site* (Purple, first recording, the 60 m and 200 m files; 8 surface
+arrivals other than the fitted one; two seeds; model A of Sec. 21.3; in / out and median
+model over measured): tail decay time 3 / 5 and 1.06 as shipped, 3 / 5 and 1.14 with the
+taps to 99 %, 4 / 4 and 1.06 with 48 taps; mean excess delay 5 / 3 and 1.13, 6 / 2 and 1.03,
+7 / 1 and 1.04. With the rule of thumb (model C): decay 4 / 3 and 2.30, then 3 / 5 and 1.92;
+mean excess 2 / 6 and 1.45, then 4 / 4 and 1.32. A small gain where the tail was already
+right on average; no harm.
+
+*Proposed default (not applied):* `tail_quantile: 0.99` with `taps: 12`. Before / after: the
+three Smart Ocean fits 1.34 / 2.05 / 0.46 of measured, then 0.74 / 0.52 / 0.60; Purple's
+mean excess delay inside the tolerance for 5, then 7, of 8 arrivals. Cost: four times the
+ray pairs between two bounce rays. For the long-range scenarios Sec. 21.6 found the decay
+rule worth a few tenths of a dB; the reach will be worth less. It matters where a tail is
+looked at: channel studies, communications, anything that resolves a millisecond.
+
+**26.4 Slow wander of the coherent surface arrival** (`time_spread.coherent_phase`,
+`sim/timespread.py` item 8, class `CoherentPhase`; `tools/coherent_phase_study.py`,
+`docs/figures/coherent_phase_study.md`).
+
+*The physics.* The coherent part of a surface bounce is the mean field, `exp(-Gamma^2 / 2)`,
+and was perfectly steady. Split the surface's displacement into long waves and the rest. The
+long waves move the reflecting patch bodily: the path changes by `-2 zeta sin g`, `zeta`
+their displacement at the specular point (towards the water), a phase `2 k zeta sin g`
+proportional to frequency. Averaged over the rest only, the reflection is
+`exp(-Gamma_S^2 / 2) exp(2 i k zeta_L sin g)`, `Gamma_S` from the rest's height
+`sqrt(h^2 - h_L^2)`; its long-time mean is the old coherent factor, and the energy of the
+arrival with its tail is unchanged. Whether a wave of wavenumber K moves the patch "bodily"
+is a matter of the Fresnel zone. First-order reflection from a sinusoidal mirror (the
+stationary-phase integral over the delay ellipses of Sec. 16's geometry) gives the factor
+`1 + i z cos(psi) exp(i Theta)`, `z = 2 k A sin g`,
+`Theta = rho K^2 (cos^2 a / sin^2 g + sin^2 a) / (2 k)`, `rho = r1 r2 / (r1 + r2)`, a the angle
+between the wave and the path. `Theta` is the phase by which the wave's first diffraction
+orders lag the specular reflection. For small `Theta` the wave is a change of path length
+(`z cos Theta`) with a little change of amplitude in step with it (`z sin Theta`: focusing
+by the wave's curvature); for large `Theta` the orders are separate later arrivals, which is
+the tail. The option applies the path-length part as a change of the ray's delay with its
+rate (so the phase is proportional to frequency, continuous through a ping and from ping to
+ping), the amplitude part at the centre frequency with the mean energy kept, and leaves waves
+with `Theta` above `fresnel_limit` (1 rad: ours) to the scattering part. The tail keeps
+`rms_vertical_speed` as its own rate; the peak has the waves' period.
+
+*Against the measurement.* With the measured unspread height (0.8 cm) and a line at 0.2 Hz:
+phase variance 0.010 rad^2 (measured 0.0084; the height was read from the same arrival's
+energy, so this is consistency, not a test). The half-band estimator of Sec. 21.6 reads
+1.42 on the model as it does for any pure change of path length (measured 1.57 +- 0.07).
+Not fitted: for a 0.2 Hz swell running along the path `Theta` is 0.63 rad at R1, an
+amplitude variance `tan^2 Theta` = 0.52 of the phase variance; measured 0.0037 / 0.0084 =
+0.44. For crests along the path it would be 0.001. So the measured mix of phase and
+amplitude is what a swell along that path gives; a source heaving on its platform gives phase
+only. The two still cannot be told apart from one hydrophone, but the amplitude share is
+now a prediction that distinguishes them, and it sides with the surface.
+
+*Tests* (`tests/python/test_coherent_phase.py`): phase variance `(2 k h sin g)^2`; the line's
+frequency and width, and a two-band table spectrum (3 : 1) recovered from the phase; the
+Fresnel split (`cos^2`, `sin^2`, in step, waves beyond the limit absent); the coherent ray's
+energy `exp(-Gamma_S^2)` and the total unchanged to 1e-9; the tail's Doppler width from the
+rest's height; the half-band ratio 1.42 through the dataset's own estimator; a 12 km path
+unchanged bit for bit; and through both engines: a 1 s tone by way of the surface both ways
+against a 5 s swell of 5 cm, received phase equal to twice `2 k zeta sin g` at the time the
+sound was at the target, within the pulse to the curvature the linear law leaves (at most
+0.3 rad of a swing of +-1.3 rad) and from ping to ping to 8 % of the swing.
+
+*What it does to the long-range chain* (5 kHz; the echo out and back by the surface, twice the
+one-way phase; `docs/figures/coherent_phase_study.md`; computed from the phase law over an
+hour of surface, not through the kernel):
+
+| Path | sea | rms phase, rad | 1 s pulse: loss with no Doppler in the replica / after the best shift, dB | 0.1 s pulse, dB | four pings 5 s apart added coherently: loss, dB |
+| --- | --- | --- | --- | --- | --- |
+| 12 km, 10 m to 4 m, grazing 0.1 degrees | any of those tried, to sea state 4 | 0.00 to 0.02 | 0.00 / 0.00 | 0.00 | 0.00 |
+| 2.6 km, 30 m to 60 m, 2.0 degrees | swell 5 cm, 8 s, crests along the path | 0.14 | 0.00 / 0.00 | 0.00 | 0.08 |
+| | swell 25 cm, 10 s, crests along | 0.71 | 0.07 / 0.00 | 0.00 | 1.9 |
+| | sea state 4, all 51 cm taken as large-scale, crests along | 1.39 | 0.88 / 0.07 | 0.01 | 2.1 |
+| 500 m, 10 m to 15 m, 2.9 degrees | swell 5 cm, crests along | 0.21 | 0.01 / 0.00 | 0.00 | 0.18 |
+| | swell 25 cm, crests along | 1.03 | 0.15 / 0.00 | 0.00 | 3.0 |
+| | sea state 4, crests along | 2.14 | 1.75 / 0.07 | 0.03 | 3.8 |
+| 274 m, 20 m to 43 m, 12.9 degrees | fjord, calm night (0.8 cm, 5 s) | 0.10 to 0.15 | 0.01 / 0.00 | 0.00 | 0.01 to 0.03 |
+| | swell 25 cm | 4.6 | 2.0 / 0.02 | 0.03 | 5.7 (incoherent: 6.0) |
+| | sea state 4 | 7.1 to 9.6 | 5.7 to 7.2 / 1.1 to 1.6 | 0.25 to 0.47 | 5.9 to 6.4 |
+| 500 m and 2.6 km | any sea, waves running ALONG the path | 0 (0.18 for the 10 s swell at 500 m, 6 % of which takes part) | 0.00 / 0.00 | 0.00 | 0.00 (0.17) (Fresnel angle 1.9 to 7000 rad: they scatter) |
+
+So: (1) at 12 km the surface path's coherent arrival does not wander in any sea tried. Its
+Fresnel zone is kilometres long; only a swell with its crests along the path and longer
+than about 8 s moves it as one, and then by at most 0.02 rad because the grazing angle is
+0.1 degrees. A 1 s pulse integrates fully, and ping-to-ping coherence over the surface path is
+not limited by the surface's heave. (2) At trial ranges with grazing angles of 2 to 3
+degrees a 1 s chirp loses under 0.1 dB (the wander within a second is a Doppler shift of
+0.02 to 0.4 Hz rms, which a chirp turns into a range offset); a 1 s tone against a replica
+with no Doppler loses up to 1.8 dB in sea state 4. (3) Coherent addition of pings 5 s apart
+loses 2 to 4 dB at 500 m to 2.6 km in a 25 cm swell or sea state 4, and everything at steep
+angles: do not plan on multi-ping coherent gain over surface paths at short range. (4) The
+wind-sea rows take all of the wind law's height as large-scale: an upper bound. (5) The
+simulator carries the delay and its rate at mid-pulse: the "best shift" column is what its
+samples leave out, at most 0.1 dB except on the steep path in a wind sea (0.7 to 1.6 dB).
+
+*Limits.* First order in the amplitude part. Deep-water dispersion. One time per ping for
+both legs (the surface is met within the travel time to the target of that instant, which
+is taken as small against the wave period: at 12 km it is not, and there the option does
+nothing anyway). Linear phase within a ping. The source's own heave is not this option.
