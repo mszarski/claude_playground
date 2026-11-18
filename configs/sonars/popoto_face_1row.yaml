@@ -29,6 +29,7 @@ hardware:
   sound_speed: {rung: gradient_prior}
   water_depth: {source: navigation}
   compute: {option: decimate_first_cpu}
+  storage: {record: raw}
 unconfirmed: [platform.usable_span_m, receive.window, hardware.hydrophone.model, hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.boards.overload_damage_vpp,
   hardware.boards.gain_switchable, hardware.projector.model, hardware.projector.amplifier, hardware.projector.blanking_after_s, hardware.navigation.rate_hz, hardware.navigation.timestamp_sigma_s,
   hardware.compute.unit]

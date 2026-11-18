@@ -97,7 +97,7 @@ SCHEMA = {
     "projector": {
         "model": ("str", "", False, "part name", "datasheet title", F),
         "amplifier": ("str", "", False, "power amplifier part name", "datasheet title", F),
-        "source_level_db": ("num", "dB re 1 uPa at 1 m", True, "source level in the band", "datasheet: TVR x drive voltage, or SL", "must be given: the link budget needs it; flag it assumed"),
+        "source_level_db_rms": ("num", "dB re 1 uPa at 1 m, rms", True, "source level in the band as an RMS pressure level (the usual datasheet convention; a peak figure is 3 dB higher for a tone)", "datasheet: TVR x rms drive voltage, or SL", "must be given: the link budget needs it; flag it assumed"),
         "band_hz": ("vec2", "Hz", True, "transmitted band", "datasheet: usable band; waveform design", "must be given"),
         "waveform": ("map", "", True, "{type: lfm | cw, duration_s, window_alpha}", "waveform design", "must be given"),
         "position_m": ("vec3", "m", True, "body frame [along, out, down] from the array's centre", "integration drawing", "must be given: a placeholder is allowed if flagged assumed"),
@@ -138,9 +138,13 @@ SCHEMA = {
         "taps_dir": ("str", "", False, "directory for the stage taps of the first pings", "", "/data/sonar/taps"),
         "taps_pings": ("int", "", False, "pings tapped", "", "2"),
         "capacity_gb": ("num", "GB", False, "size of the recording volume", "computer's specification", F),
+        "record": (("raw", "decimated"), "", False, "what the recording holds. raw: every sample of every board, the synchronisation reference included (everything can be redone; the chain decimates when compute.option says so). "
+                   "decimated: the receiver decimates as blocks arrive (`source.decimate`) and only the band is kept: the reference and everything outside the band are gone for good; for storage-limited runs",
+                   "the trial plan", "raw: the safe default during trials"),
     },
     "compute": {
-        "option": (("decimate_first_cpu", "gpu", "cpu"), "", False, "how real time is reached at the boards' full rate", "", "both prepared: the parts list shows each"),
+        "option": (("decimate_first_cpu", "gpu", "cpu"), "", False, "how real time is reached at the boards' full rate. decimate_first_cpu: the chain converts to baseband and decimates first (`chain.decimate`), on a CPU. "
+                   "gpu: the map and the elevation search on a GPU. cpu: the chain as it is", "", "two or more rows: gpu (decimate-first on a CPU is slower than the ping interval over the full window); one row: decimate_first_cpu"),
         "unit": ("str", "", False, "part name of the computer", "datasheet title", F),
         "engine": (("python", "cpp"), "", False, "which engine tools/sonar_live.py runs (the standalone C++ program's command is always generated)", "", "python"),
         "backend": (("auto", "host", "cuda"), "", False, "kernels on the CPU or the GPU", "", "auto"),
@@ -174,6 +178,10 @@ TOP = {"build": "name of the build: file names follow it", "title": "one line fo
        "environments": "waters the build is planned in: a list ({name, water_depth_m, bottom, wind_speed_m_s or sea_state, rms_wave_height_m, bubble_model, profile, own_depth_limits_m, ...}) or the name of a file "
                        "under configs/builds/environments/ (gpusonar.depthplan.ENVIRONMENT_FIELDS)"}
 ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
+# Thresholds of the chain typed here for the long-range array (2 m cells, 100 m guard, 300 m training, tracker and classifier
+# gates). The chain is being changed to derive them from the sonar's band and pulse; when that is merged this dictionary should
+# shrink to `bearings_deg` and `look`, and a build's own values go in `operation.chain` (overrides only). Used in one place:
+# `chain_config`.
 DEFAULT_CHAIN = {
     "bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard", "range_cell_m": 2.0,
     "cfar": {"pfa": 1.0e-5, "guard_m": 100.0, "train_m": 300.0}, "min_snr_db": 9.0,
@@ -300,7 +308,9 @@ def validate(spec: dict) -> list[Issue]:
                     elif sec.get(name) is None:
                         err(f"{section}.confirmed", f"{name!r} is marked confirmed but has no value")
                 continue
-            if key not in fields:
+            if section == "projector" and key == "source_level_db":
+                err("projector.source_level_db", "renamed projector.source_level_db_rms: source levels are RMS levels (dB re 1 uPa at 1 m). If the figure you hold is a peak level, subtract 3 dB")
+            elif key not in fields:
                 err(f"{section}.{key}", f"unknown field; fields are {', '.join(fields)}")
             elif v is not None and not _kind_ok(fields[key][0], v) and not (section == "operation" and key == "range_m" and isinstance(v, list) and len(v) == 2):
                 kind = fields[key][0]
@@ -447,8 +457,8 @@ def validate(spec: dict) -> list[Issue]:
         err("projector.waveform", "give {type: lfm | cw, duration_s: ...}")
         return out
     pulse = float(wf["duration_s"])
-    if not 120.0 < float(pj["source_level_db"]) < 240.0:
-        warn("projector.source_level_db", f"{pj['source_level_db']} dB re 1 uPa at 1 m is outside anything usual (150 to 230)")
+    if not 120.0 < float(pj["source_level_db_rms"]) < 240.0:
+        warn("projector.source_level_db_rms", f"{pj['source_level_db_rms']} dB re 1 uPa at 1 m is outside anything usual (150 to 230)")
     pos = np.asarray(pj["position_m"], dtype=float)
     if abs(pos[0]) > float(p["span_m"]) / 2 + 1e-9 or abs(pos[2]) > float(p["height_m"]) / 2 + 1e-9:
         warn("projector.position_m", f"{[float(x) for x in pos]} is outside the platform's face ({p['span_m']:g} m x {p['height_m']:g} m about the array's centre): hung apart?")
@@ -514,6 +524,15 @@ def validate(spec: dict) -> list[Issue]:
     if count > 64:
         warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver of the active chain (doa: sbl) takes at most 64 channels in a row and raises an error for more, on the CPU too; "
                             "bearings from the map (doa: map, the default) are unaffected")
+    cpu = cpu_seconds_per_ping(spec)
+    if cpu and compute_option(spec) != "gpu":
+        took = cpu["decimate_first"] if compute_option(spec) == "decimate_first_cpu" else cpu["as_it_is"]
+        if took > d["ping_interval_s"]:
+            warn("compute.option", f"{compute_option(spec)}: measured {took:.1f} s a ping for {rows} row(s) on a CPU (docs/design/popoto_stage2.json, window {cpu['window_m'][0]:g}-{cpu['window_m'][1]:g} m) against "
+                                   f"{d['ping_interval_s']:.1f} s between pings: not real time. The plan for two or more rows over the full window is a GPU (compute.option: gpu); "
+                                   "a GPU has not been timed on a full-length ping either")
+    if recording_mode(spec) == "decimated":
+        warn("storage.record", "decimated: the recording will not hold the synchronisation reference or anything outside the band; nothing recorded this way can be re-synchronised or re-filtered later. Raw is the default for trials")
     for cls in target_classes_of(spec, resolve=False):
         if cls.get("status", "assumed" if cls.get("target_strength_db") is not None else "model") != "confirmed":
             warn(f"targets.{cls['name']}", "its target strength is " + ("a placeholder nobody vouches for (status: assumed)" if cls.get("target_strength_db") is not None else
@@ -648,7 +667,7 @@ def sonar_config(spec: dict) -> dict:
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     transmit = {"kind": "point", "lever_arm": [float(x) if float(x) != int(float(x)) else int(float(x)) for x in pj["position_m"]],
                 "waveform": {"type": wf.get("type", "lfm"), "f_start": f_lo, "f_stop": f_hi, "duration": float(wf["duration_s"]),
-                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db": float(pj["source_level_db"])}}
+                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db": float(pj["source_level_db_rms"])}}
     boards = board_table(spec)
     receive: dict = {"kind": "real", "sample_rate": float(b["sample_rate_hz"]), "adc_bits": int(b["adc_bits"]), "adc_full_scale": adc_full_scale(spec),
                      "sensitivity_db": float(h["sensitivity_db"]), "gain_db": float(b.get("gain_db") or 0.0) + float(h.get("preamp_gain_db") or 0.0)}
@@ -685,8 +704,8 @@ def sonar_config(spec: dict) -> dict:
         "navigation": {k: v for k, v in (spec.get("navigation") or {}).items() if k in ("unit", "adapter", "rate_hz", "timestamp_sigma_s", "tilt_sensor") and v is not None},
         "sound_speed": {"rung": get(spec, "sound_speed", "rung", "gradient_prior")},
         "water_depth": {"source": get(spec, "water_depth", "source", "unknown")},
-        "compute": {k: v for k, v in (spec.get("compute") or {}).items() if k in ("option", "unit") and v is not None},
-        "storage": {k: v for k, v in (spec.get("storage") or {}).items() if k == "capacity_gb" and v is not None},
+        "compute": {"option": compute_option(spec), **{k: v for k, v in (spec.get("compute") or {}).items() if k == "unit" and v is not None}},
+        "storage": {"record": recording_mode(spec), **{k: v for k, v in (spec.get("storage") or {}).items() if k == "capacity_gb" and v is not None}},
     }
     if scheme == "shared_reference":
         hardware["sync"]["reference_level_v"] = float(ref["level_v"])
@@ -708,7 +727,7 @@ def sonar_config(spec: dict) -> dict:
     if not (status(spec, "boards", "input_full_scale_vpp") == "confirmed" or status(spec, "boards", "adc_full_scale_v") == "confirmed"):
         flags.append("receive.adc_full_scale")
     _flag(spec, flags, "operation", "range_m", "receive.window")
-    tx_keys = [("source_level_db", "transmit.waveform.source_level_db"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
+    tx_keys = [("source_level_db_rms", "transmit.waveform.source_level_db"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
                ("position_m", "transmit.lever_arm")]
     if all(status(spec, "projector", k) != "confirmed" for k, _ in tx_keys) and status(spec, "projector", "model") != "confirmed":
         flags.append("transmit")
@@ -738,6 +757,26 @@ def clocks_config(spec: dict) -> dict:
             "unconfirmed": ["receive.boards", "receive.reference"]}
 
 
+def compute_option(spec: dict) -> str:
+    """`compute.option`, or its default: a GPU for two or more rows, decimate-first on a CPU for one (the owner's decision on the
+    stage-2 timings: docs/design/popoto_stage2.json)."""
+    return get(spec, "compute", "option", "gpu" if int(spec["array"]["rows"]) > 1 else "decimate_first_cpu")
+
+
+def recording_mode(spec: dict) -> str:
+    return get(spec, "storage", "record", "raw")
+
+
+def cpu_seconds_per_ping(spec: dict) -> dict | None:
+    """Measured seconds per ping of the chain on a CPU for this build's row count, from docs/design/popoto_stage2.json (full window,
+    the boards' rate): {decimate_first, as_it_is, window_m}. None when the build is not one of the measured ones (rows of 32 at the
+    measured sample rate): nothing is extrapolated."""
+    t = (measured_timings().get("stage2") or {}).get("decimation", {}).get("timing", {}).get("host", {}).get(str(int(spec["array"]["rows"])))
+    if not t or int(spec["array"]["count"]) * int(spec["array"]["rows"]) != t.get("channels") or float(spec["boards"]["sample_rate_hz"]) != t.get("sample_rate_hz"):
+        return None
+    return {"decimate_first": float(t["chain_decimate_first"]["seconds"]), "as_it_is": float(t["chain_full_rate"]["seconds"]), "window_m": t.get("window_m")}
+
+
 def needs_sync(spec: dict) -> bool:
     return get(spec, "sync", "scheme", "none" if spec["boards"].get("shared_clock") else "shared_reference") == "shared_reference" and len(board_table(spec)) > 1
 
@@ -760,6 +799,8 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
     for key in ("engine", "backend"):
         if get(spec, "compute", key) is not None:
             chain[key] = spec["compute"][key]
+    if compute_option(spec) == "decimate_first_cpu" and recording_mode(spec) == "raw":
+        chain["decimate"] = {}                              # the recording holds the raw ping; the chain decimates (docs/DEPLOYMENT.md, Stage 2)
     if get(spec, "sound_speed", "rung") == "typed":
         chain["sound_speed"] = float(spec["sound_speed"]["value_m_s"])
     if rows > 1:
@@ -790,6 +831,8 @@ def deploy_config(spec: dict) -> dict:
     net, sto = spec.get("network") or {}, spec.get("storage") or {}
     sonar = names(spec)["sonar"] + ("_clocks" if needs_sync(spec) else "")
     cfg: dict = {"source": {"type": "flank_udp", "sonar": sonar, "host": "0.0.0.0", "port": int(net.get("stream_port", 5700)), "timeout": 30.0}}
+    if recording_mode(spec) == "decimated":
+        cfg["source"]["decimate"] = {}                      # the receiver decimates as blocks arrive: the recording holds decimated pings only
     if static and not get(spec, "navigation", "tilt_sensor", False):
         pose = get(spec, "navigation", "static_pose") or {"x": 0.0, "y": 0.0, "z": float(p.get("depth_m") or 0.0), "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
         cfg["nav"] = {"static": {k: float(v) for k, v in pose.items()}}
@@ -1111,7 +1154,9 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "pings_per_hour": 3600.0 / interval,
         "rate_channel_bit_s": fs * bits, "rate_board_bit_s": inputs * fs * bits, "rate_total_bit_s": n * fs * bits,
         "stream_bytes_per_ping": n * n_samples * int(np.ceil(bits / 8)), "record_bytes_per_ping": n * n_samples * 4,
-        "record_bytes_per_hour": n * n_samples * 4 * 3600.0 / interval, "stream_bytes_per_hour_continuous": n * fs * int(np.ceil(bits / 8)) * 3600.0,
+        "record_bytes_per_hour": n * n_samples * 4 * 3600.0 / interval,
+        "recording_mode": (hw.get("storage") or {}).get("record", "raw"), "decimation_factor": _decimation_factor(fs, f_lo, f_hi),
+        "record_bytes_per_hour_decimated": n * int(np.ceil(n_samples / _decimation_factor(fs, f_lo, f_hi))) * 8 * 3600.0 / interval, "stream_bytes_per_hour_continuous": n * fs * int(np.ceil(bits / 8)) * 3600.0,
         "cables": {"assumed_board_position_m": board_pos.tolist(), "slack_m": slack, "shortest_m": float(runs.min()), "longest_m": float(runs.max()),
                    "mean_m": float(runs.mean()), "total_m": float(runs.sum()), "reference_cables": len(boards) if ref or (hw.get("sync") or {}).get("scheme") == "shared_reference" else 0,
                    "per_row_total_m": [float(runs[row_of == i].sum()) for i in range(len(heights))]},
@@ -1122,9 +1167,16 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "far_field_m": 2.0 * (per_row[0] * pitch) ** 2 / lam,
         "unconfirmed": list(cfg.get("unconfirmed", [])) + [f for f in (clocks_cfg or {}).get("unconfirmed", [])],
     }
+    out["record_bytes_per_hour_chosen"] = out["record_bytes_per_hour_decimated"] if out["recording_mode"] == "decimated" else out["record_bytes_per_hour"]
     if ref:
         out["reference_times_s"] = [t_open + float(ref["lead"]), t_close - float(ref["tail"]) - float(ref["duration"])]
     return out
+
+
+def _decimation_factor(fs: float, f_lo: float, f_hi: float) -> int:
+    """The decimate-first stage's default factor (libs/live decimate.hpp defaults: the band plus a quarter of its width each side,
+    sampled twice over): 17 for 4 to 6 kHz at 102.4 kHz, as docs/design/popoto_stage2.json has it (a test holds the two together)."""
+    return max(int(fs // (2.0 * 1.5 * (f_hi - f_lo))), 1)
 
 
 def describe_shipped(sonar_name: str, deploy_name: str | None = None) -> dict:
@@ -1234,16 +1286,16 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
         grad = float(dep.get("gradient_sigma_per_s", 0.05) if gradient_sigma is None else gradient_sigma)
         out["elevation"] = {k: el[k] for k in ("baseline_m", "repeat_spacing_deg", "unambiguous_half_sector_deg", "highest_repeat_db", "sigma_deg", "clock_us_for_error",
                                                "clock_error_deg", "deg_per_us", "deg_per_mm_out", "two_rows_one_answer_beyond_m")}
-        budget = {}
+        depth_budget = {}
         for r in ranges:
             s = snr["ship"][str(r)]
             if s < 10.0:
-                budget[str(r)] = None
+                depth_budget[str(r)] = None
                 continue
             sig = float(elev.sin_elevation_sigma(np.repeat(el["heights_m"], n), 10.0 ** (min(s, 40.0) / 10.0) / n, f_lo, f_hi, c))
             parts = {"from_noise_m": r * sig, "from_roll_m": r * np.radians(roll), "from_gradient_m": r * r * grad / (2.0 * c)}
-            budget[str(r)] = {**{k: float(v) for k, v in parts.items()}, "total_m": float(np.sqrt(sum(v * v for v in parts.values())))}
-        out["depth_sigma_ship_m"] = budget
+            depth_budget[str(r)] = {**{k: float(v) for k, v in parts.items()}, "total_m": float(np.sqrt(sum(v * v for v in parts.values())))}
+        out["depth_sigma_ship_m"] = depth_budget
         out["depth_budget_inputs"] = {"roll_sigma_deg": roll, "gradient_sigma_per_s": grad}
         out["multipath_note"] = ("not in any sigma: in a shallow channel an echo that bounced once arrives within the pulse's range sidelobes of the direct one and pulls the "
                                  "elevation by tenths of a degree (docs/DESIGN.md Sec. 3)")

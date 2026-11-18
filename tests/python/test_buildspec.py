@@ -138,10 +138,10 @@ def test_validator_says_what_is_wrong_in_the_spec_sheets_words():
     assert has(issues_of(lambda s: s["boards"].update(clocks={"explicit": [[0, 0]]})), "error", "boards.clocks", "8 boards")
     assert has(issues_of(lambda s: s["hydrophone"].update(confirmed=["noise_db"])), "error", "hydrophone.confirmed", "no value")
     # The projector's direct sound against the inputs: a warning that carries the computed level.
-    loud = issues_of(lambda s: s["projector"].update(position_m=[0.0, 0.0, 0.3], source_level_db=197.0))
+    loud = issues_of(lambda s: s["projector"].update(position_m=[0.0, 0.0, 0.3], source_level_db_rms=197.0))
     msg = next(i.message for i in loud if i.where == "projector.position_m" and "direct sound" in i.message)
     spec = copy.deepcopy(bs.load(EXAMPLE))
-    spec["projector"].update(position_m=[0.0, 0.0, 0.3], source_level_db=197.0)
+    spec["projector"].update(position_m=[0.0, 0.0, 0.3], source_level_db_rms=197.0)
     d = bs.derive(spec)["direct"]
     assert f"{d['level_db']:.0f} dB re 1 uPa" in msg and f"{d['over_full_scale_db']:.0f} dB over full scale" in msg and d["over_full_scale_db"] > 20.0
     assert d["level_db"] == pytest.approx(197.0 - 20.0 * np.log10(d["nearest_m"]))
