@@ -79,4 +79,9 @@ struct MvdrOptions {
 BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& bearings, const MvdrOptions& options = {},
                       Backend backend = Backend::Host, int device = 0, bool batched = false);
 
+/// Seconds in each step of the batched beamformers since the last reset (beamform_batched.hpp).
+struct BeamformProfile;
+BeamformProfile beamform_profile();
+void beamform_profile_reset();
+
 }  // namespace sonar::live

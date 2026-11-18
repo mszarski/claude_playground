@@ -7,6 +7,7 @@
 #include <pybind11/stl.h>
 
 #include "sonar/live/beamform.hpp"
+#include "sonar/live/beamform_batched.hpp"
 #include "sonar/live/calibrate.hpp"
 #include "sonar/live/chain.hpp"
 #include "vec_caster.hpp"
@@ -92,6 +93,27 @@ void bind_beamform(py::module_& m) {
       "formulation on the host.");
   // The C++ beamformers take a backend (python/gpusonar/flank.py, live.py).
   m.attr("BEAMFORM_BACKENDS") = true;
+  m.def(
+      "beamform_profile",
+      [](bool reset) {
+        const live::BeamformProfile p = live::beamform_profile();
+        if (reset) live::beamform_profile_reset();
+        py::dict d;
+        d["transfer"] = p.transfer;
+        d["transform"] = p.transform;
+        d["sum"] = p.sum;
+        d["band"] = p.band;
+        d["outer"] = p.outer;
+        d["factor"] = p.factor;
+        d["solve"] = p.solve;
+        d["apply"] = p.apply;
+        d["farfield_calls"] = p.farfield_calls;
+        d["mvdr_calls"] = p.mvdr_calls;
+        return d;
+      },
+      py::arg("reset") = false,
+      "Seconds in each step of the batched far-field and MVDR beamformers (CUDA backend, or batched=True) since the\n"
+      "last reset: transfer, transform, sum (far field), band, outer, factor, solve, apply (MVDR), and the calls.");
 
   m.def(
       "calibrate_channel_responses_cpp",

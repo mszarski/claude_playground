@@ -244,34 +244,34 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
       pulse_low[2 * k] = v.real();
       pulse_low[2 * k + 1] = v.imag();
     }
-    const auto shape = [&](std::int64_t begin, std::int64_t count, float* shaped, float* lead_out, double* doppler) {
+    const std::int64_t n_coarse = power.n_coarse;
+    const auto shape = [&](std::int64_t begin, std::int64_t count, float* deviates, double* density, float* lead_out,
+                           double* doppler) {
+      if (shared) std::copy(power.density, power.density + n_coarse, density);
       parallel_for_host(count, [&](std::int64_t j) {
         const std::int64_t m = sectors[begin + j];
-        std::vector<double> own_sigma;
-        if (!shared) {
-          own_sigma.resize(static_cast<std::size_t>(n_low));
-          sigma_row(params, power, m, own_sigma.data());
-        }
-        const double* s = shared ? shared_sigma.data() : own_sigma.data();
         const double* g_re = normals + (begin + j) * 2 * n_low;
         const double* g_im = g_re + n_low;
-        float* b = shaped + 2 * j * n_low;
+        float* b = deviates + 2 * j * n_low;
         for (std::int64_t k = 0; k < n_low; ++k) {
-          b[2 * k] = static_cast<float>(s[k] * g_re[k]);
-          b[2 * k + 1] = static_cast<float>(s[k] * g_im[k]);
+          b[2 * k] = static_cast<float>(g_re[k]);
+          b[2 * k + 1] = static_cast<float>(g_im[k]);
         }
+        if (!shared) std::copy(power.density + m * n_coarse, power.density + (m + 1) * n_coarse, density + j * n_coarse);
         arrival(m, doppler[j], lead_out + j * n_channels);
       });
     };
     using Shape = decltype(shape);
-    const ReverbShapeFn shape_fn = [](void* context, std::int64_t begin, std::int64_t count, float* shaped, float* lead_out,
-                                      double* doppler) {
-      (*static_cast<const Shape*>(context))(begin, count, shaped, lead_out, doppler);
+    const ReverbShapeFn shape_fn = [](void* context, std::int64_t begin, std::int64_t count, float* deviates, double* density,
+                                      float* lead_out, double* doppler) {
+      (*static_cast<const Shape*>(context))(begin, count, deviates, density, lead_out, doppler);
     };
     void* context = const_cast<void*>(static_cast<const void*>(&shape));
     const ReverbBatchSetup setup{omega.data(), pulse_low.data(), reinterpret_cast<const float*>(pulse_spectrum.data()),
-                                 n_low,        n_taps,           n_channels,
-                                 fs_low,       params.time0,     uniform};
+                                 power.coarse, n_low,            n_taps,
+                                 n_channels,   n_coarse,         fs_low,
+                                 params.time0, dphi,             uniform,
+                                 shared,       params.total_from_host, params.total_to_host};
     if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
       reverb_accumulate_cuda(setup, n_sectors, shape_fn, context, total, g_profile, device);

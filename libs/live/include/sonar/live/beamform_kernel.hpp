@@ -11,6 +11,7 @@
 //   MvdrOuterKernel      one element of the lower triangle of one range block's x x^H
 //   MvdrTotalKernel      the same summed over the blocks
 //   MvdrFactorKernel     one (sub-band, block): training covariance, loading, Cholesky in place
+//   MvdrSteerKernel      one (sub-band, bearing, element): the steering vector's entry
 //   MvdrSolveKernel      one (sub-band, block, bearing): w = R^-1 a / (a^H R^-1 a)
 //   MvdrApplyKernel      one (group of bearings, time sample): the weights applied, sub-bands summed
 #pragma once
@@ -204,23 +205,31 @@ struct MvdrFactorKernel {
   }
 };
 
+/// The steering vectors of each sub-band, a[s][b][e] = exp(2 pi i f_s tau[b][e]), double
+/// precision: every range block of the sub-band solves against the same ones.
+struct MvdrSteerKernel {
+  const double* tau;    ///< [n_b][n_el] plane-wave leads, s
+  const double* f_abs;  ///< [n_sub] centre frequency of each sub-band, Hz
+  double* a;            ///< [n_sub][n_b][n_el] complex
+  std::int64_t n_el, n_b;
+
+  SONAR_HD void operator()(std::int64_t index) const {
+    const std::int64_t s = index / (n_b * n_el);
+    const double turns = f_abs[s] * tau[index % (n_b * n_el)];
+    const double angle = 6.283185307179586476925 * (turns - std::floor(turns));
+    a[2 * index] = std::cos(angle);
+    a[2 * index + 1] = std::sin(angle);
+  }
+};
+
 struct MvdrSolveKernel {
   const double* r;             ///< [n_sub][n_blocks][n_el][n_el] complex: Cholesky factors (lower)
   const std::int32_t* status;  ///< [n_sub][n_blocks]
-  const double* tau;           ///< [n_b][n_el] plane-wave leads, s
-  const double* f_abs;         ///< [n_sub] centre frequency of each sub-band, Hz
+  const double* a;             ///< [n_sub][n_b][n_el] complex steering vectors
   double* work;                ///< [n_sub][n_blocks][n_b][n_el] complex: R^-1 a
   float* coeff;                ///< [n_sub][n_blocks][n_b][n_el] complex: n_el conj(w)
   std::int32_t* singular;      ///< [n_sub][n_blocks][n_b]: 1 where a^H R^-1 a is zero or not finite
   std::int64_t n_el, n_blocks, n_b;
-
-  /// Steering phasor of element e: exp(2 pi i f tau), double precision.
-  SONAR_HD static void steer(double f, double t, double& c, double& s) {
-    const double turns = f * t;
-    const double a = 6.283185307179586476925 * (turns - std::floor(turns));
-    c = std::cos(a);
-    s = std::sin(a);
-  }
 
   SONAR_HD void operator()(std::int64_t index) const {
     const std::int64_t b = index % n_b, si = index / n_b, s = si / n_blocks;
@@ -231,13 +240,11 @@ struct MvdrSolveKernel {
       return;
     }
     const double* l = r + 2 * si * n_el * n_el;
-    const double* t = tau + b * n_el;
-    const double f = f_abs[s];
+    const double* av = a + 2 * (s * n_b + b) * n_el;
     double* z = work + 2 * index * n_el;
     // Forward: L y = a.
     for (std::int64_t e = 0; e < n_el; ++e) {
-      double re, im;
-      steer(f, t[e], re, im);
+      double re = av[2 * e], im = av[2 * e + 1];
       for (std::int64_t j = 0; j < e; ++j) {
         const double lr = l[2 * (e * n_el + j)], li = l[2 * (e * n_el + j) + 1];
         re -= lr * z[2 * j] - li * z[2 * j + 1];
@@ -262,8 +269,7 @@ struct MvdrSolveKernel {
     // gain = a^H R^-1 a.
     double gr = 0.0, gi = 0.0;
     for (std::int64_t e = 0; e < n_el; ++e) {
-      double ar, ai;
-      steer(f, t[e], ar, ai);
+      const double ar = av[2 * e], ai = av[2 * e + 1];
       gr += ar * z[2 * e] + ai * z[2 * e + 1];
       gi += ar * z[2 * e + 1] - ai * z[2 * e];
     }

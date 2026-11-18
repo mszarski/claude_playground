@@ -49,6 +49,13 @@ struct ReverbParams {
   /// Run the batched formulation (reverb_batched.hpp, what the CUDA backend runs) on the
   /// host as well: for tests of that formulation on a machine without a device.
   bool batched = false;
+  /// For a generator call that adds its sectors over several calls of reverb_accumulate in
+  /// the batched formulation: the accumulated spectrum is taken from `total` at the start
+  /// of a call (total_from_host) and written back to it at the end (total_to_host). Clear
+  /// total_from_host after the first call and total_to_host before the last, and the
+  /// spectrum stays on the backend in between (`total` on the host is then stale until the
+  /// last call). The reference host code works in `total` and ignores both.
+  bool total_from_host = true, total_to_host = true;
 };
 
 /// Seconds in each step of the generator since the last reset (reverb_batched.hpp).

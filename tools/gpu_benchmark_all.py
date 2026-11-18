@@ -685,9 +685,24 @@ def group_reverb(b):
                 return {"calls": len(calls), "channels": int(rec.samples.n_channels), "samples": int(rec.samples.n_samples),
                         "components": int(c.get("rows", 0)), "low-rate samples": int(c.get("n_low", 0) // k)}
 
+            before_s = before_search = None
             try:
                 row = b.case(name, "whole generator: power, random draws, kernel, interpolation", sizes, run, prep, timer=timer,
                              note=f"reverberation items of {scenario}")
+                host_profile = dict(profiles.get("host") or {})
+                if row["host_s"] is not None and getattr(core, "SIM_REVERB_ROWS", False) and (not q or os.environ.get("GPUSONAR_BENCH_BEFORE") == "1"):
+                    # The host kernel as it was called before `rows`: the sectors with power searched for in every call
+                    # (left out of the quick run unless GPUSONAR_BENCH_BEFORE=1).
+                    state = prep(HOST)
+                    timer.reset()
+                    core.SIM_REVERB_ROWS = False
+                    try:
+                        run(state, HOST)
+                    finally:
+                        core.SIM_REVERB_ROWS = True
+                    before_s = timer.snapshot()[0].get(S_RKERNEL)
+                    before_search = (profiles.get("host") or {}).get("active", 0.0)
+                    profiles["host"] = host_profile
             finally:
                 timer.restore()
             # The kernel alone, from the same runs.
@@ -727,23 +742,11 @@ def group_reverb(b):
                     f"cuda {cuda_cell(finish)}; the rest on the host {fmt_time(rest)} s ({parts})")
                 if detail:
                     log("    " + detail)
-            if row["host_s"] is not None and getattr(core, "SIM_REVERB_ROWS", False) and not q:
-                # The host kernel as it was called before `rows`: the sectors with power searched for in every call.
-                state = prep(HOST)
-                timer.reset()
-                core.SIM_REVERB_ROWS = False
-                try:
-                    run(state, HOST)
-                finally:
-                    core.SIM_REVERB_ROWS = True
-                before = timer.snapshot()
-                seconds = (before[0] if isinstance(before, tuple) else before).get(S_RKERNEL)
-                prof = profiles.get("host") or {}
-                if seconds:
-                    b.host_row("reverberation, " + name + ": kernel without `rows`",
-                               "the host kernel called as before: every call searches the density for the sectors with power", row["sizes"],
-                               seconds, note=f"one run; of which the search {fmt_time(prof.get('active', 0.0))} s; with `rows` {fmt_time(kernel['host_s'])} s")
-                    log(f"    host kernel without rows: {fmt_time(seconds)} s (search {fmt_time(prof.get('active', 0.0))} s)")
+            if before_s:
+                b.host_row("reverberation, " + name + ": kernel without `rows`",
+                           "the host kernel called as before: every call searches the density for the sectors with power", row["sizes"],
+                           before_s, note=f"one run; of which the search {fmt_time(before_search)} s; with `rows` {fmt_time(kernel['host_s'])} s")
+                log(f"    host kernel without rows: {fmt_time(before_s)} s (search {fmt_time(before_search)} s)")
         b.guard(name, build)
 
 
@@ -1015,10 +1018,25 @@ def beamformer_cases(b):
             bearings = np.radians(np.arange(-60.0, 60.25, 2.0 if q else 0.5))
             sizes = {"rows": rows, "channels": int(rec.samples.n_channels), "samples": int(rec.samples.n_samples), "bearings": len(bearings)}
             label = f"{rows} row{'s' if rows > 1 else ''} ({sizes['channels']} channels at once)"
-            b.case(f"flank.farfield_beamform, {label}", "far-field delay and sum of one conditioned ping (C++; the device: transforms and steered sums)",
-                   sizes, lambda r, be: flank.farfield_beamform(r, bearings, window="hann", backend=be).data, lambda be: rec.copy())
-            b.case(f"flank.mvdr_beamform, {label}", "sub-band MVDR of one conditioned ping (C++; the device: covariances, Cholesky, solves, weights applied)",
-                   sizes, lambda r, be: flank.mvdr_beamform(r, bearings, backend=be).data, lambda be: rec.copy())
+            def steps(row):
+                # Where the device's time went in the last runs (core.beamform_profile), per call.
+                if not hasattr(core, "beamform_profile") or row.get("cuda_s") is None:
+                    return
+                prof = core.beamform_profile(reset=True)
+                calls = max(prof["farfield_calls"] + prof["mvdr_calls"], 1)
+                text = "cuda steps per call: " + ", ".join(f"{k} {fmt_time(v / calls)} s" for k, v in prof.items() if isinstance(v, float) and v > 0.0)
+                row["note"] = (row["note"] + "; " if row["note"] else "") + text
+                log("    " + text)
+
+            def reset():
+                if hasattr(core, "beamform_profile"):
+                    core.beamform_profile(reset=True)
+            reset()
+            steps(b.case(f"flank.farfield_beamform, {label}", "far-field delay and sum of one conditioned ping (C++; the device: transforms and steered sums)",
+                         sizes, lambda r, be: flank.farfield_beamform(r, bearings, window="hann", backend=be).data, lambda be: rec.copy()))
+            reset()
+            steps(b.case(f"flank.mvdr_beamform, {label}", "sub-band MVDR of one conditioned ping (C++; the device: covariances, Cholesky, solves, weights applied)",
+                         sizes, lambda r, be: flank.mvdr_beamform(r, bearings, backend=be).data, lambda be: rec.copy()))
         b.guard(f"beamformers, {rows} row(s)", build)
 
 

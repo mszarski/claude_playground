@@ -6,9 +6,9 @@
 // reduced-rate length per component, a length that is rarely a product of small primes.
 // Here a whole run of components is on the device from the shaped random sequences on:
 //
-//   host    sigma(t) x the normal deviates of each component -> single precision
-//           (page-locked memory), the plane-wave lead of each channel
-//   device  Doppler shift of each sequence            ReverbShiftKernel
+//   host    the normal deviates of each component -> single precision (page-locked
+//           memory), its row of the power density, the plane-wave lead of each channel
+//   device  sigma(t) x deviates, Doppler shift        ReverbShapeKernel
 //           transform of every sequence               one batched FFT
 //           shifted, zero-padded pulses + transform   ReverbPulseKernel, one batched FFT
 //           sequence spectrum x pulse spectrum        ReverbProductKernel
@@ -22,11 +22,18 @@
 // host. Components are added in their order in every channel and bin, as on the host, so
 // the two differ only by the rounding of single-precision transforms and phases.
 //
+// A generator call that adds its components over several calls of reverb_accumulate can
+// leave the accumulated spectrum on the executor between them (ReverbBatchSetup::from_host,
+// to_host), so it crosses to the device once and back once.
+//
 // C++17: this header is compiled by nvcc.
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <utility>
 
 #include "sonar/sim/reverb_kernel.hpp"
 
@@ -34,9 +41,9 @@ namespace sonar::sim {
 
 /// Seconds spent in each step of the batched generator since the last reset, and counts.
 struct ReverbProfile {
-  double shape = 0.0;     ///< host: sigma x deviates to single precision, leads
-  double upload = 0.0;    ///< sequences, leads, shifts to the device
-  double shift = 0.0;     ///< ReverbShiftKernel
+  double shape = 0.0;     ///< host: deviates to single precision, density rows, leads
+  double upload = 0.0;    ///< deviates, density rows, leads, shifts to the device
+  double shift = 0.0;     ///< ReverbShapeKernel
   double transform = 0.0; ///< the transforms of the sequences
   double pulse = 0.0;     ///< shifted pulses and their transforms
   double product = 0.0;   ///< ReverbProductKernel
@@ -66,10 +73,29 @@ struct ReverbBatchSetup {
   const float* omega;           ///< [n_low] 2 pi (f + fc)
   const float* pulse;           ///< [n_taps] interleaved complex: the pulse at the reduced rate
   const float* pulse_spectrum;  ///< [n_low] interleaved complex: its transform, for components without a shift
-  std::int64_t n_low, n_taps, n_channels;
-  double fs_low, time0;
+  const double* coarse;         ///< [n_coarse] times of the power density, s
+  std::int64_t n_low, n_taps, n_channels, n_coarse;
+  double fs_low, time0, dphi;
   bool uniform;
+  bool shared;                  ///< one density row for every component
+  /// The accumulated spectrum comes from the host at the start of the call and goes back at
+  /// its end. A caller that adds over several calls clears from_host after the first and
+  /// to_host before the last: the spectrum then stays on the executor between them.
+  bool from_host, to_host;
 };
+
+/// The accumulated spectrum left on an executor between calls.
+template <class Exec>
+struct ReverbResident {
+  typename Exec::template Buffer<float> total;
+  const float* host = nullptr;
+  std::size_t size = 0;
+};
+template <class Exec>
+ReverbResident<Exec>& reverb_resident() {
+  static ReverbResident<Exec> resident;
+  return resident;
+}
 
 /// One call of the generator on an executor: construct with the spectrum accumulated so
 /// far, add runs of components, then download().
@@ -82,27 +108,40 @@ class ReverbBatched {
     omega_ = ex_.upload(s_.omega, static_cast<std::size_t>(s_.n_low));
     pulse_ = ex_.upload(s_.pulse, static_cast<std::size_t>(2 * s_.n_taps));
     pulse_spectrum_ = ex_.upload(s_.pulse_spectrum, static_cast<std::size_t>(2 * s_.n_low));
-    total_ = ex_.upload(total, static_cast<std::size_t>(2 * s_.n_channels * s_.n_low));
+    coarse_ = ex_.upload(s_.coarse, static_cast<std::size_t>(s_.n_coarse));
+    const auto size = static_cast<std::size_t>(2 * s_.n_channels * s_.n_low);
+    ReverbResident<Exec>& resident = reverb_resident<Exec>();
+    if (s_.from_host) {
+      total_ = ex_.upload(total, size);
+    } else {
+      if (resident.host != total || resident.size != size) {
+        throw std::runtime_error("reverb: no accumulated spectrum of this call was left on the backend");
+      }
+      total_ = std::move(resident.total);
+    }
+    resident.host = nullptr;
+    resident.size = 0;
     w.lap(profile_.download);
   }
 
-  /// Add `count` components: `shaped` [count, n_low] interleaved complex (sigma x deviates),
-  /// `lead` [count, n_channels] seconds, `doppler` [count] Hz.
-  void add(const float* shaped, const float* lead, const double* doppler, std::int64_t count) {
+  /// Add `count` components: `deviates` [count, n_low] interleaved complex (standard normal),
+  /// `density` [count, n_coarse] (one row when shared), `lead` [count, n_channels] seconds,
+  /// `doppler` [count] Hz.
+  void add(const float* deviates, const double* density, const float* lead, const double* doppler, std::int64_t count) {
     if (count <= 0) return;
     const std::int64_t n_low = s_.n_low;
     const auto points = static_cast<std::size_t>(count * n_low);
     bool any_shift = false;
     for (std::int64_t j = 0; j < count; ++j) any_shift = any_shift || doppler[j] != 0.0;
     ReverbStopwatch w;
-    auto x = ex_.upload(shaped, 2 * points);
+    auto x = ex_.upload(deviates, 2 * points);
+    auto d_density = ex_.upload(density, static_cast<std::size_t>((s_.shared ? 1 : count) * s_.n_coarse));
     auto d_lead = ex_.upload(lead, static_cast<std::size_t>(count * s_.n_channels));
     auto d_doppler = ex_.upload(doppler, static_cast<std::size_t>(count));
     w.lap(profile_.upload);
-    if (any_shift) {
-      ex_.run(count * n_low, ReverbShiftKernel{x.data(), d_doppler.data(), n_low, s_.time0, s_.fs_low});
-      w.lap(profile_.shift);
-    }
+    ex_.run(count * n_low, ReverbShapeKernel{x.data(), coarse_.data(), d_density.data(), d_doppler.data(), n_low,
+                                             s_.n_coarse, s_.time0, s_.fs_low, s_.dphi, s_.shared});
+    w.lap(profile_.shift);
     ex_.fft(x.data(), n_low, count, false);
     w.lap(profile_.transform);
     if (any_shift) {
@@ -122,9 +161,17 @@ class ReverbBatched {
     profile_.components += count;
   }
 
-  void download(float* total) {
+  /// The end of the call: the spectrum back to the host, or left on the executor.
+  void finish(float* total) {
     ReverbStopwatch w;
-    ex_.download(total_, total);
+    if (s_.to_host) {
+      ex_.download(total_, total);
+    } else {
+      ReverbResident<Exec>& resident = reverb_resident<Exec>();
+      resident.size = total_.size();
+      resident.host = total;
+      resident.total = std::move(total_);
+    }
     w.lap(profile_.download);
   }
 
@@ -133,12 +180,14 @@ class ReverbBatched {
   ReverbBatchSetup s_;
   ReverbProfile& profile_;
   typename Exec::template Buffer<float> omega_, pulse_, pulse_spectrum_, total_;
+  typename Exec::template Buffer<double> coarse_;
 };
 
-/// Fills the host arrays of components begin .. begin + count of a call: `shaped`
-/// [count, n_low] interleaved complex (sigma x deviates), `lead` [count, n_channels], `doppler` [count].
-using ReverbShapeFn = void (*)(void* context, std::int64_t begin, std::int64_t count, float* shaped, float* lead,
-                               double* doppler);
+/// Fills the host arrays of components begin .. begin + count of a call: `deviates`
+/// [count, n_low] interleaved complex, `density` [count, n_coarse] (one row when shared),
+/// `lead` [count, n_channels], `doppler` [count].
+using ReverbShapeFn = void (*)(void* context, std::int64_t begin, std::int64_t count, float* deviates, double* density,
+                               float* lead, double* doppler);
 
 /// Complex samples of the sequences held on the executor at once.
 constexpr std::int64_t kReverbBatchPoints = std::int64_t{4} << 20;
@@ -152,15 +201,16 @@ void reverb_accumulate_batched(Exec& ex, const ReverbBatchSetup& setup, std::int
   const std::int64_t batch = most < 1 ? 1 : most;
   for (std::int64_t begin = 0; begin < n_components; begin += batch) {
     const std::int64_t count = n_components - begin < batch ? n_components - begin : batch;
-    auto* shaped = ex.template staging<float>(0, static_cast<std::size_t>(2 * count * setup.n_low));
+    auto* deviates = ex.template staging<float>(0, static_cast<std::size_t>(2 * count * setup.n_low));
     auto* lead = ex.template staging<float>(1, static_cast<std::size_t>(count * setup.n_channels));
     auto* doppler = ex.template staging<double>(2, static_cast<std::size_t>(count));
+    auto* density = ex.template staging<double>(3, static_cast<std::size_t>((setup.shared ? 1 : count) * setup.n_coarse));
     ReverbStopwatch w;
-    shape(context, begin, count, shaped, lead, doppler);
+    shape(context, begin, count, deviates, density, lead, doppler);
     w.lap(profile.shape);
-    batched.add(shaped, lead, doppler, count);
+    batched.add(deviates, density, lead, doppler, count);
   }
-  batched.download(total);
+  batched.finish(total);
 }
 
 /// The interpolation to the record's rate (step 3 of reverb.hpp) on an executor. `out` is

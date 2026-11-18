@@ -96,22 +96,52 @@ SONAR_HD inline void reverb_phasor(double turns, float& c, float& s) {
   s = std::sin(a);
 }
 
-/// The Doppler shift of each component's sequence: x[j, k] *= exp(2 pi i doppler[j] dt_k),
-/// dt_k the time of sample k after the first.
-struct ReverbShiftKernel {
-  float* x;               ///< [count, n_low] interleaved complex
+/// numpy.interp at x with zero outside the grid (the reference code walks the grid; a
+/// kernel element finds its interval by bisection).
+SONAR_HD inline double reverb_interp(double x, const double* xp, const double* fp, std::int64_t n) {
+  if (!(x >= xp[0] && x <= xp[n - 1])) return 0.0;
+  std::int64_t lo = 0, hi = n - 1;   // xp[lo] <= x, and x < xp[hi] unless hi is still the last node
+  while (hi - lo > 1) {
+    const std::int64_t mid = (lo + hi) / 2;
+    if (xp[mid] <= x) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  if (xp[hi] <= x) lo = hi;
+  if (lo == n - 1 || xp[lo] == x) return fp[lo];
+  const double slope = (fp[lo + 1] - fp[lo]) / (xp[lo + 1] - xp[lo]);
+  return slope * (x - xp[lo]) + fp[lo];
+}
+
+/// Each component's sequence from its normal deviates: scaled by the standard deviation of
+/// the component at that time, sigma = sqrt(density(t) / fs_low * dphi / 2), and shifted by the
+/// component's Doppler: x[j, k] = sigma_j(t_k) g[j, k] exp(2 pi i doppler[j] (t_k - t_0)).
+struct ReverbShapeKernel {
+  float* x;               ///< [count, n_low] interleaved complex: the deviates in, the sequence out
+  const double* coarse;   ///< [n_coarse] times of the density, s
+  const double* density;  ///< [count, n_coarse] the rows of these components, or [1, n_coarse] when shared
   const double* doppler;  ///< [count] Hz
-  std::int64_t n_low;
-  double time0, fs_low;
+  std::int64_t n_low, n_coarse;
+  double time0, fs_low, dphi;
+  bool shared;
 
   SONAR_HD void operator()(std::int64_t i) const {
     const std::int64_t j = i / n_low, k = i % n_low;
+    const double t = time0 + static_cast<double>(k) / fs_low;
+    const double* row = density + (shared ? 0 : j) * n_coarse;
+    const double sigma = std::sqrt(reverb_interp(t, coarse, row, n_coarse) / fs_low * dphi / 2.0);
+    const auto re = static_cast<float>(sigma * static_cast<double>(x[2 * i]));
+    const auto im = static_cast<float>(sigma * static_cast<double>(x[2 * i + 1]));
     const double d = doppler[j];
-    if (d == 0.0) return;
-    const double dt = (time0 + static_cast<double>(k) / fs_low) - time0;
+    if (d == 0.0) {
+      x[2 * i] = re;
+      x[2 * i + 1] = im;
+      return;
+    }
     float c, s;
-    reverb_phasor(d * dt, c, s);
-    const float re = x[2 * i], im = x[2 * i + 1];
+    reverb_phasor(d * (t - time0), c, s);
     x[2 * i] = re * c - im * s;
     x[2 * i + 1] = re * s + im * c;
   }

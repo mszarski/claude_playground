@@ -131,7 +131,10 @@ TEST(Batched, MvdrKernelsSolveTheLoadedCovarianceAndPassTheLookDirection) {
   for (std::int64_t i = 0; i < n_el * n_el; ++i) k_total(i);
   const live::MvdrFactorKernel k_factor{outer.data(), total.data(), r.data(), status.data(), n, n_el, n_blocks, block, 0, loading};
   for (std::int64_t i = 0; i < n_blocks; ++i) k_factor(i);
-  const live::MvdrSolveKernel k_solve{r.data(), status.data(), tau.data(), f.data(), work.data(), coeff.data(), singular.data(),
+  std::vector<double> steer(2 * n_b * n_el);
+  const live::MvdrSteerKernel k_steer{tau.data(), f.data(), steer.data(), n_el, n_b};
+  for (std::int64_t i = 0; i < n_b * n_el; ++i) k_steer(i);
+  const live::MvdrSolveKernel k_solve{r.data(), status.data(), steer.data(), work.data(), coeff.data(), singular.data(),
                                       n_el, n_blocks, n_b};
   for (std::int64_t i = 0; i < n_blocks * n_b; ++i) k_solve(i);
   const auto x = [&](std::int64_t t, std::int64_t e) {

@@ -335,6 +335,7 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
     # on the backend (older builds: neither).
     named = bool(getattr(core, "SIM_REVERB_ROWS", False))
     rows = np.ascontiguousarray(rows, dtype=np.int64)
+    resident = bool(getattr(core, "SIM_REVERB_BATCHED", False)) and (BATCHED_ON_HOST or backend == core.Backend.Cuda)
     normals = None
     for first in range(0, n_active, run):
         count = min(run, n_active - first)
@@ -353,6 +354,10 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
             extra["rows"] = rows[first:first + count]
         if BATCHED_ON_HOST:
             extra["batched"] = True
+        if resident:
+            # The accumulated spectrum stays on the backend between the runs: to it with the
+            # first, back with the last.
+            extra["total_from_host"], extra["total_to_host"] = first == 0, first + count >= n_active
         core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
                                    n_azimuth, decim, velocity=velocity, backend=backend, **extra)
     finish = dict(backend=backend, batched=BATCHED_ON_HOST) if getattr(core, "SIM_REVERB_BATCHED", False) else {}

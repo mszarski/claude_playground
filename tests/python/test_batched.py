@@ -272,6 +272,17 @@ def test_doa_gate_says_where_it_ran(jammed):
         assert core.doa_gate(jammed, t, 128, grid, method="sbl", backend=core.Backend.Cuda)["backend"] == "cuda"
 
 
+def test_beamformer_profile_counts_the_calls(jammed):
+    core.beamform_profile(reset=True)
+    core.farfield_beamform_cpp(jammed.copy(), list(BEARINGS[:9]), "rect", batched=True)
+    core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS[:9]), batched=True)
+    core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS[:9]))                    # the reference code is not profiled
+    prof = core.beamform_profile(reset=True)
+    assert prof["farfield_calls"] == 1 and prof["mvdr_calls"] == 1
+    assert all(prof[k] > 0.0 for k in ("transform", "sum", "band", "outer", "factor", "solve", "apply"))
+    assert core.beamform_profile()["mvdr_calls"] == 0
+
+
 # --- CUDA ----------------------------------------------------------------------------------
 
 @needs_cuda
@@ -328,7 +339,12 @@ def test_cuda_mvdr_matches_the_host(jammed, kw):
     t = time.perf_counter()
     for _ in range(3):
         core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS), backend=core.Backend.Cuda, **kw)
-    print(f"[beamform cuda] mvdr, 81 bearings x {jammed.samples.n_samples} samples: {(time.perf_counter() - t) / 3 * 1e3:.0f} ms")
+    core.beamform_profile(reset=True)
+    for _ in range(3):
+        core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS), backend=core.Backend.Cuda, **kw)
+    prof = core.beamform_profile(reset=True)
+    print(f"[beamform cuda] mvdr, 81 bearings x {jammed.samples.n_samples} samples: {(time.perf_counter() - t) / 3 * 1e3:.0f} ms; steps of one call, ms: "
+          + ", ".join(f"{k} {v / 3 * 1e3:.1f}" for k, v in prof.items() if isinstance(v, float) and v > 0))
 
 
 @needs_cuda
@@ -401,3 +417,32 @@ def test_component_scatter_is_the_full_length_bincount_to_the_last_bit():
         table._scatter(cells, weights)
     table._scatter(np.zeros(0, dtype=np.int64), np.zeros(0))
     assert np.array_equal(table.power, want)
+
+
+def test_the_spectrum_can_stay_on_the_backend_between_runs():
+    """A generator call that adds its sectors in runs moves the accumulated spectrum to the
+    backend once and back once; the answer is the one of moving it at every run."""
+    p = reverb_inputs()
+    active = np.flatnonzero(p["density"].any(axis=1))
+    args = (p["coarse"], p["density"])
+    tail = (p["pulse"], p["offsets"], p["fs"], p["time0"], p["fc"], p["c"], p["n_azimuth"], p["decim"])
+    kw = dict(direction=p["direction"], doppler=p["doppler"], batched=True)
+    normals = np.random.default_rng(5).standard_normal((len(active), 2, p["n_low"]))
+    every = np.zeros((len(p["offsets"]), p["n_low"]), dtype=np.complex64)
+    once = np.zeros_like(every)
+    runs = [(first, active[first:first + 7]) for first in range(0, len(active), 7)]
+    for first, rows in runs:
+        core.sim_reverb_accumulate(every, *args, first, normals[first:first + len(rows)], *tail, rows=rows, **kw)
+    for first, rows in runs:                               # one such sequence at a time
+        core.sim_reverb_accumulate(once, *args, first, normals[first:first + len(rows)], *tail, rows=rows,
+                                   total_from_host=first == 0, total_to_host=first == runs[-1][0], **kw)
+        if first != runs[-1][0]:
+            assert not once.any()                          # still on the backend
+    assert every.any() and np.array_equal(once, every)
+    # Nothing is left behind, and continuing without a spectrum there is refused.
+    with pytest.raises(RuntimeError, match="left on the backend"):
+        core.sim_reverb_accumulate(once, *args, 0, normals[:7], *tail, rows=active[:7], total_from_host=False, **kw)
+    other = np.zeros_like(every)
+    core.sim_reverb_accumulate(once, *args, 0, normals[:7], *tail, rows=active[:7], total_to_host=False, **kw)
+    with pytest.raises(RuntimeError, match="left on the backend"):                # another array's spectrum is there
+        core.sim_reverb_accumulate(other, *args, 7, normals[7:14], *tail, rows=active[7:14], total_from_host=False, **kw)

@@ -365,7 +365,7 @@ void bind_simcpp(py::module_& m) {
                                     Backend backend, int device, const std::optional<ArrD>& direction,
                                     const std::optional<ArrD>& doppler,
                                     const std::optional<py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>>& rows,
-                                    bool batched) {
+                                    bool batched, bool total_from_host, bool total_to_host) {
         const sim::ReverbPower power = reverb_power(coarse, density, direction, doppler);
         require_points(offsets, "offsets");
         const py::ssize_t n_channels = offsets.shape(0);
@@ -383,6 +383,8 @@ void bind_simcpp(py::module_& m) {
         sim::ReverbParams p = reverb_params(sample_rate, 0, 0.0, time0, center_frequency, sound_speed, n_azimuth,
                                             decimation, n_low, velocity, false, false);
         p.batched = batched;
+        p.total_from_host = total_from_host;
+        p.total_to_host = total_to_host;
         auto* data = reinterpret_cast<float*>(total.mutable_data());
         const std::int64_t* row_data = rows ? rows->data() : nullptr;
         py::gil_scoped_release release;
@@ -394,6 +396,7 @@ void bind_simcpp(py::module_& m) {
       py::arg("sound_speed"), py::arg("n_azimuth"), py::arg("decimation"), py::arg("velocity") = Vec3d{},
       py::arg("backend") = Backend::Host, py::arg("device") = 0, py::arg("direction") = py::none(),
       py::arg("doppler") = py::none(), py::arg("rows") = py::none(), py::arg("batched") = false,
+      py::arg("total_from_host") = true, py::arg("total_to_host") = true,
       "Add a run of azimuth sectors of scattering-function reverberation into `total` (complex64 [channels, n_low], "
       "in place), from the power density [rows, len(coarse)]: `normals` [sectors, 2, n_low] are standard normal "
       "deviates for the sectors with power starting at the `first`-th. With `direction` [rows, 3] and `doppler` "
@@ -401,7 +404,9 @@ void bind_simcpp(py::module_& m) {
       "`rows` [sectors] names the sector (the row, for components) of each entry of `normals`, so that the sectors "
       "with power are not searched for in every call (`first` is then not used). The CUDA backend runs the batched "
       "formulation (transforms, Doppler shifts and steering on the device); `batched=True` runs that formulation on "
-      "the host.");
+      "the host. In the batched formulation `total_from_host=False` continues from the spectrum the previous call left "
+      "on the backend with `total_to_host=False` (the array is then stale until a call brings it back): a "
+      "generator call that adds its sectors in runs moves the spectrum to the device once and back once.");
   // What this build's reverberation generator can do (python/gpusonar/sim/reverb.py).
   m.attr("SIM_REVERB_COMPONENTS") = true;   // rows with their own direction and Doppler shift
   m.attr("SIM_REVERB_ROWS") = true;         // sim_reverb_accumulate(rows=...)

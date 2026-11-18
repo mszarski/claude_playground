@@ -17,9 +17,16 @@ namespace sonar::live {
 #if SONAR_HAVE_CUDA
 // beamform_cuda.cu: the batched formulation on the device.
 void farfield_cuda(const float* samples, const float* w, const double* tau, std::int64_t n, std::int64_t n_el,
-                   std::int64_t n_b, double df, double fc, float* out, int device);
-MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, int device);
+                   std::int64_t n_b, double df, double fc, float* out, BeamformProfile& profile, int device);
+MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, BeamformProfile& profile, int device);
 #endif
+
+namespace {
+BeamformProfile g_beamform_profile;
+}  // namespace
+
+BeamformProfile beamform_profile() { return g_beamform_profile; }
+void beamform_profile_reset() { g_beamform_profile = BeamformProfile{}; }
 
 namespace {
 
@@ -175,11 +182,11 @@ BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& b
     if (out.n_bearings == 0) return out;
     if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
-      farfield_cuda(s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data, device);
+      farfield_cuda(s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data, g_beamform_profile, device);
 #endif
     } else {
       dsp::HostExec ex;
-      farfield_batched(ex, s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data);
+      farfield_batched(ex, s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data, g_beamform_profile);
     }
     return out;
   }
@@ -263,11 +270,11 @@ BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& beari
     MvdrBatchedStatus status = MvdrBatchedStatus::Ok;
     if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
-      status = mvdr_cuda(in, data, device);
+      status = mvdr_cuda(in, data, g_beamform_profile, device);
 #endif
     } else {
       dsp::HostExec ex;
-      status = mvdr_batched(ex, in, data);
+      status = mvdr_batched(ex, in, data, g_beamform_profile);
     }
     if (status == MvdrBatchedStatus::Singular) {
       throw std::runtime_error("mvdr_beamform: singular covariance (no signal in the training data and no loading)");

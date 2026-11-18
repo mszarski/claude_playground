@@ -10,14 +10,14 @@
 namespace sonar::live {
 
 void farfield_cuda(const float* samples, const float* w, const double* tau, std::int64_t n, std::int64_t n_el,
-                   std::int64_t n_b, double df, double fc, float* out, int device) {
+                   std::int64_t n_b, double df, double fc, float* out, BeamformProfile& profile, int device) {
   dsp::CudaExec ex(device);
-  farfield_batched(ex, samples, w, tau, n, n_el, n_b, df, fc, out);
+  farfield_batched(ex, samples, w, tau, n, n_el, n_b, df, fc, out, profile);
 }
 
-MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, int device) {
+MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, BeamformProfile& profile, int device) {
   dsp::CudaExec ex(device);
-  return mvdr_batched(ex, in, out);
+  return mvdr_batched(ex, in, out, profile);
 }
 
 }  // namespace sonar::live
