@@ -121,7 +121,7 @@ def derive(name: str) -> dict:
         "adc_rate_khz": fs / 1e3, "adc_bits": bits,
         "samples_per_ping_per_channel": int(round((2 * r_max / c + duration) * fs)),
         "raw_data_rate_mbit_s": s.n_elements * fs * bits / 1e6,
-        "source_level_db": float(w["source_level_db"]),
+        "source_level_db": float(w.get("source_level_db_rms", w.get("source_level_db"))),
         "absorption_db_per_km": float(eq.absorption_db_per_m() * 1e3),
         "noise_spectrum_db": noise, "target_strength_db": TARGET_STRENGTH_DB[name],
         "array_gain_db": float(eq.array_gain()), "processing_gain_db": float(eq.processing_gain()),

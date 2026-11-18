@@ -219,7 +219,7 @@ def test_each_cell_takes_the_doppler_of_both_platforms():
 def bistatic_ping(tx=TX, rx=RX, v_tx=(0.0, 0.0, 0.0), v_rx=(0.0, 0.0, 0.0), name="popoto_8", ranges=(25.0, 230.0),
                   fs=20e3, duration=2e-3, waveform=None, scene=None, kind="baseband"):
     wf = {"type": "cw", "f_start": F, "f_stop": F, "duration": duration, "window_alpha": 0.0,
-          "source_level_db": None, "amplitude": 1.0}
+          "source_level_db_rms": None, "amplitude": 1.0}
     wf.update(waveform or {})
     sonar = SonarModel.load(name, {
         "receive": {"kind": kind, "sample_rate": fs, "window": {"range": list(ranges)}, "sensitivity_db": None},
@@ -457,7 +457,7 @@ def test_scenario_item_keys_reach_the_generator():
     sonar = SonarModel.load("popoto_8", {
         "receive": {"kind": "baseband", "sample_rate": 20e3, "window": {"range": [25.0, 230.0]}, "sensitivity_db": None},
         "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": F, "f_stop": F, "duration": 2e-3,
-                                                          "window_alpha": 0.0, "source_level_db": None,
+                                                          "window_alpha": 0.0, "source_level_db_rms": None,
                                                           "amplitude": 1.0}}})
 
     def run(item, tx=TX):

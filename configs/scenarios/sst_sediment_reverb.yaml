@@ -15,7 +15,7 @@ sonar_overrides:
   name: sst_sediment_reverb_sonar
   transmit:
     lever_arm: [0, 0, 0]
-    waveform: {type: cw, f_start: 20000.0, f_stop: 20000.0, duration: 0.002, window_alpha: 0.0, source_level_db: 190.0}
+    waveform: {type: cw, f_start: 20000.0, f_stop: 20000.0, duration: 0.002, window_alpha: 0.0, source_level_db_rms: 190.0}
   receive:
     kind: baseband
     sample_rate: 20000.0

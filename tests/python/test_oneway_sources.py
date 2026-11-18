@@ -28,7 +28,7 @@ ENV = {"sound_speed": C, "temperature": 12.0, "salinity": 35.0}
 
 
 def sonar(kind="real", fs=64000.0, window=(0.0, 600.0), count=4, **wave):
-    w = dict(type="cw", f_start=8000.0, f_stop=8000.0, duration=0.004, window_alpha=0.0, source_level_db=SL)
+    w = dict(type="cw", f_start=8000.0, f_stop=8000.0, duration=0.004, window_alpha=0.0, source_level_db_rms=SL)
     w.update(wave)
     return SonarModel.load("flank_32", {"array": {"count": count, "pitch": 0.094}, "transmit": {"waveform": w},
                                         "receive": {"kind": kind, "sample_rate": fs, "window": {"range": list(window)}}})
@@ -121,7 +121,7 @@ def test_kernel_pulse_equals_the_streamed_tone_with_source_and_receiver_moving(k
     item = {"origin": [300.0, 40.0, 5.0], "velocity": [-12.0, 3.0, 0.5]}
     pose = make_pose(position=(0.0, 0.0, 20.0), velocity=(5.0, 1.0, 0.0))
     pulse = listen(model, [dict(item, signal={"type": "waveform"})], pose=pose)
-    tone = listen(model, [dict(item, signal={"type": "tonals", "lines": [{"frequency": 8000.0, "level_db": SL - 10 * np.log10(2.0), "phase_deg": 0.0}]})], pose=pose)
+    tone = listen(model, [dict(item, signal={"type": "tonals", "lines": [{"frequency": 8000.0, "level_db": SL, "phase_deg": 0.0}]})], pose=pose)       # both levels are RMS: the same number
     x, y, t = pulse.samples.array, tone.samples.array, times(pulse)
     inside = (t > 0.2025) & (t < 0.2040)                              # the pulse covers 0.2012 to 0.2052 s on every channel
     assert np.abs(y[:, inside]).max() > 0.9 * model.amplitude_at_1m() / 305.0
@@ -131,7 +131,7 @@ def test_kernel_pulse_equals_the_streamed_tone_with_source_and_receiver_moving(k
 def test_sampled_pulse_runs_one_way_on_both_engines():
     """A source with a waveform of its own (a sampled FM pulse, not the sonar's CW): the C++
     kernel with the envelope table and the NumPy reference give the same record."""
-    wave = {"type": "sampled", "source": "lfm", "f_start": 7000.0, "f_stop": 9000.0, "duration": 0.013, "window_alpha": 0.2, "source_level_db": SL}
+    wave = {"type": "sampled", "source": "lfm", "f_start": 7000.0, "f_stop": 9000.0, "duration": 0.013, "window_alpha": 0.2, "source_level_db_rms": SL}
     model = sonar("baseband", 8000.0)
     item = [{"origin": [300.0, 0.0, 0.0], "velocity": [-8.0, 0.0, 0.0], "signal": {"type": "waveform", "waveform": wave}}]
     a = listen(model, item, engine="cpp").samples.array
@@ -320,11 +320,11 @@ def test_board_clocks_apply_to_pulses_and_to_streamed_signals_alike():
     def model(offset, drift):
         return SonarModel.load("flank_32", {
             "array": {"count": 4, "pitch": 0.094},
-            "transmit": {"waveform": {"type": "cw", "f_start": 8000.0, "f_stop": 8000.0, "duration": 0.004, "window_alpha": 0.0, "source_level_db": SL}},
+            "transmit": {"waveform": {"type": "cw", "f_start": 8000.0, "f_stop": 8000.0, "duration": 0.004, "window_alpha": 0.0, "source_level_db_rms": SL}},
             "receive": {"kind": "real", "sample_rate": 64000.0, "window": {"range": [0.0, 400.0]},
                         "boards": [{"first": 0, "count": 2}, {"first": 2, "count": 2, "clock_offset": offset, "clock_drift_ppm": drift}]}})
     place = {"origin": [0.0, 250.0, 0.0]}
-    tone = [dict(place, signal={"type": "tonals", "lines": [{"frequency": 8000.0, "level_db": SL - 10 * np.log10(2.0), "phase_deg": 0.0}]})]
+    tone = [dict(place, signal={"type": "tonals", "lines": [{"frequency": 8000.0, "level_db": SL, "phase_deg": 0.0}]})]
     pulse = [dict(place, signal={"type": "waveform"})]
     plain, late = listen(model(0.0, 0.0), tone), listen(model(2e-4, 0.0), tone)
     assert list(late.metadata.channel_board) == [0, 0, 1, 1]

@@ -32,9 +32,9 @@ constants are swept over decades to show what each would cost in range, the uneq
 the gain split of the coupling sets are invented to show the mechanism, and the two corner
 frequencies are the two values quoted for the board in configs/sonars/popoto_8.yaml (100 Hz,
 "10 Hz has also been quoted"; both unconfirmed there). The level convention is the
-simulator's: `source_level_db` + sensitivity + gain is the PEAK voltage of the pulse at the
-ADC (SonarModel.amplitude_at_1m). If the source level is an rms figure the pulse peaks 3 dB
-higher and every overload figure here rises by 3 dB.
+suite's: `source_level_db_rms` is an RMS level (dB re 1 uPa at 1 m); the pulse's PEAK voltage at the
+ADC is sqrt(2) 10^((SL + sensitivity + gain) / 20) (SonarModel.amplitude_at_1m), and it is the peak
+that the ADC's full scale limits. Direct levels printed here are RMS; volts and overloads are peak.
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ sys.path.insert(0, str(ROOT / "python"))
 
 from gpusonar.sim import Scene, make_pose, simulate_ping          # noqa: E402
 from gpusonar.sim import receiver as rx                           # noqa: E402
-from gpusonar.sonar import SonarModel                             # noqa: E402
+from gpusonar.sonar import PEAK_OVER_RMS_DB, SonarModel                             # noqa: E402
 
 DEFAULT_SONARS = ("popoto_long_range_3row", "popoto_static_3row", "popoto_testauv_1row")
 DISTANCES = (0.3, 0.5, 1.0, 1.69, 2.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0)
@@ -104,16 +104,16 @@ def study(name: str, pulses, set_names, gain_tolerance_db: float, offset_toleran
     cfg = model.config
     rxc, w = cfg["receive"], model.waveform_config
     c = model.nominal_sound_speed
-    sl, sens, gain_db, full_scale = float(w["source_level_db"]), float(rxc["sensitivity_db"]), float(rxc.get("gain_db", 0.0)), float(rxc["adc_full_scale"])
+    sl, sens, gain_db, full_scale = float(model.source_level_db_rms), float(rxc["sensitivity_db"]), float(rxc.get("gain_db", 0.0)), float(rxc["adc_full_scale"])
     lever = np.asarray(cfg["transmit"].get("lever_arm", [0.0, 0.0, 0.0]), dtype=float)
     r = np.linalg.norm(model.positions - lever, axis=1)
     level = sl - 20.0 * np.log10(r)
-    volts_db = level + sens + gain_db
+    volts_db = level + PEAK_OVER_RMS_DB + sens + gain_db           # peak volts at the ADC from the RMS level
     over = volts_db - 20.0 * np.log10(full_scale)
     out = {"sonar": name, "source_level_db": sl, "sensitivity_db": sens, "gain_db": gain_db, "adc_full_scale_v": full_scale,
            "projector_lever_arm": lever.tolist(), "sound_speed": c,
-           "level_convention": "source_level_db + sensitivity_db + gain_db is the PEAK voltage at the ADC (the simulator's convention); "
-                               "an rms source level adds 3 dB to every overload figure",
+           "level_convention": "source_level_db is the RMS source level (dB re 1 uPa at 1 m) and direct levels are RMS; volts at the ADC and "
+                               "overloads are the pulse's PEAK, 3.01 dB above (sqrt(2) 10^((SL + sensitivity + gain) / 20))",
            "unconfirmed_in_sonar_file": list(cfg.get("unconfirmed", [])),
            "hydrophones": [{"index": i, "position": [round(float(v), 4) for v in model.positions[i]], "distance_m": round(float(r[i]), 4),
                             "direct_level_db_re_upa": round(float(level[i]), 2), "peak_volts_at_adc": round(float(10.0 ** (volts_db[i] / 20.0)), 3),
@@ -121,9 +121,9 @@ def study(name: str, pulses, set_names, gain_tolerance_db: float, offset_toleran
            "summary": {"nearest_m": float(r.min()), "farthest_m": float(r.max()), "overload_db_nearest": float(over.max()),
                        "overload_db_farthest": float(over.min()), "hydrophones_overloaded": int(np.sum(over > 0.0)), "hydrophones": int(len(r)),
                        "gain_reduction_for_no_overload_db": float(max(over.max(), 0.0)),
-                       "distance_for_no_overload_m": float(10.0 ** ((sl + sens + gain_db - 20.0 * np.log10(full_scale)) / 20.0))},
+                       "distance_for_no_overload_m": float(10.0 ** ((sl + PEAK_OVER_RMS_DB + sens + gain_db - 20.0 * np.log10(full_scale)) / 20.0))},
            "projector_distance": [{"distance_m": d, "direct_level_db_re_upa": round(sl - 20.0 * np.log10(d), 2),
-                                   "overload_db_re_adc": round(sl - 20.0 * np.log10(d) + sens + gain_db - 20.0 * np.log10(full_scale), 2)}
+                                   "overload_db_re_adc": round(sl + PEAK_OVER_RMS_DB - 20.0 * np.log10(d) + sens + gain_db - 20.0 * np.log10(full_scale), 2)}
                                   for d in DISTANCES]}
     say(f"\n=== {name}: SL {sl:g} dB re 1 uPa at 1 m, sensitivity {sens:g} dB re 1 V/uPa, gain {gain_db:g} dB, ADC full scale {full_scale:g} V; "
         f"projector at {lever.tolist()} ===")

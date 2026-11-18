@@ -27,7 +27,7 @@ transmit:
     f_stop: 35.0e3                # the plan's example is a 22-32 kHz sweep inside this band
     duration: 0.5                 # s, as in the plan's Phase 0 link budget
     window_alpha: 0.1
-    source_level_db: 190.0       # dB re 1 uPa at 1 m
+    source_level_db_rms: 190.0       # dB re 1 uPa at 1 m, RMS
 
 receive:
   kind: real

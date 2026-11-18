@@ -128,7 +128,8 @@ def to_pressure(record, x=None):
     (the scenario's sensitivity and preamp gain: amplitude at 1 m / source pressure)."""
     wf = record.transmit.waveform
     x = np.asarray(record.samples.array if x is None else x)
-    return x * (10.0 ** (wf.source_level_db / 20.0) / wf.amplitude)
+    from gpusonar.sonar import peak_pressure_at_1m
+    return x * (peak_pressure_at_1m(wf.source_level_db) / wf.amplitude)        # the record's amplitude is the PEAK for the RMS source level
 
 
 def spectrogram(x, fs: float, t0: float, segment: float, hop: float, f_lo: float, f_hi: float, df: float = 1.0):

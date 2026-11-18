@@ -295,7 +295,7 @@ def main(argv=None):
     ap.add_argument("--ts", type=float, help="with --target-depth: a target given here (dB re 1 m)")
     ap.add_argument("--target-depth", type=float, nargs=2, metavar=("SHALLOWEST", "DEEPEST"))
     ap.add_argument("--range", type=float, default=12000.0, help="range of interest, m")
-    ap.add_argument("--threshold", type=float, default=13.0, help="SNR at the map for detection, dB")
+    ap.add_argument("--threshold", type=float, default=bs.BUDGET_THRESHOLD_DB, help="SNR at the map for detection, dB (default: buildspec.BUDGET_THRESHOLD_DB)")
     ap.add_argument("--statistic", default="peak_db", choices=("peak_db", "energy_db", "narrowband_db"), help="which two-way figure of gpusonar.lloyd the margin uses")
     ap.add_argument("--out", help="prefix: writes PREFIX.json and PREFIX.png")
     ap.add_argument("--shipped", action="store_true", help="the shipped builds, into docs/design/")

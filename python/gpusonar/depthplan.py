@@ -147,11 +147,12 @@ def _cover(held: np.ndarray, own: np.ndarray, most: int = 6) -> list:
     return steps
 
 
-def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float = 13.0,
+def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float | None = None,
          statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True) -> dict:
     """The depth plan of a build (`d`: buildspec.derive / describe) in one environment for resolved target classes
     (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest."""
     from . import buildspec as bs
+    threshold_db = bs.BUDGET_THRESHOLD_DB if threshold_db is None else float(threshold_db)
     wind = wind_of(env)
     eq, gains = bs.budget(d, wind)
     f_lo, f_hi = d["band_hz"]

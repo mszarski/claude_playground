@@ -126,7 +126,11 @@ def _options(chain: dict) -> dict:
     sync = o.pop("sync", None)
     o["look"] = "starboard" if o.pop("starboard") else "port"
     o["window"] = "hann" if o.pop("hann") else "none"
-    o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
+    # Sizes the deployment file leaves out are not on the command line either: the program derives them (derive.hpp).
+    if "tracker_bearing_sigma" in o:
+        o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
+    if o.pop("cell_peak", False):
+        o["cell_statistic"] = "peak"
     if "multipath_bearing" in o:
         o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
     o["multipath"] = int(o["multipath"])
@@ -341,7 +345,7 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                     records = run_scenario(sc).records
                     chain = bs.chain_config(spec, sync=False)                            # as deployed: no profile; and here no water depth either
                     chain.pop("engine", None)
-                    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+                    chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
                     if chain.get("elevation"):
                         chain["elevation"] = dict(chain["elevation"], water_depth=None)
                         chain["elevation"].pop("sector_from_depth", None)
@@ -370,7 +374,7 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                     records = run_scenario(sc).records
                     chain = bs.chain_config(spec, sync=bool(truth.get("sync")))
                     chain.pop("engine", None)
-                    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+                    chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
                     if chain.get("elevation"):
                         chain["elevation"] = dict(chain["elevation"], gradient_per_s=None, gradient_sigma_per_s=0.0, water_depth=truth.get("water_depth"))   # the simulated water is isovelocity
                         if truth.get("water_depth") is None:
@@ -427,7 +431,8 @@ def _stream_test(spec: dict) -> dict:
     def same(got):
         return bool(len(got) == len(recs) and all(g.samples.array.shape == w.samples.array.shape and np.abs(g.samples.array - w.samples.array).max() <= 0.501 * lsb for g, w in zip(got, recs)))
 
-    block = max(8, (128 * 32 // n_ch) // 2 * 2)                 # a datagram stays under 16 kB whatever the channel count
+    from gpusonar.sources.flank_stream import block_samples_for
+    block = block_samples_for(n_ch)                             # the stream's payload budget, whatever the channel count
     emulator = FlankBoardEmulator(recs, 3.0, block_samples=block)
     blocks = list(emulator.blocks())
     out = {"channels": n_ch, "boards": len(sonar.boards), "block_samples": block, "block_bytes": len(blocks[0])}

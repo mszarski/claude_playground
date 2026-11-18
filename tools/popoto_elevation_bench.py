@@ -250,7 +250,7 @@ def scenario_check():
 
     def chain_of(deploy, sync=True, **el):
         chain = load_yaml(ROOT / "configs" / "deploy" / f"{deploy}.yaml")["chain"]
-        chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+        chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
         if not sync:
             chain.pop("sync", None)
         if chain.get("elevation"):

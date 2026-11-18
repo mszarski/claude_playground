@@ -40,7 +40,7 @@ sonar_overrides:
     lever_arm: [0, 0, 0]         # monostatic
     beamwidth_az: 0.349
     beamwidth_el: 0.349
-    waveform: {type: cw, f_start: 9900.0, f_stop: 9900.0, duration: 0.1, window_alpha: 0.1, source_level_db: 230.0}
+    waveform: {type: cw, f_start: 9900.0, f_stop: 9900.0, duration: 0.1, window_alpha: 0.1, source_level_db_rms: 230.0}
   receive:
     sample_rate: 32000.0
     window: {range: [375.0, 3750.0]}     # 0.5 s to 5 s (+ the pulse), the span of Fig. 2

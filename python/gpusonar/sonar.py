@@ -29,6 +29,52 @@ _KINDS = {
 }
 
 
+# --- source level: ONE convention ------------------------------------------------------------------------
+# A configured source level is dB re 1 uPa at 1 m, RMS: the rms pressure of the pulse while it is on (the usual
+# datasheet figure, and what the sonar equation uses against rms noise). The key is `source_level_db_rms`.
+# Amplitudes are peak values (a record's `transmit.waveform.amplitude`, an echo's envelope): a tone or a sweep of
+# rms pressure p has the peak sqrt(2) p. That factor is applied here and nowhere else.
+SOURCE_LEVEL_KEY = "source_level_db_rms"
+SOURCE_LEVEL_ALIAS = "source_level_db"          # deprecated: read as the RMS level, with a warning
+PEAK_OVER_RMS = float(np.sqrt(2.0))
+PEAK_OVER_RMS_DB = float(20.0 * np.log10(PEAK_OVER_RMS))      # 3.01 dB
+
+
+def peak_pressure_at_1m(source_level_db_rms: float) -> float:
+    """Peak pressure (uPa) at 1 m of a pulse whose RMS source level is `source_level_db_rms` (dB re 1 uPa at 1 m)."""
+    return PEAK_OVER_RMS * 10.0 ** (float(source_level_db_rms) / 20.0)
+
+
+def source_level_db_rms(waveform: dict, where: str = "transmit.waveform"):
+    """The RMS source level of a waveform mapping (dB re 1 uPa at 1 m), or None when it has none. Reads
+    `source_level_db_rms`; the older `source_level_db` is the same number under a name that did not say so: it is
+    accepted with a FutureWarning. Both with different values is an error."""
+    new, old = waveform.get(SOURCE_LEVEL_KEY), waveform.get(SOURCE_LEVEL_ALIAS)
+    if old is not None:
+        if new is not None and float(new) != float(old):
+            raise ValueError(f"{where}: {SOURCE_LEVEL_KEY} ({new}) and the deprecated {SOURCE_LEVEL_ALIAS} ({old}) are both given and differ")
+        import warnings
+        warnings.warn(f"{where}.{SOURCE_LEVEL_ALIAS} is deprecated: write {SOURCE_LEVEL_KEY}. Source levels are RMS levels (dB re 1 uPa at 1 m); the "
+                      "number is taken as one (a peak figure is 3 dB higher: subtract 3 dB from it)", FutureWarning, stacklevel=3)
+        return float(old)
+    return None if new is None else float(new)
+
+
+def normalise_source_level(cfg: dict) -> dict:
+    """A sonar config (or an override of one) with the deprecated `transmit.waveform.source_level_db` moved to
+    `source_level_db_rms`, so that a file or an override written with the old key still replaces a base's value."""
+    w = ((cfg or {}).get("transmit") or {}).get("waveform")
+    if not isinstance(w, dict) or SOURCE_LEVEL_ALIAS not in w:
+        return cfg
+    w = dict(w)
+    old = w.pop(SOURCE_LEVEL_ALIAS)
+    if old is None:
+        w[SOURCE_LEVEL_KEY] = None
+    else:
+        w[SOURCE_LEVEL_KEY] = source_level_db_rms({SOURCE_LEVEL_ALIAS: old, **({SOURCE_LEVEL_KEY: w[SOURCE_LEVEL_KEY]} if w.get(SOURCE_LEVEL_KEY) is not None else {})})
+    return {**cfg, "transmit": {**cfg["transmit"], "waveform": w}}
+
+
 def _unit(v) -> np.ndarray:
     v = np.asarray(v, dtype=float)
     return v / np.linalg.norm(v)
@@ -152,7 +198,7 @@ class SonarModel:
 
     @classmethod
     def from_config(cls, cfg: dict) -> "SonarModel":
-        cfg = apply_fov(cfg)
+        cfg = normalise_source_level(apply_fov(cfg))
         tx_wf = cfg["transmit"]["waveform"]
         sampled = None
         if tx_wf.get("type") == "sampled":
@@ -252,19 +298,25 @@ class SonarModel:
         p = self.positions
         return float(np.linalg.norm(p.max(axis=0) - p.min(axis=0)))
 
+    @property
+    def source_level_db_rms(self):
+        """Configured source level, dB re 1 uPa at 1 m RMS, or None (an uncalibrated sonar)."""
+        return source_level_db_rms(self.waveform_config)
+
     def amplitude_at_1m(self) -> float:
-        """Peak echo amplitude from a 0 dB target at 1 m range each way, in sample units.
+        """PEAK echo amplitude from a 0 dB target at 1 m range each way, in sample units.
 
         With a source level and receive sensitivity this is volts at the ADC:
-        10^((SL + sensitivity + gain) / 20), SL in dB re 1 uPa at 1 m and sensitivity
-        in dB re 1 V/uPa. Without them the chain is uncalibrated and `amplitude` is used.
+        sqrt(2) 10^((SL + sensitivity + gain) / 20), SL the RMS source level in dB re 1 uPa at 1 m
+        (`peak_pressure_at_1m`: the one place the sqrt(2) is applied) and sensitivity in dB re 1 V/uPa.
+        Without them the chain is uncalibrated and `amplitude` (a peak value) is used.
         """
         w = self.waveform_config
         rx = self.config["receive"]
-        sl = w.get("source_level_db")
+        sl = self.source_level_db_rms
         sens = rx.get("sensitivity_db")
         if sl is not None and sens is not None:
-            return 10.0 ** ((float(sl) + float(sens) + float(rx.get("gain_db", 0.0))) / 20.0)
+            return peak_pressure_at_1m(sl) * 10.0 ** ((float(sens) + float(rx.get("gain_db", 0.0))) / 20.0)
         return float(w.get("amplitude", 1.0))
 
     # --- record template ----------------------------------------------------
@@ -314,7 +366,8 @@ class SonarModel:
         if self.sampled_waveform is not None:
             # Existing record fields: type Arbitrary, band, duration, the real replica and its rate.
             self.sampled_waveform.to_record(w)
-        w.source_level_db = float(wc["source_level_db"]) if wc.get("source_level_db") is not None else float("nan")
+        sl = self.source_level_db_rms               # the record's field holds the RMS level; `amplitude` is the peak
+        w.source_level_db = float(sl) if sl is not None else float("nan")
         w.amplitude = self.amplitude_at_1m()
         t = r.transmit
         t.waveform = w

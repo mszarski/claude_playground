@@ -29,7 +29,7 @@ sonar_overrides:
   name: sst_asiaex_receiver
   array: {count: 1, pitch: 0.094}             # TR 0702 shows one channel ("Ch 1"); omnidirectional
   transmit:
-    waveform: {type: cw, f_start: 8000.0, f_stop: 8000.0, duration: 0.003, window_alpha: 0.1, source_level_db: 190.0}
+    waveform: {type: cw, f_start: 8000.0, f_stop: 8000.0, duration: 0.003, window_alpha: 0.1, source_level_db_rms: 190.0}
   receive:
     sample_rate: 64000.0
     window: {range: [246.5, 280.0]}           # two-way "range": 5 ms before the first arrival to 40 ms after it

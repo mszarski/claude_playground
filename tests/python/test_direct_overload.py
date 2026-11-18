@@ -81,8 +81,8 @@ def test_direct_arrival_has_each_elements_own_spreading_delay_and_phase():
     x, t = rec.samples.array, times(rec)
     _, _, r = geometry(rec)
     assert r.min() == pytest.approx(3.4809, abs=1e-3) and r.max() / r.min() > 1.3          # the near field: no plane wave
-    a1 = model.amplitude_at_1m()                                                          # 10^((SL + sensitivity + gain) / 20)
-    assert a1 == pytest.approx(10.0 ** ((197.0 - 208.0 + 43.0) / 20.0))
+    a1 = model.amplitude_at_1m()                                                          # the PEAK: sqrt(2) 10^((SL + sensitivity + gain) / 20), SL an RMS level
+    assert a1 == pytest.approx(np.sqrt(2.0) * 10.0 ** ((197.0 - 208.0 + 43.0) / 20.0))
     fits = []
     for ch in range(x.shape[0]):
         inside = (t > r[ch] / C + 2e-4) & (t < r[ch] / C + 0.004 - 2e-4)
@@ -322,9 +322,9 @@ def test_overload_figures_of_the_three_row_face_match_the_sonar_equation():
     truth = {}
     rec = ping(model, truth=truth, pose=make_pose())
     _, _, r = geometry(rec)
-    want = 197.0 - 20 * np.log10(r) - 208.0 + 43.0 - 20 * np.log10(2.61)                   # SL - 20 log r + sensitivity + gain - full scale
+    want = 197.0 + 20 * np.log10(np.sqrt(2.0)) - 20 * np.log10(r) - 208.0 + 43.0 - 20 * np.log10(2.61)     # RMS SL + 3 dB (its peak) - 20 log r + sensitivity + gain - full scale
     assert np.allclose(truth["peak_db_re_adc_limit"], want, atol=0.05)
-    assert r.min() == pytest.approx(1.687, abs=1e-3) and want.max() == pytest.approx(19.1, abs=0.05) and want.min() > 7.0
+    assert r.min() == pytest.approx(1.687, abs=1e-3) and want.max() == pytest.approx(22.1, abs=0.05) and want.min() > 10.0
     assert np.abs(rec.samples.array).max() == np.float32(2.61) and np.all(truth["clipped_fraction"] > 0.0)
     assert np.all(np.isnan(truth["peak_db_re_preamp_limit"]))                              # no input stage was described
 
@@ -357,7 +357,7 @@ def test_gain_switch_keeps_the_front_end_linear_and_is_reported_in_the_records_r
 
 def test_a_stage_shared_by_a_board_takes_the_whole_board_down_and_only_that_board():
     lfm = {"type": "lfm", "f_start": 4000.0, "f_stop": 6000.0, "duration": 0.01, "window_alpha": 0.0}
-    limit = 11.4                                               # V: the direct level 3.5 m from the projector, inside the nearer boards' span
+    limit = 11.4 * np.sqrt(2.0)                                # V: the direct PEAK level 3.5 m from the projector (the source level is RMS), inside the nearer boards' span
     truths = {}
     for scope in ("channel", "board"):
         truths[scope] = {"arrays": True}
@@ -425,7 +425,7 @@ def slow_scenario():
 def test_close_target_is_lost_inside_the_recovery_interval(slow_scenario):
     result = slow_scenario
     truth = result.front_end[0]
-    assert truth["peak_db_re_adc_limit"].min() > 20.0 and truth["peak_db_re_adc_limit"].max() == pytest.approx(34.2, abs=0.2)
+    assert truth["peak_db_re_adc_limit"].min() > 20.0 and truth["peak_db_re_adc_limit"].max() == pytest.approx(37.2, abs=0.2)       # the PEAK of a 197 dB RMS source: 3 dB above the earlier figure
     # Clipping ends with the pulse (0.1 s, plus the travel and the boundary returns); the stage is dead 0.25 s more.
     assert np.all((truth["last_overload_time"] > 0.34) & (truth["last_overload_time"] < 0.37))
     rec = result.records[0]
@@ -442,7 +442,7 @@ def test_close_target_is_restored_by_gain_switching_or_a_faster_recovery(variant
     found = detections(result)
     assert near(found, 151.0) and near(found, 350.4)
     if variant == "gain_switch":
-        assert truth["peak_db_re_adc_limit"].max() < -5.0 and np.all(np.isnan(truth["last_overload_time"]))
+        assert truth["peak_db_re_adc_limit"].max() < -2.5 and np.all(np.isnan(truth["last_overload_time"]))      # 2.8 dB of headroom: the scenario's -40 dB switch was sized when the source level was read as a peak (5.8 dB then)
         assert list(result.records[0].metadata.tvg_gain_db) == [-40.0, 0.0]
     else:
         assert truth["peak_db_re_adc_limit"].max() > 30.0 and np.nanmax(truth["last_overload_time"]) < 0.13
@@ -465,7 +465,7 @@ def test_direct_sound_study_tool(tmp_path):
     study = json.loads(out.read_text())["popoto_testauv_1row"]
     model = SonarModel.load("popoto_testauv_1row")
     r = np.linalg.norm(model.positions - np.array([0.0, 0.0, 0.3]), axis=1)
-    want = 197.0 - 20 * np.log10(r) - 208.0 + 43.0 - 20 * np.log10(2.61)
+    want = 197.0 + 20 * np.log10(np.sqrt(2.0)) - 20 * np.log10(r) - 208.0 + 43.0 - 20 * np.log10(2.61)          # the peak of the RMS source level
     table = study["hydrophones"]
     assert [h["distance_m"] for h in table] == pytest.approx(list(r), abs=1e-3)       # tabulated to the millimetre
     assert [h["overload_db_re_adc"] for h in table] == pytest.approx(list(want), abs=0.01)

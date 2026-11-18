@@ -13,7 +13,7 @@ transmit:
     f_start: 6.0e3
     f_stop: 10.0e3
     duration: 0.5
-    source_level_db: 175.0       # 170-180 dB projector
+    source_level_db_rms: 175.0       # 170-180 dB projector
 
 unconfirmed:
-  - transmit.waveform.source_level_db
+  - transmit.waveform.source_level_db_rms

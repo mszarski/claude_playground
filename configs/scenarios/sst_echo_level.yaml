@@ -16,7 +16,7 @@ sonar_overrides:
   array: {count: 4}
   transmit:
     lever_arm: [0, 0, 0]
-    waveform: {type: lfm, f_start: 7000.0, f_stop: 9000.0, duration: 0.05, window_alpha: 0.1, source_level_db: 200.0}
+    waveform: {type: lfm, f_start: 7000.0, f_stop: 9000.0, duration: 0.05, window_alpha: 0.1, source_level_db_rms: 200.0}
   receive:
     kind: baseband
     sample_rate: 16000.0

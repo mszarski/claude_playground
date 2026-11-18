@@ -23,7 +23,7 @@ def reverberation_ping(seed, density=1.5, radius=260.0):
                     "sensitivity_db": None},
         "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3,
                                                           "duration": PULSE, "window_alpha": 0.0,
-                                                          "source_level_db": None, "amplitude": 1.0}}})
+                                                          "source_level_db_rms": None, "amplitude": 1.0}}})
     rng = np.random.default_rng(seed)
     pts, amp = seafloor_patch((-radius, radius), (-radius, radius), density, depth=0.0,
                               rms_amplitude=lambert_rms_amplitude(MU_DB, density), rng=rng)
@@ -105,7 +105,7 @@ def empty_baseband_ping(name="popoto_8", ranges=(25.0, 230.0), fs=20e3, duration
                     "sensitivity_db": None},
         "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3,
                                                           "duration": duration, "window_alpha": 0.0,
-                                                          "source_level_db": None, "amplitude": 1.0}}})
+                                                          "source_level_db_rms": None, "amplitude": 1.0}}})
     return sonar, simulate_ping(sonar, make_pose(position=(0.0, 0.0, -HEIGHT)), Scene(),
                                 environment={"sound_speed": C}, adc=False)
 
@@ -183,7 +183,7 @@ def test_scattering_function_on_a_real_passband_record():
             "receive": {"kind": kind, "sample_rate": fs, "window": {"range": [60.0, 120.0]}, "sensitivity_db": None},
             "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3,
                                                               "duration": PULSE, "window_alpha": 0.0,
-                                                              "source_level_db": None, "amplitude": 1.0}}})
+                                                              "source_level_db_rms": None, "amplitude": 1.0}}})
         rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, -HEIGHT)), Scene(),
                             environment={"sound_speed": C}, adc=False,
                             reverberation=[{"boundary_z": 0.0, "mu_db": MU_DB}], absorption_model="none",

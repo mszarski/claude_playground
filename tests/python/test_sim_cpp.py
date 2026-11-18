@@ -220,7 +220,7 @@ MU_DB = -27.0
 def empty_ping(name="popoto_8", kind="baseband", fs=20e3, ranges=(25.0, 230.0), duration=2e-3, waveform=None,
                velocity=(0.0, 0.0, 0.0), rpy=(0.0, 0.0, 0.0), depth=-20.0, position_jitter=0.0):
     wf = {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3, "duration": duration, "window_alpha": 0.0,
-          "source_level_db": None, "amplitude": 1.0}
+          "source_level_db_rms": None, "amplitude": 1.0}
     wf.update(waveform or {})
     cfg = {"receive": {"kind": kind, "sample_rate": fs, "window": {"range": list(ranges)}, "sensitivity_db": None},
            "transmit": {"lever_arm": [0, 0, 0], "waveform": wf}}

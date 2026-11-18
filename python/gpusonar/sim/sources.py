@@ -448,15 +448,19 @@ def _source_sonar(sonar, sig: dict):
     waveform fields, the envelope table of a sampled pulse and the absorption band."""
     from ..sonar import SonarModel
     import copy
-    if sig.get("waveform") is None and sig.get("source_level_db") is None and sig.get("amplitude") is None:
+    from ..sonar import SOURCE_LEVEL_ALIAS, SOURCE_LEVEL_KEY, source_level_db_rms
+    level = source_level_db_rms(sig, "sources[].signal")          # RMS, dB re 1 uPa at 1 m; `source_level_db` is the deprecated name
+    if sig.get("waveform") is None and level is None and sig.get("amplitude") is None:
         return sonar
     cfg = copy.deepcopy(sonar.config)
     w = dict(sig["waveform"]) if sig.get("waveform") is not None else dict(cfg["transmit"]["waveform"])
-    for key in ("source_level_db", "amplitude"):
-        if sig.get(key) is not None:
-            w[key] = sig[key]
-            if key == "amplitude":
-                w.pop("source_level_db", None)
+    if level is not None:
+        w.pop(SOURCE_LEVEL_ALIAS, None)
+        w[SOURCE_LEVEL_KEY] = level
+    if sig.get("amplitude") is not None:
+        w["amplitude"] = sig["amplitude"]
+        w.pop(SOURCE_LEVEL_ALIAS, None)
+        w.pop(SOURCE_LEVEL_KEY, None)
     cfg["transmit"] = dict(cfg["transmit"], waveform=w)
     return SonarModel.from_config(cfg)
 

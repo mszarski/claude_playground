@@ -461,7 +461,7 @@ def test_a_fast_close_pass_warns_and_auto_refines():
     model = SonarModel.load("flank_32", {"array": {"count": 2, "pitch": 0.094},
                                         "transmit": {"waveform": {"type": "cw", "f_start": 8000.0, "f_stop": 8000.0,
                                                                   "duration": 0.004, "window_alpha": 0.0,
-                                                                  "source_level_db": 190.0}},
+                                                                  "source_level_db_rms": 190.0}},
                                         "receive": {"kind": "real", "sample_rate": 64000.0,
                                                     "window": {"range": [0.0, 75.0]}}})          # 0.1 s
     env = {"sound_speed": C, "temperature": 12.0, "salinity": 35.0}

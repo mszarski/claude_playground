@@ -913,6 +913,7 @@
         "span_m": 9.0,
         "height_m": 2.0,
         "usable_span_m": 7.0,
+        "max_depth_m": 500.0,
         "mounting": "flat vertical face"
       },
       "reach_ship_m": 12799.069019588129,
@@ -962,6 +963,7 @@
         "span_m": 9.0,
         "height_m": 2.0,
         "usable_span_m": 7.0,
+        "max_depth_m": 500.0,
         "row_baseline_m": 1.5,
         "mounting": "flat vertical face"
       },
@@ -1048,6 +1050,7 @@
         "span_m": 9.0,
         "height_m": 2.0,
         "usable_span_m": 7.0,
+        "max_depth_m": 500.0,
         "row_baseline_m": 1.5,
         "mounting": "flat vertical face"
       },
@@ -2548,13 +2551,13 @@
     "nearest_hydrophone_m": 1.6868980407837342,
     "farthest_hydrophone_m": 6.369311187247801,
     "direct_level_db_at_nearest": 192.45822332347734,
-    "direct_volts_at_adc": 23.5999545276925,
+    "direct_volts_at_adc": 33.37537576445107,
     "adc_full_scale_v": 2.61,
-    "over_full_scale_db": 19.125413176711724,
+    "over_full_scale_db": 22.135713133351537,
     "direct_sound_ends_s": 1.0042462074581653,
     "blind_range_m": 750.0,
     "far_field_of_row_m": 153.6,
-    "source_level_for_full_scale_db": 177.87458682328827
+    "source_level_for_full_scale_db": 174.86428686664846
   },
   "recommended": {
     "two_rows_m": [

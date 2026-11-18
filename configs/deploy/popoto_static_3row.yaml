@@ -11,13 +11,6 @@ chain:
     reference: {f_start: 38000.0, f_stop: 48000.0, duration: 0.004, lead: 0.005, tail: 0.01}
   bearings_deg: [-60.0, 60.0, 0.5]
   look: starboard
-  range_cell_m: 2.0
-  cfar: {pfa: 1.0e-05, guard_m: 100.0, train_m: 300.0}
-  min_snr_db: 9.0
-  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
-  classify:
-    min_speed: 1.0
-    multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
   elevation:
     sector_deg: [-30.0, 30.0, 0.25]
     attitude_time: transmit

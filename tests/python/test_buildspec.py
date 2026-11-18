@@ -161,7 +161,7 @@ def test_status_of_a_field_flows_into_unconfirmed():
     spec["boards"]["confirmed"].append("sample_rate_hz")
     spec["projector"]["confirmed"] = ["position_m"]
     flags = bs.sonar_config(spec)["unconfirmed"]
-    assert "receive.sample_rate" not in flags and "transmit.lever_arm" not in flags and "transmit.waveform.source_level_db" in flags
+    assert "receive.sample_rate" not in flags and "transmit.lever_arm" not in flags and "transmit.waveform.source_level_db_rms" in flags
     written = bs.against_base(bs.sonar_config(spec), "popoto_long_range")
     assert "receive.sample_rate" in written["confirmed"] and "transmit" in written["confirmed"]   # the base's flags this build settles or narrows
 
@@ -216,7 +216,7 @@ def test_parts_list_quotes_the_plan_and_invents_nothing():
     rows = {r["key"]: r for r in parts_list.parts(d)}
     assert rows["boards"]["qty"] == 12 and rows["boards"]["status"] == "chosen" and rows["hydrophones"]["qty"] == 96
     assert rows["projector"]["status"] == "specified, not chosen" and rows["input_protection"]["status"] == "unconfirmed"
-    assert "19 dB over" in rows["input_protection"]["requirement"] and "0.87 µs" in rows["boards"]["requirement"]
+    assert "22 dB over" in rows["input_protection"]["requirement"] and "0.87 µs" in rows["boards"]["requirement"]
     assert "to be supplied" in rows["navigation"]["requirement"] and "SPRINT-Nav" in rows["navigation"]["requirement"]
     assert "pending" in rows["compute"]["requirement"] or "popoto_stage2.json" in rows["compute"]["requirement"]
     assert {r["status"] for r in rows.values()} <= {"chosen", "specified, not chosen", "unconfirmed"}

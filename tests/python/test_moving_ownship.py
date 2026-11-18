@@ -22,7 +22,7 @@ def test_reverberation_carries_ownship_doppler_by_bearing():
     sonar = SonarModel.load("flank_32", {
         "receive": {"kind": "baseband", "sample_rate": 4000.0, "window": {"range": [150.0, 900.0]}, "sensitivity_db": None},
         "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": fc, "f_stop": fc, "duration": 0.2,
-                                                          "window_alpha": 0.0, "source_level_db": None, "amplitude": 1.0}}})
+                                                          "window_alpha": 0.0, "source_level_db_rms": None, "amplitude": 1.0}}})
     centroid = {}
     for v in (0.0, speed):
         rec = simulate_ping(sonar, make_pose(position=(0, 0, -30.0), velocity=(v, 0, 0)), Scene(),
