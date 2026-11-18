@@ -12,24 +12,12 @@ values or placeholders, flagged `unconfirmed` in the files that hold them.
 
 ## State of verification of this tree
 
-Full-suite result on 110d7e2 (CPU build, `tools/test.sh` with Bellhop set, 2026-11-18): GoogleTest 135 of 135 passed; pytest 1408 passed, 88 skipped, 2 failed. Both failures were in the tests, not the code, and are fixed in the following commit (re-run singly, passing): `test_environment.py::test_sound_speed_comes_from_one_rule` depended on test order (the warning it expects is given once per process), and `test_hardcoded.py::test_an_ambiguous_elevation_...` rested on the deployment file without the ray-limited elevation search of D-118. The whole suite has not been re-run after those two fixes, and nothing since commit 3383429 has been run on a GPU.
+Full-suite result on 110d7e2 (CPU build, `tools/test.sh` with Bellhop set, 2026-11-18): GoogleTest 135 of 135 passed; pytest 1408 passed, 88 skipped, 2 failed. Both failures were in the tests, not the code, and are fixed in commit `d9cb5b7`: `test_environment.py::test_sound_speed_comes_from_one_rule` depended on test order (the warning it expects is given once per process), and `test_hardcoded.py::test_an_ambiguous_elevation_...` rested on the deployment file without the ray-limited elevation search of D-118.
 
-Until that line is filled, what stands is this:
+GPU result on `d9cb5b7` (NVIDIA L4 through Hugging Face Jobs, CUDA build with Bellhop, Ceres and the Holoscan C++ operators, 2026-11-18): the whole suite passed, 1477 passed and 24 skipped, none failed. The skips are data or tools not in the job (UACR, Watermark and Smart Ocean channels, PICMUS, `arlpy`, the ultrasound reference build, Sensor Bridge) and two tests that apply only to a CPU build. The benchmark of every stage with a CUDA backend then ran 93 cases with no error (`docs/benchmarks/gpu_benchmark_all_l4_d9cb5b7.md`). This is the first run of the whole suite, on either backend, with nothing failing on this tree.
 
-- **The full CPU suite has not been run on the final tree.** Each work package ran its own
-  and neighbouring test files in the development container, one file at a time, usually on
-  both simulator engines; the lists are in the hand-back reports and summarised per
-  component below. Several packages changed expectations in other packages' tests, each
-  with a comment saying why. The last time a whole CPU suite was reported green was on the
-  tree after the detector merge, before the basin, ray, range-dependent water, budget and
-  deployment-default merges.
-- **No GPU job has run on the final tree.** The last one (an NVIDIA L4 rented through
-  Hugging Face Jobs) ran on merge commit `3383429`: 340 selected tests passed, then the
-  benchmark of every stage with a CUDA backend ran 93 cases with no error
-  (`docs/benchmarks/gpu_benchmark_all_l4_batched.md`). Everything merged after that commit
-  has run on a CPU only. C++ in `libs/live` changed after it (detector, multipath depth,
-  ray code, coverage), so the extension and `build/bin/sonar_live` must be rebuilt; no
-  `.cu` file changed after it according to the reports.
+One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
+
 - **Three generated files are known to be out of date with the tree** (see "Open and
   known wrong"): `docs/figures/fjord_rehearsal.md`, `docs/figures/gallery.json` with the
   numbers `SCENARIOS.md` quotes from it, and `docs/design/popoto_12km.json` (made just
@@ -493,7 +481,7 @@ the arrival-time solve runs (4, 4) passes (D-83).
   can also build Ceres, the Bellhop and KRAKEN oracles and the ultrasound reference's
   native module. Full suite on a T4 (an early tree: 288 passed, 0 failed, 6 skipped);
   benchmarks on T4, L4, A10G, A100 and two A10Gs; the last job, on an L4 at commit
-  `3383429`, is described at the top of this file.
+  `d9cb5b7`, is described at the top of this file.
 - **Holoscan:** SDK 4.6.0 on rented T4 and L4 machines. It cannot be imported in the
   development container, so those tests skip locally.
 - **Sensor Bridge:** 2.7.0 built against Holoscan 4.6.0 on rented L4 and T4 machines; its

@@ -1686,6 +1686,15 @@ between host and CUDA outputs. Command:
 The second job also ran 340 selected tests first, all passing, and 93 CUDA cases with no
 error.
 
+A third run, on commit `d9cb5b7` after the detector, ray, coverage and deployment-default
+merges (`docs/benchmarks/gpu_benchmark_all_l4_d9cb5b7.md`), followed a full-suite job on the
+same GPU (1477 passed, 24 skipped). Its 93 cases ran with no error and agree with the table
+below to a few per cent, except the live chain on the device. With the backprojection map
+it takes 0.0155 s a ping for one row instead of 0.0095 s (two rows 0.0275 against 0.0209,
+three rows 0.0380 against 0.0307), and with the far-field beamformer 0.0199 s instead of
+0.0127 s; the MVDR chain (0.201 s) and all host times are unchanged. The cause has not been
+measured.
+
 | Stage, case | Host, s | CUDA, s | Speed-up | Host-CUDA rel. rms |
 | --- | --- | --- | --- | --- |
 | Echo synthesis, `fls_120k_transit` (4 pings, 128 channels, 1,691 scatterers) | 5.62 | 0.559 | 10.0× | 6.6e-7 |
