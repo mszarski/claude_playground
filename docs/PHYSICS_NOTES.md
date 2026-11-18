@@ -2226,3 +2226,100 @@ three bounces do not make; only the first arrivals were compared there.
 separately from the decay time (model B's `sum` with 24 taps leaves the taps resolved where
 the tail is long, an artefact visible in the profiles figure); angle spreading; anything at
 other frequencies or sea states; any two-way path.
+
+**21.4 Every site of the repository, and the model's dependencies** (`tools/channel_sites.py`,
+`tools/channel_validation.py --sites all`; tables `docs/figures/channel_validation_purple.md`
+and `channel_validation_sites.md`, figure `channel_validation_dependencies.png`). Section 21.3
+used five Purple files; this is all eight that matter (three recordings) and the other sites.
+
+*What the other sites allow.* The full comparison needs the geometry of each file, arrivals
+that straight rays can name, and an estimator fast enough to follow the surface. No site
+states wind, sea state, a sound-speed profile or a seabed (the paper's Sec. II and the site
+pages were searched), so there is no case with nothing fitted, no Bellhop run with a stated
+profile, and no test of a named sediment.
+
+| Site | Carrier | Verdict | Reason |
+| --- | --- | --- | --- |
+| Purple, SPACE'08 | 12.5 kHz | full protocol | geometry per file, resolved arrivals, RLS tracker 10.4 Hz |
+| Green, Norwegian fjord | 6 kHz | nothing | geometry stated, but LMS with 3600 taps and step 1/14400 follows about 0.05 Hz (our estimate; the input power is not given) and snapshots are 4.5 Hz apart: every arrival comes out steady (scintillation 0.00) |
+| Black, Mariana Trench | 18 kHz | nothing | 7 ms delay window; the surface reflection above the array is 8 ms after the direct path |
+| Red, Singapore | 25 kHz | model-free only | range (100-400 m) and depth (8-20 m) not given per file |
+| Yellow, KAM'11 | 13 kHz | model-free only | arrivals are not where straight rays put them (not isovelocity), no profile given |
+| Blue, MACE'10 | 13 kHz | model-free only | towed source: range, depth and speed not given per file |
+| Pink, Japan | 6 kHz | not run | 14 km, no profile, no bathymetry; not downloaded (1.5 GB a file) |
+| Brown, ATOC | 75 Hz | not applicable | 3250 km of deep refracted paths |
+
+*Purple, three recordings.* One number fitted per recording, as before: wind 3.96, 3.70 and
+9.14 m/s (two sigma 0.87, 0.60, 1.91). The third recording is a different sea, which is what
+makes the following a test. 27 surface arrivals, grazing 1.3 to 41.5 degrees. A: gaussian,
+facet, convolve; C: gaussian, rule_of_thumb, convolve (the suite's defaults); B: lorentzian,
+rule_of_thumb, sum.
+
+| Quantity | A | C | B |
+| --- | --- | --- | --- |
+| Doppler rms width (in / out, median model/measured) | 20 / 4, 1.05 | as A | 6 / 18, 1.54 |
+| Doppler shape | 23 / 4, 0.97 | as A | 13 / 14, 1.55 |
+| tail decay time | 10 / 13, 1.02 | 7 / 12, 2.13 | 8 / 11, 1.93 |
+| coherent share (arrival and tail) | 19 / 8 | 19 / 8 | |
+| scintillation index | 5 / 22, 0.37 | 6 / 21, 0.38 | |
+
+*Verdict per ingredient* (measured over closed form, across the arrivals not used for a fit):
+
+1. **Doppler width proportional to sin(grazing) and to the square root of the number of surface
+   bounces: supported.** Median 0.89, scatter a factor 1.13 (n = 24), from 0.4 to 5 Hz, the
+   same below and above 12 degrees (0.88, 0.90) and in the rough recording. Two-bounce
+   arrivals 0.82 (n = 4).
+2. **Doppler width proportional to frequency: supported, inside one band only.** Upper against
+   lower half of 9.2-15.8 kHz: ratio 1.185 +- 0.017 (standard error, 21 arrivals) against 1.216
+   for proportionality and 1 for none. At 200 m, where Gamma^2 is about 1, the model's
+   own factor 1 / sqrt(1 - exp(-Gamma^2)) lowers the expected ratio to 1.09; measured 1.05 and
+   1.03 there. Across carriers it is **not testable**: no second site has both geometry and a
+   fast tracker.
+3. **Doppler spectrum Gaussian: supported**, and not only at Purple. Shape w90/w50: Purple
+   median 2.53 (1.76-3.08, n = 27); Red at 25 kHz 2.3-2.5; Yellow 2.34; Blue 1.77 (Gaussian
+   2.44, Lorentzian about 4 on these axes). The other three are unidentified arrivals through
+   slower trackers.
+4. **Coherent share exp(-Gamma^2): the form is supported, the Pierson-Moskowitz height is
+   contradicted.** In the two calm recordings the shares at 200 m want 1.36 times the height of
+   the wind law (scatter 1.06, n = 6), and it holds within the band (lower half more coherent
+   than upper in 7 of 9 arrivals at 200 m). But the excess is not a constant: read as heights,
+   the 200 m surface arrival gives 0.116, 0.102 and 0.144 m in the three recordings where the
+   wind law gives 0.084, 0.073 and 0.447 m. The measured height hardly changes while the
+   Doppler width (vertical speed) more than doubles: a fetch-limited or swell-carrying sea, not
+   a fully developed one. The height has to be an input of its own.
+5. **Decay time: neither rule is supported in detail; the rule of thumb is too long.**
+   Measured over model: facet median 0.99 with a scatter of a factor 5; rule of thumb 0.47
+   with a factor 3. Above 12 degrees (Gamma^2 over 7): facet 1.28, rule of thumb 0.75. Below
+   (Gamma^2 of order 1): facet 0.59, rule of thumb 0.28.
+6. **Complex Gaussian taps: contradicted at steep angles.** Scintillation index of fully rough
+   arrivals: median 1.43 (one bounce, n = 4), 1.31 (two, n = 7), 1.72 (three, n = 6), up to 4.8
+   in the rough recording; the model gives 0.6 after the same windowing and cannot exceed 1.
+   It grows with grazing angle, not with the number of bounces: at 7-10 degrees it is 0.5-0.9.
+   Not general: Red 0.6-0.7, Yellow 0.21, Blue 0.25 (low grazing angles, as far as can be
+   told). A K-distributed tap intensity (gamma texture of shape nu on each tap, scintillation
+   1 + 2 / nu) would need nu of about 3 to 7 for the medians and 0.5 for the extreme.
+7. **Bubble loss: weakly indicated, not testable.** From 4 to 9 m/s the first surface arrival
+   at 60 m falls from -9.5 and -11.1 dB to -17.4 dB re the whole channel; the model falls by 2 dB
+   without bubbles and 3.3 dB with the Hall-Novarini law (which is outside its stated range at
+   12.5 kHz). One arrival in one recording, and levels carry a few dB of normalisation.
+8. **Multi-bounce rule, angle spreading, refraction, sediments: not testable** with these data.
+
+*Two things from 21.3 that are now explained.* The 15 ms tail at 1 km is higher-order bounces,
+not missing physics: flat images up to 12 bounces put -5.2, -5.6 and -9.0 dB of the channel's
+energy in 1-3, 3-8 and 8-18 ms, against -6.3, -7.4 and -10.9 dB measured (three bounces: -13.9
+dB and nothing). The late surface arrivals fit a surface 0.3 to 0.6 m (60 m) and 0.8 to 1.5 m
+(200 m) above the stated 15 m, growing from the first recording to the third at both ranges;
+a tide would do that, but the two ranges do not agree on the amount.
+
+*What the data ask of the model* (nothing was changed; for the owner to decide):
+`doppler_spectrum: gaussian` as default (already decided); `decay_time: facet` in place of
+`rule_of_thumb` (Purple only, three recordings); the surface's `rms_height` given separately
+from `wind_speed` whenever a height is known (`{wind_speed, rms_height}` already works: an
+explicit value overrides the wind law); an opt-in non-Gaussian tap amplitude for steep
+bounces (one site: not implemented).
+
+*Other datasets.* Watermark (FFI; van Walree et al., IEEE JOE 42, 2017) and the SFI Smart
+Ocean dataset (IEEE DataPort, the origin of Green, which per a search result includes
+sound-speed profiles) are on hosts this session may not reach (`ffi.no`,
+`ieee-dataport.org`): licence and contents not verified. A search of Zenodo found no other
+measured underwater channel set, and none above 30 kHz.
