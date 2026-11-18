@@ -1,7 +1,9 @@
 # Results
 
 Measured by this repository's tests and tools. Accuracy numbers were produced on the
-**CPU (host) backend**; the same tests pass on the CUDA backend (NVIDIA T4). Speed numbers
+**CPU (host) backend**; the tests of the earlier sections also passed on the CUDA backend
+(NVIDIA T4), and the sections from "Results since decision D-82" on say for each table
+where it ran. Speed numbers
 are in "Performance" and say which machine each came from.
 Each row names what it is compared with. Where the brief asks for a comparison that
 could not be made, that is stated.
@@ -631,20 +633,29 @@ measurement of that product.
 ## Popoto array: frequency and source level for 12 km
 
 Source: `tools/popoto_range_study.py`, `docs/design/popoto_range_study.json`, checked against
-the sonar equation in `tests/python/test_design.py`. Target +25 dB, 1 s pulse, 13 dB at the
-beamformer output, wind 5 m/s, spherical spreading plus absorption.
+the sonar equation in `tests/python/test_design.py`. Target +25 dB (a placeholder), 1 s
+pulse, wind 5 m/s, spherical spreading plus absorption, and 15.6 dB in one row at the
+beamformer output: what the chain's detector needs of one row on `popoto_face_1x32` for a
+detection probability of 0.5 on one ping (17.3 dB for 0.9; `DECISIONS.md` D-117). Source
+levels are RMS.
 
 | Array | Best frequency | Source level | Acoustic power, omnidirectional |
 | --- | --- | --- | --- |
-| 8 hydrophones | 4.2 kHz | 201 dB | 1090 W |
-| 16 | 4.2 kHz | 198 dB | 540 W |
-| 32 | 4.2 kHz | 195 dB | 270 W |
-| 64 | 4.2 kHz | 192 dB | 140 W |
-| the present 8 at 27.5 kHz | — | 319 dB (not possible); 190 dB reaches 2.8 km | — |
+| 8 hydrophones | 4.2 kHz | 204 dB | 2000 W |
+| 16 | 4.2 kHz | 201 dB | 1000 W |
+| 32 | 4.2 kHz | 198 dB | 500 W |
+| 64 | 4.2 kHz | 195 dB | 250 W |
+| the present 8 at 27.5 kHz | — | 322 dB (not possible); 190 dB reaches 2.7 km | — |
+
+Until D-117 this table was computed for a typed 13 dB and read 3 dB lower in every row
+(201, 198, 195, 192 dB; 319 dB and 2.8 km for the present array). The shipped design
+(32 hydrophones, 197 dB) was sized on that table plus 2 dB; against the detector's need it
+is 1.0 dB short with one row ("The 12 km margins with the detector's threshold", below).
 
 Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way at 4 kHz
-(70.4 dB against 84.6 dB including absorption), where 170 dB would do on noise alone; then
-reverberation decides. Simulated outcomes in five oceans are in `SCENARIOS.md`.
+(70.4 dB against 84.6 dB including absorption): there, noise alone would ask for only
+172.5 dB with 16 hydrophones, and reverberation decides. Simulated outcomes in five oceans are in
+`SCENARIOS.md`.
 
 ## CPU speed after the synthesis kernel rework
 
@@ -1650,6 +1661,737 @@ Source: `tools/rough_surface_bands.py`, `docs/figures/rough_surface_bands.json`.
 | The same, waves travelling | 10 m ahead, 2 m to port |
 | Band depth against flat water: two regular trains / irregular sea / with small-scale roughness | 12.1 / 10.7 / 8.6 dB |
 
+## Results since decision D-82: what the next sections are
+
+Everything from here to "Not yet measured" was measured after `DECISIONS.md` D-82, on the
+CPU (host) backend in the development container unless a GPU is named. Each table names
+the command or the committed file that produces it. The measurements were made on the
+work-package branches at the time; **the full CPU suite and a GPU job have not been rerun
+on the final tree** (`STATUS.md`, "State of verification of this tree"). Where a number
+was first quoted in a hand-back report and a committed generated file also holds it, the
+committed file's value is the one printed here.
+
+Illustrative inputs are named as such where they occur: no target strength, source level,
+trial-site profile or seabed in these tables is a measurement.
+
+## Every stage with a CUDA backend on an L4 (`tools/gpu_benchmark_all.py`)
+
+Source: `docs/benchmarks/gpu_benchmark_all_l4.md` (first run, tree `15f1121`) and
+`docs/benchmarks/gpu_benchmark_all_l4_batched.md` (after the batched reverberation and
+beamformer kernels, tree `3383429`; its header shows an empty commit field because the
+job ran from a tarball). NVIDIA L4 through Hugging Face Jobs; host is an AMD EPYC 7R13
+with 8 threads; best of three after a warm-up; agreement is the relative rms difference
+between host and CUDA outputs. Command:
+`GPUSONAR_JOB=benchall GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 tools/gpu_job.sh`.
+The second job also ran 340 selected tests first, all passing, and 93 CUDA cases with no
+error.
+
+| Stage, case | Host, s | CUDA, s | Speed-up | Host-CUDA rel. rms |
+| --- | --- | --- | --- | --- |
+| Echo synthesis, `fls_120k_transit` (4 pings, 128 channels, 1,691 scatterers) | 5.62 | 0.559 | 10.0× | 6.6e-7 |
+| Echo synthesis, `minefield_sas` (20 pings, 14,870 scatterers) | 14.30 | 0.337 | 42.4× | 8.1e-7 |
+| Echo synthesis, flank array, sampled m-sequence pulse | 13.52 | 0.700 | 19.3× | 3.9e-7 |
+| Echo synthesis, one ping of 20 points (`point_grid_fls_300k`) | 0.0096 | 0.0468 | 0.21× | 4.5e-8 |
+| Backprojection, SAS, 200 pings, 1.5 million pixels (one call / session) | 11.91 / 11.75 | 0.346 / 0.184 | 34.5× / 64.0× | 1.8e-7 |
+| Backprojection, FLS, 1.6 million pixels | 1.19 | 0.0434 | 27.4× | 3.5e-6 |
+| Baseband conversion, `sas_auv` raw | 0.954 | 0.0155 | 61.5× | 3.3e-7 |
+| Pulse compression, `sas_auv` | 0.0454 | 0.0071 | 6.4× | 3.1e-7 |
+| CFAR, 241 bearings × 8,000 cells | 0.0620 | 0.0083 | 7.5× | 0 |
+| Sparse Bayesian bearing gate, 24 gates | 2.15 | 1.10 | 2.0× | 0 |
+| Live chain, one row, C++ engine, backprojection map, per ping | 0.149 | 0.0095 | 15.6× | 3.2e-7 |
+
+Small cases are slower on the device (the 20-point ping above): the transfer costs more
+than the work.
+
+**Reverberation, before and after the batched kernels.** The first run showed the device
+giving almost nothing (1.0 to 1.3 times): it had only the steering sum, under 10 % of the
+kernel. "Host before" and "CUDA before" are the first file, the others the second.
+
+| Kernel (`sim_reverb_accumulate`), case | Host before | CUDA before | Host now | CUDA now | CUDA now against host now |
+| --- | --- | --- | --- | --- | --- |
+| monostatic flank, 1,176 components | 1.46 s | 1.22 s | 1.45 s | 0.260 s | 5.6× |
+| moving FLS, 1,536 | 1.36 | 1.01 | 1.32 | 0.189 | 7.0× |
+| K-distributed flank, 392 | 0.479 | 0.396 | 0.472 | 0.083 | 5.7× |
+| bistatic, moving platforms, 25,540 | 15.30 | 14.63 | 9.92 | 1.41 | 7.0× |
+| bistatic with scatterer motion, 58,576 | 57.46 | 55.84 | 27.32 | 3.09 | 8.8× |
+| bistatic over bathymetry, 3,528 | 4.54 | 3.84 | 4.25 | 0.659 | 6.4× |
+
+| Whole reverberation generator, case | Host before | CUDA before | Host now | CUDA now | Speed-up now |
+| --- | --- | --- | --- | --- | --- |
+| monostatic flank | 4.33 s | 4.07 s | 3.59 s | 0.870 s | 4.1× |
+| moving FLS | 2.62 | 2.29 | 2.27 | 1.04 | 2.2× |
+| bistatic, moving platforms | 23.70 | 23.03 | 13.99 | 4.71 | 3.0× |
+| bistatic with scatterer motion | 73.32 | 71.61 | 34.02 | 8.29 | 4.1× |
+| bistatic over bathymetry | 10.19 | 9.45 | 7.94 | 3.65 | 2.2× |
+
+Host outputs are bit-identical before and after (the full `sst_pursuit` reverberation
+matched the earlier build exactly). The random draws stay in NumPy by design (D-61), now on
+threads: 8.4 million deviates take 81 ms on one thread and 23 ms on eight.
+
+**Beamformers per ping** (C++ chain, 241 bearings × 15,467 samples; host → CUDA):
+
+| Rows | Far field | MVDR |
+| --- | --- | --- |
+| 1 | 0.192 → 0.0127 s (15.1×) | 1.67 → 0.200 s (8.4×) |
+| 2 | 0.402 → 0.0281 s (14.3×) | 3.48 → 0.406 s (8.6×) |
+| 3 | 0.586 → 0.0415 s (14.1×) | 5.17 → 0.608 s (8.5×) |
+
+In the first run both beamformers had no device code (1.0 to 1.07 times). The Python
+engine's far-field beamformer went from 3.03 s in NumPy to 0.197 s on the host through the
+C++ code and 0.0205 s on the device.
+
+**Whole scenarios** (host / CUDA, first run → second run):
+
+| Scenario | Host, s | CUDA, s |
+| --- | --- | --- |
+| `sst_pursuit` | 12.02 → 6.99 | 11.64 → 2.44 |
+| `flank_sst_shallow` | 23.90 → 22.28 | 9.76 → 3.15 |
+| `flank_sst_spread` | 58.0 → 57.0 | 9.12 → 4.69 |
+| `popoto_12km` (Bellhop) | 118 → 117 | 34.1 → 29.3 |
+| `popoto_far_mover` (Bellhop) | 137 → 135 | 31.1 → 19.8 |
+
+Not sped up, with the reason: the host kernel's transforms (bit-identity forbids another
+length); the random draws; the reverberation's power geometry (8.3 s of the Bellhop
+`popoto_12km` run, 28 % of its CUDA time); the conventional bearing gate (host).
+
+## The long-range detector: thresholds, detection probability, false alarms
+
+Source: `tests/python/test_detector.py`, `tests/cpp/test_detector.cpp`; the tables are from
+the detector work package's runs through the C++ chain and are restated in
+`DEPLOYMENT.md`, "The detector". The statistic and its closed forms are in D-93 to D-96.
+
+**Detection probability against one row's budget SNR** (point echo; 50 pings a level for
+one row, 20 for three; closed form in brackets). "Old" is the earlier cell-mean detector
+(`cell_statistic: mean`).
+
+| One row's SNR, dB | 11 | 12.5 | 14 | 15.5 | 17 | 18.5 | 20 | 21.5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 row, new | 0 (0.01) | 0.08 (0.05) | 0.32 (0.22) | 0.56 (0.58) | 0.98 (0.92) | 1 | 1 | 1 |
+| 1 row, old | 0 | 0 | 0 | 0 | 0 (0.002) | 0.24 (0.08) | 0.58 (0.62) | 0.92 (0.95) |
+| 3 rows, new | 0.45 (0.44) | 0.95 (0.83) | 0.95 (0.99) | 1 | 1 | | | |
+| 3 rows, old | 0 | 0 | 0 | 0 | 0 | | | |
+
+A point echo needs 15.1 dB of one row's SNR for a detection probability of 0.5 where the
+old detector needed 19.7 dB, with one, two or three rows alike (its threshold did not move
+with rows). The best this architecture can do for a point echo at the same budget is
+12.5 dB; the 2.6 dB between are the Hann aperture window (1.76 dB), the echo falling
+between map samples (0.5 dB), and the second test and search factor (0.3 dB).
+
+**What each build's detector needs** (`buildspec.detection`, from
+`live.budget_threshold_db`; `docs/DESIGN.md` prints the same):
+
+| Build | Rows | One row's SNR for a detection probability of 0.5 / 0.9 |
+| --- | --- | --- |
+| `popoto_face_1x32` | 1 | 15.6 / 17.3 dB |
+| `popoto_face_2x32` | 2 | 13.1 / 14.7 dB |
+| `popoto_face_3x32` | 3 | 11.6 / 13.2 dB |
+| `popoto_static_2x32` | 2 | 12.8 / 14.5 dB |
+| `popoto_static_3x32` | 3 | 11.4 / 13.0 dB |
+| `popoto_testauv_1x32` | 1 | 15.2 / 16.8 dB |
+
+**Extended echoes** (Monte Carlo of the statistic alone; total energy needed for a
+detection probability of 0.5, stated as a point's peak SNR):
+
+| Extent | Old | Sample and cell (default) | + 8 m mean | + 8 m and 32 m means |
+| --- | --- | --- | --- | --- |
+| point | 18.0 dB | 13.0 | 13.1 | 13.2 |
+| 5 m | 20.8 | 16.3 | 15.0 | 15.1 |
+| 20 m | 25.0 | 20.2 | 17.9 | 16.9 |
+| 100 m | 30.5 | 25.4 | 23.0 | 20.6 |
+
+The longer means are an option, not the default (D-97): with them `flank_patrol` gives a
+fourth, `uncertain` track against three targets.
+
+**Scenarios through the chain, old → new** (both engines give the same lines; detections
+per ping, strongest `snr_db`, tracks at the last ping). Measured before source levels
+became RMS (D-102) and the noise took its spectrum (D-103); levels have risen 3 dB since.
+
+| Scenario | True targets | Old | New (default) |
+| --- | --- | --- | --- |
+| `popoto_testauv_trial_1row` | 1 | 1, 48.7 dB, static | 1, 52.7 dB, static |
+| `popoto_static_trial_2row` | 1 | 1, 32.7, static | 1, 37.0, static |
+| `popoto_static_trial_3row` | 1 | 2 to 3, 68.7, 2 static | 1, 73.8, 1 static |
+| `popoto_elevation_free` | 3 | 3, 38.5, 3 static | 3, 44.7, 3 static |
+| `popoto_12km` (image-source stand-in) | 1 | 3 of 6 pings, 13.7, `uncertain` from ping 5 | every ping, 17.5, `mover` from ping 3 |
+| `popoto_12km_2row` | 1 | never detected | every ping, 14.7, `mover` from ping 3 |
+| `popoto_12km_3row` | 1 | 1 of 6 pings, 11.9, no track | every ping, 15.9, `mover` from ping 3 |
+| `popoto_elevation_shallow` (multipath) | 1 | 1, 43.4, static | 1, 49.3, static |
+| `popoto_face_2row_shallow` (multipath) | 1 | 1, 34.5, static | 1, 37.7, static |
+| `flank_target_1km` (Bellhop, 1 ping) | 1 | 4 detections, 18.5 | 1 detection, 27.0 |
+| `flank_patrol` (Bellhop) | 3 | 3 to 5, 30.9; mover, static, multipath, uncertain | 3 every ping, 36.5; mover, mover, static |
+
+Two close targets: 30 m apart in range give two detections and two tracks, 6 m one; 10
+degrees apart two, 1.5 degrees one. Stated resolution: two echoes are two detections
+beyond 20 m in range or 7.9 degrees in bearing.
+
+**False alarms on noise-only pings.** Two measurements, on different trees:
+
+| Budget a ping | 3 | 1 | 0.3 | 0.1 |
+| --- | --- | --- | --- | --- |
+| One row, 120 pings a case (budget package, 0.8 km window) | 2.78 | 1.07 | 0.36 | 0.16 |
+| Three rows, the same | 3.37 | 1.22 | 0.40 | 0.125 |
+| One row (detector package, 12 km window) | 3.3 | 1.3 | 0.35 | 0.12 |
+| Three rows, 90 pings (detector package) | 3.8 | 1.7 | 0.47 | 0.22 |
+
+The later measurement puts three rows at 1.1 to 1.3 times the budget, the earlier at about
+twice. The per-sample false-alarm probability is right for both row counts (exceedances
+1.02 to 1.07 times the design); the excess comes from the search factor and the cell
+mean's looks (`STATUS.md`, open item 14). At the default budget (one false detection in a
+thousand pings) 220 one-row noise pings gave none, and 90 three-row pings gave one.
+
+**Timing** (C++ chain, host, 2 threads, median seconds per ping, old → new): `popoto_12km`
+0.603 → 0.619; `popoto_12km_3row` 1.775 → 1.788; `popoto_static_trial_3row`
+1.644 → 1.576; `flank_patrol` 1.333 → 1.306. No measurable cost.
+
+## The 12 km margins with the detector's threshold (old → new, per build)
+
+Source: `tools/design_report.py` → `docs/DESIGN.md` Secs. 5 and "12 km design point";
+`tools/popoto_range_study.py` → `docs/design/popoto_range_study.json`;
+`tests/python/test_buildspec.py`, `test_design.py`. Reference ship (+25 dB, a
+placeholder), free field, 5 m/s wind, spherical spreading and absorption. "Old" is the
+typed 13 dB at the summed map with a closed-form row gain of 0, 2.4 or 3.7 dB. "New" is one
+row's SNR against what the build's own detector needs for a detection probability of 0.5
+on one ping, rows included (D-117).
+
+| Build | Rows | Margin at 12 km, old → new | Detection probability at 12 km | Reach, ship, old → new (at 0.9) | Reach, small target (+5 dB), old → new |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_face_1x32` | 1 | +1.6 → -1.0 dB | 0.24 | 12.8 → 11.5 km (10.8) | 5.3 → 4.7 km |
+| `popoto_face_2x32` | 2 | +4.0 → +1.5 dB | 0.89 | 14.0 → 12.8 km (12.0) | 6.0 → 5.3 km |
+| `popoto_face_3x32` | 3 | +5.4 → +3.0 dB | 0.99 | 14.7 → 13.5 km (12.7) | 6.4 → 5.7 km |
+| `popoto_static_2x32` | 2 | -6.0 → -8.2 dB | 0.00 | 9.4 → 8.5 km (7.9) | 3.7 → 3.3 km |
+| `popoto_static_3x32` | 3 | -4.7 → -6.7 dB | 0.00 | 9.9 → 9.1 km (8.5) | 3.9 → 3.5 km |
+| `popoto_testauv_1x32` | 1 | -10.6 → -12.7 dB | 0.00 | 7.7 → 7.0 km (6.4) | 2.9 → 2.6 km |
+
+One row's SNR at 12 km is 14.6 dB on every face build. The two-row margin is +1.55 dB,
+which the detector package's own table rounded to +1.6 and `DESIGN.md` prints as +1.5.
+The source level is "not chosen" for the test AUV and the static array; their rows use the
+face's 197 dB.
+
+Other consequences, from the same files:
+
+- At 194 dB with a 1 s pulse three rows have 0.0 dB of margin (detection probability
+  0.50; it was +2.4 dB) and two rows -1.5 dB (0.16; it was +1.0 dB).
+- Depth plan, three rows, deep non-ducting water, ship: the best own depth is still 225 m;
+  the margin there goes from +11.3 to +9.0 dB, and the band of own depths that hold it
+  narrows from 110–280 m to 125–265 m (one row: from 140–260 m to 165–250 m).
+- Through the chain (`tools/popoto_12km_study.py`, as rerun by the budget package): the
+  ship is detected on 6 of 6 pings in the image-source, noise-only and Bellhop cases with
+  one, two and three rows, with a mover track confirmed at ping 3 in each; it is not
+  detected in `deep_silt_1000m` or `summer_mud_60m`. See `STATUS.md`, open item 5, for the
+  tool's detection window.
+
+## The link budget against the chain: where the gap went
+
+Source: `tools/surface_image_validation.py --only-chain` →
+`docs/design/surface_image_validation.json` (`through_chain`); a point target at 12 km in
+free field, one row, 12 pings.
+
+| State of the tree | Chain's detector reads | Budget | Gap |
+| --- | --- | --- | --- |
+| before source levels were RMS (D-102), old detector | 32.5 dB | 44.6 dB | 12.2 dB |
+| after D-102 | 35.5 dB | 44.6 dB | 9.1 dB |
+| after the multiscale detector (D-93), as committed | 41.40 dB | 44.64 dB | 3.24 dB |
+
+The convention accounted for exactly 3.01 dB. The 3.24 dB that remain:
+
+| Term | dB | Where it belongs |
+| --- | --- | --- |
+| Hann aperture window | -1.76 | inside the detector's threshold |
+| This echo's place between map samples | -1.06 | inside the threshold as its mean, -0.51 |
+| Sweep taper with the absorption's slope across the band | -0.26 | left out by the budget |
+| Noise spectrum's slope across the band | -0.13 | left out by the budget |
+| Row gain across the band | -0.06 | left out by the budget |
+| Sum | -3.27 | |
+| Unexplained | +0.04 | |
+
+So the budget is 0.45 dB kind; the three terms are stated and not added (D-117).
+
+## Source levels as RMS, and baseband noise with the array's coherence
+
+Source: `tests/python/test_source_level.py`, `test_baseband_noise.py`;
+`tools/direct_sound_study.py` → `docs/design/direct_sound_study.json`.
+
+**D-102 (RMS).** Every echo, reverberation and direct-arrival amplitude of a calibrated
+sonar rose 3.01 dB against unchanged noise. Link budgets did not move: they always took
+the number as RMS. Consequences for overload by the projector's direct sound, as
+configured (197 dB, sensitivity -208 dB re 1 V/µPa, gain 43 dB, full scale 2.61 V: all
+flagged unconfirmed):
+
+| Quantity | Before | After |
+| --- | --- | --- |
+| Three-row face, nearest hydrophone (1.69 m from the projector) | 19.1 dB over full scale | 22.1 dB |
+| Three-row face, farthest hydrophone (6.37 m) | 7.6 dB | 10.6 dB |
+| Distance at which the direct sound falls to full scale | 15.3 m | 21.6 m |
+| `popoto_testauv_direct_overload_gain_switch`, headroom with the gain held down | 5.8 dB | 2.8 dB |
+
+All 96 hydrophones of the face are overloaded during the pulse. From the same file: the
+static frame's nearest hydrophone (0.26 m) is 38.3 dB over, the test AUV's (0.30 m)
+37.0 dB over.
+
+**D-103 (noise).**
+
+| Case | Earlier draw (white, independent) | Now |
+| --- | --- | --- |
+| Array gain, 32 hydrophones at 5 kHz, 0.09 m pitch (closed form N²/ΣΓ, matched by measurement) | 15.05 dB | 13.0 dB |
+| The same, 0.15 m pitch | 15.05 dB | 15.0 dB |
+| Chain target SNR, `popoto_testauv_trial_1row` | 53.2 dB | 50.8 dB |
+| Chain target SNR, `popoto_face_2row_shallow` | 37.0 dB | 36.7 dB |
+
+One track either way in both chain cases (measured before the detector merge). Record
+noise power rose 1.2 dB on both, because the 8 kHz-wide band reaches down to 1 kHz.
+`coherence: independent, spectrum: flat` reproduces the earlier draw sample for sample.
+
+## The environment schema: identity before and after
+
+Source: the environment work package's comparison of commit `4897a29` with baseline
+`a1a3baf` (harness and hashes in the session scratch area, not in the repository).
+
+| Check | Result |
+| --- | --- |
+| Explicit configuration of all 69 scenarios then present | equal |
+| Bellhop's input file and provider settings, 15 eigenray scenarios | byte-identical |
+| First-ping record hashes, 138 scenario-engine pairs | 129 identical, 0 different, 9 not run |
+| Full-length record hashes | 8 of 138 pairs, all identical |
+
+What the energy rule of D-105 would keep where a scenario states a bounce order is
+tabulated in D-105.
+
+## Depth from multipath timing
+
+Source: `PYTHONPATH=python python3 tools/multipath_depth_study.py` →
+`docs/design/multipath_depth_study.json`; `tests/python/test_multipath_depth.py`. One-row
+face sonar at 225 m, flat surface, ambient noise at 5 m/s wind, 36 pings a case; the water
+is taken as known, so the sigma is the fit's own.
+
+| Target depth | Range | rms error, strongest arrival at about 17 dB / 26 dB | Worst at 17 dB | Median sigma | Track of 6 pings, rms |
+| --- | --- | --- | --- | --- | --- |
+| 150 m | 1 km | 0.02 / 0.01 m | 0.03 m | 0.10 m | 0.25 m |
+| 150 m | 3 km | 0.02 / 0.02 | 0.11 | 0.29 | 0.25 |
+| 150 m | 6 km | 0.08 / 0.02 | 0.27 | 0.58 | 0.25 |
+| 150 m | 12 km | 2.79 / 0.13 | 8.85 | 1.81 | 1.25 |
+| 40 m | 1 km | 0.02 / 0.02 | 0.03 | 0.10 | 0.25 |
+| 40 m | 3 km | 0.34 / 0.04 | 2.04 | 0.29 | 0.25 |
+| 40 m | 6 km | 0.69 / 0.09 | 4.05 | 0.58 | 0.25 |
+| 40 m | 12 km | 0.24 / 0.23 | 0.28 | 1.18 | 0.25 |
+
+A depth was given on every ping except 3 % at 40 m, 12 km, 17 dB. Truth was inside two
+sigma in 94 to 100 % of pings. Near the threshold at 12 km a depth was given on 22 % of
+pings at 11.9 dB, 82 % at 14.7 dB, all at 17.6 dB.
+
+**What an unknown sound-speed gradient adds** (first-order rule, own depth 225 m), next to
+the stacked rows:
+
+| Range | Multipath depth, 150 m target, gradient unknown by 0.05 / 0.005 per second | Stacked-row depth, refraction, same | Stacked-row depth, angle noise alone, 13 / 20 dB |
+| --- | --- | --- | --- |
+| 1 km | 6.7 / 0.7 m | 17 / 1.7 m | 7 / 3 m |
+| 3 km | 60 / 6 | 150 / 15 | 21 / 9 |
+| 6 km | 240 / 24 | 600 / 60 | 42 / 19 |
+| 12 km | 960 / 96 | 2400 / 240 | 85 / 38 |
+
+The rule, τ_refracted/τ_flat − 1 ≈ r²g/(2c(z_own + z_target)), against the ray code in
+isothermal water, 50 m and 120 m: 3.4 % at 1 km (rule 3.3 %), 32 % at 3 km (30 %), 143 % at
+6 km (120 %).
+
+Other cases: no false depth in 140 single-arrival echoes; noise-only windows exceed the
+threshold in 0.5 to 2 %. In 100 m over sand, a 70 m target at 2 km reads 70.1 m with the
+bottom in the pattern and 99.7 m without (flagged `bottom_unmodelled`). With two rows at
+6 km the multipath depth (150.1 ± 0.6 m) selects the true elevation among five possible
+ones on both engines. Where it fails is in `STATUS.md`, open items 9, 10 and 13. Time: 20
+to 45 ms per examined detection at 6 to 12 km, 80 ms at 3 km, 0.2 s at 1 km, one core.
+
+## Depth by rung: what the profile knowledge is worth
+
+Source: `PYTHONPATH=python python3 tools/refraction_depth_study.py --bellhop` →
+`docs/design/refraction_depth_study.json`; `PHYSICS_NOTES.md` Sec. 28. Five illustrative
+waters, two targets each, measurement taken as exact, truth from an independent midpoint
+ray integration. Cells are median |error| / median sigma in metres; a count in brackets is
+the number of cases with a depth where it is not all of them. A "rung" is one level of
+knowledge of the sound-speed profile on the chain's ladder (`elevation.profile`).
+
+**The true water limits everything first.** Of ten cases a direct path exists in 10 at
+1 km, 5 at 3 km, 3 at 6 km, 2 at 12 km; a direct and a surface path together in 10, 5, 3
+and 0.
+
+Single row, depth from multipath timing:
+
+| Rung | 1 km | 3 km | 6 km | 12 km |
+| --- | --- | --- | --- | --- |
+| nothing but the sound speed at the vehicle | 3.0 / 6.5 | 18.2 / 63 | 47 / 306 (2 of 3) | none |
+| isothermal water assumed | 2.9 / 6.3 | 22.1 / 33 (3 of 5 within two sigma) | 0.0 / 110 | none |
+| profile sampled 10 m about own depth | 2.7 / 6.5 | 18.2 / 61 | 32 / 297 (2 of 3) | none |
+| profile sampled through the whole column | 0.0 / 0.0 | 0.0 / 2.6 | 0.0 / 3.9 | none |
+| the true profile supplied | 0.0 / 0.0 | 0.0 / 2.5 | 0.0 / 3.9 | none |
+
+Stacked rows, elevation traced by arcs:
+
+| Rung | 1 km | 3 km | 6 km | 12 km |
+| --- | --- | --- | --- | --- |
+| nothing but the sound speed at the vehicle | 5.7 / 17 | 51 / 150 | 156 / 442 | 802 / 1549 |
+| isothermal water assumed | 0.7 / 17 | 0.0 / 150 | 0.0 / 599 | 14 / 1396 |
+| profile sampled 10 m about own depth | 8.7 / 15 | 37 / 126 | 167 / 360 | 790 / 1645 |
+| whole column, or the true profile | 0.0 / 1.1 | 0.0 / 12.5 | 0.0 / 18 | 0.0 / 8.9 |
+
+Both fused: 4.2 / 11.6, 34 / 106 and 104 / 414 m at 1, 3 and 6 km with only the local
+speed; 0.0 / 0.9, 0.0 / 7.8 and 0.0 / 12 m with the whole column. No fusion at 12 km.
+
+**The estimator itself on pings simulated with Bellhop** (deep profile, vehicle at 225 m,
+one row), depth ± sigma in metres:
+
+| Target, range | Flat boundaries, no profile | Rays, local speed only | Rays, whole column | Rays, true profile |
+| --- | --- | --- | --- | --- |
+| 150 m, 1 km | 149.7 ± 6.7 | 149.1 ± 7.9 | 149.4 ± 0.1 | 149.4 ± 0.1 |
+| 150 m, 3 km | 146.4 ± 59 | 145.9 ± 60 | 149.4 ± 0.2 | 149.4 ± 0.2 |
+| 150 m, 6 km | 131.3 ± 221 | 131.0 ± 221 | 147.0 ± 3.7 | 147.1 ± 3.7 |
+| 150 m, 12 km | 384 ± 1512 | 383 ± 1504 | no depth | no depth |
+| 40 m, 1 km | 38.2 ± 2.5 | 38.0 ± 2.8 | 39.9 ± 0.1 | 40.0 ± 0.1 |
+| 40 m, 3 km | 21.9 ± 13.3 | 21.8 ± 13.4 | 39.7 ± 0.2 | 39.8 ± 0.2 |
+| 40 m, 6 km | no depth | no depth | no depth | no depth |
+| 40 m, 12 km | no depth | no depth | **377 ± 18 (wrong)** | no depth |
+
+The 377 m is wrong (truth 40 m): that profile was sampled to 500 m of 1000 m and continued
+flat below. It carries the ambiguity flag and `bottom_unmodelled`.
+
+**The ensemble at 3 km** (stage-2 study rerun; gradients -0.15, -0.05 and 0.017 per
+second, extents 25, 50 and 100 m; of 8 cases):
+
+| Rung | Within two sigma | Within the ensemble's span | Either |
+| --- | --- | --- | --- |
+| nothing but the local speed | 6 | 6 | 6 |
+| isothermal assumed | 5 | 6 | 6 |
+| sampled 10 m about own depth | 5 | 5 | 5 |
+
+The ensemble does not raise coverage of the truth (D-115).
+
+**The first ladder study** (`tools/popoto_stage2_study.py` →
+`docs/design/popoto_stage2.json`; four illustrative profiles, 200 m water, vehicle at
+50 m, targets at 20 and 120 m; median / worst depth error in metres):
+
+| Rung | 1 km | 3 km | 6 km | 12 km |
+| --- | --- | --- | --- | --- |
+| straight line at the local speed | 10.4 / 25 | 50.9 / 122 | 80.4 / 156 | 71.6 / 163 |
+| isothermal assumed | 8.9 / 30 | 31.4 / 115 | 43.0 / 95 | 45.7 / 145 |
+| mixed layer assumed, layer 25 % too deep | 3.2 / 18 | 8.5 / 105 | 45.8 / 88 | 20.3 / 119 |
+| mixed layer, right parameters | 0.0 / 0 | 0.1 / 0 | 0.1 / 0 | 0.4 / 1 |
+| sampled 10 m about own depth | 12.6 / 16 | 46.7 / 115 | 51.9 / 167 | 71.0 / 167 |
+| sampled through the whole column | 0.0 / 1 | 0.3 / 5 | 0.3 / 19 | 2.1 / 16 |
+
+These rows are from the stage-2 work package's report; they were not re-read from the JSON
+for this file.
+
+## The coverage picture: validation
+
+Source: `tests/python/test_coverage.py`, `test_refraction_rays.py`.
+
+| Against | Agreement |
+| --- | --- |
+| `lloyd.py` in isovelocity water with a flat surface, two-way factor against its peak figure, targets 4 to 300 m deep, 1 to 13 km | 0.13 dB at most, 0.03 dB median; 0.44 dB with the projector 4 m below the array |
+| Rough surface with `apl_1994` bubbles | between `lloyd.py`'s peak and energy figures (up to 2.3 dB above the peak), because the scattered part is added as power |
+| Bottom: one-way power sum against the image series with the Rayleigh coefficient | 0.3 dB at the same bounce order |
+| A 100 m shelf (duct) | factor 6 to 10 dB against `lloyd.py`'s 9 to 20 dB peak and 20 to 33 dB energy: bottom paths are added as power and limited to three bounces, a cautious choice |
+| Bellhop, four stage-2 waters | passes at the test's tolerances: direct-path presence agrees on at least 90 % of points; one-way power within 3 dB at the median and 6 dB on at least 80 %. The exact figures were not recorded |
+| `buildspec.budget` and `live.detection_probability` | equal to 1e-6 |
+| `popoto_12km` (sonar at 10 m, 100 m over sand) | without bottom or water depth: under 0.1 probability, yet the chain detects the ship at 20 to 23 dB; with both: probability 1.0. This is why both are required (D-120) |
+
+## Ray code and chain timings
+
+One core of the shared development machine (noisy to about 10 %).
+
+| What | Time |
+| --- | --- |
+| Fan of 1200 rays to 12 km read at two ranges | 0.15 ms |
+| Arrivals at one depth | 6 µs |
+| Elevation to depth by arcs (`ray_depth_arcs`) | 5 µs |
+| Eigenrays from a 2401-ray fan | 3.9 ms (Python reference 0.40 s) |
+| Multipath detection through rays, 6 to 12 km | 0.07 to 0.3 s (flat pattern: 0.03 to 0.06 s) |
+| The same at 1 km | 0.35 to 0.8 s (flat: 0.22 s) |
+| Coverage refresh, deep water, no bottom | 0.03 s |
+| Coverage refresh, 200 m with bottom, 10 own depths | 0.47 s |
+| Coverage refresh, 1000 m with bottom | 0.31 s; 0.83 s with a 7-member ensemble |
+| Detection-probability table, once | 0.5 s |
+
+On `popoto_12km` with the face deployment chain (C++ engine, 3 pings): 0.70 s per ping as
+shipped, 0.62 to 0.72 s with multipath through rays, 0.84 to 0.88 s with coverage. Closed
+forms: in isovelocity water the fan's times equal the image solution to nanoseconds and
+its amplitudes 1/R to 0.2 %.
+
+## Deployment defaults: before and after
+
+Source: the deployment-defaults work package (`tests/python/test_deployment_defaults.py`;
+measurement data in the session scratch area). "Before" is each deployment file at commit
+`ad56d73`, "after" the shipped file; the same simulated records, C++ engine.
+
+| Case | State | Detected | Track at ping | Bearing error | Elevation (true) | Depth (true) | Stated depth sigma |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ssp_thermocline_static_trial_3row`, water changes with range | before | 4/4 | none | +1.02° | -31.1° (-0.66°) | 19.3 m (60 m) | 122 m |
+| | after | 4/4 | 3 | -0.08° | +1.67° | 50.8 m | 124 m |
+| `ssp_front_static_trial_2row`, both waters | before and after equal | 4/4 | 3 | -0.07°, -0.08° | -4.22°, +3.65° (-0.66°) | 12.8 m, 75.1 m (60 m) | 125 m |
+| fjord static 2-row and 3-row, every variant | before and after equal to the printed digits | | | | | | |
+| `popoto_elevation_rehearsal`, deep / shallow target | before and after equal | 3/3 | 2 | -0.03°, -0.02° | -1.71° (-1.70°), +1.59° (+1.29°) | 60.3 m (60 m), 2.8 m (8 m) | 3.5 m |
+| `popoto_12km`, 2 rows | before | 6/6 | 3 | -0.2° to -0.4° | 3 of 6 pings ambiguous | track 2.1 m (4 m) | 2531 m |
+| | after | 6/6 | 3 | same | 5 of 6 ambiguous | track 34.5 m | 2611 m |
+| `popoto_12km`, 3 rows | before | 6/6 | 3 | -0.2° to -0.5° | 1 of 6 ambiguous, alternatives at ±22° | track 0.9 m (4 m) | 2566 m |
+| | after | 6/6 | 3 | same | 3 of 6 ambiguous, no ±22° | track 1.5 m | 2565 m |
+
+Per-ping processing time is unchanged within the noise (for example 4.11 → 4.03 s for the
+three-row static file). Coverage costs about 0.6 s on the first ping. Self-tests of the
+six builds on both engines: five pass 7 of 7; `popoto_face_2x32` passes 6 of 7. In its
+failing `rehearsal` test the same scenario reads, per ping (true elevation -0.57°): with
+no boundaries -0.47°, -0.43°, -0.30° (depth 55, 53, 46 m for 60 m); with the surface only
++0.19° (20 m); with both boundaries and no roll rate +0.03° to +0.09° (25 to 29 m); as
+generated, with a roll rate of 1.5° a second, -1.37°, -1.39°, +0.36° (98, 97, 11 m). The
+reported depth sigma is 10.9 m against the last ping's 49 m of error.
+
+Multipath depth on the test AUV (`ssp_front_testauv_trial_1row`, target at 15 m in 30 m of
+water): the flat pattern gives 30.3 ± 3.5 m on 4 of 4 pings with the note
+`bottom_unmodelled` in the water that changes with range; through rays with flagged depths
+withheld it gives no depth (reason `window`) in both waters.
+
+## Water that changes with range
+
+Source: `GPUSONAR_BELLHOP=... tools/ssp_range_study.py --out docs/figures/ssp_range_study.md`
+(about 3 minutes); `tests/python/test_ssp_range.py`. The committed table was regenerated
+with the shipped deployment files (commit `29d4505`), so its "as deployed" rows are the
+"after" rows above. The profiles are illustrative.
+
+**Bellhop's 2-D field against closed forms:**
+
+| Check | Result |
+| --- | --- |
+| The same profile given twice, 1.5 km apart, against the single profile: six strongest arrivals at nine receivers | same reflections; within 0.6 µs and 0.3 % in amplitude |
+| Constant gradient in range (1480 m/s at the source, 1520 m/s at 2 km): direct delay against the closed form | 0.05 to 0.23 µs along the gradient, 2 to 10 µs off it; launch angle within 0.05°. A straight line at the local speed is 0.7 to 16 ms out |
+| Front, horizontal ray (1500 to 1470 m/s between 900 and 1100 m) | within 2 µs; the local speed alone is 27 ms (41 m) out at 3 km |
+
+**The chain, told nothing about the change** (4 pings each; median of the pings):
+
+| Scenario | Quantity | Water changes with range | Local profile everywhere |
+| --- | --- | --- | --- |
+| `ssp_front_static_trial_2row`: front 1.2 to 1.4 km out, target at 2.6 km, 60 m deep | detected; SNR | 4/4; 45.7 dB | 4/4; 45.5 dB |
+| | first-arrival range minus straight-line distance | +21.5 m | +10.2 m |
+| | elevation; depth as deployed / with the local profile given | -4.2°; 12.8 / 82.8 m | +3.7°; 75.1 / 81.0 m |
+| `ssp_thermocline_static_trial_3row`: mixed layer 15 m at the array, 45 m at 3 km | detected; SNR | 4/4; 42.6 dB | 4/4; 43.7 dB |
+| | first-arrival range | +14.2 m | +10.2 m |
+| | elevation; depth as deployed / with the local profile given | +1.67°; 50.8 / 55.2 m | -5.4°; 67.7 / 56.6 m |
+| `ssp_front_testauv_trial_1row`: front 200 to 300 m out, target at 500 m, 15 m deep, water 30 m | detected; SNR | 4/4; 57.1 dB | 4/4; 51.5 dB |
+| | first-arrival range; bearing error | +7.0 m; -0.18° | +7.8 m; -0.32° |
+
+Detection did not change; bearing did not change where no elevation correction was
+applied; range followed the sound (+11.3 m behind the front, +4.0 m under the deepening
+layer). Even in the local water the first arrival reads 10 m long, because no ray reaches
+the target without a bottom reflection in this water. The stated one sigma on every
+stacked-row depth here is 122 to 125 m. No multipath depth was given at 2.6 km in either
+water.
+
+## A basin's late reverberation: the fit
+
+Source: `tools/basin_reverberation_fit.py` → `docs/figures/basin_reverberation_fit.md` and
+`.png`; data: SFI Smart Ocean (4 to 8 kHz, one fjord, one night; CC BY 4.0; not
+committed). The curve fitted is the share of the received energy still to come against
+delay, median of 80 soundings per hydrophone.
+
+| Form (numbers fitted) | R1, 274 m: rms / largest misfit, dB | R2, 1020 m |
+| --- | --- | --- |
+| exponential (2) | 0.59 / 1.33 to -30 dB; 0.81 / 2.14 to -40 dB; decay 0.145 to 0.158 s | 0.55 / 1.57; 0.49 / 1.59; decay 0.160 to 0.162 s |
+| power law (3) | 0.18 / 0.47; exponent 11 to 14 | equal to the exponential (exponent above 400) |
+| two exponentials (4) | 0.17 / 0.44 | equal to the exponential |
+
+Read back through the model (`sim/basin.py`) against the measurement:
+
+| | R1, 274 m | R2, 1020 m |
+| --- | --- | --- |
+| `energy_db`, `onset_s`, `decay_s` | -4.2, 0.010, 0.145 | +0.2, 0.010, 0.160 |
+| 90 / 99 / 99.9 % of energy within, ms: model (measured) | 156 (165) / 489 (465) / 823 (866) | 272 (275) / 642 (636) / 1011 (1012) |
+| rms spread, ms: model (measured) | 102 (100) | 143 (145) |
+| share of late energy repeating over five chirps 3 s apart | 0.5 to 0.7 | 0.35 to 0.65 |
+| tail energy relative to the source at 1 m (183 dB) | -43.1 dB | -61.1 dB |
+
+Bellhop over the charted section puts 98 to 99 % of its energy in the first 50 ms: without
+this model the simulator has nothing like the measured tail.
+
+## A trial in fjord-type water against the open-water rehearsal
+
+Source: `tools/fjord_rehearsal.py --ranges 300,1000,2000` →
+`docs/figures/fjord_rehearsal.md` and `.json`, **made at commit `f2bf420`; the tool fails
+on three of six variants at head** (`STATUS.md`, open item 18). C++ synthesis, Bellhop for
+the fjord's water, the C++ chain of each build's deployment file as shipped then; four
+pings and one seed per variant. The fjord's profile, section and seabed are illustrative;
+the own-ping level is a what-if that nothing measured. Target SNR in dB:
+
+| Build, target | open water | profile and section | + late tail | fjord as shipped | + own ping at -43 dB (what-if) |
+| --- | --- | --- | --- | --- | --- |
+| test AUV, 1 row, 10 dB target at 500 m | 47.5 | 39.4 | 26.3 | 26.5 | not detected |
+| the same at 300 m | 55.8 | 52.8 | 29.9 | – | not detected |
+| the same at 1000 m | 32.3 | 31.0 | 22.5 | – | not detected |
+| the same at 2000 m | 16.3 | 28.6 | 24.4 | – | 24.2 |
+| static, 2 rows, 15 dB target at 2.6 km, 1 s pulse | 32.3 | 34.9 | 15.0 | 15.1 | 15.0 |
+| static, 3 rows, 10 dB target at 150 m | 68.6 | 64.0 | 24.6 | 24.6 | 14.0 |
+
+- A track on the target is confirmed at ping 3 in every detected case.
+- With the tail (one row, 500 m) there are 20 to 47 detections per ping at other bearings
+  and 16 to 32 tracks off the target; none in open water. None exceeds 15 dB.
+  `chain.min_snr_db: 15` leaves 0.5 detections per ping and no false track with the
+  target's SNR unchanged.
+- The tail caps the reported SNR near B·T/(2E + E²), about 25 dB for the 274 m set and
+  20 dB for the 1 km set, because the echo's own tail fills the detector's window.
+- Range: the strongest arrival is a bottom bounce 19 to 21 m late at 500 m and 1 km; at
+  2.6 km there is no direct path (a 53 m sill blocks it) and range reads 28 to 41 m long.
+- Depth, three rows at 150 m: 21.3 to 21.8 m for a target at 18.0 m (stated sigma 2.6 m)
+  with the deployed sound-speed assumption; 18.0 to 18.6 m with the profile given as
+  `chain.elevation.ssp`. Two rows at 2.6 km: no usable depth (sigma about 120 m).
+- Own depth (`tools/fjord_depth_plan.py` → `docs/figures/fjord_depth_plan.md`, flat 70 m
+  seabed): worth at most 3 to 4 dB at these ranges; at 2.6 km, 5 to 29 m is best.
+
+## The reach of the facet tail (`time_spread.tail_quantile`)
+
+Source: `tools/channel_smartocean.py tail` → `docs/figures/facet_tail_smartocean.md`. Mean
+excess delay T in milliseconds read by each fit, two seeds; the model's surface is fitted
+to the measured tail with two numbers (height, vertical speed) and the slope is Cox-Munk's
+for that wind, not fitted.
+
+| | exponential fit, first 0.9 ms | facet-shape fit, 0.9 ms | exponential fit, 3 ms |
+| --- | --- | --- | --- |
+| measured (SFI Smart Ocean, R1 surface reflection) | 0.50 | 1.08 | 0.96 |
+| facet rule, taps over three mean decay times (as shipped), 24 taps | 0.67 / 0.63 | 2.21 / 1.96 | 0.44 / 0.44 |
+| facet rule, `tail_quantile: 0.99`, 24 taps | 0.37 / 0.37 | 0.56 / 0.53 | 0.56 / 0.60 |
+| facet rule, `tail_quantile: 0.999`, 48 taps | 0.39 / 0.37 | 0.53 / 0.50 | 0.60 / 0.63 |
+| rule of thumb, as shipped, 24 taps | 4.00 / 4.00 | 4.00 / 4.00 | 0.96 / 1.02 |
+
+Neither window is matched. Model over measured was 1.34, 2.05 and 0.46 across the three
+fits and is 0.74, 0.52 and 0.60 with the quantile: an error of one kind.
+
+At the 12.5 kHz site (UACR "Purple", first recording, 60 m and 200 m files, 8 arrivals, 2
+seeds), arrivals inside / outside the measured spread and the median ratio: decay time
+3 / 5 and 1.06 as shipped, 4 / 4 and 1.06 with 0.99 and 48 taps; mean excess delay 5 / 3
+and 1.13 as shipped, 7 / 1 and 1.04 with 0.99 and 48 taps. These Purple figures are from
+the work package's report; no committed file holds them.
+
+## The wander of the coherent surface arrival (`time_spread.coherent_phase`)
+
+Source: `tools/coherent_phase_study.py` → `docs/figures/coherent_phase_study.md` and
+`.json`; computed from the phase law, not through the synthesis kernel. 5 kHz, echo out
+and back by the surface.
+
+| Path | Sea | rms phase, rad | Loss of a 1 s pulse, dB: no Doppler in the replica / best shift | Four pings 5 s apart added coherently, loss, dB |
+| --- | --- | --- | --- | --- |
+| 12 km, grazing 0.1° | all tried, to sea state 4 | 0.024 at most | 0.00 / 0.00 | 0.00 |
+| 2.6 km, 2.0° | swell 25 cm rms, 10 s, across the path | 0.71 | 0.07 / 0.00 | 1.9 |
+| 2.6 km | sea state 4 (upper bound), across | 1.39 | 0.88 / 0.07 | 2.1 |
+| 500 m, 2.9° | swell 25 cm, across | 1.03 | 0.15 / 0.00 | 3.0 |
+| 500 m | sea state 4, across | 2.14 | 1.75 / 0.07 | 3.8 |
+| 274 m, 12.9° | sea state 4 | 7.1 to 9.6 | 5.7 to 7.2 / 1.1 to 1.6 | 5.9 to 6.4 |
+
+At 12 km the coherent arrival does not wander: the Fresnel zone is kilometres long and a
+1 s pulse integrates fully. The sea-state rows take all of the wind-law height as large-scale and are
+an upper bound. Kernel test: a 1 s tone by the surface both ways against a 5 s swell
+reproduces the predicted phase within the pulse and from ping to ping on both engines
+(`tests/python/test_coherent_phase.py`).
+
+Against the measurement (SFI Smart Ocean, R1): phase variance 0.010 rad² with the measured
+0.8 cm height against 0.0084 measured; the half-band estimator reads 1.42 on the model and
+1.57 ± 0.07 on the data.
+
+## Time spreading against measured channels
+
+Source: `tools/channel_validation.py --data <dir> --sites all --seeds 2 --receivers 4
+--figures docs/figures --out docs/figures/channel_validation_purple.md`,
+`tools/channel_watermark.py`, `tools/channel_smartocean.py`; tables in
+`docs/figures/channel_validation_{purple,sites,watermark,smartocean}.md`;
+`PHYSICS_NOTES.md` Sec. 21. The data are fetched at test time and not committed
+(`OPEN_SOURCE.md` 3.13). No data set states a sea state: every sea parameter is fitted or
+assumed, and each table says which.
+
+**UACR "Purple", 12.5 kHz** (one fitted number per recording, the wind: 3.96, 3.70 and
+9.14 m/s):
+
+| Quantity | Result |
+| --- | --- |
+| Doppler spectrum shape of surface arrivals, w90/w50 (a Gaussian has 2.44) | measured 2.0 to 3.1; the Gaussian option is inside the measured spread for 13 of 18 arrivals in width and 15 of 18 in shape, the Lorentzian for 4 and 7 (the basis of D-84) |
+| Cross-arrival Doppler width, measured over closed form | median 0.96, scatter ×1.18, 45 arrivals |
+| Decay time through the estimators at 60 m and 200 m | facet rule 8 arrivals inside and 13 outside; rule of thumb 4 and 15 |
+| Measured over model decay time, grazing above 12° | facet 1.26, rule of thumb 0.76 |
+| The same below 12°, with the 1 km rows (unreliable: dozens of merged paths) | facet 2.52, rule of thumb 1.20 |
+| With the rms height fitted as well (two numbers per recording): coherent share of the other arrivals | 20 inside, 0 outside (19 and 4 with the wind law's height) |
+| With a K shape fitted as well (three numbers): scintillation of the other arrivals at 60 m | 7 inside, 2 outside (1 and 11 without); at 200 m in the rough recording it fails (measured 0.8 to 0.9 against 2.2 to 5.7) |
+
+**Watermark** (no geometry or sea state stated, so only tests that need none):
+
+| Channel | Doppler shape w90/w50 | Scintillation of fully scattered arrivals, median (10 to 90 %) | Upper over lower band width ratio (frequency ratio) |
+| --- | --- | --- | --- |
+| NOF1, Oslofjord, 14 kHz, 750 m, 59 soundings | 2.50 | 0.74 (0.66 to 0.82), 12 arrivals | 1.112 ± 0.042 (1.240) |
+| NCS1, Norwegian shelf, 14 kHz, 540 m, 60 soundings | 2.48 | 0.92 (0.72 to 1.24), 718 arrivals | 1.158 ± 0.003 (1.240) |
+| BCH1, Brest harbour, 35 kHz, 800 m, one sounding on 4 hydrophones | 2.94 | 0.13 (0.04 to 0.48), 7 arrivals | 1.011 ± 0.004 (1.113) |
+
+**SFI Smart Ocean, 4 to 8 kHz** (160 recordings; a near-calm night):
+
+| Quantity | Result |
+| --- | --- |
+| Mean excess delay of the one clean surface bounce, first 0.9 ms / 3 ms window | measured 0.50 / 0.96 ms; facet rule through the same estimators 0.67 / 0.44 ms; rule of thumb over 4 / 0.96 ms. Not settled |
+| Coherent share of that arrival | 0.987 at the peak (0.978 to 0.992 over the night): 0.8 cm rms height, a fitted quantity, so not a test |
+| Peak's fluctuation | about 70 % phase (0.0084 rad² against 0.0037 relative amplitude variance); scintillation index 0.015 |
+| R1 surface reflection after the direct arrival | isovelocity 4.14 ms; with the two casts 4.53 and 4.45 ms; measured 4.28 to 4.43 ms |
+| R2 strongest-arrival loss | isovelocity 60.2 dB; casts 58.2 and 57.1 dB; measured about 71 dB (no direct path; no R2 arrival can be named with confidence) |
+| Delay spread, 90 % of energy within | 165 ms at 274 m, 275 ms at 1020 m |
+| Noise, 4 to 8 kHz | 62.9 dB re 1 µPa²/Hz at R1 (station machinery, lines near 3.7 and 7.3 kHz); 43.9 dB at R2, K-distributed with shape 3.5 |
+
+**Detection with the long-range array against the decay rule**
+(`tools/decay_time_sensitivity.py` → `docs/figures/decay_time_sensitivity.md`; target SNR,
+one row, C++ chain, two seeds; reduced Bellhop settings of 12 arrivals and 3 taps):
+
+| Case | No spreading | Facet | Rule of thumb | Difference | Seed spread |
+| --- | --- | --- | --- | --- | --- |
+| 12 km, image source, 6 pings | 13.5 dB | 13.5 | 13.5 | -0.1 dB | 0.1 dB |
+| 12 km, Bellhop | 15.1 | 15.0 | 14.8 | -0.2 | 0.2 |
+| 3 km, gravel, 30 m | 32.5 | 32.8 | 32.4 | -0.4 | 0.7 |
+| 8 km, sand, 200 m | 22.9 | 23.3 | 23.0 | -0.3 | 0.9 |
+| 4 km, mud, summer | not detected | not detected | not detected | | |
+
+These were measured before the detector, level and noise changes.
+
+## One-way sources, direct sound and overload, fitted noise, the surface image, tonal analysis
+
+Short tables from the work packages between D-82 and D-105; each test file holds the
+assertions.
+
+**One-way sources** (`PYTHONPATH=python python3 -m pytest tests/python/test_oneway_sources.py -q`):
+
+| Check | Result |
+| --- | --- |
+| Kernel pulse against a streamed tone, source and receiver both moving | identical samples to 5.5e-5 |
+| Level against SL − 20 log r − αr | within 0.01 dB (free field) |
+| Tonal Doppler against TR 0702 eq. 63 | within 0.02 Hz of a shift over 90 Hz |
+| Noise spectrum level at the hydrophone | mean within 0.25 dB |
+| Lloyd's mirror, 28 receiver depths | within 1 % of the two-path closed form |
+| Passive chain, two noise sources on the two-row array | bearings within 0.6°, elevations within 1.5° |
+| ASIAEX by a one-way source instead of the relay: arrival time / level, largest error | 0.194 µs / 0.0026 dB (relay: 0.204 µs / 0.0025 dB) |
+
+**Noise fitted to a recording** (`tests/python/test_noise_fit.py`, synthetic ground truth,
+8-hydrophone line with an interferer at 30°): fitted spectrum within 0.6 dB; coherence
+0.02 rms against the closed form; regenerated noise within 0.7 dB and 0.03 rms; beam power
+within 1 dB with the interferer at 30 ± 2°.
+
+**The surface image** (`tools/surface_image_validation.py` →
+`docs/design/surface_image_validation.json`; `tests/python/test_lloyd.py`). Target at 4 m,
+12 km, 4 to 6 kHz, two-way factor on the free-field echo (single frequency / band energy /
+peak of the compressed echo):
+
+| Own depth | Flat surface | 9.8 m/s wind with `apl_1994` bubbles |
+| --- | --- | --- |
+| 10 m | -34.2 / -33.9 / -34.1 dB | -13.6 dB |
+| 75 m | 0.0 / +0.2 / 0.0 | -2.4 |
+| 225 m | +12.0 / +11.8 / +11.7 | +6.9 |
+| 450 m (first null) | -94 / -3.8 / -6.2 | -5.4 |
+
+Agreement: simulator image paths on both engines 0.9 dB (peak); the C++ chain with noise
+0.6 dB over -15 to +12 dB (the test's tolerance for the chain was loosened from 1.0 to
+1.5 dB after the level and noise changes);
+Bellhop with the surface image only 0.1 dB (0.6 dB in the 10 m / 4 m null).
+
+**Passive tonal analysis** (`tests/python/test_tonal.py`): the Goertzel sum equals the FFT
+bin to 1e-9; a tone in white noise on 32 hydrophones is recovered within 2 % in amplitude,
+0.5 dB in SNR, 0.1° in bearing; frequency error 1.7 to 1.8 times the Cramér-Rao bound.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
+The full CPU suite and any GPU job on the final tree (`STATUS.md`). Anything on real
+hardware or in real water: every number in this file is from simulation, from analysis,
+or from other people's published channel soundings.
