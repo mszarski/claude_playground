@@ -518,11 +518,11 @@ Report LiveChain::process(PingRecord& record) {
     }
     {
       // What the rows cannot separate: the range resolution of the pulse, and the lobe width of the rows' height.
-      const Waveform& w = record.transmit.waveform;
-      const double f_lo = std::min(w.f_start, w.f_stop), f_hi = std::max(w.f_start, w.f_stop);
-      const double band = f_hi > f_lo ? f_hi - f_lo : 1.0 / w.duration;
+      const Waveform& pulse = record.transmit.waveform;
+      const double f_lo = std::min(pulse.f_start, pulse.f_stop), f_hi = std::max(pulse.f_start, pulse.f_stop);
+      const double pulse_band = f_hi > f_lo ? f_hi - f_lo : 1.0 / pulse.duration;
       const auto [h_lo, h_hi] = std::minmax_element(ef.heights.begin(), ef.heights.end());
-      limit_range_resolution = 0.5 * sound / band;
+      limit_range_resolution = 0.5 * sound / pulse_band;
       limit_aperture = *h_hi > *h_lo ? sound / (0.5 * (f_lo + f_hi)) / (*h_hi - *h_lo) : 2.0;
     }
     double noise_weight = 0.0;

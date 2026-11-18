@@ -553,6 +553,7 @@ void bind_live(py::module_& m) {
           d["length_m"] = s.length_m;
           d["looks"] = s.looks;
           d["tests"] = s.tests;
+          d["search"] = s.search;
           d["pfa"] = s.pfa;
           d["factor"] = s.factor;
           d["weights"] = s.weights;

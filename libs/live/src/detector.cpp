@@ -8,24 +8,43 @@
 #include <stdexcept>
 
 #include "sonar/detect/statistic.hpp"
+#include "sonar/dsp/pulse_compression.hpp"
 
 namespace sonar::live {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
-
-double sinc(double x) { return std::abs(x) < 1e-12 ? 1.0 : std::sin(kPi * x) / (kPi * x); }
+// How finely the replica is sampled for its autocorrelation (sample_correlation): this many samples per 1 / band, and
+// at least this many over the pulse (a tone has no band to go by). Sampling choices, not properties of a sonar.
+constexpr double kReplicaSamplesPerBand = 4.0, kReplicaSamplesPerPulse = 256.0;
+// No test is run at a false-alarm probability above this, however loose the budget (as before the table).
+constexpr double kLargestTestProbability = 0.1;
 
 }  // namespace
 
 std::vector<double> sample_correlation(const Waveform& w, double sound_speed, double step, std::int64_t n) {
-  std::vector<double> r(static_cast<std::size_t>(std::max<std::int64_t>(n, 1)));
+  // White noise through the matched filter has the replica's own power spectrum, so its amplitude correlation between
+  // two map samples is the replica's autocorrelation at their two-way time apart. The replica is the one the chain
+  // compresses with (dsp::make_replica: the pulse with its taper, at baseband about the band's centre, where a
+  // symmetric pulse's autocorrelation is real), sampled a whole number of times per map sample and finely enough for
+  // the band and for the pulse's length. A flat band would give sinc(2 B x / c) and a rectangular tone the triangle of
+  // its length; a swept pulse with a 10 % Tukey taper is 6 % narrower in band than that sinc assumes.
+  std::vector<double> r(static_cast<std::size_t>(std::max<std::int64_t>(n, 1)), 0.0);
+  r[0] = 1.0;
+  const double tau = 2.0 * step / sound_speed;
+  if (!(tau > 0.0 && w.duration > 0.0) || r.size() == 1) return r;
   const double band = std::abs(w.f_stop - w.f_start);
-  for (std::size_t d = 0; d < r.size(); ++d) {
-    const double x = static_cast<double>(d) * step;
-    // Swept: a flat band, whose compressed pulse is a sinc with its first zero one resolution (c / 2B) out.
-    // Not swept: the compressed pulse is the triangle of the pulse's own length.
-    r[d] = band > 0.0 ? sinc(x * 2.0 * band / sound_speed) : std::max(1.0 - x / (0.5 * sound_speed * w.duration), 0.0);
+  const double finest = std::max(kReplicaSamplesPerBand * band, kReplicaSamplesPerPulse / w.duration);
+  const auto per_step = static_cast<std::int64_t>(std::max(std::ceil(finest * tau), 1.0));
+  const std::vector<std::complex<float>> h = dsp::make_replica(w, static_cast<double>(per_step) / tau, w.center());
+  double energy = 0.0;
+  for (const std::complex<float>& v : h) energy += std::norm(std::complex<double>(v));
+  if (!(energy > 0.0)) return r;
+  for (std::size_t d = 1; d < r.size(); ++d) {
+    const std::size_t lag = d * static_cast<std::size_t>(per_step);
+    std::complex<double> sum{0.0, 0.0};
+    for (std::size_t k = lag; k < h.size(); ++k) sum += std::complex<double>(h[k]) * std::conj(std::complex<double>(h[k - lag]));
+    r[d] = sum.real() / energy;
   }
   return r;
 }
@@ -44,6 +63,7 @@ std::string DetectorPlan::json() const {
   for (std::size_t i = 0; i < scales.size(); ++i) {
     const DetectorScale& c = scales[i];
     s << (i ? ", " : "") << "{\"cells\": " << c.cells << ", \"length_m\": " << c.length_m << ", \"looks\": " << c.looks << ", \"tests\": " << c.tests
+      << ", \"search\": " << c.search
       << ", \"pfa\": " << c.pfa << ", \"threshold_db\": " << 10.0 * std::log10(c.factor) << "}";
   }
   s << "]}";
@@ -92,9 +112,43 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
     s.cells = cells;
     s.length_m = length;
     s.looks = detect::equivalent_looks(weights);
-    s.tests = std::max(options.search_factor * p.beams * extent / std::max(length, p.resolution_m), 1.0);
-    s.pfa = std::min(options.false_alarms_per_ping / n_scales / s.tests, 0.1);
-    s.factor = detect::weighted_exponential_threshold(weights, rows, s.pfa);
+    const double places = p.beams * extent / std::max(length, p.resolution_m);   // range resolutions (or cells) x beamwidths
+    const double share = options.false_alarms_per_ping / n_scales;
+    if (is_given(options.search_factor)) {
+      s.search = options.search_factor;
+      s.tests = std::max(s.search * places, 1.0);
+      s.pfa = std::min(share / s.tests, kLargestTestProbability);
+      s.factor = detect::weighted_exponential_threshold(weights, rows, s.pfa);
+    } else {
+      // The tests grow with the threshold (detector.hpp, kSearchSample): the threshold x at which
+      // tail(x) x tests(x) is this test's share of the budget. The product falls with x beyond the statistic's mean.
+      const auto row = static_cast<std::size_t>(std::min<std::int64_t>(rows, 3) - 1);
+      s.search = cells == 0 ? kSearchSample[row] : kSearchMean[row];
+      const double a = static_cast<double>(rows) * s.looks;
+      const auto count = [&](double x) {
+        const double u = a * x;
+        double growth = u;
+        if (cells > 0) {
+          // The hazard of the statistic itself, per unit of u: -d ln P(> x) / dx / a.
+          const double h = 1e-4 * x;
+          const double hazard = (std::log(detect::weighted_exponential_tail(weights, rows, x - h)) -
+                                 std::log(detect::weighted_exponential_tail(weights, rows, x + h))) / (2.0 * h * a);
+          growth = std::sqrt(u) * std::max(hazard, 0.0);
+        }
+        return std::max(s.search * places * growth, 1.0);
+      };
+      double lo = detect::weighted_exponential_threshold(weights, rows, kLargestTestProbability), hi = lo;
+      if (detect::weighted_exponential_tail(weights, rows, lo) * count(lo) > share) {
+        while (detect::weighted_exponential_tail(weights, rows, hi) * count(hi) > share) hi *= 2.0;
+        for (int it = 0; it < 80; ++it) {
+          const double mid = 0.5 * (lo + hi);
+          (detect::weighted_exponential_tail(weights, rows, mid) * count(mid) > share ? lo : hi) = mid;
+        }
+      }
+      s.factor = 0.5 * (lo + hi);
+      s.tests = count(s.factor);
+      s.pfa = detect::weighted_exponential_tail(weights, rows, s.factor);
+    }
     s.weights = std::move(weights);
     p.scales.push_back(std::move(s));
   };

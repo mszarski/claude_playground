@@ -750,9 +750,11 @@ nothing: the threshold on the mean stayed where it was, so two or three rows det
   mean of correlated samples; exact or saddlepoint, held to Monte Carlo). Longer means (`cfar.integrate_cells: [1, 4, 16]`)
   can be added for echoes tens of metres long; see below for why they are not on by default.
 - The false-alarm budget is stated **per ping** (`cfar.false_alarms_per_ping`, 10⁻³: one false detection in a thousand
-  pings of noise, the whole map and both tests together) and the thresholds follow from the map's size: 13.0 dB for a
-  sample and 7.3 dB for a cell's mean on one row of the 1.4 km window at 12 km; 10.6 dB for a sample with two rows
-  added, 9.3 dB (and 4.8 dB for the mean) with three. `cfar.pfa` belongs to `mean` and `peak` only.
+  pings of noise, the whole map and both tests together) and the thresholds follow from the map's size: 13.1 dB for a
+  sample and 7.4 dB for a cell's mean on one row of the 1.4 km window at 12 km; 10.7 dB for a sample with two rows
+  added, 9.5 dB (and 4.9 dB for the mean) with three. How many independent tests the map holds is counted with measured
+  constants and grows with the threshold and the rows (`PHYSICS_NOTES.md` Sec. 29.3). `cfar.pfa` belongs to `mean` and
+  `peak` only.
 - **One echo, one detection.** A flagged cell that a stronger cell's sidelobes explain is dropped: the compressed pulse's
   along range (1/(π x)² for a swept pulse), the aperture window's along bearing (the pattern of the hydrophones the
   record has, over the band: a dead board's gap raises it; not below `cfar.sidelobe_floor_db`, −40 dB), with a margin
@@ -799,15 +801,15 @@ The budget SNR for a probability of one half (`live.budget_threshold_db(record, 
 
 | Rows added | `multiscale` Pd 0.5 / 0.9 | `mean` Pd 0.5 / 0.9 | Gain at 0.5 |
 | --- | --- | --- | --- |
-| 1 | 15.1 / 16.8 dB | 19.7 / 21.0 dB | 4.6 dB |
-| 2 | 12.6 / 14.3 dB | 19.7 / 20.7 dB | 7.1 dB |
-| 3 | 11.2 / 12.8 dB | 19.7 / 20.6 dB | 8.5 dB |
+| 1 | 15.2 / 16.9 dB | 19.7 / 21.0 dB | 4.5 dB |
+| 2 | 12.8 / 14.4 dB | 19.7 / 20.7 dB | 6.9 dB |
+| 3 | 11.3 / 13.0 dB | 19.7 / 20.6 dB | 8.4 dB |
 
 Against the best this architecture can do for a point echo at the same false-alarm budget (an unweighted row, the echo
-on a sample, one test: 12.5 dB for one row), the detector is 2.6 dB short: 1.76 dB is the Hann window (kept: an
-unweighted row gave 15 to 52 detections a ping), 0.5 dB the echo falling between samples, 0.3 dB the second test and the
-search over an oversampled map. Of the 7.7 dB the cell's mean cost, `snr_db` has 7.2 dB back. The detection threshold
-has 4.6 dB of it back for one row, because the honest threshold for a sample (13.0 dB at one false detection in a
+on a sample, one test: 12.5 dB for one row), the detector is 2.7 dB short: 1.76 dB is the Hann window (kept: an
+unweighted row gave 15 to 52 detections a ping), 0.5 dB the echo falling between samples, 0.4 dB the second test and the
+search over an oversampled map (0.1 dB of it since the tests are counted as measured: `PHYSICS_NOTES.md` Sec. 29.3). Of the 7.7 dB the cell's mean cost, `snr_db` has 7.2 dB back. The detection threshold
+has 4.5 dB of it back for one row, because the honest threshold for a sample (13.1 dB at one false detection in a
 thousand pings) is 2.3 dB above the 10.7 dB that was typed for a statistic it did not fit.
 
 **Echoes that are not points.** Total echo energy needed for Pd 0.5 when it is spread evenly over an extent in range
@@ -844,10 +846,13 @@ the background reach. On `flank_patrol` they give 3 to 6 detections a ping and a
 | `flank_patrol` (Bellhop, 0.2 s pulse, 8 arrivals) | 3 | 3 to 5, 30.9 dB; mover, static, `multipath`, `uncertain` | 3 every ping, 36.5 dB; mover, mover, static |
 
 On noise alone (the 12 km window, 220 pings of one row): no detection from either detector. At budgets large enough to
-count the new one keeps its budget: 3.3, 1.3, 0.35 and 0.12 false detections a ping at budgets of 3, 1, 0.3 and 0.1.
-With three rows the detector runs about twice over its budget (3.8, 1.7, 0.47, 0.22, 0.05 and 0.033 a ping at budgets
-of 3, 1, 0.3, 0.1, 0.03 and 0.01, on 30 and 60 pings) and reported one false detection in 90 pings at the default budget;
-the old detector none. Not explained; `cfar.search_factor: 5` would bring it back for 0.15 dB.
+count, the detector keeps its budget with one, two and three rows alike: 0.96, 0.92 and 0.89 of budgets of 3, 1 and 0.3
+false detections a ping with one row, 0.91, 0.93, 0.90 with two, 0.87, 0.86, 0.79 with three (300 noise-only pings for
+each, 0.8 km window; statistical error 0.03, 0.06, 0.10; `tools/detector_search_factor.py --verify`). Until the tests
+were counted as measured (one flat `cfar.search_factor` of 2.5; `PHYSICS_NOTES.md` Sec. 29.3) three rows ran 1.2 to 1.6
+times their budget and every row count ran further over as the budget tightened (three rows: 3.8, 1.7, 0.47, 0.22, 0.05
+and 0.033 a ping at budgets of 3, 1, 0.3, 0.1, 0.03 and 0.01, on 30 and 60 pings). Nothing is measured at the default
+budget of one in a thousand pings: the thresholds there rest on the growth law of Sec. 29.3 beyond the budgets counted.
 
 **For a range prediction.** Use `live.detection_probability(snr_of_one_row, record, chain, rows=...)`, or
 `live.budget_threshold_db(record, chain, pd=0.5, rows=...)` as the threshold on the SNR of ONE row, without a separate
@@ -856,12 +861,12 @@ more cells to search: 0.5 dB between 1.4 km and 12 km of window):
 
 | Build | Rows | Window | One-row budget SNR for Pd 0.5 / 0.9 | What the rows are worth at the detector (one row's threshold less theirs) |
 | --- | --- | --- | --- | --- |
-| `popoto_face_1x32` | 1 | 0.75–12.7 km | 15.6 / 17.3 dB | — |
-| `popoto_face_2x32` | 2 | 0.75–12.7 km | 13.1 / 14.7 dB | 2.6 dB |
-| `popoto_face_3x32` | 3 | 0.75–12.7 km | 11.6 / 13.2 dB | 4.0 dB |
-| `popoto_static_2x32` | 2 | 75–3000 m | 12.8 / 14.5 dB | 2.5 dB |
-| `popoto_static_3x32` | 3 | 75–3000 m | 11.4 / 13.0 dB | 4.0 dB |
-| `popoto_testauv_1x32` | 1 | 75–2000 m | 15.2 / 16.8 dB | — |
+| `popoto_face_1x32` | 1 | 0.75–12.7 km | 15.8 / 17.4 dB | — |
+| `popoto_face_2x32` | 2 | 0.75–12.7 km | 13.2 / 14.8 dB | 2.5 dB |
+| `popoto_face_3x32` | 3 | 0.75–12.7 km | 11.8 / 13.4 dB | 4.0 dB |
+| `popoto_static_2x32` | 2 | 75–3000 m | 13.0 / 14.6 dB | 2.5 dB |
+| `popoto_static_3x32` | 3 | 75–3000 m | 11.5 / 13.1 dB | 4.0 dB |
+| `popoto_testauv_1x32` | 1 | 75–2000 m | 15.3 / 17.0 dB | — |
 
 **The link budgets use exactly these figures.** `buildspec.detection(d)` computes them from the build's own template
 record and the chain settings of its deployment file, for the detection probability the spec names

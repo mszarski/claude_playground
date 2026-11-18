@@ -3677,3 +3677,97 @@ boundary read is the same one ping after ping.
 term is then too wide); the projector's offset from the array; echoes of more than `bounces` reflections a leg; any
 correction of the depth itself (a reading at a boundary carries no depth to correct). Without a water depth there is
 no bottom in the picture and the report says so (`depth_unresolved_assumed`).
+
+### 29.2 Depth from multipath timing in water too shallow for it
+
+The surface echo of a target at depth z is tau = 2 z (z_array + z_projector) / (r c) behind its direct echo (both ways,
+Sec. 25.1) and the stage searches only depths where tau B is at least `min_delay_bandwidth` (3): from
+
+    z_min = 3 r c / (2 B (z_array + z_projector))
+
+down. The test AUV 10 m deep (projector a little deeper) at 500 m with 2 kHz of band: z_min = 26.5 m, and the sea bed is
+at 30 m. Through rays the grid of depths is laid in whole carrier fringes and ran past the sea bed; the last depth has
+no path, its surface delay is NaN, and that delay sized the beam window: the stage answered `window` for every
+detection. With the window sized by the longest finite delay the stage then fitted the 3.5 m that are left and gave
+29.8 m for a target at 15 m (the bottom's echoes fitted as a surface echo, as the flat pattern's 30.3 m). The depth
+change that moves the surface echo by one range resolution cell is 1 / (B dtau/dz) = z_min / 3 = 8.8 m: a band thinner
+than that cannot tell one depth from another by delay, and the carrier fringes alone repeat every
+c r / (2 fc (z_array + z_projector)). So through rays a band thinner than one such cell is answered `unresolvable`, with
+`multipath_searched_m` the band clipped to where the paths exist. For this geometry no depth can be measured by timing
+whatever the bottom's model: the limit is the range and the two depths, not the estimator.
+
+### 29.3 How many false detections a map of noise gives
+
+**Looks in a cell mean.** White noise through the matched filter has the replica's power spectrum, so the amplitude
+correlation between two samples of the compressed noise is the replica's autocorrelation at their two-way time apart.
+The plan took sinc(2 B x / c), a flat band; the long-range pulse is a sweep under a 10 % Tukey taper, whose band is
+narrower, and the mean of a 2 m cell (8 samples 0.25 m apart) holds 5.48 looks, not 5.80 (5.42 measured on the map).
+`sample_correlation` now autocorrelates the replica the chain compresses with. The cell-mean test's threshold rises by
+0.12 to 0.17 dB; the training correction uses the same looks.
+
+**Tests on an oversampled map.** A budget of N false detections a ping is met by a threshold x on each test with
+P(> x) x tests = its share of N, so the number of independent tests must be known. For a statistic that is the mean of
+a = rows x looks unit exponentials, u = a x:
+
+*The single sample* is a field smooth in range and in bearing: X = (1/2) sum of 2a squared unit Gaussian fields g_i with
+roughness L (the covariance of their gradients). Near a maximum of height h (in the units of u) the fields are aligned
+along one direction e, and the component along e, a Gaussian field with the high value sqrt(2h), falls off as
+sqrt(2h) (1 - s'Ls / 2): X(s) = h (1 - s'Ls) to leading order. The region above u about that maximum is the ellipse
+s'Ls < (h - u) / h of area pi (h - u) / (u sqrt|L|). The excess h - u of a maximum over a high threshold is exponential
+with mean 1 (the tail is e^-u times a power), so a region has mean area pi / (u sqrt|L|), and since the expected area
+above u is the map's area times P(> u),
+
+    separate regions = area x P(> u) x u sqrt|L| / pi          tests = regions / P = (area sqrt|L| / pi) u
+
+growing in proportion to u. *A cell's mean* is independent from cell to cell in range (the cells do not overlap) and
+smooth along bearing only: its upcrossings of u along bearing are Rice's, f_X(u) E[dX/db > 0 | X = u], and with
+dX/db = sum g_i dg_i/db, Gaussian of variance 2 u L_b given X = u, tests = upcrossings / P = sqrt(u L_b / pi) x the
+hazard f_X(u) / P(> u) of the statistic.
+
+The areas and roughnesses are not taken from theory: the map is sampled 1.5 times per range resolution, the largest
+sample is searched for, a stronger cell's sidelobes are dropped and flagged cells are grouped. One constant per test
+and number of rows is measured (`tools/detector_search_factor.py`; 400 noise-only pings for each of one, two and three
+rows of 32, 0.8 km window, each test alone at 10, 3, 1, 0.3 and 0.1 false detections a ping, counted on the chain's own
+map with the detector's own code):
+
+| | the detector as it was (one factor, 2.5): found / asked at 10, 3, 1, 0.3, 0.1 a ping | constant with the growth law, same budgets | pooled, 3 a ping and fewer |
+| --- | --- | --- | --- |
+| sample, one row | 0.83, 0.86, 0.85, 0.93, 1.05 | 0.215, 0.197, 0.179, 0.176, 0.184 | 0.191 +- 0.005 |
+| sample, two rows | 1.05, 1.14, 1.19, 1.28, 1.38 | 0.215, 0.211, 0.203, 0.201, 0.201 | 0.208 +- 0.005 |
+| sample, three rows | 1.08, 1.19, 1.35, 1.43, 1.60 | 0.188, 0.189, 0.198, 0.194, 0.204 | 0.192 +- 0.004 |
+| cell mean, one row | 0.63, 0.69, 0.67, 0.64, 0.70 | 0.524, 0.534, 0.488, 0.445, 0.465 | 0.515 +- 0.015 |
+| cell mean, two rows | 0.67, 0.73, 0.75, 0.75, 0.82 | 0.528, 0.539, 0.524, 0.499, 0.525 | 0.532 +- 0.015 |
+| cell mean, three rows | 0.71, 0.79, 0.92, 1.08, 1.18 | 0.550, 0.571, 0.627, 0.704, 0.730 | 0.598 +- 0.016 |
+
+(Counts 28 to 4327 an entry; the cell-mean rows were measured with the looks corrected.) What the first column shows is
+that the flat factor was wrong in two ways at once: more rows gave more false detections at the same budget (1.4 times
+for three rows against one), and every case ran further over as the budget tightened. Both are the growth with u: at one
+false detection a ping u is 11.9, 14.7 and 17.0 for one, two and three rows. With tests proportional to u the sample
+test's constant is the same for one, two and three rows within 8 % and does not depend on the budget within its errors
+(one row falls by 15 % from 10 to 1 a ping and is level below). The cell mean's constant is level for one and two rows
+and RISES for three rows as the budget tightens (0.55 to 0.73): the law does not hold it, and the cause is not found.
+
+**With the constants in the code**, the whole detector (both tests) on 300 other noise-only pings for each number of
+rows gave, at budgets of 3, 1 and 0.3 false detections a ping: 0.96, 0.92, 0.89 of the budget with one row; 0.91,
+0.93, 0.90 with two; 0.87, 0.86, 0.79 with three (860 to 71 detections an entry: 0.03, 0.06 and 0.10 of statistical
+error). All under one: a place both tests flag is one detection, and each test was calibrated alone.
+
+**What the thresholds moved by.** For the six builds at their own windows and the default budget, the budget SNR of
+one row for a detection probability of one half rose by 0.11 to 0.15 dB (0.02 dB of it the looks, the rest the count of
+tests, which at that threshold is 1.7 to 2.2 times what the flat factor counted for the sample):
+
+| build | rows | Pd 0.5, dB: before, after | Pd 0.9, dB: before, after | a detection's `snr_db` at least, dB: before, after |
+| --- | --- | --- | --- | --- |
+| `popoto_face_1x32` | 1 | 15.65, 15.77 | 17.25, 17.38 | 13.50, 13.61 |
+| `popoto_face_2x32` | 2 | 13.09, 13.24 | 14.70, 14.84 | 11.07, 11.21 |
+| `popoto_face_3x32` | 3 | 11.64, 11.78 | 13.24, 13.37 | 9.76, 9.89 |
+| `popoto_static_2x32` | 2 | 12.82, 12.96 | 14.47, 14.60 | 10.82, 10.95 |
+| `popoto_static_3x32` | 3 | 11.37, 11.52 | 13.02, 13.14 | 9.52, 9.65 |
+| `popoto_testauv_1x32` | 1 | 15.16, 15.27 | 16.85, 16.96 | 13.02, 13.12 |
+
+**What is not measured.** The default budget is one false detection in a thousand pings; counting there would take a
+hundred thousand pings. The thresholds at that budget rest on the growth law beyond the measured range (u of 22 to 28
+against 10 to 20 measured). If the sample test's count grew only as sqrt(u) beyond it (range sampled too coarsely to be
+smooth), the detector would be about 1.3 times under its budget; the three-row cell mean, by its measured trend, could
+be 1.5 times over its share. Neither is corrected. The constants belong to this map (bearings every 0.5 degrees, 8
+samples per 2 m cell, Hann aperture, 15 m merge): another map needs the tool run again.

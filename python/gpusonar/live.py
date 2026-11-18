@@ -52,7 +52,10 @@ DEFAULTS = {
              # map's independent cells; a flagged cell within sidelobe_margin_db of a stronger cell's sidelobe envelope is
              # put down to it; flagged cells of one bearing within merge_m in range (None: tracker.range_sigma) are one detection.
              "false_alarms_per_ping": 1e-3, "integrate_cells": None, "sidelobe_margin_db": 10.0, "sidelobe_floor_db": -40.0,
-             "search_factor": 2.5, "merge_m": None},
+             # search_factor None: the independent tests follow the threshold and the rows, with measured constants
+             # (libs/live detector.hpp, kSearchSample; tools/detector_search_factor.py). A number: that many tests per
+             # range resolution and beamwidth whatever the threshold and the rows (2.5: the detector as it was).
+             "search_factor": None, "merge_m": None},
     "min_snr_db": 9.0,
     "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
@@ -232,8 +235,8 @@ def snr_loss_db(record, range_cell_m: float, window: str = "hann", cell_statisti
 def detection_threshold_db(cfg: dict | None = None, train_cells: int = 300, record=None, rows: int | None = None) -> float:
     """The `snr_db` a detection needs to be reported: the larger of `min_snr_db` and the detector's own threshold over
     its background. mean, peak: cell-averaging CFAR at `cfar.pfa` with `train_cells` training cells (10.7 dB at 1e-5).
-    multiscale: the single-sample test's threshold for the map of `record` at `cfar.false_alarms_per_ping` (13.0 dB
-    for one row of the long-range array's 1.4 km window at 1e-3, 9.4 dB for three rows added); a detection that only
+    multiscale: the single-sample test's threshold for the map of `record` at `cfar.false_alarms_per_ping` (13.1 dB
+    for one row of the long-range array's 1.4 km window at 1e-3, 9.5 dB for three rows added); a detection that only
     the cell-mean test found reads lower, down to `min_snr_db`."""
     cfg = _merge(DEFAULTS, cfg)
     if cfg["cell_statistic"] == "multiscale":
@@ -456,7 +459,9 @@ def detector_options(cfg: dict) -> dict:
     """The multiscale detector's options from a (merged) chain configuration, as libs/live DetectorOptions names them."""
     f = cfg["cfar"]
     o = {"false_alarms_per_ping": float(f["false_alarms_per_ping"]), "sidelobe_margin_db": float(f["sidelobe_margin_db"]),
-         "sidelobe_floor_db": float(f["sidelobe_floor_db"]), "search_factor": float(f["search_factor"])}
+         "sidelobe_floor_db": float(f["sidelobe_floor_db"])}
+    if f.get("search_factor") is not None:
+        o["search_factor"] = float(f["search_factor"])
     if f.get("integrate_cells") is not None:
         o["integrate_cells"] = [int(v) for v in f["integrate_cells"]]
     if f.get("merge_m") is not None:

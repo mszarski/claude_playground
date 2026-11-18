@@ -373,7 +373,7 @@
       "id": "POP-3",
       "requirement": "Frequency and source level that take the Popoto array to 12 km",
       "set_in": "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
-      "value": "5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse: 14.6 dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.6 dB, margin -1.0 dB, detection probability 0.24; 2 rows: needs 13.1 dB, margin +1.5 dB, detection probability 0.89; 3 rows: needs 11.6 dB, margin +3.0 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.6 dB in one row). Met by the recommended three rows; one row alone is 1.0 dB short",
+      "value": "5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse: 14.6 dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.8 dB, margin -1.1 dB, detection probability 0.22; 2 rows: needs 13.2 dB, margin +1.4 dB, detection probability 0.87; 3 rows: needs 11.8 dB, margin +2.9 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.8 dB in one row). Met by the recommended three rows; one row alone is 1.1 dB short",
       "met": true
     },
     {

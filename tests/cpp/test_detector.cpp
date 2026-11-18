@@ -84,12 +84,15 @@ TEST(Statistic, WeightsOfAMeanInTheLimitsWhereTheyAreKnown) {
   const auto same = detect::mean_power_weights({1.0, 1.0, 1.0, 1.0}, 4);
   EXPECT_NEAR(same[0], 1.0, 1e-9);
   EXPECT_NEAR(detect::equivalent_looks(same), 1.0, 1e-9);
+  // The correlation is the replica's own autocorrelation (white noise through the matched filter). An untapered sweep
+  // of 200 cycles of band has a band flat to a per cent: sampled at its resolution the samples are uncorrelated.
   PingRecord r;
+  r.transmit.waveform.type = WaveformType::Lfm;
   r.transmit.waveform.f_start = 4000.0;
   r.transmit.waveform.f_stop = 6000.0;
   r.transmit.waveform.duration = 0.1;
   const auto at_resolution = sample_correlation(r.transmit.waveform, 1500.0, 0.375, 8);
-  EXPECT_NEAR(detect::equivalent_looks(detect::mean_power_weights(at_resolution, 8)), 8.0, 1e-6);
+  EXPECT_NEAR(detect::equivalent_looks(detect::mean_power_weights(at_resolution, 8)), 8.0, 0.05);
   // The chain's map: 8 samples a quarter of a metre apart are 2 m, 5.33 resolutions: between 5.33 and 8 looks.
   const double looks = detect::equivalent_looks(detect::mean_power_weights(sample_correlation(r.transmit.waveform, 1500.0, 0.25, 8), 8));
   EXPECT_GT(looks, 5.33);
@@ -97,11 +100,18 @@ TEST(Statistic, WeightsOfAMeanInTheLimitsWhereTheyAreKnown) {
   // Past the exact size the variance-equivalent number is used: the same looks within a few per cent.
   const auto corr = sample_correlation(r.transmit.waveform, 1500.0, 0.25, 64);
   EXPECT_NEAR(detect::equivalent_looks(detect::mean_power_weights(corr, 64, 16)) / detect::equivalent_looks(detect::mean_power_weights(corr, 64)), 1.0, 0.02);
-  // A pulse that does not sweep: the triangle of its own length.
+  // A taper narrows the band: fewer looks in the same cell (a Tukey taper of 10 %: 5.5 against 5.8).
+  Waveform tapered = r.transmit.waveform;
+  tapered.window_alpha = 0.1;
+  const double fewer = detect::equivalent_looks(detect::mean_power_weights(sample_correlation(tapered, 1500.0, 0.25, 8), 8));
+  EXPECT_LT(fewer, looks - 0.15);
+  EXPECT_GT(fewer, looks - 0.6);
+  // A pulse that does not sweep: the triangle of its own length (the replica is sampled 260 times over the pulse).
+  r.transmit.waveform.type = WaveformType::Cw;
   r.transmit.waveform.f_stop = 4000.0;
   const auto tone = sample_correlation(r.transmit.waveform, 1500.0, 7.5, 12);
-  EXPECT_NEAR(tone[5], 0.5, 1e-12);
-  EXPECT_EQ(tone[10], 0.0);
+  EXPECT_NEAR(tone[5], 0.5, 0.005);
+  EXPECT_NEAR(tone[10], 0.0, 0.005);
 }
 
 // One row of 32 hydrophones at 0.15 m, 4-6 kHz: the long-range array's.
