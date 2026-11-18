@@ -17,8 +17,16 @@ what does the chain cost per ping with one, two and three rows?
            Without --full the full-length ping (0.5 to 13 km at 102.4 kHz) is not run: with
            96 channels it is 0.7 GB of samples before processing.
 
-Writes docs/design/popoto_elevation_bench.json (read by tools/design_report.py). CPU only.
-Usage: tools/popoto_elevation_bench.py [--no-write] [--full]
+  --full-rate  only this: one full-length ping at the boards' rate (0.5 to 13 km at 102.4 kHz, real) per row
+           count through the C++ chain on the chosen backend, three ways: as it is (the chain converts
+           to baseband itself), through the decimate-first stage (libs/live decimate.hpp) at its
+           default rate, and at a 25th of the board rate. Also the stage alone, the streaming
+           receiver, and the sizes of a raw and a decimated recording. Writes the `decimation.timing`
+           section of docs/design/popoto_stage2.json under the backend's name. On a GPU:
+               PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda
+
+Writes docs/design/popoto_elevation_bench.json (read by tools/design_report.py). CPU only unless --backend says otherwise.
+Usage: tools/popoto_elevation_bench.py [--no-write] [--full] [--full-rate [--backend host|cuda|auto] [--rows 1,2,3] [--clocks]]
 """
 
 import argparse
@@ -70,6 +78,111 @@ def time_chain(records, rows):
     with_el = sum(1 for d in last["detections"] if d.get("elevation_deg") is not None)
     return {"seconds_per_ping": float(np.median(times[1:]) if len(times) > 1 else times[0]), "all": times,
             "detections": len(last["detections"]), "with_elevation": with_el}
+
+
+CLOCKED = {2: "popoto_long_range_2row_clocks", 3: "popoto_long_range_3row_clocks"}
+
+
+def machine_load():
+    try:
+        return [float(v) for v in os.getloadavg()]
+    except OSError:
+        return None
+
+
+def full_rate_case(rows, backend, clocks=False, window=(500.0, 13000.0)):
+    """One full-length raw ping through the chain as it is and through the decimate-first stage."""
+    from gpusonar.live import sync_reference
+    cfg = load_yaml(ROOT / "configs" / "deploy" / ("popoto_vehicle.yaml" if rows == 1 else "popoto_vehicle_elevation.yaml"))["chain"]
+    over = {"receive": {"window": {"range": list(window)}}}
+    t0 = time.perf_counter()
+    if clocks and rows in CLOCKED:
+        sonar = SonarModel.load(CLOCKED[rows], over)
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 10.0), velocity=(1.5, 0.0, 0.0)), Scene().add_points([[740.0, 6000.0, 30.0]], target_strength_db=40.0),
+                            environment={"sound_speed": 1500.0}, time_ns=0, noise_rms=2e-6, rng=np.random.default_rng(3), adc=False)
+        reference = sync_reference(cfg)
+    else:
+        clocks = False
+        cfg.pop("sync", None)                                  # ideal clocks
+        sonar, recs = pings(rows, over, [[740.0, 6000.0, 30.0]], 1, ts=40.0)
+        rec, reference = recs[0], None
+    simulate_s = time.perf_counter() - t0
+    s = rec.samples
+    out = {"channels": int(s.n_channels), "boards": len(sonar.boards), "board_clocks": bool(clocks), "samples_per_channel": int(s.n_samples),
+           "sample_rate_hz": float(s.sample_rate), "window_m": list(window), "simulate_seconds": simulate_s, "load_average_before": machine_load()}
+    options = cpp_chain_options(cfg, reference)
+    want = core.Backend.Cuda if backend == "cuda" or (backend == "auto" and core.cuda_available()) else core.Backend.Host
+    out["backend"] = "cuda" if want == core.Backend.Cuda else "host"
+
+    def chain_time(decimate=None, record=None):
+        o = dict(options, backend=want)
+        if decimate is not None:
+            o["decimate"] = decimate
+        chain = core.LiveChainCpp(o)
+        r = (record or rec).copy()
+        report = json.loads(chain.process(r))
+        best = max(report["detections"], key=lambda d: d["snr_db"]) if report["detections"] else None
+        return {"seconds": report["processing_seconds"], "detections": len(report["detections"]),
+                "strongest": {k: best[k] for k in ("range_m", "bearing_deg", "snr_db", "depth_m") if k in best} if best else None}
+
+    out["chain_full_rate"] = chain_time()
+    out["chain_decimate_first"] = chain_time({})
+    out["chain_decimate_first_factor_25"] = chain_time({"output_rate": s.sample_rate / 25.0})
+    # The stage on its own: all channels at once (a recording replayed), and streaming, block by block, as a receiver does it.
+    plan = core.live_decimate_plan(rec, {})
+    r = rec.copy()
+    t0 = time.perf_counter()
+    core.live_decimate_record(r, {}, reference)
+    out["stage_whole_ping_seconds"] = time.perf_counter() - t0
+    out["chain_on_decimated_records"] = chain_time(record=r)          # what a decimating receiver leaves the chain to do
+    out.update(factor=int(plan["factor"]), output_rate_hz=plan["output_rate"], taps=len(plan["taps"]), latency_ms=1e3 * plan["delay_s"],
+               decimated_samples_per_channel=int(r.samples.n_samples), raw_bytes_in_memory=int(np.asarray(rec.samples.array).nbytes),
+               decimated_bytes_in_memory=int(np.asarray(r.samples.array).nbytes))
+    dec = core.PingDecimator(rec, {}, reference)
+    block = max(8, (128 * 32 // s.n_channels) // 2 * 2)
+    n_try = min(s.n_samples, int(2.0 * s.sample_rate))                # two seconds of stream
+    rows_ = np.ascontiguousarray(np.asarray(rec.samples.array)[:, :n_try].T)
+    t0 = time.perf_counter()
+    for a in range(0, n_try, block):
+        dec.feed(rows_[a:a + block])
+    spent = time.perf_counter() - t0
+    out["stage_streaming_seconds_per_second_of_stream"] = spent / (n_try / s.sample_rate)
+    out["stage_streaming_block_samples"] = block
+    del rows_, dec
+    with tempfile.TemporaryDirectory() as tmp:
+        for label, record in (("raw", rec), ("decimated", r)):
+            path = os.path.join(tmp, f"{label}.h5")
+            w = gs.RecordWriter(path)
+            t0 = time.perf_counter()
+            w.write(record)
+            w.close()
+            out[f"recording_{label}_bytes"] = int(os.path.getsize(path))
+            out[f"recording_{label}_write_seconds"] = time.perf_counter() - t0
+    out["load_average_after"] = machine_load()
+    return out
+
+
+def full_rate(args):
+    path = ROOT / "docs" / "design" / "popoto_stage2.json"
+    R = json.loads(path.read_text()) if path.exists() else {}
+    timing = R.setdefault("decimation", {}).setdefault("timing", {})
+    print(f"FULL RATE: one ping, 0.5-13 km at the boards' rate, C++ chain; load average {machine_load()}, {os.cpu_count()} threads")
+    for rows in [int(v) for v in args.rows.split(",")]:
+        t = full_rate_case(rows, args.backend, clocks=args.clocks)
+        key = f"{t['backend']}{'_clocks' if t['board_clocks'] else ''}"
+        timing.setdefault(key, {})[str(rows)] = t
+        a, b, c, d = (t[k]["seconds"] for k in ("chain_full_rate", "chain_decimate_first", "chain_decimate_first_factor_25", "chain_on_decimated_records"))
+        print(f"  {rows} row(s), {t['channels']} ch{', board clocks' if t['board_clocks'] else ''}, {t['backend']}: chain {a:.1f} s; decimate first {b:.1f} s "
+              f"({a / b:.1f}x); at a 25th {c:.1f} s ({a / c:.1f}x); stage alone {t['stage_whole_ping_seconds']:.1f} s, chain after it {d:.1f} s; "
+              f"streaming stage {t['stage_streaming_seconds_per_second_of_stream']:.2f} s per second of stream; recording "
+              f"{t['recording_raw_bytes'] / 1e6:.0f} -> {t['recording_decimated_bytes'] / 1e6:.0f} MB; strongest "
+              f"{t['chain_full_rate']['strongest']} / {t['chain_decimate_first']['strongest']}", flush=True)
+        timing[key]["cpu_threads"] = os.cpu_count()
+        if not args.no_write:
+            path.write_text(json.dumps(R, indent=2))
+    if not args.no_write:
+        print(f"wrote {path.relative_to(ROOT)}")
+    return 0
 
 
 def stream_check(rows):
@@ -253,7 +366,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--no-write", action="store_true")
     ap.add_argument("--full", action="store_true", help="also one full-length ping (0.5-13 km at 102.4 kHz) per row count")
+    ap.add_argument("--full-rate", action="store_true", help="only the full-length ping at the boards' rate, with and without the decimate-first stage")
+    ap.add_argument("--backend", default="host", choices=["host", "cuda", "auto"], help="for --full-rate")
+    ap.add_argument("--rows", default="1,2,3", help="for --full-rate: row counts, comma separated")
+    ap.add_argument("--clocks", action="store_true", help="for --full-rate: boards on their own clocks, synchronised (two and three rows)")
     args = ap.parse_args()
+    if args.full_rate:
+        return full_rate(args)
     R = {"cpu_threads": os.cpu_count(), "stream": {}, "timing_scenario_size": {}, "timing_full_length": {}}
     print("SCENARIOS: depth against truth, C++ chain")
     sc = scenario_check()
