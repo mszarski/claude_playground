@@ -1,0 +1,4058 @@
+{
+ "popoto_face_1x32": {
+  "build": "popoto_face_1x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 1.0,
+  "ping_interval_s": 17.933333333333334,
+  "duty": 0.055762081784386616,
+  "pings_per_hour": 200.74349442379182,
+  "projector_position_m": [
+   4.0,
+   0.0,
+   0.0
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 9629.748144083642,
+    "reach_small_m": 3788.104758173637,
+    "snr_ship_6km_db": 23.574909535697223,
+    "snr_small_6km_db": 3.5749095356972234,
+    "snr_ship_12km_db": 7.638625575748215,
+    "snr_small_12km_db": -12.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 11362.854567631019,
+    "reach_small_m": 4622.529305449516,
+    "snr_ship_6km_db": 27.574909535697223,
+    "snr_small_6km_db": 7.574909535697223,
+    "snr_ship_12km_db": 11.638625575748215,
+    "snr_small_12km_db": -8.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 12799.069019588129,
+    "reach_small_m": 5347.119849555807,
+    "snr_ship_6km_db": 30.574909535697223,
+    "snr_small_6km_db": 10.574909535697223,
+    "snr_ship_12km_db": 14.638625575748215,
+    "snr_small_12km_db": -5.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 14353.347333192181,
+    "reach_small_m": 6163.996745791133,
+    "snr_ship_6km_db": 33.57490953569722,
+    "snr_small_6km_db": 13.574909535697223,
+    "snr_ship_12km_db": 17.638625575748215,
+    "snr_small_12km_db": -2.3613744242517853
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 16025.577899355332,
+    "reach_small_m": 7079.521125961712,
+    "snr_ship_6km_db": 36.57490953569722,
+    "snr_small_6km_db": 16.574909535697223,
+    "snr_ship_12km_db": 20.638625575748215,
+    "snr_small_12km_db": 0.6386255757482147
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 10636.325425478411,
+    "reach_small_m": 4267.339393448268,
+    "snr_ship_6km_db": 25.955427574021492,
+    "snr_small_6km_db": 5.955427574021492,
+    "snr_ship_12km_db": 10.019143614072483,
+    "snr_small_12km_db": -9.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 12492.84202529605,
+    "reach_small_m": 5190.155052002072,
+    "snr_ship_6km_db": 29.955427574021492,
+    "snr_small_6km_db": 9.955427574021492,
+    "snr_ship_12km_db": 14.019143614072483,
+    "snr_small_12km_db": -5.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14022.715869053436,
+    "reach_small_m": 5987.435584699753,
+    "snr_ship_6km_db": 32.95542757402149,
+    "snr_small_6km_db": 12.955427574021492,
+    "snr_ship_12km_db": 17.019143614072483,
+    "snr_small_12km_db": -2.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 15670.648819935097,
+    "reach_small_m": 6882.098787007102,
+    "snr_ship_6km_db": 35.95542757402149,
+    "snr_small_6km_db": 15.955427574021492,
+    "snr_ship_12km_db": 20.019143614072483,
+    "snr_small_12km_db": 0.019143614072483217
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 17435.74039414618,
+    "reach_small_m": 7879.989205207771,
+    "snr_ship_6km_db": 38.95542757402149,
+    "snr_small_6km_db": 18.955427574021492,
+    "snr_ship_12km_db": 23.019143614072483,
+    "snr_small_12km_db": 3.019143614072483
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 11232.612169945478,
+    "reach_small_m": 4558.2885570978,
+    "snr_ship_6km_db": 27.290091325604408,
+    "snr_small_6km_db": 7.290091325604408,
+    "snr_ship_12km_db": 11.353807365655399,
+    "snr_small_12km_db": -8.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 13158.868641820094,
+    "reach_small_m": 5533.2327698207555,
+    "snr_ship_6km_db": 31.290091325604408,
+    "snr_small_6km_db": 11.290091325604408,
+    "snr_ship_12km_db": 15.353807365655399,
+    "snr_small_12km_db": -4.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14741.314664365045,
+    "reach_small_m": 6373.07117167306,
+    "snr_ship_6km_db": 34.29009132560441,
+    "snr_small_6km_db": 14.290091325604408,
+    "snr_ship_12km_db": 18.3538073656554,
+    "snr_small_12km_db": -1.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 16441.53734732924,
+    "reach_small_m": 7312.981538175309,
+    "snr_ship_6km_db": 37.29009132560441,
+    "snr_small_6km_db": 17.290091325604408,
+    "snr_ship_12km_db": 21.3538073656554,
+    "snr_small_12km_db": 1.353807365655399
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 18258.222628214367,
+    "reach_small_m": 8358.468768102923,
+    "snr_ship_6km_db": 40.29009132560441,
+    "snr_small_6km_db": 20.290091325604408,
+    "snr_ship_12km_db": 24.3538073656554,
+    "snr_small_12km_db": 4.353807365655399
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 17.872838793070212,
+     "average_w": 17.872838793070212,
+     "heat_in_transducer_average_w": 10.634339081876774,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 10.723703275842126,
+     "average_w": 10.723703275842126,
+     "heat_in_transducer_average_w": 4.557573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 7.659788054172946,
+     "average_w": 7.659788054172946,
+     "heat_in_transducer_average_w": 1.9532459538141014,
+     "duty": 0.055762081784386616
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 805.1087732065561,
+     "wh_per_hour": 44.89454125687116,
+     "average_w": 44.89454125687116,
+     "heat_in_transducer_average_w": 26.712252047838334,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 483.0652639239336,
+     "wh_per_hour": 26.936724754122693,
+     "average_w": 26.936724754122693,
+     "heat_in_transducer_average_w": 11.448108020502143,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 345.04661708852404,
+     "wh_per_hour": 19.24051768151621,
+     "average_w": 19.24051768151621,
+     "heat_in_transducer_average_w": 4.906332008786634,
+     "duty": 0.055762081784386616
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 1606.403194629867,
+     "wh_per_hour": 89.57638631765057,
+     "average_w": 89.57638631765057,
+     "heat_in_transducer_average_w": 53.29794985900209,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 963.8419167779201,
+     "wh_per_hour": 53.74583179059034,
+     "average_w": 53.74583179059034,
+     "heat_in_transducer_average_w": 22.841978511000896,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 688.4585119842287,
+     "wh_per_hour": 38.38987985042168,
+     "average_w": 38.38987985042168,
+     "heat_in_transducer_average_w": 9.789419361857526,
+     "duty": 0.055762081784386616
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 3205.195756890591,
+     "wh_per_hour": 178.7283879307021,
+     "average_w": 178.7283879307021,
+     "heat_in_transducer_average_w": 106.34339081876773,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 1923.1174541343544,
+     "wh_per_hour": 107.23703275842125,
+     "average_w": 107.23703275842125,
+     "heat_in_transducer_average_w": 45.57573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 1373.6553243816816,
+     "wh_per_hour": 76.59788054172945,
+     "average_w": 76.59788054172945,
+     "heat_in_transducer_average_w": 19.532459538141012,
+     "duty": 0.055762081784386616
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 6395.206305821961,
+     "wh_per_hour": 356.6100170532692,
+     "average_w": 356.6100170532692,
+     "heat_in_transducer_average_w": 212.18296014669517,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 3837.1237834931762,
+     "wh_per_hour": 213.9660102319615,
+     "average_w": 213.9660102319615,
+     "heat_in_transducer_average_w": 90.93555434858364,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 2740.802702495126,
+     "wh_per_hour": 152.8328644514011,
+     "average_w": 152.8328644514011,
+     "heat_in_transducer_average_w": 38.97238043510728,
+     "duty": 0.055762081784386616
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 1.6750000000000003,
+   "farthest_m": 6.324999999999999,
+   "hydrophones": 32,
+   "overloaded": 32,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 19.18689362577711,
+    "level_taken_as_rms": 22.18689362577711
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 7.645979256277277,
+    "level_taken_as_rms": 10.645979256277277
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 22.18689362577711,
+    "with_6_db_of_margin": 28.18689362577711
+   },
+   "source_level_rms_for_full_scale_db": 174.81310637422288,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068881,
+    "level_taken_as_rms": 21.545644643308425
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 9.085674911928793,
+     "worst_overload_band_mean_db": 4.64304467504119,
+     "change_at_worst_frequency_db": -10.101218713848317,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 9.783786299609485,
+     "worst_overload_band_mean_db": 8.662058984753463,
+     "change_at_worst_frequency_db": -9.403107326167625,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 7.413027147097255,
+     "worst_overload_band_mean_db": 3.7555165478600543,
+     "change_at_worst_frequency_db": -11.773866478679855,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 19.178195168806198,
+     "worst_overload_band_mean_db": 19.178195168806198,
+     "change_at_worst_frequency_db": -0.00869845697091165,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 19.15158874046746,
+     "worst_overload_band_mean_db": 19.144467104936925,
+     "change_at_worst_frequency_db": -0.03530488530964959,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 19.089212301674728,
+     "worst_overload_band_mean_db": 19.05727747700827,
+     "change_at_worst_frequency_db": -0.09768132410238195,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 207.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 17.033333333333335,
+    "duty": 0.005870841487279843,
+    "overload_nearest_rms_db": 32.18689362577712,
+    "acoustic_w": 4096.328146306152,
+    "from_supply_w": 9638.419167779182,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 56.585631121991284,
+    "cavitation_depth_0p03m2_m": 54.533857416739025,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 200.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 17.433333333333334,
+    "duty": 0.028680688336520075,
+    "overload_nearest_rms_db": 25.19719358241693,
+    "acoustic_w": 819.2656292612305,
+    "from_supply_w": 1927.6838335558366,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 55.28729924156319,
+    "cavitation_depth_0p03m2_m": 18.91140763037871,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 17.933333333333334,
+    "duty": 0.055762081784386616,
+    "overload_nearest_rms_db": 22.186893625777117,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 53.74583179059034,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 193.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 18.933333333333334,
+    "duty": 0.1056338028169014,
+    "overload_nearest_rms_db": 19.176593669137304,
+    "acoustic_w": 204.81640731530803,
+    "from_supply_w": 481.92095838896006,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 50.90714349179156,
+    "cavitation_depth_0p03m2_m": 4.501824001161872,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 190.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 20.933333333333334,
+    "duty": 0.19108280254777069,
+    "overload_nearest_rms_db": 16.16629371249749,
+    "acoustic_w": 102.40820365765398,
+    "from_supply_w": 240.96047919447997,
+    "joule_per_ping": 963.8419167779199,
+    "average_w": 46.04340366773503,
+    "cavitation_depth_0p03m2_m": 0.2813546702389116,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 26.933333333333334,
+    "duty": 0.3712871287128713,
+    "overload_nearest_rms_db": 12.186893625777117,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 963.8419167779203,
+    "average_w": 35.78620978135843,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ },
+ "popoto_face_2x32": {
+  "build": "popoto_face_2x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 1.0,
+  "ping_interval_s": 17.933333333333334,
+  "duty": 0.055762081784386616,
+  "pings_per_hour": 200.74349442379182,
+  "projector_position_m": [
+   4.0,
+   0.0,
+   0.0
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 9629.748144083642,
+    "reach_small_m": 3788.104758173637,
+    "snr_ship_6km_db": 23.574909535697223,
+    "snr_small_6km_db": 3.5749095356972234,
+    "snr_ship_12km_db": 7.638625575748215,
+    "snr_small_12km_db": -12.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 11362.854567631019,
+    "reach_small_m": 4622.529305449516,
+    "snr_ship_6km_db": 27.574909535697223,
+    "snr_small_6km_db": 7.574909535697223,
+    "snr_ship_12km_db": 11.638625575748215,
+    "snr_small_12km_db": -8.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 12799.069019588129,
+    "reach_small_m": 5347.119849555807,
+    "snr_ship_6km_db": 30.574909535697223,
+    "snr_small_6km_db": 10.574909535697223,
+    "snr_ship_12km_db": 14.638625575748215,
+    "snr_small_12km_db": -5.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 14353.347333192181,
+    "reach_small_m": 6163.996745791133,
+    "snr_ship_6km_db": 33.57490953569722,
+    "snr_small_6km_db": 13.574909535697223,
+    "snr_ship_12km_db": 17.638625575748215,
+    "snr_small_12km_db": -2.3613744242517853
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 16025.577899355332,
+    "reach_small_m": 7079.521125961712,
+    "snr_ship_6km_db": 36.57490953569722,
+    "snr_small_6km_db": 16.574909535697223,
+    "snr_ship_12km_db": 20.638625575748215,
+    "snr_small_12km_db": 0.6386255757482147
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 10636.325425478411,
+    "reach_small_m": 4267.339393448268,
+    "snr_ship_6km_db": 25.955427574021492,
+    "snr_small_6km_db": 5.955427574021492,
+    "snr_ship_12km_db": 10.019143614072483,
+    "snr_small_12km_db": -9.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 12492.84202529605,
+    "reach_small_m": 5190.155052002072,
+    "snr_ship_6km_db": 29.955427574021492,
+    "snr_small_6km_db": 9.955427574021492,
+    "snr_ship_12km_db": 14.019143614072483,
+    "snr_small_12km_db": -5.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14022.715869053436,
+    "reach_small_m": 5987.435584699753,
+    "snr_ship_6km_db": 32.95542757402149,
+    "snr_small_6km_db": 12.955427574021492,
+    "snr_ship_12km_db": 17.019143614072483,
+    "snr_small_12km_db": -2.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 15670.648819935097,
+    "reach_small_m": 6882.098787007102,
+    "snr_ship_6km_db": 35.95542757402149,
+    "snr_small_6km_db": 15.955427574021492,
+    "snr_ship_12km_db": 20.019143614072483,
+    "snr_small_12km_db": 0.019143614072483217
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 17435.74039414618,
+    "reach_small_m": 7879.989205207771,
+    "snr_ship_6km_db": 38.95542757402149,
+    "snr_small_6km_db": 18.955427574021492,
+    "snr_ship_12km_db": 23.019143614072483,
+    "snr_small_12km_db": 3.019143614072483
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 11232.612169945478,
+    "reach_small_m": 4558.2885570978,
+    "snr_ship_6km_db": 27.290091325604408,
+    "snr_small_6km_db": 7.290091325604408,
+    "snr_ship_12km_db": 11.353807365655399,
+    "snr_small_12km_db": -8.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 13158.868641820094,
+    "reach_small_m": 5533.2327698207555,
+    "snr_ship_6km_db": 31.290091325604408,
+    "snr_small_6km_db": 11.290091325604408,
+    "snr_ship_12km_db": 15.353807365655399,
+    "snr_small_12km_db": -4.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14741.314664365045,
+    "reach_small_m": 6373.07117167306,
+    "snr_ship_6km_db": 34.29009132560441,
+    "snr_small_6km_db": 14.290091325604408,
+    "snr_ship_12km_db": 18.3538073656554,
+    "snr_small_12km_db": -1.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 16441.53734732924,
+    "reach_small_m": 7312.981538175309,
+    "snr_ship_6km_db": 37.29009132560441,
+    "snr_small_6km_db": 17.290091325604408,
+    "snr_ship_12km_db": 21.3538073656554,
+    "snr_small_12km_db": 1.353807365655399
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 18258.222628214367,
+    "reach_small_m": 8358.468768102923,
+    "snr_ship_6km_db": 40.29009132560441,
+    "snr_small_6km_db": 20.290091325604408,
+    "snr_ship_12km_db": 24.3538073656554,
+    "snr_small_12km_db": 4.353807365655399
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 17.872838793070212,
+     "average_w": 17.872838793070212,
+     "heat_in_transducer_average_w": 10.634339081876774,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 10.723703275842126,
+     "average_w": 10.723703275842126,
+     "heat_in_transducer_average_w": 4.557573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 7.659788054172946,
+     "average_w": 7.659788054172946,
+     "heat_in_transducer_average_w": 1.9532459538141014,
+     "duty": 0.055762081784386616
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 805.1087732065561,
+     "wh_per_hour": 44.89454125687116,
+     "average_w": 44.89454125687116,
+     "heat_in_transducer_average_w": 26.712252047838334,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 483.0652639239336,
+     "wh_per_hour": 26.936724754122693,
+     "average_w": 26.936724754122693,
+     "heat_in_transducer_average_w": 11.448108020502143,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 345.04661708852404,
+     "wh_per_hour": 19.24051768151621,
+     "average_w": 19.24051768151621,
+     "heat_in_transducer_average_w": 4.906332008786634,
+     "duty": 0.055762081784386616
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 1606.403194629867,
+     "wh_per_hour": 89.57638631765057,
+     "average_w": 89.57638631765057,
+     "heat_in_transducer_average_w": 53.29794985900209,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 963.8419167779201,
+     "wh_per_hour": 53.74583179059034,
+     "average_w": 53.74583179059034,
+     "heat_in_transducer_average_w": 22.841978511000896,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 688.4585119842287,
+     "wh_per_hour": 38.38987985042168,
+     "average_w": 38.38987985042168,
+     "heat_in_transducer_average_w": 9.789419361857526,
+     "duty": 0.055762081784386616
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 3205.195756890591,
+     "wh_per_hour": 178.7283879307021,
+     "average_w": 178.7283879307021,
+     "heat_in_transducer_average_w": 106.34339081876773,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 1923.1174541343544,
+     "wh_per_hour": 107.23703275842125,
+     "average_w": 107.23703275842125,
+     "heat_in_transducer_average_w": 45.57573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 1373.6553243816816,
+     "wh_per_hour": 76.59788054172945,
+     "average_w": 76.59788054172945,
+     "heat_in_transducer_average_w": 19.532459538141012,
+     "duty": 0.055762081784386616
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 6395.206305821961,
+     "wh_per_hour": 356.6100170532692,
+     "average_w": 356.6100170532692,
+     "heat_in_transducer_average_w": 212.18296014669517,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 3837.1237834931762,
+     "wh_per_hour": 213.9660102319615,
+     "average_w": 213.9660102319615,
+     "heat_in_transducer_average_w": 90.93555434858364,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 2740.802702495126,
+     "wh_per_hour": 152.8328644514011,
+     "average_w": 152.8328644514011,
+     "heat_in_transducer_average_w": 38.97238043510728,
+     "duty": 0.055762081784386616
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 1.8352452152232956,
+   "farthest_m": 6.369311187247801,
+   "hydrophones": 64,
+   "overloaded": 64,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 18.393307843833377,
+    "level_taken_as_rms": 21.393307843833377
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 7.585340496174174,
+    "level_taken_as_rms": 10.585340496174174
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 21.393307843833377,
+    "with_6_db_of_margin": 27.393307843833377
+   },
+   "source_level_rms_for_full_scale_db": 175.60669215616662,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068869,
+    "level_taken_as_rms": 21.545644643308407
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 10.720028016433925,
+     "worst_overload_band_mean_db": 5.092919686062207,
+     "change_at_worst_frequency_db": -7.673279827399451,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 8.942405749528543,
+     "worst_overload_band_mean_db": 7.489021316095613,
+     "change_at_worst_frequency_db": -9.450902094304833,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 7.295892440163648,
+     "worst_overload_band_mean_db": 3.403705527625786,
+     "change_at_worst_frequency_db": -11.097415403669729,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 17.192272200718037,
+     "worst_overload_band_mean_db": 16.454505272170948,
+     "change_at_worst_frequency_db": -1.2010356431153397,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 15.03949708336309,
+     "worst_overload_band_mean_db": 13.159504929098986,
+     "change_at_worst_frequency_db": -3.353810760470287,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 12.38625879500439,
+     "worst_overload_band_mean_db": 10.46982618873881,
+     "change_at_worst_frequency_db": -6.007049048828987,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 207.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 17.033333333333335,
+    "duty": 0.005870841487279843,
+    "overload_nearest_rms_db": 31.393307843833384,
+    "acoustic_w": 4096.328146306152,
+    "from_supply_w": 9638.419167779182,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 56.585631121991284,
+    "cavitation_depth_0p03m2_m": 54.533857416739025,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 200.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 17.433333333333334,
+    "duty": 0.028680688336520075,
+    "overload_nearest_rms_db": 24.403607800473196,
+    "acoustic_w": 819.2656292612305,
+    "from_supply_w": 1927.6838335558366,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 55.28729924156319,
+    "cavitation_depth_0p03m2_m": 18.91140763037871,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 17.933333333333334,
+    "duty": 0.055762081784386616,
+    "overload_nearest_rms_db": 21.393307843833384,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 53.74583179059034,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 193.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 18.933333333333334,
+    "duty": 0.1056338028169014,
+    "overload_nearest_rms_db": 18.38300788719357,
+    "acoustic_w": 204.81640731530803,
+    "from_supply_w": 481.92095838896006,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 50.90714349179156,
+    "cavitation_depth_0p03m2_m": 4.501824001161872,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 190.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 20.933333333333334,
+    "duty": 0.19108280254777069,
+    "overload_nearest_rms_db": 15.372707930553759,
+    "acoustic_w": 102.40820365765398,
+    "from_supply_w": 240.96047919447997,
+    "joule_per_ping": 963.8419167779199,
+    "average_w": 46.04340366773503,
+    "cavitation_depth_0p03m2_m": 0.2813546702389116,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 26.933333333333334,
+    "duty": 0.3712871287128713,
+    "overload_nearest_rms_db": 11.393307843833384,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 963.8419167779203,
+    "average_w": 35.78620978135843,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ },
+ "popoto_face_3x32": {
+  "build": "popoto_face_3x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 1.0,
+  "ping_interval_s": 17.933333333333334,
+  "duty": 0.055762081784386616,
+  "pings_per_hour": 200.74349442379182,
+  "projector_position_m": [
+   4.0,
+   0.0,
+   0.0
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 9629.748144083642,
+    "reach_small_m": 3788.104758173637,
+    "snr_ship_6km_db": 23.574909535697223,
+    "snr_small_6km_db": 3.5749095356972234,
+    "snr_ship_12km_db": 7.638625575748215,
+    "snr_small_12km_db": -12.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 11362.854567631019,
+    "reach_small_m": 4622.529305449516,
+    "snr_ship_6km_db": 27.574909535697223,
+    "snr_small_6km_db": 7.574909535697223,
+    "snr_ship_12km_db": 11.638625575748215,
+    "snr_small_12km_db": -8.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 12799.069019588129,
+    "reach_small_m": 5347.119849555807,
+    "snr_ship_6km_db": 30.574909535697223,
+    "snr_small_6km_db": 10.574909535697223,
+    "snr_ship_12km_db": 14.638625575748215,
+    "snr_small_12km_db": -5.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 14353.347333192181,
+    "reach_small_m": 6163.996745791133,
+    "snr_ship_6km_db": 33.57490953569722,
+    "snr_small_6km_db": 13.574909535697223,
+    "snr_ship_12km_db": 17.638625575748215,
+    "snr_small_12km_db": -2.3613744242517853
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 16025.577899355332,
+    "reach_small_m": 7079.521125961712,
+    "snr_ship_6km_db": 36.57490953569722,
+    "snr_small_6km_db": 16.574909535697223,
+    "snr_ship_12km_db": 20.638625575748215,
+    "snr_small_12km_db": 0.6386255757482147
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 10636.325425478411,
+    "reach_small_m": 4267.339393448268,
+    "snr_ship_6km_db": 25.955427574021492,
+    "snr_small_6km_db": 5.955427574021492,
+    "snr_ship_12km_db": 10.019143614072483,
+    "snr_small_12km_db": -9.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 12492.84202529605,
+    "reach_small_m": 5190.155052002072,
+    "snr_ship_6km_db": 29.955427574021492,
+    "snr_small_6km_db": 9.955427574021492,
+    "snr_ship_12km_db": 14.019143614072483,
+    "snr_small_12km_db": -5.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14022.715869053436,
+    "reach_small_m": 5987.435584699753,
+    "snr_ship_6km_db": 32.95542757402149,
+    "snr_small_6km_db": 12.955427574021492,
+    "snr_ship_12km_db": 17.019143614072483,
+    "snr_small_12km_db": -2.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 15670.648819935097,
+    "reach_small_m": 6882.098787007102,
+    "snr_ship_6km_db": 35.95542757402149,
+    "snr_small_6km_db": 15.955427574021492,
+    "snr_ship_12km_db": 20.019143614072483,
+    "snr_small_12km_db": 0.019143614072483217
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 17435.74039414618,
+    "reach_small_m": 7879.989205207771,
+    "snr_ship_6km_db": 38.95542757402149,
+    "snr_small_6km_db": 18.955427574021492,
+    "snr_ship_12km_db": 23.019143614072483,
+    "snr_small_12km_db": 3.019143614072483
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 11232.612169945478,
+    "reach_small_m": 4558.2885570978,
+    "snr_ship_6km_db": 27.290091325604408,
+    "snr_small_6km_db": 7.290091325604408,
+    "snr_ship_12km_db": 11.353807365655399,
+    "snr_small_12km_db": -8.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 13158.868641820094,
+    "reach_small_m": 5533.2327698207555,
+    "snr_ship_6km_db": 31.290091325604408,
+    "snr_small_6km_db": 11.290091325604408,
+    "snr_ship_12km_db": 15.353807365655399,
+    "snr_small_12km_db": -4.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 14741.314664365045,
+    "reach_small_m": 6373.07117167306,
+    "snr_ship_6km_db": 34.29009132560441,
+    "snr_small_6km_db": 14.290091325604408,
+    "snr_ship_12km_db": 18.3538073656554,
+    "snr_small_12km_db": -1.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 16441.53734732924,
+    "reach_small_m": 7312.981538175309,
+    "snr_ship_6km_db": 37.29009132560441,
+    "snr_small_6km_db": 17.290091325604408,
+    "snr_ship_12km_db": 21.3538073656554,
+    "snr_small_12km_db": 1.353807365655399
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 18258.222628214367,
+    "reach_small_m": 8358.468768102923,
+    "snr_ship_6km_db": 40.29009132560441,
+    "snr_small_6km_db": 20.290091325604408,
+    "snr_ship_12km_db": 24.3538073656554,
+    "snr_small_12km_db": 4.353807365655399
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 17.872838793070212,
+     "average_w": 17.872838793070212,
+     "heat_in_transducer_average_w": 10.634339081876774,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 10.723703275842126,
+     "average_w": 10.723703275842126,
+     "heat_in_transducer_average_w": 4.557573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 7.659788054172946,
+     "average_w": 7.659788054172946,
+     "heat_in_transducer_average_w": 1.9532459538141014,
+     "duty": 0.055762081784386616
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 805.1087732065561,
+     "wh_per_hour": 44.89454125687116,
+     "average_w": 44.89454125687116,
+     "heat_in_transducer_average_w": 26.712252047838334,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 483.0652639239336,
+     "wh_per_hour": 26.936724754122693,
+     "average_w": 26.936724754122693,
+     "heat_in_transducer_average_w": 11.448108020502143,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 345.04661708852404,
+     "wh_per_hour": 19.24051768151621,
+     "average_w": 19.24051768151621,
+     "heat_in_transducer_average_w": 4.906332008786634,
+     "duty": 0.055762081784386616
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 1606.403194629867,
+     "wh_per_hour": 89.57638631765057,
+     "average_w": 89.57638631765057,
+     "heat_in_transducer_average_w": 53.29794985900209,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 963.8419167779201,
+     "wh_per_hour": 53.74583179059034,
+     "average_w": 53.74583179059034,
+     "heat_in_transducer_average_w": 22.841978511000896,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 688.4585119842287,
+     "wh_per_hour": 38.38987985042168,
+     "average_w": 38.38987985042168,
+     "heat_in_transducer_average_w": 9.789419361857526,
+     "duty": 0.055762081784386616
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 3205.195756890591,
+     "wh_per_hour": 178.7283879307021,
+     "average_w": 178.7283879307021,
+     "heat_in_transducer_average_w": 106.34339081876773,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 1923.1174541343544,
+     "wh_per_hour": 107.23703275842125,
+     "average_w": 107.23703275842125,
+     "heat_in_transducer_average_w": 45.57573892232903,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 1373.6553243816816,
+     "wh_per_hour": 76.59788054172945,
+     "average_w": 76.59788054172945,
+     "heat_in_transducer_average_w": 19.532459538141012,
+     "duty": 0.055762081784386616
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 6395.206305821961,
+     "wh_per_hour": 356.6100170532692,
+     "average_w": 356.6100170532692,
+     "heat_in_transducer_average_w": 212.18296014669517,
+     "duty": 0.055762081784386616
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 3837.1237834931762,
+     "wh_per_hour": 213.9660102319615,
+     "average_w": 213.9660102319615,
+     "heat_in_transducer_average_w": 90.93555434858364,
+     "duty": 0.055762081784386616
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 2740.802702495126,
+     "wh_per_hour": 152.8328644514011,
+     "average_w": 152.8328644514011,
+     "heat_in_transducer_average_w": 38.97238043510728,
+     "duty": 0.055762081784386616
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 1.6868980407837342,
+   "farthest_m": 6.369311187247801,
+   "hydrophones": 96,
+   "overloaded": 96,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 19.125413176711724,
+    "level_taken_as_rms": 22.125413176711724
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 7.585340496174174,
+    "level_taken_as_rms": 10.585340496174174
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 22.125413176711724,
+    "with_6_db_of_margin": 28.125413176711724
+   },
+   "source_level_rms_for_full_scale_db": 174.87458682328827,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068854,
+    "level_taken_as_rms": 21.545644643308385
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 10.720028016433925,
+     "worst_overload_band_mean_db": 5.092919686062207,
+     "change_at_worst_frequency_db": -8.405385160277799,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 9.717089294724287,
+     "worst_overload_band_mean_db": 8.607028024336346,
+     "change_at_worst_frequency_db": -9.408323881987437,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 7.464311649951899,
+     "worst_overload_band_mean_db": 3.6433212631189953,
+     "change_at_worst_frequency_db": -11.661101526759825,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 19.020628265402866,
+     "worst_overload_band_mean_db": 18.96400946619041,
+     "change_at_worst_frequency_db": -0.10478491130885814,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 18.83577290781623,
+     "worst_overload_band_mean_db": 18.678362512035307,
+     "change_at_worst_frequency_db": -0.2896402688954929,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 18.556652558190642,
+     "worst_overload_band_mean_db": 18.246820034592325,
+     "change_at_worst_frequency_db": -0.5687606185210825,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 207.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 17.033333333333335,
+    "duty": 0.005870841487279843,
+    "overload_nearest_rms_db": 32.12541317671173,
+    "acoustic_w": 4096.328146306152,
+    "from_supply_w": 9638.419167779182,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 56.585631121991284,
+    "cavitation_depth_0p03m2_m": 54.533857416739025,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 200.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 17.433333333333334,
+    "duty": 0.028680688336520075,
+    "overload_nearest_rms_db": 25.135713133351544,
+    "acoustic_w": 819.2656292612305,
+    "from_supply_w": 1927.6838335558366,
+    "joule_per_ping": 963.8419167779183,
+    "average_w": 55.28729924156319,
+    "cavitation_depth_0p03m2_m": 18.91140763037871,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 17.933333333333334,
+    "duty": 0.055762081784386616,
+    "overload_nearest_rms_db": 22.12541317671173,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 53.74583179059034,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 193.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 18.933333333333334,
+    "duty": 0.1056338028169014,
+    "overload_nearest_rms_db": 19.11511322007192,
+    "acoustic_w": 204.81640731530803,
+    "from_supply_w": 481.92095838896006,
+    "joule_per_ping": 963.8419167779201,
+    "average_w": 50.90714349179156,
+    "cavitation_depth_0p03m2_m": 4.501824001161872,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 190.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 20.933333333333334,
+    "duty": 0.19108280254777069,
+    "overload_nearest_rms_db": 16.104813263432106,
+    "acoustic_w": 102.40820365765398,
+    "from_supply_w": 240.96047919447997,
+    "joule_per_ping": 963.8419167779199,
+    "average_w": 46.04340366773503,
+    "cavitation_depth_0p03m2_m": 0.2813546702389116,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 26.933333333333334,
+    "duty": 0.3712871287128713,
+    "overload_nearest_rms_db": 12.125413176711731,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 963.8419167779203,
+    "average_w": 35.78620978135843,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ },
+ "popoto_static_2x32": {
+  "build": "popoto_static_2x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 0.1,
+  "ping_interval_s": 4.1,
+  "duty": 0.02439024390243903,
+  "pings_per_hour": 878.048780487805,
+  "projector_position_m": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6163.996745791133,
+    "reach_small_m": 2255.7518806373014,
+    "snr_ship_6km_db": 13.574909535697223,
+    "snr_small_6km_db": -6.425090464302777,
+    "snr_ship_12km_db": -2.3613744242517853,
+    "snr_small_12km_db": -22.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 7407.624009823151,
+    "reach_small_m": 2784.2838564114613,
+    "snr_ship_6km_db": 17.574909535697223,
+    "snr_small_6km_db": -2.4250904643027766,
+    "snr_ship_12km_db": 1.6386255757482147,
+    "snr_small_12km_db": -18.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 8463.390064564568,
+    "reach_small_m": 3251.814162255175,
+    "snr_ship_6km_db": 20.574909535697223,
+    "snr_small_6km_db": 0.5749095356972234,
+    "snr_ship_12km_db": 4.638625575748215,
+    "snr_small_12km_db": -15.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 9629.748144083642,
+    "reach_small_m": 3788.104758173637,
+    "snr_ship_6km_db": 23.574909535697223,
+    "snr_small_6km_db": 3.5749095356972234,
+    "snr_ship_12km_db": 7.638625575748215,
+    "snr_small_12km_db": -12.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 10910.219655179222,
+    "reach_small_m": 4400.335335988982,
+    "snr_ship_6km_db": 26.574909535697223,
+    "snr_small_6km_db": 6.574909535697223,
+    "snr_ship_12km_db": 10.638625575748215,
+    "snr_small_12km_db": -9.361374424251785
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6882.098787007102,
+    "reach_small_m": 2557.9913868085573,
+    "snr_ship_6km_db": 15.955427574021492,
+    "snr_small_6km_db": -4.044572425978508,
+    "snr_ship_12km_db": 0.019143614072483217,
+    "snr_small_12km_db": -19.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 8236.455359604452,
+    "reach_small_m": 3149.8735267842835,
+    "snr_ship_6km_db": 19.955427574021492,
+    "snr_small_6km_db": -0.04457242597850808,
+    "snr_ship_12km_db": 4.019143614072483,
+    "snr_small_12km_db": -15.980856385927519
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 9379.653498961372,
+    "reach_small_m": 3671.379854148251,
+    "snr_ship_6km_db": 22.955427574021492,
+    "snr_small_6km_db": 2.955427574021492,
+    "snr_ship_12km_db": 7.019143614072483,
+    "snr_small_12km_db": -12.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 10636.325425478411,
+    "reach_small_m": 4267.339393448268,
+    "snr_ship_6km_db": 25.955427574021492,
+    "snr_small_6km_db": 5.955427574021492,
+    "snr_ship_12km_db": 10.019143614072483,
+    "snr_small_12km_db": -9.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 12009.132190684524,
+    "reach_small_m": 4944.9306566516825,
+    "snr_ship_6km_db": 28.955427574021492,
+    "snr_small_6km_db": 8.955427574021492,
+    "snr_ship_12km_db": 13.019143614072483,
+    "snr_small_12km_db": -6.980856385927517
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 7312.981538175309,
+    "reach_small_m": 2743.213481310012,
+    "snr_ship_6km_db": 17.290091325604408,
+    "snr_small_6km_db": -2.7099086743955922,
+    "snr_ship_12km_db": 1.353807365655399,
+    "snr_small_12km_db": -18.6461926343446
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 8731.253655488572,
+    "reach_small_m": 3373.152666975646,
+    "snr_ship_6km_db": 21.290091325604408,
+    "snr_small_6km_db": 1.2900913256044078,
+    "snr_ship_12km_db": 5.353807365655399,
+    "snr_small_12km_db": -14.6461926343446
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 9924.535958352139,
+    "reach_small_m": 3926.89293306351,
+    "snr_ship_6km_db": 24.290091325604408,
+    "snr_small_6km_db": 4.290091325604408,
+    "snr_ship_12km_db": 8.353807365655399,
+    "snr_small_12km_db": -11.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 11232.612169945478,
+    "reach_small_m": 4558.2885570978,
+    "snr_ship_6km_db": 27.290091325604408,
+    "snr_small_6km_db": 7.290091325604408,
+    "snr_ship_12km_db": 11.353807365655399,
+    "snr_small_12km_db": -8.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 12657.65010830424,
+    "reach_small_m": 5274.467044204824,
+    "snr_ship_6km_db": 30.290091325604408,
+    "snr_small_6km_db": 10.290091325604408,
+    "snr_ship_12km_db": 14.353807365655399,
+    "snr_small_12km_db": -5.646192634344601
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 32.05195756890591,
+     "wh_per_hour": 7.817550626562419,
+     "average_w": 7.817550626562419,
+     "heat_in_transducer_average_w": 4.651442622804639,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 19.23117454134355,
+     "wh_per_hour": 4.690530375937452,
+     "average_w": 4.690530375937452,
+     "heat_in_transducer_average_w": 1.9934754097734166,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 13.736553243816818,
+     "wh_per_hour": 3.350378839955322,
+     "average_w": 3.350378839955322,
+     "heat_in_transducer_average_w": 0.8543466041886072,
+     "duty": 0.02439024390243903
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 80.51087732065561,
+     "wh_per_hour": 19.63679934650137,
+     "average_w": 19.63679934650137,
+     "heat_in_transducer_average_w": 11.683895611168314,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 48.306526392393366,
+     "wh_per_hour": 11.782079607900823,
+     "average_w": 11.782079607900823,
+     "heat_in_transducer_average_w": 5.007383833357849,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 34.5046617088524,
+     "wh_per_hour": 8.415771148500587,
+     "average_w": 8.415771148500587,
+     "heat_in_transducer_average_w": 2.14602164286765,
+     "duty": 0.02439024390243903
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 160.6403194629867,
+     "wh_per_hour": 39.18056572267969,
+     "average_w": 39.18056572267969,
+     "heat_in_transducer_average_w": 23.31243660499441,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 96.38419167779202,
+     "wh_per_hour": 23.508339433607812,
+     "average_w": 23.508339433607812,
+     "heat_in_transducer_average_w": 9.991044259283319,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 68.84585119842288,
+     "wh_per_hour": 16.79167102400558,
+     "average_w": 16.79167102400558,
+     "heat_in_transducer_average_w": 4.281876111121423,
+     "duty": 0.02439024390243903
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 78.1755062656242,
+     "average_w": 78.1755062656242,
+     "heat_in_transducer_average_w": 46.51442622804639,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 46.905303759374505,
+     "average_w": 46.905303759374505,
+     "heat_in_transducer_average_w": 19.934754097734164,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 33.503788399553216,
+     "average_w": 33.503788399553216,
+     "heat_in_transducer_average_w": 8.543466041886068,
+     "duty": 0.02439024390243903
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 639.5206305821962,
+     "wh_per_hour": 155.98064160541372,
+     "average_w": 155.98064160541372,
+     "heat_in_transducer_average_w": 92.80848175522115,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 383.71237834931765,
+     "wh_per_hour": 93.58838496324822,
+     "average_w": 93.58838496324822,
+     "heat_in_transducer_average_w": 39.77506360938049,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 274.08027024951264,
+     "wh_per_hour": 66.84884640232016,
+     "average_w": 66.84884640232016,
+     "heat_in_transducer_average_w": 17.04645583259164,
+     "duty": 0.02439024390243903
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 0.26100766272276377,
+   "farthest_m": 2.9100042955294754,
+   "hydrophones": 64,
+   "overloaded": 64,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 35.33412470038739,
+    "level_taken_as_rms": 38.33412470038739
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 14.38931725204977,
+    "level_taken_as_rms": 17.38931725204977
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 38.33412470038739,
+    "with_6_db_of_margin": 44.33412470038739
+   },
+   "source_level_rms_for_full_scale_db": 158.6658752996126,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068861,
+    "level_taken_as_rms": 21.545644643308396
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 34.53256226917541,
+     "worst_overload_band_mean_db": 34.21366766830894,
+     "change_at_worst_frequency_db": -0.8015624312119911,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 33.23067002546494,
+     "worst_overload_band_mean_db": 32.40123757326511,
+     "change_at_worst_frequency_db": -2.1034546749224603,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 31.366609353121536,
+     "worst_overload_band_mean_db": 30.04508090965905,
+     "change_at_worst_frequency_db": -3.967515347265863,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 29.06588334683991,
+     "worst_overload_band_mean_db": 26.902254629222327,
+     "change_at_worst_frequency_db": -6.268241353547488,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 30.609754314962775,
+     "worst_overload_band_mean_db": 30.154187146422164,
+     "change_at_worst_frequency_db": -4.724370385424624,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 33.30598934619986,
+     "worst_overload_band_mean_db": 31.94599688945133,
+     "change_at_worst_frequency_db": -2.0281353541875404,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 4.1,
+    "duty": 0.02439024390243903,
+    "overload_nearest_rms_db": 38.334124700387406,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 23.508339433607812,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 190.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 4.5,
+    "duty": 0.1111111111111111,
+    "overload_nearest_rms_db": 31.34442465702722,
+    "acoustic_w": 81.92656292612322,
+    "from_supply_w": 192.76838335558406,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 21.418709261731564,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 5.0,
+    "duty": 0.2,
+    "overload_nearest_rms_db": 28.334124700387406,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 19.276838335558406,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 183.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 6.0,
+    "duty": 0.3333333333333333,
+    "overload_nearest_rms_db": 25.323824743747593,
+    "acoustic_w": 20.4816407315308,
+    "from_supply_w": 48.192095838896,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 16.064031946298666,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 180.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 8.0,
+    "duty": 0.5,
+    "overload_nearest_rms_db": 22.31352478710778,
+    "acoustic_w": 10.2408203657654,
+    "from_supply_w": 24.096047919448,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 12.048023959724,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 177.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 14.0,
+    "duty": 0.7142857142857143,
+    "overload_nearest_rms_db": 18.334124700387406,
+    "acoustic_w": 4.096328146306161,
+    "from_supply_w": 9.638419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 6.884585119842287,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ },
+ "popoto_static_3x32": {
+  "build": "popoto_static_3x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 0.1,
+  "ping_interval_s": 4.1,
+  "duty": 0.02439024390243903,
+  "pings_per_hour": 878.048780487805,
+  "projector_position_m": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6163.996745791133,
+    "reach_small_m": 2255.7518806373014,
+    "snr_ship_6km_db": 13.574909535697223,
+    "snr_small_6km_db": -6.425090464302777,
+    "snr_ship_12km_db": -2.3613744242517853,
+    "snr_small_12km_db": -22.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 7407.624009823151,
+    "reach_small_m": 2784.2838564114613,
+    "snr_ship_6km_db": 17.574909535697223,
+    "snr_small_6km_db": -2.4250904643027766,
+    "snr_ship_12km_db": 1.6386255757482147,
+    "snr_small_12km_db": -18.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 8463.390064564568,
+    "reach_small_m": 3251.814162255175,
+    "snr_ship_6km_db": 20.574909535697223,
+    "snr_small_6km_db": 0.5749095356972234,
+    "snr_ship_12km_db": 4.638625575748215,
+    "snr_small_12km_db": -15.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 9629.748144083642,
+    "reach_small_m": 3788.104758173637,
+    "snr_ship_6km_db": 23.574909535697223,
+    "snr_small_6km_db": 3.5749095356972234,
+    "snr_ship_12km_db": 7.638625575748215,
+    "snr_small_12km_db": -12.361374424251785
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 10910.219655179222,
+    "reach_small_m": 4400.335335988982,
+    "snr_ship_6km_db": 26.574909535697223,
+    "snr_small_6km_db": 6.574909535697223,
+    "snr_ship_12km_db": 10.638625575748215,
+    "snr_small_12km_db": -9.361374424251785
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6882.098787007102,
+    "reach_small_m": 2557.9913868085573,
+    "snr_ship_6km_db": 15.955427574021492,
+    "snr_small_6km_db": -4.044572425978508,
+    "snr_ship_12km_db": 0.019143614072483217,
+    "snr_small_12km_db": -19.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 8236.455359604452,
+    "reach_small_m": 3149.8735267842835,
+    "snr_ship_6km_db": 19.955427574021492,
+    "snr_small_6km_db": -0.04457242597850808,
+    "snr_ship_12km_db": 4.019143614072483,
+    "snr_small_12km_db": -15.980856385927519
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 9379.653498961372,
+    "reach_small_m": 3671.379854148251,
+    "snr_ship_6km_db": 22.955427574021492,
+    "snr_small_6km_db": 2.955427574021492,
+    "snr_ship_12km_db": 7.019143614072483,
+    "snr_small_12km_db": -12.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 10636.325425478411,
+    "reach_small_m": 4267.339393448268,
+    "snr_ship_6km_db": 25.955427574021492,
+    "snr_small_6km_db": 5.955427574021492,
+    "snr_ship_12km_db": 10.019143614072483,
+    "snr_small_12km_db": -9.980856385927517
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 12009.132190684524,
+    "reach_small_m": 4944.9306566516825,
+    "snr_ship_6km_db": 28.955427574021492,
+    "snr_small_6km_db": 8.955427574021492,
+    "snr_ship_12km_db": 13.019143614072483,
+    "snr_small_12km_db": -6.980856385927517
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 7312.981538175309,
+    "reach_small_m": 2743.213481310012,
+    "snr_ship_6km_db": 17.290091325604408,
+    "snr_small_6km_db": -2.7099086743955922,
+    "snr_ship_12km_db": 1.353807365655399,
+    "snr_small_12km_db": -18.6461926343446
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 8731.253655488572,
+    "reach_small_m": 3373.152666975646,
+    "snr_ship_6km_db": 21.290091325604408,
+    "snr_small_6km_db": 1.2900913256044078,
+    "snr_ship_12km_db": 5.353807365655399,
+    "snr_small_12km_db": -14.6461926343446
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 9924.535958352139,
+    "reach_small_m": 3926.89293306351,
+    "snr_ship_6km_db": 24.290091325604408,
+    "snr_small_6km_db": 4.290091325604408,
+    "snr_ship_12km_db": 8.353807365655399,
+    "snr_small_12km_db": -11.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 11232.612169945478,
+    "reach_small_m": 4558.2885570978,
+    "snr_ship_6km_db": 27.290091325604408,
+    "snr_small_6km_db": 7.290091325604408,
+    "snr_ship_12km_db": 11.353807365655399,
+    "snr_small_12km_db": -8.646192634344601
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 12657.65010830424,
+    "reach_small_m": 5274.467044204824,
+    "snr_ship_6km_db": 30.290091325604408,
+    "snr_small_6km_db": 10.290091325604408,
+    "snr_ship_12km_db": 14.353807365655399,
+    "snr_small_12km_db": -5.646192634344601
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 32.05195756890591,
+     "wh_per_hour": 7.817550626562419,
+     "average_w": 7.817550626562419,
+     "heat_in_transducer_average_w": 4.651442622804639,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 19.23117454134355,
+     "wh_per_hour": 4.690530375937452,
+     "average_w": 4.690530375937452,
+     "heat_in_transducer_average_w": 1.9934754097734166,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 13.736553243816818,
+     "wh_per_hour": 3.350378839955322,
+     "average_w": 3.350378839955322,
+     "heat_in_transducer_average_w": 0.8543466041886072,
+     "duty": 0.02439024390243903
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 80.51087732065561,
+     "wh_per_hour": 19.63679934650137,
+     "average_w": 19.63679934650137,
+     "heat_in_transducer_average_w": 11.683895611168314,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 48.306526392393366,
+     "wh_per_hour": 11.782079607900823,
+     "average_w": 11.782079607900823,
+     "heat_in_transducer_average_w": 5.007383833357849,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 34.5046617088524,
+     "wh_per_hour": 8.415771148500587,
+     "average_w": 8.415771148500587,
+     "heat_in_transducer_average_w": 2.14602164286765,
+     "duty": 0.02439024390243903
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 160.6403194629867,
+     "wh_per_hour": 39.18056572267969,
+     "average_w": 39.18056572267969,
+     "heat_in_transducer_average_w": 23.31243660499441,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 96.38419167779202,
+     "wh_per_hour": 23.508339433607812,
+     "average_w": 23.508339433607812,
+     "heat_in_transducer_average_w": 9.991044259283319,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 68.84585119842288,
+     "wh_per_hour": 16.79167102400558,
+     "average_w": 16.79167102400558,
+     "heat_in_transducer_average_w": 4.281876111121423,
+     "duty": 0.02439024390243903
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 78.1755062656242,
+     "average_w": 78.1755062656242,
+     "heat_in_transducer_average_w": 46.51442622804639,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 46.905303759374505,
+     "average_w": 46.905303759374505,
+     "heat_in_transducer_average_w": 19.934754097734164,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 33.503788399553216,
+     "average_w": 33.503788399553216,
+     "heat_in_transducer_average_w": 8.543466041886068,
+     "duty": 0.02439024390243903
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 639.5206305821962,
+     "wh_per_hour": 155.98064160541372,
+     "average_w": 155.98064160541372,
+     "heat_in_transducer_average_w": 92.80848175522115,
+     "duty": 0.02439024390243903
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 383.71237834931765,
+     "wh_per_hour": 93.58838496324822,
+     "average_w": 93.58838496324822,
+     "heat_in_transducer_average_w": 39.77506360938049,
+     "duty": 0.02439024390243903
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 274.08027024951264,
+     "wh_per_hour": 66.84884640232016,
+     "average_w": 66.84884640232016,
+     "heat_in_transducer_average_w": 17.04645583259164,
+     "duty": 0.02439024390243903
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 0.26100766272276377,
+   "farthest_m": 2.9100042955294754,
+   "hydrophones": 96,
+   "overloaded": 96,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 35.33412470038739,
+    "level_taken_as_rms": 38.33412470038739
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 14.38931725204977,
+    "level_taken_as_rms": 17.38931725204977
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 38.33412470038739,
+    "with_6_db_of_margin": 44.33412470038739
+   },
+   "source_level_rms_for_full_scale_db": 158.6658752996126,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068861,
+    "level_taken_as_rms": 21.545644643308396
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 34.53256226917541,
+     "worst_overload_band_mean_db": 34.21366766830894,
+     "change_at_worst_frequency_db": -0.8015624312119911,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 33.23067002546494,
+     "worst_overload_band_mean_db": 32.40123757326511,
+     "change_at_worst_frequency_db": -2.1034546749224603,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 31.366609353121536,
+     "worst_overload_band_mean_db": 30.04508090965905,
+     "change_at_worst_frequency_db": -3.967515347265863,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 29.06588334683991,
+     "worst_overload_band_mean_db": 26.902254629222327,
+     "change_at_worst_frequency_db": -6.268241353547488,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 30.609754314962775,
+     "worst_overload_band_mean_db": 30.154187146422164,
+     "change_at_worst_frequency_db": -4.724370385424624,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 33.30598934619986,
+     "worst_overload_band_mean_db": 31.94599688945133,
+     "change_at_worst_frequency_db": -2.0281353541875404,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 4.1,
+    "duty": 0.02439024390243903,
+    "overload_nearest_rms_db": 38.334124700387406,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 23.508339433607812,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 190.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 4.5,
+    "duty": 0.1111111111111111,
+    "overload_nearest_rms_db": 31.34442465702722,
+    "acoustic_w": 81.92656292612322,
+    "from_supply_w": 192.76838335558406,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 21.418709261731564,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 5.0,
+    "duty": 0.2,
+    "overload_nearest_rms_db": 28.334124700387406,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 19.276838335558406,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 183.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 6.0,
+    "duty": 0.3333333333333333,
+    "overload_nearest_rms_db": 25.323824743747593,
+    "acoustic_w": 20.4816407315308,
+    "from_supply_w": 48.192095838896,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 16.064031946298666,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 180.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 8.0,
+    "duty": 0.5,
+    "overload_nearest_rms_db": 22.31352478710778,
+    "acoustic_w": 10.2408203657654,
+    "from_supply_w": 24.096047919448,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 12.048023959724,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 177.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 14.0,
+    "duty": 0.7142857142857143,
+    "overload_nearest_rms_db": 18.334124700387406,
+    "acoustic_w": 4.096328146306161,
+    "from_supply_w": 9.638419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 6.884585119842287,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ },
+ "popoto_testauv_1x32": {
+  "build": "popoto_testauv_1x32",
+  "source_level_db": 197.0,
+  "source_level_convention": "rms, dB re 1 uPa at 1 m",
+  "band_hz": [
+   4000.0,
+   6000.0
+  ],
+  "fractional_bandwidth": 0.4,
+  "wavelength_m": [
+   0.25,
+   0.375
+  ],
+  "pulse_s": 0.1,
+  "ping_interval_s": 2.7666666666666666,
+  "duty": 0.03614457831325302,
+  "pings_per_hour": 1301.2048192771085,
+  "projector_position_m": [
+   0.0,
+   0.0,
+   0.3
+  ],
+  "projector_model": null,
+  "amplifier": null,
+  "link_ranges_m": [
+   6000.0,
+   12000.0
+  ],
+  "link": [
+   {
+    "rows": 1,
+    "source_level_db": 190.0,
+    "reach_ship_m": 5558.947975911989,
+    "reach_small_m": 2007.3939756954367,
+    "snr_ship_6km_db": 11.38733191421929,
+    "snr_small_6km_db": -8.61266808578071,
+    "snr_ship_12km_db": -4.548952045729719,
+    "snr_small_12km_db": -24.54895204572972
+   },
+   {
+    "rows": 1,
+    "source_level_db": 194.0,
+    "reach_ship_m": 6704.925389259,
+    "reach_small_m": 2482.6706261554004,
+    "snr_ship_6km_db": 15.38733191421929,
+    "snr_small_6km_db": -4.61266808578071,
+    "snr_ship_12km_db": -0.5489520457297186,
+    "snr_small_12km_db": -20.54895204572972
+   },
+   {
+    "rows": 1,
+    "source_level_db": 197.0,
+    "reach_ship_m": 7682.854825331126,
+    "reach_small_m": 2904.509882050465,
+    "snr_ship_6km_db": 18.38733191421929,
+    "snr_small_6km_db": -1.6126680857807099,
+    "snr_ship_12km_db": 2.4510479542702814,
+    "snr_small_12km_db": -17.54895204572972
+   },
+   {
+    "rows": 1,
+    "source_level_db": 200.0,
+    "reach_ship_m": 8768.162762983928,
+    "reach_small_m": 3389.9576695291053,
+    "snr_ship_6km_db": 21.38733191421929,
+    "snr_small_6km_db": 1.3873319142192901,
+    "snr_ship_12km_db": 5.451047954270281,
+    "snr_small_12km_db": -14.548952045729719
+   },
+   {
+    "rows": 1,
+    "source_level_db": 203.0,
+    "reach_ship_m": 9965.1205361354,
+    "reach_small_m": 3946.102113797949,
+    "snr_ship_6km_db": 24.38733191421929,
+    "snr_small_6km_db": 4.38733191421929,
+    "snr_ship_12km_db": 8.451047954270281,
+    "snr_small_12km_db": -11.548952045729719
+   },
+   {
+    "rows": 2,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6219.84452213933,
+    "reach_small_m": 2278.9671538742414,
+    "snr_ship_6km_db": 13.767849952543557,
+    "snr_small_6km_db": -6.232150047456443,
+    "snr_ship_12km_db": -2.168434007405452,
+    "snr_small_12km_db": -22.168434007405452
+   },
+   {
+    "rows": 2,
+    "source_level_db": 194.0,
+    "reach_ship_m": 7472.279572904658,
+    "reach_small_m": 2812.4212073079475,
+    "snr_ship_6km_db": 17.767849952543557,
+    "snr_small_6km_db": -2.232150047456443,
+    "snr_ship_12km_db": 1.8315659925945482,
+    "snr_small_12km_db": -18.168434007405452
+   },
+   {
+    "rows": 2,
+    "source_level_db": 197.0,
+    "reach_ship_m": 8535.031999400555,
+    "reach_small_m": 3284.1597576999625,
+    "snr_ship_6km_db": 20.767849952543557,
+    "snr_small_6km_db": 0.7678499525435569,
+    "snr_ship_12km_db": 4.831565992594548,
+    "snr_small_12km_db": -15.168434007405454
+   },
+   {
+    "rows": 2,
+    "source_level_db": 200.0,
+    "reach_ship_m": 9708.634502520741,
+    "reach_small_m": 3825.117591169151,
+    "snr_ship_6km_db": 23.767849952543557,
+    "snr_small_6km_db": 3.767849952543557,
+    "snr_ship_12km_db": 7.831565992594548,
+    "snr_small_12km_db": -12.168434007405452
+   },
+   {
+    "rows": 2,
+    "source_level_db": 203.0,
+    "reach_ship_m": 10996.5401597238,
+    "reach_small_m": 4442.478382029674,
+    "snr_ship_6km_db": 26.767849952543557,
+    "snr_small_6km_db": 6.767849952543557,
+    "snr_ship_12km_db": 10.831565992594548,
+    "snr_small_12km_db": -9.168434007405452
+   },
+   {
+    "rows": 3,
+    "source_level_db": 190.0,
+    "reach_ship_m": 6617.480650938845,
+    "reach_small_m": 2445.6766904867854,
+    "snr_ship_6km_db": 15.102513704126476,
+    "snr_small_6km_db": -4.897486295873524,
+    "snr_ship_12km_db": -0.8337702558225324,
+    "snr_small_12km_db": -20.833770255822536
+   },
+   {
+    "rows": 3,
+    "source_level_db": 194.0,
+    "reach_ship_m": 7931.661329368039,
+    "reach_small_m": 3014.200748588014,
+    "snr_ship_6km_db": 19.102513704126476,
+    "snr_small_6km_db": -0.8974862958735237,
+    "snr_ship_12km_db": 3.1662297441774676,
+    "snr_small_12km_db": -16.833770255822536
+   },
+   {
+    "rows": 3,
+    "source_level_db": 197.0,
+    "reach_ship_m": 9043.235645226818,
+    "reach_small_m": 3515.8522189672667,
+    "snr_ship_6km_db": 22.102513704126473,
+    "snr_small_6km_db": 2.1025137041264763,
+    "snr_ship_12km_db": 6.166229744177468,
+    "snr_small_12km_db": -13.833770255822534
+   },
+   {
+    "rows": 3,
+    "source_level_db": 200.0,
+    "reach_ship_m": 10267.327718157669,
+    "reach_small_m": 4089.911472339371,
+    "snr_ship_6km_db": 25.102513704126473,
+    "snr_small_6km_db": 5.102513704126476,
+    "snr_ship_12km_db": 9.166229744177468,
+    "snr_small_12km_db": -10.833770255822532
+   },
+   {
+    "rows": 3,
+    "source_level_db": 203.0,
+    "reach_ship_m": 11606.910627129231,
+    "reach_small_m": 4743.570292640488,
+    "snr_ship_6km_db": 28.102513704126473,
+    "snr_small_6km_db": 8.102513704126476,
+    "snr_ship_12km_db": 12.166229744177468,
+    "snr_small_12km_db": -7.833770255822532
+   }
+  ],
+  "power": {
+   "190": {
+    "0.3": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 272.44163933570024,
+     "from_supply_w": 320.51957568905914,
+     "joule_per_ping": 32.05195756890591,
+     "wh_per_hour": 11.585044904423825,
+     "average_w": 11.585044904423825,
+     "heat_in_transducer_average_w": 6.893101718132176,
+     "duty": 0.03614457831325302
+    },
+    "0.5": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 163.46498360142013,
+     "from_supply_w": 192.31174541343546,
+     "joule_per_ping": 19.23117454134355,
+     "wh_per_hour": 6.951026942654295,
+     "average_w": 6.951026942654295,
+     "heat_in_transducer_average_w": 2.954186450628075,
+     "duty": 0.03614457831325302
+    },
+    "0.7": {
+     "acoustic_w": 81.73249180071006,
+     "into_transducer_w": 116.76070257244295,
+     "from_supply_w": 137.36553243816817,
+     "joule_per_ping": 13.736553243816818,
+     "wh_per_hour": 4.9650192447530666,
+     "average_w": 4.9650192447530666,
+     "heat_in_transducer_average_w": 1.2660799074120321,
+     "duty": 0.03614457831325302
+    }
+   },
+   "194": {
+    "0.3": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 684.3424572255726,
+     "from_supply_w": 805.1087732065561,
+     "joule_per_ping": 80.51087732065561,
+     "wh_per_hour": 29.100317103851427,
+     "average_w": 29.100317103851427,
+     "heat_in_transducer_average_w": 17.314688676791597,
+     "duty": 0.03614457831325302
+    },
+    "0.5": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 410.60547433534356,
+     "from_supply_w": 483.0652639239336,
+     "joule_per_ping": 48.306526392393366,
+     "wh_per_hour": 17.460190262310856,
+     "average_w": 17.460190262310856,
+     "heat_in_transducer_average_w": 7.420580861482113,
+     "duty": 0.03614457831325302
+    },
+    "0.7": {
+     "acoustic_w": 205.30273716767178,
+     "into_transducer_w": 293.2896245252454,
+     "from_supply_w": 345.04661708852404,
+     "joule_per_ping": 34.5046617088524,
+     "wh_per_hour": 12.471564473079182,
+     "average_w": 12.471564473079182,
+     "heat_in_transducer_average_w": 3.180248940635192,
+     "duty": 0.03614457831325302
+    }
+   },
+   "197": {
+    "0.3": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 1365.4427154353868,
+     "from_supply_w": 1606.403194629867,
+     "joule_per_ping": 160.6403194629867,
+     "wh_per_hour": 58.06276607095905,
+     "average_w": 58.06276607095905,
+     "heat_in_transducer_average_w": 34.547345812220634,
+     "duty": 0.03614457831325302
+    },
+    "0.5": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 819.2656292612321,
+     "from_supply_w": 963.8419167779201,
+     "joule_per_ping": 96.38419167779202,
+     "wh_per_hour": 34.83765964257543,
+     "average_w": 34.83765964257543,
+     "heat_in_transducer_average_w": 14.806005348094557,
+     "duty": 0.03614457831325302
+    },
+    "0.7": {
+     "acoustic_w": 409.63281463061605,
+     "into_transducer_w": 585.1897351865944,
+     "from_supply_w": 688.4585119842287,
+     "joule_per_ping": 68.84585119842288,
+     "wh_per_hour": 24.884042601839596,
+     "average_w": 24.884042601839596,
+     "heat_in_transducer_average_w": 6.345430863469096,
+     "duty": 0.03614457831325302
+    }
+   },
+   "200": {
+    "0.3": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 2724.416393357002,
+     "from_supply_w": 3205.195756890591,
+     "joule_per_ping": 320.51957568905914,
+     "wh_per_hour": 115.85044904423825,
+     "average_w": 115.85044904423825,
+     "heat_in_transducer_average_w": 68.93101718132175,
+     "duty": 0.03614457831325302
+    },
+    "0.5": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1634.6498360142011,
+     "from_supply_w": 1923.1174541343544,
+     "joule_per_ping": 192.31174541343546,
+     "wh_per_hour": 69.51026942654293,
+     "average_w": 69.51026942654293,
+     "heat_in_transducer_average_w": 29.541864506280746,
+     "duty": 0.03614457831325302
+    },
+    "0.7": {
+     "acoustic_w": 817.3249180071006,
+     "into_transducer_w": 1167.6070257244294,
+     "from_supply_w": 1373.6553243816816,
+     "joule_per_ping": 137.36553243816817,
+     "wh_per_hour": 49.650192447530664,
+     "average_w": 49.650192447530664,
+     "heat_in_transducer_average_w": 12.660799074120318,
+     "duty": 0.03614457831325302
+    }
+   },
+   "203": {
+    "0.3": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 5435.9253599486665,
+     "from_supply_w": 6395.206305821961,
+     "joule_per_ping": 639.5206305821962,
+     "wh_per_hour": 231.1520351501914,
+     "average_w": 231.1520351501914,
+     "heat_in_transducer_average_w": 137.53546091436385,
+     "duty": 0.03614457831325302
+    },
+    "0.5": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 3261.5552159691997,
+     "from_supply_w": 3837.1237834931762,
+     "joule_per_ping": 383.71237834931765,
+     "wh_per_hour": 138.69122109011482,
+     "average_w": 138.69122109011482,
+     "heat_in_transducer_average_w": 58.943768963298794,
+     "duty": 0.03614457831325302
+    },
+    "0.7": {
+     "acoustic_w": 1630.7776079845999,
+     "into_transducer_w": 2329.682297120857,
+     "from_supply_w": 2740.802702495126,
+     "joule_per_ping": 274.08027024951264,
+     "wh_per_hour": 99.06515792151059,
+     "average_w": 99.06515792151059,
+     "heat_in_transducer_average_w": 25.261615269985203,
+     "duty": 0.03614457831325302
+    }
+   }
+  },
+  "cavitation": {
+   "threshold_peak_pa": {
+    "5": 149901.25,
+    "10": 200177.5,
+    "30": 401282.5,
+    "100": 1105150.0,
+    "200": 2110675.0
+   },
+   "intensity_w_cm2": {
+    "5": 0.7307442195630082,
+    "10": 1.303122975813008,
+    "30": 5.236671375813009,
+    "100": 39.71891130081301,
+    "200": 144.876388800813
+   },
+   "limit_db": {
+    "0.01": {
+     "5": 189.5137064905036,
+     "10": 192.02590662474762,
+     "30": 198.0666058129093,
+     "100": 206.86602596358236,
+     "200": 212.48602872611082
+    },
+    "0.03": {
+     "5": 194.2849190377002,
+     "10": 196.79711917194422,
+     "30": 202.83781836010593,
+     "100": 211.63723851077899,
+     "200": 217.25724127330744
+    },
+    "0.1": {
+     "5": 199.5137064905036,
+     "10": 202.02590662474762,
+     "30": 208.0666058129093,
+     "100": 216.86602596358236,
+     "200": 222.48602872611082
+    },
+    "0.3": {
+     "5": 204.28491903770023,
+     "10": 206.79711917194425,
+     "30": 212.83781836010593,
+     "100": 221.63723851077899,
+     "200": 227.25724127330744
+    }
+   },
+   "least_depth_for_build_level_m": {
+    "0.01": 25.38836766948812,
+    "0.03": 10.470468968532822,
+    "0.1": 1.2538558562929945,
+    "0.3": 0.0
+   },
+   "least_depth_gamma_half_m": {
+    "0.01": 40.0085022953777,
+    "0.03": 18.91140763037874,
+    "0.1": 5.877148367903474,
+    "0.3": 0.0
+   },
+   "area_free_at_surface_m2": 0.12691214689858807,
+   "sphere_diameter_free_at_surface_m": 0.20099102227370777
+  },
+  "direct": {
+   "nearest_m": 0.30335622624235026,
+   "farthest_m": 1.4268934788553769,
+   "hydrophones": 32,
+   "overloaded": 32,
+   "input_full_scale_db_re_upa": 173.3328101467656,
+   "overload_nearest_db": {
+    "level_taken_as_peak": 34.02813159204734,
+    "level_taken_as_rms": 37.02813159204734
+   },
+   "overload_farthest_db": {
+    "level_taken_as_peak": 20.57935878998898,
+    "level_taken_as_rms": 23.57935878998898
+   },
+   "reduction_towards_array_needed_db": {
+    "to_full_scale": 37.02813159204734,
+    "with_6_db_of_margin": 43.02813159204734
+   },
+   "source_level_rms_for_full_scale_db": 159.97186840795266,
+   "distance_for_full_scale_m": {
+    "level_taken_as_peak": 15.253148297068863,
+    "level_taken_as_rms": 21.5456446433084
+   },
+   "overload_against_distance_rms_db": {
+    "0.3": 37.12476475884114,
+    "0.5": 32.687789766514015,
+    "1": 26.66718985323439,
+    "2": 20.646589939954765,
+    "4": 14.62599002667514,
+    "8": 8.605390113395515,
+    "16": 2.58479020011589,
+    "32": -3.435809713163735
+   },
+   "lines": [
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 33.64307166155445,
+     "worst_overload_band_mean_db": 33.559062833371144,
+     "change_at_worst_frequency_db": -0.38505993049288634,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 32.803847330925805,
+     "worst_overload_band_mean_db": 32.43065984697242,
+     "change_at_worst_frequency_db": -1.2242842611215323,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "along",
+     "worst_overload_peak_db": 31.309941007453904,
+     "worst_overload_band_mean_db": 30.318309296751483,
+     "change_at_worst_frequency_db": -2.718190584593433,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    },
+    {
+     "elements": 2,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 27.320665275996234,
+     "worst_overload_band_mean_db": 25.27154176752887,
+     "change_at_worst_frequency_db": -6.707466316051104,
+     "per_element_source_level_db": 190.97940008672037,
+     "directivity_index_db": 3.010299956639812,
+     "half_beamwidth_3db_deg": 29.96,
+     "acoustic_power_w": 204.81640731530803
+    },
+    {
+     "elements": 3,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 28.613397435089425,
+     "worst_overload_band_mean_db": 28.082436614645093,
+     "change_at_worst_frequency_db": -5.414734156957913,
+     "per_element_source_level_db": 187.45757490560675,
+     "directivity_index_db": 4.771212547196624,
+     "half_beamwidth_3db_deg": 18.07,
+     "acoustic_power_w": 136.54427154353866
+    },
+    {
+     "elements": 4,
+     "spacing_m": 0.15,
+     "axis": "vertical",
+     "worst_overload_peak_db": 31.444659684810095,
+     "worst_overload_band_mean_db": 30.26287797283245,
+     "change_at_worst_frequency_db": -2.583471907237243,
+     "per_element_source_level_db": 184.95880017344075,
+     "directivity_index_db": 6.020599913279623,
+     "half_beamwidth_3db_deg": 13.15,
+     "acoustic_power_w": 102.40820365765398
+    }
+   ]
+  },
+  "pulse_trade": [
+   {
+    "pulse_s": 0.1,
+    "source_level_db": 197.0,
+    "time_bandwidth_db": 23.010299956639813,
+    "blind_range_m": 75.0,
+    "ping_interval_s": 2.7666666666666666,
+    "duty": 0.03614457831325302,
+    "overload_nearest_rms_db": 37.028131592047345,
+    "acoustic_w": 409.63281463061605,
+    "from_supply_w": 963.8419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 34.83765964257543,
+    "cavitation_depth_0p03m2_m": 10.470468968532822,
+    "lfm_speed_tolerance_m_s": 3.75,
+    "doppler_channels_for_10_m_s": 3
+   },
+   {
+    "pulse_s": 0.5,
+    "source_level_db": 190.0102999566398,
+    "time_bandwidth_db": 30.0,
+    "blind_range_m": 375.0,
+    "ping_interval_s": 3.1666666666666665,
+    "duty": 0.15789473684210528,
+    "overload_nearest_rms_db": 30.038431548687157,
+    "acoustic_w": 81.92656292612322,
+    "from_supply_w": 192.76838335558406,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 30.43711316140801,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.75,
+    "doppler_channels_for_10_m_s": 14
+   },
+   {
+    "pulse_s": 1.0,
+    "source_level_db": 187.0,
+    "time_bandwidth_db": 33.01029995663981,
+    "blind_range_m": 750.0,
+    "ping_interval_s": 3.6666666666666665,
+    "duty": 0.27272727272727276,
+    "overload_nearest_rms_db": 27.028131592047345,
+    "acoustic_w": 40.96328146306161,
+    "from_supply_w": 96.38419167779203,
+    "joule_per_ping": 96.38419167779203,
+    "average_w": 26.28659773030692,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.375,
+    "doppler_channels_for_10_m_s": 27
+   },
+   {
+    "pulse_s": 2.0,
+    "source_level_db": 183.9897000433602,
+    "time_bandwidth_db": 36.020599913279625,
+    "blind_range_m": 1500.0,
+    "ping_interval_s": 4.666666666666666,
+    "duty": 0.4285714285714286,
+    "overload_nearest_rms_db": 24.017831635407532,
+    "acoustic_w": 20.4816407315308,
+    "from_supply_w": 48.192095838896,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 20.653755359526862,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.1875,
+    "doppler_channels_for_10_m_s": 54
+   },
+   {
+    "pulse_s": 4.0,
+    "source_level_db": 180.97940008672037,
+    "time_bandwidth_db": 39.03089986991944,
+    "blind_range_m": 3000.0,
+    "ping_interval_s": 6.666666666666666,
+    "duty": 0.6000000000000001,
+    "overload_nearest_rms_db": 21.00753167876772,
+    "acoustic_w": 10.2408203657654,
+    "from_supply_w": 24.096047919448,
+    "joule_per_ping": 96.384191677792,
+    "average_w": 14.457628751668802,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.09375,
+    "doppler_channels_for_10_m_s": 107
+   },
+   {
+    "pulse_s": 10.0,
+    "source_level_db": 177.0,
+    "time_bandwidth_db": 43.01029995663981,
+    "blind_range_m": 7500.0,
+    "ping_interval_s": 12.666666666666666,
+    "duty": 0.7894736842105263,
+    "overload_nearest_rms_db": 17.028131592047345,
+    "acoustic_w": 4.096328146306161,
+    "from_supply_w": 9.638419167779201,
+    "joule_per_ping": 96.38419167779202,
+    "average_w": 7.609278290352002,
+    "cavitation_depth_0p03m2_m": 0.0,
+    "lfm_speed_tolerance_m_s": 0.0375,
+    "doppler_channels_for_10_m_s": 267
+   }
+  ],
+  "band": {
+   "1": {
+    "q": 1.2464158498530906,
+    "mean_loss_db": 0.3387359450295001,
+    "headroom_to_equalise_db": 1.0,
+    "volts_factor_to_equalise": 1.1220184543019633
+   },
+   "3": {
+    "q": 2.443680398459109,
+    "mean_loss_db": 1.0461457964738896,
+    "headroom_to_equalise_db": 3.0,
+    "volts_factor_to_equalise": 1.4125375446227544
+   },
+   "6": {
+    "q": 4.229235183010022,
+    "mean_loss_db": 2.178538079590082,
+    "headroom_to_equalise_db": 6.0,
+    "volts_factor_to_equalise": 1.9952623149688795
+   },
+   "10": {
+    "q": 7.34846922834953,
+    "mean_loss_db": 3.8070785819267847,
+    "headroom_to_equalise_db": 10.0,
+    "volts_factor_to_equalise": 3.1622776601683795
+   }
+  },
+  "drive": {
+   "130": {
+    "volts_rms": 2238.72113856834,
+    "volts_peak": 3166.0297965346836
+   },
+   "135": {
+    "volts_rms": 1258.9254117941675,
+    "volts_peak": 1780.3893913754455
+   },
+   "140": {
+    "volts_rms": 707.945784384138,
+    "volts_peak": 1001.1865297009069
+   },
+   "145": {
+    "volts_rms": 398.1071705534973,
+    "volts_peak": 563.0085598747348
+   },
+   "150": {
+    "volts_rms": 223.872113856834,
+    "volts_peak": 316.60297965346837
+   }
+  },
+  "depth": {
+   "target_depth_m": 4.0,
+   "range_m": 12000.0,
+   "own_depth_for_full_image_gain_m": 225.0,
+   "surface_image_one_way_db": {
+    "5": -23.123016808799058,
+    "10": -17.10770971708773,
+    "30": -7.621821881149893,
+    "100": 2.181949848328321,
+    "200": 5.887629092678334
+   },
+   "pressure_bar_abs": {
+    "5": 1.5160125,
+    "10": 2.018775,
+    "30": 4.029825,
+    "100": 11.0685,
+    "200": 21.12375
+   }
+  }
+ }
+}
