@@ -1129,3 +1129,23 @@ being extended to the repository's other sites. The owner chose to switch ("Yes 
 Gaussian"). Consequence: realisations of runs with time spreading change (the spectrum also
 sets the ping-to-ping fading). The decay-time rule is not changed: the same data do not
 settle it.
+
+### D-85 Time spreading: the decay time defaults to the facet rule
+
+`time_spread.decay_time` now defaults to `facet` (mean excess delay
+mss (1 + sin^2 g) t1 t2 / (t1 + t2), with the shape Gaussian facet slopes give);
+`rule_of_thumb` (TR 0702's 2 mss t1 t2 / (t1 + t2), one exponential) stays selectable.
+Evidence: the measured channels of `PHYSICS_NOTES.md` Sec. 21 (21.4 for the three
+recordings): 27 surface arrivals at the SPACE'08 site, 12.5 kHz, three recordings in two
+sea states, one fitted number per recording (the wind). Measured decay time over model:
+median 0.47 for the rule of thumb (about twice too long) against 0.99 for `facet`; above
+12 degrees of grazing 0.75 against 1.28, below it 0.28 against 0.59. Limits: one site, one
+band; the scatter is a factor 5 per arrival for `facet` (3 for the rule), so the median is
+supported and a single arrival is not; neither rule is supported in detail. The two rules
+agree at normal incidence and differ by a factor two at low grazing angles. The owner was
+shown the recommendation and answered "Take your recommendations".
+Consequence: runs with `time_spread` and no `decay_time` key get tails up to half as long
+(shipped: `sst_asiaex`, `flank_sst_shallow`; `flank_sst_spread` already names `facet`).
+The comparison with TR 0702 (`tools/sst_validation.py`) names `rule_of_thumb`, as it names
+`multi_bounce: sum` and `doppler_spectrum: lorentzian`: that report's rule is what it tests.
+D-84's last sentence ("the decay-time rule is not changed") is superseded by this entry.

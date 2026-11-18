@@ -77,7 +77,8 @@ across it).
    them and that at the far end from the last, each with its expected share of the tap's
    excess delay; the cross terms between bounces are neglected.
 
-2. Decay time and shape from the same facets (`decay_time="facet"`). The slopes above put
+2. Decay time and shape from the same facets (`decay_time="facet"`, the default; TR 0702's
+   rule is `"rule_of_thumb"`; PHYSICS_NOTES Sec. 21.4 has the measurements). The slopes above put
    tau = 2 (s_x^2 + s_y^2 sin^2 g) / (c q), so the mean excess delay is
    T = mss (1 + sin^2 g) t1 t2 / (t1 + t2): TR 0702's rule of thumb at normal incidence and
    half of it at low grazing angles (there only the slopes along the path delay the sound).
@@ -254,7 +255,7 @@ class TimeSpreadProvider(EigenrayProvider):
     taps: incoherent arrivals added per bounce ray. spacing: s between them (None: so that
     they span three decay times, but never closer than `min_spacing`).
     angle_spread: each tap leaves and arrives in its own direction (module docstring, 1).
-    decay_time: "rule_of_thumb" (TR 0702's) or "facet" (2).
+    decay_time: "facet" (default; 2) or "rule_of_thumb" (TR 0702's).
     doppler: the tail varies during a ping; each tap is then `doppler_lines` rays, each with a
     `range_rate` (3). doppler_spectrum: "gaussian" (default) or "lorentzian".
     multi_bounce: "convolve" (default) or "sum" (4).
@@ -264,7 +265,7 @@ class TimeSpreadProvider(EigenrayProvider):
                  bottom: dict | None = None, surface_z: float = 0.0, bottom_z: float | None = None,
                  taps: int = 6, min_spacing: float = 0.0, coherence_length: float = 10.0, seed: int = 0,
                  surface_sound_speed: float | None = None, bottom_sound_speed: float | None = None,
-                 incoherent: bool = True, angle_spread: bool = False, decay_time: str = "rule_of_thumb",
+                 incoherent: bool = True, angle_spread: bool = False, decay_time: str = "facet",
                  doppler: bool = False, doppler_spectrum: str = "gaussian", doppler_lines: int = 8,
                  multi_bounce: str = "convolve"):
         self.angle_spread, self.doppler = bool(angle_spread), bool(doppler)
@@ -578,7 +579,7 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
                               surface_sound_speed=c_surface, bottom_sound_speed=c_bottom,
                               incoherent=bool(cfg.get("incoherent", True)),
                               angle_spread=bool(cfg.get("angle_spread", False)),
-                              decay_time=str(cfg.get("decay_time", "rule_of_thumb")),
+                              decay_time=str(cfg.get("decay_time", "facet")),
                               doppler=bool(cfg.get("doppler", False)),
                               doppler_spectrum=str(cfg.get("doppler_spectrum", "gaussian")),
                               doppler_lines=int(cfg.get("doppler_lines", 8)),
