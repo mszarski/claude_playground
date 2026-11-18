@@ -199,7 +199,7 @@ def test_flank_echo_level_follows_the_sonar_equation():
     alpha = float(acoustics.absorption(8e3, 10.0, 35.0, 20.0))
     tl = sum(20 * np.log10(ri) + alpha * ri for ri in r)
     el_db = 200.0 - tl + ts_db                       # dB re 1 uPa at the hydrophone
-    volts_db = el_db + (-180.0)                      # dB re 1 V
+    volts_db = el_db + (-180.0) + 20 * np.log10(np.sqrt(2.0))   # dB re 1 V at the PEAK: the source level (200) is an RMS level
     # Absorption varies across the 6-10 kHz sweep (about +-0.5 dB two-way at 1 km here),
     # so compare with a tolerance that covers the band.
     assert 20 * np.log10(plateau) == pytest.approx(volts_db, abs=0.7)

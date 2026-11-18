@@ -21,7 +21,7 @@ from .sonar import SonarModel
 
 @dataclass
 class SonarEquation:
-    source_level_db: float
+    source_level_db: float              # dB re 1 uPa at 1 m, RMS (the suite's one convention: sonar.source_level_db_rms)
     center_frequency: float
     bandwidth: float
     pulse_duration: float
@@ -38,9 +38,9 @@ class SonarEquation:
     @classmethod
     def from_sonar(cls, sonar: SonarModel, noise_spectrum_db: float, **kw) -> "SonarEquation":
         w = sonar.waveform_config
-        if w.get("source_level_db") is None:
+        if sonar.source_level_db_rms is None:
             raise ValueError(f"sonar {sonar.name!r} has no source level; the chain is uncalibrated")
-        return cls(float(w["source_level_db"]), sonar.center_frequency, sonar.bandwidth,
+        return cls(float(sonar.source_level_db_rms), sonar.center_frequency, sonar.bandwidth,
                    float(w["duration"]), sonar.n_elements, noise_spectrum_db, **kw)
 
     def absorption_db_per_m(self) -> float:

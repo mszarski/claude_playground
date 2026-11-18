@@ -163,7 +163,7 @@ def test_wind_speed_gives_the_surface_statistics():
 
 
 def test_bottom_and_surface_bounces_each_use_their_own_boundary():
-    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=2)
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2)
     pts = np.array([[500.0, 0.0, 40.0]])
     base = inner.eigenrays(SOURCE, pts)
     only_bottom = TimeSpreadProvider(inner, frequency=F, bottom={"rms_height": 0.03, "mean_square_slope": 0.045, "rms_vertical_speed": 0.0},
@@ -257,7 +257,7 @@ def steep_bounce():
 def test_the_options_off_give_the_output_of_the_version_before_them():
     """Sums over the eigenrays of a two-boundary case, from sim/timespread.py as it was before
     angle spreading, within-ping Doppler, the facet decay time and convolved bounces."""
-    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=2)
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2)
     pts = np.array([[500.0, 40.0, 40.0], [300.0, -20.0, 10.0]])
     kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0}, surface=True),
               bottom={"rms_height": 0.03, "mean_square_slope": 0.02, "rms_vertical_speed": 0.0},
@@ -466,7 +466,7 @@ def test_doppler_width_of_a_tone_through_one_surface_bounce(height):
 
 
 def test_no_boundary_motion_no_doppler_and_a_bottom_spreads_only_with_the_sonars_motion():
-    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=1)
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=1)
     pts = np.array([[100.0, 0.0, 50.0]])
     still = dict(ROUGH, rms_vertical_speed=0.0)
     kw = dict(frequency=F, surface_z=0.0, bottom_z=80.0, taps=3, doppler=True, doppler_spectrum="gaussian")

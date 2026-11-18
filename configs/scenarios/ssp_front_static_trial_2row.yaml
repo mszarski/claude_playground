@@ -1,0 +1,46 @@
+# The two-row static array against a target 2.6 km away, with a FRONT at mid-range: the water the sound crosses is not the water at the array.
+#   tools/sonar_live.py configs/deploy/popoto_static_2row.yaml --scenario ssp_front_static_trial_2row --out DIR --engine cpp     (needs GPUSONAR_BELLHOP)
+#   tools/ssp_range_study.py                                                  (this against the same scenario with the local profile everywhere)
+# The same sonar, platform, target and window as `popoto_static_trial_2row`; the water is ILLUSTRATIVE (nobody measured it):
+#   - at the array and out to 1200 m: a summer profile, a mixed layer of 1500 m/s down to 15 m, a thermocline to 1485 m/s at 35 m, isothermal
+#     water below it (0.017 /s). This is the LOCAL profile: the one a cast at the array gives, and all a chain can be told;
+#   - from 1400 m on: colder water mixed from top to bottom (1478 m/s at the surface, 0.017 /s): 22 m/s slower at the surface, 6.4 m/s slower below 35 m;
+#   - between 1200 and 1400 m the speed is linear in range between the two (Bellhop's 2-D field, `environment.profiles_by_range`).
+# Range is horizontal distance from the array, the same on every bearing (the provider's section): rings of water about the array, not a front
+# lying across a map. The seabed is flat. The eigenrays reflect from a flat surface.
+# Every depth, the target and the water are placeholders for a trial site that is not chosen.
+name: ssp_front_static_trial_2row
+sonar: popoto_static_2row_clocks
+fidelity: eigenray
+sonar_overrides:
+  transmit: {waveform: {duration: 1.0}}
+  receive: {window: {range: [2450, 2750]}}
+environment:
+  base: coastal_12c_sand
+  water_depth_m: 100.0
+  profiles_by_range:
+    - {range_m: 0.0,    depth_m: [0, 15, 25, 35, 45, 55, 70, 100], speed_m_s: [1500.0, 1500.0, 1492.5, 1485.0, 1485.17, 1485.34, 1485.6, 1486.1]}
+    - {range_m: 1200.0, depth_m: [0, 15, 25, 35, 45, 55, 70, 100], speed_m_s: [1500.0, 1500.0, 1492.5, 1485.0, 1485.17, 1485.34, 1485.6, 1486.1]}
+    - {range_m: 1400.0, depth_m: [0, 15, 25, 35, 45, 55, 70, 100], speed_m_s: [1478.0, 1478.26, 1478.43, 1478.6, 1478.77, 1478.94, 1479.19, 1479.7]}
+  sound_speed_m_s: 1488.75            # the local profile's speed at the array (30 m): what the record carries
+  wind_speed_m_s: 5.0
+  shipping: 0.5
+  absorption: ainslie_mccolm
+  illustrative: true
+propagation:
+  min_range: 2540.0
+  max_range: 2660.0
+  range_step: 5.0
+  depth_step: 1.0
+  max_arrivals: 12
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 30.0], rpy: [0.0349, 0.0, 0], velocity: [0, 0, 0]}   # still; tilted 2 deg
+pings: {count: 4, interval: 5.0}
+scene:
+  - {type: points, label: target, positions: [[300.0, 2583.0, 60.0]], target_strength_db: 15.0}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 22
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (the noise uses it): the provider's rough-surface loss takes its grazing angle from the local profile, which water that changes with range does not support"

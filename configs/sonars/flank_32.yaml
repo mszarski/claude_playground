@@ -19,7 +19,7 @@ transmit:
     f_stop: 10.0e3
     duration: 1.0
     window_alpha: 0.05
-    source_level_db: 200.0       # configurable from 170 to 210
+    source_level_db_rms: 200.0       # configurable from 170 to 210
 
 receive:
   kind: real

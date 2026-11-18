@@ -31,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import acoustics
 from .config import config_dir, deep_merge, load_sonar_config, load_yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -184,12 +185,20 @@ ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
 # gates). The chain is being changed to derive them from the sonar's band and pulse; when that is merged this dictionary should
 # shrink to `bearings_deg` and `look`, and a build's own values go in `operation.chain` (overrides only). Used in one place:
 # `chain_config`.
-DEFAULT_CHAIN = {
-    "bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard", "range_cell_m": 2.0,
-    "cfar": {"pfa": 1.0e-5, "guard_m": 100.0, "train_m": 300.0}, "min_snr_db": 9.0,
-    "tracker": {"range_sigma": 15.0, "bearing_sigma_deg": 1.0, "confirm_hits": 3, "max_misses": 2},
-    "classify": {"min_speed": 1.0, "multipath": {"max_excess_range": 800.0, "bearing_deg": 3.0, "velocity": 2.5}},
-}
+# Only what a build decides. The range cell, CFAR windows, SNR floor, tracker and classifier sizes are the chain's own:
+# it derives or defaults them from the sonar (libs/live derive.hpp, gpusonar.live), and a second copy here would drift.
+DEFAULT_CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard"}
+# The detection threshold of the link budget (dB of SNR after the matched filter and the array): ONE value, read here
+# by `performance`, `surface_term`, the depth planner and the plan. It is the budget's historical 13 dB, NOT the shipped
+# detector's figure: see DETECTOR_THRESHOLD_DB. Replacing it by `live.budget_threshold_db(record, chain, pd=..., rows=...)`
+# on the one-row SNR (without `rows_detection_gain_db`, which the detector accounts for itself) is the open step.
+BUDGET_THRESHOLD_DB = 13.0
+# The design detection probability the budget's "threshold" language stands for, and what the chain's detector
+# (cell_statistic: multiscale, D-93 to D-99) needs for it on the budget's footing (one-row SNR with the budget's row
+# gain added back): the detector package's tabulated figures for the shipped builds (15.1 to 15.6 dB at 0.5, 16.7 to
+# 17.3 dB at 0.9; `live.budget_threshold_db` gives the figure for a record and a chain).
+DESIGN_DETECTION_PROBABILITY = 0.5
+DETECTOR_THRESHOLD_DB = {0.5: 15.5, 0.9: 17.0}
 DEFAULT_REFERENCE = {"f_start_hz": 38.0e3, "f_stop_hz": 48.0e3, "duration_s": 4.0e-3, "level_v": 2.0e-3, "lead_s": 5.0e-3, "tail_s": 10.0e-3}
 C_ASSUMED_BOTTOM = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}
 
@@ -338,7 +347,7 @@ def validate(spec: dict) -> list[Issue]:
 
     # --- consistency: only reached when every field is of its kind ---
     p, a, h, b, pj, op, tr = (spec[k] for k in ("platform", "array", "hydrophone", "boards", "projector", "operation", "trial"))
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     rows, count = a["rows"], a["count"]
     if rows < 1 or count < 2:
         err("array.rows", "at least one row of at least two hydrophones")
@@ -475,7 +484,7 @@ def validate(spec: dict) -> list[Issue]:
                                      f"Needed: {dr['gain_reduction_needed_db']:.0f} dB less gain during the transmit, or the projector {dr['distance_for_full_scale_m']:.0f} m from every hydrophone, "
                                      f"or a source level of {dr['source_level_for_full_scale_db']:.0f} dB; and protection and a known recovery time: the first usable range is "
                                      f"{dr['min_range_memoryless_m']:.0f} m with an input that has no memory, plus {dr['range_per_ms_of_recovery_m']:.2f} m per millisecond of recovery "
-                                     "(peak levels; 3 dB more if the source level is an rms figure)")
+                                     "(the source level is an RMS level; the volts and the overload are the pulse's PEAK, 3 dB above it)")
     if d.get("reference_times_s") and d["direct"]["over_full_scale_db"] > 0.0:
         gap = d["reference_times_s"][0] - d["direct"]["ends_s"]
         rec = pj.get("blanking_after_s")
@@ -530,9 +539,11 @@ def validate(spec: dict) -> list[Issue]:
         err("sound_speed.value_m_s", "rung is typed but no value is given")
     if get(spec, "sound_speed", "rung") == "profile" and get(spec, "sound_speed", "profile") is None:
         err("sound_speed.profile", "rung is profile but no profile is given")
-    if count > 64:
-        warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver of the active chain (doa: sbl) takes at most 64 channels in a row and raises an error for more, on the CPU too; "
-                            "bearings from the map (doa: map, the default) are unaffected")
+    from . import _gpusonar as core
+    sbl_max = int(getattr(core, "SBL_KERNEL_MAX_CHANNELS", 64))
+    if count > sbl_max:
+        warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver's kernels (doa: sbl) take at most {sbl_max} channels in a row; with more the chain falls back to "
+                            "the host path (slower, and flagged in its report); bearings from the map (doa: map, the default) are unaffected")
     cpu = cpu_seconds_per_ping(spec)
     if cpu and compute_option(spec) != "gpu":
         took = cpu["decimate_first"] if compute_option(spec) == "decimate_first_cpu" else cpu["as_it_is"]
@@ -576,7 +587,7 @@ def target_classes_of(spec: dict, resolve: bool = True, range_m: float = 12000.0
     if not resolve or not classes:
         return classes
     f_lo, f_hi = (float(x) for x in spec["projector"]["band_hz"])
-    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", 1500.0)))
+    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED)))
 
 
 def environments_of(spec: dict) -> list:
@@ -634,7 +645,7 @@ def adc_full_scale(spec: dict) -> float:
 
 
 def window_range(spec: dict) -> list[float]:
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     r0, r1 = spec["operation"]["range_m"]
     blind = 0.5 * c * float(spec["projector"]["waveform"]["duration_s"])
     return [float(blind if r0 is None else r0), float(r1)]
@@ -652,7 +663,7 @@ def sonar_config(spec: dict) -> dict:
     `hardware` block that the diagrams and the parts list read. `emit` writes it against a base."""
     p, a, h, b, pj = (spec[k] for k in ("platform", "array", "hydrophone", "boards", "projector"))
     rows, count = int(a["rows"]), int(a["count"])
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     starboard = a.get("look", "starboard") == "starboard"
     arr: dict = {"axis": [1, 0, 0], "boresight": [0, 1 if starboard else -1, 0]}
     row_keys = {"count": count}
@@ -676,7 +687,7 @@ def sonar_config(spec: dict) -> dict:
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     transmit = {"kind": "point", "lever_arm": [float(x) if float(x) != int(float(x)) else int(float(x)) for x in pj["position_m"]],
                 "waveform": {"type": wf.get("type", "lfm"), "f_start": f_lo, "f_stop": f_hi, "duration": float(wf["duration_s"]),
-                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db": float(pj["source_level_db_rms"])}}
+                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db_rms": float(pj["source_level_db_rms"])}}
     boards = board_table(spec)
     receive: dict = {"kind": "real", "sample_rate": float(b["sample_rate_hz"]), "adc_bits": int(b["adc_bits"]), "adc_full_scale": adc_full_scale(spec),
                      "sensitivity_db": float(h["sensitivity_db"]), "gain_db": float(b.get("gain_db") or 0.0) + float(h.get("preamp_gain_db") or 0.0)}
@@ -736,7 +747,7 @@ def sonar_config(spec: dict) -> dict:
     if not (status(spec, "boards", "input_full_scale_vpp") == "confirmed" or status(spec, "boards", "adc_full_scale_v") == "confirmed"):
         flags.append("receive.adc_full_scale")
     _flag(spec, flags, "operation", "range_m", "receive.window")
-    tx_keys = [("source_level_db_rms", "transmit.waveform.source_level_db"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
+    tx_keys = [("source_level_db_rms", "transmit.waveform.source_level_db_rms"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
                ("position_m", "transmit.lever_arm")]
     if all(status(spec, "projector", k) != "confirmed" for k, _ in tx_keys) and status(spec, "projector", "model") != "confirmed":
         flags.append("transmit")
@@ -817,13 +828,6 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
         el: dict = {"sector_deg": [-30.0, 30.0, 0.25]}
         if rows == 2:
             el["sector_from_depth"] = {"bounces": 1, "margin_deg": 1.0}
-            # Two rows cannot tell which of several elevation angles an echo came from. The chain (live.py, `correct_bearing`) places a
-            # detection at range x the horizontal part of the PICKED angle's direction, also when the pick is flagged ambiguous: a wrong
-            # pick of 25 degrees moves the detection 1.1 km in at 12 km and the track breaks (measured: tools/popoto_12km_study.py --classes).
-            # So with two rows the position stays the row's own (range and cone bearing), as one row gives it; the cone correction it gives
-            # up is under 0.01 degree within a few degrees of level. Drop this line when the chain applies the correction only to
-            # unambiguous elevations.
-            el["correct_bearing"] = False
         el["attitude_time"] = get(spec, "navigation", "attitude_time", "arrival" if (not static or nav_tilt) else "transmit")
         el["attitude_rate_sigma_deg_s"] = float(get(spec, "navigation", "attitude_rate_sigma_deg_s", 0.5))
         el["roll_sigma_deg"] = float(get(spec, "navigation", "roll_sigma_deg", 1.0 if static else 0.2))
@@ -839,6 +843,14 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
     return deep_merge(chain, get(spec, "operation", "chain", {}) or {})
 
 
+def _idle_seconds(spec: dict) -> float:
+    """How long without a block before the stream is taken to have ended: three ping intervals (the interval is the
+    two-way time to the far edge of the receive window plus the pulse, as `describe` has it), at least 30 s."""
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
+    interval = 2.0 * float(window_range(spec)[1]) / c + float(sonar_config(spec)["transmit"]["waveform"]["duration"])
+    return float(max(30.0, np.ceil(3.0 * interval)))
+
+
 def deploy_config(spec: dict) -> dict:
     """The deployment file: where pings come from, navigation, the chain, where results go."""
     p = spec["platform"]
@@ -846,7 +858,9 @@ def deploy_config(spec: dict) -> dict:
     static = p["kind"] == "static"
     net, sto = spec.get("network") or {}, spec.get("storage") or {}
     sonar = names(spec)["sonar"] + ("_clocks" if needs_sync(spec) else "")
-    cfg: dict = {"source": {"type": "flank_udp", "sonar": sonar, "host": "0.0.0.0", "port": int(net.get("stream_port", 5700)), "timeout": 30.0}}
+    cfg: dict = {"source": {"type": "flank_udp", "sonar": sonar, "host": "0.0.0.0", "port": int(net.get("stream_port", 5700)),
+                              # the stream has ended after this long without a block (the program's idle_seconds): three ping intervals, at least 30 s
+                              "timeout": _idle_seconds(spec)}}
     if recording_mode(spec) == "decimated":
         cfg["source"]["decimate"] = {}                      # the receiver decimates as blocks arrive: the recording holds decimated pings only
     if static and not get(spec, "navigation", "tilt_sensor", False):
@@ -903,7 +917,7 @@ def scenario_configs(spec: dict) -> dict:
     rows = int(a["rows"])
     static = p["kind"] == "static"
     sonar = names(spec)["sonar"]
-    c = float(tr.get("sound_speed_m_s") or get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(tr.get("sound_speed_m_s") or get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     band = f_hi - f_lo
     base_rate = 4.0 * band                                       # complex samples: twice the bandwidth, twice over
@@ -1127,13 +1141,15 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
     runs = np.abs(pos - board_pos).sum(axis=1) + slack                      # along the face, then up or down, then out: no diagonals
     tx = np.asarray(cfg["transmit"].get("lever_arm", [0.0, 0.0, 0.0]), dtype=float)
     dist = np.linalg.norm(pos - tx, axis=1)
-    sl = float(w["source_level_db"]) if w.get("source_level_db") is not None else float("nan")
+    from .sonar import PEAK_OVER_RMS_DB, source_level_db_rms
+    sl = source_level_db_rms(w)                                             # RMS, dB re 1 uPa at 1 m
+    sl = float("nan") if sl is None else sl
     sens, gain = float(rx.get("sensitivity_db", float("nan"))), float(rx.get("gain_db", 0.0))
     full_scale = float(rx.get("adc_full_scale", float("nan")))
-    level = sl - 20.0 * np.log10(dist.min())
-    volts = 10.0 ** ((level + sens + gain) / 20.0)
+    level = sl - 20.0 * np.log10(dist.min())                                # RMS level of the direct sound at the nearest hydrophone
+    volts = 10.0 ** ((level + PEAK_OVER_RMS_DB + sens + gain) / 20.0)       # its PEAK at the ADC: what the full scale (a peak voltage) limits
     over = 20.0 * np.log10(volts / full_scale)
-    over_each = sl - 20.0 * np.log10(dist) + sens + gain - 20.0 * np.log10(full_scale)          # every hydrophone, dB re ADC full scale
+    over_each = sl + PEAK_OVER_RMS_DB - 20.0 * np.log10(dist) + sens + gain - 20.0 * np.log10(full_scale)          # every hydrophone, dB re ADC full scale
     r0, r1 = (float(x) for x in rx["window"]["range"])
     t_open, t_close = 2.0 * r0 / c, 2.0 * r1 / c + pulse
     n_samples = int(np.ceil((t_close - t_open) * fs))
@@ -1224,7 +1240,7 @@ def describe_shipped(sonar_name: str, deploy_name: str | None = None) -> dict:
 
 # --- expected performance -----------------------------------------------------------------------------
 
-def elevation_pattern(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0, 0.1), n_f=64):
+def elevation_pattern(heights, true_deg, f_lo, f_hi, c=acoustics.NOMINAL_SOUND_SPEED, sector=(-30.0, 30.0, 0.1), n_f=64):
     """Noise-free response of rows at `heights` steered over elevation with true time delays over the band
     (power, 1 at the arrival): the estimator's ambiguity function (tools/popoto_elevation_study.py: pattern)."""
     h = np.asarray(heights, dtype=float)
@@ -1235,7 +1251,7 @@ def elevation_pattern(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30
     return np.degrees(grid), p / (len(h) * n_f) ** 2
 
 
-def second_lobe_db(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0, 0.1)) -> float:
+def second_lobe_db(heights, true_deg, f_lo, f_hi, c=acoustics.NOMINAL_SOUND_SPEED, sector=(-30.0, 30.0, 0.1)) -> float:
     """Highest point of that response outside the main lobe, inside the sector, dB (-99: none)."""
     _, p = elevation_pattern(heights, true_deg, f_lo, f_hi, c, sector)
     e = int(np.argmax(p))
@@ -1249,7 +1265,7 @@ def second_lobe_db(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0,
     return float(max(10.0 * np.log10(max(rest.max(), 1e-30)), -99.0)) if len(rest) else -99.0
 
 
-def directivity_db(n: int, pitch: float, f: float, c: float = 1500.0) -> float:
+def directivity_db(n: int, pitch: float, f: float, c: float = acoustics.NOMINAL_SOUND_SPEED) -> float:
     """Array gain of a line of n hydrophones against isotropic noise at broadside: N^2 / sum sinc(2 d_ij / lambda)."""
     x = np.arange(n) * pitch
     return float(10.0 * np.log10(n * n / np.sinc(2.0 * (x[:, None] - x[None, :]) * f / c).sum()))
@@ -1302,7 +1318,7 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
     snr = {}
     for key, ts in (("ship", 25.0), ("small", 5.0)):
         eq, _ = budget(d, wind, ts)
-        out[f"reach_{key}_m"] = float(eq.detection_range(13.0))
+        out[f"reach_{key}_m"] = float(eq.detection_range(BUDGET_THRESHOLD_DB))
         snr[key] = {str(r): float(eq.snr(r)) - g_rows for r in ranges}
     out["row_snr_db"] = snr
     el = d["elevation"]
@@ -1332,7 +1348,7 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
 
 
 def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, classes: list | None = None, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0),
-                 threshold_db: float = 13.0) -> dict:
+                 threshold_db: float = BUDGET_THRESHOLD_DB) -> dict:
     """What the free-field figures of `performance` leave out, for one environment (depthplan.ENVIRONMENT_FIELDS) and one
     own depth (default: the shallowest allowed): the two-way propagation factor of gpusonar.lloyd (surface image, roughness,
     bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.

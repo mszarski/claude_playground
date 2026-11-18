@@ -12,7 +12,7 @@ fidelity: free_field
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 60.0e3, window: {range: [44.0, 60.0]}}
   transmit: {waveform: {duration: 2.5e-3}}
-environment: {sound_speed: 1500.0, temperature: 10.0, salinity: 35.0}
+environment: {base: coastal_10c, absorption: francois_garrison}
 platform:
   speed: 2.176                   # 0.544 m per ping: half the 1.088 m array
   legs:
@@ -26,6 +26,5 @@ scene:
   - {type: rocks, label: rocks, x_range: [4.5, 9.0], y_range: [48.0, 52.0], count: 5, radius_range: [0.2, 0.5], density: 5000.0, mu_db: -15.0}
   - {type: cylinder, label: pipe, start: [9.2, 47.5, -0.15], end: [10.3, 48.6, -0.15], radius: 0.15, density: 5000.0, mu_db: -10.0}
 synthesis: {beam_floor_db: -40.0}
-absorption: francois_garrison
 receiver: {noise_rms: 0.0, adc: false}
 seed: 73

@@ -50,7 +50,7 @@ def test_surface_reverberation_level():
                         "sensitivity_db": None},
             "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": fc, "f_stop": fc,
                                                               "duration": pulse, "window_alpha": 0.0,
-                                                              "source_level_db": None, "amplitude": 1.0}}})
+                                                              "source_level_db_rms": None, "amplitude": 1.0}}})
         rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, depth)), Scene(), environment={"sound_speed": C},
                             adc=False, absorption_model="none", rng=np.random.default_rng(seed),
                             reverberation=[{"boundary_z": 0.0, "model": "chapman_harris", "wind_speed": wind}])

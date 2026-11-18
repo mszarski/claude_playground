@@ -1,0 +1,6 @@
+# A fresh-water pool at 20 deg C: the sound speed follows from the temperature (Marczak: 1482.3 m/s).
+name: pool_20c_fresh
+title: "Fresh water, 20 deg C"
+temperature_c: 20.0
+salinity_psu: 0.0
+illustrative: true

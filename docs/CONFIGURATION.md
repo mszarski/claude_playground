@@ -79,8 +79,8 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `transmit.aperture_width`, `transmit.aperture_height` | projector size; or `beamwidth_az`, `beamwidth_el` directly |
 | `transmit.waveform.type` | `lfm`, `cw` or `gaussian` |
 | `transmit.waveform.f_start`, `f_stop`, `duration`, `window_alpha` | band (Hz), pulse length (s), edge taper |
-| `transmit.waveform.source_level_db` | dB re 1 µPa at 1 m; with `receive.sensitivity_db` it makes samples volts |
-| `transmit.waveform.amplitude` | echo amplitude of a 0 dB target at 1 m when the chain is uncalibrated |
+| `transmit.waveform.source_level_db_rms` | source level, dB re 1 µPa at 1 m, **RMS** (the rms pressure of the pulse while it is on: the usual datasheet figure, and what the sonar equation uses against rms noise). With `receive.sensitivity_db` it makes samples volts: the pulse's PEAK at the ADC is √2 · 10^((SL + sensitivity + gain) / 20) (`sonar.peak_pressure_at_1m`, the one place the √2 is applied). `source_level_db` is the deprecated name of the same number: read as RMS, with a `FutureWarning` (D-102) |
+| `transmit.waveform.amplitude` | PEAK echo amplitude of a 0 dB target at 1 m when the chain is uncalibrated |
 | `transmit.waveform.type: sampled` | a pulse given by samples (`gpusonar/sim/waveform.py`); `f_start`, `f_stop` are then the occupied band and are required. Echoes of a sampled pulse are synthesised by the C++ kernel (host or CUDA), or by the NumPy reference when that engine is selected; `table_factor: 0` or more than 32 `gain_knots` runs in NumPy, with a warning |
 | `transmit.waveform.source` | for `sampled`: `lfm`, `hfm`, `stepped_fm` (with `steps`), `barker` (with `code`: its length), `mseq` (with `degree`, optional `taps`), `code` (with `code`: chip values, or `[re, im]` pairs), `samples` (inline list), `file` |
 | `transmit.waveform.file`, `dataset` | `.wav` (real passband), `.npy` or HDF5 dataset (real passband, or complex envelope) |
@@ -131,7 +131,9 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | --- | --- |
 | `sonar`, `sonar_overrides` | which sonar, and changes to it |
 | `fidelity` | `free_field`, `image_source` (flat surface and bottom, walls), `sediment` (refraction into the bed), `eigenray` (Bellhop, external) |
-| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind). For `eigenray`: `environment: {depth, ssp_depth, ssp_speed, bottom_speed, bottom_density, bottom_attenuation, bathymetry}` is the ocean (sound-speed profile, bottom type, depth) |
+| `propagation` (`image_source`): the bottom | `bottom_z` and `bottom` come from the environment. A bottom with no description (no environment `bottom`, no `propagation.bottom`, no explicit `bottom_coefficient`) is an ERROR: no reflection coefficient is assumed (before D-104: 0.5 at every angle). `bottom_coefficient: 0.5` still gives a constant; a wall needs its `coefficient` |
+| `propagation.max_order` (`image_source`), `propagation.max_arrivals` (`eigenray`) | how many bounces / arrivals per point are kept. Given: honoured. Left out (D-105): by energy: bounce orders (arrivals) are kept while one lies within `arrival_floor_db` (20 dB) of the point's strongest, up to `max_order_cap` (8) / `max_arrivals_cap` (64). When the cap cuts something above the floor a `RuntimeWarning` says how much (once per provider; `provider.truncation`); `order_used` / `arrivals_used` and (Bellhop) `dropped_energy` say what was done. Before D-105: two bounces, the strongest eight arrivals, silently |
+| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind). For `eigenray`: `environment: {depth, ssp_depth, ssp_speed, bottom_speed, bottom_density, bottom_attenuation, bathymetry, ssp_range, ssp_speed_by_range}` is the ocean (sound-speed profile, bottom type, depth; `bathymetry` and the last two make the bed and the water functions of range from the sonar: "Water that changes with range" below) |
 | `time_spread` | time spreading of bounce paths (`sim/timespread.py`, D-62): `surface: {wind_speed}` or `{rms_height, mean_square_slope, rms_vertical_speed}`, `bottom: {rms_height, mean_square_slope}`, `taps` (6), `coherence_length` (10 m), `min_spacing`, `incoherent: false` for coherent loss only. Absent: bounce paths are fully coherent |
 | `reverberation` item `{model: volume, layer: [top, bottom], sv_db}` | a volume-scattering layer (fish, plankton, bubbles) as SST's sheet at the layer's centre: strength per unit area = volume strength × thickness |
 | `reverberation` item `{model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}` | bottom scattering from interface roughness and sediment volume (`sim/bottom.py`, D-63) in place of Lambert's law. All six are needed; none has a default |
@@ -169,7 +171,11 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `time_spread.doppler_lines` | sinusoids the process of each tap is made of (8). Changing it changes the realisation |
 | `time_spread.decay_time` | `facet` (default since D-85: mss (1 + sin² grazing) t1 t2 / (t1 + t2) with the shape that Gaussian facet slopes give; measured-over-model median 0.99 at the one site with measured channels, scatter a factor 5 per arrival) or `rule_of_thumb` (TR 0702: 2 mss t1 t2 / (t1 + t2), exponential; the default before D-85, about twice too long at that site; name it to reproduce TR 0702 or earlier records) |
 | `time_spread.multi_bounce` | `convolve` (default: the convolution of the bounces' tails; a bounce delays the tail only when it scatters) or `sum` (the earlier rule: one exponential whose mean is the sum of the bounces' means; wrong when the bounces differ) |
-| `environment` | `sound_speed`, `temperature`, `salinity`, `water_depth` |
+| `environment` | the site, described once: see "Environment: one description per site" below. Inline, the name of an environment under `configs/environments/`, or `{base: <name>, ...}` |
+| `environment_overrides` | `{<dotted key>: "<reason>"}`: values typed in a block that deliberately differ from the environment (see below). Anything else that differs is an error |
+| `time_spread.tail_quantile` | how far the taps of a bounce's tail reach: the delay within which this share of the tail's energy arrives (0.5 to below 1; e.g. 0.99), from the shape's own mean and variance; for one rough bounce each tap then holds the exact energy of its interval of delay at that interval's mean delay. Absent (default): three mean decay times, the earlier taps bit for bit. The taps are that much farther apart (2.1 to 2.2 times at 0.99 for a low-angle `facet` bounce): raise `taps` to keep the spacing (`sim/timespread.py` item 7, PHYSICS_NOTES Sec. 26.3) |
+| `time_spread.coherent_phase: {rms_height \| share, period_s \| spectrum: {frequency_hz, density}, direction_deg}` | slow wander of the coherent (unspread) part of a surface bounce: the long waves heave the reflecting patch, a change of path length `-2 zeta sin(grazing)` applied to the ray's delay with its rate (continuous through a ping, linear within it, and from ping to ping; phase proportional to frequency). `rms_height` (m) or `share` (0 to 1 of the surface's mean-square height) is the large-scale part; the rest scatters as before with `surface.rms_vertical_speed` as its own rate. `period_s`: a line at 1/period (`relative_width`, default 0.1); `direction_deg`: where the waves travel to (from +x towards +y), `spread_deg` (0). Optional: `waves` (16 sinusoids), `focusing` (true: the matching change of amplitude), `fresnel_limit` (1 rad: waves whose Fresnel angle on a bounce is larger take no part there, so long low-angle paths do not wander), `span_s` (the pulse length: the phase is exact at mid-pulse), `legs` (2 for echoes, 1 for one-way sources), `seed`. Absent: the coherent arrival is steady, as before (`sim/timespread.py` item 8, PHYSICS_NOTES Sec. 26.4) |
+| `basin_reverberation: {energy_db, onset_s, decay_s, coherence_m, repeatable}` | the late reverberation of an enclosed basin (fjord, harbour), which the 2-D ocean does not have (`sim/basin.py`, PHYSICS_NOTES Sec. 26.1): a diffuse tail behind every echo and every one-way source, of energy `energy_db` re the modelled arrivals per one-way leg (an echo's tail holds 2E + E^2, E of it from the target's own bearing), starting `onset_s` after them and decaying as exp(-t / `decay_s`). `coherence_m`: `isotropic` (plane waves from all round the horizon: coherence J0(kd)) or a length in m with `bearing_deg` (a sector). `repeatable`: the share of its energy that is the same on every ping (true / false / 0 to 1). ALL FIVE MUST BE GIVEN: there are no defaults. Measured (one fjord, one night, 4-8 kHz; `basin.MEASURED`, `docs/figures/basin_reverberation_fit.md`): -4.2 dB, 0.010 s, 0.145 s, repeatable 0.7 at 274 m; +0.2 dB, 0.010 s, 0.160 s, 0.45 at 1020 m; array coherence was not measured. Optional: `own_ping_db` (the basin's answer to the ping itself, energy re the pulse at 1 m: a WHAT-IF, not measured at a source; the late field was -43 dB at 274 m and -61 dB at 1020 m from one), `elevation_spread_deg` (10, an assumption), `directions`, `seed`, `echoes`, `sources`. Added after synthesis in NumPy on either engine. Absent: nothing is added |
 | `absorption` | `francois_garrison` (default), `ainslie_mccolm`, `thorp` (the two-term expression SST uses, TR 0702 eq. (42); no temperature, salinity or depth dependence; for like-for-like comparisons at low frequency: it warns above 100 kHz, where it lacks the pure-water term) or `none` |
 | `seed` | random seed of the scene, noise and reverberation |
 
@@ -225,7 +231,9 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | Key | Meaning |
 | --- | --- |
 | `reverberation` | a list of boundaries: `{boundary_z, mu_db}` (Lambert) or `{boundary_z, model: chapman_harris, wind_speed}`. Without `mu_db`, a model or a sediment the Lambert parameter is -29 dB (D-89; -27 dB before): the deep-water value at 530 and 1030 Hz (Mackenzie 1961 as quoted by Muggleworth, NPS 1994, hdl 10945/28529, p. 34), not a sonar-frequency one, so name a sediment (`{model: fluid_sediment, sediment: ...}`, `{sediment: rock}`) or give the site's `mu_db`; the bare default warns once at 10 kHz and above. Every shipped scenario gives `mu_db` and is unaffected. Fixed in the world: a moving sonar sees it Doppler shifted by bearing, through its own beam patterns. `offset_db` moves a boundary's strength whatever its model (what `tools/calibrate_sim.py` writes). A surface modelled by a `sea_surface` scene item must not also be listed here |
-| `receiver.ambient_noise` | `{level_db}` flat, or `{wind_speed, shipping}` for the four-term ambient fit |
+| `receiver.ambient_noise` | `{level_db}` flat, or `{model: wenz}` for the four-term ambient fit with the environment's wind and shipping (`{wind_speed, shipping}` typed here are checked against the environment) |
+| `receiver.ambient_noise.coherence` | between hydrophones: `isotropic` (default: sin(kd)/(kd) at each frequency), `surface` (noise made at the sea surface, the Cron-Sherman model: `noise.surface_noise_coherence`; deep uniform water only) or `independent`. Real-passband and baseband records alike (D-103) |
+| `receiver.ambient_noise.spectrum` | `shaped` (default: the configured spectrum across the record's band) or `flat` (its level at the centre frequency). `coherence: independent, spectrum: flat` is what every baseband record had before D-103, sample for sample: array gain against sea noise was then 10 log N whatever the pitch. Alpha-stable noise and K noise without a `correlation_time` are white and independent by construction and ignore both keys |
 | `receiver.ambient_noise.statistics` | non-Gaussian ambient noise (`sim/noise.py`). `{model: k, shape, correlation_time, common}`: K-distributed; without `correlation_time` TR 0702's KNoise (a K variate per sample and channel, then the spectrum filter: kurtosis 3/shape for a white spectrum only); with it a unit-mean gamma texture held over cells that long on the Gaussian noise (spectrum and array coherence kept), shared by all hydrophones unless `common: false`. `{model: alpha_stable, alpha}`: impulsive symmetric alpha-stable samples, white in band, independent channels; for alpha < 2 there is no variance and the configured level sets the scale (that of the Gaussian noise of the same spectrum; identical to it at alpha = 2). Default (no key, `model: gaussian`, infinite `shape`): unchanged |
 | `receiver.ambient_noise: {model: fitted, file, gain_db, channels, include_tones, allow_uncovered}` | noise generated from a model fitted to a multichannel recording by `tools/fit_noise.py` (`sim/noise_fit.py`): its spectrum, the coherence between hydrophones and its tail. Levels are in the recording's sample units; `gain_db` (0) rescales. The model's channel count must match the sonar's, or `channels` picks a subset; frequencies the recording did not cover are refused unless `allow_uncovered` (zero noise there); `include_tones` (false) adds back the lines the fit removed |
 | `sources` | radiating sources heard one way (`sim/sources.py`): a list of `{label, origin (or position), velocity, heading_deg, turn_rate_deg, signal}`; `signal` is one mapping or a list. `{type: noise, level_db, slope_db_per_octave, reference_frequency, band}` or `{type: noise, spectrum: {frequency, level_db}}` (dB re 1 uPa^2/Hz at 1 m); `{type: tonals, lines: [{frequency, level_db, phase_deg}], family: {fundamental, harmonics: [[n, 20 log A_n, phase_deg]]}}` (rms source level for a line; TR 0702 eq. 29 for a family); `{type: waveform, waveform: {...}, source_level_db, times | repeat: {first, interval, count} | ping_offset}` (any transmit waveform; default the sonar's, emitted with each ping); `{type: file, path, dataset, sample_rate, level_db | scale, start, loop}`. Levels use `receive.sensitivity_db + gain_db` as ambient noise does. Pulses run in the C++/CUDA kernel, the rest in a NumPy streaming synthesiser |
@@ -234,6 +242,149 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | `reverberation` item `exclude_specular: true` (or `{mean_square_slope, rms_height, reflection}`) | `geometry: bistatic` items only: take out of the scattering strength the near-specular part that `time_spread` already carries as the tail of each bounce (`sim/reverb_specular.py`). Use it when the transmitter's pulse also arrives one way over that boundary (a `sources:` entry for a separate transmitter). `true` reads the slopes and height from `time_spread` and the reflection coefficient from the provider. Refused with a warning on a monostatic item |
 | `receiver.noise_rms`, `receiver.adc` | white noise at the ADC; whether to quantise |
 | `synthesis.beam_floor_db` | skip paths this far down both beam patterns (speeds up narrow-beam scenes) |
+
+## Environment: one description per site
+
+A scenario describes its site ONCE, under `environment`, and every part of the simulator that needs a site value
+reads it from there (`python/gpusonar/environment.py`). The same schema serves the build layer's `environments:`
+lists (`configs/builds/environments/`, `gpusonar.depthplan`): one loader, one validator, one set of field names.
+This is the simulated site, the truth the sound is made in. What a running sonar knows of the water is the live
+chain's (`elevation.profile`, `libs/live/environment.hpp`) and is not set here.
+
+```yaml
+environment: {base: coastal_12c_sand, water_depth_m: 60.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: francois_garrison}
+```
+
+`environment` is a mapping, the name of an environment, or `{base: <name>, ...}` (the named one with some fields
+changed). Names: a file `configs/environments/<name>.yaml` (one mapping, which may itself have a `base`), or an entry
+of a list file (`environments: [...]`) there or under `configs/builds/environments/`.
+
+| Field | Unit | Meaning | Left out |
+| --- | --- | --- | --- |
+| `water_depth_m` | m | water depth | no bottom anywhere |
+| `bottom` | | a name in `configs/sediments.yaml`, or `{speed (m/s), density (ratio to water), attenuation (dB per wavelength)}`. Needs `water_depth_m` | the bottom reflects nothing unless a block gives its own |
+| `wind_speed_m_s` or `sea_state` | m/s at 10 m; 0 to 9 | the sea surface: ambient noise, surface reverberation laws, time spreading, Bellhop's surface loss, bubble laws | no wind is given to anything; a Wenz noise spectrum then uses 5 m/s (`environment.DEFAULT_WIND_SPEED_M_S`) |
+| `rms_wave_height_m` | m | rms surface displacement (significant height / 4), an input of its own: measured heights did not follow the wind law (`docs/PHYSICS_NOTES.md` Sec. 21). Given to `time_spread.surface.rms_height` | the Pierson-Moskowitz height of the wind |
+| `sound_speed_m_s` | m/s | sound speed of isovelocity water; beside a profile, the speed at the sonar (what a record carries) | the profile at `reference_depth_m`; else Mackenzie/Marczak from `temperature_c`, `salinity_psu`; else 1500 (`acoustics.NOMINAL_SOUND_SPEED`, the one definition) |
+| `profile` | | `{depth_m: [...], speed_m_s: [...]}`, or a family: `{family: munk[, axis_depth_m, axis_speed_m_s, points]}`, `{family: linear, surface_speed_m_s, gradient_per_s}`. Used by the `eigenray` tier | isovelocity |
+| `profiles_by_range` | | `[{range_m, depth_m: [...], speed_m_s: [...]}, ...]` in place of `profile`: water that changes with range (see "Water that changes with range" below). No value is assumed: two profiles or more, the first at `range_m: 0`, ranges increasing, every profile on the same depth grid from 0 to the bottom or deeper. Used by the `eigenray` tier | the same water at every range |
+| `temperature_c`, `salinity_psu`, `ph`, `reference_depth_m` | deg C, PSU, -, m | the water for absorption and for the sound-speed formula | 10, 35, 8, 0 (`environment.DEFAULT_*`; the resolved environment lists which were defaulted under `defaulted`) |
+| `absorption` | | `francois_garrison`, `ainslie_mccolm`, `thorp`, `none` (a scenario's own `absorption` key wins: the model is a choice of formula, the water it is evaluated in is the site's) | `francois_garrison` |
+| `shipping` | 0 to 1 | shipping activity of the ambient-noise spectrum | 0.5 |
+| `bubble_model` | | wind law for the loss per surface bounce (build layer's planner) | none |
+| `water_depth_known` | bool | `false`: the vehicle is not told the depth (the record's `environment.water_depth` stays unset; a processor then has it from navigation or not at all) | `true` |
+| `frame_origin_lla` | deg, deg, m | written into records | |
+| `overrides` | | `{field: "reason"}`: a field stated on purpose although another implies a different value (a nominal `sound_speed_m_s` beside a temperature: geometry then uses the first, absorption the second). Without it that case warns | |
+| `name`, `title`, `note`, `illustrative`, `own_depth_limits_m`, `bottom_clearance_m` | | labels, and the build layer's planning fields (`docs/REFERENCE_DESIGN.md`) | |
+
+The older spellings `sound_speed`, `water_depth`, `temperature`, `salinity`, `wind_speed`, `depth` are the same
+fields (`environment.ALIASES`); one field under two spellings with different values is an error.
+
+**Who takes what** (`environment.apply_to_scenario`; a key typed in the block is kept and checked):
+
+| Block | Takes from the environment |
+| --- | --- |
+| `propagation`, `image_source` | `bottom_z` = water depth; `bottom` = the bottom (unless `bottom_coefficient` is given) |
+| `propagation`, `eigenray` | `environment: {depth, ssp_depth, ssp_speed or sound_speed, bottom_speed, bottom_density, bottom_attenuation or sediment}`, and with `profiles_by_range` also `ssp_range`, `ssp_speed_by_range` (`ssp_speed` is then the local profile); `frequency` = the sonar's band centre (it follows `sonar` and `sonar_overrides`); `wind_speed`; `max_range` = 1.1 x the far edge of the receive window |
+| `time_spread.surface` | `wind_speed` when the section gives no roughness of its own (`surface: true` is enough), `rms_height` = `rms_wave_height_m` |
+| each `reverberation` item | `boundary_z`: 0 for the surface laws (`chapman_harris`, `kraus_surface`, `bubble_layer_surface`), the water depth for the others (`boundary: surface` puts a Lambert item on the surface); `wind_speed` for the surface laws; `sediment` for `fluid_sediment` when the bottom is a name |
+| `receiver.ambient_noise` | `{model: wenz}` (or `true`): `wind_speed`, `shipping`. `{level_db: ...}` is a flat spectrum and takes nothing |
+| `absorption`, and every absorption calculation | the model, and the water (temperature, salinity, depth, pH) |
+| the record | `sound_speed`; `temperature`, `salinity`; `water_depth` unless `water_depth_known: false` |
+
+**A typed value that contradicts the environment is an error**, naming the key, unless the scenario lists it:
+
+```yaml
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a flat surface although the site has wind; ..."
+```
+
+Keys are dotted paths (`propagation.frequency`, `propagation.environment.depth`, `reverberation[1].wind_speed`,
+`time_spread.surface.wind_speed`, `receiver.ambient_noise.wind_speed`). An entry that no longer
+differs gives a warning, so the list cannot go stale. Two things need no entry: an explicit null
+(`propagation.bottom_z: null`: no bottom in this run), and, with `propagation.environment.bathymetry`, an ocean `depth`
+deeper than the environment's water depth (the deepest point of a bed that changes with range; the environment's is the depth at the sonar).
+
+`config.load_scenario_config(name, overrides)` returns the scenario EXPANDED: the environment resolved (with
+`sound_speed`, `temperature`, `water_depth`, `site_water_depth`, `wind_speed`, ...) and every block holding the
+values it took, so code that reads `cfg["environment"]["sound_speed"]` or `cfg["propagation"]["bottom_z"]` finds
+them. To change the site of a loaded scenario pass the change as an override
+(`{"environment": {"water_depth_m": 45.0}}`); `expand=False` gives the file as written. What the environment does
+NOT reach: positions typed in `scene` and `platform` (a seabed object at `z: 60`), the `sediment` tier's
+`sediment_speed` and `interface_z`, and a scene surface's own `spectrum`.
+
+### Water that changes with range
+
+```yaml
+environment:
+  water_depth_m: 100.0
+  profiles_by_range:                    # range_m: horizontal distance from the sonar, m
+    - {range_m: 0.0,    depth_m: [0, 15, 35, 100], speed_m_s: [1500.0, 1500.0, 1485.0, 1486.1]}     # the LOCAL profile
+    - {range_m: 1200.0, depth_m: [0, 15, 35, 100], speed_m_s: [1500.0, 1500.0, 1485.0, 1486.1]}
+    - {range_m: 1400.0, depth_m: [0, 15, 35, 100], speed_m_s: [1478.0, 1478.3, 1478.6, 1479.7]}
+  sound_speed_m_s: 1488.75              # the local profile at the sonar's depth: what the record carries
+```
+
+`profiles_by_range` gives the `eigenray` tier a sound speed that depends on range as well as depth (a front, other water
+beyond a sill, a thermocline that deepens). It goes to Bellhop as Bellhop's own 2-D field (SSP option `Q`, a `.ssp`
+file beside the `.env`; `sim/bellhop.py`), so the rays bend, speed up and slow down in it; nothing of it is
+approximated on this side.
+
+| What | Rule |
+| --- | --- |
+| What range is | The horizontal distance from the sonar, whatever the bearing: the provider's 2-D section starts at the source of each eigenray call (the projector, the array's reference point) and is the same in every direction, exactly as `propagation.environment.bathymetry` is. The water is therefore rings about the sonar, not a front lying across a map, and it moves with a moving vehicle. A target at 2.6 km on any bearing is behind a front at 1.3 km |
+| The local profile | The first profile, at `range_m: 0`: the water at the sonar, the one a cast from the vehicle gives. `environment.profile` in the resolved environment, `ssp_depth` and `ssp_speed` of the ocean, and every "the sound speed" below are this one |
+| Between and beyond | Between two profiles the speed at each depth is linear in range (Bellhop's quadrilateral interpolation; linear in depth between grid depths). Two profiles with the same speeds make a stretch of unchanged water; the width of a front is the distance between the two profiles either side of it. Beyond the last range the last profile holds (as a bathymetry's last depth does) |
+| Errors (no value is filled in) | fewer than two profiles; first range not 0; ranges not increasing; a profile on another depth grid than the first; a grid that does not start at 0 or does not reach `water_depth_m` (and, with a bathymetry or reverberation over relief, the deepest point of the bed); depths and speeds of different lengths; a speed outside 1300 to 1700 m/s; a key other than `range_m`, `depth_m`, `speed_m_s`; `profile` beside it; `sound_speed_m_s` outside the local profile |
+| With `base` | a child's `profile` or `profiles_by_range` replaces the parent's water, whichever of the two the parent used |
+
+What every other user of "the" sound speed does when the profile varies with range:
+
+| User | Uses | Why, and what it costs |
+| --- | --- | --- |
+| The record (`environment.sound_speed`), and with it the chain | `sound_speed_m_s`; left out, the local profile at `reference_depth_m`. Set it to the local profile at the sonar's depth | what the vehicle would measure. The record's fields are unchanged: one speed, no profile. A chain is told nothing else unless its own configuration is (`chain.elevation.ssp`) |
+| Apparent positions of the eigenrays (delay x speed along the launch direction) | the local profile at the source's depth | the kernel works with straight lines at one speed; delay and angle at the array are Bellhop's and are kept exactly |
+| Delay correction from a Bellhop grid node to the field point | the speed at the point's own range and depth | first order in the offset from the node |
+| Absorption | the environment's one water (`temperature_c`, `salinity_psu`, `reference_depth_m`, `ph`), over the path length taken as delay x the local speed | the profiles carry speeds, not temperatures; a 1 % error in path length is 1 % of the absorption in dB (0.02 dB of the 1.7 dB two-way at 2.6 km and 5 kHz) |
+| Rough-surface loss of the eigenrays (`propagation.wind_speed` > 0) | the surface grazing angle by Snell's law from the launch angle through the LOCAL profile | not valid where the speed changes along the ray: at grazing angles of a few degrees a 1 % change of speed moves the angle by degrees. The shipped scenarios reflect the eigenrays from a flat surface (`propagation.wind_speed: 0` with its override) for that reason |
+| `time_spread` (speeds at the surface and the bottom), reverberation strength laws, `reverb_specular`, the basin tail, noise coherence, `sediment` named bottoms (speed ratio x the bottom-water speed) | the local values | these are properties of a boundary patch or of the array's own water; the patch's water is up to 1.5 % off in the shipped scenarios |
+| Reverberation's paths, one-way sources, the direct arrival | Bellhop through the 2-D field (they ask the same provider) | |
+| `fidelity: image_source`, `free_field`, `sediment` | the environment's one sound speed everywhere, with a warning that the change with range is NOT simulated | these tiers have no profile at all |
+| The depth planner (`gpusonar.depthplan`) | the local profile at every range; the plan's `method` and `profile_rests_on` say so | the planner is range independent |
+
+Shipped environments (`configs/environments/`, all illustrative): `coastal_12c` (12 deg C, 35 PSU, nominal
+1500 m/s), `coastal_12c_sand` and `coastal_12c_bellhop_sand` (the two illustrative sands of the shipped scenarios,
+kept apart by name), `shelf_100m_sand_12c` (the build layer's `shelf_100m_sand` with that water: the 12 km site),
+`coastal_10c`, `pool_20c_fresh`, `tank_20c_1480`.
+
+Scenarios with water that changes with range (`configs/scenarios/ssp_*`, all illustrative; `tools/ssp_range_study.py` runs each against its own local profile everywhere,
+`docs/figures/ssp_range_study.md`): `ssp_front_static_trial_2row` (a front 1.2 to 1.4 km from the two-row static array, target at 2.6 km),
+`ssp_thermocline_static_trial_3row` (the mixed layer 15 m thick at the three-row static array and 45 m at 3 km), `ssp_front_testauv_trial_1row`
+(a front 200 to 300 m from the test AUV, target at 500 m).
+
+## Units and conventions
+
+One table. Where a module can check a convention cheaply it does (named in the last column).
+
+| Quantity | Convention | Stated or checked in |
+| --- | --- | --- |
+| Frame | north, east, down (NED): x ahead/north, y to starboard/east, z DOWN; z = 0 is the sea surface; depth is positive z. The body frame is the same on the vehicle; attitude is roll, pitch, yaw in radians. (The repository root's `CLAUDE.md` describes another package, `trajectory_classifier`, which is east-north-up: nothing of it applies here.) | `core/record.hpp` header; `validate` rejects a non-unit boresight |
+| Boundaries | `surface_z`, `bottom_z`, `boundary_z` are z in that frame (surface 0, bottom = water depth). A surface law off the surface or a bottom item off the bottom is an error | `environment.apply_to_scenario` |
+| Angles at a boundary | GRAZING angles, radians, in every model function (`acoustics`, `sim/bottom`, `sim/surface`, `rayleigh_reflection`); no function takes an incidence angle. Config keys ending `_deg` are degrees; bearings are from broadside, positive towards the bow; elevation positive up | key suffixes |
+| Source level | dB re 1 µPa at 1 m, **RMS** (`source_level_db_rms`; `projector.source_level_db_rms` in a build spec; `SonarEquation.source_level_db`; a one-way source's `level_db` and `source_level_db_rms`). A RECORD holds peak values: its `transmit.waveform.source_level_db` is the level of the peak pressure, the configured figure + 3.01 dB, converted where the config is read (`SonarModel.make_record`; back: `sonar.record_source_level_db_rms`). A harmonic table `[n, 20 log10 A_n, phase]` of a one-way source holds PEAK amplitudes (as SST's table) | `sonar.source_level_db_rms`, `sonar.peak_pressure_at_1m`; `tests/python/test_source_level.py` |
+| Amplitudes | PEAK values: a record's `transmit.waveform.amplitude` (peak echo amplitude of a 0 dB target at 1 m each way, sample units), an eigenray's `amplitude`, the envelope of a baseband record. A real tone of peak A has rms A/√2; a complex envelope of magnitude A stands for that same tone and carries power A² (twice the real signal's) | `core/record.hpp` header; `sonar.amplitude_at_1m` |
+| Receive sensitivity, gain | dB re 1 V/µPa (a negative number) and dB; samples are volts at the ADC. `receive.adc_full_scale` is volts PEAK after the gain; a board's `input_full_scale_vpp` is volts peak-to-peak before it (`buildspec.adc_full_scale` converts). Overload figures compare a peak with a peak | `buildspec.describe`, `tools/direct_sound_study.py` |
+| Noise | spectrum level, dB re 1 µPa²/Hz (one-sided), an RMS quantity; `noise_rms` is in sample units, per real component for complex data; a baseband record's noise has E\|x\|² = 2 × the integral of the spectrum over its band | `sim/noise.py`; `tests/python/test_baseband_noise.py` |
+| Target and scattering strength | target strength dB re 1 m² (10 log10 of the backscattering cross section / 4π); boundary scattering strength per unit area and solid angle (10 log10, dimensionless); volume strength per m (10 log10 of m⁻¹); Lambert `mu_db` = 10 log10 μ | `sim/bottom.py`, `sim/reverb.py` |
+| Density | sediments: a RATIO to the water above (`rho`; `bottom.density`), the table's reference water stated per row; Bellhop's bottom density is g/cm³ over water of 1 g/cm³, numerically that ratio; `acoustics.water_density` returns kg/m³ | `configs/sediments.yaml` header |
+| Attenuation | sediments: dB per WAVELENGTH (`bottom.attenuation`, Bellhop's unit `W`) or the loss parameter `delta` (`DB_PER_WAVELENGTH` converts); water: dB/m (`acoustics.absorption`); dB/km in the channel-replay summaries; dB/kyd only inside the Thorp formula | `sim/bottom.py` |
+| Sound speed | m/s; one nominal value, `acoustics.NOMINAL_SOUND_SPEED` (1500), used only when nothing says otherwise; a record's `environment.sound_speed` has no default (NaN until stated) | `environment.resolve`; `validate` |
+| Wind | m/s at 10 m. Used as the 19.5 m wind of Pierson-Moskowitz and the 12.5 m wind of Cox-Munk without correction; knots only inside Chapman-Harris. `sea_state` 0 to 9 is its median wind | `acoustics.py` |
+| Wave height | `rms_wave_height_m`, `rms_height`: RMS displacement (significant height / 4) | `environment.problems` questions a value over 5 m |
+| Time | sample times: seconds after the transmit (`samples.start_time`, `sample_rate`); `transmit.time_ns`: ns since the Unix epoch, UTC; a board's clock offset is that board's time minus the common timeline; a stream block counts samples since capture start; scenario time: seconds from the first ping | `core/record.hpp` |
+| Signal sign | exp(+i ω t): an echo delayed by τ carries exp(−i 2π f τ); the baseband carrier removed is `center_frequency`; Bellhop's arrivals (exp(−i ω t)) are conjugated on reading | `sim/bellhop.py` |
+| Receive window | `receive.window.range` is two-way: 2 r / c with the record's sound speed, plus the pulse; ranges in the chain's reports are half the two-way path, not corrected for refraction | `sonar.window` |
+| Frequencies, band | Hz; a sonar's band is `f_start`..`f_stop`, its centre their mean; the ray tracer's frequency is that centre unless overridden | `environment.apply_to_scenario` |
 
 ## Processing chains and deployment files
 

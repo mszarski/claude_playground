@@ -10,18 +10,15 @@ sonar: popoto_testauv_1row_clocks
 fidelity: image_source
 sonar_overrides:
   receive: {window: {range: [150, 900]}}
-environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 30.0}
+environment: {base: coastal_12c_sand, water_depth_m: 30.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0
-  bottom_z: 30.0
   max_order: 1
-  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
 platform: {position: [0, 0, 10.0], rpy: [0.0524, 0.0175, 0], velocity: [1.0, 0, 0], rates: [0.0349, 0, 0]}   # rolled 3 deg, rolling 2 deg/s
 pings: {count: 4, interval: 3.0}
 scene:
   - {type: points, label: target, positions: [[120.0, 485.0, 15.0]], target_strength_db: 10.0}
-absorption: ainslie_mccolm
 receiver:
   adc: false
-  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
 seed: 21

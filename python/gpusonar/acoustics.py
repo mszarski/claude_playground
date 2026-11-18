@@ -14,6 +14,12 @@ from __future__ import annotations
 
 import numpy as np
 
+NOMINAL_SOUND_SPEED = 1500.0
+"""Sound speed in m/s assumed when nothing says otherwise: the one definition of the suite's "1500". A scenario's
+environment (gpusonar/environment.py) or a sonar's `nominal_sound_speed` replaces it; a function that takes
+`sound_speed=NOMINAL_SOUND_SPEED` is asking the caller to pass the environment's value."""
+GRAVITY = 9.81      # m/s^2
+
 
 def sound_speed(temperature: float, salinity: float = 35.0, depth: float = 0.0) -> float:
     """Sound speed in m/s. Mackenzie for sea water, Marczak for fresh water (S < 5 PSU)."""
@@ -127,7 +133,7 @@ def water_density(temperature: float = 10.0, salinity: float = 35.0) -> float:
     return a + s * (b + c * np.sqrt(s) + 4.8314e-04 * s)
 
 
-def bubbly_sound_speed(void_fraction, sound_speed: float = 1500.0, gas_sound_speed: float = 340.0,
+def bubbly_sound_speed(void_fraction, sound_speed: float = NOMINAL_SOUND_SPEED, gas_sound_speed: float = 340.0,
                        density_ratio: float = 1000.0):
     """Sound speed (m/s) of water holding a volume fraction `void_fraction` of gas bubbles, at
     frequencies well below the bubbles' resonance (the mixture then has the mean density and
@@ -238,7 +244,7 @@ def rms_surface_vertical_speed(wind_speed: float) -> float:
     return float(np.sqrt(a * np.sqrt(np.pi) / (4.0 * np.sqrt(b))) * max(float(wind_speed), 0.0))
 
 
-def rough_coherent_reflection(grazing, rms_height: float, frequency: float, sound_speed: float = 1500.0):
+def rough_coherent_reflection(grazing, rms_height: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Amplitude of the coherent reflection from a boundary of given rms height relative to a
     flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)."""
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
@@ -246,7 +252,7 @@ def rough_coherent_reflection(grazing, rms_height: float, frequency: float, soun
     return np.exp(-0.5 * gamma**2)
 
 
-def surface_coherent_reflection(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+def surface_coherent_reflection(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Amplitude of the coherent (specular) reflection from a rough surface relative to a
     flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing) the Rayleigh parameter.
 

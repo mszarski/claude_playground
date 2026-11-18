@@ -29,18 +29,26 @@ sonar_overrides:
   name: sst_asiaex_receiver
   array: {count: 1, pitch: 0.094}             # TR 0702 shows one channel ("Ch 1"); omnidirectional
   transmit:
-    waveform: {type: cw, f_start: 8000.0, f_stop: 8000.0, duration: 0.003, window_alpha: 0.1, source_level_db: 190.0}
+    waveform: {type: cw, f_start: 8000.0, f_stop: 8000.0, duration: 0.003, window_alpha: 0.1, source_level_db_rms: 190.0}
   receive:
     sample_rate: 64000.0
     window: {range: [246.5, 280.0]}           # two-way "range": 5 ms before the first arrival to 40 ms after it
-environment: {sound_speed: 1500.0, temperature: 15.0, salinity: 34.0}
+environment:
+  sound_speed_m_s: 1500.0
+  temperature_c: 15.0
+  salinity_psu: 34.0
+  water_depth_m: 100.0
+  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}   # medium sand of configs/sediments.yaml; SST used "FineSand"
+  wind_speed_m_s: 3.0                  # the wind SST used for Fig. 4
+  absorption: francois_garrison
+  water_depth_known: false
+  overrides:
+    sound_speed_m_s: "nominal 1500 m/s typed beside 15 deg C / 34 PSU (which give 1505.5 m/s); kept so shipped records do not change"
 propagation:
   surface_z: 0.0
-  bottom_z: 100.0
   max_order: 2
-  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}   # medium sand of configs/sediments.yaml; SST used "FineSand"
 time_spread:
-  surface: {wind_speed: 3.0}                  # the wind SST used for Fig. 4
+  surface: true          # the environment's wind
   bottom: {rms_height: 0.012, mean_square_slope: 0.045}        # as printed in TR 0702
   taps: 12
 platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
@@ -48,7 +56,6 @@ pings: {count: 20, interval: 5.0, transmit: false}
 scene: []
 sources:
   - {label: projector, origin: [500.0, 0.0, 30.0], signal: {type: waveform}}   # 500 m away, 30 m deep; the waveform and level above
-absorption: francois_garrison
 receiver: {noise_rms: 0.0, adc: false}
 seed: 22
 unconfirmed:

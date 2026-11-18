@@ -119,25 +119,46 @@ class FreeFieldProvider(EigenrayProvider):
 class ImageSourceProvider(EigenrayProvider):
     """Images of the field point in a flat surface (z = surface_z) and bottom (z = bottom_z).
 
-    `max_order` bounces in total. Reflection coefficients are constant and real here
-    (surface -1 by default: pressure release); angle-dependent bottom loss arrives with
-    the boundary models in milestone 12.
+    The surface reflects with `surface_coefficient` (-1 by default: pressure release, a fact of the air above).
+    The bottom has NO default: a bottom needs a description, either `bottom` (a fluid half-space {speed, density,
+    attenuation} or {sediment: name}: the Rayleigh coefficient at each ray's grazing angle; a scenario's
+    environment supplies it) or an explicit constant `bottom_coefficient`. A `bottom_z` with neither is an error
+    (before D-104 it silently reflected 0.5 at every angle); a wall likewise needs its `coefficient`.
+
+    Bounces: `max_order` when given. Left out, the series is cut by energy (D-105): orders are kept while some field
+    point has an arrival within `arrival_floor_db` (20 dB) of its strongest, up to `max_order_cap` (8). When the cap
+    cuts off an order that is still above the floor, a warning says by how much, once per provider, and
+    `truncation` holds it; `order_used` is the order of the last call.
     """
 
     tier = "image_source"
+    DEFAULT_ARRIVAL_FLOOR_DB = 20.0
+    DEFAULT_MAX_ORDER_CAP = 8
 
     def __init__(self, sound_speed: float, surface_z: float | None = 0.0,
                  bottom_z: float | None = None, surface_coefficient: complex = -1.0,
-                 bottom_coefficient: complex = 0.5, max_order: int = 2,
+                 bottom_coefficient: complex | None = None, max_order: int | None = None,
                  walls: list[dict] | None = None, bottom: dict | None = None,
-                 engine: str | None = None):
+                 engine: str | None = None, arrival_floor_db: float | None = None, max_order_cap: int | None = None):
         self.sound_speed = float(sound_speed)
         self.engine = engine
         self.surface_z = surface_z
         self.bottom_z = bottom_z
         self.surface_coefficient = complex(surface_coefficient)
-        self.bottom_coefficient = complex(bottom_coefficient)
-        self.max_order = int(max_order)
+        if bottom_z is not None and bottom is None and bottom_coefficient is None:
+            raise ValueError(f"image_source: a bottom at z = {bottom_z} with no description. Give the scenario's environment a `bottom` (a name in "
+                             "configs/sediments.yaml or {speed, density, attenuation}), or `propagation.bottom`, or an explicit "
+                             "`propagation.bottom_coefficient`; no reflection coefficient is assumed")
+        # With `bottom` the Rayleigh coefficient is used and this constant is not; 0 keeps arithmetic defined.
+        self.bottom_coefficient = complex(0.0 if bottom_coefficient is None else bottom_coefficient)
+        self.max_order = None if max_order is None else int(max_order)
+        self.arrival_floor_db = float(self.DEFAULT_ARRIVAL_FLOOR_DB if arrival_floor_db is None else arrival_floor_db)
+        self.max_order_cap = int(self.DEFAULT_MAX_ORDER_CAP if max_order_cap is None else max_order_cap)
+        self.order_used = self.max_order
+        self.truncation = None                   # {"order": cap, "left_out_db": level of the first order cut, re the strongest arrival}
+        for wall in walls or []:
+            if wall.get("coefficient") is None:
+                raise ValueError("image_source: a wall needs its reflection `coefficient` (none is assumed)")
         # Fluid sediment half-space {speed, density (g/cm^3), attenuation (dB/wavelength)}:
         # when given, each bottom bounce uses the Rayleigh reflection coefficient at the
         # ray's grazing angle instead of the constant `bottom_coefficient`.
@@ -152,8 +173,37 @@ class ImageSourceProvider(EigenrayProvider):
         # Walls are applied to first order only, on top of the vertical image series.
         self.walls = walls or []
 
-    def _vertical_images(self, z: np.ndarray):
+    def _order_for(self, source, points) -> int:
+        """The bounce order of this call: `max_order` when it was given, else the energy criterion of the class
+        docstring, worked out here for both engines on up to 256 of the field points (evenly taken, both ends in)."""
+        if self.max_order is not None:
+            return self.max_order
+        if self.surface_z is None and self.bottom_z is None:
+            return 0
+        pts = points if len(points) <= 256 else points[np.unique(np.linspace(0, len(points) - 1, 256).astype(int))]
+        probe = self._eigenrays_numpy(source, pts, self.max_order_cap + 1, walls=False)
+        mag = np.abs(probe.amplitude)
+        rel = mag / np.maximum(mag.max(axis=1, keepdims=True), 1e-300)
+        bounces = (probe.n_surface + probe.n_bottom)[0]
+        level = np.array([rel[:, bounces == n].max() if np.any(bounces == n) else 0.0 for n in range(self.max_order_cap + 2)])
+        floor = 10.0 ** (-self.arrival_floor_db / 20.0)
+        above = np.flatnonzero(level[:self.max_order_cap + 1] >= floor)
+        order = int(above[-1]) if len(above) else 0
+        if level[self.max_order_cap + 1] >= floor:
+            order = self.max_order_cap
+            left = float(20.0 * np.log10(level[self.max_order_cap + 1]))
+            if self.truncation is None:
+                import warnings
+                warnings.warn(f"image_source: the bounce series was cut at the cap of {self.max_order_cap} bounces while the next order is still "
+                              f"{left:.1f} dB re the strongest arrival (floor: -{self.arrival_floor_db:g} dB). Arrivals are missing: raise "
+                              "`max_order_cap`, or state `max_order`", RuntimeWarning, stacklevel=4)
+            self.truncation = {"order": order, "left_out_db": left}
+        self.order_used = order if self.order_used is None else max(self.order_used, order)
+        return self.order_used
+
+    def _vertical_images(self, z: np.ndarray, max_order: int | None = None):
         """Yield (image_z, n_surface, n_bottom) for the bounce sequences up to max_order."""
+        max_order = self.max_order if max_order is None else max_order
         yield z, 0, 0
         zs, zb = self.surface_z, self.bottom_z
         for first in ("s", "b"):
@@ -162,7 +212,7 @@ class ImageSourceProvider(EigenrayProvider):
             img = z
             ns = nb = 0
             nxt = first
-            for _ in range(self.max_order):
+            for _ in range(max_order):
                 if nxt == "s":
                     if zs is None:
                         break
@@ -180,27 +230,31 @@ class ImageSourceProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        order = self._order_for(source, points)
         if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
-            walls = [(int(w["axis"]), float(w["position"]), complex(w.get("coefficient", 0.8))) for w in self.walls]
+            walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
             return EigenraySet(**core.sim_image_source_eigenrays(
                 self.sound_speed, _source3(source), points,
                 surface_z=None if self.surface_z is None else float(self.surface_z),
                 bottom_z=None if self.bottom_z is None else float(self.bottom_z),
                 surface_coefficient=self.surface_coefficient, bottom_coefficient=self.bottom_coefficient,
-                max_order=self.max_order, walls=walls,
+                max_order=order, walls=walls,
                 bottom=None if self.bottom is None else _fluid_bottom(**self.bottom)))
+        return self._eigenrays_numpy(source, points, order)
+
+    def _eigenrays_numpy(self, source, points, order: int, walls: bool = True) -> EigenraySet:
         c = self.sound_speed
         rays = []  # (image positions [S, 3], coefficient, ns, nb)
-        for img_z, ns, nb in self._vertical_images(points[:, 2]):
+        for img_z, ns, nb in self._vertical_images(points[:, 2], order):
             img = points.copy()
             img[:, 2] = img_z
             coef = self.surface_coefficient**ns * self.bottom_coefficient**nb
             rays.append((img, coef, ns, nb, 1.0))
-            for wall in self.walls:
+            for wall in self.walls if walls else []:
                 wimg = img.copy()
                 axis = int(wall["axis"])
                 wimg[:, axis] = 2.0 * float(wall["position"]) - wimg[:, axis]
-                wall_coef = complex(wall.get("coefficient", 0.8))
+                wall_coef = complex(wall["coefficient"])
                 rays.append((wimg, coef * wall_coef, ns, nb, wall_coef))
         s, k = points.shape[0], len(rays)
         out = EigenraySet(

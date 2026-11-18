@@ -17,6 +17,7 @@ import yaml
 from scipy.io import wavfile
 
 from .. import _gpusonar as core
+from ..acoustics import NOMINAL_SOUND_SPEED
 from .base import Source, register
 
 _WAVEFORMS = {
@@ -184,7 +185,9 @@ class WavSource(Source):
         w.f_stop = float(wf.get("f_stop", wf["f_start"]))
         w.duration = float(wf["duration"])
         w.window_alpha = float(wf.get("window_alpha", 0.0))
-        w.source_level_db = float(wf.get("source_level_db", float("nan")))
+        from ..sonar import PEAK_OVER_RMS_DB
+        # the sidecar's figure is an RMS level (either key); the record holds the peak level (core/record.hpp)
+        w.source_level_db = float(wf.get("source_level_db_rms", wf.get("source_level_db", float("nan")))) + PEAK_OVER_RMS_DB
         w.amplitude = float(wf.get("amplitude", 1.0))
         s.center_frequency = w.center()
         r.samples = s
@@ -224,7 +227,7 @@ class WavSource(Source):
 
         env_cfg = cfg.get("environment", {}) or {}
         env = r.environment
-        env.sound_speed = float(env_cfg.get("sound_speed", 1500.0))
+        env.sound_speed = float(env_cfg.get("sound_speed", NOMINAL_SOUND_SPEED))
         env.temperature = float(env_cfg.get("temperature", float("nan")))
         env.salinity = float(env_cfg.get("salinity", float("nan")))
         env.water_depth = float(env_cfg.get("water_depth", float("nan")))

@@ -1,0 +1,55 @@
+# Stage 2 trial in fjord-type water: the two-row static array against a target 2.6 km away.
+#   tools/sonar_live.py configs/deploy/popoto_static_2row.yaml --scenario fjord_static_trial_2row --out DIR --engine cpp     (needs GPUSONAR_BELLHOP)
+#   tools/fjord_rehearsal.py                                                                       (this against the open-water rehearsal)
+# The same sonar, platform, target and window as `popoto_static_trial_2row`, in water of the kind the first comparison with measured
+# data in this band was made in (SFI Smart Ocean dataset, 4-8 kHz, a Norwegian fjord in November; PHYSICS_NOTES Sec. 21.6, 25):
+#   - a sound-speed profile with a maximum at 19 m under a fresher surface layer (sim/basin.py `stratified_profile(90, step=5)`:
+#     ILLUSTRATIVE, of the shape of that site's two casts, not the casts);
+#   - a seabed of basins and sills along the line of sight (`basin_section(..., step=100)`: ILLUSTRATIVE, of the kind charted
+#     there; Bellhop's 2-D section, the same on every bearing), over the suite's default half-space (the seabed there is not named);
+#   - the basin's late reverberation behind every echo (`basin_reverberation`: the set measured at 1020 m; coherence across the array is an
+#     assumption: nothing measured it);
+#   - a calm night's noise with the tail of the quieter hydrophone there (level of a 1.9 m/s wind without shipping, K-distributed,
+#     shape 3.5). Near machinery the same site read 63 dB re 1 uPa^2/Hz, flat: `ambient_noise: {level_db: 63}`.
+# The surface is flat (measured: a mirror at 6 kHz that night). `own_ping_db` (the basin's answer to the ping itself) is NOT set:
+# nothing measured it at the source; tools/fjord_rehearsal.py runs it as a what-if.
+# Every depth, the target and the seabed are placeholders for a trial site that is not chosen.
+name: fjord_static_trial_2row
+sonar: popoto_static_2row_clocks
+fidelity: eigenray
+sonar_overrides:
+  transmit: {waveform: {duration: 1.0}}
+  receive: {window: {range: [2450, 2750]}}
+environment:
+  water_depth_m: 50.0                 # at the sonar; the bed's profile along the line is propagation.environment.bathymetry
+  profile:
+    depth_m: [0, 5, 10, 15, 19, 20, 25, 30, 35, 40, 45, 50, 54, 55, 60, 65, 70, 75, 80, 85, 90]
+    speed_m_s: [1480.5, 1487.1, 1491.7, 1494.4, 1495.0, 1494.9, 1494.5, 1494.1, 1493.6, 1493.2, 1492.8, 1492.3, 1492.0, 1492.0, 1492.1, 1492.2, 1492.3, 1492.4, 1492.4, 1492.5, 1492.6]
+  sound_speed_m_s: 1494.1             # the profile's speed at the sonar (what the record carries)
+  temperature_c: 10.0
+  salinity_psu: 32.0
+  bottom: {speed: 1600.0, density: 1.8, attenuation: 0.5}
+  wind_speed_m_s: 1.9                 # a calm night: the level of a 1.9 m/s wind without shipping
+  shipping: 0.0
+  absorption: ainslie_mccolm
+propagation:
+  environment:
+    depth: 90.0
+    bathymetry: [[0, 50], [100, 57.1], [200, 72.3], [300, 84.3], [400, 84.3], [500, 72.8], [600, 58.9], [700, 53], [800, 58.3], [900, 68.4], [1000, 76], [1100, 76], [1200, 69.6], [1300, 62.4], [1400, 60], [1500, 64.8], [1600, 77.6], [1700, 88.4], [1800, 88.3], [1900, 76.4], [2000, 60.8], [2100, 53], [2200, 60], [2300, 73.9], [2400, 84.5], [2500, 84.6], [2600, 75.1], [2700, 64.1], [2800, 60], [2900, 62.4], [3000, 69.6]]
+  min_range: 2540.0
+  max_range: 2660.0
+  range_step: 5.0
+  depth_step: 1.0
+  max_arrivals: 12
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 30.0], rpy: [0.0349, 0.0, 0], velocity: [0, 0, 0]}   # still; tilted 2 deg
+pings: {count: 4, interval: 5.0}
+scene:
+  - {type: points, label: target, positions: [[300.0, 2583.0, 60.0]], target_strength_db: 15.0}
+basin_reverberation: {energy_db: 0.2, onset_s: 0.010, decay_s: 0.16, coherence_m: isotropic, repeatable: 0.45}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz, statistics: {model: k, shape: 3.5}}     # wind and shipping: the environment's
+seed: 22
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (the noise uses it); as written, so that the record does not change"

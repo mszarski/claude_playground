@@ -154,7 +154,7 @@ def test_validation_file_holds_the_model_to_the_simulator_the_chain_and_bellhop(
     assert max(V["largest_difference_db"].values()) < 1.3
     chain = V["through_chain"]
     rows = [r for r in chain["rows"] if r["chain_factor_db"] is not None]
-    assert len(rows) >= 5 and max(abs(r["chain_factor_db"] - r["model_peak_db"]) for r in rows) < 1.0
+    assert len(rows) >= 5 and max(abs(r["chain_factor_db"] - r["model_peak_db"]) for r in rows) < 1.5        # 1.33 dB with the multiscale detector (D-93) and the coloured noise (D-103); under 1.0 before
     if V.get("bellhop"):
         for case in V["bellhop"].values():
             assert case["one_way_energy_difference_db"]["largest"] < 0.7

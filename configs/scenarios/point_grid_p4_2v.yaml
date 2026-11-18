@@ -2,7 +2,7 @@
 name: point_grid_p4_2v
 sonar: p4_2v
 fidelity: free_field
-environment: {temperature: 20.0, salinity: 0.0}
+environment: pool_20c_fresh
 platform:
   position: [0, 0, 1.0]
   rpy: [0, 0, 0]

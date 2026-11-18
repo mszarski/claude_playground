@@ -17,13 +17,8 @@ nav:                             # the vehicle's navigation: JSON datagrams (gpu
 chain:                           # gpusonar/live.py; anything left out keeps its default
   bearings_deg: [-60.0, 60.0, 0.5]
   look: starboard
-  range_cell_m: 2.0
-  cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
-  min_snr_db: 9.0
-  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
-  classify:
-    min_speed: 1.0
-    multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
+  # range cell, CFAR windows, SNR floor, tracker and classifier sizes: the chain derives or defaults them from the sonar
+  # (libs/live derive.hpp; `LiveChain.resolved` and the report say what was used). Write one here only to change it.
 
 output:
   recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5     # every raw ping, before processing

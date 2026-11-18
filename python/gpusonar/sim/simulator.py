@@ -9,6 +9,7 @@ import numpy as np
 
 from .. import _gpusonar as core
 from .. import acoustics
+from .. import environment as site
 from ..config import dump_yaml, load_scenario_config
 from ..sonar import SonarModel, resolve_environment
 from . import receiver
@@ -34,9 +35,7 @@ def absorption_table(sonar: SonarModel, env: dict, model: str):
     if hi <= lo:
         hi = lo * 1.0001
     f = np.linspace(lo, hi, core.ABSORPTION_TABLE_SIZE)
-    table = acoustics.absorption(
-        f, env.get("temperature", 10.0), env.get("salinity", 35.0), env.get("depth", 0.0),
-        env.get("ph", 8.0), model)
+    table = acoustics.absorption(f, *site.water(env), model)
     return lo, hi, [float(x) for x in np.broadcast_to(table, f.shape)]
 
 
@@ -48,7 +47,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
-                  noise_spectrum=None, reverberation: list | None = None,
+                  noise_spectrum=None, noise_options: dict | None = None, reverberation: list | None = None,
                   beam_floor_db: float | None = None, noise_statistics: dict | None = None, fitted_noise: dict | None = None,
                   sources: list | None = None, transmit: bool = True,
                   backend=core.Backend.Host, engine: str | None = None,
@@ -148,13 +147,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                  platform_acceleration=tuple(float(a) for a in acceleration))
     from .. import taps
     taps.sim_tap(record, "echoes")
+    if transmit and getattr(provider, "basin", None) is not None:      # `basin_reverberation` (sim/basin.py): the echoes' late tail
+        provider.basin.after_echoes(record, sonar, provider, scenario_time, environment=env, absorption_model=absorption_model, backend=backend, engine=engine)
     for item in (reverberation or []) if transmit else []:
         # Boundary reverberation by the scattering-function method (sim/reverb.py).
         from . import reverb
         w = sonar.waveform_config
         fc = 0.5 * (float(w["f_start"]) + float(w.get("f_stop", w["f_start"])))
-        alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
-                                           env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
+        alpha = float(acoustics.absorption(fc, *site.water(env), absorption_model))
         strength = None
         if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
             # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
@@ -170,7 +170,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # {model: bubble_layer_surface, wind_speed, extinction: apl_1994 | hall_novarini}: the
             # bubble-layer and facet terms of the published high-frequency surface model (sim/surface.py).
             from . import surface as surface_model
-            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env.get("sound_speed", 1500.0),
+            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env["sound_speed"],
                                                                    item.get("extinction", "apl_1994"))
         elif item.get("model") == "fluid_sediment":
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
@@ -190,9 +190,9 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             if item.get("geometry", "monostatic") == "bistatic":
                 # The model at the true bistatic azimuth of each cell (pi is backscatter).
                 strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
-                    g_in, g_out, fc, env.get("sound_speed", 1500.0), azimuth=azimuth, **_p)
+                    g_in, g_out, fc, env["sound_speed"], azimuth=azimuth, **_p)
             else:
-                strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys}, **extra)
+                strength = bottom_model.reverberation_strength(fc, env["sound_speed"], **{k: float(item[k]) for k in keys}, **extra)
         elif item.get("model") == "volume":
             # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
             # (fish, plankton, bubbles), as a sheet at its centre depth.
@@ -226,7 +226,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         # as the tail of each bounce eigenray (sim/reverb_specular.py; TR 0702 Sec. 12.4).
         if item.get("exclude_specular"):
             from . import reverb_specular
-            part = reverb_specular.boundary_part(item, provider, fc, env.get("sound_speed", 1500.0))
+            part = reverb_specular.boundary_part(item, provider, fc, env["sound_speed"])
             if part is not None:
                 if strength is None:
                     mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
@@ -335,18 +335,43 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         from . import noise as noise_models
         rx_cfg = sonar.config["receive"]
         sens = float(rx_cfg.get("sensitivity_db") or 0.0) + float(rx_cfg.get("gain_db", 0.0))
-        if np.iscomplexobj(samples):
-            # A baseband record covers a band `sample_rate` wide about the carrier: white
-            # noise at the spectrum level of the centre frequency, independent between
-            # channels (true of an isotropic field at half-wavelength spacing). The complex
-            # envelope carries twice the power of the real signal in that band.
+        # `receiver.ambient_noise`: `coherence: isotropic` (default) | `surface` | `independent` between hydrophones,
+        # `spectrum: shaped` (default: the configured spectrum across the record's band) | `flat` (its level at the
+        # centre frequency). Real-passband and baseband records follow the same two choices (D-103).
+        opts = noise_options or {}
+        coherence = str(opts.get("coherence", noise_models.DEFAULT_COHERENCE))
+        shape = str(opts.get("spectrum", "shaped"))
+        if coherence not in noise_models.COHERENCE_MODELS or shape not in ("shaped", "flat"):
+            raise ValueError(f"receiver.ambient_noise: coherence is one of {', '.join(noise_models.COHERENCE_MODELS)} and spectrum is shaped or flat "
+                             f"(got {coherence!r}, {shape!r})")
+        stats = noise_models.noise_statistics(noise_statistics)
+        # White, sample-by-sample statistics (alpha-stable; K with no correlation time) keep their own generator: a
+        # colouring or mixing filter would change the distribution they are asked for.
+        white_statistics = stats is not None and (stats["model"] == "alpha_stable" or not stats["correlation_time"] > 0.0)
+        if np.iscomplexobj(samples) and not white_statistics and not (coherence == "independent" and shape == "flat"):
+            # A baseband record covers a band `sample_rate` wide about the carrier: the configured spectrum across
+            # that band, and between hydrophones the coherence the real-passband path gives (sim/noise.py
+            # `baseband_gaussian_noise`). Closely spaced hydrophones then share noise, as they do at sea.
+            fc_bb = record.samples.center_frequency
+            spectrum = noise_models.flat_spectrum(noise_spectrum, fc_bb) if shape == "flat" else noise_spectrum
+            g = rng or np.random.default_rng()
+            ambient = noise_models.baseband_gaussian_noise(samples.shape[1], record.samples.sample_rate, fc_bb, spectrum, g,
+                                                           positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens, coherence=coherence)
+            if stats is not None:                       # K with a correlation time: the texture on the Gaussian field
+                ambient = ambient * noise_models.gamma_texture(samples.shape[1], record.samples.sample_rate, stats["shape"], stats["correlation_time"],
+                                                               g, samples.shape[0], stats["common"]).astype(np.float32)
+            samples = samples + ambient.astype(samples.dtype)
+        elif np.iscomplexobj(samples):
+            # `coherence: independent, spectrum: flat` (what every baseband record had before D-103), and the white
+            # statistics: white noise at the spectrum level of the centre frequency, independent between channels
+            # (true of an isotropic field at half-wavelength spacing only). The complex envelope carries twice
+            # the power of the real signal in that band.
             fs_bb = record.samples.sample_rate
             level = float(np.asarray(noise_spectrum(np.array([record.samples.center_frequency])))[0])
             sigma = np.sqrt(2.0 * 10.0 ** (level / 10.0) * fs_bb) * 10.0 ** (sens / 20.0)
             g = rng or np.random.default_rng()
             ambient = (sigma / np.sqrt(2.0)) * (
                 g.standard_normal(samples.shape) + 1j * g.standard_normal(samples.shape)).astype(samples.dtype)
-            stats = noise_models.noise_statistics(noise_statistics)
             if stats is not None and stats["model"] == "alpha_stable":
                 # Impulsive noise: independent symmetric alpha-stable real and imaginary parts
                 # with the scale of the Gaussian parts they replace (identical at alpha = 2).
@@ -361,9 +386,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                     stats["common"] if slow else False).astype(np.float32)
             samples = samples + ambient
         else:
+            spectrum = noise_models.flat_spectrum(noise_spectrum, sonar.center_frequency) if shape == "flat" else noise_spectrum
             samples = samples + noise_models.k_noise(
-                samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
-                noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+                samples.shape[1], record.samples.sample_rate, spectrum, rng or np.random.default_rng(),
+                noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens, coherence=coherence)
     if fitted_noise:
         # `receiver.ambient_noise: {model: fitted, file: ...}`: noise with the spectrum, the
         # coherence between hydrophones and the tail of a recording (sim/noise_fit.py), in the
@@ -401,8 +427,8 @@ def _noise_spectrum(cfg):
     if "level_db" in cfg:
         level = float(cfg["level_db"])
         return lambda f: np.full_like(np.asarray(f, dtype=float), level)
-    return lambda f: noise_models.wenz_spectrum_db(f, float(cfg.get("wind_speed", 5.0)),
-                                                    float(cfg.get("shipping", 0.5)))
+    return lambda f: noise_models.wenz_spectrum_db(f, float(cfg.get("wind_speed", site.DEFAULT_WIND_SPEED_M_S)),
+                                                    float(cfg.get("shipping", site.DEFAULT_SHIPPING)))
 
 
 def _add_true_ins(record, accel: np.ndarray, rate: float) -> None:
@@ -542,10 +568,15 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     if isinstance(name_or_config, dict):
         cfg = name_or_config
     else:
-        cfg = load_scenario_config(name_or_config, overrides)
+        cfg = load_scenario_config(name_or_config, overrides, expand=False)
+    typed = cfg                                  # what the scenario says: this is what a written file records
     cfg = acoustics.resolve_sea_state(cfg)     # `sea_state: 0..9` wherever `wind_speed` is accepted
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
-    env = resolve_environment(cfg.get("environment"))
+    # One environment per site (gpusonar/environment.py): inline, a name under configs/environments, or
+    # {base: name, ...}. Propagation, time spreading, reverberation, ambient noise and absorption take their
+    # site values from it; a typed value that contradicts it is an error unless `environment_overrides` names it.
+    env = site.resolve(cfg.get("environment"), strict=True)
+    cfg = site.apply_to_scenario(cfg, env, sonar)
     tier = cfg.get("fidelity", "free_field")
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
     if engine is not None and hasattr(provider, "engine"):
@@ -555,6 +586,9 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         spread = dict(cfg["time_spread"])
         spread.setdefault("seed", int(cfg.get("seed", 0)))
         provider = timespread.wrap(provider, spread, frequency=sonar.center_frequency)
+    if cfg.get("basin_reverberation"):
+        from . import basin
+        provider = basin.attach(provider, cfg["basin_reverberation"], seed=int(cfg.get("seed", 0)))
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     scene = build_scene(cfg.get("scene", []), rng)
     sources = None
@@ -579,10 +613,11 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     # A rail moves between pings and stands still during each one.
     stop_and_go = bool(plat.get("stop_and_go", False))
     ping_kwargs = dict(
-        provider=provider, absorption_model=cfg.get("absorption", "francois_garrison"),
+        provider=provider, absorption_model=cfg.get("absorption", site.DEFAULT_ABSORPTION),
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
+        noise_options={k: v for k, v in (rx_cfg.get("ambient_noise") or {}).items() if k in ("coherence", "spectrum")},
         fitted_noise=(rx_cfg.get("ambient_noise") if (rx_cfg.get("ambient_noise") or {}).get("model") == "fitted" else None),
         sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
@@ -666,7 +701,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
 
     if output:
         opts = core.WriterOptions()
-        opts.config_yaml = dump_yaml(cfg)
+        opts.config_yaml = dump_yaml(typed)
         opts.compression_level = int(cfg.get("compression_level", 1))
         with core.RecordWriter(str(output), opts) as w:
             for r in records:
@@ -681,5 +716,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             w.write_truth_text("labels", json.dumps(scene.labels))
     if ping_times is None:
         ping_times = [i * interval for i in range(len(records))]
+    # The result's config: the scenario with its site values filled in and the environment resolved.
+    cfg = {**cfg, "environment": env}
     return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), legs=leg_of_record,
                           times=np.asarray(ping_times, dtype=float), front_end=front_end)

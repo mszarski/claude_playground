@@ -10,7 +10,7 @@ sonar: sas_rail
 fidelity: free_field
 sonar_overrides:
   receive: {window: {range: [1.9, 2.1]}}
-environment: {sound_speed: 1480.0, temperature: 20.0, salinity: 0.0}
+environment: {base: tank_20c_1480, absorption: none}
 platform:
   position: [0, 0, -0.684]
   rpy: [0, 0, 0]
@@ -24,6 +24,5 @@ scene:
     heading_deg: 0.0
     shapes:
       - {shape: cylinder, start: [-0.05, 0, 0], end: [0.05, 0, 0], radius: 0.01, resolved: true, spacing: 0.00025}
-absorption: none
 receiver: {noise_rms: 0.0, adc: false}
 seed: 1

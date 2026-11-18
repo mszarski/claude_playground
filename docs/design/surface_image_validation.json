@@ -540,9 +540,9 @@
   ],
   "through_chain": {
     "target_strength_db": 55.0,
-    "chain_snr_free_field_db": 32.483105726666665,
+    "chain_snr_free_field_db": 41.44663838666667,
     "budget_snr_free_field_db": 44.638625575748215,
-    "chain_minus_budget_db": -12.15551984908155,
+    "chain_minus_budget_db": -3.1919871890815443,
     "rows": [
       {
         "own_depth_m": 10.0,
@@ -557,8 +557,8 @@
         "own_depth_m": 30.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 17.14917133,
-        "chain_factor_db": -15.333934396666663,
+        "chain_snr_db": 27.34830489,
+        "chain_factor_db": -14.098333496666669,
         "model_peak_db": -14.72971725450689,
         "model_energy_db": -14.50386294400319
       },
@@ -566,8 +566,8 @@
         "own_depth_m": 75.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 32.52671293,
-        "chain_factor_db": 0.04360720333333745,
+        "chain_snr_db": 42.55675565,
+        "chain_factor_db": 1.1101172633333292,
         "model_peak_db": 0.1725186816979759,
         "model_energy_db": 0.4009123579451019
       },
@@ -575,8 +575,8 @@
         "own_depth_m": 150.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 41.91674423,
-        "chain_factor_db": 9.433638503333334,
+        "chain_snr_db": 51.63282411,
+        "chain_factor_db": 10.186185723333331,
         "model_peak_db": 9.505301043209304,
         "model_energy_db": 9.588940576927502
       },
@@ -584,8 +584,8 @@
         "own_depth_m": 225.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 44.3579396,
-        "chain_factor_db": 11.874833873333337,
+        "chain_snr_db": 53.15229685,
+        "chain_factor_db": 11.705658463333329,
         "model_peak_db": 11.718978605890314,
         "model_energy_db": 11.755741912097157
       },
@@ -593,8 +593,8 @@
         "own_depth_m": 300.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 41.33203852,
-        "chain_factor_db": 8.848932793333333,
+        "chain_snr_db": 51.9359052,
+        "chain_factor_db": 10.48926681333333,
         "model_peak_db": 9.157886330199684,
         "model_energy_db": 9.483068132325535
       },
@@ -602,8 +602,8 @@
         "own_depth_m": 450.0,
         "target_depth_m": 4.0,
         "range_m": 12000.0,
-        "chain_snr_db": 26.7881236,
-        "chain_factor_db": -5.694982126666666,
+        "chain_snr_db": 34.92841516,
+        "chain_factor_db": -6.51822322666667,
         "model_peak_db": -6.203617522828501,
         "model_energy_db": -3.763452307881872
       }

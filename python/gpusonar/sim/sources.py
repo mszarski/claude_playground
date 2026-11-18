@@ -73,6 +73,7 @@ import numpy as np
 
 from .. import _gpusonar as core
 from .. import acoustics
+from .. import environment as site
 from . import waveform as wf_mod
 from .targets import HighlightTarget
 
@@ -447,15 +448,19 @@ def _source_sonar(sonar, sig: dict):
     waveform fields, the envelope table of a sampled pulse and the absorption band."""
     from ..sonar import SonarModel
     import copy
-    if sig.get("waveform") is None and sig.get("source_level_db") is None and sig.get("amplitude") is None:
+    from ..sonar import SOURCE_LEVEL_ALIAS, SOURCE_LEVEL_KEY, source_level_db_rms
+    level = source_level_db_rms(sig, "sources[].signal")          # RMS, dB re 1 uPa at 1 m; `source_level_db` is the deprecated name
+    if sig.get("waveform") is None and level is None and sig.get("amplitude") is None:
         return sonar
     cfg = copy.deepcopy(sonar.config)
     w = dict(sig["waveform"]) if sig.get("waveform") is not None else dict(cfg["transmit"]["waveform"])
-    for key in ("source_level_db", "amplitude"):
-        if sig.get(key) is not None:
-            w[key] = sig[key]
-            if key == "amplitude":
-                w.pop("source_level_db", None)
+    if level is not None:
+        w.pop(SOURCE_LEVEL_ALIAS, None)
+        w[SOURCE_LEVEL_KEY] = level
+    if sig.get("amplitude") is not None:
+        w["amplitude"] = sig["amplitude"]
+        w.pop(SOURCE_LEVEL_ALIAS, None)
+        w.pop(SOURCE_LEVEL_KEY, None)
     cfg["transmit"] = dict(cfg["transmit"], waveform=w)
     return SonarModel.from_config(cfg)
 
@@ -582,8 +587,7 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
     lo, hi = (fc - 0.5 * fs, fc + 0.5 * fs) if baseband else (0.0, 0.5 * fs)
 
     def env_abs(f):
-        return np.asarray(acoustics.absorption(np.maximum(np.asarray(f, dtype=float), 1.0), env.get("temperature", 10.0), env.get("salinity", 35.0),
-                                               env.get("depth", 0.0), env.get("ph", 8.0), absorption_model), dtype=float) * np.ones(np.shape(f))
+        return np.asarray(acoustics.absorption(np.maximum(np.asarray(f, dtype=float), 1.0), *site.water(env), absorption_model), dtype=float) * np.ones(np.shape(f))
 
     rx_ref = np.asarray(record.rx_positions(), dtype=float).mean(axis=0)
     added = None
@@ -650,6 +654,8 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
                                series_carrier=carrier, spreading=spreading,
                                knot_interval=source.stream.get("knot_interval"), f_top=hi)
             added = part if added is None else added + part
+    if added is not None and getattr(provider, "basin", None) is not None:
+        added = provider.basin.one_way(record, added, scenario_time)      # `basin_reverberation` (sim/basin.py): the sources' late tail
     if added is not None:
         s = record.samples
         kind = s.kind

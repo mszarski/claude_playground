@@ -135,7 +135,7 @@ def test_texture_is_the_same_on_both_engines():
 
 def empty_ping(ranges=(25.0, 230.0), fs=20e3, waveform=None, name="popoto_8"):
     wf = {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3, "duration": 2e-3, "window_alpha": 0.0,
-          "source_level_db": None, "amplitude": 1.0}
+          "source_level_db_rms": None, "amplitude": 1.0}
     wf.update(waveform or {})
     sonar = SonarModel.load(name, {
         "receive": {"kind": "baseband", "sample_rate": fs, "window": {"range": list(ranges)}, "sensitivity_db": None},
@@ -349,7 +349,7 @@ def test_band_taper_is_the_same_on_both_engines():
                         "sensitivity_db": None},
             "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": 27.5e3, "f_stop": 27.5e3,
                                                               "duration": 2e-3, "window_alpha": 0.0,
-                                                              "source_level_db": None, "amplitude": 1.0}}})
+                                                              "source_level_db_rms": None, "amplitude": 1.0}}})
         rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, -20.0), velocity=(3.0, -2.0, 0.0)), Scene(),
                             environment={"sound_speed": C}, adc=False)
         reverb.add_reverberation(rec, FreeFieldProvider(C), 0.0, -27.0, np.random.default_rng(2), n_azimuth=24,

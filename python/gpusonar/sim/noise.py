@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 
 def wenz_spectrum_db(frequency, wind_speed: float = 5.0, shipping: float = 0.5,
                      components: bool = False):
@@ -45,7 +47,7 @@ def self_noise_spectrum_db(frequency, broadband_db: float = -300.0, slope_db_per
     return broadband_db + slope_db_per_octave * np.log2(f / reference_frequency)
 
 
-def isotropic_coherence(positions, frequency: float, sound_speed: float = 1500.0) -> np.ndarray:
+def isotropic_coherence(positions, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED) -> np.ndarray:
     """Coherence matrix of 3-D isotropic noise between omnidirectional sensors:
     sin(k d) / (k d), with d the separation."""
     p = np.asarray(positions, dtype=float)
@@ -53,11 +55,10 @@ def isotropic_coherence(positions, frequency: float, sound_speed: float = 1500.0
     return np.sinc(2.0 * frequency * d / sound_speed)
 
 
-def surface_noise_coherence(positions, frequency: float, sound_speed: float = 1500.0, nodes: int = 96) -> np.ndarray:
+def surface_noise_coherence(positions, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, nodes: int = 96) -> np.ndarray:
     """Coherence matrix (complex, Hermitian) of noise made at the sea surface, between
-    omnidirectional sensors in deep, uniform water: the Cron-Sherman model. Not used by the
-    noise generator (which takes the isotropic matrix); provided for comparison and for a
-    caller that builds its own.
+    omnidirectional sensors in deep, uniform water: the Cron-Sherman model. The noise generators
+    use it with `coherence: surface` (`receiver.ambient_noise.coherence`); the default is the isotropic matrix.
 
     The model: sound arrives from above only, with power per unit solid angle proportional to
     cos(t), t the angle of the arrival from the vertical (a sheet of surface dipoles, no
@@ -92,15 +93,86 @@ def surface_noise_coherence(positions, frequency: float, sound_speed: float = 15
     return 2.0 * np.sum(w * u * kernel, axis=2)
 
 
+COHERENCE_MODELS = ("isotropic", "surface", "independent")
+DEFAULT_COHERENCE = "isotropic"
+
+
+def coherence_matrix(model: str, positions, frequency: float, sound_speed: float) -> np.ndarray | None:
+    """Coherence between hydrophones at one frequency by a named model: `isotropic` (sin(kd)/(kd)), `surface`
+    (noise made at the sea surface: `surface_noise_coherence`, complex) or `independent` (None: no mixing)."""
+    if model == "independent":
+        return None
+    if model == "isotropic":
+        return isotropic_coherence(positions, frequency, sound_speed)
+    if model == "surface":
+        return surface_noise_coherence(positions, frequency, sound_speed)
+    raise ValueError(f"unknown noise coherence {model!r}: one of {', '.join(COHERENCE_MODELS)}")
+
+
+def _mixing(gamma: np.ndarray) -> np.ndarray:
+    """A factor L with L L^H = gamma (a coherence matrix): Cholesky, or the eigen-decomposition when closely
+    spaced hydrophones make the matrix singular to rounding."""
+    n = gamma.shape[0]
+    try:
+        return np.linalg.cholesky(gamma + 1e-9 * np.eye(n))
+    except np.linalg.LinAlgError:
+        w, v = np.linalg.eigh(gamma)
+        return v * np.sqrt(np.maximum(w, 0.0))
+
+
+def flat_spectrum(spectrum_db, frequency: float):
+    """A spectrum held at its level at `frequency` (`spectrum: flat`)."""
+    level = float(np.asarray(spectrum_db(np.array([float(frequency)])))[0])
+    return lambda f: np.full_like(np.asarray(f, dtype=float), level)
+
+
+def baseband_gaussian_noise(n_samples: int, sample_rate: float, center_frequency: float, spectrum_db, rng: np.random.Generator,
+                            positions=None, sound_speed: float = NOMINAL_SOUND_SPEED, sensitivity_db: float = 0.0,
+                            n_channels: int | None = None, n_bands: int = 96, coherence: str = DEFAULT_COHERENCE) -> np.ndarray:
+    """Complex-envelope Gaussian noise [channels, samples] for a baseband record: the band `sample_rate` wide about
+    `center_frequency`, with the one-sided spectrum `spectrum_db(f)` across it (dB re 1 uPa^2/Hz at the passband
+    frequency f = center_frequency + baseband frequency; `sensitivity_db` converts to sample units) and, with
+    `positions`, the coherence between hydrophones of `coherence` at each passband frequency (`coherence_matrix`),
+    imposed per band as in `gaussian_noise`.
+
+    The complex envelope carries twice the power of the real signal in the band: E|x|^2 = 2 x integral of the
+    spectrum over the band, so a flat spectrum S gives E|x|^2 = 2 S sample_rate (what the earlier white generator
+    made). The cross-spectrum of two channels at passband frequency f is 2 S(f) Gamma_ij(f), Gamma the model's
+    coherence with the suite's exp(+i w t) convention; an isotropic field gives a real Gamma, noise from the surface
+    a complex one (the deeper hydrophone hears it later)."""
+    if positions is not None:
+        positions = np.asarray(positions, dtype=float)
+        n_channels = positions.shape[0]
+    if n_channels is None:
+        raise ValueError("give positions or n_channels")
+    order = np.argsort(np.fft.fftfreq(n_samples, 1.0 / sample_rate), kind="stable")      # bins by passband frequency
+    f = center_frequency + np.fft.fftfreq(n_samples, 1.0 / sample_rate)
+    psd = 10.0 ** ((np.asarray(spectrum_db(np.maximum(f, 1.0)), dtype=float) + sensitivity_db) / 10.0)
+    psd = np.where(f > 0.0, psd, 0.0)                         # nothing below 0 Hz (a band wider than twice the carrier)
+    # x = ifft(X): E|x|^2 = sum E|X_k|^2 / N^2, and E|x|^2 = 2 sum_k S_k fs / N, so E|X_k|^2 = 2 S_k fs N.
+    scale = np.sqrt(2.0 * psd * sample_rate * n_samples)
+    white = (rng.standard_normal((n_channels, n_samples)) + 1j * rng.standard_normal((n_channels, n_samples))) / np.sqrt(2.0)
+    if positions is not None and coherence != "independent":
+        edges = np.linspace(0, n_samples, min(int(n_bands), n_samples) + 1).astype(int)
+        for a, b in zip(edges[:-1], edges[1:]):
+            if b <= a:
+                continue
+            bins = order[a:b]
+            gamma = coherence_matrix(coherence, positions, max(float(f[bins[len(bins) // 2]]), 1.0), sound_speed)
+            white[:, bins] = _mixing(gamma) @ white[:, bins]
+    return np.fft.ifft(white * scale[None, :], axis=1).astype(np.complex64)
+
+
 def gaussian_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator,
-                   positions=None, sound_speed: float = 1500.0, sensitivity_db: float = 0.0,
-                   n_channels: int | None = None, n_bands: int = 96) -> np.ndarray:
+                   positions=None, sound_speed: float = NOMINAL_SOUND_SPEED, sensitivity_db: float = 0.0,
+                   n_channels: int | None = None, n_bands: int = 96, coherence: str = DEFAULT_COHERENCE) -> np.ndarray:
     """Real Gaussian noise [channels, samples] with one-sided power spectral density
     `spectrum_db(f)` (dB re 1 uPa^2/Hz, converted to sample units by `sensitivity_db`).
 
-    With `positions` [channels, 3] the channels have the coherence of isotropic noise,
-    sin(kd)/(kd) at each frequency; without, they are independent. Coherence is imposed
-    with a Cholesky factor per frequency band (`n_bands` bands across 0 to Nyquist).
+    With `positions` [channels, 3] the channels have the coherence of `coherence` (`coherence_matrix`): by
+    default isotropic noise, sin(kd)/(kd) at each frequency; `surface`: noise made at the sea surface;
+    `independent`, or without positions: none. Coherence is imposed with a Cholesky factor per frequency
+    band (`n_bands` bands across 0 to Nyquist).
     """
     if positions is not None:
         positions = np.asarray(positions, dtype=float)
@@ -114,13 +186,16 @@ def gaussian_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.rand
     # (shared between real and imaginary parts).
     scale = np.sqrt(psd * sample_rate * n_samples / 4.0)
     white = rng.standard_normal((n_channels, len(f))) + 1j * rng.standard_normal((n_channels, len(f)))
-    if positions is not None:
+    if positions is not None and coherence != "independent":
         edges = np.linspace(0, len(f), n_bands + 1).astype(int)
         for a, b in zip(edges[:-1], edges[1:]):
             if b <= a:
                 continue
-            gamma = isotropic_coherence(positions, f[(a + b) // 2], sound_speed)
-            chol = np.linalg.cholesky(gamma + 1e-9 * np.eye(n_channels))
+            if coherence == "isotropic":                      # as it always was, bit for bit
+                gamma = isotropic_coherence(positions, f[(a + b) // 2], sound_speed)
+                chol = np.linalg.cholesky(gamma + 1e-9 * np.eye(n_channels))
+            else:
+                chol = _mixing(coherence_matrix(coherence, positions, f[(a + b) // 2], sound_speed))
             white[:, a:b] = chol @ white[:, a:b]
     return np.fft.irfft(white * scale[None, :], n=n_samples, axis=1).astype(np.float32)
 
@@ -219,9 +294,10 @@ def gamma_texture(n_samples: int, sample_rate: float, shape: float, correlation_
 
 
 def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator, statistics: dict | None,
-            positions=None, sound_speed: float = 1500.0, sensitivity_db: float = 0.0,
-            n_channels: int | None = None, n_bands: int = 96) -> np.ndarray:
-    """`gaussian_noise` with other statistics. `statistics` = {"model": "alpha_stable", "alpha"}:
+            positions=None, sound_speed: float = NOMINAL_SOUND_SPEED, sensitivity_db: float = 0.0,
+            n_channels: int | None = None, n_bands: int = 96, coherence: str = DEFAULT_COHERENCE) -> np.ndarray:
+    """`gaussian_noise` with other statistics (`coherence`: as there; the white K samples of correlation_time 0
+    are mixed with the isotropic matrix or not at all). `statistics` = {"model": "alpha_stable", "alpha"}:
     `alpha_stable_noise` (white in band, independent channels; read its note on level). Or
     {"model": "k", "shape": nu, "correlation_time": seconds, "common": bool} (see
     `noise_statistics`): K-distributed noise, in two cases.
@@ -248,12 +324,12 @@ def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Gene
     stats = noise_statistics(statistics)
     kwargs = dict(positions=positions, sound_speed=sound_speed, sensitivity_db=sensitivity_db, n_channels=n_channels, n_bands=n_bands)
     if stats is None:
-        return gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs)
+        return gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs, coherence=coherence)
     if stats["model"] == "alpha_stable":
         channels = n_channels if positions is None else np.asarray(positions).shape[0]
         return alpha_stable_noise(n_samples, sample_rate, spectrum_db, rng, stats["alpha"], sensitivity_db, channels)
     if stats["correlation_time"] > 0.0:
-        x = gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs)
+        x = gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs, coherence=coherence)
         return x * gamma_texture(n_samples, sample_rate, stats["shape"], stats["correlation_time"], rng,
                                  x.shape[0], stats["common"]).astype(np.float32)
     if positions is not None:
@@ -266,7 +342,7 @@ def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Gene
     psd[0] = 0.0
     white = rng.standard_normal((n_channels, n_samples)) * gamma_texture(n_samples, sample_rate, stats["shape"], 0.0, rng, n_channels, False)
     spectrum = np.fft.rfft(white, axis=1)                    # unit-variance white: E|X|^2 = N per bin
-    if positions is not None:
+    if positions is not None and coherence != "independent":
         edges = np.linspace(0, len(f), n_bands + 1).astype(int)
         for a, b in zip(edges[:-1], edges[1:]):
             if b > a:

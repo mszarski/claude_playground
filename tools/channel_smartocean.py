@@ -1114,7 +1114,8 @@ def levels(out: dict) -> dict:
     return lv
 
 
-def model_through_estimators(surface: dict, range_m: float, sound_speed: float, n_time: int = 1600, seed: int = 3) -> dict:
+def model_through_estimators(surface: dict, range_m: float, sound_speed: float, n_time: int = 1600, seed: int = 3,
+                             time_spread: dict | None = None, rules=("facet", "rule_of_thumb")) -> dict:
     """Our time spreading for the R1 geometry (direct and surface-reflected straight rays; surface
     of the rms height and vertical speed fitted to the tail, slope of the equivalent wind's Cox-Munk law),
     sampled like the 4 Hz soundings and passed through the same estimators, for each decay rule:
@@ -1128,10 +1129,11 @@ def model_through_estimators(surface: dict, range_m: float, sound_speed: float, 
         a = t / (1.0 + sin2)
         return timespread.facet_delay_density(lag, a, a * sin2)
     out = {}
-    for rule in ("facet", "rule_of_thumb"):
+    for rule in rules:
         cfg = {"surface": {"rms_height": surface["tail"]["rms_height_m"], "mean_square_slope": surface["wind_law"]["mean_square_slope"],
                            "rms_vertical_speed": surface["tail"]["rms_vertical_speed_m_s"]},
                "decay_time": rule, "taps": 24, "doppler_lines": 48, "seed": seed}
+        cfg.update(time_spread or {})                  # further `time_spread` keys (tail_quantile, taps): the `tail` subcommand
         prov = timespread.wrap(ImageSourceProvider(sound_speed, surface_z=0.0, bottom_z=None, max_order=1), cfg, frequency=FC)
         k = 256
         ch = cr.model_channel(prov, [0.0, 0.0, STATED["source_depth"]], np.array([[range_m, 0.0, STATED["R1"]["depth"]]]), n_time=n_time, fs_time=4.0, fs_delay=FS,
@@ -1186,6 +1188,52 @@ def stage_bathymetry(args) -> int:
     return 0
 
 
+TAIL_OPTIONS = [("three mean decay times (as shipped), 24 taps", {}),
+                ("tail_quantile 0.9, 24 taps", {"tail_quantile": 0.9}),
+                ("tail_quantile 0.99, 24 taps", {"tail_quantile": 0.99}),
+                ("tail_quantile 0.99, 48 taps", {"tail_quantile": 0.99, "taps": 48}),
+                ("tail_quantile 0.999, 48 taps", {"tail_quantile": 0.999, "taps": 48})]
+
+
+def stage_tail(args) -> int:
+    """How far the model's taps reach against the two windows of the measured tail fit (R1's surface
+    reflection): the model of `model_through_estimators` under each entry of TAIL_OPTIONS, from the
+    numbers `analyse` left in the cache (no recordings needed). Two seeds of the scattered taps."""
+    cache = Path(args.cache)
+    out = json.loads((cache / "analysis_numbers.json").read_text())
+    sf, fits = out["surface"], out["R1"]["profile2"]["fits"]
+    c_src = out["propagation"]["speed_at_source"]
+    measured = {k: 1e3 * fits[k]["decay_time_s"] for k in ("exponential_0.9ms", "facet_shape_0.9ms", "exponential_3ms")}
+    lines = ["# The reach of the facet tail against the measured tail of R1's surface reflection", "", ATTRIBUTION + ".", "",
+             "Made by `tools/channel_smartocean.py tail`: our time spreading for the R1 geometry with the surface fitted to the tail (two numbers: height, vertical speed; the slope is "
+             f"Cox-Munk's for the wind whose height that is, {sf['wind_law']['mean_square_slope']:.4f}, not fitted), sampled like the 4 Hz soundings and passed through the same fits as the "
+             "measurement, with the taps spanning three mean decay times (as shipped) or the stated share of the shape's energy. Mean excess delay T read by each fit, ms; two seeds of the taps.", "",
+             "| Model | rule | T, exponential fit, first 0.9 ms | T, facet-shape fit, 0.9 ms | T, exponential fit, 3 ms | mean excess delay put in | last tap at, ms |", "| --- | --- | --- | --- | --- | --- | --- |",
+             f"| measured | | {measured['exponential_0.9ms']:.2f} | {measured['facet_shape_0.9ms']:.2f} | {measured['exponential_3ms']:.2f} | | |"]
+    res = {"measured_ms": measured}
+    from gpusonar.sim import timespread
+    sin2 = float(np.sin(np.radians(sf["grazing_deg"])) ** 2)
+    for label, extra in TAIL_OPTIONS:
+        for rule in (("facet", "rule_of_thumb") if extra.get("tail_quantile") in (None, 0.99) and extra.get("taps") is None else ("facet",)):
+            runs = [model_through_estimators(sf, out["propagation"]["R1"]["range_m"], c_src, seed=seed, time_spread=extra, rules=(rule,))[rule] for seed in (3, 4)]
+            put = sf["decay_ms_wind_law"][rule]
+            a = put / (1.0 + sin2) if rule == "facet" else 0.5 * put
+            b = a * sin2 if rule == "facet" else a
+            q = extra.get("tail_quantile")
+            last = 3.0 * put if q is None else float(timespread.tail_span(a + b, 2.0 * (a * a + b * b), q))
+            cell = lambda key: " / ".join(f"{1e3 * r[key]['decay_time_s']:.2f}" for r in runs)     # noqa: E731
+            lines.append(f"| {label} | {rule} | {cell('exponential_0.9ms')} | {cell('facet_shape_0.9ms')} | {cell('exponential_3ms')} | {put:.2f} | {last:.2f} |")
+            res.setdefault(label, {})[rule] = {k: [1e3 * r[k]["decay_time_s"] for r in runs] for k in measured}
+            print(lines[-1], flush=True)
+    text = "\n".join(lines) + "\n"
+    if args.out:
+        Path(args.out).write_text(text)
+    if args.json:
+        Path(args.json).write_text(json.dumps(res, indent=1))
+    print(text)
+    return 0
+
+
 def stage_analyse(args) -> int:
     cache = Path(args.cache)
     res = collect(cache)
@@ -1218,12 +1266,17 @@ def main(argv=None) -> int:
     a.add_argument("--figures", default=None)
     a.add_argument("--out", default=None)
     a.set_defaults(func=stage_analyse)
+    a = sub.add_parser("tail", help="the model's tap reach (time_spread.tail_quantile) against the measured tail fits; needs only analysis_numbers.json")
+    a.add_argument("--cache", required=True)
+    a.add_argument("--out", default=None)
+    a.add_argument("--json", default=None)
+    a.set_defaults(func=stage_tail)
     a = sub.add_parser("bathymetry", help="the unpacked depth geodatabase -> bathymetry.json (needs pyogrio, pyproj, shapely)")
     a.add_argument("--gdb", required=True, help="the .gdb directory")
     a.add_argument("--out", required=True)
     a.set_defaults(func=stage_bathymetry)
     args = ap.parse_args(argv)
-    if args.stage == "bathymetry":
+    if args.stage in ("bathymetry", "tail"):
         return args.func(args)
     if data_dir() is None and not (Path(args.cache) / "bb" / "meta.json").exists():
         print("GPUSONAR_SMARTOCEAN is not set to a directory with the dataset (and the cache has no recordings)", file=sys.stderr)

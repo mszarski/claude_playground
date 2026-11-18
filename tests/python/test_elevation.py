@@ -98,7 +98,7 @@ def static_chain(scenario):
     assert "static" in chain["nav"] and chain["chain"]["elevation"]["attitude_time"] == "transmit"      # a fixed pose: no history
     chain = chain["chain"]
     chain.pop("sync")
-    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+    chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
     chain["elevation"] = dict(chain["elevation"], gradient_per_s=None)                                   # the simulated water is isovelocity
     if scenario["environment"].get("water_depth"):
         chain["elevation"]["water_depth"] = float(scenario["environment"]["water_depth"])
@@ -678,7 +678,7 @@ def test_every_stage_runs_from_its_files_through_both_engines(scenario, deploy, 
     result = run_scenario(sc)
     target = np.asarray(sc["scene"][0]["positions"][0])
     chain = load_yaml(ROOT / "configs" / "deploy" / f"{deploy}.yaml")["chain"]
-    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+    chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
     if chain.get("elevation"):
         chain["elevation"] = dict(chain["elevation"], gradient_per_s=None, water_depth=float(sc["environment"]["water_depth"]))   # the simulated water is isovelocity
     reports = {engine: run(result.records, dict(chain, backend="host"), engine) for engine in ("python", "cpp")}

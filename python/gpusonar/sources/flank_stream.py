@@ -145,7 +145,7 @@ class PingAssembler:
         self.sonar = sonar
         self.sample_bytes = int(sample_bytes)
         self.pose = pose if pose is not None else core.Pose()
-        self.sound_speed = float(sound_speed or sonar.config.get("nominal_sound_speed", 1500.0))
+        self.sound_speed = float(sound_speed or sonar.nominal_sound_speed)
         template = sonar.make_record(self.pose, environment={"sound_speed": self.sound_speed})
         s = template.samples
         self.sample_rate = s.sample_rate

@@ -308,7 +308,7 @@ def test_a_track_adds_up_pings_that_are_each_too_weak():
     cfg = mp.options(KNOWN)
     single = 0
     for seed in range(8):
-        rec, origin = prepared(scenario(own, target, rng, ts=19.0, seed=1500 + seed))
+        rec, origin = prepared(scenario(own, target, rng, ts=16.0, seed=1500 + seed))      # 3 dB below the 19 it was tuned at: source levels are RMS now (D-102), echoes 3 dB up
         slant = float(np.hypot(rng, target - own)) + 1.0
         d = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, o)
         single += bool(d["valid"])
@@ -428,7 +428,7 @@ def test_two_rows_multipath_depth_selects_the_elevation():
                 assert d["depth_multipath_m"] == pytest.approx(150.0, abs=1.5)
                 if d.get("depth_consistent"):
                     seen += 1
-                    assert abs(d["depth_fused_m"] - 150.0) < 3.0 and d["depth_fused_sigma_m"] < 1.0     # the rows add their gradient prior, weighted
+                    assert abs(d["depth_fused_m"] - 150.0) < 3.0 and d["depth_fused_sigma_m"] < 1.5     # the rows add their gradient prior, weighted (1.13 m with RMS source levels and coloured, coherent noise: D-102, D-103)
                     if "elevation_selected" in d:
                         cands = [d["elevation_deg"]] + d.get("elevation_alternatives_deg", [])
                         true = np.degrees(np.arcsin((225.0 - 150.0) / d["range_m"]))

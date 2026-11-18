@@ -20,125 +20,44 @@ import warnings
 
 import numpy as np
 
-from . import acoustics, lloyd
-from .config import config_dir, load_yaml
+from . import acoustics, environment, lloyd
 
-# field -> (kind, unit, required, meaning, where to find it, what to do if unknown)
-ENVIRONMENT_FIELDS = {
-    "name": ("str", "", True, "short name (letters, digits, underscores)", "", "must be given"),
-    "title": ("str", "", False, "one line for headings", "", "the name"),
-    "water_depth_m": ("num", "m", False, "water depth. Left out or null: no bottom return at all (deep water, or a bottom that returns nothing): the surface image only", "chart / echo sounder", "leave it out: the non-ducting case"),
-    "bottom": ("str or map", "", False, "the sea bed: a name in configs/sediments.yaml, or {speed m/s, density re water, attenuation dB/wavelength}. Needs water_depth_m", "site survey", "leave it out with water_depth_m: the bottom then only limits own depth"),
-    "wind_speed_m_s": ("num", "m/s", False, "wind at 10 m: ambient noise, the wind law for the surface's rms height (when rms_wave_height_m is not given) and the bubble law", "forecast / trial plan", "5 (the link budget's)"),
-    "sea_state": ("int", "", False, "0 to 9, in place of wind_speed_m_s: its median wind speed (acoustics.SEA_STATE_WIND_SPEED)", "forecast", "give wind_speed_m_s"),
-    "rms_wave_height_m": ("num", "m", False, "rms displacement of the surface (a quarter of the significant wave height). An input of its own: measured heights did not follow the wind law (PHYSICS_NOTES Sec. 21)",
-                          "wave buoy / forecast: significant height / 4", "leave it out: the Pierson-Moskowitz height for the wind speed"),
-    "bubble_model": ("str", "", False, "wind law for the loss at each surface bounce: apl_1994 (sim/surface.py), or null for none", "", "null: no bubble loss"),
-    "sound_speed_m_s": ("num", "m/s", False, "sound speed of isovelocity water", "CTD", "1500"),
-    "profile": ("map", "", False, "{depth_m: [...], speed_m_s: [...]}: a sound-speed profile. The factor then comes from Bellhop (GPUSONAR_BELLHOP) and needs water_depth_m", "SVP cast / climatology", "leave it out: isovelocity"),
-    "own_depth_limits_m": ("[shallowest, deepest]", "m", False, "depths the platform may operate at in this water (a static frame: depths it can be hung at); never deeper than the build's platform.max_depth_m", "the operating rules",
-                           "5 m to the build's platform.max_depth_m (300 m when that is not given: a placeholder, flagged)"),
-    "bottom_clearance_m": ("num", "m", False, "how close to the bottom the platform may come", "operating rules", "10: a placeholder, flagged"),
-    "illustrative": ("bool", "", False, "true: nobody measured this environment; it is an example", "", "true"),
-    "note": ("str", "", False, "where the values come from, in words", "", "leave it out"),
-}
+# One environment schema for the build layer and the scenarios: gpusonar/environment.py (FIELDS, the loader and the
+# checks). The planner reads the fields below; an environment may carry the others (temperature, absorption, ...).
+ENVIRONMENT_FIELDS = {k: environment.FIELDS[k] for k in environment.PLANNING_FIELDS}
 NO_PATH_DB = -99.0                    # the factor is cut off here: below it there is no path to speak of (a shadow zone)
 DEFAULT_LIMITS = [5.0, 300.0]
 DEFAULT_CLEARANCE = 10.0
+LOCAL_PROFILE_NOTE = "the environment's water changes with range (profiles_by_range): planned with the LOCAL profile (range 0) at every range, as a vehicle that has only its own cast would"
+
+
+def _local_water(env: dict) -> tuple:
+    """(env, ranged): the planner is range independent. An environment whose water changes with range (`profiles_by_range`)
+    is planned with its local profile at every range; `ranged` says that this was done (it goes into the plan's words)."""
+    if env.get("profile") is None and env.get("profiles_by_range") is not None:
+        z, c = environment.profile_arrays(env)
+        return {**env, "profile": {"depth_m": z, "speed_m_s": c}}, True
+    return env, False
 
 
 def load_environments(value) -> list:
-    """The `environments` value of a build spec as a list: a list as written, or the named file's `environments:` list."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        path = config_dir() / "builds" / "environments" / f"{value}.yaml"
-        if not path.exists():
-            known = sorted(q.stem for q in (config_dir() / "builds" / "environments").glob("*.yaml"))
-            raise FileNotFoundError(f"no environment file {value!r}; known: {', '.join(known)}")
-        return list(load_yaml(path).get("environments") or [])
-    return list(value)
+    """The `environments` value of a build spec as a list: a list as written, or the named file's `environments:` list
+    (gpusonar.environment.load_list)."""
+    return environment.load_list(value)
 
 
 def environment_problems(envs) -> list:
-    """(field, message) for everything wrong with a list of environments."""
-    if not isinstance(envs, list):
-        return [("environments", "must be a list of environments ({name, water_depth_m, bottom, wind_speed_m_s, ...}) or the name of a file under configs/builds/environments/")]
-    out, seen = [], set()
-    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)  # noqa: E731
-    for i, e in enumerate(envs):
-        where = f"environments[{i}]"
-        if not isinstance(e, dict):
-            out.append((where, "must be a mapping"))
-            continue
-        name = e.get("name")
-        where = f"environments.{name}" if isinstance(name, str) else where
-        for key in e:
-            if key not in ENVIRONMENT_FIELDS:
-                out.append((f"{where}.{key}", f"unknown field; fields are {', '.join(ENVIRONMENT_FIELDS)}"))
-        if not isinstance(name, str) or not name.replace("_", "").isalnum():
-            out.append((f"{where}.name", "give the environment a name of letters, digits and underscores"))
-        elif name in seen:
-            out.append((f"{where}.name", "two environments have this name"))
-        seen.add(name)
-        depth = e.get("water_depth_m")
-        if depth is not None and not (num(depth) and depth > 0):
-            out.append((f"{where}.water_depth_m", f"is {depth!r}; a depth in metres, or leave it out for no bottom return"))
-            depth = None
-        bottom = e.get("bottom")
-        if bottom is not None:
-            if depth is None:
-                out.append((f"{where}.bottom", "a bottom needs water_depth_m"))
-            if isinstance(bottom, str):
-                from .sim import bottom as bottom_model
-                try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        bottom_model.sediment_reflection(bottom)
-                except (KeyError, ValueError) as exc:
-                    out.append((f"{where}.bottom", f"{bottom!r} is not a sediment of configs/sediments.yaml ({exc})"))
-            elif not (isinstance(bottom, dict) and all(num(bottom.get(k)) for k in ("speed", "density"))):
-                out.append((f"{where}.bottom", "give a sediment name of configs/sediments.yaml or {speed (m/s), density (re water), attenuation (dB/wavelength)}"))
-        if e.get("sea_state") is not None and e.get("wind_speed_m_s") is not None:
-            out.append((f"{where}.sea_state", "give sea_state or wind_speed_m_s, not both"))
-        if e.get("sea_state") is not None:
-            try:
-                acoustics.sea_state_wind_speed(e["sea_state"])
-            except ValueError as exc:
-                out.append((f"{where}.sea_state", str(exc)))
-        for key in ("wind_speed_m_s", "rms_wave_height_m", "bottom_clearance_m"):
-            if e.get(key) is not None and not (num(e[key]) and e[key] >= 0):
-                out.append((f"{where}.{key}", f"is {e[key]!r}; a number >= 0 ({ENVIRONMENT_FIELDS[key][1]})"))
-        if e.get("rms_wave_height_m") is not None and num(e["rms_wave_height_m"]) and e["rms_wave_height_m"] > 5.0:
-            out.append((f"{where}.rms_wave_height_m", f"{e['rms_wave_height_m']} m rms is a significant height of {4 * e['rms_wave_height_m']:g} m: is this the significant height? The field is the rms displacement (a quarter of it)"))
-        if e.get("bubble_model") is not None:
-            from .sim import surface as surface_model
-            if e["bubble_model"] not in surface_model.BUBBLE_LOSS_MODELS:
-                out.append((f"{where}.bubble_model", f"{e['bubble_model']!r}: one of {', '.join(sorted(surface_model.BUBBLE_LOSS_MODELS))}, or null"))
-        lim = e.get("own_depth_limits_m")
-        if lim is not None and not (isinstance(lim, list) and len(lim) == 2 and all(num(x) for x in lim) and 0 < lim[0] < lim[1]):
-            out.append((f"{where}.own_depth_limits_m", f"is {lim!r}; give [shallowest, deepest] in metres"))
-        elif lim is not None and depth is not None and lim[0] >= depth:
-            out.append((f"{where}.own_depth_limits_m", f"the shallowest operating depth ({lim[0]:g} m) is below the bottom ({depth:g} m)"))
-        prof = e.get("profile")
-        if prof is not None:
-            ok = isinstance(prof, dict) and isinstance(prof.get("depth_m"), list) and isinstance(prof.get("speed_m_s"), list) and len(prof["depth_m"]) == len(prof["speed_m_s"]) >= 2
-            if not ok or any(b <= a for a, b in zip(prof["depth_m"], prof["depth_m"][1:])):
-                out.append((f"{where}.profile", "give {depth_m: [...], speed_m_s: [...]} of equal length, depths increasing"))
-            if depth is None:
-                out.append((f"{where}.profile", "a sound-speed profile needs water_depth_m (Bellhop needs a bottom)"))
-    return out
+    """(field, message) for everything wrong with a list of environments (gpusonar.environment.problems)."""
+    return environment.problems(envs)
 
 
-def wind_of(env: dict, default: float = 5.0) -> float:
-    if env.get("sea_state") is not None:
-        return float(acoustics.sea_state_wind_speed(env["sea_state"]))
-    return float(env.get("wind_speed_m_s", default))
+def wind_of(env: dict, default: float = environment.DEFAULT_WIND_SPEED_M_S) -> float:
+    return float(environment.wind_speed(env, default))
 
 
 def surface_of(env: dict) -> lloyd.Surface:
     return lloyd.Surface.from_config({"wind_speed": wind_of(env), "rms_height": env.get("rms_wave_height_m"), "bubble_model": env.get("bubble_model")},
-                                     float(env.get("sound_speed_m_s", 1500.0)))
+                                     float(env.get("sound_speed_m_s", acoustics.NOMINAL_SOUND_SPEED)))
 
 
 def layer_of(env: dict, absorption_db_per_m: float = 0.0) -> lloyd.Layer:
@@ -146,7 +65,7 @@ def layer_of(env: dict, absorption_db_per_m: float = 0.0) -> lloyd.Layer:
     if isinstance(bottom, str):
         bottom = {"sediment": bottom}
     has = env.get("water_depth_m") is not None and bottom is not None
-    return lloyd.Layer(depth=float(env["water_depth_m"]) if has else None, bottom=bottom if has else None, sound_speed=float(env.get("sound_speed_m_s", 1500.0)),
+    return lloyd.Layer(depth=float(env["water_depth_m"]) if has else None, bottom=bottom if has else None, sound_speed=float(env.get("sound_speed_m_s", acoustics.NOMINAL_SOUND_SPEED)),
                        max_grazing_deg=30.0, absorption_db_per_m=absorption_db_per_m)
 
 
@@ -168,6 +87,7 @@ def own_depth_grid(env: dict, n: int = 100, max_depth: float | None = None) -> n
 def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, ranges, projector_below_m: float = 0.0, absorption_db_per_m: float = 0.0) -> dict:
     """The two-way factor (lloyd.summarise's figures, dB) on [own depth, target depth, range], and how it was computed."""
     own, zt, rr = (np.asarray(x, dtype=float) for x in (own_depths, target_depths, ranges))
+    env, ranged = _local_water(env)
     surface = surface_of(env)
     keys = ("peak_db", "energy_db", "narrowband_db")
     out = {k: np.zeros((own.size, zt.size, rr.size)) for k in keys}
@@ -193,7 +113,7 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
                     res = lloyd.summarise(h, s)
                     for k in keys:
                         out[k][i, j, m] = float(res[k])
-        return {**out, "method": "Bellhop arrivals over the profile (flat bottom, range-independent); the projector taken at the array's depth"}
+        return {**out, "method": "Bellhop arrivals over the profile (flat bottom, range-independent); the projector taken at the array's depth" + (f"; {LOCAL_PROFILE_NOTE}" if ranged else "")}
     layer = layer_of(env, absorption_db_per_m)
     ducted = layer.depth is not None
     f = lloyd.band(f_lo, f_hi, 513 if ducted else 129)
@@ -238,11 +158,13 @@ def _cover(held: np.ndarray, own: np.ndarray, most: int = 6) -> list:
     return steps
 
 
-def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float = 13.0,
+def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float | None = None,
          statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True) -> dict:
     """The depth plan of a build (`d`: buildspec.derive / describe) in one environment for resolved target classes
     (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest."""
     from . import buildspec as bs
+    threshold_db = bs.BUDGET_THRESHOLD_DB if threshold_db is None else float(threshold_db)
+    env, ranged = _local_water(env)
     wind = wind_of(env)
     eq, gains = bs.budget(d, wind)
     f_lo, f_hi = d["band_hz"]
@@ -271,7 +193,7 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     f3 = fac[statistic]
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
            "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
-           "profile_rests_on": ("the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
+           "profile_rests_on": (LOCAL_PROFILE_NOTE if ranged else "the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
            "method": fac["method"], "statistic": statistic, "threshold_db": threshold_db, "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
            "free_field_margin_0db_target_db": free.tolist(), "classes": {}}

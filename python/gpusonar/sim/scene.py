@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 
 @dataclass
 class Scene:
@@ -153,7 +155,7 @@ class Scene:
         return amp
 
     def evaluate(self, t: float, tx_position=None, rx_position=None, frequency: float | None = None,
-                 sound_speed: float = 1500.0):
+                 sound_speed: float = NOMINAL_SOUND_SPEED):
         """Scatterer positions, amplitudes and velocities for a ping at scenario time t, for a
         projector at `tx_position` and a receiver (array reference point) at `rx_position`.
 

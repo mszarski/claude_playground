@@ -9,7 +9,7 @@ fidelity: free_field
 # at 1 m): chosen so the strongest echo uses about a quarter of the ADC range.
 sonar_overrides:
   transmit: {waveform: {amplitude: 10000.0}}
-environment: {temperature: 20.0, salinity: 0.0}
+environment: pool_20c_fresh
 platform:
   position: [0, 0, 1.0]
   rpy: [0, 0, 0]

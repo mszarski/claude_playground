@@ -26,6 +26,7 @@ import warnings
 
 import numpy as np
 
+from .acoustics import NOMINAL_SOUND_SPEED
 from .config import config_dir, load_yaml
 
 # field -> (kind, unit, required, meaning, where a spec sheet has it, what to do if unknown)
@@ -50,7 +51,7 @@ _CACHE: dict = {}
 
 
 def cylinder_ts_db(length_m: float, diameter_m: float, aspect_deg, f_lo: float, f_hi: float, range_m: float | None = None, caps: bool = True,
-                   sound_speed: float = 1500.0, n_f: int = 21) -> np.ndarray:
+                   sound_speed: float = NOMINAL_SOUND_SPEED, n_f: int = 21) -> np.ndarray:
     key = (float(length_m), float(diameter_m), tuple(np.atleast_1d(np.asarray(aspect_deg, dtype=float)).tolist()), float(f_lo), float(f_hi), range_m, bool(caps), float(sound_speed), int(n_f))
     if key not in _CACHE:
         _CACHE[key] = _cylinder_ts_db(*key[:2], np.array(key[2]), *key[3:])
@@ -88,7 +89,7 @@ def _cylinder_ts_db(length_m, diameter_m, aspect_deg, f_lo, f_hi, range_m, caps,
     return out
 
 
-def cylinder_closed_forms(length_m: float, diameter_m: float, frequency: float, range_m: float, sound_speed: float = 1500.0) -> dict:
+def cylinder_closed_forms(length_m: float, diameter_m: float, frequency: float, range_m: float, sound_speed: float = NOMINAL_SOUND_SPEED) -> dict:
     """The textbook limits the numbers above are held to: broadside in the far field, broadside inside L^2 / lambda, the flat end."""
     lam, a, length = sound_speed / frequency, 0.5 * diameter_m, float(length_m)
     return {"broadside_far_field_db": float(10.0 * np.log10(a * length**2 / (2.0 * lam))), "broadside_near_field_db": float(10.0 * np.log10(a * range_m / 4.0)),
@@ -155,7 +156,7 @@ def problems(classes) -> list:
     return out
 
 
-def resolve(classes, f_lo: float, f_hi: float, range_m: float = 12000.0, sound_speed: float = 1500.0) -> list:
+def resolve(classes, f_lo: float, f_hi: float, range_m: float = 12000.0, sound_speed: float = NOMINAL_SOUND_SPEED) -> list:
     """Each class completed: `ts_db` [low, high] (the stated figure, or the cylinder's over its aspects at `range_m`),
     `status`, and for a cylinder the table `by_aspect` and the closed-form limits."""
     out = []

@@ -297,7 +297,7 @@ def ping(tx=TX, rx=RX, ranges=(25.0, 230.0), scene=None, **kw):
     sonar = SonarModel.load("popoto_8", {
         "receive": {"kind": "baseband", "sample_rate": 20e3, "window": {"range": list(ranges)}, "sensitivity_db": None},
         "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": F, "f_stop": F, "duration": 2e-3,
-                                                          "window_alpha": 0.0, "source_level_db": None,
+                                                          "window_alpha": 0.0, "source_level_db_rms": None,
                                                           "amplitude": 1.0}}})
     return simulate_ping(sonar, make_pose(position=rx), scene or Scene(), environment={"sound_speed": C},
                          absorption_model="none", adc=False, tx_pose=make_pose(position=tx), **kw)

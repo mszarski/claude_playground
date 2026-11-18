@@ -1,0 +1,8 @@
+# coastal_12c over the OTHER illustrative sand (1600 m/s, 1.8, 0.5 dB/wavelength): the numbers the Bellhop provider
+# has in code as its fallback, typed in the flank and Popoto-trial scenarios. Two "sands" in the shipped scenarios is
+# audit finding S-2; they are kept apart here, by name, so that the shipped records do not change.
+# Give water_depth_m in the scenario.
+name: coastal_12c_bellhop_sand
+title: "Sea water at 12 deg C over the Bellhop provider's sand (1600 m/s, 1.8, 0.5 dB/wavelength)"
+base: coastal_12c
+bottom: {speed: 1600.0, density: 1.8, attenuation: 0.5}

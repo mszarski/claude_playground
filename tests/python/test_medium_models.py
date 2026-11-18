@@ -57,7 +57,7 @@ def test_scenario_with_sea_state_equals_the_wind_speed_one():
     def samples(key, value):
         cfg = load_scenario_config("point_grid_fls_300k")
         cfg["fidelity"] = "image_source"
-        cfg["propagation"] = {"surface_z": 0.0, "bottom_z": 120.0, "max_order": 1}
+        cfg["propagation"] = {"surface_z": 0.0, "bottom_z": 120.0, "bottom_coefficient": 0.5, "max_order": 1}
         cfg["scene"][0].update(ranges=cfg["scene"][0]["ranges"][:1], bearings_deg=[0.0])
         cfg["time_spread"] = {"surface": {key: value}, "taps": 2}
         cfg["receiver"] = {"noise_rms": 0.0, "adc": False}

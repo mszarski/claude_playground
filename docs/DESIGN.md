@@ -95,12 +95,12 @@ rows stay inside, not a length to fill; ONE row design, the long module, serves 
 
 | Build | Rows × module | For | Beam | Reach, ship / small (km) | Elevation at 20 dB | Boards | Direct sound over full scale |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `popoto_testauv_1x32` | 1 × `testauv_short` | the chain on real boards and under way (the short row: the one exception) | 5.3° | 7.7 / 2.9 | none | 4 | +34 dB |
-| `popoto_static_2x32` | 2 × `long_4p8m` | the long row and stacked rows in the water for the first time | 3.2° | 9.4 / 3.7 | 0.18° (one of several possible angles: see below) | 8 | +35 dB |
-| `popoto_static_3x32` | 3 × `long_4p8m` | the recommended row arrangement, still off the vehicle | 3.2° | 9.9 / 3.9 | 0.18° | 12 | +35 dB |
-| `popoto_face_1x32` | 1 × `long_4p8m` | the face to start with: one long row | 3.2° | 12.8 / 5.3 | none | 4 | +19 dB |
-| `popoto_face_2x32` | 2 × `long_4p8m` | elevation on the vehicle where water is shallow against the range | 3.2° | 14.0 / 6.0 | 0.18° (one of several possible angles: see below) | 8 | +18 dB |
-| `popoto_face_3x32` | 3 × `long_4p8m` | the recommended end state | 3.2° | 14.7 / 6.4 | 0.18° | 12 | +19 dB |
+| `popoto_testauv_1x32` | 1 × `testauv_short` | the chain on real boards and under way (the short row: the one exception) | 5.3° | 7.7 / 2.9 | none | 4 | +37 dB |
+| `popoto_static_2x32` | 2 × `long_4p8m` | the long row and stacked rows in the water for the first time | 3.2° | 9.4 / 3.7 | 0.18° (one of several possible angles: see below) | 8 | +38 dB |
+| `popoto_static_3x32` | 3 × `long_4p8m` | the recommended row arrangement, still off the vehicle | 3.2° | 9.9 / 3.9 | 0.18° | 12 | +38 dB |
+| `popoto_face_1x32` | 1 × `long_4p8m` | the face to start with: one long row | 3.2° | 12.8 / 5.3 | none | 4 | +22 dB |
+| `popoto_face_2x32` | 2 × `long_4p8m` | elevation on the vehicle where water is shallow against the range | 3.2° | 14.0 / 6.0 | 0.18° (one of several possible angles: see below) | 8 | +21 dB |
+| `popoto_face_3x32` | 3 × `long_4p8m` | the recommended end state | 3.2° | 14.7 / 6.4 | 0.18° | 12 | +22 dB |
 
 (Two rows: with two rows 1.5 m apart the array cannot tell which of several elevation angles (about 11.5° apart) an echo came from, so it reports the list of possible angles instead of one; bearing, range and the track are unaffected; the list collapses to one angle when the water depth and the range rule the others out, when a track already has a depth, or with a third row.)
 
@@ -323,8 +323,8 @@ Accuracy and every mounting and clock tolerance scale with the baseline; the rep
 **The projector on the face.** No position was given ("Projector etc" needs room). The sonar files put it in the forward end margin at mid-height,
 4 m from the array's centre: a placeholder, 1.69 to 6.37 m from the hydrophones. Two things follow, both from the files' own numbers:
 
-- **Its direct sound overloads the inputs.** 192 dB re 1 µPa at the nearest hydrophone is 24 V at the ADC with the file's sensitivity and gain,
-  19 dB over full scale (2.61 V), for the whole pulse (to 1.004 s after the ping). The plan clamps the preamp inputs and the software uses
+- **Its direct sound overloads the inputs.** 192 dB re 1 µPa at the nearest hydrophone is 33 V at the ADC with the file's sensitivity and gain,
+  22 dB over full scale (2.61 V), for the whole pulse (to 1.004 s after the ping). The plan clamps the preamp inputs and the software uses
   nothing inside 750 m. How quickly the inputs recover afterwards is **not known**, and the simulator models neither the direct sound nor the recovery.
 - **Its offset costs no accuracy.** Every record carries the projector's lever arm, and the beamformer and the elevation search hold the true path projector →
   target → each hydrophone (tested with the projector off-centre). A row's far field begins at 154 m; the backprojection kernel is exact inside it too.
@@ -569,12 +569,12 @@ build files (`gpusonar.buildspec.describe`: source level − 20 log₁₀(distan
 
 | Build | Projector to nearest hydrophone | Direct level there | At the ADC | Over full scale | Direct sound ends | First sync burst after that | Distance for full scale | Source level for full scale |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `popoto_testauv_1x32` | 0.30 m | 207 dB re 1 µPa | 131 V | **+34 dB** | 0.101 s | 4.0 ms | 15 m | 163 dB |
-| `popoto_static_2x32` | 0.26 m | 209 dB re 1 µPa | 153 V | **+35 dB** | 0.102 s | 3.1 ms | 15 m | 162 dB |
-| `popoto_static_3x32` | 0.26 m | 209 dB re 1 µPa | 153 V | **+35 dB** | 0.102 s | 3.1 ms | 15 m | 162 dB |
-| `popoto_face_1x32` | 1.68 m | 193 dB re 1 µPa | 24 V | **+19 dB** | 1.004 s | 0.8 ms | 15 m | 178 dB |
-| `popoto_face_2x32` | 1.84 m | 192 dB re 1 µPa | 22 V | **+18 dB** | 1.004 s | 0.8 ms | 15 m | 179 dB |
-| `popoto_face_3x32` | 1.69 m | 192 dB re 1 µPa | 24 V | **+19 dB** | 1.004 s | 0.8 ms | 15 m | 178 dB |
+| `popoto_testauv_1x32` | 0.30 m | 207 dB re 1 µPa | 186 V | **+37 dB** | 0.101 s | 4.0 ms | 22 m | 160 dB |
+| `popoto_static_2x32` | 0.26 m | 209 dB re 1 µPa | 216 V | **+38 dB** | 0.102 s | 3.1 ms | 22 m | 159 dB |
+| `popoto_static_3x32` | 0.26 m | 209 dB re 1 µPa | 216 V | **+38 dB** | 0.102 s | 3.1 ms | 22 m | 159 dB |
+| `popoto_face_1x32` | 1.68 m | 193 dB re 1 µPa | 34 V | **+22 dB** | 1.004 s | 0.8 ms | 22 m | 175 dB |
+| `popoto_face_2x32` | 1.84 m | 192 dB re 1 µPa | 31 V | **+21 dB** | 1.004 s | 0.8 ms | 22 m | 176 dB |
+| `popoto_face_3x32` | 1.69 m | 192 dB re 1 µPa | 33 V | **+22 dB** | 1.004 s | 0.8 ms | 22 m | 175 dB |
 
 The files' gain and full scale ARE the plan's figures for the capture board ("43 dB preamp, 37 mVpp full scale": 43 dB and 18.5 mV peak at the input, 2.61 V after the gain), so the computation with the plan's
 figures is the same computation: full scale is 173 dB re 1 µPa at the hydrophone. What is NOT the plan's is the hydrophone sensitivity (-208 dB re 1 V/µPa, a placeholder): a hydrophone
@@ -585,19 +585,19 @@ blanking cost nothing by themselves. What matters is (a) that the inputs are not
 (7.5 m per 10 ms); (c) that the synchronisation bursts and any calibration signal do not fall inside the transmit or the recovery. On (c) the shipped timing is a finding: the first burst is
 0.8 ms after the direct sound ends at the farthest hydrophone on the face. The build validator now warns of it.
 
-**Every hydrophone is overloaded, not only the nearest.** On the face (three rows) 96 of 96 are, from +7.6 dB at the farthest (6.37 m) to +19.1 dB at the nearest; the direct sound falls to full scale only 15.3 m from the projector, so **no position on a 9 m face avoids it**: at least
-19.1 dB of gain reduction during the transmit is needed, or inputs that are built to be overloaded. The first usable range is 753 m with an input that has no memory (76 m with the 0.1 s pulse), plus 0.75 m per millisecond of recovery. These are peak levels (add 3 dB if a source level is an rms figure) and the water path only: hull-borne and electrical coupling from the amplifier are not modelled and could exceed it.
+**Every hydrophone is overloaded, not only the nearest.** On the face (three rows) 96 of 96 are, from +10.6 dB at the farthest (6.37 m) to +22.1 dB at the nearest; the direct sound falls to full scale only 21.6 m from the projector, so **no position on a 9 m face avoids it**: at least
+22.1 dB of gain reduction during the transmit is needed, or inputs that are built to be overloaded. The first usable range is 753 m with an input that has no memory (76 m with the 0.1 s pulse), plus 0.75 m per millisecond of recovery. These are peak levels (add 3 dB if a source level is an rms figure) and the water path only: hull-borne and electrical coupling from the amplifier are not modelled and could exceed it.
 
-The simulator now models this (`transmit.direct_path`, `receive.overload`; `tools/direct_sound_study.py`): its per-hydrophone figures for the face are +7.6 to +19.1 dB over full scale, 96 of 96 overloaded, full scale at 15.3 m (`design/direct_sound_study.json`; the same closed form as here, checked against the simulated samples). Its recovery parameter sets are illustrative: no board has been measured. Blanking alone suffices only if the front end has no memory; a gain switch of more than the overload removes the problem at its source.
+The simulator now models this (`transmit.direct_path`, `receive.overload`; `tools/direct_sound_study.py`): its per-hydrophone figures for the face are +10.6 to +22.1 dB over full scale, 96 of 96 overloaded, full scale at 21.6 m (`design/direct_sound_study.json`; the same closed form as here, checked against the simulated samples). Its recovery parameter sets are illustrative: no board has been measured. Blanking alone suffices only if the front end has no memory; a gain switch of more than the overload removes the problem at its source.
 
 | Option | What it buys | What it costs or needs | Known? |
 | --- | --- | --- | --- |
 | Ignore window in the chain (blanking) | discards the samples of the transmit and of the recovery; `chain.blanking` | nothing; it protects nothing | yes |
-| Input clamp or limiter (protection) | survival at +19 dB over full scale (24 V equivalent at the ADC, 0.17 V at the input) | a recovery time after the clamp releases: **unknown** | the plan says of its own integrated design "preamp inputs are clamped"; for the PMM6081 it gives no damage threshold and no clamp: unknown |
-| Switchable or time-varying input gain | 19 dB less gain during the transmit removes the overload; a ramp afterwards is a TVG (the record format carries one) | the board must offer it | unknown: the plan lists "other gain options" among its questions for Popoto |
-| Move the projector | 6 dB per doubling of distance: ×2 (3.4 m): +13 dB, ×4 (6.7 m): +7 dB, ×8 (13.5 m): +1 dB; full scale at 15 m | room on the platform; beyond the face it means a pole, or below or behind the hull; the direct sound then ends later (0.67 ms per metre) | geometry: yes |
-| A projector with a null towards the array, or a baffle | must deliver 19 dB towards the nearest hydrophone to reach full scale, more for margin | a directional source or a structure at 4–6 kHz (a wavelength is 30 cm); no product is assumed | unknown |
-| Lower source level, longer pulse, same energy | each 3 dB less level is twice the pulse: −3 dB: 2 s, blind inside 1.5 km, −6 dB: 4 s, blind inside 3.0 km, −10 dB: 10 s, blind inside 7.5 km. The 12 km budget is unchanged (it depends on energy); full scale would need −19 dB, a 82 s pulse: not a way out by itself | blind range and ping interval grow with the pulse | yes |
+| Input clamp or limiter (protection) | survival at +22 dB over full scale (33 V equivalent at the ADC, 0.24 V at the input) | a recovery time after the clamp releases: **unknown** | the plan says of its own integrated design "preamp inputs are clamped"; for the PMM6081 it gives no damage threshold and no clamp: unknown |
+| Switchable or time-varying input gain | 22 dB less gain during the transmit removes the overload; a ramp afterwards is a TVG (the record format carries one) | the board must offer it | unknown: the plan lists "other gain options" among its questions for Popoto |
+| Move the projector | 6 dB per doubling of distance: ×2 (3.4 m): +16 dB, ×4 (6.7 m): +10 dB, ×8 (13.5 m): +4 dB; full scale at 22 m | room on the platform; beyond the face it means a pole, or below or behind the hull; the direct sound then ends later (0.67 ms per metre) | geometry: yes |
+| A projector with a null towards the array, or a baffle | must deliver 22 dB towards the nearest hydrophone to reach full scale, more for margin | a directional source or a structure at 4–6 kHz (a wavelength is 30 cm); no product is assumed | unknown |
+| Lower source level, longer pulse, same energy | each 3 dB less level is twice the pulse: −3 dB: 2 s, blind inside 1.5 km, −6 dB: 4 s, blind inside 3.0 km, −10 dB: 10 s, blind inside 7.5 km. The 12 km budget is unchanged (it depends on energy); full scale would need −22 dB, a 164 s pulse: not a way out by itself | blind range and ping interval grow with the pulse | yes |
 | Schedule the sync bursts clear of the transmit | the bursts survive | `sync.reference.lead_s` in the spec (after the recovery time), or open the window later | yes, once the recovery time is |
 
 **Position and the multipath depth bias.** The projector's place also moves the bias a shallow channel puts on depth: with the projector beside the rows in the end margin the two-row check at 3 km reads 26–34 m for a target at 60 m (`popoto_elevation_bench.json`); an earlier run with it 1.5 m below the array's centre read closer to the truth. Below the array was better on that count; it is one geometry, not a rule.
@@ -633,9 +633,9 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 - **Bubbles, by the `apl_1994` law, remove the surface path in a high wind** (5 dB a bounce at 0.07° and 9.8 m/s): the null fills and the lobe's gain goes with it (last column). That law grows without limit towards grazing and its sources state no range of validity; a target inside the bubble layer is not modelled. Treat that column as a bound, not a prediction.
 - **A deep target is spared.** Over own depths of 5–300 m the peak factor ranges over -46 to +12 dB for a target at 4 m; -11 to +12 dB for a target at 30 m; -1 to +11 dB for a target at 100 m; +1 to +8 dB for a target at 300 m: once the two paths differ by more than the pulse resolves, the direct-then-surface and surface-then-direct echoes arrive together and add (+6 dB), whatever the depth.
 
-**Checked.** Against the simulator's image-source paths through `run_scenario` on both engines (echo with the surface over echo without, own depth 10–600 m, target 4, 30, 150 m, at 12 and 3 km): within 0.9 dB at the peak and 1.1 dB in energy, the largest differences in the nulls, where the sweep's taper matters. Through the C++ chain with noise (a strong point at 4 m, 12 km): the detector's SNR against own depth follows the model within 0.6 dB over -15 to +12 dB. Against Bellhop, one way at 12 km: surface image only: energy within 0.6 dB, two-way peak within 1.2 dB; 100 m of isovelocity water over sand: energy within 0.0 dB, two-way peak within 0.1 dB (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop). The projector's depth counts in a null: 1.5 m below the array (the one-row file) is 1.2 dB there (`tools/surface_image_validation.py`).
+**Checked.** Against the simulator's image-source paths through `run_scenario` on both engines (echo with the surface over echo without, own depth 10–600 m, target 4, 30, 150 m, at 12 and 3 km): within 0.9 dB at the peak and 1.1 dB in energy, the largest differences in the nulls, where the sweep's taper matters. Through the C++ chain with noise (a strong point at 4 m, 12 km): the detector's SNR against own depth follows the model within 1.3 dB over -15 to +12 dB. Against Bellhop, one way at 12 km: surface image only: energy within 0.6 dB, two-way peak within 1.2 dB; 100 m of isovelocity water over sand: energy within 0.0 dB, two-way peak within 0.1 dB (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop). The projector's depth counts in a null: 1.5 m below the array (the one-row file) is 1.2 dB there (`tools/surface_image_validation.py`).
 
-**The chain reads lower than the budget.** For the same target in free field the chain's detector reports 32.5 dB where the budget says 44.6 dB: 12.2 dB less. With the chain's own threshold (9 dB) a target needs 8.2 dB more than the budget's 13 dB to be detected. Part is the 2 m range cell and the aperture taper; part is that the simulator still takes a source level as a peak pressure while the budget (and, by the owner's decision, every spec) takes it as rms: 3 dB. **Margins below are the budget's; read them with this in mind until the two are reconciled.**
+> **THE BUDGET'S 13 dB THRESHOLD IS NOT THE SHIPPED DETECTOR'S.** Measured, same target, free field (`tools/surface_image_validation.py`): the chain's `snr_db` reads 41.4 dB where the budget says 44.6 dB, 3.2 dB less. For a detection probability of 0.5 the detector needs about 15.5 dB on the budget's footing (17 dB for 0.9; `buildspec.DETECTOR_THRESHOLD_DB`, from `live.budget_threshold_db`): 2.5 dB more than the 13 dB used below. **Every margin below is therefore optimistic by about 2.5 dB** until the budget tools take the detector's own threshold and quote detection probabilities (`live.detection_probability`); that step is open. Source levels are RMS in the simulator and in the budget alike (D-102).
 
 **Which water is which.** *Non-ducting*: the direct path and the surface image only. It applies where the bottom returns little towards the target: water deep against the range (the bounce meets the bottom above its critical angle), a soft bottom (silt, clay, mud), or sound bent down onto such a bottom. *Ducted*: shallow against the range over sand or gravel, where many bounces arrive nearly whole; the image series (isovelocity) or Bellhop (with a profile) then replaces the two-path factor and is worth tens of decibels more than spherical spreading. The planner computes whichever the environment describes and says which it used.
 
@@ -840,7 +840,7 @@ which arrival of a group came first; how a track's elevation changes over pings.
 **Hardware for the 12 km point** (details and the plan's own words: *Parts list*).
 
 - **Projector:** 197 dB re 1 µPa at 1 m over 4–6 kHz for 1 s every 17.9 s (duty 5.6%); 417 W acoustic from an omnidirectional source. **None is chosen**; the plan's transducer covers 20–35 kHz.
-- **Direct sound:** 192 dB re 1 µPa at the nearest hydrophone, 19 dB over the inputs' full scale at the placeholder position: *The projector's direct sound* above.
+- **Direct sound:** 192 dB re 1 µPa at the nearest hydrophone, 22 dB over the inputs' full scale at the placeholder position: *The projector's direct sound* above.
 - **Hydrophones, boards, synchronisation:** 96 hydrophones on 12 boards (three rows), 64 on 8 (two); rows agree to 0.87 µs for 0.05°.
 - **Data:** 236 Mbit/s while receiving (three rows); 1,733,974 samples a channel and 666 MB a ping for the 750–12700 m window, 134 GB an hour recorded raw (4 bytes a sample), 16 GB an hour decimated by 17. **Recorded raw by default** (the owner's decision; `storage.record`): a decimated recording has lost the synchronisation reference and everything outside the band for good, so raw is the safe default during trials and `decimated` the documented option for storage-limited runs. For one / two / three rows: 45 / 89 / 134 GB an hour raw, 5.2 / 10.5 / 15.7 decimated.
 - **Compute: the plan** (the owner's decision on the stage-2 timings). Over the full window the decimate-first stage on a CPU takes 13.1 / 22.9 / 44.2 s a ping for 1 / 2 / 3 rows against 17.9 s between pings: **one row may run on a CPU; two or three rows need a GPU** (`compute.option` defaults to `gpu` for stacked rows and the validator warns of a CPU option slower than the ping interval). **The full-window GPU figure is still unmeasured**: the L4 numbers below are for scenario-size decimated pings.
@@ -889,11 +889,11 @@ Generated from the stage files (`tools/parts_list.py`; the full table with every
 | Recording as chosen (`storage.record`), an hour | raw: 45.48 GB (decimated: 5.35 GB) | raw: 92.07 GB (decimated: 10.83 GB) | raw: 138.11 GB (decimated: 16.25 GB) | raw: 44.55 GB (decimated: 5.24 GB) | raw: 89.11 GB (decimated: 10.48 GB) | raw: 133.66 GB (decimated: 15.73 GB) |
 | Cables: shortest–longest, total (boards assumed at the array's centre) | 0.5–1.9 m, 39 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m | 0.6–2.8 m, 54 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m |
 | Projector to the nearest hydrophone | 0.30 m | 0.26 m | 0.26 m | 1.68 m | 1.84 m | 1.69 m |
-| Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +35 dB | 209 dB re 1 µPa: +35 dB | 193 dB re 1 µPa: +19 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
+| Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +37 dB | 209 dB re 1 µPa: +38 dB | 209 dB re 1 µPa: +38 dB | 193 dB re 1 µPa: +22 dB | 192 dB re 1 µPa: +21 dB | 192 dB re 1 µPa: +22 dB |
 | Direct sound ends | 0.101 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) |
-| Source level that just reaches full scale | 163 dB | 162 dB | 162 dB | 178 dB | 179 dB | 178 dB |
-| Hydrophones overloaded; at the farthest | 32 of 32; +21 dB | 64 of 64; +14 dB | 96 of 96; +14 dB | 32 of 32; +8 dB | 64 of 64; +8 dB | 96 of 96; +8 dB |
-| Gain reduction needed during the transmit | 34 dB | 35 dB | 35 dB | 19 dB | 18 dB | 19 dB |
+| Source level that just reaches full scale | 160 dB | 159 dB | 159 dB | 175 dB | 176 dB | 175 dB |
+| Hydrophones overloaded; at the farthest | 32 of 32; +24 dB | 64 of 64; +17 dB | 96 of 96; +17 dB | 32 of 32; +11 dB | 64 of 64; +11 dB | 96 of 96; +11 dB |
+| Gain reduction needed during the transmit | 37 dB | 38 dB | 38 dB | 22 dB | 21 dB | 22 dB |
 | First usable range, input with no memory (+ per ms of recovery) | 76 m (+0.75 m) | 76 m (+0.75 m) | 76 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) |
 | Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | one row: n/a | 0.87 µs | 0.87 µs |
 | Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |

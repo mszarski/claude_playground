@@ -269,7 +269,7 @@ def test_chain_results_through_the_stage_equal_the_full_rate_path(scenario, depl
     elevations, depths, tracks and the clock estimates, within the tolerances above. C++ engine."""
     recs = stage_records(scenario)
     chain = load_yaml(ROOT / "configs" / "deploy" / f"{deploy}.yaml")["chain"]
-    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+    chain["tracker"] = dict(chain.get("tracker") or {}, confirm_hits=2)
     if chain.get("elevation"):
         water = load_scenario_config(scenario)["environment"].get("water_depth")
         chain["elevation"] = dict(chain["elevation"], gradient_per_s=None, water_depth=water)

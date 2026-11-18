@@ -119,7 +119,7 @@ def main():
     model = SonarModel.load("popoto_array")
     wf = model.config["transmit"]["waveform"]
     fc, n_cur = 0.5 * (float(wf["f_start"]) + float(wf["f_stop"])), len(model.positions)
-    sl_cur = float(wf["source_level_db"])
+    sl_cur = float(wf.get("source_level_db_rms", wf.get("source_level_db")))
     need = float(required_source_level(fc, args.range, n_cur, args.ts, float(wf["duration"]), args.snr))
     rr = np.geomspace(500.0, 30000.0, 400)
     ok = [float(required_source_level(fc, r, n_cur, args.ts, float(wf["duration"]), args.snr)) <= sl_cur for r in rr]

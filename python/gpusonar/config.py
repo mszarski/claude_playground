@@ -96,6 +96,9 @@ def _load_with_base(kind: str, name_or_path, seen=()) -> dict:
     if path in seen:
         raise ValueError(f"config inheritance loop at {path}")
     cfg = load_yaml(path)
+    if kind == "sonars":
+        from .sonar import normalise_source_level
+        cfg = normalise_source_level(cfg)          # `source_level_db` (deprecated) -> `source_level_db_rms`
     base = cfg.pop("base", None)
     if base is not None:
         parent = _load_with_base(kind, base, seen + (path,))
@@ -143,12 +146,24 @@ def merge_flags(parent: dict, child: dict, merged: dict) -> dict:
 def load_sonar_config(name_or_path, overrides: dict | None = None) -> dict:
     """Resolved sonar config: a name under configs/sonars or a path, plus overrides."""
     cfg = _load_with_base("sonars", name_or_path)
-    return deep_merge(cfg, overrides) if overrides else cfg
+    if overrides:
+        from .sonar import normalise_source_level
+        cfg = deep_merge(cfg, normalise_source_level(overrides))
+    return cfg
 
 
-def load_scenario_config(name_or_path, overrides: dict | None = None) -> dict:
+def load_scenario_config(name_or_path, overrides: dict | None = None, expand: bool = True) -> dict:
+    """Resolved scenario config: a name under configs/scenarios or a path, plus overrides. With `expand` (default) the
+    scenario's one environment (gpusonar/environment.py) is resolved and its site values are written into the blocks
+    that use them (propagation, time_spread, reverberation, receiver.ambient_noise, absorption), so a reader finds
+    `cfg["environment"]["sound_speed"]` or `cfg["propagation"]["bottom_z"]` whatever the file names or leaves to the
+    environment. `expand=False`: the file as written."""
     cfg = _load_with_base("scenarios", name_or_path)
-    return deep_merge(cfg, overrides) if overrides else cfg
+    cfg = deep_merge(cfg, overrides) if overrides else cfg
+    if expand:
+        from . import environment
+        cfg = environment.expand_scenario(cfg)
+    return cfg
 
 
 def list_configs(kind: str) -> list[str]:

@@ -1,0 +1,7 @@
+# coastal_12c over the illustrative sand half-space the Popoto and FLS scenarios use (1650 m/s, 1.9, 0.8 dB/wavelength:
+# "typical textbook values for the sediment type, not measurements"; not an entry of configs/sediments.yaml).
+# Give water_depth_m in the scenario.
+name: coastal_12c_sand
+title: "Sea water at 12 deg C over illustrative sand (1650 m/s, 1.9, 0.8 dB/wavelength)"
+base: coastal_12c
+bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}

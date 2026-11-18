@@ -2,7 +2,7 @@
 name: point_grid_fls_300k
 sonar: fls_300k
 fidelity: free_field
-environment: {temperature: 12.0, salinity: 35.0}
+environment: {temperature_c: 12.0, salinity_psu: 35.0}
 platform:
   position: [0, 0, 10.0]
   rpy: [0, 0, 0]

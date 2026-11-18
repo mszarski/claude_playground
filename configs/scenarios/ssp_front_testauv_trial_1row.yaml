@@ -1,0 +1,45 @@
+# The one-row prototype on the test AUV against a target at 500 m, with a FRONT between the vehicle and the target.
+#   tools/sonar_live.py configs/deploy/popoto_testauv_1row.yaml --scenario ssp_front_testauv_trial_1row --out DIR --engine cpp     (needs GPUSONAR_BELLHOP)
+#   tools/ssp_range_study.py                                                  (this against the same scenario with the local profile everywhere)
+# The same sonar, platform, target and window as `popoto_testauv_trial_1row`; the water is ILLUSTRATIVE (nobody measured it):
+#   - at the vehicle and out to 200 m: a mixed layer of 1500 m/s down to 8 m, a thermocline to 1490 m/s at 16 m, isothermal water below
+#     (0.017 /s). This is the LOCAL profile: the one the vehicle's own cast gives, and all a chain can be told;
+#   - from 300 m on: colder water mixed from top to bottom (1478 m/s at the surface, 0.017 /s): 22 m/s slower at the surface, 12 m/s at the bottom;
+#   - between 200 and 300 m the speed is linear in range between the two (Bellhop's 2-D field, `environment.profiles_by_range`).
+# Range is horizontal distance from the vehicle, the same on every bearing (the provider's section), so the water moves with the vehicle:
+# over the four pings (9 m of travel) the front stays 200 to 300 m from it. The seabed is flat. The eigenrays reflect from a flat surface.
+# Every depth, the target and the water are placeholders for a trial site that is not chosen.
+name: ssp_front_testauv_trial_1row
+sonar: popoto_testauv_1row_clocks
+fidelity: eigenray
+sonar_overrides:
+  receive: {window: {range: [150, 900]}}
+environment:
+  base: coastal_12c_sand
+  water_depth_m: 30.0
+  profiles_by_range:
+    - {range_m: 0.0,   depth_m: [0, 8, 16, 30], speed_m_s: [1500.0, 1500.0, 1490.0, 1490.24]}
+    - {range_m: 200.0, depth_m: [0, 8, 16, 30], speed_m_s: [1500.0, 1500.0, 1490.0, 1490.24]}
+    - {range_m: 300.0, depth_m: [0, 8, 16, 30], speed_m_s: [1478.0, 1478.14, 1478.27, 1478.51]}
+  sound_speed_m_s: 1497.5             # the local profile's speed at the vehicle (10 m): what the record carries
+  wind_speed_m_s: 5.0
+  shipping: 0.5
+  absorption: ainslie_mccolm
+  illustrative: true
+propagation:
+  min_range: 440.0
+  max_range: 560.0
+  range_step: 5.0
+  depth_step: 1.0
+  max_arrivals: 12
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 10.0], rpy: [0.0524, 0.0175, 0], velocity: [1.0, 0, 0], rates: [0.0349, 0, 0]}   # rolled 3 deg, rolling 2 deg/s
+pings: {count: 4, interval: 3.0}
+scene:
+  - {type: points, label: target, positions: [[120.0, 485.0, 15.0]], target_strength_db: 10.0}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 21
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (the noise uses it): the provider's rough-surface loss takes its grazing angle from the local profile, which water that changes with range does not support"

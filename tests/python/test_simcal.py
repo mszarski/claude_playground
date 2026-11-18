@@ -19,10 +19,9 @@ TRUE_BOTTOM_DB, TRUE_SURFACE_DB, TRUE_NOISE_DB = 6.0, -4.0, 38.0
 
 
 def start_cfg():
-    cfg = load_scenario_config("fls_120k_transit")
-    cfg["environment"]["water_depth"] = 45.0                     # shallower, so the seabed is well inside the beam
-    cfg["propagation"]["bottom_z"] = 45.0
-    cfg["reverberation"][0]["boundary_z"] = 45.0
+    # shallower, so the seabed is well inside the beam: one change, at the environment (the blocks follow it)
+    cfg = load_scenario_config("fls_120k_transit", {"environment": {"water_depth_m": 45.0}})
+    assert cfg["propagation"]["bottom_z"] == 45.0 and cfg["reverberation"][0]["boundary_z"] == 45.0
     cfg["fidelity"] = "free_field"
     cfg.pop("propagation")
     return cfg

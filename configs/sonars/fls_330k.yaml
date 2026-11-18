@@ -28,7 +28,7 @@ transmit:
     f_stop: 345.0e3
     duration: 10.0e-3
     window_alpha: 0.1
-    source_level_db: 210.0       # dB re 1 uPa at 1 m; link budget in docs/DESIGN.md
+    source_level_db_rms: 210.0       # dB re 1 uPa at 1 m, RMS; link budget in docs/DESIGN.md
 
 receive:
   kind: real

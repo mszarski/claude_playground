@@ -138,14 +138,14 @@ def row_modules() -> list:
     for label, (spec, d, perf) in cases:
         snr = map_snr(perf, "ship")
         out[label] = (d, perf, snr)
-        gap = max(13.0 - snr, 0.0)
+        gap = max(bs.BUDGET_THRESHOLD_DB - snr, 0.0)
         L.append(f"| {label} | {perf['beamwidth_deg']:.1f}° | {perf['gain_isotropic_noise_db']:.1f} dB | {perf['gain_isotropic_noise_db'] + perf['rows_detection_gain_db']:.1f} dB | {_km(perf['reach_ship_m'])} / {_km(perf['reach_small_m'])} | "
-                 f"{snr:.1f} dB | {snr - 13.0:+.1f} dB | {d['source_level_db'] + gap:.0f} dB" + (" (as shipped)" if not gap else "") + f" | {d['pulse_s'] * 10.0 ** (gap / 10.0):.1f} s |")
+                 f"{snr:.1f} dB | {snr - bs.BUDGET_THRESHOLD_DB:+.1f} dB | {d['source_level_db'] + gap:.0f} dB" + (" (as shipped)" if not gap else "") + f" | {d['pulse_s'] * 10.0 ** (gap / 10.0):.1f} s |")
     (ds, ps, snr_s), (dl, pl, snr_l) = out["1 × short (the test AUV's row)"], out["1 × long"]
     L.append(f"\n- **Closer than half a wavelength the hydrophones share the sea's noise.** 32 at {ds['pitch_m'] * 100:g} cm gain {ps['gain_isotropic_noise_db']:.1f} dB against sea noise, not the {ps['gain_uncorrelated_noise_db']:.1f} dB\n"
              f"  that 32 give at half a wavelength; against the boards' own noise they still gain {ps['gain_uncorrelated_noise_db']:.1f} dB. The beam is {ps['beamwidth_deg']:.1f}° against {pl['beamwidth_deg']:.1f}°, so it also takes in more reverberation.\n"
              f"- **The short row costs {snr_l - snr_s:.1f} dB and {ps['beamwidth_deg'] / pl['beamwidth_deg']:.1f} times the beam width.** At 12 km on the ship-sized target it has {snr_s - 13.0:+.1f} dB of margin against {snr_l - 13.0:+.1f} dB for the long row"
-             + (f"; where the margin is negative the table says what source level or pulse would restore it" if snr_s < 13.0 else "") + ".\n"
+             + (f"; where the margin is negative the table says what source level or pulse would restore it" if snr_s < bs.BUDGET_THRESHOLD_DB else "") + ".\n"
              "- **Static and face builds share everything in the module**: expected beam, gain and reach per row, the four-board harness, the calibration procedure. They differ in the platform: motion, the\n"
              "  attitude source, the projector's place, cabling and where the compute sits.\n"
              "- On the test AUV itself the prototype also uses a 0.1 s pulse (10 dB less processing gain) for short-range trials; its own reach is in the plan's table above.\n")
@@ -267,7 +267,7 @@ def twelve_km() -> list:
             d_txt, n_txt = f"±{known:.0f} m (noise, roll to {roll:g}°, clocks to {sync_us:.2f} µs)", f"not in metres: ±{r * r * grad / (2 * c):.0f} m from a gradient unknown by {grad:g} /s"
         else:
             e_txt, d_txt, n_txt = "none", "none", "none"
-        L.append(f"| {label.split(' long')[0]} | yes: {snr_s:.1f} dB, {snr_s - 13.0:+.1f} dB of margin | no: {snr_m:.1f} dB, {13.0 - snr_m:.0f} dB short | ±{b:.2f}° = ±{r * np.radians(b):.0f} m across "
+        L.append(f"| {label.split(' long')[0]} | yes: {snr_s:.1f} dB, {snr_s - bs.BUDGET_THRESHOLD_DB:+.1f} dB of margin | no: {snr_m:.1f} dB, {bs.BUDGET_THRESHOLD_DB - snr_m:.0f} dB short | ±{b:.2f}° = ±{r * np.radians(b):.0f} m across "
                  f"(beam {perf['beamwidth_deg']:.1f}°, {r * np.radians(perf['beamwidth_deg']):.0f} m) | {e_txt} | {d_txt} | {n_txt} |")
     L.append("\nFor that to hold: a projector that delivers the source level in this band (none is chosen); hydrophones and inputs whose own noise is below the sea's (parts list); the inputs recovered from the direct sound\n"
              f"well inside the {d3['blind_range_m']:g} m blind range; noise, not reverberation, limiting at 12 km (below); for elevation, boards of different rows synchronised to {d3['elevation']['clock_us_for_error']:.2f} µs and the roll known as stated;\n"
@@ -280,8 +280,8 @@ def twelve_km() -> list:
     for label, (_, d, perf) in options:
         s_, m_ = map_snr(perf, "ship"), map_snr(perf, "small")
         L.append(f"| {label} | {perf['beamwidth_deg']:.1f}° | {perf['gain_isotropic_noise_db']:.1f} dB | {perf['gain_isotropic_noise_db'] + perf['rows_detection_gain_db']:.1f} dB | {s_:.1f} dB | {s_ - 13.0:+.1f} dB | {m_:.1f} dB | "
-                 f"{13.0 - m_:.1f} dB | {_km(perf['reach_ship_m'])} / {_km(perf['reach_small_m'])} |")
-    gap = 13.0 - map_snr(p3, "small")
+                 f"{bs.BUDGET_THRESHOLD_DB - m_:.1f} dB | {_km(perf['reach_ship_m'])} / {_km(perf['reach_small_m'])} |")
+    gap = bs.BUDGET_THRESHOLD_DB - map_snr(p3, "small")
     calm = float(wenz_spectrum_db(np.array([d3["centre_hz"]]), 0.5, 0.5)[0])
     g = {k: bs.rows_detection_gain_db(k) for k in (2, 3, 4)}
     fill = options[4][1][2]["gain_isotropic_noise_db"] - p1["gain_isotropic_noise_db"]
@@ -376,7 +376,8 @@ def twelve_km() -> list:
              + (f"{S['refraction_m']['0.05']['12000.0']:.0f} m at 12 km" if S else "kilometres") + ", more than any water depth, and the report says so in `depth_refraction_sigma_m`.\n")
     L += without_a_profile(d2, d3)
     # tracking
-    confirm = dep["tracker"]["confirm_hits"]
+    from gpusonar import live as _live
+    confirm = (dep.get("tracker") or {}).get("confirm_hits", _live.DEFAULTS["tracker"]["confirm_hits"])       # the chain's own unless the build says
     L.append(f"**Tracking at 12 km.** {60.0 / d3['ping_interval_s']:.1f} pings a minute on target (one every {d3['ping_interval_s']:.1f} s for the full window). The shipped tracker confirms on {confirm} detections "
              f"(`tracker.confirm_hits`), so a track exists {confirm * d3['ping_interval_s']:.0f} s after the first detection at the earliest, {(confirm - 1) * d3['ping_interval_s']:.0f} s if counted from it; a mover's class needs its speed, "
              f"which at {b3:.2f}° of bearing accuracy ({r * np.radians(b3):.0f} m across) takes several pings more for a crossing target. "
@@ -471,10 +472,15 @@ def depth_and_targets() -> list:
                     + " (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop)." if V.get("bellhop") else " Bellhop was not available for the check.")
                  + f" The projector's depth counts in a null: 1.5 m below the array (the one-row file) is {20 * np.log10(11.5 / 10):.1f} dB there (`tools/surface_image_validation.py`).\n")
         if ch.get("chain_minus_budget_db") is not None:
-            L.append(f"**The chain reads lower than the budget.** For the same target in free field the chain's detector reports {ch['chain_snr_free_field_db']:.1f} dB where the budget says {ch['budget_snr_free_field_db']:.1f} dB: "
-                     f"{-ch['chain_minus_budget_db']:.1f} dB less. With the chain's own threshold ({bs.DEFAULT_CHAIN['min_snr_db']:g} dB) a target needs {bs.DEFAULT_CHAIN['min_snr_db'] - ch['chain_minus_budget_db'] - 13.0:.1f} dB more than the budget's "
-                     "13 dB to be detected. Part is the 2 m range cell and the aperture taper; part is that the simulator still takes a source level as a peak pressure while the budget (and, by the owner's decision, every spec) takes it as rms: 3 dB. "
-                     "**Margins below are the budget's; read them with this in mind until the two are reconciled.**\n")
+            gap = -ch["chain_minus_budget_db"]
+            need = bs.DETECTOR_THRESHOLD_DB
+            L.append(f"> **THE BUDGET'S {bs.BUDGET_THRESHOLD_DB:g} dB THRESHOLD IS NOT THE SHIPPED DETECTOR'S.** Measured, same target, free field "
+                     f"(`tools/surface_image_validation.py`): the chain's `snr_db` reads {ch['chain_snr_free_field_db']:.1f} dB where the budget says {ch['budget_snr_free_field_db']:.1f} dB, "
+                     f"{gap:.1f} dB less. For a detection probability of {bs.DESIGN_DETECTION_PROBABILITY:g} the detector needs about {need[0.5]:g} dB on the budget's footing "
+                     f"({need[0.9]:g} dB for 0.9; `buildspec.DETECTOR_THRESHOLD_DB`, from `live.budget_threshold_db`): {need[0.5] - bs.BUDGET_THRESHOLD_DB:.1f} dB more than the "
+                     f"{bs.BUDGET_THRESHOLD_DB:g} dB used below. **Every margin below is therefore optimistic by about {need[0.5] - bs.BUDGET_THRESHOLD_DB:.1f} dB** until the budget tools "
+                     "take the detector's own threshold and quote detection probabilities (`live.detection_probability`); that step is open. Source levels are RMS in the simulator and "
+                     "in the budget alike (D-102).\n")
     # the plans
     face = P["builds"]
     b3 = face["popoto_face_3x32"]["plans"]

@@ -55,7 +55,7 @@ sys.path.insert(0, str(ROOT / "python"))
 from gpusonar import elevation as el  # noqa: E402
 from gpusonar import flank  # noqa: E402
 from gpusonar.sim.noise import wenz_spectrum_db  # noqa: E402
-from gpusonar.sonar import SonarModel  # noqa: E402
+from gpusonar.sonar import PEAK_OVER_RMS_DB, SonarModel  # noqa: E402
 from gpusonar.sonar_equation import SonarEquation  # noqa: E402
 
 C = 1500.0
@@ -436,7 +436,7 @@ def main():
         return out
 
     long_range = SonarModel.load("popoto_long_range")
-    sl_full = float(long_range.waveform_config["source_level_db"])
+    sl_full = float(long_range.source_level_db_rms)
     R["stages"] = {}
     stage_files = (("1: test AUV, 1 x 32", "popoto_testauv_1row"), ("2: static array, 2 x 32", "popoto_static_2row"),
                    ("3: static array, 3 x 32", "popoto_static_3row"),
@@ -448,7 +448,7 @@ def main():
         m = SonarModel.load(name)
         heights = sorted(set(np.round(-m.positions[:, 2], 3)))
         n = m.n_elements // len(heights)
-        st = describe(label, n, float(m.config["array"]["pitch"]), heights, float(m.waveform_config["source_level_db"]),
+        st = describe(label, n, float(m.config["array"]["pitch"]), heights, float(m.source_level_db_rms),
                       float(m.waveform_config["duration"]), dict(m.config.get("platform", {})))
         st["sonar"] = name
         R["stages"][label] = st
@@ -467,7 +467,7 @@ def main():
     print("  The prototype's row over 2 m and over 3 m (32 hydrophones; same waveform as shipped), and the 0.15 m row for comparison:")
     R["prototype_span"] = {}
     proto = SonarModel.load("popoto_testauv_1row")
-    p_sl, p_pulse = float(proto.waveform_config["source_level_db"]), float(proto.waveform_config["duration"])
+    p_sl, p_pulse = float(proto.source_level_db_rms), float(proto.waveform_config["duration"])
     for label, n, pitch in (("2 m", 32, 0.0625), ("3 m", 32, 0.09), ("4.8 m (the full row)", 32, 0.15), ("3 m, 20 hydrophones at 0.15 m", 20, 0.15)):
         st = describe(label, n, pitch, [0.0], p_sl, p_pulse, {})
         R["prototype_span"][label] = st
@@ -594,7 +594,7 @@ def main():
     dist = np.linalg.norm(face.positions - tx, axis=1)
     rxc = face.config["receive"]
     blast_db = sl_full - 20.0 * np.log10(dist.min())                                  # dB re 1 uPa at the nearest hydrophone
-    volts = 10.0 ** ((blast_db + float(rxc["sensitivity_db"]) + float(rxc.get("gain_db", 0.0))) / 20.0)
+    volts = 10.0 ** ((blast_db + PEAK_OVER_RMS_DB + float(rxc["sensitivity_db"]) + float(rxc.get("gain_db", 0.0))) / 20.0)
     pulse = float(face.waveform_config["duration"])
     R["projector"] = {"lever_arm_m": [float(v) for v in tx], "nearest_hydrophone_m": float(dist.min()), "farthest_hydrophone_m": float(dist.max()),
                       "direct_level_db_at_nearest": float(blast_db), "direct_volts_at_adc": float(volts), "adc_full_scale_v": float(rxc["adc_full_scale"]),

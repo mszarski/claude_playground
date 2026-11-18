@@ -357,6 +357,7 @@ def test_a_submerged_target_with_a_resolved_surface_echo_is_one_detection_and_on
     cfg.pop("reverberation", None)
     cfg["fidelity"] = "image_source"
     cfg["propagation"] = {"surface_z": 0.0, "bottom_z": None, "max_order": 1}
+    cfg.pop("environment_overrides", None)          # the rays of this case are image paths: the scenario's Bellhop override does not apply
     cfg["sonar_overrides"]["receive"]["window"] = {"range": [range_m - 500.0, range_m + 500.0]}
     cfg["platform"] = {"position": [0.0, 0.0, 225.0], "rpy": [0.0, 0.0, 0.0], "velocity": [0.0, 0.0, 0.0]}
     cfg["pings"] = {"count": 4, "interval": 18.0}
