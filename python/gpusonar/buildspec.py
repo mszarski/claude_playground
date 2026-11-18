@@ -966,7 +966,8 @@ def scenario_configs(spec: dict) -> dict:
     roll = np.radians(float(tr.get("roll_deg", 2.0 if static else 3.0)))
     rate = 0.0 if static else np.radians(float(tr.get("roll_rate_deg_s", 2.0)))
     bottom = tr.get("bottom") or C_ASSUMED_BOTTOM
-    prop = {"surface_z": 0.0, "bottom_z": depth, "max_order": 1, "bottom": dict(bottom)}
+    # No `max_order`: how many bounces are kept is the simulator's energy rule (D-105), as in the shipped trial scenarios.
+    prop = {"surface_z": 0.0, "bottom_z": depth, "bottom": dict(bottom)}
     pulse_far = float(tr.get("pulse_s") or pj["waveform"]["duration_s"])
     far_tx = {"transmit": {"waveform": {"duration": pulse_far}}} if pulse_far != float(pj["waveform"]["duration_s"]) else {}
 

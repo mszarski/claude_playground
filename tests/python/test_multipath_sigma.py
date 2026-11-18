@@ -104,6 +104,11 @@ def rehearsal(gen, build, tmp_path):
     try:
         sc = bs.scenario_configs(spec)["rehearsal"]
         truth = sc.pop("truth")
+        # Change A (energy truncation rule in the trial scenarios): the generator no longer states `max_order`, so its
+        # rehearsal keeps bounces by energy (eight here). These tests are about the three first-order paths sharing the
+        # range cell (direct with surface reads the surface, direct with bottom the sea bed): the order is stated HERE,
+        # so the records are the ones the expectations below were measured on.
+        sc["propagation"]["max_order"] = 1
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             records = run_scenario(sc).records

@@ -47,10 +47,11 @@ KINDS = ("free", "shallow", "rehearsal", "passing", "submerged", "passive", "str
 CRITERIA = {
     "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate; "
             "rows, on every ping: the true depth within two of the depth's stated sigma, and the multipath term of that sigma no more than 3 m + 0.3% of range (nothing shares the range cell in free field)",
-    "shallow": "the target: range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing within 1 deg; rows, on every ping: the true depth within two of the depth's stated sigma "
+    "shallow": "the target: the detection's first arrival within 6 m of the target's range (a detection is the direct echo and the bounces behind it, reported at their energy-weighted range: "
+               "that range and the detection's extent are recorded, not judged), bearing within 1 deg; rows, on every ping: the true depth within two of the depth's stated sigma "
                "(an ambiguous elevation: the truth within that of a listed candidate, or within 0.5 deg), and the sigma's multipath term no wider than the distance from the reported depth to the farther end of the water column. "
                "Where direct, surface and bottom echoes share the range cell the rows read a boundary and the depth cannot be right: what is checked is that the report says so",
-    "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; range within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
+    "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; first arrival within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
     "passing": "at least one track of kind mover, speed within 1 m/s of the truth, in both engines",
     "submerged": "a submerged mover of the spec's first submerged target class, with NO sound-speed profile and no water depth given to the chain (the deployment file's gradient prior only): "
                  "a track of kind mover, speed within 1 m/s and heading within 15 degrees of the truth; with rows, any depth the track reports has the true depth inside two of its sigmas, "
@@ -264,28 +265,42 @@ def _run(records, chain, engine):
         return live.run([r.copy() for r in records])
 
 
-def _nearest(report, target):
+def _range_of(det, first_arrival=False) -> float:
+    """The range a detection is checked at. With boundaries (`first_arrival`) the detector reports ONE detection for the
+    direct echo and the bounces behind it: `range_m` is their energy-weighted mean, which lies behind the target by a
+    share of the group's length (tens of metres once the simulator keeps bounces by energy, D-105), and `first_range_m`
+    is the group's first arrival, the direct echo. That one is the target's range (as tools/popoto_12km_study.py and
+    tools/fjord_rehearsal.py score it)."""
+    if first_arrival and det.get("first_range_m") is not None:
+        return float(det["first_range_m"])
+    return float(det["range_m"])
+
+
+def _nearest(report, target, first_arrival=False):
     own = np.asarray(report["ownship_xyz"])
     rng = float(np.linalg.norm(np.asarray(target) - own))
     hits = [x for x in report["detections"] if x["snr_db"] is not None]
     if not hits:
         return None, own, rng
-    near = [x for x in hits if abs(x["range_m"] - rng) < 8.0]
+    near = [x for x in hits if abs(_range_of(x, first_arrival) - rng) < 8.0]
     if near:
         # Several arrivals of one target (surface and bottom bounces) can lie within a few metres: the direct one is the
         # nearest to the true range among those within 10 dB of the strongest.
         top = max(x["snr_db"] for x in near)
         near = [x for x in near if x["snr_db"] >= top - 10.0]
-    return (min(near or hits, key=lambda x: abs(x["range_m"] - rng))), own, rng
+    return (min(near or hits, key=lambda x: abs(_range_of(x, first_arrival) - rng))), own, rng
 
 
-def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tolerance=3.0):
-    """Errors of the detection nearest one target, and whether they pass."""
-    det, own, rng = _nearest(report, target)
+def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tolerance=3.0, first_arrival=False):
+    """Errors of the detection nearest one target, and whether they pass. `first_arrival`: the range checked is the
+    detection's first arrival (`_range_of`); the error of its energy-weighted range and its extent are kept beside it."""
+    det, own, rng = _nearest(report, target, first_arrival)
     if det is None:
         return {"found": False, "ok": False}
     bearing = float(np.degrees(np.arctan2(target[0] - own[0], look_sign * (target[1] - own[1]))))
-    out = {"found": True, "range_error_m": det["range_m"] - rng, "bearing_error_deg": det["bearing_deg"] - bearing, "snr_db": det["snr_db"]}
+    out = {"found": True, "range_error_m": _range_of(det, first_arrival) - rng, "bearing_error_deg": det["bearing_deg"] - bearing, "snr_db": det["snr_db"]}
+    if first_arrival:
+        out["mean_range_error_m"], out["extent_m"] = det["range_m"] - rng, det.get("extent_m")
     ok = abs(out["range_error_m"]) <= range_tolerance and abs(out["bearing_error_deg"]) <= 1.0
     if rows > 1:
         true_el = float(np.degrees(np.arcsin((own[2] - target[2]) / rng)))
@@ -315,8 +330,8 @@ def _check_depth(report, target, water_depth, look_sign=1.0) -> dict | None:
     not so wide that it says nothing. With boundaries (`water_depth`) the term may not exceed the distance from the
     reported depth to the farther end of the water column; without them nothing can share the range cell, so it must
     stay inside the free-field allowance of 3 m + 0.3 % of the range. None: the ping has no detection of the target."""
-    det, own, rng = _nearest(report, target)
-    if det is None or abs(det["range_m"] - rng) > 8.0:
+    det, own, rng = _nearest(report, target, bool(water_depth))        # with boundaries: by the detection's first arrival (`_range_of`)
+    if det is None or abs(_range_of(det, bool(water_depth)) - rng) > 8.0:
         return None
     true_el = float(np.degrees(np.arcsin((own[2] - target[2]) / rng)))
     out = {"true_depth_m": float(target[2]), "depth_m": det.get("depth_m"), "depth_sigma_m": det.get("depth_sigma_m"), "elevation_deg": det.get("elevation_deg"),
@@ -446,7 +461,8 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                             bounded = kind in ("shallow", "rehearsal")
                             # With boundaries a detection is a cluster of the direct echo and its first bounces, a few metres deep. Range and bearing
                             # are checked here and, in free field, the depth against the truth to 3 m + 0.3 % of the range.
-                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") and not bounded else 1, 0.0, sign, range_tolerance=6.0 if bounded else 3.0)
+                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") and not bounded else 1, 0.0, sign, range_tolerance=6.0 if bounded else 3.0,
+                                                          first_arrival=bounded)
                                             for t in truth["targets"]]
                             e["ok"] = all(t["ok"] for t in e["targets"])
                             if truth.get("check_depth") and rows > 1:

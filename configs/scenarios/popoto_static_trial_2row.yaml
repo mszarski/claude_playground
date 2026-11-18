@@ -2,12 +2,16 @@
 #   tools/sonar_live.py configs/deploy/popoto_static_2row.yaml --scenario popoto_static_trial_2row --out DIR
 # Raw 102.4 kHz samples, every board on its own clock (the chain must synchronise them), the frame
 # hanging still at 30 m and tilted 2 degrees (a known tilt: the record carries it), 100 m of water over
-# sand (image-source multipath).
+# sand (image-source multipath; no `max_order` is stated, so bounces are kept by the simulator's energy
+# rule: eight here).
 # Why this far and this deep: two rows 1.5 m apart repeat every 11.5 degrees, so they give ONE elevation only
 # where water depth and range confine every arrival to within 5.7 degrees of level
 # (chain.elevation.sector_from_depth): in 100 m of water with one bounce, beyond 2.4 km. In 30 m of water that
 # is beyond 0.7 km, where the direct, surface and bottom echoes are less than a range cell apart and cannot be
 # told apart at all. Closer in, two rows give candidates (the three-row trial shows the short range).
+# THAT HOLDS FOR ONE BOUNCE. With the eight bounces the energy rule keeps, later arrivals come from up to 17
+# degrees, the detection is 104 m long, and the two rows report candidates here too (+3.7 and -4.4 degrees
+# for a direct path from -0.66): this trial no longer shows one elevation (tests/python/test_elevation.py).
 # The pulse is 1 s here (0.1 s in the sonar file) for the signal at this range.
 # Depths and bottom values are placeholders for a trial site that is not chosen.
 name: popoto_static_trial_2row
@@ -19,7 +23,6 @@ sonar_overrides:
 environment: {base: coastal_12c_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0
-  max_order: 1
 platform: {position: [0, 0, 30.0], rpy: [0.0349, 0.0, 0], velocity: [0, 0, 0]}   # still; tilted 2 deg
 pings: {count: 4, interval: 5.0}
 scene:

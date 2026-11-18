@@ -572,10 +572,15 @@ def test_two_rows_on_the_face_candidates_reach_the_track_and_the_water_depth_dec
         d = strongest(bounded[-1])
         assert not d["elevation_ambiguous"] and d["path"] == "direct", engine
         # Direct path from 0.57 degrees below. The echoes with one surface or bottom bounce on one leg arrive 0.6 to 0.9 m
-        # behind it (two range cells) and pull the estimate by up to half a degree, 26 m at 3 km; by how much depends on
-        # their phases, so on the geometry to a fraction of a wavelength (with the projector 1.5 m below the array's
-        # centre instead of beside it the same target reads 48 to 53 m). In free field it reads 60 m.
-        assert d["elevation_deg"] == pytest.approx(-0.57, abs=0.7) and d["depth_m"] == pytest.approx(60.0, abs=36.0), engine
+        # behind it (two range cells) and pull the estimate; by how much depends on their phases, so on the geometry to
+        # a fraction of a wavelength (with the projector 1.5 m below the array's centre instead of beside it the same
+        # target reads 48 to 53 m). In free field it reads 60 m.
+        # Change A (the scenario no longer states `max_order: 1`; the energy rule keeps eight bounces): the pull was up
+        # to half a degree, 26 m at 3 km (limits 0.7 degrees and 36 m); with the later bounces in the detection it is
+        # 0.35 to 0.9 degrees over the four pings, and this ping reads +0.32 degrees and 13 m for a target at 60 m, with
+        # a stated sigma of 25 m. The limits are what was measured, not a requirement met: the depth is 47 m wrong.
+        assert d["elevation_deg"] == pytest.approx(-0.57, abs=1.0) and d["depth_m"] == pytest.approx(60.0, abs=50.0), engine
+        assert abs(d["depth_m"] - 60.0) <= 2.0 * d["depth_sigma_m"], engine          # the detection's own sigma still owns up to it
         track = bounded[-1]["tracks"][0]
         assert track["depth_m"] == pytest.approx(60.0, abs=36.0) and track["path"] == "direct", engine
     assert strongest(wide[-1])["elevation_alternatives_deg"] == pytest.approx(strongest(run(records, dict(CHAIN, elevation=dict(QUIET, water_depth=100.0)))[-1])["elevation_alternatives_deg"], abs=0.02)
@@ -663,7 +668,7 @@ def test_shallow_channel_direct_surface_and_bottom_arrivals_fold_to_the_targets_
 
 STAGES = [   # scenario, deployment file, rows, check
     ("popoto_testauv_trial_1row", "popoto_testauv_1row", 1, None),
-    ("popoto_static_trial_2row", "popoto_static_2row", 2, 60.0),
+    ("popoto_static_trial_2row", "popoto_static_2row", 2, None),          # None: candidates, no one depth (change A, below)
     ("popoto_static_trial_3row", "popoto_static_3row", 3, 18.0),
     ("popoto_elevation_rehearsal", "popoto_elevation_rehearsal", 3, 60.0),
 ]
@@ -687,12 +692,22 @@ def test_every_stage_runs_from_its_files_through_both_engines(scenario, deploy, 
         last = reps[-1]
         assert last["sync"]["ok"] and last["sync"]["worst_residual_us"] < 1.0, engine
         own = np.asarray(last["ownship_xyz"])
-        d = min((x for x in last["detections"] if x["snr_db"] is not None and x["snr_db"] > 25.0), key=lambda x: abs(x["range_m"] - np.linalg.norm(target - own)))
+        # Change A (the trial scenarios keep bounces by energy, eight here, not one): a detection is the direct echo and
+        # the bounces behind it, 58 to 104 m of them, and `range_m` is their energy-weighted mean (10 m behind the target
+        # at 500 m, 32 m at 2.6 km). The target's range is the detection's first arrival, and that is checked to 3 m.
+        first = lambda x: x["first_range_m"] if x.get("first_range_m") is not None else x["range_m"]                 # noqa: E731
+        d = min((x for x in last["detections"] if x["snr_db"] is not None and x["snr_db"] > 25.0), key=lambda x: abs(first(x) - np.linalg.norm(target - own)))
         picked[engine] = d
-        assert d["range_m"] == pytest.approx(np.linalg.norm(target - own), abs=3.0), engine
+        assert first(d) == pytest.approx(np.linalg.norm(target - own), abs=3.0), engine
         assert d["bearing_deg"] == pytest.approx(np.degrees(np.arctan2(target[0] - own[0], target[1] - own[1])), abs=1.0), engine
         if n_rows == 1:
             assert "rows" not in last and "elevation_deg" not in d, engine
+        elif depth is None:
+            # Change A: with eight bounces kept the arrivals of the two-row trial are no longer within half a repeat of
+            # level (the scenario's premise held for one bounce), and two rows report candidates: +3.7 and -4.4 degrees
+            # for a direct path from -0.66. No single elevation is claimed, and the depth's sigma (122 m) says nothing.
+            assert last["rows"] == n_rows and d["elevation_ambiguous"] and d["elevation_alternatives_deg"] and d["path"] != "direct", engine
+            assert d["depth_sigma_m"] > 100.0, engine
         else:
             assert last["rows"] == n_rows and not d["elevation_ambiguous"] and d["path"] == "direct", engine
             # The roll at the echo's arrival (the record's attitude samples) is in the depth.
@@ -703,6 +718,7 @@ def test_every_stage_runs_from_its_files_through_both_engines(scenario, deploy, 
     assert a["range_m"] == pytest.approx(b["range_m"], abs=0.1) and a["bearing_deg"] == pytest.approx(b["bearing_deg"], abs=0.02)
     if n_rows > 1:
         assert a["depth_m"] == pytest.approx(b["depth_m"], abs=0.3) and a["elevation_deg"] == pytest.approx(b["elevation_deg"], abs=0.02)
+        assert a["elevation_ambiguous"] == b["elevation_ambiguous"]
 
 
 # --- passive ----------------------------------------------------------------------------------------

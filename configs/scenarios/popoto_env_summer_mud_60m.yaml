@@ -15,7 +15,6 @@ propagation:
   max_range: 5200.0
   range_step: 40.0
   depth_step: 1.5
-  max_arrivals: 40
   wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
 platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
 pings: {count: 6, interval: 9.3}
