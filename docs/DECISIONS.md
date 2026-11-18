@@ -1149,3 +1149,36 @@ Consequence: runs with `time_spread` and no `decay_time` key get tails up to hal
 The comparison with TR 0702 (`tools/sst_validation.py`) names `rule_of_thumb`, as it names
 `multi_bounce: sum` and `doppler_spectrum: lorentzian`: that report's rule is what it tests.
 D-84's last sentence ("the decay-time rule is not changed") is superseded by this entry.
+
+### D-86 Bottom roughness scattering defaults to the small-slope approximation
+
+`roughness_model` of the fluid-sediment bottom model (`sim/bottom.py`: reverberation items,
+sediment seafloors, `sediment_fit`, the study and fit tools) now defaults to `small_slope`;
+`perturbation` stays selectable and is unchanged. Evidence is the literature pass
+(`PHYSICS_NOTES.md` Sec. 23.2, `REFERENCES.md`), not a measurement of ours: the lowest-order
+small-slope result is what current work uses; against boundary-element solutions it is valid
+wherever first-order perturbation theory is, and beyond (Olson, J. Acoust. Soc. Am. 160,
+1918, 2026, hdl 10945/76181: "PT is accurate whenever SSA(2) is accurate"); it equals the
+perturbation result for small relief and the Kirchhoff result in the specular direction
+(our tests), where perturbation theory with a power-law spectrum diverges. Limits: that
+comparison is for one-dimensional surfaces and backscatter; no data of ours decide between
+the two. The owner was shown the recommendation and answered "Take your recommendations".
+Consequence, measured on the shipped cases: below 60 degrees of grazing the backscattering
+strength changes by 0.0 to +0.3 dB; at 75 degrees by +0.0 to +0.6 dB; at 85 degrees by
++0.3, -4.4 and -3.3 dB (placeholder sand at 8 kHz, medium sand at 20 kHz, placeholder
+sand at 300 kHz), and at 90 degrees it is finite (+17, -3, -2 dB) where the perturbation
+result is not. In records: `sst_sediment_reverb` +0.07 dB (grazing 8 to 53 degrees),
+`fls_glints_on_sediment` unchanged to 0.00 dB (difference -82 dB re the record); in
+`flank_sst_shallow` and `flank_sst_spread` the first 0.2 s of the record, where the long
+pulse's return from the bottom below the sonar (normal incidence) still arrives, falls by
+6 to 8 dB (record energy -6.5 dB) and the rest is unchanged to 0.00 dB: that part of the
+old records came from the diverging perturbation result as sampled by the angle grid.
+Cost: 1.3 times the perturbation evaluation (a cached table; 0.21 s against 0.16 s for
+200 000 angle pairs), nothing measurable in scenario run time, so no further tabulation.
+`sim/sediment_fit.py` and `tools/fit_sediment.py` keep naming `perturbation` as their own
+default: a fit records its model in the row it writes, its tests assert what first-order
+theory can and cannot separate, and with a free exponent the small-slope table would be
+rebuilt at every step; `--roughness-model small_slope` is there for data above 60 degrees. The small-slope result needs 2 < gamma2 < 4; outside that range, with no
+model named, the perturbation result is used and a warning says so. Sediment seafloors now
+pass `roughness_model` and `small_scale_kh` on, so the earlier amplitudes stay selectable
+there too (they were not before, because there was nothing to select).

@@ -174,7 +174,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
             # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
             # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
-            # roughness_model (perturbation | kirchhoff | small_slope | composite | combined),
+            # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
+            # composite | combined),
             # small_scale_kh.
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
