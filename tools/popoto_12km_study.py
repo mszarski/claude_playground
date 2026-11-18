@@ -262,6 +262,8 @@ def main(argv=None):
     if args.merge and out_path.exists():
         R["cases"] = json.loads(out_path.read_text())["cases"]
         R["bellhop"] = bool(have)
+    if out_path.exists() and "class_cases" in json.loads(out_path.read_text()):
+        R["class_cases"] = json.loads(out_path.read_text())["class_cases"]          # the other half of the file (--classes): kept, as --classes keeps this half
     R["not_run"] = []
     envs = [] if args.no_envs else sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
     if args.no_envs:
