@@ -311,9 +311,14 @@ def test_three_rows_far_lobe_in_a_deepening_thermocline_is_kept_out_by_the_rays_
     from gpusonar.config import load_scenario_config, load_yaml
     records = run_scenario(load_scenario_config("ssp_thermocline_static_trial_3row")).records
     deploy = load_yaml(str(Path(__file__).resolve().parents[2] / "configs" / "deploy" / "popoto_static_3row.yaml"))["chain"]
-    with LiveChain(dict(copy.deepcopy(deploy), engine="cpp", backend="host")) as chain:
+    # Changed with the owner's decision to switch the key on in every stacked-row deployment file: the shipped file now HAS
+    # it, so "the finding" is the shipped chain with the key taken out, and the shipped file itself is one of the fixed runs.
+    assert deploy["elevation"]["sector_from_rays"] == {}
+    before = copy.deepcopy(deploy)
+    before["elevation"].pop("sector_from_rays")
+    with LiveChain(dict(before, engine="cpp", backend="host")) as chain:
         shipped = chain.run([r.copy() for r in records])
-    assert all(abs(rep["detections"][0]["elevation_deg"]) > 25.0 for rep in shipped)                 # the finding, as deployed
+    assert all(abs(rep["detections"][0]["elevation_deg"]) > 25.0 for rep in shipped)                 # the finding, as deployed before
     assert not any(t["kind"] != "multipath" for rep in shipped for t in rep["tracks"])
     got = {}
     for engine in ("cpp", "python"):

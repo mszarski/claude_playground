@@ -1,7 +1,7 @@
 {
  "ssp_front_static_trial_2row": {
   "changes with range": {
-   "simulate_seconds": 29.5,
+   "simulate_seconds": 30.4,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -207,7 +207,7 @@
       "depth_sigma_m": 125.0384848,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -228,7 +228,7 @@
       "depth_sigma_m": 125.0374583,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -249,7 +249,7 @@
       "depth_sigma_m": 125.0372242,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -270,7 +270,7 @@
       "depth_sigma_m": 125.0373268,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      }
     ],
     "track_confirmed_at_ping": 3,
@@ -279,7 +279,7 @@
    }
   },
   "local everywhere": {
-   "simulate_seconds": 29.8,
+   "simulate_seconds": 28.0,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -485,7 +485,7 @@
       "depth_sigma_m": 124.138713,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -506,7 +506,7 @@
       "depth_sigma_m": 124.1391119,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -527,7 +527,7 @@
       "depth_sigma_m": 124.1428787,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -548,7 +548,7 @@
       "depth_sigma_m": 124.1319701,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      }
     ],
     "track_confirmed_at_ping": 3,
@@ -559,7 +559,7 @@
  },
  "ssp_thermocline_static_trial_3row": {
   "changes with range": {
-   "simulate_seconds": 45.7,
+   "simulate_seconds": 48.2,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -671,15 +671,15 @@
       "other_detections": 0,
       "snr_db": 42.41064384,
       "range_error_m": 32.95614339703525,
-      "bearing_error_deg": 1.0198369676202486,
+      "bearing_error_deg": -0.08084815537975132,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08353184037975137,
-      "elevation_deg": -31.09080829,
-      "elevation_sigma_deg": 1.00009245,
+      "elevation_deg": 1.637378627,
+      "elevation_sigma_deg": 1.000074087,
       "elevation_ambiguous": false,
-      "depth_m": 20.07799681,
-      "depth_sigma_m": 121.7231438,
-      "path": "multiple"
+      "depth_m": 49.82698755,
+      "depth_sigma_m": 123.5345184,
+      "path": "surface"
      },
      {
       "detected": true,
@@ -690,15 +690,15 @@
       "other_detections": 0,
       "snr_db": 42.57805446,
       "range_error_m": 32.972518397034946,
-      "bearing_error_deg": 1.0199822506202487,
+      "bearing_error_deg": -0.0805521303797514,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08345435637975118,
-      "elevation_deg": -31.09148265,
-      "elevation_sigma_deg": 1.000092283,
+      "elevation_deg": 1.702708614,
+      "elevation_sigma_deg": 1.000070844,
       "elevation_ambiguous": false,
-      "depth_m": 20.04312746,
-      "depth_sigma_m": 121.7244881,
-      "path": "multiple"
+      "depth_m": 51.79465149,
+      "depth_sigma_m": 123.5351667,
+      "path": "surface"
      },
      {
       "detected": true,
@@ -709,15 +709,15 @@
       "other_detections": 0,
       "snr_db": 42.58927463,
       "range_error_m": 32.87559839703499,
-      "bearing_error_deg": -0.08558570237975172,
+      "bearing_error_deg": -0.0817219823797517,
       "first_range_error_m": 14.212166397035162,
-      "cone_bearing_error_deg": null,
-      "elevation_deg": -31.18888354,
-      "elevation_sigma_deg": 1.000092437,
-      "elevation_ambiguous": true,
-      "depth_m": 16.27955744,
-      "depth_sigma_m": 121.7032693,
-      "path": "multiple"
+      "cone_bearing_error_deg": -0.08558570237975172,
+      "elevation_deg": 1.964817386,
+      "elevation_sigma_deg": 1.000077914,
+      "elevation_ambiguous": false,
+      "depth_m": 60.0396544,
+      "depth_sigma_m": 123.5404919,
+      "path": "surface"
      },
      {
       "detected": true,
@@ -728,24 +728,19 @@
       "other_detections": 0,
       "snr_db": 42.57844001,
       "range_error_m": 32.93351039703521,
-      "bearing_error_deg": 1.0173894086202484,
+      "bearing_error_deg": -0.08584742937975154,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08836738337975181,
-      "elevation_deg": -31.13049098,
-      "elevation_sigma_deg": 1.000090083,
+      "elevation_deg": 1.587252944,
+      "elevation_sigma_deg": 1.000077063,
       "elevation_ambiguous": false,
-      "depth_m": 18.53491452,
-      "depth_sigma_m": 121.7160413,
-      "path": "multiple"
+      "depth_m": 48.34208081,
+      "depth_sigma_m": 123.5329906,
+      "path": "surface"
      }
     ],
-    "track_confirmed_at_ping": null,
-    "tracks_elsewhere_last_ping": [
-     {
-      "range_m": 2238.839832,
-      "kind": "multipath"
-     }
-    ],
+    "track_confirmed_at_ping": 3,
+    "tracks_elsewhere_last_ping": [],
     "track_multipath_depth_m": null
    },
    "local profile, multipath depth": {
@@ -760,17 +755,17 @@
       "other_detections": 0,
       "snr_db": 42.41064384,
       "range_error_m": 32.95614339703525,
-      "bearing_error_deg": 1.0198369676202486,
+      "bearing_error_deg": -0.08084815537975132,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08353184037975137,
-      "elevation_deg": -31.09080829,
-      "elevation_sigma_deg": 1.00009245,
+      "elevation_deg": 1.637378627,
+      "elevation_sigma_deg": 1.000074087,
       "elevation_ambiguous": false,
-      "depth_m": 19.82205782,
-      "depth_sigma_m": 121.7231438,
-      "path": "multiple",
+      "depth_m": 54.7920064,
+      "depth_sigma_m": 123.5345184,
+      "path": "surface",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -781,17 +776,17 @@
       "other_detections": 0,
       "snr_db": 42.57805446,
       "range_error_m": 32.972518397034946,
-      "bearing_error_deg": 1.0199822506202487,
+      "bearing_error_deg": -0.0805521303797514,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08345435637975118,
-      "elevation_deg": -31.09148265,
-      "elevation_sigma_deg": 1.000092283,
+      "elevation_deg": 1.702708614,
+      "elevation_sigma_deg": 1.000070844,
       "elevation_ambiguous": false,
-      "depth_m": 19.78749468,
-      "depth_sigma_m": 121.7244881,
-      "path": "multiple",
+      "depth_m": 55.60857079,
+      "depth_sigma_m": 123.5351667,
+      "path": "surface",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -802,17 +797,17 @@
       "other_detections": 0,
       "snr_db": 42.58927463,
       "range_error_m": 32.87559839703499,
-      "bearing_error_deg": -0.08558570237975172,
+      "bearing_error_deg": -0.0817219823797517,
       "first_range_error_m": 14.212166397035162,
-      "cone_bearing_error_deg": null,
-      "elevation_deg": -31.18888354,
-      "elevation_sigma_deg": 1.000092437,
-      "elevation_ambiguous": true,
-      "depth_m": 16.06691716,
-      "depth_sigma_m": 121.7032693,
-      "path": "multiple",
+      "cone_bearing_error_deg": -0.08558570237975172,
+      "elevation_deg": 1.964817386,
+      "elevation_sigma_deg": 1.000077914,
+      "elevation_ambiguous": false,
+      "depth_m": 58.10442165,
+      "depth_sigma_m": 123.5404919,
+      "path": "surface",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -823,31 +818,26 @@
       "other_detections": 0,
       "snr_db": 42.57844001,
       "range_error_m": 32.93351039703521,
-      "bearing_error_deg": 1.0173894086202484,
+      "bearing_error_deg": -0.08584742937975154,
       "first_range_error_m": 14.212166397035162,
       "cone_bearing_error_deg": -0.08836738337975181,
-      "elevation_deg": -31.13049098,
-      "elevation_sigma_deg": 1.000090083,
+      "elevation_deg": 1.587252944,
+      "elevation_sigma_deg": 1.000077063,
       "elevation_ambiguous": false,
-      "depth_m": 18.29502218,
-      "depth_sigma_m": 121.7160413,
-      "path": "multiple",
+      "depth_m": 54.45400334,
+      "depth_sigma_m": 123.5329906,
+      "path": "surface",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      }
     ],
-    "track_confirmed_at_ping": null,
-    "tracks_elsewhere_last_ping": [
-     {
-      "range_m": 2238.839832,
-      "kind": "multipath"
-     }
-    ],
+    "track_confirmed_at_ping": 3,
+    "tracks_elsewhere_last_ping": [],
     "track_multipath_depth_m": null
    }
   },
   "local everywhere": {
-   "simulate_seconds": 49.1,
+   "simulate_seconds": 46.6,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -1053,7 +1043,7 @@
       "depth_sigma_m": 124.137743,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -1074,7 +1064,7 @@
       "depth_sigma_m": 124.1422934,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -1095,7 +1085,7 @@
       "depth_sigma_m": 124.1372076,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      },
      {
       "detected": true,
@@ -1116,7 +1106,7 @@
       "depth_sigma_m": 124.1377368,
       "path": "multiple",
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "merged"
      }
     ],
     "track_confirmed_at_ping": 3,
@@ -1127,7 +1117,7 @@
  },
  "ssp_front_testauv_trial_1row": {
   "changes with range": {
-   "simulate_seconds": 4.1,
+   "simulate_seconds": 3.1,
    "record_sound_speed_m_s": 1497.5,
    "eigenrays": [
     {
@@ -1302,9 +1292,8 @@
       "bearing_error_deg": -0.19500926501535787,
       "first_range_error_m": 7.1001225858250905,
       "cone_bearing_error_deg": null,
-      "depth_multipath_m": 30.34489806,
-      "depth_multipath_sigma_m": 3.459601323,
-      "multipath_note": "bottom_unmodelled"
+      "depth_multipath_m": null,
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1318,9 +1307,8 @@
       "bearing_error_deg": -0.2274126391915523,
       "first_range_error_m": 7.062128116135057,
       "cone_bearing_error_deg": null,
-      "depth_multipath_m": 30.290093,
-      "depth_multipath_sigma_m": 3.444894065,
-      "multipath_note": "bottom_unmodelled"
+      "depth_multipath_m": null,
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1334,9 +1322,8 @@
       "bearing_error_deg": -0.16233504563795798,
       "first_range_error_m": 7.007087355976523,
       "cone_bearing_error_deg": null,
-      "depth_multipath_m": 30.22778727,
-      "depth_multipath_sigma_m": 3.430005591,
-      "multipath_note": "bottom_unmodelled"
+      "depth_multipath_m": null,
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1350,9 +1337,8 @@
       "bearing_error_deg": -0.16779682713829303,
       "first_range_error_m": 5.93492887864403,
       "cone_bearing_error_deg": null,
-      "depth_multipath_m": 30.22778727,
-      "depth_multipath_sigma_m": 3.430005591,
-      "multipath_note": "bottom_unmodelled"
+      "depth_multipath_m": null,
+      "multipath_reason": "window"
      }
     ],
     "track_confirmed_at_ping": 3,
@@ -1361,7 +1347,7 @@
    }
   },
   "local everywhere": {
-   "simulate_seconds": 3.9,
+   "simulate_seconds": 3.6,
    "record_sound_speed_m_s": 1497.5,
    "eigenrays": [
     {
@@ -1537,7 +1523,7 @@
       "first_range_error_m": 8.85012258582509,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1552,7 +1538,7 @@
       "first_range_error_m": 7.812128116135057,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1567,7 +1553,7 @@
       "first_range_error_m": 7.757087355976523,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "window"
      },
      {
       "detected": true,
@@ -1582,7 +1568,7 @@
       "first_range_error_m": 7.68492887864403,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "single_arrival"
+      "multipath_reason": "window"
      }
     ],
     "track_confirmed_at_ping": 3,

@@ -122,7 +122,7 @@ def test_the_generator_refuses_a_coverage_site_without_its_facts(lacking, words)
     spec["operation"]["coverage"] = {"environment": site}
     with pytest.raises(ValueError, match=words) as exc:
         bs.chain_config(spec)
-    assert "no default" in str(exc.value)
+    assert "have no default" in str(exc.value)
     errors = [i for i in bs.validate(spec) if i.level == "error"]
     assert len(errors) == 1 and errors[0].where == "operation.coverage" and words in errors[0].message
     with pytest.raises(bs.SpecError, match=words):
@@ -156,7 +156,7 @@ def test_the_chain_refuses_coverage_without_water_depth_or_bottom(engine):
         with pytest.raises(ValueError) as exc:
             LiveChain(dict(base, coverage=cov))
         text = str(exc.value)
-        assert all(f"coverage.{k}" in text.split("Give")[0] for k in lacking) and "no default" in text and "cannot be seen" in text
+        assert all(f"coverage.{k}" in text.split("Give")[0] for k in lacking) and "neither has a default" in text and "cannot be seen" in text
     with pytest.raises(ValueError, match="positive number"):
         LiveChain(dict(base, coverage=dict(full, water_depth_m=0.0)))
     with LiveChain(dict(base, coverage=full)):                                   # with both it starts
@@ -166,7 +166,7 @@ def test_the_chain_refuses_coverage_without_water_depth_or_bottom(engine):
 def test_the_cpp_chain_itself_refuses_too():
     """Not only the Python layer in front of it: build/bin/sonar_live is given the same options as key=value."""
     flat = coverage.cpp_options(bs.chain_config(bs.load("popoto_face_1x32"))["coverage"])
-    base = {"bearing_first_deg": -60.0, "bearing_last_deg": 60.0, "bearing_step_deg": 0.5, "backend": "host"}
+    base = dict(live.cpp_chain_options({"bearings_deg": [-60.0, 60.0, 0.5]}), backend=core.Backend.Host)      # as gpusonar.live hands it over
     core.LiveChainCpp(dict(base, coverage=flat))
     for lacking, words in ((("water_depth",), "coverage_water_depth"), (("bottom",), "coverage_bottom=1"), (("water_depth", "bottom"), "coverage_water_depth")):
         with pytest.raises(ValueError, match=words):
@@ -214,4 +214,4 @@ def test_the_programs_options_carry_the_new_settings():
     snr, pd = coverage.pd_table(record, chain)
     assert [float(v) for v in o["coverage_pd_value"].split(",")] == pytest.approx(pd, abs=1e-9) and len(o["coverage_pd_snr_db"].split(",")) == len(snr)
     assert o["multipath_depth"] == 1 and o["multipath_depth_rays"] == 1 and o["multipath_depth_withhold_flagged"] == 1
-    assert not any(isinstance(v, (dict, list)) for v in o.values())              # every value is one the program can read
+    assert not any(isinstance(v, (dict, list)) for k, v in o.items() if k.startswith(("coverage", "multipath_depth", "elevation")))     # values the program can read

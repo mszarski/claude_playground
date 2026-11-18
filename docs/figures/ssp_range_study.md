@@ -1,6 +1,6 @@
 # Water that changes with range against a chain that knows the local profile
 
-Made by `tools/ssp_range_study.py` at commit 1b313d0. Each scenario is simulated twice (C++ synthesis; Bellhop's eigenrays): with its water as written (`environment.profiles_by_range`: Bellhop's 2-D sound-speed field) and with the profile at the sonar at every range. Same seed, target and noise. The records go through the C++ chain of the build's deployment file as shipped, and again with the local profile given to the elevation stage (stacked rows) and depth from multipath timing switched on with its defaults. The chain is never told that the water changes. Four pings each: a look at what happens, not statistics. The profiles are ILLUSTRATIVE: nobody measured them. Range is horizontal distance from the sonar and the section is the same on every bearing.
+Made by `tools/ssp_range_study.py` at commit 29d4505 (deployment defaults: sector_from_rays in the stacked-row files; multipath depth through rays, flagged depths withheld). Each scenario is simulated twice (C++ synthesis; Bellhop's eigenrays): with its water as written (`environment.profiles_by_range`: Bellhop's 2-D sound-speed field) and with the profile at the sonar at every range. Same seed, target and noise. The records go through the C++ chain of the build's deployment file as shipped, and again with the local profile given to the elevation stage (stacked rows) and depth from multipath timing switched on as a generated deployment file holds it (`rays: true`, `withhold_flagged: true`: a depth with a note is not reported, its note is the reason). The chain is never told that the water changes. Four pings each: a look at what happens, not statistics. The profiles are ILLUSTRATIVE: nobody measured them. Range is horizontal distance from the sonar and the section is the same on every bearing.
 
 Numbers are the median of the pings the target was detected on; in square brackets every ping. Range error: the detection's range minus the straight-line distance to the target, for the detection's strongest sample / for its first arrival. Elevation: positive up; `straight` is the straight line to the target, which is not where the sound arrives from in this water (see the eigenrays).
 
@@ -20,9 +20,9 @@ Depth of the target's detection:
 | Water | Chain | elevation, degrees (straight) [every ping] | pings flagged ambiguous | depth from the rows, m (true) [every ping] | its stated one sigma, m | depth from multipath timing, m: [every ping]; track | multipath stage's reason or note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | changes with range | as deployed | -4.22 (-0.66) [-4.36, -4.12, -4.29, -4.15] | 1/4 | 12.8 (60.0) [20.3, 7.4, 16.6, 9.1] | 125.0, 125.0, 125.0, 125.0 | [-, -, -, -]; - | - |
-| changes with range | local profile, multipath depth | -4.22 (-0.66) [-4.36, -4.12, -4.29, -4.15] | 1/4 | 82.8 (60.0) [79.5, 85.3, 81.1, 84.5] | 125.0, 125.0, 125.0, 125.0 | [-, -, -, -]; - | single_arrival |
+| changes with range | local profile, multipath depth | -4.22 (-0.66) [-4.36, -4.12, -4.29, -4.15] | 1/4 | 82.8 (60.0) [79.5, 85.3, 81.1, 84.5] | 125.0, 125.0, 125.0, 125.0 | [-, -, -, -]; - | merged |
 | local everywhere | as deployed | +3.65 (-0.66) [+3.65, +3.65, +3.65, +3.65] | 4/4 | 75.1 (60.0) [75.1, 75.1, 75.1, 75.0] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | - |
-| local everywhere | local profile, multipath depth | +3.65 (-0.66) [+3.65, +3.65, +3.65, +3.65] | 4/4 | 81.0 (60.0) [81.0, 81.0, 81.1, 81.0] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | single_arrival |
+| local everywhere | local profile, multipath depth | +3.65 (-0.66) [+3.65, +3.65, +3.65, +3.65] | 4/4 | 81.0 (60.0) [81.0, 81.0, 81.1, 81.0] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | merged |
 
 The simulated sound: Bellhop's arrivals from the array to the target (one way, first ping), the six strongest of those kept (the scenario's `max_arrivals`). Range excess: the arrival's delay times the record's sound speed, minus the straight-line distance.
 
@@ -47,8 +47,8 @@ Target of 15 dB, 60 m deep, 2600 m away horizontally; array at 30 m; the record'
 
 | Water | Chain | detected, pings | SNR, dB | range error, m: strongest / first arrival | bearing error, degrees [every ping] | track on the target confirmed at ping | tracks elsewhere, last ping: range, m (kind) | other detections per ping |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| changes with range | as deployed | 4/4 | 42.6 | +32.9 / +14.2 | +1.02 [+1.02, +1.02, -0.09, +1.02] | none | 2239 (multipath) | 0.0 |
-| changes with range | local profile, multipath depth | 4/4 | 42.6 | +32.9 / +14.2 | +1.02 [+1.02, +1.02, -0.09, +1.02] | none | 2239 (multipath) | 0.0 |
+| changes with range | as deployed | 4/4 | 42.6 | +32.9 / +14.2 | -0.08 [-0.08, -0.08, -0.08, -0.09] | 3 | none | 0.0 |
+| changes with range | local profile, multipath depth | 4/4 | 42.6 | +32.9 / +14.2 | -0.08 [-0.08, -0.08, -0.08, -0.09] | 3 | none | 0.0 |
 | local everywhere | as deployed | 4/4 | 43.7 | +40.9 / +10.2 | -0.06 [-0.06, -0.06, -0.06, -0.06] | 3 | none | 0.0 |
 | local everywhere | local profile, multipath depth | 4/4 | 43.7 | +40.9 / +10.2 | -0.06 [-0.06, -0.06, -0.06, -0.06] | 3 | none | 0.0 |
 
@@ -56,10 +56,10 @@ Depth of the target's detection:
 
 | Water | Chain | elevation, degrees (straight) [every ping] | pings flagged ambiguous | depth from the rows, m (true) [every ping] | its stated one sigma, m | depth from multipath timing, m: [every ping]; track | multipath stage's reason or note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| changes with range | as deployed | -31.11 (-0.66) [-31.09, -31.09, -31.19, -31.13] | 1/4 | 19.3 (60.0) [20.1, 20.0, 16.3, 18.5] | 121.7, 121.7, 121.7, 121.7 | [-, -, -, -]; - | - |
-| changes with range | local profile, multipath depth | -31.11 (-0.66) [-31.09, -31.09, -31.19, -31.13] | 1/4 | 19.0 (60.0) [19.8, 19.8, 16.1, 18.3] | 121.7, 121.7, 121.7, 121.7 | [-, -, -, -]; - | single_arrival |
+| changes with range | as deployed | +1.67 (-0.66) [+1.64, +1.70, +1.96, +1.59] | 0/4 | 50.8 (60.0) [49.8, 51.8, 60.0, 48.3] | 123.5, 123.5, 123.5, 123.5 | [-, -, -, -]; - | - |
+| changes with range | local profile, multipath depth | +1.67 (-0.66) [+1.64, +1.70, +1.96, +1.59] | 0/4 | 55.2 (60.0) [54.8, 55.6, 58.1, 54.5] | 123.5, 123.5, 123.5, 123.5 | [-, -, -, -]; - | merged |
 | local everywhere | as deployed | -5.36 (-0.66) [-5.30, -5.54, -5.35, -5.37] | 0/4 | 67.7 (60.0) [65.1, 76.0, 67.3, 68.1] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | - |
-| local everywhere | local profile, multipath depth | -5.36 (-0.66) [-5.30, -5.54, -5.35, -5.37] | 0/4 | 56.6 (60.0) [57.8, 52.4, 56.9, 56.3] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | single_arrival |
+| local everywhere | local profile, multipath depth | -5.36 (-0.66) [-5.30, -5.54, -5.35, -5.37] | 0/4 | 56.6 (60.0) [57.8, 52.4, 56.9, 56.3] | 124.1, 124.1, 124.1, 124.1 | [-, -, -, -]; - | merged |
 
 The simulated sound: Bellhop's arrivals from the array to the target (one way, first ping), the six strongest of those kept (the scenario's `max_arrivals`). Range excess: the arrival's delay times the record's sound speed, minus the straight-line distance.
 
@@ -94,9 +94,9 @@ Depth of the target's detection:
 | Water | Chain | elevation, degrees (straight) [every ping] | pings flagged ambiguous | depth from the rows, m (true) [every ping] | its stated one sigma, m | depth from multipath timing, m: [every ping]; track | multipath stage's reason or note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | changes with range | as deployed | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [-, -, -, -]; - | - |
-| changes with range | local profile, multipath depth | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [30.3, 30.3, 30.2, 30.2]; - | bottom_unmodelled |
+| changes with range | local profile, multipath depth | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [-, -, -, -]; - | window |
 | local everywhere | as deployed | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [-, -, -, -]; - | - |
-| local everywhere | local profile, multipath depth | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [-, -, -, -]; - | single_arrival |
+| local everywhere | local profile, multipath depth | - (-0.57) [-, -, -, -] | 0/4 | - (15.0) [-, -, -, -] | -, -, -, - | [-, -, -, -]; - | window |
 
 The simulated sound: Bellhop's arrivals from the array to the target (one way, first ping), the six strongest of those kept (the scenario's `max_arrivals`). Range excess: the arrival's delay times the record's sound speed, minus the straight-line distance.
 

@@ -217,6 +217,12 @@ def test_build_spec_validates_targets_and_environments_and_they_change_no_genera
     assert "targets.ship" in warned and "environments.deep_no_bottom_return" in warned      # placeholders are said to be placeholders
     bare = copy.deepcopy(spec)
     bare.pop("targets"), bare.pop("environments")
+    # Changed with the owner's decision to switch the coverage picture on for the face builds: the spec now names one of its
+    # environments as the SITE of `chain.coverage` (operation.coverage), which does go into the deployment file, and a spec
+    # without that environment is refused. The statement below is about the planning inputs, so it is made without the site.
+    with pytest.raises(ValueError, match="not one of the build's environments"):
+        bs.files(bare)
+    spec["operation"].pop("coverage"), bare["operation"].pop("coverage")
     with_, without = bs.files(spec), bs.files(bare)               # only the submerged-mover trial is added; no sonar or deployment file changes
     assert {k: v for k, v in with_.items() if "submerged" not in k} == without and [k for k in with_ if k not in without] == ["scenarios/popoto_face_3x32_submerged.yaml"]
     broken = copy.deepcopy(spec)
