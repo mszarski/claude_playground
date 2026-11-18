@@ -63,20 +63,23 @@ recon::BpOptions make_options(const std::string& interp, bool stop_and_hop, floa
   return o;
 }
 
-/// `trajectory_allowance`: None = the kernel's fixed 2 cm; a number of metres; or "table" =
-/// from each ping's residual table (never less than the 2 cm).
+/// `trajectory_allowance`: None or "table" = from each ping's residual table (never less
+/// than the 2 cm; the default since D-92); "fixed" = the 2 cm for every ping, as before; a
+/// number of metres.
 recon::BpInputs session_inputs(const py::list& pings, const py::object& weights, int trajectory_upsample,
                                const py::object& trajectory_allowance = py::none()) {
   const auto ptrs = ping_list(pings);
   std::vector<std::vector<float>> w;
   const bool has_w = !weights.is_none();
   if (has_w) w = weights.cast<std::vector<std::vector<float>>>();
-  float allowance = recon::kTrajectoryAllowance;
+  float allowance = recon::kTrajectoryAllowanceFromTable;
   if (py::isinstance<py::str>(trajectory_allowance)) {
-    if (trajectory_allowance.cast<std::string>() != "table") {
-      throw std::invalid_argument("trajectory_allowance must be None, a number of metres or \"table\"");
+    const auto name = trajectory_allowance.cast<std::string>();
+    if (name == "fixed") {
+      allowance = recon::kTrajectoryAllowance;
+    } else if (name != "table") {
+      throw std::invalid_argument("trajectory_allowance must be None, \"table\", \"fixed\" or a number of metres");
     }
-    allowance = -1.0F;
   } else if (!trajectory_allowance.is_none()) {
     allowance = trajectory_allowance.cast<float>();
     if (!(allowance >= 0.0F)) throw std::invalid_argument("trajectory_allowance must be >= 0 m");
@@ -286,9 +289,10 @@ void bind_recon(py::module_& m) {
       "`refraction` = (interface_z, sediment_speed): both are required, neither has a default.\n"
       "`trajectory_allowance` (session-level: an argument of backproject() and of BackprojectSession)\n"
       "is what the field-of-view pre-test allows for the platform straying from its first-order pose\n"
-      "within a ping: None = 0.02 m (BP_TRAJECTORY_ALLOWANCE), a number of metres, or \"table\" = the\n"
-      "largest residual of each ping's own trajectory table (at least 0.02 m). It matters only with\n"
-      "fov_factor > 0 and a trajectory table (position_lookup other than \"analytic\").";
+      "within a ping: None or \"table\" (the default) = the largest residual of each ping's own trajectory\n"
+      "table, at least 0.02 m (BP_TRAJECTORY_ALLOWANCE); \"fixed\" = 0.02 m for every ping, the behaviour\n"
+      "before DECISIONS.md D-92; or a number of metres. It matters only with fov_factor > 0 and a\n"
+      "trajectory table (position_lookup other than \"analytic\"); without a table both are 0.02 m.";
   m.def(
       "backproject",
       [](const py::list& pings, const ArrD& points, const std::string& interp, bool stop_and_hop,

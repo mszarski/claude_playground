@@ -383,15 +383,19 @@ TEST(Backproject, TrajectoryAllowanceComesFromThePingsOwnTable) {
     s.position = Vec3d{0.0, k == 2 ? 0.5 : 0.0, 0.0};
     r.navigation.ins.push_back(s);
   }
-  const recon::BpInputs fixed = recon::make_inputs({&r}, nullptr, 4);
-  EXPECT_FLOAT_EQ(fixed.groups[0].traj_allowance, recon::kTrajectoryAllowance);  // today's 2 cm
+  // The behaviour before D-92, by its name: 2 cm whatever the table holds.
+  const recon::BpInputs fixed = recon::make_inputs({&r}, nullptr, 4, recon::kTrajectoryAllowance);
+  EXPECT_FLOAT_EQ(fixed.groups[0].traj_allowance, 0.02F);
   EXPECT_NEAR(fixed.groups[0].traj_residual_max, 0.5F, 1e-6F);
-  const recon::BpInputs table = recon::make_inputs({&r}, nullptr, 4, -1.0F);
+  // The default takes it from the table.
+  const recon::BpInputs table = recon::make_inputs({&r}, nullptr, 4);
   EXPECT_NEAR(table.groups[0].traj_allowance, 0.5F, 1e-6F);
+  EXPECT_NEAR(recon::make_inputs({&r}, nullptr, 4, recon::kTrajectoryAllowanceFromTable).groups[0].traj_allowance,
+              0.5F, 1e-6F);
   const recon::BpInputs stated = recon::make_inputs({&r}, nullptr, 4, 0.1F);
   EXPECT_FLOAT_EQ(stated.groups[0].traj_allowance, 0.1F);
   // Without a table the derived allowance is the 2 cm, never less.
-  const recon::BpInputs none = recon::make_inputs({&r}, nullptr, 0, -1.0F);
+  const recon::BpInputs none = recon::make_inputs({&r}, nullptr, 0);
   EXPECT_FLOAT_EQ(none.groups[0].traj_allowance, recon::kTrajectoryAllowance);
   EXPECT_FLOAT_EQ(none.groups[0].traj_residual_max, 0.0F);
 }
