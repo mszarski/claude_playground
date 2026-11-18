@@ -1874,11 +1874,13 @@ Other consequences, from the same files:
 - Depth plan, three rows, deep non-ducting water, ship: the best own depth is still 225 m;
   the margin there goes from +11.3 to +9.0 dB, and the band of own depths that hold it
   narrows from 110–280 m to 125–265 m (one row: from 140–260 m to 165–250 m).
-- Through the chain (`tools/popoto_12km_study.py`, as rerun by the budget package): the
+- Through the chain (`tools/popoto_12km_study.py` → `docs/design/popoto_12km.json`): the
   ship is detected on 6 of 6 pings in the image-source, noise-only and Bellhop cases with
-  one, two and three rows, with a mover track confirmed at ping 3 in each; it is not
-  detected in `deep_silt_1000m` or `summer_mud_60m`. See `STATUS.md`, open item 5, for the
-  tool's detection window.
+  one, two and three rows, with a mover track confirmed at ping 3 in each, and with one
+  and two rows at 12 km in the gravel and winter-sand waters; it is not detected in
+  `deep_silt_1000m` or `summer_mud_60m`. In Bellhop's field one detection spans 112 to
+  118 m and its first arrival is within 4 m of the ship. The file predates the
+  deployment defaults (`STATUS.md`, open item 5).
 
 ## The link budget against the chain: where the gap went
 

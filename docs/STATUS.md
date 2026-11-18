@@ -32,8 +32,8 @@ Until that line is filled, what stands is this:
   `.cu` file changed after it according to the reports.
 - **Three generated files are known to be out of date with the tree** (see "Open and
   known wrong"): `docs/figures/fjord_rehearsal.md`, `docs/figures/gallery.json` with the
-  numbers `SCENARIOS.md` quotes from it, and the scoring inside
-  `tools/popoto_12km_study.py`.
+  numbers `SCENARIOS.md` quotes from it, and `docs/design/popoto_12km.json` (made just
+  before the deployment defaults went in).
 
 How things are verified, in the words used below:
 
@@ -206,16 +206,20 @@ Grouped; within a group the most consequential first.
    Sec. 1.1 and item 3 of "How to choose" in `docs/design/projector_selection.md` need
    re-reading by the owner.
 4. **Water decides more than the design does.** In simulation the ship is detected at
-   12 km in 100 m over sand with one, two and three rows, and is not detected in the deep
-   silt and the summer-mud waters. The four `popoto_env_*` waters were never run with
-   three rows. Sea state 5 ends 12 km detection in non-ducting water in the budget.
-5. **`tools/popoto_12km_study.py` scores "the ship's detection" within ±20 m of the
-   ship**, and at head the strongest sample of the detection is 31 to 47 m behind it in
-   Bellhop's field, so the tool scores 0 of 6 where the raw detections show 6 of 6 with a
-   track. The budget package changed the tool to use the detection's first arrival and
-   extent; the deployment-default package still found the window too narrow on its tree.
-   Which state the committed `docs/design/popoto_12km.json` reflects must be checked when
-   the study is rerun.
+   12 km in 100 m over sand with one, two and three rows, and with one and two rows in
+   the gravel and winter-sand waters; it is not detected at 12 km in the deep-silt and
+   the summer-mud waters. The four `popoto_env_*` waters were never run with three rows. Sea state 5 ends 12 km detection in non-ducting water in the budget.
+5. **`docs/design/popoto_12km.json` predates the deployment defaults.** The study tool
+   (`tools/popoto_12km_study.py`) counted a detection as the ship's only within ±20 m of
+   the ship; with the present detector one detection covers a group of arrivals 110 to
+   126 m long in Bellhop's field, and that rule scored 0 of 6 pings while a mover track
+   sat on the ship. The tool at head uses the detection's first arrival and extent, and
+   the committed file shows 6 of 6 pings with a track at ping 3 for one, two and three
+   rows in 100 m over sand, and for one and two rows in the gravel and winter-sand waters.
+   The deployment-default package reported the old 0 of 6 from a tree without that fix.
+   The committed file was made minutes before `sector_from_rays` went into the stacked-row
+   files (D-118), so its two- and three-row elevation and depth entries are the "before"
+   state and the study must be rerun.
 
 ### Depth
 
