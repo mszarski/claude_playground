@@ -57,18 +57,39 @@ SETTINGS = {"min_snr_db 15": {"min_snr_db": 15.0},
             "min_snr_db 15, confirm on 4 of 4": {"min_snr_db": 15.0, "tracker": {"confirm_hits": 4}}}
 
 
+# Three variants keep the open-water rehearsal's noise in the fjord's water, so that one thing changes at a time. That
+# noise names a wind and a shipping level the fjord's environment does not have: the scenario loader refuses such a
+# contradiction unless it is named with its reason (python/gpusonar/environment.py, `environment_overrides`).
+OPEN_NOISE_REASON = ("the open-water rehearsal's noise is kept in this variant of the fjord scenario, so that only the water, the seabed and the late tail "
+                     "change against the open-water run (tools/fjord_rehearsal.py); the fjord's own calm-night noise comes with the variant 'fjord as shipped'")
+
+
+def with_open_noise(cfg: dict, build: dict) -> dict:
+    """The fjord scenario with the open-water rehearsal's ambient noise in place of its own, the contradiction with
+    the fjord's environment named: every value of that noise the environment also gives, and gives differently."""
+    from gpusonar import environment
+    noise = copy.deepcopy(load_scenario_config(build["open"])["receiver"]["ambient_noise"])
+    cfg["receiver"]["ambient_noise"] = noise
+    site = environment.resolve(cfg["environment"])                  # the fjord's site: `wind_speed`, `shipping`
+    named = dict(cfg.get("environment_overrides") or {})
+    for key in ("wind_speed", "shipping"):
+        if key in noise and site.get(key) is not None and float(noise[key]) != float(site[key]):
+            named[f"receiver.ambient_noise.{key}"] = OPEN_NOISE_REASON
+    cfg["environment_overrides"] = named
+    return cfg
+
+
 def variant(build: dict, name: str) -> dict:
     if name == "open water":
         return load_scenario_config(build["open"])
     cfg = load_scenario_config(build["fjord"])
-    open_noise = load_scenario_config(build["open"])["receiver"]["ambient_noise"]
     if name == "profile, section":
         cfg.pop("basin_reverberation")
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
     elif name == "+ late tail":
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
     elif name == "+ own ping, what-if":
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
         cfg["basin_reverberation"] = dict(cfg["basin_reverberation"], own_ping_db=OWN_PING_DB)
     elif name == "+ machinery noise":
         cfg["receiver"]["ambient_noise"] = {"level_db": 63.0}

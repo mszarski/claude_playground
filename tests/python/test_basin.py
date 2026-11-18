@@ -410,3 +410,38 @@ def test_fjord_scenario_runs_through_bellhop_and_gains_the_tail():
     ratio = (np.abs(with_tail - plain) ** 2).sum() / (np.abs(plain) ** 2).sum()
     # The window ends 0.33 s after the echo: most of the tail (decay 0.145 s) is in it.
     assert 0.6 * (2.0 * e + e * e) < ratio < 1.15 * (2.0 * e + e * e)
+
+
+def test_every_variant_of_the_fjord_rehearsal_tool_loads_and_names_what_it_overrides():
+    """tools/fjord_rehearsal.py puts the open-water rehearsal's noise (wind 5 m/s, shipping 0.5) into the fjord scenario
+    for three of its six variants. The fjord's environment has a wind of 1.9 m/s and no shipping, and the scenario loader
+    refuses a typed value that contradicts the environment unless it is named with its reason: the tool failed on those
+    three. It names them; without the names the loader still refuses."""
+    import importlib.util
+    import pathlib
+    import warnings
+    from gpusonar import environment
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "fjord_rehearsal.py"
+    spec = importlib.util.spec_from_file_location("fjord_rehearsal", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    copied = ("profile, section", "+ late tail", "+ own ping, what-if")
+    for build in tool.BUILDS.values():
+        for name in tool.VARIANTS:
+            cfg = tool.variant(build, name)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")                      # a name that overrides nothing is a warning: none here
+                out = environment.expand_scenario(dict(cfg))
+            noise = out["receiver"]["ambient_noise"]
+            named = {k: v for k, v in (cfg.get("environment_overrides") or {}).items() if k.startswith("receiver.ambient_noise.")}
+            if name in copied:
+                assert (noise["wind_speed"], noise["shipping"]) == (5.0, 0.5) and "statistics" not in noise      # the open-water run's noise
+                assert set(named) == {"receiver.ambient_noise.wind_speed", "receiver.ambient_noise.shipping"}
+                assert all("open-water rehearsal's noise" in reason for reason in named.values())
+                bare = dict(cfg, environment_overrides={k: v for k, v in cfg["environment_overrides"].items() if k not in named})
+                with pytest.raises(environment.EnvironmentError, match="receiver.ambient_noise.wind_speed: 5.0 here, 1.9"):
+                    environment.expand_scenario(bare)
+            else:
+                assert not named
+            if name == "fjord as shipped":
+                assert (noise["wind_speed"], noise["shipping"], noise["statistics"]["model"]) == (1.9, 0.0, "k")
