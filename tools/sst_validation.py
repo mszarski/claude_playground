@@ -637,7 +637,7 @@ BOTH_ROUGH = {"surface": {"rms_height": 0.2, "mean_square_slope": 0.01836, "rms_
 
 @functools.lru_cache(maxsize=None)
 def asiaex_runs(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> dict:
-    surface_only = {"propagation": {"bottom_z": None}, "environment_overrides": {"propagation.bottom_z": "the surface alone: the site's bottom is left out of this run on purpose"}}
+    surface_only = {"propagation": {"bottom_z": None}}
     bottom_only = {"propagation": {"surface_z": None}, "pings": {"count": 1}}
     fast = {"pings": {"count": int(doppler_pings), "interval": 0.05}}
     # TR 0702's own rules are what this reproduction compares with, so they are named: the

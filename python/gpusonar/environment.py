@@ -460,6 +460,8 @@ class _Site:
         if key not in block:
             block[key] = copy.deepcopy(value)
             self.filled.append(path)
+        elif block[key] is None:
+            pass                # an explicit null says "not in this run" (propagation.bottom_z: null: the surface alone)
         elif not _same(block[key], value):
             self.differs(path, f"{block[key]!r} here, {value!r} from {what}")
 
@@ -515,14 +517,21 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         prop = dict(cfg.get("propagation") or {})
         ocean = dict(prop.get("environment") or {})
         where = "propagation.environment"
-        site.take(ocean, "depth", depth, f"{where}.depth", "environment.water_depth_m")
+        if ocean.get("bathymetry") is not None and "depth" in ocean:
+            # A bottom whose depth changes with range: the ocean's `depth` is the deepest point of the profile and the
+            # environment's water depth is the depth at the sonar. The first must not be shallower than the second.
+            if depth is not None and float(ocean["depth"]) < float(depth) - 1e-9:
+                site.differs(f"{where}.depth", f"{ocean['depth']!r} here is shallower than {depth!r} from environment.water_depth_m")
+        else:
+            site.take(ocean, "depth", depth, f"{where}.depth", "environment.water_depth_m")
         if env.get("profile") is not None:
             site.take(ocean, "ssp_depth", env["profile"]["depth"], f"{where}.ssp_depth", "environment.profile")
             site.take(ocean, "ssp_speed", env["profile"]["speed"], f"{where}.ssp_speed", "environment.profile")
         else:
             if ocean.get("ssp_speed") is not None:
-                if any(not _same(float(v), env["sound_speed"]) for v in ocean["ssp_speed"]):
-                    site.differs(f"{where}.ssp_speed", f"{ocean['ssp_speed']!r} here, isovelocity {env['sound_speed']!r} from environment.sound_speed_m_s")
+                # a profile typed here beside the environment's one speed: that speed is the one at the sonar, and must be a speed of the profile
+                if not (min(ocean["ssp_speed"]) - 1e-6 <= float(env["sound_speed"]) <= max(ocean["ssp_speed"]) + 1e-6):
+                    site.differs(f"{where}.ssp_speed", f"{min(ocean['ssp_speed'])!r} to {max(ocean['ssp_speed'])!r} here, {env['sound_speed']!r} from environment.sound_speed_m_s")
             else:
                 site.take(ocean, "sound_speed", env["sound_speed"], f"{where}.sound_speed", "environment.sound_speed_m_s")
         typed_bottom = [k for k in ("bottom_speed", "bottom_density", "bottom_attenuation", "sediment") if k in ocean]

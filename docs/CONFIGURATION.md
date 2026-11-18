@@ -300,7 +300,9 @@ environment_overrides:
 
 Keys are dotted paths (`propagation.frequency`, `propagation.environment.depth`, `reverberation[1].wind_speed`,
 `time_spread.surface.wind_speed`, `receiver.ambient_noise.wind_speed`). An entry that no longer
-differs gives a warning, so the list cannot go stale.
+differs gives a warning, so the list cannot go stale. Two things need no entry: an explicit null
+(`propagation.bottom_z: null`: no bottom in this run), and, with `propagation.environment.bathymetry`, an ocean `depth`
+deeper than the environment's water depth (the deepest point of a bed that changes with range; the environment's is the depth at the sonar).
 
 `config.load_scenario_config(name, overrides)` returns the scenario EXPANDED: the environment resolved (with
 `sound_speed`, `temperature`, `water_depth`, `site_water_depth`, `wind_speed`, ...) and every block holding the

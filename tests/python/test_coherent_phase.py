@@ -101,7 +101,7 @@ def test_taps_reach_the_quantile_with_exact_energy_and_mean(rule):
 
 
 def test_tail_quantile_absent_is_the_earlier_output_and_two_bounces_keep_their_rule():
-    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=60.0, max_order=2, surface_coefficient=-1.0)
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=60.0, bottom_coefficient=0.5, max_order=2, surface_coefficient=-1.0)      # the constant, stated (no default since D-104)
     rough = {"rms_height": 0.05, "mean_square_slope": 0.02, "rms_vertical_speed": 0.1}
     kw = dict(frequency=F, surface=rough, bottom=rough, surface_z=0.0, bottom_z=60.0, taps=8, doppler=True, doppler_lines=2)
     plain = TimeSpreadProvider(inner, **kw).eigenrays(SOURCE, POINT)

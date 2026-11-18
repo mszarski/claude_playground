@@ -160,7 +160,8 @@ def test_every_shipped_scenario_states_its_site_once():
             continue                                                          # a variant: its parent is checked
         for key in site_keys["propagation"]:
             assert key not in (typed.get("propagation") or {}), f"{name}: propagation.{key} is typed; it belongs to the environment"
-        assert "environment" not in (typed.get("propagation") or {}), name
+        # the ocean block may only hold what the environment cannot: a bed whose depth changes with range
+        assert set((typed.get("propagation") or {}).get("environment") or {}) <= {"depth", "bathymetry"}, name
         noise = (typed.get("receiver") or {}).get("ambient_noise") or {}
         assert not any(k in noise for k in site_keys["receiver.ambient_noise"]), name
         for item in typed.get("reverberation") or []:
