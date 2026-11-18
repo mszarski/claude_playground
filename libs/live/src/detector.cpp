@@ -40,7 +40,7 @@ std::string DetectorPlan::json() const {
   s << std::setprecision(6);
   s << "{\"rows\": " << rows << ", \"samples_per_cell\": " << samples_per_cell << ", \"cell_m\": " << cell_m << ", \"step_m\": " << step_m
     << ", \"resolution_m\": " << resolution_m << ", \"beams\": " << beams << ", \"train_looks_per_cell\": " << train_looks_per_cell
-    << ", \"merge_cells\": " << merge_cells << ", \"sidelobe_margin_db\": " << 10.0 * std::log10(margin) << ", \"source_snr_db\": " << 10.0 * std::log10(source_ratio) << ", \"scales\": [";
+    << ", \"merge_cells\": " << merge_cells << ", \"merge_deg\": " << std::asin(std::min(merge_u, 1.0)) * 180.0 / kPi << ", \"sidelobe_margin_db\": " << 10.0 * std::log10(margin) << ", \"source_snr_db\": " << 10.0 * std::log10(source_ratio) << ", \"scales\": [";
   for (std::size_t i = 0; i < scales.size(); ++i) {
     const DetectorScale& c = scales[i];
     s << (i ? ", " : "") << "{\"cells\": " << c.cells << ", \"length_m\": " << c.length_m << ", \"looks\": " << c.looks << ", \"tests\": " << c.tests
@@ -138,6 +138,12 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
     }
     pattern[static_cast<std::size_t>(iu)] = acc / n_f;
   }
+  // Cells closer in bearing than half the half-power beamwidth are one echo's beam (a weak echo's beam can be flagged in
+  // two pieces); never less than one step of the bearing grid, so touching cells always belong together.
+  std::int64_t half = 1;
+  while (half < n_u && pattern[static_cast<std::size_t>(half)] >= 0.5) ++half;
+  p.merge_u = p.u_step * static_cast<double>(half);
+  for (std::size_t b = 1; b < bearings.size(); ++b) p.merge_u = std::max(p.merge_u, std::abs(std::sin(bearings[b]) - std::sin(bearings[b - 1])));
   // The detection itself is the part of the beam within the margin of its peak (and the cells next to it in range):
   // the envelope is 1 there. Beyond, it is the beam's own skirt and then its sidelobe peaks (the largest value from
   // here to one beamwidth further out, so that the nulls between sidelobes are bridged), never below the floor.
@@ -291,30 +297,17 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
     }
   }
 
-  // Flagged cells of one bearing no further apart than the tracker can tell apart are joined (the cells between
-  // them become part of the group): the arrivals of one multipath group, a target's highlights.
-  if (plan.merge_cells > 0) {
-    bool any = false;
-    for (std::int64_t b = 0; b < n_b; ++b) {
-      std::int64_t last = -1;
-      for (std::int64_t j = 0; j < n_cells; ++j) {
-        if (!flag[static_cast<std::size_t>(b * n_cells + j)]) continue;
-        if (last >= 0 && j - last > 1 && j - last - 1 <= plan.merge_cells) {
-          for (std::int64_t q = last + 1; q < j; ++q) flag[static_cast<std::size_t>(b * n_cells + q)] = 1;
-          any = true;
-        }
-        last = j;
-      }
-    }
-    if (any) {
-      flagged.clear();
-      for (std::int64_t i = 0; i < n_b * n_cells; ++i) {
-        if (flag[static_cast<std::size_t>(i)]) flagged.push_back(i);
-      }
-    }
+  // One detection per group of flagged cells that belong together: no further apart than merge_cells + 1 in range and
+  // merge_u in sin(bearing). Touching cells (diagonals included) always are.
+  std::vector<std::int64_t> b_lo(static_cast<std::size_t>(n_b)), b_hi(b_lo);
+  for (std::int64_t b = 0; b < n_b; ++b) {
+    std::int64_t lo = b, hi = b;
+    while (lo > 0 && std::abs(sin_b[static_cast<std::size_t>(lo - 1)] - sin_b[static_cast<std::size_t>(b)]) <= plan.merge_u + 1e-12) --lo;
+    while (hi < n_b - 1 && std::abs(sin_b[static_cast<std::size_t>(hi + 1)] - sin_b[static_cast<std::size_t>(b)]) <= plan.merge_u + 1e-12) ++hi;
+    b_lo[static_cast<std::size_t>(b)] = lo;
+    b_hi[static_cast<std::size_t>(b)] = hi;
   }
-
-  // One detection per group of touching flagged cells (diagonals included).
+  const std::int64_t reach = plan.merge_cells + 1;
   std::vector<Detection> out;
   std::vector<unsigned char> seen(n, 0);
   std::vector<std::int64_t> stack;
@@ -340,10 +333,8 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
       const double ratio = static_cast<double>(peak[static_cast<std::size_t>(i)]) / std::max(static_cast<double>(background[static_cast<std::size_t>(i)]), 1e-300);
       best = std::max(best, ratio);
       ++cells;
-      for (std::int64_t dr = -1; dr <= 1; ++dr) {
-        for (std::int64_t dc = -1; dc <= 1; ++dc) {
-          const std::int64_t r2 = row + dr, c2 = col + dc;
-          if (r2 < 0 || r2 >= n_b || c2 < 0 || c2 >= n_cells) continue;
+      for (std::int64_t r2 = b_lo[static_cast<std::size_t>(row)]; r2 <= b_hi[static_cast<std::size_t>(row)]; ++r2) {
+        for (std::int64_t c2 = std::max<std::int64_t>(col - reach, 0); c2 <= std::min(col + reach, n_cells - 1); ++c2) {
           const std::int64_t j = r2 * n_cells + c2;
           if (flag[static_cast<std::size_t>(j)] && !seen[static_cast<std::size_t>(j)]) {
             seen[static_cast<std::size_t>(j)] = 1;

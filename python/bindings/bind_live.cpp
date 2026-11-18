@@ -531,6 +531,7 @@ void bind_live(py::module_& m) {
         out["margin"] = p.margin;
         out["aperture_m"] = p.aperture_m;
         out["merge_cells"] = p.merge_cells;
+        out["merge_u"] = p.merge_u;
         out["range_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.range_envelope.size()), p.range_envelope.data());
         out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
         out["u_step"] = p.u_step;

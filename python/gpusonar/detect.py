@@ -180,26 +180,34 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             alive &= ~((fp < fp[q]) & ~((e_r >= 1.0) & (e_b >= 1.0)) & (fp <= plan["margin"] * e_r * e_b * fp[q]))
         flag = np.zeros_like(flag)
         flag[fb[alive], fj[alive]] = True
-        # Flagged cells of one bearing no further apart than the tracker can tell apart are joined.
-        gap = int(plan["merge_cells"])
-        if gap > 0:
-            fb, fj = fb[alive], fj[alive]                                    # raster order: by bearing, then range
-            close = (fb[1:] == fb[:-1]) & (fj[1:] - fj[:-1] > 1) & (fj[1:] - fj[:-1] - 1 <= gap)
-            for q in np.flatnonzero(close):
-                flag[fb[q], fj[q] + 1:fj[q + 1]] = True
+        fb, fj = fb[alive], fj[alive]
 
-    labels, n = ndimage.label(flag, structure=np.ones((3, 3), dtype=int))
+    # One detection per group of flagged cells that belong together: no further apart than merge_cells + 1 in range and
+    # merge_u in sin(bearing) (touching cells always are). Groups in the order of their first cell, by bearing then range.
     out = []
-    ratio = peak / np.maximum(background_map.astype(float), 1e-300)
-    for label, where in enumerate(ndimage.find_objects(labels), start=1):
-        ib, ir = np.nonzero(labels[where] == label)
-        ib, ir = ib + where[0].start, ir + where[1].start
-        w = cells[ib, ir, :].astype(float)                                   # [cell, sample]
-        r = fine_ranges[(ir[:, None] * k + np.arange(k)[None, :])]
-        near, far = float(cell_ranges[ir].min()), float(cell_ranges[ir].max())
-        out.append(Detection(float((w * r).sum() / w.sum()), float((w.sum(axis=1) * bearings[ib]).sum() / w.sum()),
-                             float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
-                             extent=far - near + float(plan["cell_m"])))
+    if len(fb):
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+        sin_b = np.sin(bearings)
+        reach = int(plan["merge_cells"]) + 1
+        # Within 1 in the largest-coordinate distance of these: within merge_u and within `reach` cells.
+        pts = np.stack([sin_b[fb] / (plan["merge_u"] + 1e-12), fj / (reach + 1e-9)], axis=1)
+        pairs = cKDTree(pts).query_pairs(1.0, p=np.inf, output_type="ndarray")
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(fb), len(fb)))
+        _, member = connected_components(graph, directed=False)
+        ratio = peak / np.maximum(background_map.astype(float), 1e-300)
+        first = {}
+        for i, g in enumerate(member):
+            first.setdefault(int(g), i)
+        for g in sorted(first, key=first.get):
+            ib, ir = fb[member == g], fj[member == g]
+            w = cells[ib, ir, :].astype(float)                                   # [cell, sample]
+            r = fine_ranges[(ir[:, None] * k + np.arange(k)[None, :])]
+            near, far = float(cell_ranges[ir].min()), float(cell_ranges[ir].max())
+            out.append(Detection(float((w * r).sum() / w.sum()), float((w.sum(axis=1) * bearings[ib]).sum() / w.sum()),
+                                 float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
+                                 extent=far - near + float(plan["cell_m"])))
     return out, background_map
 
 

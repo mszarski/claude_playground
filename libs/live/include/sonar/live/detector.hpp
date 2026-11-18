@@ -21,10 +21,12 @@
 // A cell that passes any test is flagged. Flagged cells that a stronger cell's own sidelobes explain
 // (the compressed pulse's along range, the aperture window's along bearing, with a margin) are
 // dropped: a strong echo is one detection, not a mainlobe and a fringe of sidelobe fragments. Flagged
-// cells of one bearing no further apart in range than the tracker can tell apart (`cfar.merge_m`,
-// default its range sigma) are joined, and touching cells are grouped as before, so a target's
-// highlights and the arrivals of one multipath group are ONE detection. It reports its strongest
-// sample over the background (`snr_db`), its energy-weighted position and its extent in range.
+// cells are then grouped: two belong together when they are no further apart in range than the
+// tracker can tell apart (`cfar.merge_m`, default its range sigma) and no further apart in bearing
+// than half the beam's half-power width (touching cells always do), so a target's highlights, the
+// arrivals of one multipath group and the two halves of a weak echo's beam are ONE detection, and
+// two targets further apart than that in either are two. It reports its strongest sample over the
+// background (`snr_db`), its energy-weighted position and its extent in range.
 //
 // The background at the ends of the map. Near either end the training window has cells on one side
 // only, and reverberation falls with range: the mean of cells that all lie beyond the cell under test
@@ -84,7 +86,8 @@ struct DetectorPlan {
   double train_looks_per_cell = 1.0;     ///< independent exponential looks one training cell holds (rows included)
   double margin = 10.0;                  ///< sidelobe margin, power ratio
   double aperture_m = 0.0;
-  std::int64_t merge_cells = 0;          ///< unflagged cells between two flagged ones of a bearing that are bridged
+  std::int64_t merge_cells = 0;          ///< flagged cells up to this many cells + 1 apart in range may be one detection
+  double merge_u = 0.0;                  ///< ... when no further apart than this in sin(bearing): half the half-power beamwidth
   /// Range sidelobe envelope by cells apart (index 0 and 1: the mainlobe, 1.0).
   std::vector<double> range_envelope;
   /// Bearing sidelobe envelope against |sin(bearing) - sin(bearing of the stronger cell)|, sampled every `u_step`;
