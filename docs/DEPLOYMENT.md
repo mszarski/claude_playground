@@ -264,9 +264,10 @@ targets at 20 and 120 m:
 | built: the whole column sampled | 0.0 / 1 | 0.3 / 5 | 0.3 / 19 | 2.1 / 16 |
 | supplied: the true profile | 0.0 / 0 | 0.1 / 0 | 0.1 / 0 | 0.4 / 1 |
 
-- A profile that covers the water between vehicle and target brings the depth to metres at
-  every range tested. Anything less leaves tens of metres from 3 km on, in 200 m of water:
-  about what not knowing the depth at all would give.
+- A profile that covers the water between vehicle and target brings the median depth error
+  to a metre or two at every range tested (the worst case of the built profile, binned at
+  2 m, is 19 m, at 6 km). Anything less leaves tens of metres from 3 km on, in 200 m of
+  water: little better than not knowing the depth at all.
 - A dive through the water column is therefore worth more than any assumption. A vehicle that
   stays at one depth has the `local` rung and should treat depths beyond a few kilometres as
   indications.
