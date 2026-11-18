@@ -383,6 +383,25 @@ def test_sodac_probe_periods_are_what_the_tool_assumes():
         assert np.abs(np.vdot(a, b)) / np.sqrt(np.vdot(a, a).real * np.vdot(b, b).real) > 0.999, name
 
 
+def _cache():
+    d = os.environ.get("GPUSONAR_SMARTOCEAN_CACHE")
+    return Path(d) if d and (Path(d) / "soundings" / "R1_14.npz").exists() else None
+
+
+@pytest.mark.skipif(_cache() is None, reason="GPUSONAR_SMARTOCEAN_CACHE has no soundings (tools/channel_smartocean.py sound)")
+def test_sodac_surface_reflection_at_r1_is_where_the_casts_put_it():
+    """One recording through the tool: the surface reflection follows the direct arrival by the
+    4.3 to 4.5 ms the measured profiles give (straight rays: 4.14), nearly as strong, and steady."""
+    import channel_smartocean as tool
+    with np.load(_cache() / "soundings" / "R1_14.npz") as z:
+        r = tool.analyse_recording(z, "R1", 14)
+    for name in ("chirp4", "prbs", "chirp40"):
+        assert 4.25 < r[name]["delay_ms"] < 4.55, name
+        assert -4.0 < r[name]["level2_db"] < 1.0, name
+        assert r[name]["coherent"] > 0.9, name
+    assert 0.1 < r["spread"]["t10"] < 0.3
+
+
 @pytest.mark.skipif(_dataset() is None or not (_dataset() / "CTD.csv").exists(), reason="no SODAC CTD.csv")
 def test_sodac_ctd_has_two_casts_with_a_maximum_near_the_source_depth():
     casts = cs.load_ctd(str(_dataset() / "CTD.csv"))

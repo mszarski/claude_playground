@@ -2398,6 +2398,153 @@ knobs fitting better is not validation; what counts is the rows nothing was fitt
   table), and the fitted shapes differ by a factor 20 between recordings. A description of
   the steep arrivals, not a model of them.
 
+**21.6 Raw recordings in the long-range array's band: the SFI Smart Ocean dataset, 4-8 kHz**
+(`sim/channel_sounding.py`, `tools/channel_smartocean.py`; table
+`docs/figures/channel_validation_smartocean.md`, figures `channel_validation_smartocean_*.png`;
+detection runs `tools/decay_time_sensitivity.py`, `docs/figures/decay_time_sensitivity.md`).
+
+*Sources opened.* The dataset page (IEEE DataPort, doi:10.21227/3aa6-4k33, CC BY 4.0) and its
+descriptor article (van Walree, Otnes, Tomasi, Henriksen, Vahlin, Danre, Bergh, Socheleau,
+Chitre, IEEE Data Descriptions 2 (2025) 218-223, read as hal-05793814). Taken from the
+article: positions and depths (its Table II), source level (Table I), 94 Pa per full scale,
+file layout, "calm, with little wind and some drizzle". Files used: the 4-8 kHz receptions
+(160 recordings), the transmitted waveforms, `CTD.csv`, the depth geodatabase. Not available:
+the supplementary waveform description (the transmitted WAV files serve as probes instead),
+the sea-surface photograph, the site paper (Bergh et al., Sensors 24 (2024) 6530), the
+9-14 and 24-32 kHz receptions.
+
+*The experiment.* A sender at 20 m hung from a floating fish-farm platform; two hydrophones
+on bottom tripods, R1 at 43 m depth 274 m away and R2 at 14 m depth 1020 m away; 80 cycles
+of probes 10 minutes apart from 17:00 to 06:20 UTC on 14-15 November 2024. Not stated: wind
+speed, wave height, tide, seabed type, tripod heights, water depth at the instruments. The
+chart (10 m contours, soundings of 2002) gives 47 m at the sender and a seabed that falls
+to 61 m and rises to 40 m towards R1, and falls to 86 m, rises to 53 m, falls to 77 m and
+climbs a slope to 18 m towards R2. It is not exact: it puts the seabed at R1 above the
+stated hydrophone depth, and the casts reach 54.6 m where it says 47 m.
+
+*The two casts* (the file's own sound-speed column; nothing recomputed). Both: 1480-1481 m/s
+at the surface, rising to a maximum of 1494.7 and 1495.4 m/s at 19 m, then falling slowly
+to 1491-1493 m/s at 54 m. The sender sits on the maximum. The way up reads 1.0 to 1.9 m/s
+above the way down at 20 m (the sensor's lag); the mean of the two is used. Assumed: that a
+cast at the platform holds along both paths.
+
+*Estimator* (ours; no tracker). Recordings are taken to complex baseband about 6 kHz at
+12 kHz. Periodic probes are deconvolved period by period (chirp trains: 4 Hz snapshots with
+a 250 ms delay window, 16 s; 40 Hz with a 25 ms window, 10 s; 0.745 s chirps 3 s apart for
+the whole response); the 60 s aperiodic sequence by least squares in 0.5 s blocks every
+0.25 s over a 50 ms window. Band 5 kHz with a raised-cosine weight: half-power width
+0.29 ms, first sidelobe -31 dB. Clock difference between sender and recorders: 1e-6
+(removed). Floors, re the direct arrival at R1: -38 dB (4 Hz chirps; this is fluctuating
+reverberation, not noise), -33 dB (least squares: reverberation beyond its window), -24 dB
+(40 Hz chirps: reverberation folded ten times). Reverberation, not noise, limits every
+sounding: 36 % of the energy at R1 and 59 % at R2 arrives later than 10 ms.
+
+*Refraction* (stated: geometry and casts; assumed: a half-space seabed 1600 m/s, 1.8,
+0.5 dB per wavelength, a 1.5 m tripod at R1; fitted: nothing).
+
+| | straight rays or Bellhop isovelocity | Bellhop, cast 1 / cast 2 | measured |
+| --- | --- | --- | --- |
+| R1: surface reflection after the direct arrival | 4.14 ms | 4.53 / 4.45 ms | 4.28 to 4.43 ms through the night |
+| R1: grazing angle at the surface | 13.0 degrees | 14.7 degrees | - |
+| R1: loss of the direct arrival | 48.8 dB | 48.8 / 48.7 dB | 47.5 dB (source level 183) or 45.5 (181) |
+| R2: strong arrivals in the first 6 ms | direct, bottom, surface within 0.37 ms | two 2.15 ms apart, the first stronger / one | two 1.84 ms apart (1.68 to 1.91), the second 1.6 dB stronger (-5.5 to +8) |
+| R2: loss of the strongest arrival | 60.2 dB | 58.2 / 57.1 dB | about 71 dB; the whole response 58 dB |
+
+At 274 m the profile moves the surface reflection by 0.3 to 0.4 ms (more than a resolution
+cell) and its grazing angle by 1.7 degrees; isovelocity is outside the measured range all
+night, the casts are 0.02 to 0.25 ms above it. The measured value drifts smoothly by
+0.13 ms, which is 0.4 m of water level: a tide, not stated, of the same size as the
+difference left. At 1 km the profile decides everything: with the sender on the sound-speed
+maximum there is no direct path, the two casts give qualitatively different arrivals, a
+metre of seabed depth at the receiver changes which bounces arrive (tried), and no arrival
+there can be named with confidence. Isovelocity cannot make the measured pair 1.84 ms
+apart at all; cast 1 makes a pair 2.15 ms apart with the levels the other way round. The
+strongest arrival is 13 dB weaker than Bellhop's while the energy of the whole response is
+what spherical spreading gives: the sound arrives, spread over a second. The time
+difference between the receivers (0.4957 s) is 3 ms short of every prediction (0.4990
+isovelocity): 5 m, more than the positions and the recorders' time stamps can be trusted
+to, so no sound speed is read from it.
+
+*The surface reflection at R1* is the one arrival that is a single surface bounce, is
+named without doubt and stands clear of its neighbours. Against the direct arrival,
+snapshot by snapshot:
+
+- Coherent share at its peak 0.987 (0.978 to 0.992 over the night); with its tail to
+  0.9 ms, 0.969. The surface was close to a mirror at 6 kHz.
+- The fluctuation is two processes. At the peak it is mostly phase (variance 0.0084 rad^2
+  against 0.0037 relative amplitude), slow (rms 0.36 Hz, 13 % of its power above 0.5 Hz, a
+  line near 0.2 Hz rather than a Gaussian: w90/w50 = 1.4 to 1.5), and it has the shape of
+  the steady arrival: a mirror heaving 0.8 cm rms, or the sender heaving 1.3 cm rms on its
+  platform (the two cannot be told apart: the first arrivals' phases at R1 and R2, which
+  lie in nearly opposite directions, are correlated -0.70, so the sender does sway, by
+  millimetres along the paths). Behind the peak there is a tail that the steady arrival
+  does not have: 2.2 % of the arrival's energy, faster (rms 0.63 Hz, 74 % above 0.5 Hz),
+  absent behind the direct arrival (20 dB lower there). Shorter waves scatter later and
+  move faster.
+- Phase variance in the upper over the lower half band: 1.57 +- 0.07 where the same
+  estimator reads 1.42 for a pure change of path length and 1 for a phase that does not
+  depend on frequency (1.26 +- 0.04 against 1.11 for the least-squares soundings). The
+  variance grows as frequency squared within the band.
+- Scintillation index of the arrival's energy 0.015: far from a fully scattered arrival.
+
+*What this says of the model's ingredients.*
+
+1. **Coherent share exp(-Gamma^2): consistent, but not a test** (the height is the fitted
+   quantity: 0.8 cm for the unspread part, 1.1 cm for the tail, 1.4 cm together). No wind
+   was stated; the wind whose Pierson-Moskowitz height is the tail's is 1.5 m/s, and the
+   wind whose noise curve matches R2's noise level is 1.9 m/s (below): two independent
+   readings of "little wind" that agree.
+2. **Doppler width: the low-roughness limit of the formula is seen, the wind law is not.**
+   For Gamma << 1 the model's width is the rms wave frequency v / (2 pi h) whatever the
+   acoustic frequency, and the measured widths are wave frequencies (0.36 and 0.63 Hz).
+   The Pierson-Moskowitz sea of that height would have 1.3 Hz. One height and one speed for
+   the whole arrival is wrong here: peak and tail are different waves. Proportionality of
+   the width to the acoustic frequency belongs to rough surfaces and cannot be tested at
+   this site, nor against the 12.5 kHz site (which is rough): the two are in different
+   regimes.
+3. **Complex Gaussian taps: not what the peak does** (its fluctuation is 70 % phase; a
+   Gaussian tap added to a steady arrival gives equal parts), adequate for the tail as far
+   as can be seen. The energy involved is 1 %.
+4. **Decay time: not settled.** Mean excess delay of the tail, with the pulse and the
+   steady arrival's own echoes taken out: 0.50 ms fitted over the first 0.9 ms (four
+   quarters of the night: 0.27, 0.63, 0.53, 0.63), 0.96 ms over 3 ms. The rules, with the
+   Cox-Munk slope of the 1.5 m/s wind (0.0105; the slope is not measured, and Cox-Munk
+   is at the bottom of its range): facet 0.45 ms, rule of thumb 0.85 ms. Our model with the
+   surface fitted to the tail (two numbers: height, speed), sampled and fitted like the
+   data: facet reads 0.67 and 0.44 ms in the two windows, rule of thumb more than 4 and
+   0.96 ms. So the first 0.9 ms decays as the facet option does and not as the rule of
+   thumb does; the 3 ms window reads the rule of thumb's value, but there the later echoes
+   of the surface arrival fluctuate too and our facet tail is cut at three decay times.
+   Read the other way, the measured times are mean-square slopes of 0.012 to 0.022 under
+   the facet rule and 0.006 to 0.012 under the rule of thumb: both believable for a light
+   wind. The uncertainty of the measurement (a factor 2 between windows, 2.3 between
+   quarters) and of the slope is as large as the factor 1.9 between the rules at this
+   angle. What the data do show: a tail exists at Gamma^2 = 0.03, and its length is of the
+   order mean-square slope x t1 t2 / (t1 + t2), as both rules have it.
+5. **Multi-bounce rule, bubble loss, bottom reflection against named sediments: not
+   testable.** No arrival with two surface bounces can be named; the seabed is not named
+   (the echo 0.5 ms behind the direct arrival at R1 is 12 dB down where a flat half-space
+   gives 1 dB: a hilltop under a tripod, not a sediment measurement).
+6. **Delay spread: the model has nothing like it.** 90 % of the energy within 165 ms at
+   274 m and 275 ms at 1020 m, 99 % within 465 and 636 ms; rms spread 100 and 145 ms.
+   Bellhop over the charted section ends after 0.2 s and 98 to 99 % of its energy is in the
+   first 50 ms. This is the reverberation of a basin with sides, not of our 2-D ocean.
+
+*Noise* (the 2.5 to 3.5 s before each cycle's first transmission: 222 and 219 s in all).
+R2: 43.9 dB re 1 uPa^2/Hz in 4-8 kHz (41.7 to 48.5 through the night), slope -3.5 dB per
+octave; the simulator's Wenz-type curve has that level at 1.9 m/s of wind without shipping
+(one fitted number) and a slope of -5.2. Tails heavier than Gaussian (q99.95/q50 = 6.0
+against 3.3; `noise_fit` chooses the K family, shape 3.5): the clicks the article
+attributes to the receiver platform. R1: 62.9 dB, slope +0.8, lines (3.7, 7.3 kHz),
+Gaussian: the research station's machinery, 19 dB above the sea. Coherence between the two
+hydrophones (1.2 km apart): 0.007, the estimator's floor.
+
+*What the other two bands would add.* The same surface within minutes at 11.5 and 28 kHz:
+Gamma^2 3.7 and 22 times larger (0.1 and 0.7 at R1), so the coherent share against
+frequency squared is a test with no free number once the height is fixed here, the Doppler
+width leaves its wave-frequency limit, and the tail carries ten to twenty times the energy
+with half the pulse width (9 kHz of band): the decay time would be measured, not bracketed.
+
 ## 22. The projector's direct sound and a receiver that overloads [OURS]
 
 Not from TR 0702: SST's receiver is linear. This section is our own model, written for the

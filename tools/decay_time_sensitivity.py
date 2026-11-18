@@ -69,7 +69,8 @@ def run(cases: list, seeds: int, pings: int | None, store: Path, log=print) -> d
     for case in cases:
         cfg = scenario(case, pings)
         wind = wind_of(cfg)
-        todo = [("as shipped", None, None)] + [(name, opt, s) for name, opt in OPTIONS.items() for s in range(seeds)]
+        # every seed for the two rules; the multi-bounce rule with the first seed only (it is a second question)
+        todo = [("as shipped", None, None)] + [(name, opt, s) for name, opt in OPTIONS.items() for s in range(seeds if "sum" not in name else 1)]
         for name, opt, seed in todo:
             key = name if seed is None else f"{name} / seed {seed}"
             if key in res.get(case, {}):
@@ -86,6 +87,52 @@ def run(cases: list, seeds: int, pings: int | None, store: Path, log=print) -> d
     return res
 
 
+def echo_levels(pings: int = 24, log=print) -> dict:
+    """Without noise, reverberation or a detector: the echo of one point target after pulse
+    compression on one hydrophone, ping after ping, with the surface flat and rough under each
+    rule (image-source paths, two bounces). Two geometries: `flank_sst_shallow`'s (flank array,
+    1 km, 100 m of water, wind 6 m/s) and `popoto_12km`'s (long-range array, 12 km, 100 m, wind
+    5 m/s). Reported re the flat surface: the strongest sample of the whole echo (what a
+    detector on one beam sees), its ping-to-ping standard deviation, and the echo's energy."""
+    from gpusonar import recon
+    from gpusonar.sim import ImageSourceProvider, Scene, make_pose, simulate_ping
+    from gpusonar.sim.timespread import wrap
+    from gpusonar.sonar import SonarModel
+    out = {}
+    geometries = {"flank_sst_shallow geometry (1 km)": ("flank_32", {"receive": {"window": {"range": [900.0, 1150.0]}}}, [0.0, 1000.0, 50.0], 30.0, 6.0, 15.0),
+                  "popoto_12km geometry (12 km)": ("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8.0e3, "window": {"range": [11800.0, 12300.0]}}},
+                                                   [0.0, 12000.0, 4.0], 10.0, 5.0, 19.9)}
+    for label, (sonar_name, overrides, target, own_depth, wind, interval) in geometries.items():
+        sonar = SonarModel.load(sonar_name, overrides)
+        inner = ImageSourceProvider(1500.0, surface_z=0.0, bottom_z=100.0, max_order=2, bottom=dict(speed=1650.0, density=1.9, attenuation=0.8))
+        scene = Scene().add_points([target], target_strength_db=10.0)
+        pose = make_pose(position=(0.0, 0.0, own_depth))
+        cases = {"flat": inner}
+        for rule in ("facet", "rule_of_thumb"):
+            cases[rule] = wrap(inner, {"surface": {"wind_speed": wind}, "decay_time": rule, "seed": 11}, frequency=sonar.center_frequency)
+        peaks, energy = {}, {}
+        for name, provider in cases.items():
+            pk, en = [], []
+            for i in range(pings if name != "flat" else 2):
+                rec = simulate_ping(sonar, pose, scene, provider=provider, environment={"sound_speed": 1500.0}, adc=False, noise_rms=0.0,
+                                    scenario_time=interval * i, sequence=i)
+                recon.prepare([rec])
+                e = np.abs(rec.samples.array[rec.samples.array.shape[0] // 2]) ** 2
+                pk.append(e.max())
+                en.append(e.sum())
+            peaks[name], energy[name] = np.array(pk), np.array(en)
+        row = {"wind_speed": wind, "pings": pings}
+        for rule in ("facet", "rule_of_thumb"):
+            db = 10.0 * np.log10(peaks[rule] / peaks["flat"].mean())
+            row[rule] = {"peak_db": float(10.0 * np.log10(peaks[rule].mean() / peaks["flat"].mean())), "peak_median_db": float(np.median(db)), "peak_std_db": float(db.std()),
+                         "energy_db": float(10.0 * np.log10(energy[rule].mean() / energy["flat"].mean()))}
+        row["difference_db"] = row["rule_of_thumb"]["peak_db"] - row["facet"]["peak_db"]
+        row["standard_error_db"] = float(np.hypot(row["facet"]["peak_std_db"], row["rule_of_thumb"]["peak_std_db"]) / np.sqrt(pings))
+        out[label] = row
+        log(label, json.dumps(row))
+    return out
+
+
 def markdown(res: dict) -> str:
     lines = ["# Detection with the long-range array: how much the decay-time rule matters", "",
              "Made by `tools/decay_time_sensitivity.py`: each scenario as shipped (no time spreading) and with a wind-roughened surface under each rule. One row of 32 hydrophones, "
@@ -93,6 +140,9 @@ def markdown(res: dict) -> str:
              "in brackets each seed of the scattered taps.", "",
              "| Scenario | wind, m/s | as shipped | facet | rule of thumb | facet, multi_bounce sum | rule of thumb minus facet, dB | spread between seeds, dB |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for case, rows in res.items():
+        if case.startswith("_"):
+            continue
+
         def cell(name):
             keys = [k for k in rows if k == name or k.startswith(name + " / seed")]
             if not keys:
@@ -110,6 +160,15 @@ def markdown(res: dict) -> str:
         spread = f"{max(np.ptp(f) if len(f) > 1 else 0.0, np.ptp(r) if len(r) > 1 else 0.0):.1f}" if f and r else "-"
         wind = next(iter(rows.values())).get("wind_speed", float("nan"))
         lines.append(f"| {case} | {wind:.0f} | {shipped} | {facet} | {rule} | {fsum} | {diff} | {spread} |")
+    if "_echo_levels" in res:
+        lines += ["", "Without noise, reverberation or a detector: one point target, image-source paths with two bounces, one hydrophone after pulse compression. "
+                  "The strongest sample of the echo, re a flat surface:", "",
+                  "| Geometry | wind, m/s | pings | facet: mean (median), ping-to-ping sd, dB | rule of thumb | rule of thumb minus facet, dB | its standard error, dB | echo energy, facet / rule of thumb, dB |",
+                  "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+        for label, r in res["_echo_levels"].items():
+            f, t = r["facet"], r["rule_of_thumb"]
+            lines.append(f"| {label} | {r['wind_speed']:.0f} | {r['pings']} | {f['peak_db']:+.2f} ({f['peak_median_db']:+.2f}), {f['peak_std_db']:.2f} | {t['peak_db']:+.2f} ({t['peak_median_db']:+.2f}), {t['peak_std_db']:.2f} | "
+                         f"{r['difference_db']:+.2f} | {r['standard_error_db']:.2f} | {f['energy_db']:+.2f} / {t['energy_db']:+.2f} |")
     return "\n".join(lines) + "\n"
 
 
@@ -121,9 +180,13 @@ def main(argv=None) -> int:
     ap.add_argument("--json", default=str(ROOT / "docs" / "figures" / "decay_time_sensitivity.json"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--echo-pings", type=int, default=0, help="also the noise-free echo levels of `echo_levels`, over this many pings")
     args = ap.parse_args(argv)
     store = Path(args.json)
-    res = json.loads(store.read_text()) if args.report_only else run(args.cases.split(","), args.seeds, args.pings, store)
+    res = json.loads(store.read_text()) if args.report_only else run([c for c in args.cases.split(",") if c], args.seeds, args.pings, store)
+    if args.echo_pings and "_echo_levels" not in res:
+        res["_echo_levels"] = echo_levels(args.echo_pings)
+        store.write_text(json.dumps(res, indent=1))
     text = markdown(res)
     if args.out:
         Path(args.out).write_text(text)
