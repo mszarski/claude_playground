@@ -356,8 +356,17 @@ def remove_drift(channel: TimeVaryingChannel, receiver: int = 0, delay_bin: int 
 # Estimators on a sounding
 # =================================================================================================
 
-def tail_decay(profile: np.ndarray, pulse: np.ndarray, fs_delay: float, *, floor: float = 0.0, decay_grid=None) -> dict:
+def tail_decay(profile: np.ndarray, pulse: np.ndarray, fs_delay: float, *, floor: float = 0.0, decay_grid=None,
+               density=None, steady: np.ndarray | None = None, oversample: int = 8) -> dict:
     """Decay time of the scattered tail behind one arrival, with the instrument's pulse taken out.
+
+    `density(lag s, T)`: the tail's shape for mean excess delay T in place of the exponential
+    (e.g. `timespread.facet_delay_density` of a = T / (1 + sin^2 g), b = a sin^2 g); it is
+    sampled `oversample` times per bin and summed. `steady`: the steady (coherent) intensity
+    profile on the same bins, used in place of `pulse` for the unspread term: a modulation
+    common to the arrival and to the echoes that follow it (a heaving mirror, a swaying source)
+    fluctuates in proportion to the steady profile, echoes included, and is then not mistaken
+    for a tail.
 
     profile: mean intensity against delay around the arrival (the fluctuating part: total less
     |mean|^2), [K]. pulse: the intensity response of the sounding to a single steady path on
@@ -394,13 +403,16 @@ def tail_decay(profile: np.ndarray, pulse: np.ndarray, fs_delay: float, *, floor
                     best = (r, cc)
             return best
         return float((((a @ coef) - y * wgt) ** 2).sum()), coef
-    r0, _ = solve([p])
+    first = p if steady is None else np.asarray(steady, dtype=float) / max(float(np.sum(steady)), 1e-300)
+    fine = (np.arange(k * oversample) + 0.5) / (oversample * fs_delay)
+    r0, _ = solve([first])
     best = None
     for t in decay_grid:
-        e = np.exp(-lag / t)
+        e = np.exp(-fine / t) if density is None else np.asarray(density(fine, t), dtype=float)
+        e = e.reshape(k, oversample).sum(axis=1)
         e = e / e.sum()
         conv = np.convolve(p, e)[:k]
-        r, c = solve([p, conv])
+        r, c = solve([first, conv])
         if best is None or r < best[0]:
             best = (r, float(t), c)
     r, t, c = best
