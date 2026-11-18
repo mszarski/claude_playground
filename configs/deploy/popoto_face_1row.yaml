@@ -17,6 +17,7 @@ chain:
   classify:
     min_speed: 1.0
     multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
+  decimate: {}
 output:
   recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5
   report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl

@@ -1,0 +1,47 @@
+# Waters the long-range array's builds are planned in (a build spec says `environments: illustrative`).
+# Fields: docs/REFERENCE_DESIGN.md, "Environments" (gpusonar.depthplan.ENVIRONMENT_FIELDS).
+#
+# ALL OF THESE ARE ILLUSTRATIVE: no site is chosen and nothing here was measured. Water depths, bottoms and profiles
+# are those of the shipped popoto_12km and popoto_env_* scenarios (textbook sediment values, made-up profiles);
+# the wind is the link budget's 5 m/s. Own depths are searched from 5 m to the build's platform.max_depth_m (the owner: "Depth no
+# further than 500m") and no closer to the bottom than bottom_clearance_m, which is a PLACEHOLDER (10 m when not given).
+#
+# Which applies where. `deep_no_bottom_return` is the non-ducting case: direct path and surface image only. It holds
+# where the bottom's echo is lost: water deep against the range (the bounce meets the bottom above its critical angle),
+# a soft bottom (silt, clay, mud: no critical angle), or a downward-refracting profile over such a bottom. The others
+# are ducted: shallow against the range over a hard bottom (sand, gravel), where many bounces arrive nearly unattenuated.
+# With a `profile` the factor comes from Bellhop, and the answer changes with it.
+environments:
+  - name: deep_no_bottom_return
+    title: "Non-ducting: no bottom return, isovelocity, 5 m/s wind"
+    wind_speed_m_s: 5.0
+  - name: deep_no_bottom_return_sea_state_5
+    title: "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law"
+    sea_state: 5
+    bubble_model: apl_1994
+  - name: shelf_100m_sand
+    title: "Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's)"
+    water_depth_m: 100.0
+    bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+    wind_speed_m_s: 5.0
+    bottom_clearance_m: 10.0
+  - name: slope_1000m_silt_profile
+    title: "1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop"
+    water_depth_m: 1000.0
+    bottom: {speed: 1575.0, density: 1.7, attenuation: 1.0}
+    profile: {depth_m: [0.0, 50.0, 200.0, 600.0, 1000.0], speed_m_s: [1510.0, 1509.0, 1492.0, 1486.0, 1492.0]}
+    wind_speed_m_s: 5.0
+  - name: winter_200m_sand_profile
+    title: "200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop"
+    water_depth_m: 200.0
+    bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+    profile: {depth_m: [0.0, 200.0], speed_m_s: [1480.0, 1483.4]}
+    wind_speed_m_s: 5.0
+    bottom_clearance_m: 10.0
+  - name: summer_60m_mud_profile
+    title: "60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop"
+    water_depth_m: 60.0
+    bottom: {speed: 1500.0, density: 1.5, attenuation: 0.2}
+    profile: {depth_m: [0.0, 15.0, 30.0, 60.0], speed_m_s: [1522.0, 1520.0, 1492.0, 1490.0]}
+    wind_speed_m_s: 5.0
+    bottom_clearance_m: 5.0

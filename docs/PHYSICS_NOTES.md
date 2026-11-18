@@ -2658,3 +2658,55 @@ cell needs Abraham and Lyons (2002), which is on the wanted list.
   relaxation frequencies (0.769 and 41.372 kHz). Stated validity ranges of both formulas
   were not read.
 - Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
+
+## 24. The surface image in a link budget; own depth as a lever [OURS]
+
+`python/gpusonar/lloyd.py`, `depthplan.py`, `target_classes.py`; `tools/popoto_depth_planner.py`,
+`tools/surface_image_validation.py`. No source beyond the repository's own functions: the image
+construction is derived in the module's docstring, the roughness factor is
+`acoustics.rough_coherent_reflection`, the bubble law `sim.surface` `apl_1994`, the bottom
+`sim.propagation.rayleigh_reflection`, the cylinder `sim.targets`.
+
+*The factor.* One way, re the direct path: `H(f) = 1 + mu (R_d / R_s) exp(-i k (R_s - R_d))`,
+`mu = -exp(-Gamma^2 / 2) 10^(-L_b / 20)`, plus a scattered power
+`S = (1 - exp(-Gamma^2)) 10^(-L_b / 10) (R_d / R_s)^2` with no fixed phase. Two way, monostatic:
+transfer function `H^2` (`H_tx H_rx` when the projector is not at the array's depth), mean
+intensity `(|H|^2 + S)^2` because the surface has changed in the two-way travel time. Three
+figures are reported: single frequency; energy over the band; peak of the compressed coherent
+echo (the one a detection budget uses). With a bottom the sum runs over the layer's images.
+
+*What the band does.* Nulls at `z1 z2 = n lambda R / 2`. The n = 0 null (the surface) is the same
+at every frequency: a wide band does not fill it. The n-th null's phase spreads by
+`2 pi n B / fc` over the band: at n = 1 with 4 to 6 kHz the energy is -3.7 dB and the peak -6.2 dB
+where one frequency gives a null. Beyond `z1 z2 = lambda R fc / (2 B)` the pattern is gone: the
+paths are resolved, the direct-surface and surface-direct echoes coincide (+6 dB peak), and the
+energy is 1 + 4 + 1 (7.8 dB).
+
+*Roughness at long range.* The grazing angle of the surface path is `(z1 + z2) / R`: 0.07 degrees
+for 10 m and 4 m at 12 km, 1.1 degrees for 225 m. `Gamma = 2 k h sin(grazing)` is then small for any
+plausible height: the surface is a mirror, and sea state enters through noise and bubbles, not
+through roughness. The rms height is an input of its own (Sec. 21: measured heights did not follow
+the wind law).
+
+*Bubbles.* The `apl_1994` law goes as `1 / sin(grazing)` (floored at 2 degrees by `sim/surface.py`)
+and gives about 5 dB a bounce at 9.8 m/s with that floor (11 dB without it at 1 degree): it weakens the surface path, so the null fills and the
+lobe's gain is lost. No validity range is stated by its sources; a target inside the bubble layer
+is not modelled. A bound, not a prediction.
+
+*Measured* (`docs/design/surface_image_validation.json`): simulator image-source paths, both
+engines, own depth 10 to 600 m, target 4 / 30 / 150 m, 12 and 3 km: within 0.8 dB (peak) and
+1.1 dB (energy), largest in the nulls (the sweep's taper; the model's band is flat). Through the
+C++ chain with noise: within 0.6 dB from -15 to +12 dB. Bellhop, one way at 12 km: surface image
+only, energy within 0.6 dB (0.1 dB except in the 10 m / 4 m null, where the arrivals file's digits
+limit Bellhop); 100 m over sand, the image series within 0.1 dB in energy and 0.2 dB in two-way
+peak. The projector 1.5 m below the array (popoto_long_range) is 1.2 dB in a null.
+
+*A finding on the way.* For the same target in free field the chain's detector reports 12.2 dB
+less than the link budget's SNR. A 0.5 m range cell recovers 3.3 dB, a rectangular aperture
+window 1.9 dB, both 5.1 dB; the simulator takes a source level as a peak pressure where the
+budget is an energy equation (3 dB, by inspection, HARDCODED_AUDIT P-5); about 4 dB is not
+explained.
+
+*Not modelled.* Refraction in the closed form (Bellhop when the environment has a profile), the
+scattered energy's spread in delay and angle (so `peak_db` leaves it out), a rough bottom, the
+vertical offsets of stacked rows (the array is one depth), reverberation (margins are noise-limited).
