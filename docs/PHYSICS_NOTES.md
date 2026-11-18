@@ -3685,12 +3685,13 @@ Sec. 25.1) and the stage searches only depths where tau B is at least `min_delay
 
     z_min = 3 r c / (2 B (z_array + z_projector))
 
-down. The test AUV 10 m deep (projector a little deeper) at 500 m with 2 kHz of band: z_min = 26.5 m, and the sea bed is
-at 30 m. Through rays the grid of depths is laid in whole carrier fringes and ran past the sea bed; the last depth has
-no path, its surface delay is NaN, and that delay sized the beam window: the stage answered `window` for every
-detection. With the window sized by the longest finite delay the stage then fitted the 3.5 m that are left and gave
-29.8 m for a target at 15 m (the bottom's echoes fitted as a surface echo, as the flat pattern's 30.3 m). The depth
-change that moves the surface echo by one range resolution cell is 1 / (B dtau/dz) = z_min / 3 = 8.8 m: a band thinner
+down. The test AUV's trial (`ssp_front_testauv_trial_1row`: array and projector 10 m deep, the detection centred 523 m
+away, 2 kHz of band): z_min = 29.3 m, and the sea bed is at 30 m. Through rays the grid of depths is laid in whole
+carrier fringes and ran past the sea bed; the last depth has no path, its surface delay is NaN, and that delay sized the
+beam window: the stage answered `window` for every detection. With the window sized by the longest finite delay the
+stage then fitted the 0.6 m that are left and gave 29.8 m for a target at 15 m (the bottom's echoes fitted as a surface
+echo, as the flat pattern's 30.3 m). The depth change that moves the surface echo by one range resolution cell is
+1 / (B dtau/dz) = z_min / 3 = 9.8 m: a band thinner
 than that cannot tell one depth from another by delay, and the carrier fringes alone repeat every
 c r / (2 fc (z_array + z_projector)). So through rays a band thinner than one such cell is answered `unresolvable`, with
 `multipath_searched_m` the band clipped to where the paths exist. For this geometry no depth can be measured by timing

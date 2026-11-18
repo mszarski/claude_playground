@@ -499,7 +499,7 @@ mean gradient is known (0.017 for isothermal water) and `gradient_sigma_per_s` f
 found: a target above the resolvable depth, a surface path the water does not carry, or too little SNR; a track adds
 pings up), `window` (edge of the record), `unresolvable` (through rays, shallow water: the depths at which the surface
 echo separates are a sliver above the sea bed, thinner than the depth step the delay can tell apart; `multipath_searched_m`
-gives it. The test AUV 10 m deep in 30 m of water at 500 m: 26.5 to 30 m; a target at 15 m cannot be measured there by
+gives it. The test AUV 10 m deep in 30 m of water at 500 m: 29.3 to 29.9 m; a target at 15 m cannot be measured there by
 timing, with or without the bottom in the pattern). Through a thermocline the surface path or the direct path may not exist at
 all (`tools/multipath_depth_study.py`: no direct path beyond 1 to 3 km from 50 m under the stage-2 thermoclines); the
 flat pattern then matches whatever does arrive, or nothing.
