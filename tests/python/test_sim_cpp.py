@@ -87,14 +87,14 @@ def test_free_field_paths_match():
 
 @pytest.mark.parametrize("options", [
     dict(surface_z=0.0, bottom_z=None, max_order=1),
-    dict(surface_z=0.0, bottom_z=80.0, max_order=2),
+    dict(surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2),
     dict(surface_z=0.0, bottom_z=80.0, max_order=5, surface_coefficient=-0.9 + 0.1j, bottom_coefficient=0.4 - 0.3j),
-    dict(surface_z=None, bottom_z=80.0, max_order=3),
+    dict(surface_z=None, bottom_z=80.0, bottom_coefficient=0.5, max_order=3),
     dict(surface_z=None, bottom_z=None, max_order=3),
     dict(surface_z=0.0, bottom_z=80.0, max_order=3, bottom=dict(speed=1650.0, density=1.9, attenuation=0.8)),
     dict(surface_z=0.0, bottom_z=80.0, max_order=4, bottom=dict(speed=1450.0, density=1.4)),     # slow mud, no loss
-    dict(surface_z=0.0, bottom_z=80.0, max_order=2,
-         walls=[dict(axis=0, position=400.0), dict(axis=1, position=-350.0, coefficient=0.6 + 0.2j)]),
+    dict(surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2,
+         walls=[dict(axis=0, position=400.0, coefficient=0.8), dict(axis=1, position=-350.0, coefficient=0.6 + 0.2j)]),
     dict(surface_z=0.0, bottom_z=80.0, max_order=2, bottom=dict(speed=1700.0, density=2.0, attenuation=0.5),
          walls=[dict(axis=1, position=350.0, coefficient=0.7)]),
 ])
@@ -108,7 +108,7 @@ def test_image_source_paths_match(options):
 
 def test_image_path_lengths_are_those_of_the_images():
     source = np.array([0.0, 0.0, 20.0])
-    e = ImageSourceProvider(C, surface_z=0.0, bottom_z=100.0, max_order=2, engine="cpp").eigenrays(
+    e = ImageSourceProvider(C, surface_z=0.0, bottom_z=100.0, bottom_coefficient=0.5, max_order=2, engine="cpp").eigenrays(
         source, [[300.0, 0.0, 60.0]])
     image_z = np.array([60.0, -60.0, 260.0, 140.0, -140.0])      # direct, s, sb, b, bs
     np.testing.assert_allclose(e.delay[0], np.hypot(300.0, image_z - 20.0) / C, rtol=1e-15)
@@ -156,7 +156,7 @@ class MaskedProvider(EigenrayProvider):
     """Image-source eigenrays with some rays marked invalid, as a ray tracer returns them."""
 
     def __init__(self):
-        self.inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=2, engine="numpy")
+        self.inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2, engine="numpy")
         self.sound_speed = C
 
     def eigenrays(self, source, points):
@@ -167,7 +167,7 @@ class MaskedProvider(EigenrayProvider):
 
 
 @pytest.mark.parametrize("provider", [
-    FreeFieldProvider(C), ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=2),
+    FreeFieldProvider(C), ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2),
     SedimentProvider(C, 1700.0, interface_z=60.0), MaskedProvider()], ids=lambda p: type(p).__name__)
 @pytest.mark.parametrize("case", ["plain", "lambert", "normals", "moving", "all"])
 def test_two_way_paths_match(provider, case):

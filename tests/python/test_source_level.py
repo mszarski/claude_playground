@@ -25,8 +25,10 @@ def test_the_one_place():
     assert sonar.source_level_db_rms == 197.0
     assert sonar.amplitude_at_1m() == pytest.approx(np.sqrt(2.0) * 10.0 ** ((197.0 + rx["sensitivity_db"] + rx.get("gain_db", 0.0)) / 20.0))
     record = sonar.make_record(make_pose(), environment={"sound_speed": 1500.0})
-    assert record.transmit.waveform.source_level_db == 197.0                    # the record's field holds the RMS level
-    assert record.transmit.waveform.amplitude == pytest.approx(sonar.amplitude_at_1m())       # and its amplitude the peak
+    # a record holds PEAK values (core/record.hpp): the level of the peak pressure, and the peak amplitude it gives
+    w = record.transmit.waveform
+    assert w.source_level_db == pytest.approx(197.0 + PEAK_OVER_RMS_DB) and sonar_module.record_source_level_db_rms(record) == pytest.approx(197.0)
+    assert w.amplitude == pytest.approx(sonar.amplitude_at_1m()) == pytest.approx(10.0 ** ((w.source_level_db + rx["sensitivity_db"] + rx.get("gain_db", 0.0)) / 20.0))
     # an uncalibrated sonar: `amplitude` is a peak value and nothing is scaled
     plain = SonarModel.load("popoto_long_range", {"transmit": {"waveform": {"source_level_db_rms": None, "amplitude": 2.5}}})
     assert plain.source_level_db_rms is None and plain.amplitude_at_1m() == 2.5

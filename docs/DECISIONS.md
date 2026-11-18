@@ -1262,3 +1262,146 @@ rule. No number changes. Cost of the choice: the row sits 0 to 2.5 dB below its
 neighbours' trend (most at 6 kHz and 45 degrees). The row's provenance and note now say
 so; `sigma2: 0.002` beside the name gives the rule's value. Limit: literature only, one
 print; a second print of the table would settle it (`REFERENCES.md` wanted list).
+
+### D-91 One environment per site, one schema for scenarios and build specs
+
+The owner: "Remove hardcoded assumptions where we can" (audit G-1, G-2, M-1, P-1, P-2, P-3, P-9).
+A scenario typed its site in up to eight places and the ray tracer's frequency beside the
+sonar. Now `environment:` describes the site once (`python/gpusonar/environment.py`): inline,
+a name under `configs/environments/`, or `{base: name, ...}`; propagation, time spreading,
+reverberation items, ambient noise, Bellhop and absorption take their site values from it,
+and Bellhop's frequency is the sonar's band centre. Choices made:
+
+- **One schema, the build layer's.** The depth planner already had `water_depth_m`,
+  `wind_speed_m_s`, `profile: {depth_m, speed_m_s}`; those names (with their units) are the
+  schema, extended with the water (`temperature_c`, `salinity_psu`, `ph`,
+  `reference_depth_m`), `absorption`, `shipping`. `depthplan` now delegates loading and
+  checking; a scenario can name an entry of the build layer's list file (the three
+  `popoto_env_*` profile scenarios and `popoto_12km*` do). The scenario layer's older
+  spellings (`sound_speed`, `water_depth`, ...) are aliases of the same fields, not a second
+  format: one field under two spellings with different values is an error.
+- **A typed value that contradicts the environment is an error**, unless the scenario names
+  the key under `environment_overrides` with a reason. An override that no longer differs
+  warns. Rejected: letting the block's value win silently (today's failure), and forbidding
+  typed values (a bank at another depth, a flat surface for the rays, are legitimate).
+- **The absorption MODEL is not a site value.** A scenario's own `absorption` wins over the
+  environment's without an override: comparisons run one site under several formulas. The
+  water the formula is evaluated in is the site's.
+- **The simulated site is not what the sonar knows.** `water_depth_known: false` keeps the
+  depth out of the record (the chain reads `record.environment.water_depth` for elevation):
+  21 shipped scenarios simulated a bottom the record never mentioned, and stay so.
+  The live chain's `libs/live/environment.hpp` (the sound-speed ladder) is untouched.
+- **The loader expands.** `load_scenario_config` returns the scenario with the site values
+  written into the blocks (`expand=False`: as written), because about a hundred places in
+  tools and tests read `cfg["environment"]["sound_speed"]` or `cfg["propagation"]["bottom_z"]`.
+  To move the site of a loaded scenario, pass the change as an override to the loader.
+- **Sound speed:** the value given; else the profile at `reference_depth_m`; else
+  Mackenzie/Marczak from temperature and salinity; else `acoustics.NOMINAL_SOUND_SPEED`,
+  the one definition of 1500 (about 60 bare literals in signatures now name it).
+
+Every shipped scenario was converted with records unchanged (evidence in the report: the
+explicit configuration of all 69 is equal before and after; record hashes on both engines).
+Inconsistencies found were NOT resolved: each is kept through a commented override and
+listed for the owner (D-92). Not reached by the environment: positions typed in `scene` and
+`platform`, the `sediment` tier's `sediment_speed`/`interface_z`, a scene surface's own
+`spectrum`. Limit: `max_range` of the ray grid defaults to 1.1 x the window's far edge
+when left out; the shipped scenarios keep theirs.
+
+### D-92 Inconsistent scenarios are kept as they were, each named
+
+Converting the scenarios showed four kinds of inconsistency. None was fixed, because fixing
+any changes records and each is the owner's call:
+
+1. **A nominal sound speed beside a temperature that implies another** (audit P-3): 47
+   scenarios through `coastal_12c` (1500 against 1496.8 m/s), `coastal_10c` (1489.8),
+   `tank_20c_1480` (1482.3), `sst_asiaex` (1505.5), `sst_pursuit` (1482.4), and
+   `popoto_elevation_rehearsal` (1490 typed). Geometry uses the typed speed, absorption the
+   temperature. Kept by `overrides: {sound_speed_m_s: reason}` in the environment; a
+   scenario without the mark gets one warning per process.
+2. **Rays from a flat surface in a windy sea**: nine Bellhop scenarios use the wind for
+   surface reverberation and noise but trace eigenrays with no surface loss. Kept by
+   `propagation.wind_speed: 0.0` under `environment_overrides`.
+3. **A bottom the vehicle is not told about**: 21 scenarios (the 15 Bellhop ones, the two
+   `flank_sst_*`, the four `sst_*`) simulate a water depth that the record does not carry.
+   Kept by `water_depth_known: false`.
+4. **Two sands** (audit S-2): 1650 m/s, 1.9, 0.8 dB/wavelength in the Popoto and FLS
+   scenarios; 1600, 1.8, 0.5 in the flank and Popoto-trial ones (Bellhop's in-code
+   fallback). Kept apart by name: `coastal_12c_sand`, `coastal_12c_bellhop_sand`.
+
+Recommendation, for when records may change: drop the typed 1500 (let the water give the
+speed), give the rays the site's wind through `time_spread` rather than the coherent loss
+alone, tell the vehicle the depth where a real one would know it, and pick one sand from
+`configs/sediments.yaml` by name.
+
+### D-93 Source levels are RMS; the square root of two is applied in one place
+
+The owner's decision (audit P-5). A configured source level is dB re 1 uPa at 1 m RMS,
+under a key that says so: `transmit.waveform.source_level_db_rms` (the build spec already
+had `projector.source_level_db_rms`). `source_level_db` is a deprecated alias: read as RMS
+with a `FutureWarning`, so nothing silently keeps the old meaning. Amplitudes are peak
+values; `sonar.peak_pressure_at_1m` applies the sqrt(2) and nothing else does. A RECORD
+keeps its own convention, stated in `core/record.hpp`: `source_level_db` and `amplitude`
+there are peak values, so `make_record` writes the configured level + 3.01 dB and
+`sonar.record_source_level_db_rms` goes back. Rejected: a `source_level_reference: peak |
+rms` switch (two conventions for ever), and changing the record's meaning (old files).
+
+What moves, by construction: every echo, reverberation and direct-arrival amplitude of a
+calibrated sonar rises by 20 log10 sqrt(2) = 3.01 dB against unchanged noise (uncalibrated
+sonars, which give `amplitude`, do not move). Overload figures rise by the same 3.01 dB
+(nearest hydrophone of the three-row face: 19.1 to 22.1 dB over full scale; no overload
+beyond 21.6 m instead of 15.3 m). The link budgets do not move: they always took the
+number as RMS. The chain-versus-budget gap for a point echo in free field at 12 km went
+from 12.2 dB to 9.1 dB (detector 35.5 dB, budget 44.6 dB): exactly the 3.01 dB, so that
+part of the gap was the convention and the rest is the detector's (cell averaging and
+aperture window, measured by the chain's owner at 7.7 and 1.8 dB). The shipped
+`popoto_testauv_direct_overload_gain_switch` scenario keeps its -40 dB switch and now has
+2.8 dB of headroom instead of 5.8 dB.
+
+### D-94 Baseband noise has the spectrum and the array's coherence
+
+The owner's decision (audit P-8, P-6). A baseband record's ambient noise was white at the
+centre frequency's level and independent between hydrophones, so a row closer than half a
+wavelength got the full 10 log N against sea noise. It now has the configured spectrum
+across the record's band and the coherence the real-passband path has always had
+(isotropic, sin(kd)/(kd) per frequency band; `coherence: surface` selects the Cron-Sherman
+matrix that was in `sim/noise.py` unused; both paths take the option). The complex envelope
+is drawn in the frequency domain with E|x|^2 = 2 x the integral of the spectrum, mixed
+per band with a factor of the coherence matrix at the passband frequency.
+`coherence: independent, spectrum: flat` is the earlier generator, sample for sample.
+Alpha-stable noise and K noise without a correlation time stay white and independent (a
+filter would change the distribution they are asked for); a K texture with a correlation
+time multiplies the shared field, as in the real path. Measured against the closed form
+N^2 / sum(Gamma) for 32 hydrophones at 5 kHz: 13.0 dB at the test AUV's 0.09 m pitch
+(2.1 dB below 10 log N = 15.05 dB), 15.0 dB at 0.15 m (half a wavelength: unchanged).
+Limit: `buildspec.directivity_db` already used the closed form in the budgets, so the
+budgets do not move; `sonar_equation.SonarEquation.from_sonar` still takes 10 log N unless
+it is given the gain.
+
+### D-95 A bottom needs a description; no reflection coefficient is assumed
+
+The owner approved changing the default (audit S-1). An image-source bottom with nothing
+said about it reflected 0.5 at every grazing angle: a made-up number, 6 dB a bounce where a
+sand bottom below its critical angle loses almost nothing. Now the bottom is the
+environment's (`bottom`: a name in `configs/sediments.yaml` or `{speed, density,
+attenuation}`: the Rayleigh coefficient at each ray's angle), and a `bottom_z` with no
+description at all is an error that says what to give. An explicit `bottom_coefficient`
+still works; a wall needs its `coefficient` likewise (0.8 was the same kind of number). The
+C++ structs lost the same defaults in the core batch. No shipped scenario relied on the
+default: `sst_echo_level` and `sst_pursuit` state `bottom_coefficient: 0.5` (SST's own
+runs used a constant; kept and listed for the owner).
+
+### D-96 Bounces and arrivals are kept by energy, with a cap that speaks
+
+The owner approved changing the default (audit S-3, M-2). Multipath was cut at two bounces
+(image source) or the strongest eight arrivals (Bellhop), silently. Left to the provider,
+the cut is now by energy: bounce orders, or arrivals, are kept while one lies within
+`arrival_floor_db` (20 dB) of the strongest at some field point, up to a cap
+(`max_order_cap` 8, `max_arrivals_cap` 64). When the cap cuts something still above the
+floor a warning says how much, and the provider keeps the figure (`truncation`,
+`order_used`, `arrivals_used`, Bellhop's `dropped_energy`). A stated `max_order` or
+`max_arrivals` is honoured as before. Why 20 dB: an arrival 20 dB down adds at most
+0.9 dB coherently and 0.04 dB in energy; why a cap: a duct over a hard bottom has no end
+(path pairs grow as the square of the arrivals). The order is chosen in Python for both
+engines, on up to 256 of the field points. Every shipped scenario states its order or its
+arrival count, so no shipped record moves; what the criterion would choose for each is in
+the report, for the owner to decide scenario by scenario.

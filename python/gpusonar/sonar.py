@@ -33,7 +33,8 @@ _KINDS = {
 # A configured source level is dB re 1 uPa at 1 m, RMS: the rms pressure of the pulse while it is on (the usual
 # datasheet figure, and what the sonar equation uses against rms noise). The key is `source_level_db_rms`.
 # Amplitudes are peak values (a record's `transmit.waveform.amplitude`, an echo's envelope): a tone or a sweep of
-# rms pressure p has the peak sqrt(2) p. That factor is applied here and nowhere else.
+# rms pressure p has the peak sqrt(2) p. That factor is applied here and nowhere else. A RECORD holds peak values
+# throughout (core/record.hpp): its `source_level_db` is the configured RMS level + 3.01 dB (`make_record`).
 SOURCE_LEVEL_KEY = "source_level_db_rms"
 SOURCE_LEVEL_ALIAS = "source_level_db"          # deprecated: read as the RMS level, with a warning
 PEAK_OVER_RMS = float(np.sqrt(2.0))
@@ -58,6 +59,12 @@ def source_level_db_rms(waveform: dict, where: str = "transmit.waveform"):
                       "number is taken as one (a peak figure is 3 dB higher: subtract 3 dB from it)", FutureWarning, stacklevel=3)
         return float(old)
     return None if new is None else float(new)
+
+
+def record_source_level_db_rms(record) -> float:
+    """The RMS source level (dB re 1 uPa at 1 m) of a record: its `transmit.waveform.source_level_db` is the PEAK
+    level (core/record.hpp), 3.01 dB above. NaN when the record has none."""
+    return float(record.transmit.waveform.source_level_db) - PEAK_OVER_RMS_DB
 
 
 def normalise_source_level(cfg: dict) -> dict:
@@ -366,8 +373,12 @@ class SonarModel:
         if self.sampled_waveform is not None:
             # Existing record fields: type Arbitrary, band, duration, the real replica and its rate.
             self.sampled_waveform.to_record(w)
-        sl = self.source_level_db_rms               # the record's field holds the RMS level; `amplitude` is the peak
-        w.source_level_db = float(sl) if sl is not None else float("nan")
+        # The boundary between the two conventions. Configured levels are RMS; a record's `source_level_db` and
+        # `amplitude` are PEAK values (core/record.hpp): the level of the pulse's peak pressure, 3.01 dB above the
+        # configured figure, so that inside a record amplitude = 10^((source_level_db + sensitivity + gain) / 20).
+        # `record_source_level_db_rms` goes back.
+        sl = self.source_level_db_rms
+        w.source_level_db = float(sl) + PEAK_OVER_RMS_DB if sl is not None else float("nan")
         w.amplitude = self.amplitude_at_1m()
         t = r.transmit
         t.waveform = w

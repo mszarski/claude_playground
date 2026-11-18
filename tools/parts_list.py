@@ -164,7 +164,7 @@ def parts(d: dict, timings: dict | None = None, static: bool | None = None) -> l
                   f"{dr['distance_for_full_scale_m']:.0f} m from the projector, so no position on the platform avoids it; a source level of {dr['source_level_for_full_scale_db']:.0f} dB would. "
                   "Peak levels (3 dB more if the source level is an rms figure). Not in these numbers: hull-borne and electrical coupling from the amplifier, which could exceed the water path: a bench item. "
                   "Simulated with `transmit.direct_path` and `receive.overload` (`tools/direct_sound_study.py`, `design/direct_sound_study.json`)" if over > 0 else ". Inside the inputs' range"),
-        "`transmit.lever_arm`, `transmit.waveform.source_level_db`, `receive.adc_full_scale`; `projector` of popoto_elevation_study.json", QUOTES["blanking"] if popoto else (),
+        "`transmit.lever_arm`, `transmit.waveform.source_level_db_rms`, `receive.adc_full_scale`; `projector` of popoto_elevation_study.json", QUOTES["blanking"] if popoto else (),
         "recovery time of the inputs after overload; whether the clamp the plan describes exists on these boards")
     add("projector", "Projector" + (f" ({hw['projector']['model']})" if (hw.get("projector") or {}).get("model") else ""), 1, "specified, not chosen" if not (hw.get("projector") or {}).get("model") else "chosen",
         f"{d['source_level_db']:g} dB re 1 µPa at 1 m over {f_lo / 1e3:g}–{f_hi / 1e3:g} kHz for a {d['pulse_s']:g} s sweep (a duty of {100 * d['pulse_s'] / d['ping_interval_s']:.1f}% at the shortest ping interval, "

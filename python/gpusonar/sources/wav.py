@@ -185,7 +185,9 @@ class WavSource(Source):
         w.f_stop = float(wf.get("f_stop", wf["f_start"]))
         w.duration = float(wf["duration"])
         w.window_alpha = float(wf.get("window_alpha", 0.0))
-        w.source_level_db = float(wf.get("source_level_db_rms", wf.get("source_level_db", float("nan"))))      # RMS, dB re 1 uPa at 1 m
+        from ..sonar import PEAK_OVER_RMS_DB
+        # the sidecar's figure is an RMS level (either key); the record holds the peak level (core/record.hpp)
+        w.source_level_db = float(wf.get("source_level_db_rms", wf.get("source_level_db", float("nan")))) + PEAK_OVER_RMS_DB
         w.amplitude = float(wf.get("amplitude", 1.0))
         s.center_frequency = w.center()
         r.samples = s

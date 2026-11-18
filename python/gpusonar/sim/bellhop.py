@@ -240,14 +240,24 @@ class BellhopProvider(EigenrayProvider):
 
     def __init__(self, env: OceanEnvironment, frequency: float, max_range: float,
                  range_step: float | None = None, depth_step: float | None = None,
-                 max_arrivals: int = 8, n_beams: int = 0, angles=(-80.0, 80.0),
-                 min_range: float = 1.0, wind_speed: float = 0.0):
+                 max_arrivals: int | None = None, n_beams: int = 0, angles=(-80.0, 80.0),
+                 min_range: float = 1.0, wind_speed: float = 0.0, arrival_floor_db: float = 20.0, max_arrivals_cap: int = 64):
+        # Arrivals kept per field point: `max_arrivals` (the strongest) when given. Left out (D-96): every arrival
+        # within `arrival_floor_db` of the point's strongest, up to `max_arrivals_cap`; when the cap cuts off arrivals
+        # above the floor a warning says how much energy was dropped, once, and `truncation` holds it (before D-96 the
+        # default was the strongest eight, silently). `dropped_energy` is the largest fraction of a point's
+        # arrival energy left out so far, whichever rule cut it.
+        self.arrival_floor_db = float(arrival_floor_db)
+        self.max_arrivals_cap = int(max_arrivals_cap)
+        self.arrivals_used = None
+        self.dropped_energy = 0.0
+        self.truncation = None
         self.env = env
         # Wind speed (m/s) for the rough-surface reflection loss, applied per surface bounce
         # to Bellhop's flat-surface arrivals (acoustics.surface_coherent_reflection). 0: flat.
         self.wind_speed = float(wind_speed)
         self.frequency = float(frequency)
-        self.max_arrivals = int(max_arrivals)
+        self.max_arrivals = None if max_arrivals is None else int(max_arrivals)
         self.n_beams = n_beams
         self.angles = angles
         self.ranges = np.arange(min_range, max_range + (range_step or max_range / 200.0),
@@ -287,19 +297,40 @@ class BellhopProvider(EigenrayProvider):
         arr = self.arrivals_for(source[2])
         c_src = self.env.speed_at(source[2])
         c_surface = self.env.speed_at(0.0)
+        horiz = points[:, :2] - source[:2]
+        rng = np.linalg.norm(horiz, axis=1)
+        ir = np.clip(np.rint((rng - self.ranges[0]) / (self.ranges[1] - self.ranges[0])).astype(int),
+                     0, len(self.ranges) - 1)
+        iz = np.clip(np.rint((points[:, 2] - self.depths[0]) / (self.depths[1] - self.depths[0])).astype(int),
+                     0, len(self.depths) - 1)
         s, k = len(points), self.max_arrivals
+        if k is None:
+            # The energy criterion, on the grid nodes these points use (flat-surface amplitudes: a rough-surface
+            # loss only lowers the later ones further).
+            floor, need, over = 10.0 ** (-self.arrival_floor_db / 20.0), 1, 0.0
+            for a_iz, a_ir in {(int(a), int(b)) for a, b in zip(iz, ir)}:
+                mag = np.sort(np.abs(arr.amplitude[a_iz][a_ir]))[::-1]
+                if len(mag) == 0:
+                    continue
+                n = int(np.sum(mag >= floor * mag[0]))
+                if n > self.max_arrivals_cap:
+                    over = max(over, float(np.sum(mag[self.max_arrivals_cap:] ** 2) / np.sum(mag ** 2)))
+                need = max(need, min(n, self.max_arrivals_cap))
+            k = need if self.arrivals_used is None else max(self.arrivals_used, need)
+            if over > 0.0:
+                if self.truncation is None:
+                    import warnings
+                    warnings.warn(f"eigenray: arrivals were cut at the cap of {self.max_arrivals_cap} per point while more lie within "
+                                  f"{self.arrival_floor_db:g} dB of the strongest: {100.0 * over:.1f} % of a point's arrival energy is left out. "
+                                  "Raise `max_arrivals_cap`, or state `max_arrivals`", RuntimeWarning, stacklevel=3)
+                self.truncation = {"arrivals": self.max_arrivals_cap, "dropped_energy": max(over, (self.truncation or {}).get("dropped_energy", 0.0))}
+        self.arrivals_used = k
         out = EigenraySet(
             delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
             launch=np.zeros((s, k, 3)), arrival=np.zeros((s, k, 3)),
             n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int),
             valid=np.zeros((s, k), dtype=bool), sound_speed=c_src)
-        horiz = points[:, :2] - source[:2]
-        rng = np.linalg.norm(horiz, axis=1)
         unit = np.divide(horiz, rng[:, None], out=np.tile([1.0, 0.0], (s, 1)), where=rng[:, None] > 0)
-        ir = np.clip(np.rint((rng - self.ranges[0]) / (self.ranges[1] - self.ranges[0])).astype(int),
-                     0, len(self.ranges) - 1)
-        iz = np.clip(np.rint((points[:, 2] - self.depths[0]) / (self.depths[1] - self.depths[0])).astype(int),
-                     0, len(self.depths) - 1)
         for i in range(s):
             amp = arr.amplitude[iz[i]][ir[i]]
             if len(amp) == 0:
@@ -310,7 +341,10 @@ class BellhopProvider(EigenrayProvider):
                 loss = acoustics.surface_coherent_reflection(np.arccos(cos_s), self.wind_speed,
                                                              self.frequency, c_surface)
                 amp = amp * loss ** arr.n_surface[iz[i]][ir[i]]
-            order = np.argsort(-np.abs(amp))[:k]
+            ranked = np.argsort(-np.abs(amp))
+            order = ranked[:k]
+            if len(ranked) > k:
+                self.dropped_energy = max(self.dropped_energy, float(np.sum(np.abs(amp[ranked[k:]]) ** 2) / max(np.sum(np.abs(amp) ** 2), 1e-300)))
             n = len(order)
             la, aa = arr.launch_angle[iz[i]][ir[i]][order], arr.arrival_angle[iz[i]][ir[i]][order]
             # First-order delay correction from the grid node to the actual point.

@@ -128,8 +128,7 @@ def to_pressure(record, x=None):
     (the scenario's sensitivity and preamp gain: amplitude at 1 m / source pressure)."""
     wf = record.transmit.waveform
     x = np.asarray(record.samples.array if x is None else x)
-    from gpusonar.sonar import peak_pressure_at_1m
-    return x * (peak_pressure_at_1m(wf.source_level_db) / wf.amplitude)        # the record's amplitude is the PEAK for the RMS source level
+    return x * (10.0 ** (wf.source_level_db / 20.0) / wf.amplitude)             # peak over peak: both of the record's are peak values
 
 
 def spectrogram(x, fs: float, t0: float, segment: float, hop: float, f_lo: float, f_hi: float, df: float = 1.0):
@@ -904,7 +903,8 @@ def check_echo_level() -> dict:
         result = _quiet_run(ECHO, {"fidelity": tier, **({"propagation": None} if tier == "free_field" else {})})
         z, t0, fs = _compressed(result)
         a1 = result.records[0].transmit.waveform.amplitude
-        sl = result.records[0].transmit.waveform.source_level_db
+        from gpusonar.sonar import record_source_level_db_rms
+        sl = record_source_level_db_rms(result.records[0])                       # RMS: what the sonar equation takes
         groups = [("d", "d")] if tier == "free_field" else [("d", "d"), ("d", "s"), ("s", "s"), ("d", "b"), ("s", "b"), ("b", "b")]
         rows = {}
         for q, p in groups:
@@ -1073,7 +1073,7 @@ def check_image_model(max_bounces: int = 3) -> dict:
     from gpusonar.sim.timespread import TimeSpreadProvider
     c, depth = 1500.0, 100.0
     src, rcv = np.array([0.0, 0.0, 30.0]), np.array([400.0, 300.0, 55.0])
-    provider = ImageSourceProvider(c, surface_z=0.0, bottom_z=depth, max_order=max_bounces, engine="numpy")
+    provider = ImageSourceProvider(c, surface_z=0.0, bottom_z=depth, bottom_coefficient=0.5, max_order=max_bounces, engine="numpy")       # a constant, stated (the old default)
     es = provider.eigenrays(src, rcv[None, :])
     spread = TimeSpreadProvider(provider, frequency=8000.0, surface={"rms_height": 0.1, "mean_square_slope": 0.01, "rms_vertical_speed": 0.0},
                                 bottom_z=depth)
