@@ -13,6 +13,11 @@ longer as the frequency drops), and a fixed aperture filled at half-wavelength s
 Bellhop is installed (GPUSONAR_BELLHOP) its transmission loss for shallow water is used as
 well, at a few frequencies.
 
+The curves are free-field (direct path only). The surface-reflected path is added as a separate term (`surface` in the JSON and the
+third panel): the two-way factor of gpusonar.lloyd for a target at `--target-depth` against own depth, across the chosen band, for a flat
+surface, the wind law's roughness, and bubble loss; the source level needed changes by minus that factor. Source levels are RMS levels
+(the owner's decision; the budget is an energy equation, which is the rms usage).
+
 Writes docs/design/popoto_range_study.png and .json. CPU only.
 Usage: tools/popoto_range_study.py [--range 12000] [--ts 25] [--pulse 1.0] [--depth 100]
 """
@@ -73,6 +78,7 @@ def main():
     ap.add_argument("--snr", type=float, default=13.0)
     ap.add_argument("--depth", type=float, default=100.0)
     ap.add_argument("--aperture", type=float, default=3.0)
+    ap.add_argument("--target-depth", type=float, default=4.0, help="m: the popoto_12km scenario's ship (an assumed figure)")
     args = ap.parse_args()
     f = np.geomspace(1e3, 40e3, 120)
     out = {"range_m": args.range, "target_strength_db": args.ts, "pulse_s": args.pulse, "snr_db": args.snr,
@@ -81,7 +87,8 @@ def main():
                          "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK, "xtick.color": MUTED,
                          "ytick.color": MUTED, "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6,
                          "axes.spines.top": False, "axes.spines.right": False, "font.size": 10})
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(14, 5.2), constrained_layout=True, sharey=True)
+    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(20, 5.2), constrained_layout=True)
+    a2.sharey(a1)
     for n, col in zip((8, 16, 32, 64), (BLUE, ORANGE, AQUA, YELLOW)):
         sl = required_source_level(f, args.range, n, args.ts, args.pulse, args.snr)
         i = int(np.argmin(sl))
@@ -108,6 +115,7 @@ def main():
     # The shipped 27.5 kHz array (configs/sonars/popoto_array.yaml) for comparison: what 12 km would
     # take in its own band, and how far its own source level reaches.
     from gpusonar.sonar import SonarModel
+    model_lr = SonarModel.load("popoto_long_range")
     model = SonarModel.load("popoto_array")
     wf = model.config["transmit"]["waveform"]
     fc, n_cur = 0.5 * (float(wf["f_start"]) + float(wf["f_stop"])), len(model.positions)
@@ -132,6 +140,29 @@ def main():
                                        fr, 12.0, 35.0, 50.0, model="ainslie_mccolm") * args.range)})
         a2.plot(fb / 1e3, [b["source_level_db"] for b in out["bellhop"]], "s", color=INK, ms=7,
                 label=f"{args.aperture:.1f} m aperture, Bellhop loss in {args.depth:.0f} m of water over sand")
+    # the surface-reflected path for the chosen band: what it adds to (or takes from) the source level needed
+    from gpusonar import lloyd
+    f_lo, f_hi = (float(model_lr.waveform_config[k]) for k in ("f_start", "f_stop"))
+    own = np.arange(5.0, 601.0, 5.0)
+    cases = {"flat surface": lloyd.FLAT, "5 m/s wind (wind-law roughness)": lloyd.Surface(wind_speed=5.0), "9.8 m/s wind, apl_1994 bubble loss": lloyd.Surface(wind_speed=9.8, bubble_model="apl_1994")}
+    lobe = lloyd.first_lobe_own_depth(0.5 * (f_lo + f_hi), args.target_depth, args.range)
+    out["surface"] = {"range_m": args.range, "target_depth_m": args.target_depth, "band_hz": [f_lo, f_hi], "first_lobe": lobe,
+                      "source_level_convention": "rms: source levels are rms levels, used in an energy equation", "by_own_depth": [], "curves": {}}
+    for (label, surf), col in zip(cases.items(), (BLUE, AQUA, ORANGE)):
+        t = lloyd.two_way(f_lo, f_hi, own, args.target_depth, args.range, surf, n_f=257)
+        out["surface"]["curves"][label] = {"own_depth_m": own.tolist(), "peak_db": t["peak_db"].tolist(), "narrowband_db": t["narrowband_db"].tolist()}
+        a3.plot(-t["peak_db"], own, color=col, lw=2, label=label)
+        if surf is lloyd.FLAT:
+            a3.plot(-t["narrowband_db"], own, color=MUTED, lw=0.8, ls=":", label="flat, single frequency")
+            for z in (10.0, 30.0, round(lobe["zero_db_m"] / 5) * 5.0, round(lobe["peak_m"] / 5) * 5.0):
+                k = int(np.argmin(np.abs(own - z)))
+                out["surface"]["by_own_depth"].append({"own_depth_m": float(own[k]), "peak_db": float(t["peak_db"][k]), "narrowband_db": float(t["narrowband_db"][k])})
+    a3.set_xlim(-15, 45)
+    a3.invert_yaxis()
+    a3.set_xlabel("change in the source level needed (dB): minus the two-way surface factor")
+    a3.set_ylabel("own depth (m)")
+    a3.set_title(f"Surface-reflected path, target at {args.target_depth:g} m, {args.range / 1e3:g} km, {f_lo / 1e3:g}-{f_hi / 1e3:g} kHz (no bottom return)", loc="left", fontsize=10)
+    a3.legend(frameon=False, fontsize=8)
     for ax in (a1, a2):
         ax.set_xscale("log")
         ax.set_xlabel("centre frequency (kHz)")
@@ -139,7 +170,7 @@ def main():
         ax.legend(frameon=False, fontsize=8, loc="upper center")
     a1.set_ylabel("source level needed (dB re 1 µPa at 1 m)")
     fig.suptitle(f"Target strength +{args.ts:.0f} dB, {args.pulse:.1f} s pulse, ambient noise at 5 m/s wind; "
-                 "curves use spherical spreading (conservative), noise-limited", fontsize=10)
+                 "curves use spherical spreading, direct path only, noise-limited; source levels are rms", fontsize=10)
     dest = ROOT / "docs" / "design"
     dest.mkdir(parents=True, exist_ok=True)
     fig.savefig(dest / "popoto_range_study.png", dpi=120)

@@ -43,13 +43,20 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    | `shallow` | surface and bottom echoes, the far range | range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing; depth within 3 m + range × sin 0.7° (the multipath allowance) |
    | `rehearsal` | raw samples at the boards' rate, every board on its own clock, the platform's attitude (rolling, or a tilted frame) | the boards synchronise under 1 µs; range within 6 m, bearing, depth |
    | `passing` | a target crossing at 3 m/s | one mover, speed within 1 m/s |
+   | `submerged` | a mover of the spec's first submerged target class, at speed, the chain given NO sound-speed profile and no water depth | a track classed mover, speed within 1 m/s, heading within 15°; any depth it reports has the truth inside two sigma; with two rows the track exists while every detection lists several possible elevations. Skipped without `targets:` |
    | `passive` | two radiating sources, the sonar silent (`sources:`, `pings.transmit: false`) | both bearings within 1° in 80% of frames |
    | `stream` | pings as board blocks at the build's channel count | both assemblers and UDP loopback return every sample |
 
    `DIR/self_test.json` holds the measured errors, not only pass or fail. A failure names the engine and the
    quantity. The usual causes: a trial range the pulse hides (lengthen `trial.ranges_m` or shorten the pulse);
-   two rows far apart in water too shallow to bound them (candidates, not a depth: by design); a
+   two rows far apart in water too shallow to bound them (the array cannot then tell which of several elevation angles an echo came from and reports the list of possible angles, not a depth: by design; bearing, range and the track are unaffected); a
    synchronisation reference outside the sampled band.
+   **Plan the depth.** `tools/popoto_depth_planner.py SPEC` (after step 2; it needs only the spec): for each of the spec's environments and target
+   classes it prints the detection margin against own depth, the depth to operate (a static frame: to hang) at, the band of depths that hold each class and
+   two classes at once, the reach there, the target depths one depth leaves uncovered and how many depths cover all of them; `--out PREFIX` writes the table's
+   JSON and a figure. An environment or a target can also be given on the command line (`--water-depth 80 --bottom medium_sand --sea-state 3 --rms-height 0.15
+   --ts 10 --target-depth 20 60 --range 2500`). The free-field figures of `performance.json` do not contain the surface-reflected path; the planner's do.
+   Source levels are rms levels everywhere (`projector.source_level_db_rms`).
 5. **Rehearse ashore with the emulated stream.** Command 2 of `DIR/COMMANDS.txt`: the rehearsal's pings are
    sent as board blocks over UDP to the deployment file's own port and come out as a recording, a report and
    taps, exactly as they will from the boards. The report must match the simulated run's.
@@ -66,12 +73,18 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    | Clock offsets and drifts between boards | `sync` in the report over an hour | `boards.clock_tolerance_ppm`, `clock_offset_max_s` |
    | Hydrophone sensitivity and noise | against the reference hydrophone; a quiet recording's spectrum | `hydrophone.sensitivity_db`, `noise_db` |
    | Hydrophone positions and row offsets | the in-water calibration (`calibrate.estimate_channel_errors`) | `array.pitch_m` / `positions_m`, `out_m` |
-   | Source level and the projector's position | the reference hydrophone at a known distance; a tape | `projector.source_level_db`, `position_m` |
+   | Source level and the projector's position | the reference hydrophone at a known distance; a tape | `projector.source_level_db_rms` (an rms level), `position_m` |
    | Recovery after the direct sound | raw samples of the nearest input after the pulse | `projector.blanking_after_s` |
    | Attitude accuracy and time stamps | a source at a known depth with the platform level and rolled; `attitude_time: transmit` against `arrival` | `navigation.roll_sigma_deg`, `timestamp_sigma_s` |
    | Sound speed, water depth | the platform's sensors against a cast | `sound_speed.*`, `water_depth.*` |
 
    Then generate again and re-run the self-tests: the simulated trials now use the measured values.
+   **A dive for a sound-speed profile is optional.** It improves the depth in metres at range and nothing else; a track of a submerged mover, its class,
+   speed, heading, elevation angle and above-or-below never wait for it (the `submerged` self-test holds the software to that). For a static frame: a cast at
+   deployment, equally optional.
+   **Recording and compute.** `storage.record: raw` (the default: everything can be redone) or `decimated` (storage-limited runs: the synchronisation
+   reference and everything outside the band are gone for good). `compute.option`: `gpu` for two or more rows, `decimate_first_cpu` allowed for one; the
+   validator warns when a CPU option's measured time per ping exceeds the ping interval.
 8. **What the design does not cover.** The projector's direct sound and the inputs' recovery are computed, not
    simulated. Reverberation-limited range is measured only in the shipped 12 km scenarios, not predicted for a
    new build (`performance.json` is noise-limited, spherical spreading). The bias multipath puts on elevation
@@ -82,6 +95,48 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    listening with stacked rows must run with `elevation=1`, as the generated `listen.options` do). Chain thresholds (`cfar`, `tracker`,
    `classify`) are the long-range array's defaults unless `operation.chain` changes them. Processing time is
    measured only for one, two and three rows of 32.
+
+## Target classes and environments
+
+Two optional top-level keys say what the build is planned against. They change no generated sonar or deployment file; `tools/popoto_depth_planner.py`,
+`buildspec.performance(..., environment=...)` and the `submerged` self-test read them. Each is a list, or the name of a file under `configs/builds/targets/` or
+`configs/builds/environments/` (shipped: `reference_classes`, `illustrative`; every figure in both is an assumed placeholder, and the validator says so in a warning
+until a class is `status: confirmed` and an environment `illustrative: false`).
+
+- `targets:` what is to be detected: a target strength (one value or the range over aspect; the planner works at the low end), the depths it may be at, its speeds.
+  A class may give a `cylinder` instead of, or beside, a target strength: the geometric-acoustics figure of a bare rigid cylinder of that size is computed and printed
+  by aspect. That is a model figure for sizing a study; a real hull is not a bare cylinder.
+- `environments:` the water: depth and bottom (a name in `configs/sediments.yaml` or three numbers), wind or sea state, the rms wave height as its own input, an optional
+  bubble law, an optional sound-speed profile (then Bellhop is needed), and the depths the platform may operate at. No water depth means no bottom return: the
+  non-ducting case, direct path and surface image only.
+
+This table is printed by `tools/build_from_spec.py --fields` after the spec's own.
+
+| Field | Unit | Needed | Meaning | Where to find it | If unknown |
+| --- | --- | --- | --- | --- | --- |
+| `targets[].name` | — | yes | short name of the class (letters, digits, underscores): tables and file keys use it | the requirement | must be given |
+| `targets[].title` | — | no | one line for headings | — | the name |
+| `targets[].target_strength_db` | dB re 1 m | no | target strength in the sonar's band: one value, or the range over aspect. The planner works at the LOW end unless told otherwise | a measurement or a requirement document | give `cylinder` and take the model figure, or a placeholder with status: assumed |
+| `targets[].cylinder` | — | no | {length_m, diameter_m, caps}: a rigid cylinder of that size stands in for the hull and the target strength is the geometric-acoustics figure for it (gpusonar.target_classes.cylinder_ts_db), over `aspects_deg` | the vehicle's outline | give target_strength_db |
+| `targets[].aspects_deg` | deg | no | aspects from broadside (0) to end-on (90) over which the cylinder's figure is taken; the range is its lowest and highest band-averaged value | — | [0, 15, 30, 45, 60, 75] |
+| `targets[].depth_m` | m | yes | depths the target may be at (a surface ship: its hull's draught range) | the requirement | must be given |
+| `targets[].speed_m_s` | m/s | no | speeds it may move at: the scenarios use the top of the range for a mover | the requirement | leave it out: no mover scenario is derived |
+| `targets[].status` | — | no | who vouches for the target strength: assumed (a placeholder for the owner to replace), confirmed (measured or stated by the owner), model (the cylinder figure) (one of: assumed, confirmed, model) | — | assumed |
+| `targets[].note` | — | no | where the figures come from, in words | — | leave it out |
+| `environments[].name` | — | yes | short name (letters, digits, underscores) | — | must be given |
+| `environments[].title` | — | no | one line for headings | — | the name |
+| `environments[].water_depth_m` | m | no | water depth. Left out or null: no bottom return at all (deep water, or a bottom that returns nothing): the surface image only | chart / echo sounder | leave it out: the non-ducting case |
+| `environments[].bottom` | — | no | the sea bed: a name in configs/sediments.yaml, or {speed m/s, density re water, attenuation dB/wavelength}. Needs water_depth_m | site survey | leave it out with water_depth_m: the bottom then only limits own depth |
+| `environments[].wind_speed_m_s` | m/s | no | wind at 10 m: ambient noise, the wind law for the surface's rms height (when rms_wave_height_m is not given) and the bubble law | forecast / trial plan | 5 (the link budget's) |
+| `environments[].sea_state` | — | no | 0 to 9, in place of wind_speed_m_s: its median wind speed (acoustics.SEA_STATE_WIND_SPEED) | forecast | give wind_speed_m_s |
+| `environments[].rms_wave_height_m` | m | no | rms displacement of the surface (a quarter of the significant wave height). An input of its own: measured heights did not follow the wind law (PHYSICS_NOTES Sec. 21) | wave buoy / forecast: significant height / 4 | leave it out: the Pierson-Moskowitz height for the wind speed |
+| `environments[].bubble_model` | — | no | wind law for the loss at each surface bounce: apl_1994 (sim/surface.py), or null for none | — | null: no bubble loss |
+| `environments[].sound_speed_m_s` | m/s | no | sound speed of isovelocity water | CTD | 1500 |
+| `environments[].profile` | — | no | {depth_m: [...], speed_m_s: [...]}: a sound-speed profile. The factor then comes from Bellhop (GPUSONAR_BELLHOP) and needs water_depth_m | SVP cast / climatology | leave it out: isovelocity |
+| `environments[].own_depth_limits_m` | m | no | depths the platform may operate at (a static frame: depths it can be hung at) | the platform's rating and the operating rules | [5, 300]: placeholders, flagged |
+| `environments[].bottom_clearance_m` | m | no | how close to the bottom the platform may come | operating rules | 10: a placeholder, flagged |
+| `environments[].illustrative` | — | no | true: nobody measured this environment; it is an example | — | true |
+| `environments[].note` | — | no | where the values come from, in words | — | leave it out |
 
 ## Row modules
 
@@ -147,7 +202,7 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `sync.elevation_error_deg` | deg | no | elevation error allowed from clock error between rows: sets the required agreement | error budget | 0.05 |
 | `projector.model` | — | no | part name | datasheet title | leave it out: it is listed as unknown |
 | `projector.amplifier` | — | no | power amplifier part name | datasheet title | leave it out: it is listed as unknown |
-| `projector.source_level_db` | dB re 1 uPa at 1 m | yes | source level in the band | datasheet: TVR x drive voltage, or SL | must be given: the link budget needs it; flag it assumed |
+| `projector.source_level_db_rms` | dB re 1 uPa at 1 m, rms | yes | source level in the band as an RMS pressure level (the usual datasheet convention; a peak figure is 3 dB higher for a tone) | datasheet: TVR x rms drive voltage, or SL | must be given: the link budget needs it; flag it assumed |
 | `projector.band_hz` | Hz | yes | transmitted band | datasheet: usable band; waveform design | must be given |
 | `projector.waveform` | — | yes | {type: lfm | cw, duration_s, window_alpha} | waveform design | must be given |
 | `projector.position_m` | m | yes | body frame [along, out, down] from the array's centre | integration drawing | must be given: a placeholder is allowed if flagged assumed |
@@ -178,7 +233,8 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `storage.taps_dir` | — | no | directory for the stage taps of the first pings | — | /data/sonar/taps |
 | `storage.taps_pings` | — | no | pings tapped | — | 2 |
 | `storage.capacity_gb` | GB | no | size of the recording volume | computer's specification | leave it out: it is listed as unknown |
-| `compute.option` | — | no | how real time is reached at the boards' full rate (one of: decimate_first_cpu, gpu, cpu) | — | both prepared: the parts list shows each |
+| `storage.record` | — | no | what the recording holds. raw: every sample of every board, the synchronisation reference included (everything can be redone; the chain decimates when compute.option says so). decimated: the receiver decimates as blocks arrive (`source.decimate`) and only the band is kept: the reference and everything outside the band are gone for good; for storage-limited runs (one of: raw, decimated) | the trial plan | raw: the safe default during trials |
+| `compute.option` | — | no | how real time is reached at the boards' full rate. decimate_first_cpu: the chain converts to baseband and decimates first (`chain.decimate`), on a CPU. gpu: the map and the elevation search on a GPU. cpu: the chain as it is (one of: decimate_first_cpu, gpu, cpu) | — | two or more rows: gpu (decimate-first on a CPU is slower than the ping interval over the full window); one row: decimate_first_cpu |
 | `compute.unit` | — | no | part name of the computer | datasheet title | leave it out: it is listed as unknown |
 | `compute.engine` | — | no | which engine tools/sonar_live.py runs (the standalone C++ program's command is always generated) (one of: python, cpp) | — | python |
 | `compute.backend` | — | no | kernels on the CPU or the GPU (one of: auto, host, cuda) | — | auto |

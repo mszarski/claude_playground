@@ -222,6 +222,13 @@ def build_md(spec: dict, d: dict, perf: dict, warnings: list, out: Path) -> str:
                   ]
         if d["rows"] == 2 and el["repeat_spacing_deg"]:
             steps.append(f"Two rows: the candidates (`elevation_alternatives_deg`) are {el['repeat_spacing_deg']:.1f}° apart; with the site's water depth typed in or sent by navigation, `sector_from_depth` must leave the right one.")
+    steps.append("Operating depth: `tools/popoto_depth_planner.py " + spec["build"] + "` for the water and the targets of the day (water depth, bottom, sea state or wave height, a profile if there is one). "
+                 + ("The frame's hanging depth is that choice." if static else "Own depth is a lever: against a target near the surface in water that does not duct, tens of decibels.")
+                 + " The answer rests on the water it is given; say which.")
+    steps.append("OPTIONAL, never a precondition: " + ("a sound-speed cast at deployment" if static else "a dive through the water column before a search, and again when the water changes")
+                 + ", so that the chain has a profile covering the water between the array and a target. It improves only the depth in metres at range. Detection, bearing, range, the track, its speed and heading, "
+                 "mover against multipath, the elevation angle and whether the target is above or below are all available without it (the `submerged` self-test checks exactly that), and the depth then comes with a wide, honest sigma "
+                 "and the name of what it rests on (`depth_profile_source`).")
     steps.append("Feed back: every measured value replaces its assumption in the spec and moves to `confirmed`; generate again and re-run the self-tests (docs/REFERENCE_DESIGN.md, step 7).")
     L += [f"{i + 1}. {s}" for i, s in enumerate(steps)]
     L.append("\n## Self-tests and their pass criteria\n")
@@ -452,6 +459,18 @@ def field_table() -> str:
     return "\n".join(L)
 
 
+def planning_table() -> str:
+    """The fields of a target class and of an environment (`targets:`, `environments:` of a spec) as a Markdown table."""
+    from gpusonar import depthplan, target_classes
+    L = ["| Field | Unit | Needed | Meaning | Where to find it | If unknown |", "| --- | --- | --- | --- | --- | --- |"]
+    for section, fields in (("targets[]", target_classes.FIELDS), ("environments[]", depthplan.ENVIRONMENT_FIELDS)):
+        for name, (kind, unit, required, meaning, where, unknown) in fields.items():
+            if isinstance(kind, tuple):
+                meaning = f"{meaning} (one of: {', '.join(kind)})"
+            L.append(f"| `{section}.{name}` | {unit or '—'} | {'yes' if required else 'no'} | {meaning} | {where or '—'} | {unknown} |")
+    return "\n".join(L)
+
+
 # --- the shipped builds -------------------------------------------------------------------------------
 
 def shipped_files() -> dict:
@@ -483,7 +502,7 @@ def main(argv=None):
     ap.add_argument("--check-shipped", action="store_true")
     args = ap.parse_args(argv)
     if args.fields:
-        print(field_table())
+        print(field_table() + "\n\n" + planning_table())
         return 0
     if args.write_shipped or args.check_shipped:
         bad = []
