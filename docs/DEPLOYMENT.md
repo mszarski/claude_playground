@@ -527,43 +527,179 @@ cards.
 
 ## What `snr_db` is, and how it relates to the link budget
 
-A detection's `snr_db` is 10 log10 of **the power of the strongest range cell of its cluster over the detector's
-background for that cell**, on the beamformed, pulse-compressed range × bearing map. The background is the mean power
-of the cells `cfar.train_m` either side of it along range, beyond `cfar.guard_m`. A cell is reported when that ratio
-exceeds both the detector's own factor for `cfar.pfa` (10.7 dB at 10⁻⁵) and `min_snr_db` (9 dB).
-A track's `mean_snr_db` is the mean of that over the detections it took.
+A detection's `snr_db` is 10 log10 of **its strongest sample over the detector's background there**, on the beamformed,
+pulse-compressed range × bearing map (the rows' maps added in power when `elevation` stacks rows). The background is the
+mean power of the cells `cfar.train_m` either side of it along range, beyond `cfar.guard_m`. A track's `mean_snr_db` is
+the mean of that over the detections it took. This is the default detector, `cell_statistic: multiscale`
+(`libs/live` `detector.hpp`); `mean` is the detector until now, for which `snr_db` is the strongest range cell's **mean**
+power over the same background, and `peak` its strongest sample over the mean of the cells' largest samples.
 
 A link budget (`gpusonar.sonar_equation`, `buildspec.performance`, `tools/popoto_range_study.py`) states something
-else: the **peak signal power over the mean noise power at the output of an unweighted beamformer**. For a point echo
-the chain reads lower by two things, both measured (`tests/python/test_hardcoded.py`, a free-field point target
-against the beam output computed separately) and both given by `gpusonar.live.snr_loss_db(record, range_cell_m,
-window, cell_statistic)`:
+else: the **peak signal power over the mean noise power at the output of an unweighted beamformer of one row**. For a
+point echo the chain reads lower, by `gpusonar.live.snr_loss_db(record, range_cell_m, window, cell_statistic)`
+(measured in `tests/python/test_detector.py` and `test_hardcoded.py`, a free-field point target against the beam output
+computed separately):
 
-| Part | Size, as shipped (4–6 kHz, 2 m cell, Hann) | Why |
-| --- | --- | --- |
-| aperture window | 1.76 dB | Hann weighting against noise that is uncorrelated between hydrophones: N Σw² / (Σw)². `window: rect` has none, and −13 dB sidelobes instead of −31 dB |
-| range cell | 7.7 dB (measured 7.6) | the map is computed every 0.25 m and the cell holds the **mean** power of its 8 samples; an echo one range resolution long (0.375 m) fills about one and a half of them |
-| total | 9.4 dB (measured 9.4) | |
-
-So the chain as shipped reports a point echo from **20.1 dB** of budget SNR (`live.budget_threshold_db`), not from the
-13 dB the plan's range figures use. A third difference is a matter of convention, not of the chain: a budget that
-takes the source level as a peak where the chain's pings carry rms (or the reverse) is another 3 dB. Together these are
-the 12 dB by which the detector was found to read under the budget for the same target; nothing is left unexplained.
-
-What can be had back, measured on the shipped stage scenarios and the 12 km stand-in (four pings each, C++ engine):
-
-| Change | Point echo, free field | On the scenarios | Cost |
+| Part | `multiscale` | `mean` (until now) | Why |
 | --- | --- | --- | --- |
-| `cell_statistic: peak` (the cell holds its largest sample; the background is then the mean of such maxima, 4.3 dB above the mean noise for 8 samples) | +2.8 dB | −0.9 to +3.1 dB on the strongest detection; detections and tracks nearly as before (one more weak track on the three-row trial), but the 12 km mover was still `uncertain` after four pings where it was `mover` | none in compute |
-| `range_cell_m` at 0.75 of the resolution (one sample per cell, no averaging) | +7.2 dB | +3.4 to +6.3 dB on the strongest detection, but 2 to 17 detections a ping where there were 1 to 3 (range sidelobes of the compressed pulse and the target's own highlights become detections of their own), several tracks where there was one, and the 12 km mover `uncertain` | tracks fragment |
-| `window: rect` | +1.8 dB | not run alone; with the small cell above, 15 to 52 detections a ping (bearing sidelobes as well) | false tracks |
+| aperture window | 1.76 dB | 1.76 dB | Hann weighting against noise that is uncorrelated between hydrophones: N Σw² / (Σw)². It buys −31 dB bearing sidelobes where an unweighted row has −13 dB |
+| range cell | 0.5 dB | 7.7 dB | the map is computed every 0.25 m for a 0.375 m resolution (4–6 kHz). `multiscale` reads the sample nearest the echo's peak; `mean` averaged it with the other seven samples of a 2 m cell |
+| total | 2.3 dB (measured 2.4) | 9.4 dB (measured 9.4) | |
 
-Neither is the default: the 2 m cell of mean power also merges an echo's range sidelobes and highlights into one
-detection, which is what the tracker needs, and the measured gain of `peak` on echoes that are not points is small.
-Getting the 7 dB back without the fragmentation needs work in the detector itself (a weighted replica to bring the
-range sidelobes down, detections merged over the guard width, and a threshold matched to the cell's statistic); it is
-not done. Until then a range prediction should use the chain's threshold in the budget's units
-(`live.budget_threshold_db`), and state the target's source-level convention.
+### The detector
+
+**What was wrong.** The cell-averaging threshold for 10⁻⁵ (10.7 dB) is the threshold for ONE exponentially distributed
+sample. It was applied to the mean of the 8 correlated samples of a cell (5.8 independent looks), which exceeds 10.7 dB
+in noise about once in 10²¹ cells: the false-alarm probability typed was never the one obtained, the threshold was 4.8 dB
+higher than that mean needs for 10⁻⁵, and a point echo had lost 7.7 dB in the same mean. Rows added in power changed
+nothing: the threshold on the mean stayed where it was, so two or three rows detected no further than one.
+
+**What it is now** (both engines; `LiveChain.detector` and the program's `detector {...}` line print it):
+
+- Every range cell is tested on its **strongest sample** and on its **mean**, each against the threshold of its own
+  statistic (`libs/detect` `statistic.hpp`: Erlang for a sample of the added rows, a weighted sum of exponentials for a
+  mean of correlated samples; exact or saddlepoint, held to Monte Carlo). Longer means (`cfar.integrate_cells: [1, 4, 16]`)
+  can be added for echoes tens of metres long; see below for why they are not on by default.
+- The false-alarm budget is stated **per ping** (`cfar.false_alarms_per_ping`, 10⁻³: one false detection in a thousand
+  pings of noise, the whole map and both tests together) and the thresholds follow from the map's size: 13.0 dB for a
+  sample and 7.3 dB for a cell's mean on one row of the 1.4 km window at 12 km; 10.6 dB for a sample with two rows
+  added, 9.3 dB (and 4.8 dB for the mean) with three. `cfar.pfa` belongs to `mean` and `peak` only.
+- **One echo, one detection.** A flagged cell that a stronger cell's sidelobes explain is dropped: the compressed pulse's
+  along range (1/(π x)² for a swept pulse), the aperture window's along bearing (the pattern of the hydrophones the
+  record has, over the band: a dead board's gap raises it; not below `cfar.sidelobe_floor_db`, −40 dB), with a margin
+  of `cfar.sidelobe_margin_db` (10 dB). A cell inside a stronger echo's own core (its half-power beam, the next range
+  cell) is never dropped. Flagged cells are then
+  grouped when they are no further apart in range than `cfar.merge_m` (default: the tracker's range sigma, 15 m) and no
+  further apart in bearing than half the beam's half-power width (2.6° for a 32-hydrophone row at 5 kHz); touching cells
+  always are. So a target's highlights and the arrivals of one multipath group are one detection. It reports its
+  strongest sample as `snr_db`; its range, the energy-weighted mean of its samples; its bearing, the mean of its beams
+  weighted by their energy above half the strongest one's (within 0.06° of truth on `popoto_elevation_free`, as before;
+  from ping to ping it scatters by 0.02° where the old centroid scattered by 0.01°); and `extent_m`, the range it spans.
+- **What a detection holds of its echo.** `first_range_m` and `extent_m` (it covers the range cells from the one centred
+  on `first_range_m` over `extent_m`), and, when there are two or more, `arrivals`: `[range_m, snr_db]` of each local
+  peak along range inside it that stands above the single-sample threshold (the strongest sample over its bearings;
+  at most the 8 strongest, nearest first). A submerged target's direct echo and its echoes by the surface are ONE
+  detection and one track, with those arrivals inside it (`tests/python/test_detector.py`: a target at 150 m seen from
+  225 m at 6 and 12 km, arrivals 2.8 to 11 m apart). The merge window: flagged cells up to 16 m apart in range (21 ms of
+  two-way delay) are joined, so arrivals up to 16 m apart are always in one detection and arrivals more than 20 m apart
+  never. The complex samples behind them, at any range sampling over the detection's window at its bearing:
+  `beam_samples` (`libs/live` `chain.hpp`; `core.live_beam_samples` in Python), one row at a time.
+- **What is resolved.** Two echoes are two detections when they are more than 20 m apart in range (the merge distance
+  and a cell either side), or more than one and a half half-power beamwidths apart in bearing (7.9°). A weaker echo
+  less than 10 dB above a stronger one's sidelobe envelope at its place is not told apart from those sidelobes: on
+  the same bearing that is an echo more than 14 dB below the stronger one 4 m away, 34 dB below it at 20 m, 44 dB at
+  60 m. `doa: sbl` resolves bearings inside a beam.
+- **The background at the ends of the map.** Near either end the training window has cells on one side only, and
+  reverberation falls with range: the plain mean of cells that all lie beyond the cell under test reads low (1.7 dB at
+  the near end of `flank_patrol`). With 6 dB of unintended threshold that went unnoticed; with a matched threshold it is
+  a row of false alarms. The mean is therefore moved along the background's slope there (the slope between the medians
+  of the first, or last, two training lengths of the same bearing).
+
+**Probability of detection**, point echo, steady, one ping, 12 km window (`live.detection_probability`; measured through
+the C++ chain on 50 simulated pings per level for one row and 20 for three, `tests/python/test_detector.py` repeats one
+level):
+
+| Budget SNR of one row | 11 dB | 12.5 | 14 | 15.5 | 17 | 18.5 | 20 | 21.5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| one row, `multiscale`: measured (closed form) | 0.00 (0.01) | 0.08 (0.05) | 0.32 (0.22) | 0.56 (0.58) | 0.98 (0.92) | 1.00 | 1.00 | 1.00 |
+| one row, `mean`: measured (closed form) | 0 | 0 | 0 | 0 | 0.00 (0.002) | 0.24 (0.08) | 0.58 (0.62) | 0.92 (0.95) |
+| three rows, `multiscale` | 0.45 (0.44) | 0.95 (0.83) | 0.95 (0.99) | 1.00 | 1.00 | | | |
+| three rows, `mean` | 0 | 0 | 0 | 0 | 0 | | | |
+
+The budget SNR for a probability of one half (`live.budget_threshold_db(record, chain, pd=..., rows=...)`), and for 0.9:
+
+| Rows added | `multiscale` Pd 0.5 / 0.9 | `mean` Pd 0.5 / 0.9 | Gain at 0.5 |
+| --- | --- | --- | --- |
+| 1 | 15.1 / 16.8 dB | 19.7 / 21.0 dB | 4.6 dB |
+| 2 | 12.6 / 14.3 dB | 19.7 / 20.7 dB | 7.1 dB |
+| 3 | 11.2 / 12.8 dB | 19.7 / 20.6 dB | 8.5 dB |
+
+Against the best this architecture can do for a point echo at the same false-alarm budget (an unweighted row, the echo
+on a sample, one test: 12.5 dB for one row), the detector is 2.6 dB short: 1.76 dB is the Hann window (kept: an
+unweighted row gave 15 to 52 detections a ping), 0.5 dB the echo falling between samples, 0.3 dB the second test and the
+search over an oversampled map. Of the 7.7 dB the cell's mean cost, `snr_db` has 7.2 dB back. The detection threshold
+has 4.6 dB of it back for one row, because the honest threshold for a sample (13.0 dB at one false detection in a
+thousand pings) is 2.3 dB above the 10.7 dB that was typed for a statistic it did not fit.
+
+**Echoes that are not points.** Total echo energy needed for Pd 0.5 when it is spread evenly over an extent in range
+(one row, Monte Carlo of the statistic alone, the energy stated as the peak SNR the same echo would have as a point):
+
+| Extent | `mean` (until now) | sample + cell (default) | + 8 m | + 8 m + 32 m |
+| --- | --- | --- | --- | --- |
+| point | 18.0 dB | 13.0 | 13.1 | 13.2 |
+| 5 m | 20.8 | 16.3 | 15.0 | 15.1 |
+| 20 m | 25.0 | 20.2 | 17.9 | 16.9 |
+| 100 m | 30.5 | 25.4 | 23.0 | 20.6 |
+
+Integration over range IS right for an extended echo: 1.3 dB at 5 m, 3.3 dB at 20 m, 4.8 dB at 100 m. The longer means
+are nevertheless an option (`cfar.integrate_cells: [1, 4, 16]`), not the default: their thresholds are 4.0 and 2.1 dB
+over the background, which a strong, long echo's bearing sidelobes (measured −28 dB on `flank_patrol`) and any error of
+the background reach. On `flank_patrol` they give 3 to 6 detections a ping and a fourth, `uncertain` track against
+3 targets (9 to 14 a ping before the background's slope was handled). Use them in noise that is known to be flat.
+
+**Measured on the shipped scenarios** (both engines give the same lines; before → after; detections per ping, strongest
+`snr_db`, tracks at the last ping):
+
+| Scenario | True targets | `mean` (until now) | `multiscale` (default) |
+| --- | --- | --- | --- |
+| `popoto_testauv_trial_1row` | 1 | 1 a ping, 48.7 dB, 1 static | 1 a ping, 52.7 dB, 1 static |
+| `popoto_static_trial_2row` | 1 | 1, 32.7 dB, 1 static | 1, 37.0 dB, 1 static |
+| `popoto_static_trial_3row` | 1 | 2 to 3, 68.7 dB, 2 static | 1, 73.8 dB, 1 static |
+| `popoto_elevation_free` | 3 | 3, 38.5 dB, 3 static | 3, 44.7 dB, 3 static |
+| `popoto_12km` (image-source stand-in) | 1 | on 3 of 6 pings, 13.7 dB, `uncertain` from ping 5 | every ping, 17.5 dB, `mover` from ping 3 |
+| `popoto_12km_2row` (stand-in) | 1 | never | every ping, 14.7 dB, `mover` from ping 3 |
+| `popoto_12km_3row` (stand-in) | 1 | on 1 of 6 pings, 11.9 dB, no track | every ping, 15.9 dB, `mover` from ping 3 |
+| `popoto_elevation_shallow` (multipath) | 1 | 1, 43.4 dB, 1 static | 1, 49.3 dB, 1 static |
+| `popoto_face_2row_shallow` (multipath) | 1 | 1, 34.5 dB, 1 static | 1, 37.7 dB, 1 static |
+| `flank_target_1km` (Bellhop, one ping) | 1 | 4 detections, 18.5 dB | 1 detection, 27.0 dB |
+| `flank_patrol` (Bellhop, 0.2 s pulse, 8 arrivals) | 3 | 3 to 5, 30.9 dB; mover, static, `multipath`, `uncertain` | 3 every ping, 36.5 dB; mover, mover, static |
+
+On noise alone (the 12 km window, 220 pings of one row): no detection from either detector. At budgets large enough to
+count the new one keeps its budget: 3.3, 1.3, 0.35 and 0.12 false detections a ping at budgets of 3, 1, 0.3 and 0.1.
+With three rows the detector runs about twice over its budget (3.8, 1.7, 0.47, 0.22, 0.05 and 0.033 a ping at budgets
+of 3, 1, 0.3, 0.1, 0.03 and 0.01, on 30 and 60 pings) and reported one false detection in 90 pings at the default budget;
+the old detector none. Not explained; `cfar.search_factor: 5` would bring it back for 0.15 dB.
+
+**For a range prediction.** Use `live.detection_probability(snr_of_one_row, record, chain, rows=...)`, or
+`live.budget_threshold_db(record, chain, pd=0.5, rows=...)` as the threshold on the SNR of ONE row, without a separate
+gain for the rows (it is in the threshold). For the shipped builds, with their own receive windows (a longer window is
+more cells to search: 0.5 dB between 1.4 km and 12 km of window):
+
+| Build | Rows | Window | One-row budget SNR for Pd 0.5 / 0.9 | The same with `buildspec.rows_detection_gain_db` added, as `performance` compares it with 13 dB |
+| --- | --- | --- | --- | --- |
+| `popoto_face_1x32` | 1 | 0.75–12.7 km | 15.6 / 17.3 dB | 15.6 / 17.3 dB |
+| `popoto_face_2x32` | 2 | 0.75–12.7 km | 13.1 / 14.7 dB | 15.5 / 17.1 dB |
+| `popoto_face_3x32` | 3 | 0.75–12.7 km | 11.6 / 13.2 dB | 15.4 / 17.0 dB |
+| `popoto_static_2x32` | 2 | 75–3000 m | 12.8 / 14.5 dB | 15.2 / 16.9 dB |
+| `popoto_static_3x32` | 3 | 75–3000 m | 11.4 / 13.0 dB | 15.1 / 16.7 dB |
+| `popoto_testauv_1x32` | 1 | 75–2000 m | 15.2 / 16.8 dB | 15.2 / 16.8 dB |
+
+So the 13 dB of the plan's range figures becomes 15.5 dB for a probability of one half (17 dB for nine in ten) with the
+rows' gain as the budget already counts it; with the detector until now it was 19.7 dB of one row's SNR whatever the
+number of rows. The reference ship (+25 dB, free field, `buildspec.budget`) at 12 km on the face builds, margin at Pd 0.5
+and the probability of detection on one ping:
+
+| Rows | Budget's margin (13 dB) | `mean`: margin, Pd | `multiscale`: margin, Pd | Pd at 10 / 12 / 14 km, before → after |
+| --- | --- | --- | --- | --- |
+| 1 | +1.6 dB | −5.1 dB, 0.00 | −1.0 dB, 0.24 | 0.24 → 1.00 / 0.00 → 0.24 / 0.00 → 0.00 |
+| 2 | +4.0 dB | −5.0 dB, 0.00 | +1.6 dB, 0.89 | 0.17 → 1.00 / 0.00 → 0.89 / 0.00 → 0.05 |
+| 3 | +5.3 dB | −5.0 dB, 0.00 | +3.0 dB, 0.99 | 0.14 → 1.00 / 0.00 → 0.99 / 0.00 → 0.24 |
+
+A third difference is a matter of convention, not of the chain: a budget that takes the source level as a peak where
+the chain's pings carry rms (or the reverse) is another 3 dB.
+
+`cell_statistic: mean` (with `range_cell_m` and `cfar` as before) is the detector until now, line for line:
+`tests/python/test_detector.py` recomputes its detections from the map with the cell-averaging detector alone.
+
+Not done, and why: a weighted replica. Measured with the library's pulse compression (`recon.prepare(window=...)`) at
+time-bandwidth products of 200 and 2000: Hamming costs 1.1 dB and widens the compressed pulse 1.41 times for −36 dB
+range sidelobes, Hann 1.5 dB and 1.53 times for −31 dB (unweighted: −13.3 dB); at a product of 20 the sidelobes are
+only −28 and −27 dB, so a rule that picks the window would weight nothing below a product of about 100. The chain
+does not weight: the sidelobe envelope removes a strong echo's range sidelobes at no loss, at the price of the
+masking stated above, and a weighted replica would need its own sample correlation and envelope in the detector's
+plan; a Taylor aperture window (computed for 32 hydrophones: 0.69 dB of loss at −30 dB sidelobes against the Hann
+window's 1.76 dB at −31.5 dB, so 1.1 dB back; it needs the window in `flank.py` and in the elevation estimate); training cells that leave out other detections (a second echo
+100 to 400 m from a strong one is still desensitised by it, as before).
 
 Related report fields: with stacked rows a detection whose elevation is ambiguous carries `"bearing_corrected": false`:
 its `bearing_deg` and `range_m` are the row's own (cone angle and slant range), not corrected by an elevation that is
@@ -599,7 +735,8 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `chain.cfar.guard_m`, `train_m` | the standing 100 m and 300 m are for echoes spread by a waveguide at kilometres; a warning says when the receive window is shorter than both sides of them. A short-range sonar should set them |
 | `chain.classify.multipath.max_excess_range` (800 m), `velocity` | the site: the longest extra path a bounce can have at the water depth and range worked |
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
-| `chain.min_snr_db`, `chain.cfar.pfa` | the false-alarm rate wanted |
+| `chain.cfar.false_alarms_per_ping`, `chain.min_snr_db` | the false-alarm rate wanted: expected false detections per ping in noise (10⁻³), and a floor on `snr_db` (9 dB). `chain.cfar.pfa` is for `cell_statistic: mean` and `peak` only |
+| `chain.cfar.merge_m`, `sidelobe_floor_db` | what is one detection: echoes of one bearing within the tracker's range sigma (15 m) are merged; the bearing sidelobe floor (−40 dB) is an assumption about the array's gain and phase errors until it is measured |
 | `chain.sync.reference`, `search_time`, `tolerance_us`, `min_quality` | several boards: the reference burst above the band, how far apart the boards can start (2 ms), how well they must agree (a twentieth of a period; tighter for rows) |
 | `chain.elevation.*` (sector, `min_row_elements`, `water_depth`, sigmas, gradient) | stacked rows only; the row tolerance is derived |
 | `chain.doa: sbl` on a row of more than 64 hydrophones | runs on the host reference (about half the speed); every report line then says `"sbl_fallback": true` |

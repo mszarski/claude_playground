@@ -10,6 +10,12 @@
 
 namespace sonar::live {
 
+/// One local peak of the map along range inside a detection (the multiscale detector): an arrival of its echo.
+struct Arrival {
+  double range = 0.0;    ///< m, of the map sample that holds the peak
+  double snr_db = 0.0;   ///< that sample over the detector's background of its cell
+};
+
 struct Detection {
   double range = 0.0;    ///< m
   double bearing = 0.0;  ///< rad
@@ -22,6 +28,12 @@ struct Detection {
   /// has a depth takes the one that fits it; a track without one waits.
   bool depth_ambiguous = false;
   std::vector<double> depth_alternatives{};
+  double extent = std::numeric_limits<double>::quiet_NaN();       ///< m in range the cluster spans (the multiscale detector); NaN: not reported
+  /// The detection's arrivals, nearest first (the multiscale detector): the local peaks along range of the strongest
+  /// sample over its bearings, each above the single-sample threshold; at most 8, the strongest. One detection is one
+  /// target: its direct echo, its surface and bottom echoes and its highlights within the merge distance are all here,
+  /// from `first_range` over `extent`. The complex samples behind them: `beam_samples` (chain.hpp).
+  std::vector<Arrival> arrivals{};
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

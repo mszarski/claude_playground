@@ -1,7 +1,10 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 
+#include <pybind11/stl.h>
+
 #include "sonar/detect/cfar.hpp"
+#include "sonar/detect/statistic.hpp"
 
 namespace py = pybind11;
 using namespace sonar;  // NOLINT(google-build-using-namespace)
@@ -56,6 +59,16 @@ void bind_detect(py::module_& m) {
       "`resolution` metres (c / 2B). The window is `guard_resolutions` and `train_resolutions` resolution\n"
       "cells on each side, or `guard_m` / `train_m` metres when those are > 0 (the guard is at least one\n"
       "resolution cell). A map sampled at the resolution gets the defaults of cfar(): (4, 32).");
+  m.def("mean_power_weights", &detect::mean_power_weights, py::arg("correlation"), py::arg("n"), py::arg("max_exact") = 256,
+        "Weights (summing to 1) of the mean power of n consecutive samples whose complex amplitudes correlate by\n"
+        "correlation[lag]: the mean is distributed as sum w_i E_i with E_i independent unit exponentials (libs/detect statistic.hpp).");
+  m.def("equivalent_looks", &detect::equivalent_looks, py::arg("weights"));
+  m.def("weighted_exponential_tail", &detect::weighted_exponential_tail, py::arg("weights"), py::arg("rows"), py::arg("x"),
+        "P(X > x) in noise for X = (1 / rows) sum over rows and components of w_i E: exact for one weight (Erlang), saddlepoint otherwise.");
+  m.def("weighted_exponential_threshold", &detect::weighted_exponential_threshold, py::arg("weights"), py::arg("rows"), py::arg("pfa"),
+        "The x with weighted_exponential_tail(weights, rows, x) = pfa: a threshold over the true mean noise power.");
+  m.def("training_correction", &detect::training_correction, py::arg("pfa"), py::arg("n_train"),
+        "Factor on a threshold over the true mean when the mean is estimated from n_train independent exponential looks.");
   m.attr("CFAR_DEFAULT_PFA") = detect::CfarOptions{}.pfa;
   m.attr("CFAR_DEFAULT_GUARD") = detect::CfarOptions{}.guard;
   m.attr("CFAR_DEFAULT_TRAIN") = detect::CfarOptions{}.train;

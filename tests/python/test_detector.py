@@ -1,0 +1,404 @@
+"""The chain's detector at the range resolution (`cell_statistic: multiscale`; libs/live detector.hpp, libs/detect
+statistic.hpp, gpusonar.detect.multiscale) against closed forms, Monte Carlo and simulated pings, on both engines:
+
+  - the thresholds of its statistics (one sample of several rows, the mean of correlated samples) against the
+    chi-square closed form and against band-limited noise drawn here; what the detector until now really asked for;
+  - on noise-only pings: the false-alarm budget is kept (measured at a budget large enough to count), nothing at the
+    default budget, nothing from the detector as it was;
+  - a point echo reads its budget SNR less the window and the straddling (2.3 dB, where the mean of a 2 m cell read
+    9.4 dB less), is found where `detection_probability` says and the detector as it was is not;
+  - two targets further apart than the stated resolution are two detections and two tracks, nearer are one;
+  - `cell_statistic: mean` is the detector as it was: the chain's detections recomputed here from the map with the
+    cell-averaging detector alone;
+  - both engines give the same detections, with stacked rows too, and the same background at the ends of a map.
+"""
+import json
+
+import numpy as np
+import pytest
+from scipy import stats
+
+from gpusonar import core, detect, flank, live, recon
+from gpusonar.live import LiveChain
+from gpusonar.sim import Scene, make_pose, simulate_ping
+from gpusonar.sonar import SonarModel
+
+WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}}}
+KW = dict(environment={"sound_speed": 1500.0}, adc=False, absorption_model="none")
+POSE = dict(position=(0.0, 0.0, 0.0))
+NOISE = 2e-4
+
+
+@pytest.fixture(scope="module")
+def sonar():
+    return SonarModel.load("popoto_long_range", WINDOW)
+
+
+@pytest.fixture(scope="module")
+def template(sonar):
+    return sonar.make_record(core.Pose(), environment={"sound_speed": 1500.0})
+
+
+def at(r, bearing_deg, z=0.0):
+    b = np.radians(bearing_deg)
+    return [r * np.sin(b), r * np.cos(b), z]
+
+
+def ping(sonar, points, ts_db, seed, noise=NOISE, sequence=0):
+    scene = Scene()
+    for p, ts in zip(points, np.broadcast_to(ts_db, len(points))):
+        scene.add_points([p], target_strength_db=float(ts))
+    return simulate_ping(sonar, make_pose(**POSE), scene, noise_rms=noise, rng=np.random.default_rng(seed), sequence=sequence, **KW)
+
+
+def budget_snr_db(sonar, r, bearing_deg, ts_db=0.0, noise=NOISE, seed=1):
+    """What a link budget states for this target: the peak of the noiseless, unweighted beam output over the mean noise
+    power of the same beamformer."""
+    quiet = ping(sonar, [at(r, bearing_deg)], ts_db, seed, noise=0.0)
+    only = ping(sonar, [at(r, 0.0)], -300.0, seed + 1, noise=noise)
+    recon.prepare([quiet, only], backend=core.Backend.Host)
+    peak = np.abs(flank.backprojection_map(quiet, r + np.arange(-2.0, 2.0, 0.01), np.radians([bearing_deg]), window="rect", interp="linear",
+                                           backend=core.Backend.Host).image) ** 2
+    noise_map = np.abs(flank.backprojection_map(only, np.arange(1000.0, 1600.0, 0.3), np.radians(np.arange(-30.0, 30.0, 2.0)), window="rect",
+                                                interp="linear", backend=core.Backend.Host).image) ** 2
+    return float(10.0 * np.log10(peak.max() / noise_map.mean()))
+
+
+# --- the statistics --------------------------------------------------------------------------------------------------
+
+def band_noise(rng, n_trials, n, step_over_resolution):
+    """Complex noise of unit power and a flat band, sampled `step_over_resolution` of a range resolution apart."""
+    m = int(2 ** np.ceil(np.log2(n + 64)))
+    z = (rng.standard_normal((n_trials, m)) + 1j * rng.standard_normal((n_trials, m))) / np.sqrt(2.0)
+    spectrum = np.fft.fft(z, axis=1) * (np.abs(np.fft.fftfreq(m)) <= 0.5 * step_over_resolution)
+    return np.fft.ifft(spectrum, axis=1)[:, 32:32 + n] / np.sqrt(step_over_resolution)
+
+
+def test_thresholds_against_the_chi_square_closed_form_and_band_limited_noise(template):
+    # One sample of `rows` maps added in power: Erlang, 2 x rows degrees of freedom.
+    for rows in (1, 2, 3):
+        for pfa in (1e-3, 1e-6, 1e-9):
+            want = stats.gamma.isf(pfa, rows) / rows
+            assert core.weighted_exponential_threshold([1.0], rows, pfa) == pytest.approx(want, rel=1e-9)
+    # The mean of the 8 samples of a 2 m cell (a quarter of a metre apart, 0.375 m resolution) and of four cells.
+    corr = core.live_sample_correlation(template, 0.25, 32)
+    assert corr[:3] == pytest.approx(np.sinc(np.arange(3) * 0.25 / 0.375))
+    rng = np.random.default_rng(3)
+    power = np.abs(band_noise(rng, 1500, 4096, 0.25 / 0.375)) ** 2
+    assert power.mean() == pytest.approx(1.0, abs=0.01)
+    for n, pfas in ((8, (1e-2, 1e-3, 1e-4)), (32, (1e-2, 1e-3))):
+        w = core.mean_power_weights(corr, n)
+        assert sum(w) == pytest.approx(1.0)
+        stat = power.reshape(1500, -1, n).mean(axis=2)
+        assert stat.var() == pytest.approx(1.0 / core.equivalent_looks(w), rel=0.05)
+        for pfa in pfas:
+            t = core.weighted_exponential_threshold(w, 1, pfa)
+            assert np.mean(stat > t) == pytest.approx(pfa, rel=0.25), (n, pfa)       # 77 to 7700 exceedances expected
+        # ... and of three rows of it.
+        three = (stat + np.abs(band_noise(rng, 1500, 4096, 0.25 / 0.375) ** 2).reshape(1500, -1, n).mean(axis=2)
+                 + np.abs(band_noise(rng, 1500, 4096, 0.25 / 0.375) ** 2).reshape(1500, -1, n).mean(axis=2)) / 3.0
+        assert np.mean(three > core.weighted_exponential_threshold(w, 3, 1e-3)) == pytest.approx(1e-3, rel=0.3)
+    # What the detector until now asked of that mean: the one-sample factor for 1e-5 (10.7 dB), which the mean of a cell
+    # exceeds in noise about once in 1e21 cells, not once in 1e5: 6 dB of threshold nobody had chosen.
+    w8 = core.mean_power_weights(corr, 8)
+    factor = detect.cfar_threshold_factor(1e-5, 300)
+    assert 10.0 * np.log10(factor) == pytest.approx(10.7, abs=0.05)
+    assert core.weighted_exponential_tail(w8, 1, factor) < 1e-18
+    assert 10.0 * np.log10(core.weighted_exponential_threshold(w8, 1, 1e-5)) == pytest.approx(5.9, abs=0.1)
+    # The background estimated from n looks: the cell-averaging factor is the one-sample case.
+    assert -np.log(1e-5) * core.training_correction(1e-5, 300) == pytest.approx(factor)
+
+
+def test_the_plan_states_its_tests_and_keeps_the_budget_between_them(template):
+    plan = live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5]})
+    sample, cell = plan["scales"]
+    assert (sample["cells"], cell["cells"]) == (0, 1) and plan["samples_per_cell"] == 8 and plan["cell_m"] == 2.0
+    assert sample["tests"] * sample["pfa"] + cell["tests"] * cell["pfa"] == pytest.approx(1e-3)
+    assert sample["factor"] == pytest.approx(-np.log(sample["pfa"]))
+    assert cell["looks"] == pytest.approx(5.8, abs=0.1) and plan["merge_cells"] == 7
+    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template) == pytest.approx(12.8, abs=0.3)
+    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template, rows=3) == pytest.approx(9.3, abs=0.3)
+    with pytest.raises(ValueError):
+        live.detection_threshold_db({"cell_statistic": "multiscale"})                 # it follows from the map: no record, no number
+    longer = live.detector_plan(template, {"cfar": {"integrate_cells": [1, 4, 16], "false_alarms_per_ping": 1e-2}})
+    assert [s["cells"] for s in longer["scales"]] == [0, 1, 4, 16]
+    assert sum(s["tests"] * s["pfa"] for s in longer["scales"]) == pytest.approx(1e-2)
+    assert [s["factor"] for s in longer["scales"]] == sorted((s["factor"] for s in longer["scales"]), reverse=True)
+
+
+def test_background_follows_a_slope_at_the_ends_and_both_engines_compute_the_same():
+    rng = np.random.default_rng(5)
+    n_b, n, guard, train = 6, 900, 50, 150
+    level = np.exp(-np.log(2.0) / 300.0 * np.arange(n))                               # 3 dB per 300 cells, as reverberation falls
+    power = (level[None, :] * rng.gamma(40.0, 1.0 / 40.0, (n_b, n))).astype(np.float32)
+    got, worth = detect.background(power, guard, train)
+    plain, _ = detect._window_mean(power.astype(float), guard, train)
+    assert np.abs(10.0 * np.log10(got / level)).max() < 0.35
+    assert 10.0 * np.log10(plain[:, 0] / level[0]).mean() == pytest.approx(-1.25, abs=0.15)   # what the plain mean reads at the near end
+    assert np.array_equal(got[:, 200:700], plain[:, 200:700])                         # balanced windows: the plain mean
+    cpp, cpp_worth = core.live_detector_background(power, guard, train)
+    assert np.allclose(cpp, got, rtol=1e-9) and np.allclose(cpp_worth, worth, rtol=1e-12)
+    assert worth[450] == 300.0 and worth[0] < 40.0
+
+
+# --- noise alone -----------------------------------------------------------------------------------------------------
+
+def test_noise_only_pings_keep_the_false_alarm_budget_and_give_nothing_at_the_default(sonar, monkeypatch):
+    """Six pings of noise. At a budget of 3 false detections a ping (so that they can be counted) the detector reports
+    1.5 to 6 a ping (3.3 measured on 60 pings of the 12 km window); at the default (one in a thousand pings) nothing, and
+    the detector as it was nothing either."""
+    seen = {}
+    plain = detect.multiscale
+
+    def spy(*args):
+        seen["args"] = args
+        return plain(*args)
+
+    monkeypatch.setattr(detect, "multiscale", spy)
+    base = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host"}
+    counted, default, was = 0, 0, 0
+    with LiveChain(dict(base, engine="python", cell_statistic="multiscale", cfar={"false_alarms_per_ping": 3.0})) as loose, \
+            LiveChain(dict(base, engine="cpp", cell_statistic="multiscale")) as chain, LiveChain(dict(base, engine="cpp", cell_statistic="mean")) as old:
+        for i in range(6):
+            rec = ping(sonar, [at(1300.0, 0.0)], -300.0, 700 + i, sequence=i)
+            counted += len(loose.process(rec.copy())["detections"])
+            default += len(chain.process(rec.copy())["detections"])
+            was += len(old.process(rec.copy())["detections"])
+        assert loose.detector["scales"][0]["threshold_db"] < chain.detector["scales"][0]["threshold_db"] - 1.0
+    assert 9 <= counted <= 36, counted
+    assert default == 0 and was == 0
+    # The same map through the NumPy detector at the default budget: nothing.
+    args = seen["args"]
+    default_plan = live.detector_plan(rec, base)
+    assert len(plain(*args[:-1], default_plan)[0]) == 0
+    assert args[-1]["scales"][0]["pfa"] == pytest.approx(3e3 * default_plan["scales"][0]["pfa"])
+
+
+# --- a point echo ----------------------------------------------------------------------------------------------------
+
+def test_a_point_echo_reads_its_budget_snr_less_window_and_straddling_on_both_engines(sonar, template):
+    """The reference is the link budget's number (peak of the noiseless unweighted beam over mean noise). The multiscale
+    detector's `snr_db` is 2.3 dB below it (Hann window 1.76 dB, the echo between samples 0.5 dB); the mean of a 2 m cell
+    was 9.4 dB below."""
+    loss = live.snr_loss_db(template, 2.0, "hann", "multiscale")
+    assert loss["window_db"] == pytest.approx(1.76, abs=0.02) and loss["cell_db"] == pytest.approx(0.55, abs=0.15)
+    assert live.snr_loss_db(template, 2.0)["total_db"] == pytest.approx(9.4, abs=0.2)             # as before
+    read, want = [], []
+    for trial in range(3):
+        rng = np.random.default_rng(40 + trial)
+        r_t, b_t = 1300.0 + rng.uniform(-3.0, 3.0), rng.uniform(-10.0, 10.0)
+        want.append(budget_snr_db(sonar, r_t, b_t, ts_db=0.0))
+        rec = ping(sonar, [at(r_t, b_t)], 0.0, 60 + trial)
+        got = {}
+        for engine in ("cpp", "python"):
+            with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+                rep = chain.process(rec.copy())
+            assert len(rep["detections"]) == 1, engine
+            got[engine] = d = rep["detections"][0]
+            assert abs(d["range_m"] - r_t) < 1.0 and abs(d["bearing_deg"] - b_t) < 0.5 and d["extent_m"] <= 6.0, (engine, d)
+        assert got["python"]["snr_db"] == pytest.approx(got["cpp"]["snr_db"], abs=0.02)
+        assert got["python"]["range_m"] == pytest.approx(got["cpp"]["range_m"], abs=1e-3)
+        read.append(got["cpp"]["snr_db"])
+    assert float(np.mean(want) - np.mean(read)) == pytest.approx(loss["total_db"], abs=0.8)
+
+
+def test_detection_probability_is_what_the_chain_does(sonar, template):
+    """At a budget SNR of 17 dB a point echo is detected nine times in ten by the multiscale detector and almost never
+    by the detector as it was; the closed form says so and twelve simulated pings agree. The thresholds a range
+    prediction should use follow."""
+    new, old = {"cell_statistic": "multiscale"}, {"cell_statistic": "mean"}
+    assert live.detection_probability(17.0, template, new) == pytest.approx(0.92, abs=0.05)
+    assert live.detection_probability(17.0, template, old) < 0.01
+    curve = live.detection_probability(np.arange(8.0, 26.0, 1.0), template, new)
+    assert np.all(np.diff(curve) >= 0.0) and curve[0] < 1e-3 and curve[-1] > 0.999
+    # Pd one half: 15.0 dB of budget SNR where the detector as it was needs 19.7 (its own formula says 20.1: a threshold, not a probability).
+    assert live.budget_threshold_db(template, new) == pytest.approx(15.0, abs=0.3)
+    assert live.budget_threshold_db(template, old, pd=0.5) == pytest.approx(19.7, abs=0.3)
+    assert live.budget_threshold_db(template, old) == pytest.approx(20.1, abs=0.2)
+    assert live.budget_threshold_db(template, new, pd=0.9) == pytest.approx(16.7, abs=0.3)
+    # Rows added in power need less of each row (the detector as it was gained nothing from them: its threshold on the
+    # mean did not move); a fluctuating echo needs more for a high probability.
+    assert live.budget_threshold_db(template, new, rows=3) == pytest.approx(11.1, abs=0.3)
+    assert live.budget_threshold_db(template, new, rows=2) == pytest.approx(12.5, abs=0.3)
+    assert live.budget_threshold_db(template, old, rows=3, pd=0.5) == pytest.approx(19.7, abs=0.3)
+    assert live.budget_threshold_db(template, new, pd=0.9, fluctuation="swerling1") > live.budget_threshold_db(template, new, pd=0.9) + 5.0
+    with pytest.raises(ValueError):
+        live.detection_probability(17.0, template, new, fluctuation="rician")
+    r_t, b_t = 1300.0, 4.0
+    snr0 = budget_snr_db(sonar, r_t, b_t)
+    noise = NOISE * 10.0 ** ((snr0 - 17.0) / 20.0)
+    found = {"multiscale": 0, "mean": 0}
+    for trial in range(12):
+        rng = np.random.default_rng(900 + trial)
+        r, b = r_t + rng.uniform(-3.0, 3.0), b_t + rng.uniform(-3.0, 3.0)
+        rec = ping(sonar, [at(r, b)], 0.0, 300 + trial, noise=noise)
+        for name in found:
+            with LiveChain({"cell_statistic": name, "backend": "host", "engine": "cpp"}) as chain:
+                rep = chain.process(rec.copy())
+            near = [d for d in rep["detections"] if abs(d["range_m"] - r) < 6.0 and abs(d["bearing_deg"] - b) < 2.5]
+            found[name] += bool(near)
+            assert len(rep["detections"]) == len(near)                 # and nothing else
+    assert found["multiscale"] >= 9 and found["mean"] <= 1, found
+
+
+# --- one target one detection, two targets two -----------------------------------------------------------------------
+
+@pytest.mark.parametrize("second, detections", [
+    ((1330.0, 0.0), 2),       # 30 m behind on the same bearing: beyond the tracker's range sigma (15 m, merged up to 16 m)
+    ((1306.0, 0.0), 1),       # 6 m behind: one detection, 8 m long
+    ((1300.0, 10.0), 2),      # the same range, 10 degrees apart: more than one and a half half-power beamwidths (7.9 degrees)
+    ((1300.0, 1.5), 1),       # 1.5 degrees apart: one beam, one detection
+    ((1322.0, 5.0), 2),       # both at once
+])
+def test_two_targets_beyond_the_stated_resolution_are_two_and_nearer_are_one(sonar, second, detections):
+    rec = ping(sonar, [at(1300.0, 0.0), at(*second)], [0.0, -3.0], 81)
+    got = {}
+    for engine in ("cpp", "python"):
+        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+            got[engine] = chain.process(rec.copy())["detections"]
+            assert chain.detector["merge_cells"] == 7 and chain.detector["merge_deg"] == pytest.approx(2.6, abs=0.2)
+        assert len(got[engine]) == detections, (engine, got[engine])
+    for a, b in zip(got["cpp"], got["python"]):
+        assert a["range_m"] == pytest.approx(b["range_m"], abs=1e-3) and a["snr_db"] == pytest.approx(b["snr_db"], abs=0.02)
+        assert a["extent_m"] == b["extent_m"]
+    if detections == 1 and second[1] == 0.0:
+        assert got["cpp"][0]["extent_m"] >= 8.0 and 1300.0 < got["cpp"][0]["range_m"] < 1306.0
+
+
+def test_two_targets_thirty_metres_apart_are_two_tracks_and_a_strong_one_is_one(sonar):
+    """Four pings: two targets 30 m apart in range on one bearing keep two tracks, on both engines. A target 30 dB up
+    (62 dB of budget SNR: its range and bearing sidelobes far above the threshold) is one detection and one track."""
+    pair = [ping(sonar, [at(1300.0, 3.0), at(1330.0, 3.0)], [0.0, 0.0], 200 + i, sequence=i) for i in range(4)]
+    strong = [ping(sonar, [at(1300.0, -8.0)], 30.0, 240 + i, sequence=i) for i in range(4)]
+    for engine in ("cpp", "python"):
+        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+            reps = chain.run([r.copy() for r in pair])
+        assert [len(r["detections"]) for r in reps] == [2, 2, 2, 2], engine
+        assert len(reps[-1]["tracks"]) == 2 and sorted(round(t["range_m"]) for t in reps[-1]["tracks"]) == [1300, 1330], engine
+        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+            reps = chain.run([r.copy() for r in strong])
+        assert [len(r["detections"]) for r in reps] == [1, 1, 1, 1], engine
+        d = reps[0]["detections"][0]
+        assert d["snr_db"] > 57.0 and abs(d["range_m"] - 1300.0) < 1.0 and abs(d["bearing_deg"] + 8.0) < 0.3 and d["extent_m"] <= 6.0, d
+        assert len(reps[-1]["tracks"]) == 1
+
+
+# --- the detector as it was, and the engines ---------------------------------------------------------------------------
+
+def test_cell_statistic_mean_is_the_detector_as_it_was(sonar):
+    """`cell_statistic: mean` with the 2 m cell: the chain's detections are those of the cell-averaging detector on the
+    map's cell means, recomputed here with nothing of the new detector: mean of 8 samples, the one-sample factor for
+    `cfar.pfa` over 150 cells either side beyond 50, touching cells grouped at their power-weighted centroid."""
+    rec = ping(sonar, [at(1250.0, -12.0), at(1400.0, 9.0), at(1404.0, 9.0)], [5.0, 10.0, 6.0], 77)
+    cfg = {"cell_statistic": "mean", "range_cell_m": 2.0, "cfar": {"pfa": 1e-5, "guard_m": 100.0, "train_m": 300.0}, "min_snr_db": 9.0, "backend": "host"}
+    reports = {}
+    for engine in ("python", "cpp"):
+        with LiveChain(dict(cfg, engine=engine)) as chain:
+            reports[engine] = chain.process(rec.copy())
+            assert chain.detector is None
+    prepared = rec.copy()
+    recon.prepare([prepared], backend=core.Backend.Host)
+    bearings = np.radians(np.arange(-40.0, 40.25, 0.5))
+    s = prepared.samples
+    r0, r1 = 0.5 * 1500.0 * s.start_time, 0.5 * 1500.0 * (s.start_time + (s.n_samples - 1) / s.sample_rate - prepared.transmit.waveform.duration)
+    fine_r = r0 + 0.25 * np.arange(int((r1 - r0) / 0.25) // 8 * 8)
+    fan = flank.backprojection_map(prepared, fine_r, bearings, window="hann", interp="linear", backend=core.Backend.Host)
+    power = (np.abs(fan.image) ** 2).T.reshape(len(bearings), -1, 8).mean(axis=2)
+    ranges = fine_r.reshape(-1, 8).mean(axis=1)
+    want = [h for h in detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150) if h.snr_db > 9.0]
+    assert len(want) == 2
+    for engine, tolerance in (("python", 1e-6), ("cpp", 2e-3)):
+        got = reports[engine]["detections"]
+        assert len(got) == len(want), engine
+        for g, w in zip(got, want):
+            assert "extent_m" not in g
+            assert g["range_m"] == pytest.approx(w.range, abs=tolerance) and g["snr_db"] == pytest.approx(w.snr_db, abs=10 * tolerance)
+            assert g["bearing_deg"] == pytest.approx(np.degrees(w.bearing), abs=tolerance)
+    with pytest.raises(ValueError):
+        LiveChain({"cell_statistic": "median"})
+    with pytest.raises(ValueError):
+        live.cpp_chain_options({"cell_statistic": "median"})
+
+
+def test_both_engines_give_the_same_detections_with_stacked_rows_and_the_program_takes_the_keys():
+    """Three rows added in power (the single-sample statistic then has six degrees of freedom and a 9.4 dB threshold):
+    the same detections, elevations and plan from both engines; and the keys reach the C++ options by their names."""
+    sonar = SonarModel.load("popoto_long_range_3row", WINDOW)
+    rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 50.0)), Scene().add_points([at(1250.0, -15.0, 50.0), at(1400.0, 10.0, 80.0)], target_strength_db=0.0),
+                        noise_rms=NOISE, rng=np.random.default_rng(12), **KW)
+    cfg = {"cell_statistic": "multiscale", "backend": "host", "elevation": {}}
+    got = {}
+    for engine in ("cpp", "python"):
+        with LiveChain(dict(cfg, engine=engine)) as chain:
+            got[engine] = chain.process(rec.copy())
+            plan = chain.detector
+        assert plan["rows"] == 3 and plan["scales"][0]["threshold_db"] == pytest.approx(9.3, abs=0.3), engine
+        assert len(got[engine]["detections"]) == 2, engine
+    for a, b in zip(got["cpp"]["detections"], got["python"]["detections"]):
+        assert a["range_m"] == pytest.approx(b["range_m"], abs=2e-3) and a["bearing_deg"] == pytest.approx(b["bearing_deg"], abs=1e-3)
+        assert a["snr_db"] == pytest.approx(b["snr_db"], abs=0.02) and a["extent_m"] == b["extent_m"]
+        assert a["elevation_deg"] == pytest.approx(b["elevation_deg"], abs=0.05)
+    o = live.cpp_chain_options({"cell_statistic": "multiscale", "cfar": {"false_alarms_per_ping": 0.01, "integrate_cells": [1, 4], "merge_m": 8.0}})
+    assert o["cell_multiscale"] is True and o["cfar_false_alarms_per_ping"] == 0.01 and o["cfar_integrate_cells"] == [1, 4] and o["cfar_merge_m"] == 8.0
+    assert live.cpp_chain_options({"cell_statistic": "mean"})["cell_multiscale"] is False
+
+
+@pytest.mark.parametrize("range_m, ts_db", [(6000.0, 15.0), (12000.0, 36.0)])
+def test_a_submerged_target_with_a_resolved_surface_echo_is_one_detection_and_one_track(range_m, ts_db):
+    """A target at 150 m seen from 225 m, the surface above (image-source paths, no bottom): its echo arrives by the
+    direct path and, 2 x 225 x 150 / range later in path, by the surface (5.6 m at 12 km, 11 m at 6 km; in range half of
+    that for one leg by the surface, all of it for both). It is one target: one detection on every ping and one track,
+    on both engines, with the arrivals listed inside the detection for whoever needs their delays. (The two paths with
+    one leg by the surface add: that arrival is 6 dB above the direct one, which the levels here keep above the threshold.)"""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("popoto_12km")
+    cfg.pop("truth", None)
+    cfg.pop("reverberation", None)
+    cfg["fidelity"] = "image_source"
+    cfg["propagation"] = {"surface_z": 0.0, "bottom_z": None, "max_order": 1}
+    cfg["sonar_overrides"]["receive"]["window"] = {"range": [range_m - 500.0, range_m + 500.0]}
+    cfg["platform"] = {"position": [0.0, 0.0, 225.0], "rpy": [0.0, 0.0, 0.0], "velocity": [0.0, 0.0, 0.0]}
+    cfg["pings"] = {"count": 4, "interval": 18.0}
+    cfg["scene"] = [{"type": "points", "label": "submerged", "positions": [[300.0, range_m, 150.0]], "target_strength_db": ts_db}]
+    records = run_scenario(cfg).records
+    slant = float(np.hypot(np.hypot(300.0, range_m), 75.0))
+    later = 2.0 * 225.0 * 150.0 / range_m                     # extra path of a leg by the surface, m
+    got = {}
+    for engine in ("cpp", "python"):
+        with LiveChain({"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": engine}) as chain:
+            reps = got[engine] = chain.run([r.copy() for r in records])
+            assert chain.detector["merge_cells"] == 7          # cells up to 16 m apart in range are one detection
+        for rep in reps:
+            assert len(rep["detections"]) == 1, (engine, rep["detections"])
+            d = rep["detections"][0]
+            assert d["first_range_m"] - 1.0 <= slant + 0.5 and slant + later <= d["first_range_m"] + d["extent_m"] + 1.0, (engine, d)
+            # The direct echo and the echoes by the surface are inside it, apart by the surface's delay.
+            assert len(d["arrivals"]) >= 2, (engine, d)
+            ranges = np.array([a[0] for a in d["arrivals"]])
+            assert np.abs(ranges - slant).min() < 0.5, (engine, d)
+            assert min(np.abs(ranges - slant - 0.5 * later).min(), np.abs(ranges - slant - later).min()) < 0.5, (engine, d)
+        assert len(reps[-1]["tracks"]) == 1 and {t["id"] for r in reps for t in r["tracks"]} == {reps[-1]["tracks"][0]["id"]}, engine
+    for a, b in zip(got["cpp"], got["python"]):
+        assert len(a["detections"][0]["arrivals"]) == len(b["detections"][0]["arrivals"])
+        assert np.allclose(a["detections"][0]["arrivals"], b["detections"][0]["arrivals"], atol=0.05)
+
+
+def test_beam_samples_are_what_the_map_is_the_power_of(sonar):
+    """The complex samples behind a detection (libs/live chain.hpp `beam_samples`, `core.live_beam_samples`): over its
+    range window at its bearing their strongest squared magnitude over the background is its `snr_db`, at its range."""
+    rec = ping(sonar, [at(1300.0, 6.0)], 0.0, 91)
+    with LiveChain({"backend": "host", "engine": "cpp"}) as chain:
+        d = chain.process(rec)["detections"][0]               # the record is left prepared (baseband, compressed)
+        power, ranges, _ = chain._cpp.last_map()
+    grid = np.radians(np.arange(-40.0, 40.25, 0.5))
+    bearing = grid[int(np.argmin(np.abs(grid - np.radians(d["bearing_deg"]))))]
+    window = d["first_range_m"] - 1.0 + 0.25 * np.arange(int(d["extent_m"] / 0.25) + 8)
+    z = core.live_beam_samples(rec, [float(r) for r in window], float(bearing))
+    assert z.dtype == np.complex64 and len(z) == len(window)
+    peak = int(np.argmax(np.abs(z)))
+    assert abs(window[peak] - d["range_m"]) < 0.5
+    background = np.median(np.asarray(power))                 # the map's cell means in noise: their median is near their mean
+    assert 10.0 * np.log10(np.abs(z[peak]) ** 2 / background) == pytest.approx(d["snr_db"], abs=1.0)
+    same = flank.backprojection_map(rec, window, np.array([bearing]), window="hann", interp="linear", backend=core.Backend.Host).image.ravel()
+    assert np.allclose(z, same, rtol=1e-4, atol=1e-6 * np.abs(same).max())

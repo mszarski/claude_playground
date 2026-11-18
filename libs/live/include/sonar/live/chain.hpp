@@ -13,6 +13,7 @@
 // record for a downstream tracker.
 #pragma once
 
+#include <complex>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
+#include "sonar/live/detector.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
@@ -70,6 +72,12 @@ struct ChainOptions {
   /// of them; the background is then the mean of such maxima, about the k-th harmonic number above the
   /// mean noise power. docs/DEPLOYMENT.md, "What snr_db is".
   bool cell_peak = false;
+  /// "multiscale", the default (detector.hpp): each cell is tested on its strongest sample and on its mean (and on
+  /// the means of several cells when asked), each against the threshold of its own statistic at
+  /// `detector.false_alarms_per_ping`; `cfar_pfa` is then not used. false with cell_peak false: "mean", the detector
+  /// until then, line for line. cell_peak with this set is refused.
+  bool cell_multiscale = true;
+  DetectorOptions detector;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -102,6 +110,9 @@ struct ChainOptions {
 
 struct ReportDetection {
   double range_m, bearing_deg, snr_db;
+  double extent_m = -1.0;                            ///< >= 0: the cluster's extent in range (multiscale detector)
+  double first_range_m = 0.0;                        ///< where that extent begins: the detection covers [first_range_m - cell / 2, + extent_m]
+  std::vector<Arrival> arrivals{};                   ///< its arrivals along range (detections.hpp); reported when there are two or more
   // With stacked rows (Report::rows > 0):
   bool elevation_valid = false;                      ///< an elevation was found with enough quality
   double elevation_deg = 0.0, elevation_sigma_deg = 0.0, elevation_quality = 0.0;  ///< level-referenced, up positive
@@ -165,6 +176,16 @@ void prepare(PingRecord& record, Backend backend = Backend::Host, int device = 0
 std::vector<float> range_bearing_power(const PingRecord& record, const std::vector<double>& ranges,
                                        const std::vector<double>& bearings, bool hann, Backend backend, int device = 0);
 
+/// The compressed, beamformed COMPLEX samples of one line of hydrophones at `ranges` (m, any spacing; the map's own
+/// is a quarter of a metre for 4-6 kHz) along one bearing (rad from broadside, the map's convention): what the map's
+/// power is the squared magnitude of. For a module that needs the arrival structure inside a detection (the delay and
+/// phase between a direct and a surface echo): take the detection's `first_range` and `extent` (or its `arrivals`) and
+/// its bearing, and ask for the samples over that window. `record` must be prepared (`prepare`; LiveChain::process
+/// leaves it so); with stacked rows pass one row's record (`row_record`) per call: the chain adds the rows in POWER,
+/// and their complex sum is not the map. The phase is that of the backprojection kernel (range from the line's centre).
+std::vector<std::complex<float>> beam_samples(const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann,
+                                              Backend backend = Backend::Host, int device = 0);
+
 class LiveChain {
  public:
   explicit LiveChain(const ChainOptions& options = {});
@@ -174,6 +195,9 @@ class LiveChain {
   const ChainOptions& options() const { return opt_; }
   /// What the first ping's record resolved (derive.hpp); an empty JSON object before it.
   std::string resolved_json() const { return resolved_ ? defaults_.json() : "{}"; }
+  /// The multiscale detector's plan for the last map (detector.hpp): lengths, looks, thresholds; "{}" when it is not in use.
+  std::string detector_json() const { return planned_ ? plan_.json() : "{}"; }
+  const DetectorPlan& detector_plan() const { return plan_; }
   bool resolved() const { return resolved_; }
   SoundSpeedLadder& ladder() { return ladder_; }
   // The last ping's map, for display and taps.
@@ -188,6 +212,12 @@ class LiveChain {
   SoundSpeedLadder ladder_;
   std::int64_t pings_ = 0;
   std::int64_t cell_samples_ = 1;   ///< fine samples per range cell in the last map
+  std::vector<float> fine_;         ///< the map before it is averaged into cells (multiscale detector), rows added
+  std::vector<double> fine_ranges_;
+  std::vector<float> background_;   ///< the detector's background of each cell (multiscale detector)
+  DetectorPlan plan_;
+  bool planned_ = false;
+  std::int64_t plan_cells_ = 0, plan_train_ = 0, plan_rows_ = 0;
   bool have_origin_ = false;
   Vec3d origin_;
   std::int64_t t0_ns_ = 0;
