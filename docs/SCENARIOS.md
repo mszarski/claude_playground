@@ -510,22 +510,22 @@ attached to it as later arrivals; one is called static.
 ![popoto_12km animation](figures/popoto_12km.gif)
 
 **What frequency and power reach 12 km.** `tools/popoto_range_study.py` and `DESIGN.md`
-section 5: with spherical spreading, a +25 dB target, a 1 s pulse and 15.6 dB in one row at the
+section 5: with spherical spreading, a +25 dB target, a 1 s pulse and 15.8 dB in one row at the
 beamformer output (what the chain's own detector needs of one row for a detection probability of
-0.5 on one ping, `buildspec.detection`; 17.3 dB for 0.9; the figure was a typed 13 dB before),
+0.5 on one ping, `buildspec.detection`; 17.4 dB for 0.9; the figure was a typed 13 dB before),
 
 - the present 27.5 kHz band cannot do it (about 322 dB would be needed; absorption alone
   is about 136 dB over the round trip), and on the same budget reaches about 2.7 km;
 - the best frequency is **4 to 6 kHz**;
 - there, 32 hydrophones at half-wavelength spacing need **198 dB re 1 µPa at 1 m**, about
-  501 W of acoustic power from an omnidirectional projector; 16 need 201 dB (1001 W),
-  64 need 195 dB (250 W).
+  515 W of acoustic power from an omnidirectional projector; 16 need 201 dB (1030 W),
+  64 need 195 dB (257 W).
 
 `popoto_long_range` was sized on the typed 13 dB with 2 dB in hand: 32 hydrophones at 15 cm (4.8 m),
 4–6 kHz, 1 s, 197 dB (about 420 W acoustic if omnidirectional; electrical power depends on
-a projector not yet chosen). Against the detector's own figure one row has -1.0 dB of margin at 12 km
-in free field (detection probability 0.24 on one ping), two rows +1.5 dB (0.89), three
-+3.0 dB (0.99). In this scenario, 100 m of isovelocity water over sand:
+a projector not yet chosen). Against the detector's own figure one row has -1.1 dB of margin at 12 km
+in free field (detection probability 0.22 on one ping), two rows +1.4 dB (0.87), three
++2.9 dB (0.99). In this scenario, 100 m of isovelocity water over sand:
 
 | Quantity | Result |
 | --- | --- |
@@ -756,7 +756,7 @@ scenarios also state a bounce order far below what the energy rule of D-105 woul
 | `popoto_elevation_free` | Three rows on the face, rolled 3 degrees, three targets near 1 km above, level with and below the vehicle, free field: the reported depths must be the targets'. |
 | `popoto_elevation_shallow` | Three rows at 30 m in 100 m of water over sand, a target at 50 m depth 1 km away; image-source multipath to second order. |
 | `popoto_elevation_rehearsal` | The full stacked-row system as it would run: raw 102.4 kHz samples on twelve boards with their own clocks, the vehicle rolled and rolling, a deep and a shallow target near 1 km. Chain: `configs/deploy/popoto_elevation_rehearsal.yaml`. |
-| `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes (`STATUS.md`, open item 6). |
+| `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes, and the depth sigma now says so (`STATUS.md`, open item 6). |
 
 ### The staged builds: trials in open water
 
@@ -808,7 +808,8 @@ eigenrays from a flat surface.
 
 Results for the last five groups are tables, not figures: `RESULTS.md` ("Deployment
 defaults: before and after", "Water that changes with range", "A trial in fjord-type water
-against the open-water rehearsal"), `docs/figures/fjord_rehearsal.md`,
+against the open-water rehearsal", and the regenerated fjord and 12 km tables in "Six fixes
+after the first whole-suite run"), `docs/figures/fjord_rehearsal.md`,
 `docs/figures/ssp_range_study.md`, and `docs/design/direct_sound_study.json`.
 
 ## What no scenario has yet

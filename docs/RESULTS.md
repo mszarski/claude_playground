@@ -634,23 +634,25 @@ measurement of that product.
 
 Source: `tools/popoto_range_study.py`, `docs/design/popoto_range_study.json`, checked against
 the sonar equation in `tests/python/test_design.py`. Target +25 dB (a placeholder), 1 s
-pulse, wind 5 m/s, spherical spreading plus absorption, and 15.6 dB in one row at the
+pulse, wind 5 m/s, spherical spreading plus absorption, and 15.8 dB in one row at the
 beamformer output: what the chain's detector needs of one row on `popoto_face_1x32` for a
-detection probability of 0.5 on one ping (17.3 dB for 0.9; `DECISIONS.md` D-117). Source
-levels are RMS.
+detection probability of 0.5 on one ping (17.4 dB for 0.9; `DECISIONS.md` D-117, D-134).
+Source levels are RMS.
 
 | Array | Best frequency | Source level | Acoustic power, omnidirectional |
 | --- | --- | --- | --- |
-| 8 hydrophones | 4.2 kHz | 204 dB | 2000 W |
-| 16 | 4.2 kHz | 201 dB | 1000 W |
-| 32 | 4.2 kHz | 198 dB | 500 W |
-| 64 | 4.2 kHz | 195 dB | 250 W |
+| 8 hydrophones | 4.2 kHz | 204 dB | 2060 W |
+| 16 | 4.2 kHz | 201 dB | 1030 W |
+| 32 | 4.2 kHz | 198 dB | 515 W |
+| 64 | 4.2 kHz | 195 dB | 257 W |
 | the present 8 at 27.5 kHz | — | 322 dB (not possible); 190 dB reaches 2.7 km | — |
 
 Until D-117 this table was computed for a typed 13 dB and read 3 dB lower in every row
 (201, 198, 195, 192 dB; 319 dB and 2.8 km for the present array). The shipped design
 (32 hydrophones, 197 dB) was sized on that table plus 2 dB; against the detector's need it
-is 1.0 dB short with one row ("The 12 km margins with the detector's threshold", below).
+is 1.1 dB short with one row ("The 12 km margins with the detector's threshold" and
+"Six fixes after the first whole-suite run", below). The table was regenerated after the
+detector's tests were recounted (D-134): 15.6 dB became 15.8 dB and each power rose by 3 %.
 
 Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way at 4 kHz
 (70.4 dB against 84.6 dB including absorption): there, noise alone would ask for only
@@ -1784,19 +1786,24 @@ A point echo needs 15.1 dB of one row's SNR for a detection probability of 0.5 w
 old detector needed 19.7 dB, with one, two or three rows alike (its threshold did not move
 with rows). The best this architecture can do for a point echo at the same budget is
 12.5 dB; the 2.6 dB between are the Hann aperture window (1.76 dB), the echo falling
-between map samples (0.5 dB), and the second test and search factor (0.3 dB).
+between map samples (0.5 dB), and the second test and search factor (0.3 dB). These are
+from before the detector recount of D-134, which added 0.11 to 0.15 dB ("Six fixes after
+the first whole-suite run").
 
 **What each build's detector needs** (`buildspec.detection`, from
 `live.budget_threshold_db`; `docs/DESIGN.md` prints the same):
 
 | Build | Rows | One row's SNR for a detection probability of 0.5 / 0.9 |
 | --- | --- | --- |
-| `popoto_face_1x32` | 1 | 15.6 / 17.3 dB |
-| `popoto_face_2x32` | 2 | 13.1 / 14.7 dB |
-| `popoto_face_3x32` | 3 | 11.6 / 13.2 dB |
-| `popoto_static_2x32` | 2 | 12.8 / 14.5 dB |
-| `popoto_static_3x32` | 3 | 11.4 / 13.0 dB |
-| `popoto_testauv_1x32` | 1 | 15.2 / 16.8 dB |
+| `popoto_face_1x32` | 1 | 15.8 / 17.4 dB |
+| `popoto_face_2x32` | 2 | 13.2 / 14.8 dB |
+| `popoto_face_3x32` | 3 | 11.8 / 13.4 dB |
+| `popoto_static_2x32` | 2 | 13.0 / 14.6 dB |
+| `popoto_static_3x32` | 3 | 11.5 / 13.1 dB |
+| `popoto_testauv_1x32` | 1 | 15.3 / 17.0 dB |
+
+These are the values since D-134; before it each was 0.11 to 0.15 dB lower (both to two
+decimals in "Six fixes after the first whole-suite run").
 
 **Extended echoes** (Monte Carlo of the statistic alone; total energy needed for a
 detection probability of 0.5, stated as a point's peak SNR):
@@ -1847,6 +1854,8 @@ twice. The per-sample false-alarm probability is right for both row counts (exce
 1.02 to 1.07 times the design); the excess comes from the search factor and the cell
 mean's looks (`STATUS.md`, open item 14). At the default budget (one false detection in a
 thousand pings) 220 one-row noise pings gave none, and 90 three-row pings gave one.
+Superseded: the search factor and the looks were since replaced and measured again on 400
+and 300 pings per row count ("Six fixes after the first whole-suite run", D-134).
 
 **Timing** (C++ chain, host, 2 threads, median seconds per ping, old → new): `popoto_12km`
 0.603 → 0.619; `popoto_12km_3row` 1.775 → 1.788; `popoto_static_trial_3row`
@@ -1874,22 +1883,28 @@ on one ping, rows included (D-117).
 One row's SNR at 12 km is 14.6 dB on every face build. The two-row margin is +1.55 dB,
 which the detector package's own table rounded to +1.6 and `DESIGN.md` prints as +1.5.
 The source level is "not chosen" for the test AUV and the static array; their rows use the
-face's 197 dB.
+face's 197 dB. Since the detector recount (D-134) the "new" margins are -1.1 / +1.4 /
++2.9 dB and the probabilities 0.22 / 0.87 / 0.99 on the face; the table as it stands now
+is in "Six fixes after the first whole-suite run".
 
 Other consequences, from the same files:
 
 - At 194 dB with a 1 s pulse three rows have 0.0 dB of margin (detection probability
-  0.50; it was +2.4 dB) and two rows -1.5 dB (0.16; it was +1.0 dB).
+  0.50; it was +2.4 dB) and two rows -1.5 dB (0.16; it was +1.0 dB). Since D-134: -0.1 dB
+  (0.46) and -1.6 dB (0.13).
 - Depth plan, three rows, deep non-ducting water, ship: the best own depth is still 225 m;
   the margin there goes from +11.3 to +9.0 dB, and the band of own depths that hold it
-  narrows from 110–280 m to 125–265 m (one row: from 140–260 m to 165–250 m).
+  narrows from 110–280 m to 125–265 m (one row: from 140–260 m to 165–250 m). These are
+  from before the detector recount of D-134; the planner was not regenerated
+  (`STATUS.md`, open item 37).
 - Through the chain (`tools/popoto_12km_study.py` → `docs/design/popoto_12km.json`): the
   ship is detected on 6 of 6 pings in the image-source, noise-only and Bellhop cases with
   one, two and three rows, with a mover track confirmed at ping 3 in each, and with one
   and two rows at 12 km in the gravel and winter-sand waters; it is not detected in
   `deep_silt_1000m` or `summer_mud_60m`. In Bellhop's field one detection spans 112 to
-  118 m and its first arrival is within 4 m of the ship. The file predates the
-  deployment defaults (`STATUS.md`, open item 5).
+  118 m and its first arrival is within 4 m of the ship. The file has since been
+  regenerated with the shipped deployment files and three rows in every water ("Six fixes
+  after the first whole-suite run").
 
 ## The link budget against the chain: where the gap went
 
@@ -2007,7 +2022,8 @@ Other cases: no false depth in 140 single-arrival echoes; noise-only windows exc
 threshold in 0.5 to 2 %. In 100 m over sand, a 70 m target at 2 km reads 70.1 m with the
 bottom in the pattern and 99.7 m without (flagged `bottom_unmodelled`). With two rows at
 6 km the multipath depth (150.1 ± 0.6 m) selects the true elevation among five possible
-ones on both engines. Where it fails is in `STATUS.md`, open items 9, 10 and 13. Time: 20
+ones on both engines. Where it fails is in `STATUS.md`, open items 9, 10 and 13 (item 10,
+the test AUV in 30 m of water, now answers `unresolvable`). Time: 20
 to 45 ms per examined detection at 6 to 12 km, 80 ms at 3 km, 0.2 s at 1 km, one core.
 
 ## Depth by rung: what the profile knowledge is worth
@@ -2150,19 +2166,25 @@ failing `rehearsal` test the same scenario reads, per ping (true elevation -0.57
 no boundaries -0.47°, -0.43°, -0.30° (depth 55, 53, 46 m for 60 m); with the surface only
 +0.19° (20 m); with both boundaries and no roll rate +0.03° to +0.09° (25 to 29 m); as
 generated, with a roll rate of 1.5° a second, -1.37°, -1.39°, +0.36° (98, 97, 11 m). The
-reported depth sigma is 10.9 m against the last ping's 49 m of error.
+reported depth sigma is 10.9 m against the last ping's 49 m of error. Superseded: with
+`elevation.multipath_sigma` (D-133) the sigma on those pings is 25.0, 24.4 and 41.0 m and
+all six builds pass 7 of 7; the 12 km rows of the table were also rerun ("Six fixes after
+the first whole-suite run").
 
 Multipath depth on the test AUV (`ssp_front_testauv_trial_1row`, target at 15 m in 30 m of
 water): the flat pattern gives 30.3 ± 3.5 m on 4 of 4 pings with the note
 `bottom_unmodelled` in the water that changes with range; through rays with flagged depths
-withheld it gives no depth (reason `window`) in both waters.
+withheld it gives no depth (reason `window`) in both waters. Superseded: `window` was a
+bug; the answer is now `unresolvable` (D-136, "Six fixes after the first whole-suite
+run").
 
 ## Water that changes with range
 
 Source: `GPUSONAR_BELLHOP=... tools/ssp_range_study.py --out docs/figures/ssp_range_study.md`
 (about 3 minutes); `tests/python/test_ssp_range.py`. The committed table was regenerated
 with the shipped deployment files (commit `29d4505`), so its "as deployed" rows are the
-"after" rows above. The profiles are illustrative.
+"after" rows above. It was regenerated again at `4e153cb`; only the two test-AUV multipath
+rows changed (`unresolvable`). The profiles are illustrative.
 
 **Bellhop's 2-D field against closed forms:**
 
@@ -2221,8 +2243,10 @@ this model the simulator has nothing like the measured tail.
 ## A trial in fjord-type water against the open-water rehearsal
 
 Source: `tools/fjord_rehearsal.py --ranges 300,1000,2000` →
-`docs/figures/fjord_rehearsal.md` and `.json`, **made at commit `f2bf420`; the tool fails
-on three of six variants at head** (`STATUS.md`, open item 18). C++ synthesis, Bellhop for
+`docs/figures/fjord_rehearsal.md` and `.json`, **as made at commit `f2bf420`. The tool has
+since been fixed and the file regenerated; the numbers below are the earlier ones, and the
+regenerated ones are in "Six fixes after the first whole-suite run"** (`STATUS.md`, open
+item 18). C++ synthesis, Bellhop for
 the fjord's water, the C++ chain of each build's deployment file as shipped then; four
 pings and one seed per variant. The fjord's profile, section and seabed are illustrative;
 the own-ping level is a what-if that nothing measured. Target SNR in dB:
@@ -2399,6 +2423,220 @@ Bellhop with the surface image only 0.1 dB (0.6 dB in the 10 m / 4 m null).
 **Passive tonal analysis** (`tests/python/test_tonal.py`): the Goertzel sum equals the FFT
 bin to 1e-9; a tone in white noise on 32 hydrophones is recovered within 2 % in amplitude,
 0.5 dB in SNR, 0.1° in bearing; frequency error 1.7 to 1.8 times the Cramér-Rao bound.
+
+## Six fixes after the first whole-suite run
+
+Source: commits `565d69e` to `4e153cb` (decisions D-133 to D-136; `PHYSICS_NOTES.md`
+Sec. 29). CPU build. Checked by the generator's self-tests (six builds, 7 of 7 each, both
+engines), `ctest -E pytest` (136 of 136, one CUDA test skipped) and nineteen pytest files
+run one at a time. **Not run for these commits: the whole pytest suite, any GPU job, any
+Bellhop check of the new depth-sigma term in refracting water.** Where an older section
+of this file states a value these supersede, a line there points here.
+
+### The detector's thresholds, before and after (D-134)
+
+Source: `buildspec.detection` → `docs/DESIGN.md`, `docs/design/derived.json`,
+`popoto_range_study.json`, `projector_requirements.json` (regenerated);
+`tests/python/test_buildspec.py`. One row's budget SNR each build's detector needs, at the
+build's own window and the default false-alarm budget:
+
+| Build | Rows | Detection probability 0.5: before, after | 0.9: before, after | A detection's `snr_db` at least: before, after |
+| --- | --- | --- | --- | --- |
+| `popoto_face_1x32` | 1 | 15.65, 15.77 dB | 17.25, 17.38 dB | 13.50, 13.61 dB |
+| `popoto_face_2x32` | 2 | 13.09, 13.24 | 14.70, 14.84 | 11.07, 11.21 |
+| `popoto_face_3x32` | 3 | 11.64, 11.78 | 13.24, 13.37 | 9.76, 9.89 |
+| `popoto_static_2x32` | 2 | 12.82, 12.96 | 14.47, 14.60 | 10.82, 10.95 |
+| `popoto_static_3x32` | 3 | 11.37, 11.52 | 13.02, 13.14 | 9.52, 9.65 |
+| `popoto_testauv_1x32` | 1 | 15.16, 15.27 | 16.85, 16.96 | 13.02, 13.12 |
+
+The rise is 0.11 to 0.15 dB. About 0.02 dB of it is the looks of a cell mean (5.48, from
+the replica's autocorrelation, where the plan took 5.80; 5.42 measured on the map); the
+rest is the count of tests. No deployment file changed (`--check-shipped` passes).
+
+**The 12 km design point with them** (reference ship of +25 dB, free field, 5 m/s wind,
+197 dB; one row's SNR at 12 km is 14.6 dB on the face, 4.6 dB on the static frame's row
+and 2.5 dB on the test AUV's):
+
+| Build | Rows | Margin at 12 km: before, after | Detection probability: before, after | Reach, ship (at 0.9) / small target, after |
+| --- | --- | --- | --- | --- |
+| `popoto_face_1x32` | 1 | -1.0, -1.1 dB | 0.24, 0.22 | 11.5 km (10.7) / 4.7 km |
+| `popoto_face_2x32` | 2 | +1.5, +1.4 | 0.89, 0.87 | 12.7 km (11.9) / 5.3 km |
+| `popoto_face_3x32` | 3 | +3.0, +2.9 | 0.99, 0.99 | 13.4 km (12.6) / 5.7 km |
+| `popoto_static_2x32` | 2 | -8.2, -8.3 | 0.00, 0.00 | 8.5 km / 3.3 km |
+| `popoto_static_3x32` | 3 | -6.7, -6.9 | 0.00, 0.00 | 9.0 km / 3.5 km |
+| `popoto_testauv_1x32` | 1 | -12.7, -12.8 | 0.00, 0.00 | 6.9 km / 2.6 km |
+
+Reach moved by 0.1 km at most. 32 hydrophones in one row still need 198 dB for 12 km
+(197.9 dB, 515 W acoustic, omnidirectional). At 194 dB with a 1 s pulse three rows now
+have -0.1 dB of margin (detection probability 0.46; it was 0.0 dB and 0.50) and two rows
+-1.6 dB (0.13; it was -1.5 dB and 0.16). **Not regenerated:** the depth planner
+(`docs/design/popoto_depth_planner.json`, `.png`) and `docs/figures/fjord_depth_plan.md`,
+so the depth-plan margins printed in this file and in `DESIGN.md` are 0.11 to 0.15 dB
+kind.
+
+### False alarms: the old factor, the measured constants, the verification
+
+Source: `tools/detector_search_factor.py` (measures the constants; `--verify` checks the
+whole detector); `tests/python/test_detector.py`, `tests/cpp/test_detector.cpp`.
+400 noise-only pings for each of one, two and three rows of 32, 0.8 km window, each test
+alone, counted on the chain's own map with the detector's own code.
+
+| Test, rows | Flat factor 2.5: found / asked at 10, 3, 1, 0.3, 0.1 a ping | Constant with the growth law, same budgets | Pooled, 3 a ping and fewer |
+| --- | --- | --- | --- |
+| sample, 1 | 0.83, 0.86, 0.85, 0.93, 1.05 | 0.215, 0.197, 0.179, 0.176, 0.184 | 0.191 ± 0.005 |
+| sample, 2 | 1.05, 1.14, 1.19, 1.28, 1.38 | 0.215, 0.211, 0.203, 0.201, 0.201 | 0.208 ± 0.005 |
+| sample, 3 | 1.08, 1.19, 1.35, 1.43, 1.60 | 0.188, 0.189, 0.198, 0.194, 0.204 | 0.192 ± 0.004 |
+| cell mean, 1 | 0.63, 0.69, 0.67, 0.64, 0.70 | 0.524, 0.534, 0.488, 0.445, 0.465 | 0.515 ± 0.015 |
+| cell mean, 2 | 0.67, 0.73, 0.75, 0.75, 0.82 | 0.528, 0.539, 0.524, 0.499, 0.525 | 0.532 ± 0.015 |
+| cell mean, 3 | 0.71, 0.79, 0.92, 1.08, 1.18 | 0.550, 0.571, 0.627, 0.704, 0.730 | 0.598 ± 0.016 |
+
+Counts are 28 to 4327 an entry; the cell-mean rows were measured with the looks corrected.
+Pooled over budgets of 3 to 0.1 a ping the flat factor ran 0.86, 1.16 and 1.24 times the
+budget for one, two and three rows. The pooled constants are in the code as
+`kSearchSample` and `kSearchMean`. The three-row cell mean's constant rises as the budget
+tightens (0.55 to 0.73): the growth law does not hold it, and the cause is not found.
+
+**The whole detector with the constants in** (both tests; 300 other noise-only pings per
+row count):
+
+| Rows | Found / budget at 3, 1, 0.3 a ping | Counts |
+| --- | --- | --- |
+| 1 | 0.96, 0.92, 0.89 | 860, 276, 80 |
+| 2 | 0.91, 0.93, 0.90 | 817, 278, 81 |
+| 3 | 0.87, 0.86, 0.79 | 784, 258, 71 |
+
+Statistical error is 0.03, 0.06 and 0.10 at the three budgets. All are within about 20 %
+of the budget, and under it: a place both tests flag is one detection, and each test was
+calibrated alone. **Nothing is measured at the default budget** (one false detection in a
+thousand pings; about 100 000 pings would be needed). By its measured trend the three-row
+cell mean could run 1.5 times over its share there. The constants belong to one map
+(bearings every 0.5 degrees, 2 m cells of 8 samples, Hann window, 15 m merge).
+
+### Two stacked rows at 3 km: what they read, and the sigma they now state (D-133)
+
+Source: the `popoto_face_2x32` rehearsal scenario with the target moved through the
+column, three pings each, C++ chain (`PHYSICS_NOTES.md` Sec. 29.1);
+`tests/python/test_multipath_sigma.py`. Two rows 1.5 m apart, array 30 m deep in 100 m of
+water, target at 3 km.
+
+| Target depth | Elevation read | Depth reported |
+| --- | --- | --- |
+| 10 m | +0.49° to +0.57° | 0 to 4 m |
+| 25 m | +0.36° to +0.42° | 8 to 11 m |
+| 45 m | +0.37° to +0.53° | 2 to 11 m |
+| 60 m | -1.43° to -1.38° | 95 to 98 m |
+| 80 m | -1.33° to -1.21° | 93 to 100 m |
+| 95 m | -1.49° to -1.41° | 92 to 96 m |
+
+The reading is the sea surface (+0.57°) or the sea bed (-1.34°). It says in which part of
+the column the target is and no more.
+
+| Case | Depth error | Stated sigma: before, with `multipath_sigma` | Error in sigmas: before, after |
+| --- | --- | --- | --- |
+| Rehearsal self-test, target at 60 m, three pings (98.5, 97.0, 11.0 m read) | 38.5, 37.0, 49.0 m | 14.5, 14.5, 10.9 m; 25.0, 24.4, 41.0 m | 2.6, 2.5, 4.5; 1.54, 1.52, 1.19 |
+| The 18 pings of the sweep | | 19 to 48 m | worst 1.53 |
+| Two rows at 1 km, targets at 10, 30, 60, 90 m, 12 pings | 0.4 to 6.3 m | 3.9 to 38 m | at most 0.59 |
+| Three rows at 1 km, target at 60 m | 1.1 to 1.6 m | 3.9 m (the term 1.8 m; not flagged) | |
+
+Both engines give the same rehearsal figures, and the three depths are flagged
+`depth_multipath_limited`. At 1 km with two rows the term is too wide by three to five
+times for the targets at 10 and 30 m (22 to 38 m stated). The weak-pull limit agrees with
+its closed form within 5 % in three geometries. The `shallow` self-test of the two-row
+builds passes with a 118 m sigma that comes from the attitude-gap term, which was there
+before.
+
+### Multipath depth through rays on the test AUV (D-136)
+
+Source: `docs/figures/ssp_range_study.md` (regenerated; only these two rows changed),
+`tests/python/test_refraction_rays.py`. `ssp_front_testauv_trial_1row`: target 15 m deep
+in 30 m of water, array and projector at 10 m, 2 kHz of band.
+
+| State | Answer |
+| --- | --- |
+| before | no depth, reason `window`, on every detection (a NaN delay sized the beam window) |
+| with the window fixed only | 29.8 m for the 15 m target (the 0.6 m of water left was fitted) |
+| as committed | no depth, `multipath_reason: unresolvable`, `multipath_searched_m` [29.3, 29.9] m, in both waters and with or without a bottom model |
+
+The surface echo separates only from 29.3 m down, the sea bed is at 30 m, and the depth
+step the delay can resolve is 9.8 m. The flat pattern is unchanged.
+
+### The FLS merge on six full scenes (D-135)
+
+Source: `tools/gallery.py` with `gallery.FLS_MERGE` off (head) and on (merged); CPU, one
+simulation each; `tests/python/test_realistic_scenes.py`, `test_detect.py`. The merge is
+the multiscale detector's grouping rule (`detect.group_flagged`) with the chain's own
+distances, 1.9 m in range and 0.73°.
+
+| Scene | Tracks: `gallery.json` / head / merged | Named objects, in the same order |
+| --- | --- | --- |
+| `fls_120k_transit` | 7 / 7 / 6 | pinnacle 0.62 / 0.53 / 0.03 m/s; others unchanged |
+| `fls_170k_transit` | 4 / 4 / 3 | anchored boat static / uncertain / static (0.03 / 0.14 / 0.02 m/s) |
+| `fls_330k_transit` | 2 / 4 / 3 | anchored boat not tracked / 1.68 m / 2.29 m; pinnacle not tracked in all three |
+| `fls_170k_traffic` | 11 / 13 / 8 | anchored boat 0.16 / 0.18 / 0.18 m/s; false movers 3 / 2 / 0 |
+| `fls_120k_cluttered_seabed` | 65 / 64 / 36 | line tracks 15 / 16 / 0; false movers 4 / 4 / 7; anchored boat 0.02 / 0.03 / 0.32 m/s |
+| `fls_120k_rough_surface` | 57 / 56 / 52 | boat under way 4.72 / 4.72 / 8.08 m/s (true 5.0), mover / mover / uncertain |
+
+In the thinned `fls_170k_traffic` test the merge takes the anchored boat from 1.92 to
+0.29 m/s. The thinned `fls_120k_transit` test fails with it (pinnacle 1.6 m/s against a
+1.2 limit). It is left off; the slowest scene, `fls_120k_rough_surface`, took 4.7 minutes.
+
+### The fjord rehearsal, regenerated
+
+Source: `tools/fjord_rehearsal.py --ranges 300,1000,2000` →
+`docs/figures/fjord_rehearsal.md` and `.json` (commit `506e959`; the file's header says
+`b808d73`, one commit earlier, before the scoring change). The earlier table was from
+`f2bf420`, before the detector rework. Target SNR in dB, earlier → regenerated:
+
+| Build, target | open water | profile and section | + late tail | fjord as shipped | + own ping at -43 dB (what-if) |
+| --- | --- | --- | --- | --- | --- |
+| test AUV, 1 row, 10 dB target at 500 m | 47.5 → 55.5 | 39.4 → 49.5 | 26.3 → 33.5 | 26.5 → 33.8 | not detected, both |
+| the same at 300 m | 55.8 → 62.9 | 52.8 → 61.5 | 29.9 → 46.5 | – | not detected, both |
+| the same at 1000 m | 32.3 → 40.9 | 31.0 → 39.5 | 22.5 → 28.4 | – | not detected, both |
+| the same at 2000 m | 16.3 → 26.2 | 28.6 → 37.6 | 24.4 → 32.4 | – | 24.2 → 32.0 |
+| static, 2 rows, 15 dB target at 2.6 km, 1 s pulse | 32.3 → 39.6 | 34.9 → 43.9 | 15.0 → 43.6 | 15.1 → 50.0 | 15.0 → 43.5 |
+| static, 3 rows, 10 dB target at 150 m | 68.6 → 76.6 | 64.0 → 71.6 | 24.6 → 29.1 | 24.6 → 29.1 | 14.0 → not detected (0 of 4 pings) |
+
+- The tool ran every variant: the three that carry the open-water noise into the fjord
+  scenario name it under `environment_overrides`.
+- The two-row tail variants moved most because of the scoring. The detector reports the
+  echo and the basin tail as one detection at their energy-weighted range, 61 to 64 m
+  behind the target; the tool had scored that detection as "behind" the target. It now
+  takes a detection's first arrival and extent.
+- A track on the target is confirmed at ping 3 in every case where it is detected. In the
+  three-row own-ping what-if the target is not detected and a track appears at ping 4 (it
+  was detected on 4 of 4 pings, track at ping 3).
+- Detections that are not the target: at most 7.2 a ping (they were up to 56). Tracks not
+  on the target: none with the deployed settings (they were up to 54); one alternative
+  setting (CFAR guard 30 m, train 100 m, fjord as shipped, one row) leaves 2.
+- `chain.min_snr_db: 15` on the one-row fjord variant leaves 1.5 detections a ping, no
+  track off the target and the target's SNR unchanged (33.8 dB).
+- Range: the detection reads 24 to 31 m long at 500 m and 21 to 27 m at 1 km, its first
+  arrival within 2 m; at 2.6 km the detection reads 42 to 64 m long and its first arrival
+  6 to 8 m.
+- Depth, three rows at 150 m: 21.4 to 21.6 m for a target at 18.0 m (stated sigma 2.7 m)
+  as deployed, 18.1 to 18.4 m with the profile given. Two rows at 2.6 km with the tail:
+  41 m for 60 m with 127 m of sigma.
+
+### The 12 km study, rerun with the shipped deployment files
+
+Source: `tools/popoto_12km_study.py` with Bellhop set → `docs/design/popoto_12km.json`
+(commit `1efa598`). All 21 cases, six pings each; the four `popoto_env_*` waters had never
+been run with three rows. Cells are one / two / three rows.
+
+| Case | Pings detected | Median SNR, dB | Track confirmed at ping | Pings with several possible elevations |
+| --- | --- | --- | --- | --- |
+| `popoto_12km`, image-source paths | 6 / 6 / 6 | 17.8 / 14.9 / 14.2 | 3 / 3 / 3 | – / 5 / 6 |
+| the same, noise only | 6 / 6 / 6 | 16.4 / 14.9 / 14.4 | 3 / 3 / 3 | – / 5 / 5 |
+| `popoto_12km`, Bellhop (100 m over sand) | 6 / 6 / 6 | 24.0 / 22.4 / 23.5 | 3 / 3 / 3 | – / 6 / 4 |
+| `popoto_env_deep_silt_1000m`, Bellhop | 0 / 0 / 0 | – | none | – |
+| `popoto_env_gravel_30m`, Bellhop | 6 / 6 / 6 | 33.9 / 35.0 / 35.1 | 3 / 3 / 3 | – / 0 / 0 |
+| `popoto_env_summer_mud_60m`, Bellhop | 0 / 0 / 0 | – | none | – |
+| `popoto_env_winter_sand_200m`, Bellhop | 6 / 6 / 6 | 24.7 / 32.9 / 33.9 | 3 / 3 / 3 | – / 6 / 6 |
+
+Detection, SNR and tracks are identical to the earlier file in every case that existed.
+With `sector_from_rays` more detections carry the ambiguity flag than before (two rows
+were 0 to 3 of 6 pings, three rows 1), except in the gravel water, where none does. The
+depth sigma at 12 km is 2960 to 3010 m.
 
 ## Not yet measured
 

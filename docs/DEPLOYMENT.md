@@ -636,9 +636,8 @@ of decay per second in the measured fjord).
 
 Rehearse with `configs/scenarios/fjord_*_trial_*.yaml`, replacing the profile, the section and the tail's three
 numbers by the site's as soon as a cast, a chart and one sounding of a pinger exist
-(`tools/basin_reverberation_fit.py` shows the fit). `tools/fjord_rehearsal.py` fails on three of its six variants at
-the present head (`STATUS.md`, open item 18); the committed table is from before the deployment-default change, which
-was measured not to move any fjord figure.
+(`tools/basin_reverberation_fit.py` shows the fit). `tools/fjord_rehearsal.py` runs on every variant and its committed table is from the
+present detector (`STATUS.md`, open item 18).
 
 ## Listening without transmitting
 

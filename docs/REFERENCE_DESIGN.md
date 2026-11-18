@@ -40,7 +40,7 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    | Self-test | What is simulated | Pass |
    | --- | --- | --- |
    | `free` | free field, three targets above, level with and below the array | range within 3 m, bearing within 1°; three or more rows: depth within 3 m + 0.3% of range; two rows that repeat: the true elevation among the candidates |
-   | `shallow` | surface and bottom echoes, the far range | range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing; depth within 3 m + range × sin 0.7° (the multipath allowance) |
+   | `shallow` | surface and bottom echoes, the far range | range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing; on every ping the true depth within two of the stated sigma, and the sigma's multipath term no wider than the water column (D-133; a fixed allowance of 0.7° stood here before) |
    | `rehearsal` | raw samples at the boards' rate, every board on its own clock, the platform's attitude (rolling, or a tilted frame) | the boards synchronise under 1 µs; range within 6 m, bearing, depth |
    | `passing` | a target crossing at 3 m/s | one mover, speed within 1 m/s |
    | `submerged` | a mover of the spec's first submerged target class, at speed, the chain given NO sound-speed profile and no water depth | a track classed mover, speed within 1 m/s, heading within 15°; any depth it reports has the truth inside two sigma; with two rows the track exists while every detection lists several possible elevations. Skipped without `targets:` |
@@ -94,7 +94,8 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
 8. **What the design does not cover.** The projector's direct sound and the inputs' recovery are computed, not
    simulated. Reverberation-limited range is measured only in the shipped 12 km scenarios, not predicted for a
    new build (`performance.json` is noise-limited, spherical spreading). The bias multipath puts on elevation
-   in a shallow channel is in no reported sigma. Depth beyond a few hundred metres needs a sound-speed profile
+   in a shallow channel is in the depth sigma only where `elevation.multipath_sigma` is on (every generated
+   stacked-row file), with boundaries taken as perfect mirrors; it is not corrected. Depth beyond a few hundred metres needs a sound-speed profile
    nobody is assumed to have. Curved arrays, towed arrays, more than one projector, directional hydrophones,
    boards whose samples are not 24-bit, and a `port` look direction have not been run through the self-tests.
    The sparse Bayesian bearing kernels take at most 64 channels and raise an error for more (64 in a row; passive

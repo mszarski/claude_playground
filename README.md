@@ -9,9 +9,10 @@ backprojection kernel, the same config system and the same simulator.
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
 Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU and
 the CUDA backend has been run and benchmarked on rented GPUs. The long-range design is
-honest about where it stands: one long row at 197 dB is 1.0 dB short of detection at 12 km
+honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
-profile, and one generated build fails one of its self-tests. The full CPU suite and a GPU
+profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
+(the depth sigma now says so). The full CPU suite and a GPU
 job have not yet been rerun on the present tree. [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;
 [`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
@@ -205,7 +206,7 @@ Start with the first three.
 
 - [`docs/STATUS.md`](docs/STATUS.md): what works, how it was checked, what is open or known wrong, the owner's open questions.
 - [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory, references and benchmarks, each with the command or file that produces it.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md): every choice made where the paper, the brief or a reference is silent, with its reason (A-01 onward, D-01 to D-132).
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): every choice made where the paper, the brief or a reference is silent, with its reason (A-01 onward, D-01 to D-136).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the pieces fit, what runs on a GPU, and how to capture, inspect and re-inject data at every stage.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): the long-range array on a vehicle: one program, one YAML file, what the vehicle must provide, the staged build, refraction in operation, the detector, a checklist for a trial in a fjord or harbour, what is unconfirmed.
 - [`docs/REFERENCE_DESIGN.md`](docs/REFERENCE_DESIGN.md): how to go from a build spec to hardware, step by step, with every field of the spec.
@@ -368,7 +369,7 @@ platform and the operation; the sonar file, the deployment file, a parts list, d
 and checklists are generated from it, and seven self-tests run the generated chain on
 simulated pings. `docs/REFERENCE_DESIGN.md` walks through it; `docs/DEPLOYMENT.md` says
 what each report field means. The link budget's threshold is the chain's own detector's
-(`docs/DECISIONS.md` D-117), so margins and the chain agree to about half a dB.
+(`docs/DECISIONS.md` D-117, D-134), so margins and the chain agree to about half a dB.
 
 ## Run a whole chain from one YAML file
 

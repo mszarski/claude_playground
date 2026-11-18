@@ -42,7 +42,7 @@ Both conventions are printed wherever it matters.
 
 | Requirement | Value for the 12 km point (`popoto_face_3x32`) | Origin |
 | --- | --- | --- |
-| Source level | 197 dB re 1 µPa at 1 m rms; each dB is a dB of SNR. at 197 dB the ship at 12 km has -1.0 / +1.5 / +3.0 dB of margin with 1 / 2 / 3 rows (detection probability 0.24 / 0.89 / 0.99 on one ping); at 194 dB only three rows are still at the design probability (+0.0 dB, 0.50; two rows -1.5 dB, 0.16); 190 dB does not detect it | link budget, Sec. 1.1 |
+| Source level | 197 dB re 1 µPa at 1 m rms; each dB is a dB of SNR. at 197 dB the ship at 12 km has -1.1 / +1.4 / +2.9 dB of margin with 1 / 2 / 3 rows (detection probability 0.22 / 0.87 / 0.99 on one ping); at 194 dB three rows are just under the design probability (-0.1 dB, 0.46; two rows -1.6 dB, 0.13); 190 dB does not detect it | link budget, Sec. 1.1 |
 | Band | 4–6 kHz, 40% of the centre; response within 3 dB across it (mechanical Q of 2.4 or less), or voltage headroom to equalise | Sec. 1.2 |
 | Pulse, duty | 1 s every 17.9 s, 5.6%; 201 pings an hour | build file |
 | Acoustic power | 410 W omnidirectional (417 W with the rounded constant 170.8 the design text uses); less by the directivity index | Sec. 1.3 |
@@ -68,40 +68,40 @@ can only be made once D exists.
 Output SNR = SL − 2 TL + TS − NL + array gain + 10 log₁₀ T (`docs/DESIGN.md` Sec. 5): spherical spreading,
 Ainslie-McColm absorption (12 °C, 50 m), ambient noise at 5 m/s wind (51.5 dB re 1 µPa²/Hz at 5 kHz), ship +25 dB, small target +5 dB. The SNRs are
 ONE row's. *Needed* is what the chain's own detector, as the build deploys it, needs of one row's SNR for a detection
-probability of 0.5 on one ping with that many rows added: 15.6 / 13.1 / 11.6 dB for 1 / 2 / 3 rows on the face
-(17.3 / 14.7 / 13.2 dB for 0.9; `gpusonar.buildspec.detection`; a typed 13 dB with a row gain on top stood here before
+probability of 0.5 on one ping with that many rows added: 15.8 / 13.2 / 11.8 dB for 1 / 2 / 3 rows on the face
+(17.4 / 14.8 / 13.4 dB for 0.9; `gpusonar.buildspec.detection`; a typed 13 dB with a row gain on top stood here before
 and was 2.4 to 2.7 dB kinder). *Pd* is the detection probability the detector gives at the SNR of the row. Noise-limited: reverberation and the channel are not in
 it, and `docs/DESIGN.md` ("The 12 km design point") shows the water moves the answer by tens of dB while a row
 moves it by 2–4 dB. Long rows (32 at 0.15 m), 1 s pulse. *Tool:*
 
 | Rows | Source level (dB) | Needed (dB) | Ship at 6 km (dB) | Ship at 12 km (dB) | margin at 12 km (dB) | Pd at 12 km | Small at 6 km (dB) | Small at 12 km (dB) | Reach ship / small (km) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 190 | 15.6 | 23.6 | 7.6 | -8.0 | 0.00 | 3.6 | -12.4 | 8.6 / 3.3 |
-| 1 | 194 | 15.6 | 27.6 | 11.6 | -4.0 | 0.01 | 7.6 | -8.4 | 10.2 / 4.1 |
-| 1 | 197 | 15.6 | 30.6 | 14.6 | -1.0 | 0.24 | 10.6 | -5.4 | 11.5 / 4.7 |
-| 1 | 200 | 15.6 | 33.6 | 17.6 | +2.0 | 0.95 | 13.6 | -2.4 | 13.0 / 5.4 |
-| 1 | 203 | 15.6 | 36.6 | 20.6 | +5.0 | 1.00 | 16.6 | 0.6 | 14.5 / 6.3 |
-| 2 | 190 | 13.1 | 23.6 | 7.6 | -5.5 | 0.00 | 3.6 | -12.4 | 9.6 / 3.8 |
-| 2 | 194 | 13.1 | 27.6 | 11.6 | -1.5 | 0.16 | 7.6 | -8.4 | 11.3 / 4.6 |
-| 2 | 197 | 13.1 | 30.6 | 14.6 | +1.5 | 0.89 | 10.6 | -5.4 | 12.8 / 5.3 |
-| 2 | 200 | 13.1 | 33.6 | 17.6 | +4.5 | 1.00 | 13.6 | -2.4 | 14.3 / 6.1 |
-| 2 | 203 | 13.1 | 36.6 | 20.6 | +7.5 | 1.00 | 16.6 | 0.6 | 16.0 / 7.1 |
-| 3 | 190 | 11.6 | 23.6 | 7.6 | -4.0 | 0.01 | 3.6 | -12.4 | 10.2 / 4.1 |
-| 3 | 194 | 11.6 | 27.6 | 11.6 | +0.0 | 0.50 | 7.6 | -8.4 | 12.0 / 4.9 |
-| 3 | 197 | 11.6 | 30.6 | 14.6 | +3.0 | 0.99 | 10.6 | -5.4 | 13.5 / 5.7 |
-| 3 | 200 | 11.6 | 33.6 | 17.6 | +6.0 | 1.00 | 13.6 | -2.4 | 15.1 / 6.6 |
-| 3 | 203 | 11.6 | 36.6 | 20.6 | +9.0 | 1.00 | 16.6 | 0.6 | 16.8 / 7.5 |
+| 1 | 190 | 15.8 | 23.6 | 7.6 | -8.1 | 0.00 | 3.6 | -12.4 | 8.5 / 3.3 |
+| 1 | 194 | 15.8 | 27.6 | 11.6 | -4.1 | 0.01 | 7.6 | -8.4 | 10.1 / 4.0 |
+| 1 | 197 | 15.8 | 30.6 | 14.6 | -1.1 | 0.22 | 10.6 | -5.4 | 11.5 / 4.7 |
+| 1 | 200 | 15.8 | 33.6 | 17.6 | +1.9 | 0.93 | 13.6 | -2.4 | 12.9 / 5.4 |
+| 1 | 203 | 15.8 | 36.6 | 20.6 | +4.9 | 1.00 | 16.6 | 0.6 | 14.5 / 6.2 |
+| 2 | 190 | 13.2 | 23.6 | 7.6 | -5.6 | 0.00 | 3.6 | -12.4 | 9.5 / 3.7 |
+| 2 | 194 | 13.2 | 27.6 | 11.6 | -1.6 | 0.13 | 7.6 | -8.4 | 11.3 / 4.6 |
+| 2 | 197 | 13.2 | 30.6 | 14.6 | +1.4 | 0.87 | 10.6 | -5.4 | 12.7 / 5.3 |
+| 2 | 200 | 13.2 | 33.6 | 17.6 | +4.4 | 1.00 | 13.6 | -2.4 | 14.2 / 6.1 |
+| 2 | 203 | 13.2 | 36.6 | 20.6 | +7.4 | 1.00 | 16.6 | 0.6 | 15.9 / 7.0 |
+| 3 | 190 | 11.8 | 23.6 | 7.6 | -4.1 | 0.00 | 3.6 | -12.4 | 10.1 / 4.0 |
+| 3 | 194 | 11.8 | 27.6 | 11.6 | -0.1 | 0.46 | 7.6 | -8.4 | 11.9 / 4.9 |
+| 3 | 197 | 11.8 | 30.6 | 14.6 | +2.9 | 0.99 | 10.6 | -5.4 | 13.4 / 5.7 |
+| 3 | 200 | 11.8 | 33.6 | 17.6 | +5.9 | 1.00 | 13.6 | -2.4 | 15.0 / 6.5 |
+| 3 | 203 | 11.8 | 36.6 | 20.6 | +8.9 | 1.00 | 16.6 | 0.6 | 16.7 / 7.5 |
 
 Reading it:
 
 - **dB for dB.** Between 6 and 12 km a dB of source level is worth about 0.5 km of reach on the ship-sized
   target and 0.3 km on the small one.
-- **197 dB** gives -1.0 / +1.5 / +3.0 dB of margin at 12 km with 1 / 2 / 3 rows on the ship: a detection probability of
-  0.24 / 0.89 / 0.99 on one ping. One row alone does not close the 12 km point at this level. **194 dB** leaves
-  -4.0 / -1.5 / +0.0 dB (0.01 / 0.16 / 0.50): only three rows are still at the design probability, with no
-  margin. **190 dB** does not close it (-4.0 dB with three rows); it reaches 10.2 km.
-- **200 and 203 dB** buy margin on the ship (+6.0, +9.0 dB with three rows) but do not bring the small target to
-  12 km (-2.4 and 0.6 dB in a row against 11.6 needed); they bring it to 6.6 and 7.5 km. `docs/DESIGN.md` gives 214 dB for
+- **197 dB** gives -1.1 / +1.4 / +2.9 dB of margin at 12 km with 1 / 2 / 3 rows on the ship: a detection probability of
+  0.22 / 0.87 / 0.99 on one ping. One row alone does not close the 12 km point at this level. **194 dB** leaves
+  -4.1 / -1.6 / -0.1 dB (0.01 / 0.13 / 0.46): three rows are just under the design probability, with no
+  margin. **190 dB** does not close it (-4.1 dB with three rows); it reaches 10.1 km.
+- **200 and 203 dB** buy margin on the ship (+5.9, +8.9 dB with three rows) but do not bring the small target to
+  12 km (-2.4 and 0.6 dB in a row against 11.8 needed); they bring it to 6.5 and 7.5 km. `docs/DESIGN.md` gives 214 dB for
   that, which Sec. 1.4 shows is a large radiator run deep.
 - Margin matters more than the table suggests: the budget omits the surface image (−17 dB each way for a
   target at 4 m seen from 10 m at 12 km, before bottom bounces return energy; Sec. 1.5) and the time spreading
@@ -481,7 +481,9 @@ needs the near field) and two to four times the Doppler channels.
 
 ### 1.9 The prototype: test AUV and static frame, 0.1 s pulse
 
-The short row (32 at 0.09 m) with the 0.1 s pulse of the short-range builds. *Tool*
+The short row (32 at 0.09 m) with the 0.1 s pulse of the short-range builds. The table below is from before the
+detector recount of D-134: *Needed* is now 15.3 dB, so every margin is 0.1 dB less; the Pd and reach columns were not
+recomputed. *Tool*
 (`tools/projector_requirements.py popoto_testauv_1x32 --levels 160 ... --ranges 500 1000 2000`):
 
 | Rows | Source level (dB) | Needed (dB) | Ship at 0.5 km (dB) | Ship at 1 km (dB) | Ship at 2 km (dB) | margin at 2 km (dB) | Pd at 2 km | Small at 0.5 km (dB) | Small at 1 km (dB) | Small at 2 km (dB) | Reach ship / small (km) |
@@ -855,7 +857,7 @@ Reading it:
 | What it is | one directional piston at 197 dB rms across 4–6 kHz, 1 s | the same unit, or one ring, at 194 dB with 2 s or 191 dB with 4 s (HFM, or a sweep with a Doppler bank) | two free-flooded rings in phase, half a wavelength apart, axes along the face; or two pistons | the unit of A or C at 170–185 dB, 0.1 s, on the test AUV and the static frame |
 | **Named candidates (by their sheets)** | **Neptune T335** (198.5 dB flat at 400 V rms, rated 10 % duty); **Massa TR-1075A** (197.1–200.6 dB at 600 W, 30 %) or **TR-1075D** (about 202 dB at 1000 W, 30 %); Neptune T296 (195–199.5 dB, 27 kg) falls 2 dB short at 6 kHz | T335 at 237 or 168 V rms; TR-1075A at 119–168 V or 84–119 V; **one Neptune T170** reaches 191 dB across the band at 355–631 V rms but a 4 s pulse is 19 % duty against its 10 % rating at 750 V | **two Neptune T170** at 191 dB each (355–631 V rms, inside 750 V at 10 %); two GeoSpectrum M27-450 give 195.6–197.6 dB at their 600 V limit; three give 199 dB | T335 at 27–84 V rms; TR-1075A at 13–60 V; T170 at 56–316 V; GeoSpectrum M21-070-5000 bender (0.6 kg) for 175 dB |
 | Depth rating against the owner's 500 m | 600 m (T335, TR-1075): passes with a factor 1.2; response change with depth not on the sheets | as A; T170 unlimited | T170 unlimited, M27-450 6000 m: pass, and the type whose response does not change with depth | as the unit chosen |
-| Link budget (noise-limited, ship at 12 km, 1 / 2 / 3 rows) | -1.0 / +1.5 / +3.0 dB of margin (detection probability 0.24 / 0.89 / 0.99 on one ping) on the piston's axis; 3 dB less at about ±45° (sheet: "conical 90°" at 5 kHz, 80° for the Massa) | the same (same energy), if the Doppler processing holds its loss under 1 dB | the same at broadside; the pair along the face narrows the sector to about ±30° at −3 dB, and each ring's own figure-of-eight to ±45° | 1.8–3.9 km on the ship, 0.6–1.4 km on the small target with one short row |
+| Link budget (noise-limited, ship at 12 km, 1 / 2 / 3 rows) | -1.1 / +1.4 / +2.9 dB of margin (detection probability 0.22 / 0.87 / 0.99 on one ping) on the piston's axis; 3 dB less at about ±45° (sheet: "conical 90°" at 5 kHz, 80° for the Massa) | the same (same energy), if the Doppler processing holds its loss under 1 dB | the same at broadside; the pair along the face narrows the sector to about ±30° at −3 dB, and each ring's own figure-of-eight to ±45° | 1.8–3.9 km on the ship, 0.6–1.4 km on the small target with one short row |
 | Blind range | 750 m | 1.5 km (2 s) or 3 km (4 s) | 750 m | 75 m |
 | Direct sound left (nearest hydrophone, rms convention, face placeholder) | about +12.6 dB with the T335 facing out (its sheet: −9.5 to −14 dB at 90°); +22 dB with the TR-1075 until its side response is known | 3 or 6 dB less than A | about +5 to +14 dB: the rings' axial null (−8.5 dB at the worst hydrophone) and the pair's null (−8.4 dB at the worst frequency) do not simply add in the near field; not computed jointly | at 175 dB: +15 dB at 0.30 m, 0 dB at 1.7 m, before any help from the unit's pattern |
 | Cavitation (makers' statements) | 17–18 m for the TR-1075 at 197 dB; not stated for the T335 (assume about 20 m); **not usable at full level on the static frame at 10 m** | TR-1075A: 194 dB from about 10 m, 191 dB from about 4 m | each T170 at 191 dB: from the surface (its limit is 195 dB at 5 m); each M27-450 at 191 dB: from about 22 m | none |
@@ -900,8 +902,8 @@ less flat than the TR-1075; Neptune's catalogue adds no projector. ITC's and Ult
 3. **Do D first, with the unit of A or C: chain (a).** A T335 or a T170 at tens to a few hundred volts on a 200 W
    amplifier is the prototype source; the same hardware then runs option B (a 2–4 s HFM at 191–194 dB) before
    the full-level amplifier exists. One BII5160-class amplifier with a T335 gives about 195 dB: with a 1 s pulse
-   at 194 dB three rows are at the design detection probability at 12 km (+0.0 dB of margin, 0.50 on one ping) and two rows are
-   1.5 dB short (0.16); with option B's 2 s pulse at 194 dB the energy, and so the margins, are those of 197 dB.
+   at 194 dB three rows are just under the design detection probability at 12 km (-0.1 dB of margin, 0.46 on one ping) and two rows are
+   1.6 dB short (0.13); with option B's 2 s pulse at 194 dB the energy, and so the margins, are those of 197 dB.
 4. **The direct sound is still not solved by the projector alone**: the best case on these sheets is about
    +5 to +13 dB over the inputs' full scale at the face's placeholder. The front-end measures of
    `docs/DESIGN.md` stay necessary; the projector choice reduces what they must absorb from 22 dB to about 10 dB.

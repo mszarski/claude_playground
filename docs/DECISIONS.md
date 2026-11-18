@@ -1799,7 +1799,8 @@ these are stated and not added. `SonarEquation.from_sonar` now takes the array's
 against isotropic noise, which closes the limit noted in D-103. The general table of
 `DESIGN.md` Sec. 5 for the imaging sonars keeps a 13 dB line, now named
 `REFERENCE_SNR_DB` and described as a reference line, not a detector's threshold.
-Tests: `test_buildspec.py`, `test_design.py`, `test_lloyd.py`.
+Tests: `test_buildspec.py`, `test_design.py`, `test_lloyd.py`. The margins and
+probabilities above moved by about 0.1 dB when the detector's tests were recounted (D-134).
 
 ### D-118 Stacked-row deployment files search only where rays can arrive from (owner approved)
 
@@ -1813,7 +1814,7 @@ per-ping time is unchanged. **Known cost:** at 12 km (`popoto_12km`, Bellhop) mo
 are flagged elevation-ambiguous (two rows 3 of 6 becomes 5 of 6, three rows 1 of 6 becomes
 3 of 6) and the two-row track depth moved from 2.1 m to 34.5 m for a target at 4 m; the
 stated depth sigma there is about 2600 m in both states, so neither depth carries
-information. **It does not fix** the two-row face self-test (`STATUS.md`, open items).
+information. **It does not fix** the two-row face self-test (`STATUS.md`, open items; D-133 does).
 
 ### D-119 Multipath depth is deployed through rays, with flagged depths withheld (owner approved)
 
@@ -1822,7 +1823,8 @@ Any build that enables `multipath_depth` gets `rays: true, withhold_flagged: tru
 build enables it, so this lives in the generator only. Reason: the flat pattern returned
 the water depth (30.3 ± 3.5 m) for a 15 m target in 30 m of water, a wrong depth with a
 small sigma. Consequence: in that case no depth is reported at all (reason `window`); why
-the ray mode answers `window` in 30 m of water has not been investigated.
+the ray mode answers `window` in 30 m of water has not been investigated. (It since has:
+D-136. The answer is now `unresolvable`.)
 
 ### D-120 Coverage is on for the face and vehicle files; water depth and bottom are required (owner approved)
 
@@ -1853,7 +1855,8 @@ new noise) tips the cells between the clusters over the threshold. A fix is prop
 **not applied**: merge detections closer than the tracker can keep apart before tracking
 in `run_fls_transit`, as the long-range chain does (D-95). It changes detection and track
 counts in every FLS scene and needs the full gallery re-run against `gallery.json`. The
-loosened limit stands until then and is the owner's call.
+loosened limit stands until then and is the owner's call. (Measured since on the six full
+scenes and left off: D-135.)
 
 ## Choices made between D-82 and D-105 that were recorded only in hand-back reports
 
@@ -2040,3 +2043,133 @@ Following `docs/HARDCODED_AUDIT.md`:
 - `small_scale_kh = 0.5` is now cited to a published criterion rather than "our choice".
 - No default was changed on literature evidence alone; the candidates are in
   `REFERENCES.md` Sec. 11 for the owner.
+
+## Six fixes after the first whole-suite run
+
+Numbers and tables are in `RESULTS.md`, "Six fixes after the first whole-suite run";
+derivations in `PHYSICS_NOTES.md` Sec. 29.
+
+### D-133 The depth sigma of stacked rows says when boundary echoes share the range cell
+
+An echo that goes out by one path and back by another has the same length as its mirror,
+so the two add as pressures and the rows read the mean of the two elevations. Direct with
+surface reads the sea surface; direct with bottom reads the sea bed, whatever the target's
+depth. The two-row face at 3 km in 100 m of water read 98.5, 97.0 and 11.0 m for a target
+at 60 m with a stated sigma of 11 to 15 m. `elevation.multipath_sigma: {bounces,
+max_depth_m}` is opt-in in the chain and on in every stacked-row deployment file (the
+generator writes it; the hand-written `popoto_elevation_rehearsal` has it). For every
+target depth the water allows, the chain's ray fan gives the echoes, the clump the stage's
+own first-arrival rule takes, and how well that depth explains the reading. The spread of
+those depths about the reported one, less what the angle's sigma already holds, goes into
+`depth_sigma_m` of the detection and of the track (`depth_unresolved_sigma_m`), and
+`depth_multipath_limited` is true where that term is the larger part. One C++ function
+(`libs/live` `multipath_depth_limit`) serves both engines. The same three pings now state
+25.0, 24.4 and 41.0 m (1.54, 1.52 and 1.19 sigma of error). The generator's self-test
+judge changed with it: it looks at every ping, asks for the truth within two stated sigma
+and for the multipath term to stay bounded (by the water column with boundaries; by
+3 m + 0.3 % of range in free field). All six builds pass 7 of 7 on both engines.
+
+Rejected:
+
+- Correcting the depth. A reading at a boundary holds no target depth to correct.
+- A fixed allowance in the self-test (0.7 degrees stood there). It passed or failed by
+  luck.
+- Feeding the term to the track filter. The same boundary is read ping after ping, so
+  averaging must not shrink it (as for refraction, D-128).
+
+Limits:
+
+- Both boundaries are perfect mirrors. A soft bottom or a rough surface weakens the pairs,
+  and the term is then too wide.
+- Too wide by three to five times for shallow targets (10 and 30 m) at 1 km with two rows:
+  22 to 38 m stated against errors of 0.4 to 6.3 m.
+- Without a water depth there is no bottom in the picture; the report says so
+  (`depth_unresolved_assumed`).
+- The `shallow` self-test of the two-row builds passes with a 118 m sigma that comes from
+  the attitude-gap term (the scenario has no attitude history), which was there before.
+- Not checked against Bellhop in refracting water. At 12 km the depth sigma is still 2960
+  to 3010 m (D-118's case).
+
+Tests: `test_multipath_sigma.py`, `tests/cpp/test_elevation.cpp`.
+
+### D-134 The detector counts its tests as measured
+
+The thresholds follow from a false-alarm budget per ping (D-93), so the number of
+independent tests on the map must be known. It was one flat search factor of 2.5, measured
+with one row. Measured on 400 noise-only pings per row count, each test alone, that factor
+ran 0.86, 1.16 and 1.24 times the budget for one, two and three rows (pooled over budgets
+of 3 to 0.1 a ping), and every row count ran further over as the budget tightened (three
+rows: 1.08 at 10 a ping, 1.60 at 0.1). The count now grows with the threshold: in
+proportion to u = rows x looks x threshold for the single sample, and by Rice's rate along
+bearing for the cell mean. One constant per test and row count is measured:
+`kSearchSample` = 0.191, 0.208, 0.192 and `kSearchMean` = 0.515, 0.532, 0.598 for one, two
+and three rows (`tools/detector_search_factor.py` regenerates and verifies them). The
+looks of a cell mean are taken from the replica the chain compresses with: 5.48 in a 2 m
+cell, not 5.80 (5.42 measured on the map). The whole detector then gave 0.79 to 0.96 of
+the budget on 300 other pings per row count at 3, 1 and 0.3 a ping.
+
+Consequences: the one-row budget SNR each build needs rose by 0.11 to 0.15 dB (about
+0.02 dB of it the looks). At 12 km the margins are -1.1 / +1.4 / +2.9 dB for one, two and
+three rows (they were -1.0 / +1.5 / +3.0, D-117) and the detection probabilities 0.22 /
+0.87 / 0.99 (were 0.24 / 0.89 / 0.99). Reach moves by 0.1 km at most. No deployment file
+changed. The thresholds are in `buildspec.detection`, so the Python engine, the budget and
+`detection_probability` follow the same plan.
+
+Rejected: keeping the flat factor with a constant per row count. It would still run over
+as the budget tightens. `cfar.search_factor: 2.5` restores the old count.
+
+Limits:
+
+- Nothing is measured at the default budget (one false detection in a thousand pings; it
+  would take about 100 000 pings). The thresholds there rest on the growth law beyond the
+  measured range.
+- The three-row cell-mean test does not follow the law: its constant rises from 0.55 to
+  0.73 as the budget tightens from 10 to 0.1 a ping. The cause is not found. At the
+  default budget that test could run about 1.5 times over its share.
+- The constants were measured on one map only (long-range array, bearings every 0.5
+  degrees, 2 m cells of 8 samples, Hann window, 15 m merge). Every chain using
+  `multiscale` now takes them; another map needs the tool run again.
+- Thresholds still assume Gaussian noise.
+
+Tests: `test_detector.py`, `tests/cpp/test_detector.cpp`, `test_buildspec.py`.
+
+### D-135 Addendum to D-121: the FLS merge was measured on six full scenes and is left off
+
+The fix D-121 proposed exists: `detect.group_flagged` is the multiscale detector's
+grouping rule as one function, and `detect.cluster(merge=...)` uses it with distances from
+the chain's own plan (1.9 m in range, 0.73 degrees). It is behind
+`gallery.FLS_MERGE = False`. In the thinned `fls_170k_traffic` test it cures the anchored
+boat (1.92 m/s becomes 0.29 m/s). On the six full scenes (CPU, one simulation each):
+
+| Scene | Tracks: `gallery.json` / head / merged | Named objects |
+| --- | --- | --- |
+| `fls_120k_transit` | 7 / 7 / 6 | pinnacle 0.62 / 0.53 / 0.03 m/s; others unchanged |
+| `fls_170k_transit` | 4 / 4 / 3 | anchored boat static / uncertain / static (0.03 / 0.14 / 0.02 m/s) |
+| `fls_330k_transit` | 2 / 4 / 3 | anchored boat not tracked / 1.68 m / 2.29 m; pinnacle not tracked in all three |
+| `fls_170k_traffic` | 11 / 13 / 8 | anchored boat 0.16 / 0.18 / 0.18 m/s; false movers 3 / 2 / 0 |
+| `fls_120k_cluttered_seabed` | 65 / 64 / 36 | line tracks 15 / 16 / 0; false movers 4 / 4 / 7; anchored boat 0.02 / 0.03 / 0.32 m/s |
+| `fls_120k_rough_surface` | 57 / 56 / 52 | boat under way 4.72 / 4.72 / 8.08 m/s (true 5.0), mover / mover / uncertain |
+
+The merge harms two of the six: the cluttered seabed loses every line track and gains
+false movers, and under the rough surface the boat under way reads 8.08 m/s and is no
+longer classed a mover. The thinned `fls_120k_transit` test also fails with it
+(pinnacle 1.6 m/s against a 1.2 limit). So it is left off and the loosened 2.5 m/s limit
+of D-121 stays. A new test runs the thinned traffic scene with the switch on and holds the
+anchored boat under 0.6 m/s. Turning it on, with those losses, is the owner's call.
+
+### D-136 Addendum to D-113 and D-119: `unresolvable` through rays; the `window` answer was a NaN
+
+D-119 left open why the ray mode answered `window` for a 15 m target in 30 m of water. It
+was a bug, and behind it a real limit. The ray pattern's depth grid is laid in whole
+carrier fringes and ran past the sea bed; the last depth has no path, its surface delay is
+NaN, and that delay sized the beam window. The window now takes the longest finite delay.
+With that fixed the stage fitted the 0.6 m of water left and gave 29.8 m for the 15 m
+target. In that trial the surface echo separates only from 29.3 m down, the sea bed is at
+30 m, and the depth step the delay can resolve is 9.8 m. So through rays a searched band
+thinner than one resolvable depth step answers `multipath_reason: unresolvable`, with
+`multipath_searched_m` clipped to where paths exist ([29.3, 29.9] m here). The answer is
+the same in both waters and with or without a bottom model. The flat pattern is unchanged.
+Rejected: reporting the fitted 29.8 m with a flag; a band that thin cannot tell one depth
+from another by delay. Limit: for that geometry no depth can be measured by timing at all;
+the range and the two depths set it, not the estimator. Test: `test_refraction_rays.py`;
+`docs/figures/ssp_range_study.md` was regenerated and only those two rows changed.

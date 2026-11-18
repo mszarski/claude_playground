@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-132); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 28); keys in
+(now to D-136); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -18,10 +18,14 @@ GPU result on `d9cb5b7` (NVIDIA L4 through Hugging Face Jobs, CUDA build with Be
 
 One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
 
-- **Three generated files are known to be out of date with the tree** (see "Open and
-  known wrong"): `docs/figures/fjord_rehearsal.md`, `docs/figures/gallery.json` with the
-  numbers `SCENARIOS.md` quotes from it, and `docs/design/popoto_12km.json` (made just
-  before the deployment defaults went in).
+- **Generated files known to be out of date with the tree** (see "Open and known
+  wrong"): `docs/figures/gallery.json` with the numbers `SCENARIOS.md` quotes from it
+  (item 16); and, by the 0.11 to 0.15 dB the detector's thresholds moved (D-134),
+  `docs/design/popoto_depth_planner.json` and `.png`, `docs/figures/fjord_depth_plan.md`
+  and the depth sections of `DESIGN.md` that read the planner file (item 37).
+  `docs/figures/fjord_rehearsal.md` and `docs/design/popoto_12km.json`, stale at the last
+  status, were regenerated with the shipped deployment files (commits `506e959` and
+  `1efa598`; items 5 and 18).
 
 How things are verified, in the words used below:
 
@@ -51,7 +55,7 @@ How things are verified, in the words used below:
 | 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test's final assertions had not passed in a job when last reported, and real-time pace loses one burst per run. Not done: the reference's SDK build, any hardware run, the RoCE receiver. The Holoscan `PrepareOp` still applies the old gain law (see open items) |
 | 12 Realistic propagation, reverberation and noise | **in progress**; most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread), the RAM cross-check, a 3-D seamount |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; motion estimation is CPU only. `docs/JETSON.md` is untested |
-| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); five builds pass seven of seven self-tests, `popoto_face_2x32` six of seven |
+| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds pass seven of seven self-tests on both engines (D-133) |
 | 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water** | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py` |
 
 ## What works, component by component, and how it was checked
@@ -136,11 +140,19 @@ sections further down.
 - **Detector** (D-93 to D-99): each 2 m cell is tested on its strongest sample and on its
   mean, with thresholds that follow from a false-alarm budget per ping; one echo is one
   detection. A point echo needs 15.1 dB of one row's SNR for a detection probability of
-  0.5 where the old detector needed 19.7 dB. Verified against closed forms and Monte
-  Carlo, and through the C++ chain on eleven scenarios on both engines
-  (`test_detector.py`, `test_detector.cpp`). Thresholds assume Gaussian noise.
+  0.5 where the old detector needed 19.7 dB (before the detector recount of D-134, which
+  added 0.11 to 0.15 dB). Verified against closed forms and Monte Carlo, and through the
+  C++ chain on eleven scenarios on both engines (`test_detector.py`,
+  `test_detector.cpp`). Thresholds assume Gaussian noise.
+- **The detector's count of tests** (D-134): it grows with the threshold and the rows,
+  with one measured constant per test and row count (`tools/detector_search_factor.py`).
+  On 300 noise-only pings per row count the detector gave 0.79 to 0.96 of its budget at
+  3, 1 and 0.3 false detections a ping. Not measured at the default budget (open item 14).
 - **Stacked rows** (D-128): elevation and depth from two or three rows; with two rows a
-  list of possible elevations unless water depth rules the others out.
+  list of possible elevations unless water depth rules the others out. With
+  `elevation.multipath_sigma` (D-133; on in every stacked-row deployment file) the depth
+  sigma holds what unresolved boundary echoes add, and `depth_multipath_limited` says when
+  the rows read the surface or the sea bed (`test_multipath_sigma.py`).
 - **Stage 2** (D-129): navigation from an inertial unit with a Doppler log through an
   adapter (`tools/nav_adapter.py`; the mapping for the vehicle's own unit is a template),
   water depth from altitude plus depth, the sound-speed ladder, decimate-first processing
@@ -180,46 +192,51 @@ Grouped; within a group the most consequential first.
 
 ### The 12 km design point
 
-1. **One long row at 197 dB is 1.0 dB short at 12 km**: 14.6 dB against the 15.6 dB the
-   detector needs, a detection probability of 0.24 on one ping. Two rows have +1.5 dB
-   (0.89), three +3.0 dB (0.99). The design was sized as 13 dB plus 2 dB before the
-   threshold was the detector's. 32 hydrophones in one row need 198 dB (about 500 W
-   acoustic, omnidirectional). These figures are for a steady point echo in noise: a
-   fluctuating or extended echo and reverberation are not in them.
+1. **One long row at 197 dB is 1.1 dB short at 12 km**: 14.6 dB against the 15.8 dB the
+   detector needs, a detection probability of 0.22 on one ping. Two rows have +1.4 dB
+   (0.87), three +2.9 dB (0.99). Before the detector's tests were recounted (D-134) these
+   read -1.0 / +1.5 / +3.0 dB and 0.24 / 0.89 / 0.99. The design was sized as 13 dB plus
+   2 dB before the threshold was the detector's. 32 hydrophones in one row need 198 dB
+   (about 515 W acoustic, omnidirectional). These figures are for a steady point echo in
+   noise: a fluctuating or extended echo and reverberation are not in them.
 2. **The budget is still about 0.45 dB kind** against the chain at 12 km (three small
    terms stated and not added, D-117).
 3. **The projector document's recommendations rest on margins that have moved.** Its
-   numbers were updated, its reasoning was not: at 194 dB with a 1 s pulse three rows have
-   0.0 dB of margin (detection probability 0.50) and two rows -1.5 dB (0.16). Sec. 0,
-   Sec. 1.1 and item 3 of "How to choose" in `docs/design/projector_selection.md` need
-   re-reading by the owner.
+   numbers were updated (again after D-134), its reasoning was not: at 194 dB with a 1 s
+   pulse three rows have -0.1 dB of margin (detection probability 0.46) and two rows
+   -1.6 dB (0.13). Sec. 0, Sec. 1.1 and item 3 of "How to choose" in
+   `docs/design/projector_selection.md` need re-reading by the owner. Its Sec. 1.9
+   (the prototype's table) was not regenerated and is marked.
 4. **Water decides more than the design does.** In simulation the ship is detected at
-   12 km in 100 m over sand with one, two and three rows, and with one and two rows in
-   the gravel and winter-sand waters; it is not detected at 12 km in the deep-silt and
-   the summer-mud waters. The four `popoto_env_*` waters were never run with three rows. Sea state 5 ends 12 km detection in non-ducting water in the budget.
-5. **`docs/design/popoto_12km.json` predates the deployment defaults.** The study tool
-   (`tools/popoto_12km_study.py`) counted a detection as the ship's only within ±20 m of
-   the ship; with the present detector one detection covers a group of arrivals 110 to
-   126 m long in Bellhop's field, and that rule scored 0 of 6 pings while a mover track
-   sat on the ship. The tool at head uses the detection's first arrival and extent, and
-   the committed file shows 6 of 6 pings with a track at ping 3 for one, two and three
-   rows in 100 m over sand, and for one and two rows in the gravel and winter-sand waters.
-   The deployment-default package reported the old 0 of 6 from a tree without that fix.
-   The committed file was made minutes before `sector_from_rays` went into the stacked-row
-   files (D-118), so its two- and three-row elevation and depth entries are the "before"
-   state and the study must be rerun.
+   12 km on 6 of 6 pings and tracked from ping 3 with one, two and three rows in 100 m
+   over sand and in the gravel and winter-sand waters; it is not detected at 12 km in the
+   deep-silt and the summer-mud waters, with three rows as with one and two. Sea state 5
+   ends 12 km detection in non-ducting water in the budget.
+5. **`docs/design/popoto_12km.json` is regenerated with the shipped deployment files**
+   (commit `1efa598`): all 21 cases ran through `tools/popoto_12km_study.py`, including
+   the four `popoto_env_*` waters with three rows, which had never been run. Detection,
+   SNR and tracks are identical to the earlier file in every case that existed. The tool
+   counts a detection as the ship's by its first arrival and extent: one detection covers
+   a group of arrivals 110 to 126 m long in Bellhop's field, and the earlier ±20 m rule
+   scored 0 of 6 pings while a mover track sat on the ship. What changed with
+   `sector_from_rays` (D-118) is elevation: item 11.
 
 ### Depth
 
-6. **`popoto_face_2x32` fails its `rehearsal` self-test.** Two rows 1.5 m apart cannot
-   separate the direct, surface and bottom echoes of a target at 3 km in 100 m of water:
-   they arrive within about 2 m of path and 4 degrees of elevation, and the rows measure
-   the phase of their sum. Depth reads 11.0 m for a target at 60 m on the last ping, on
-   both engines; elevation swings between -1.4 and +0.4 degrees from ping to ping. **The
-   stated depth sigma is 11 m against a 49 m error**, so the sigma is understated when
-   unresolved boundary echoes are present. `sector_from_rays` and `sector_from_depth` do
-   not help: it is not a wrong lobe. No fix is applied; candidates are a multipath term in
-   the two-row sigma, or a self-test that looks at every ping.
+6. **Two rows at 3 km in 100 m of water read a boundary, and now say so** (D-133). Rows
+   1.5 m apart cannot separate the direct, surface and bottom echoes of a target there;
+   an echo pair and its mirror add, and the rows read the sea surface or the sea bed
+   whatever the target's depth (0 to 11 m for targets at 10 to 45 m, 92 to 100 m for
+   targets at 60 to 95 m). In the `popoto_face_2x32` `rehearsal` self-test the depths are
+   still 98.5, 97.0 and 11.0 m for a target at 60 m; the stated sigma is now 25.0, 24.4
+   and 41.0 m (it was 14.5, 14.5 and 10.9 m) and the depth is flagged
+   `depth_multipath_limited`. No depth is corrected. The self-test's judge now looks at
+   every ping, and all six builds pass 7 of 7 on both engines. **Still wrong: the new
+   sigma is too wide for shallow targets at 1 km with two rows**, 22 to 38 m stated
+   against errors of 0.4 to 6.3 m for targets at 10 and 30 m. Boundaries are taken as
+   perfect mirrors, and the term has not been checked against Bellhop in refracting
+   water. The `shallow` self-test of the two-row builds passes with a 118 m sigma that
+   comes from the attitude-gap term (no attitude history in the scenario).
 7. **Depth at range is limited by knowledge of the sound-speed profile, not by the
    estimator** (`PHYSICS_NOTES.md` Sec. 28, `docs/design/refraction_depth_study.json`).
    With only the sound speed at the vehicle, the median depth error from stacked rows is
@@ -237,11 +254,16 @@ Grouped; within a group the most consequential first.
 9. **One confidently wrong multipath depth remains**: 377 ± 18 m for a target at 40 m at
    12 km, with a profile sampled to 500 m of 1000 m. It carries the ambiguity flag and
    `bottom_unmodelled`; `withhold_flagged` suppresses it.
-10. **Test-AUV multipath depth through rays answers `window`** (no depth) for a 15 m
-    target in 30 m of water, in both waters of `ssp_front_testauv_trial_1row`. The false
-    30.3 m of the flat pattern is gone, and so is any depth. Not investigated.
-11. **At 12 km with stacked rows the deployment default made flags worse** (D-118): more
-    pings are flagged elevation-ambiguous, and the depth sigma is about 2.6 km either way.
+10. **Test-AUV multipath depth through rays: closed as `unresolvable`** (D-136). For a
+    15 m target in 30 m of water, in both waters of `ssp_front_testauv_trial_1row`, the
+    stage answers `multipath_reason: unresolvable` with the searched band [29.3, 29.9] m.
+    The earlier `window` was a NaN that sized the beam window. No depth can be measured
+    by timing there: the surface echo separates only from 29.3 m down and the sea bed is
+    at 30 m.
+11. **At 12 km with stacked rows the deployment default made flags worse** (D-118). In
+    the regenerated study more detections carry the ambiguity flag: two rows on 5 or 6 of
+    6 pings (were 0 to 3), three rows on 4 to 6 (were 1). The depth sigma there is 2960
+    to 3010 m, so no depth carries information.
 12. **No stacked-row chain run on Bellhop pings per ladder rung.** Elevation and fusion
     truth in the study come from an independent ray integration only.
 13. **A rough surface taken for flat** gives a wrong multipath depth with a small sigma
@@ -252,17 +274,37 @@ Grouped; within a group the most consequential first.
 
 ### Detection, tracking, false alarms
 
-14. **Three rows run 1.1 to 1.3 times the false-alarm budget** (one row 0.9 to 1.2
-    times), measured on 120 noise-only pings per case. Two causes are identified and
-    neither is fixed: the search factor of 2.5 was measured with one row (a noise peak of
-    three rows added is narrower, 4.1 exceeding samples against 5.7), and the cell-mean
-    test fires 1.5 to 1.65 times too often per cell for any row count (the plan assumes
-    5.80 looks in a cell mean, the map has 5.42). Both are worth under 0.1 dB of
-    threshold. An earlier measurement on another tree read about twice the budget for
-    three rows.
+14. **False alarms are within about 20 % of the budget where measured, and are not
+    measured at the default budget** (D-134). The flat search factor of 2.5 is replaced
+    by a count of tests that grows with the threshold and the rows, and a cell mean's
+    looks come from the replica (5.48, not 5.80). The whole detector on 300 noise-only
+    pings per row count (not the pings the constants were measured on):
+
+    | Rows | Found / budget at 3, 1, 0.3 a ping | Counts |
+    | --- | --- | --- |
+    | 1 | 0.96, 0.92, 0.89 | 860, 276, 80 |
+    | 2 | 0.91, 0.93, 0.90 | 817, 278, 81 |
+    | 3 | 0.87, 0.86, 0.79 | 784, 258, 71 |
+
+    Statistical error is 0.03, 0.06 and 0.10. Open:
+    - **Nothing is measured at the default budget** (one false detection in a thousand
+      pings; it would take about 100 000 pings). The thresholds there rest on a growth
+      law extrapolated beyond the measured range.
+    - **The three-row cell-mean test does not follow that law**: its measured constant
+      rises from 0.55 to 0.73 as the budget tightens from 10 to 0.1 a ping. The cause is
+      not found. At the default budget that test could run about 1.5 times over its
+      share.
+    - **The constants were measured on one map only** (long-range array, bearings every
+      0.5 degrees, 2 m cells of 8 samples, Hann window, 15 m merge). Every chain using
+      `multiscale` now takes them.
 15. **The anchored boat's tracks swap in the thinned `fls_170k_traffic` test** (D-121):
-    the limit is loosened to 2.5 m/s; the cause is a merged detection followed by a track
-    swap; a fix is proposed and not applied.
+    the limit stays loosened to 2.5 m/s. The fix (merge detections before tracking) is in
+    the code behind `gallery.FLS_MERGE = False`, was measured on the six full FLS scenes
+    and is **not applied** (D-135). It cures the anchored boat (1.92 m/s becomes
+    0.29 m/s) but harms two scenes: in `fls_120k_cluttered_seabed` the line tracks fall
+    from 16 to 0 and false movers rise from 4 to 7, and in `fls_120k_rough_surface` the
+    boat under way reads 8.08 m/s (true 5.0) and becomes `uncertain`. On or off is the
+    owner's call.
 16. **`docs/figures/gallery.json` and the numbers `SCENARIOS.md` quotes from it predate
     D-102, D-103 and the default changes.** A comparison of 18 scenarios found eight
     identical and the four MINSAS scenes equal to the printed digits, and six FLS scenes
@@ -270,7 +312,9 @@ Grouped; within a group the most consequential first.
     pinnacle error 79 m becomes 31 m); in `fls_170k_transit` and `fls_120k_transit` a
     `static` track becomes `uncertain`; `fls_170k_traffic` 11 tracks become 13;
     `fls_120k_cluttered_seabed` 65 become 64; `fls_120k_rough_surface` 57 become 56. That
-    comparison was itself made before the detector merge. The gallery has not been rerun.
+    comparison was itself made before the detector merge. The six FLS scenes were run
+    again at head for D-135 and gave the same track counts (7, 4, 4, 13, 64, 56);
+    `gallery.json` was not regenerated.
 17. **Not done in the detector:** a Taylor aperture window (computed for 32 elements: 0.69
     dB of loss at -30 dB sidelobes against the Hann window's 1.76 dB, so 1.1 dB to gain;
     it needs changes in `flank.py` and the elevation estimate); replica weighting
@@ -280,16 +324,22 @@ Grouped; within a group the most consequential first.
 
 ### Trials in fjord or harbour water
 
-18. **`tools/fjord_rehearsal.py` fails on three of six variants at head**: the scenario
-    loader refuses the open-water noise the tool copies into the fjord scenario (a
-    contradiction with the site that needs a named override, D-100).
-    `docs/figures/fjord_rehearsal.md` is therefore from commit `f2bf420`, before the
-    deployment-default change. The deployment package measured those variants with its
-    own harness and found every fjord variant identical before and after to the printed
-    digits; the committed table was not regenerated.
+18. **`docs/figures/fjord_rehearsal.md` is regenerated from this tree, and the tool runs
+    every variant** (commits `5709b2d`, `506e959`). The three variants that carry the
+    open-water noise into the fjord scenario now name it under `environment_overrides`
+    (D-100); a test checks that all 18 variants load with no warning. A second defect was
+    found while regenerating: the detector reports the echo and the basin tail as one
+    detection at their energy-weighted range (63 m behind the target for the two-row
+    array), and the tool scored a 44 dB detection as "behind" and the target as
+    undetected on 4 of 4 pings. It now uses first arrival and extent, as
+    `popoto_12km_study.py` does. **The file's header says "at commit b808d73"; it was
+    made with the scoring change committed one commit later (`506e959`).**
 19. **The ping's own basin reverberation was never measured** (`own_ping_db` is a
     what-if). In the what-if at -43 dB a 10 dB target is undetectable out to 1 km with one
-    row whatever the chain settings, and unaffected at 2 km.
+    row as deployed (at 1 km one of the four other chain settings tried finds it on 3 of
+    4 pings at 13.7 dB), and unaffected at 2 km. **In the regenerated table the three-row
+    what-if got worse**: the target at 150 m is detected on 0 of 4 pings (was 4 of 4),
+    with a track at ping 4 (was 3).
 20. **The fjord's profile, section and seabed are illustrative**, modelled on one site;
     the tail's numbers are one fjord, one night, 4 to 8 kHz. The rehearsal is four pings
     and one seed per variant.
@@ -365,15 +415,28 @@ Grouped; within a group the most consequential first.
 36. The board forwarder is not written. The navigation mapping for the vehicle's unit is
     a template with every vendor entry to fill in.
 
+### Files behind the detector recount (D-134)
+
+37. **Stale by the 0.11 to 0.15 dB the thresholds moved**:
+    `docs/design/popoto_depth_planner.json` and `.png` (the tool had planned one build
+    after 9 minutes and was stopped), `docs/figures/fjord_depth_plan.md`, and the depth
+    sections of `DESIGN.md` that read the planner file (they still print +3.0 dB of
+    free-field margin and +9.0 dB at 225 m for three rows). Hand-written and left as
+    they were, with a marker: the prototype table of `docs/design/projector_selection.md`
+    Sec. 1.9 and the older sections of `RESULTS.md`. The other margins in
+    `projector_selection.md`, `SCENARIOS.md` and `README.md` were updated from the
+    regenerated `DESIGN.md` and `projector_requirements.json`.
+
 ## Open questions for the project owner
 
 Decisions already taken are in `DECISIONS.md` and are not repeated here.
 
 **The Popoto array**
 
-1. **Two rows or three on the face?** Two rows at 3 km in 100 m of water give a depth
-   error near 50 m with a stated sigma of 11 m (open item 6), and at 12 km one row is
-   1.0 dB short. Does the face go straight from one row to three?
+1. **Two rows or three on the face?** Two rows at 3 km in 100 m of water read the sea
+   surface or the sea bed, not the target, and now say so with a sigma of 24 to 41 m
+   (open item 6), and at 12 km one row is 1.1 dB short. Does the face go straight from
+   one row to three?
 2. **4 to 6 kHz on a board specified for 10 to 100 kHz.** The plan asked Popoto only about
    6 to 10 kHz; the design uses the inputs an octave below their specification and no key
    flags it on the receive side (audit item G-5).
@@ -424,8 +487,10 @@ Decisions already taken are in `DECISIONS.md` and are not repeated here.
 18. `propagation.wind_speed > 0` together with range-dependent water as an error.
 19. Dropping `max_arrivals: 12` and `max_order` from the trial scenarios so the energy
     rule applies (open item 22).
-20. Merging close FLS detections before tracking (D-121); the search factor and cell-mean
-    looks of the detector (open item 14); the anchored-boat limit.
+20. Merging close FLS detections before tracking: measured on six full scenes and left
+    off (D-135, open item 15); on, with the losses in the cluttered and rough-surface
+    scenes, or off with the loosened anchored-boat limit? (The detector's search factor
+    and cell-mean looks, proposed here before, are applied: D-134.)
 21. The scenario inconsistencies of D-101, scenario by scenario.
 22. `elevation.ray_method: arcs` as the default (it would move existing depths by up to
     2 m).
@@ -454,17 +519,18 @@ the arrival-time solve runs (4, 4) passes (D-83).
 ## What is next
 
 1. Fill the full-suite line above: the whole CPU suite and a GPU job on the final tree,
-   then regenerate `docs/figures/fjord_rehearsal.md`, the gallery and
-   `docs/design/popoto_12km.json`.
+   then regenerate the gallery, `docs/design/popoto_depth_planner.json` and
+   `docs/figures/fjord_depth_plan.md` (open items 16 and 37).
 2. The owner's answers on rows, band, converter, projector and site (questions 1 to 12).
 3. Real data: a first Popoto recording through `tools/sonar_live.py`, a cast and one
    sounding of a pinger at the trial site, a first FLS log or SAS image through
    `tools/calibrate_sim.py`. Everything in those paths has only seen simulated input or
    other people's measured channels.
-4. The two-row depth sigma with unresolved boundary echoes; the `window` answer of the
-   ray-mode multipath depth in shallow water; a stacked-row chain run on Bellhop pings.
-5. The detector's search factor and cell-mean looks for two and three rows; the Taylor
-   window; merging FLS detections before tracking.
+4. The two-row depth sigma for shallow targets at 1 km (too wide); a Bellhop check of
+   its multipath term in refracting water; a stacked-row chain run on Bellhop pings.
+5. The detector's false alarms at the default budget and the three-row cell mean; its
+   constants on a map other than the long-range one; the Taylor window; the owner's call
+   on merging FLS detections before tracking.
 6. The vehicle adapters: board samples to UDP blocks or WAV with a sidecar; the vehicle's
    navigation message.
 7. Milestone 11: a job in which the loopback test passes; the reference's SDK build and a
@@ -544,8 +610,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - Tracking uses the built-in nearest-neighbour Kalman tracker with typed sigmas (measured
   scatter of a still target is at most 1.1 m and 0.4 degrees). Stone Soup was not used.
 - A target's sidelobe detections are removed by their envelope and close detections are
-  merged in the long-range chain (D-95). The FLS gallery's own detector does neither
-  (open item 15) and still drops detections under a typed 13 dB.
+  merged in the long-range chain (D-95). The FLS gallery's own detector does neither by
+  default (the merge exists and is off: D-135, open item 15) and still drops detections
+  under a typed 13 dB.
 - Ranges are those of the strongest arrival and are not corrected for propagation: a
   bottom-bounce arrival reads long (about 300 m in the deep-water scenario, 20 to 40 m in
   the fjord rehearsal).
@@ -564,10 +631,10 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   197 dB: the 12 km design).
 - **12 km with the Popoto boards** (`tools/popoto_range_study.py`, `DESIGN.md` section 5):
   the 27.5 kHz band cannot do it; 4 to 6 kHz can, with 198 dB from 32 hydrophones in one
-  row (about 500 W acoustic, omnidirectional) for the 15.6 dB the chain's detector needs at
+  row (about 515 W acoustic, omnidirectional) for the 15.8 dB the chain's detector needs at
   a detection probability of 0.5 under spherical spreading. The shipped 197 dB design is
-  1.0 dB short of that with one row and has +1.5 and +3.0 dB with two and three rows
-  (D-117). In simulation it tracks a ship at 12 km in 100 m of water over sand, and at
+  1.1 dB short of that with one row and has +1.4 and +2.9 dB with two and three rows
+  (D-117, D-134). In simulation it tracks a ship at 12 km in 100 m of water over sand, and at
   8 km in a winter duct; it does **not** see the same ship at 4 km under a summer
   thermocline over mud. No projector is chosen; electrical power is unknown.
 - **The staged Popoto builds** (`configs/builds/`, `REFERENCE_DESIGN.md`): a one-row
