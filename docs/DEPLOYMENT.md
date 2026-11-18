@@ -614,16 +614,27 @@ of decay per second in the measured fjord).
    detector's background window and caps the reading. That is the water, not a fault of the array.
 3. **Clutter.** With the tail there were 20 to 47 detections per ping at other bearings and 16 to 32 false tracks at
    short range with the 0.1 s pulse; none above 15 dB. Use `chain.min_snr_db: 15` (the deployed value is 9): it left
-   0.5 detections per ping and no false track, with the target's SNR unchanged.
+   0.5 detections per ping and no false track, with the target's SNR unchanged. **This is what a build spec's
+   `operation.site_kind: enclosed` writes into its deployment file** (`buildspec.ENCLOSED_WATER_CHAIN`; `open`, the
+   default, writes nothing, and no shipped build is enclosed). Chosen over the short window of item 4 on the present
+   table: on the fjord scenarios as shipped both keep the target on four pings of four with one, two and three rows;
+   `min_snr_db: 15` leaves 1.5, 1.5 and 0.2 other detections per ping and no track off the target, the short window
+   6.0, 0.5 and 1.8 and two such tracks with one row. With three rows the track on the target is confirmed one ping
+   later (ping 4).
 4. **A long pulse or a weak target.** Use a short CFAR window instead, `chain.cfar: {guard_m: 30, train_m: 100}`. It
    costs 3 to 6 dB of reported SNR, but at 2.6 km with the 1 s pulse it kept all four pings (12.4 dB) where
-   `min_snr_db: 15` lost two.
+   `min_snr_db: 15` lost two. It is not what `site_kind: enclosed` writes: set it in the spec's `operation.chain`
+   (`cfar: {guard_m: 30, train_m: 100}`, and `min_snr_db: 9` to take the floor back) when the target is weak against
+   the ping's own reverberation. In the what-if of the present table it found a 10 dB target that `min_snr_db: 15`
+   did not: three rows at 150 m (4 of 4 pings, 10.6 dB) and one row at 1 km (3 of 4, 13.7 dB).
 5. **Measure the ping's own reverberation first, and set the blanking from it.** Nothing in the repository measures
    it. Ping with no target and plot level against time; expect a fall of 27 to 30 dB per second if the water is like
    the measured fjord. Set `chain.blanking` to the time at which it has fallen below the expected echo, and plan the
    first targets beyond it. In the rehearsal's what-if a 10 dB target was undetectable out to 1 km with one row
    whatever the chain settings, and unaffected at 2 km.
-6. **Depth from stacked rows needs a profile.** Cast one and give it as `chain.elevation.ssp`. Without it the
+6. **Depth from stacked rows needs a profile.** Cast one and give it as `chain.elevation.ssp` (in a build spec:
+   `sound_speed.rung: profile` with `sound_speed.profile`; a spec with `site_kind: enclosed`, stacked rows and no
+   profile validates with a warning that says so. The profile is the site's: nothing is generated for it). Without it the
    three-row depth at 150 m was 3 to 4 m off (21.3 to 21.8 m for a target at 18.0 m, with a stated sigma of 2.6 m);
    with it, 18.0 to 18.6 m. With two rows at kilometres there is no usable depth in either case.
 7. **Hanging depth.** Hang the array above the shallowest ground between it and the target (a 53 m sill removed the

@@ -156,6 +156,10 @@ SCHEMA = {
         "range_m": ("vec2", "m", True, "[first, last] range the receive window covers; first null: the blind range of the pulse", "requirement", "must be given"),
         "bearings_deg": ("list", "deg", False, "[first, last, step] from broadside", "requirement", "[-60, 60, 0.5]"),
         "chain": ("map", "", False, "settings of the chain laid over the defaults (docs/CONFIGURATION.md)", "", "the defaults"),
+        "site_kind": (("open", "enclosed"), "", False, "the water the build is deployed in. enclosed: a fjord, a harbour, a basin, where sound keeps arriving for about a second after "
+                      "every strong arrival: the deployment file gets `chain.min_snr_db: 15` (buildspec.ENCLOSED_WATER_CHAIN; docs/DEPLOYMENT.md, a trial in a fjord or a harbour), "
+                      "laid under `operation.chain`. Stacked rows there also need a cast for their depth: `sound_speed.rung: profile` with the site's profile, which is site data and "
+                      "has no default (a warning says so)", "the trial plan", "open: nothing changes"),
         "coverage": ("map", "", False, "{environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see "
                      "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default", "the site the build is deployed at",
                      "leave it out: no coverage picture"),
@@ -193,6 +197,15 @@ ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
 # Only what a build decides. The range cell, CFAR windows, SNR floor, tracker and classifier sizes are the chain's own:
 # it derives or defaults them from the sonar (libs/live derive.hpp, gpusonar.live), and a second copy here would drift.
 DEFAULT_CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard"}
+# What a deployment file's `chain` gains for enclosed water (`operation.site_kind: enclosed`: a fjord, a harbour), laid over
+# the chain's own defaults and under the build's `operation.chain`. The owner's choice between this and the short CFAR
+# window (`cfar: {guard_m: 30, train_m: 100}`), from docs/figures/fjord_rehearsal.md: on the fjord scenarios as shipped both
+# keep the target on four pings of four with one, two and three rows; `min_snr_db: 15` leaves 1.5, 1.5 and 0.2 other
+# detections per ping and no track off the target, the short window 6.0, 0.5 and 1.8 and two such tracks with one row.
+# What it does NOT do: a target under the ping's own reverberation (the what-if of that table) is lost with either, and
+# there the short window found a 10 dB target that this setting did not (three rows at 150 m; one row at 1 km on three
+# pings of four). Open water (the default) gets nothing: the chain's own floor stands.
+ENCLOSED_WATER_CHAIN = {"min_snr_db": 15.0}
 # What a deployment file's `chain.multipath_depth` holds wherever a build switches it on (`operation.chain.multipath_depth`;
 # the build's own keys are laid over these). No shipped build switches it on.
 MULTIPATH_DEPTH_DEPLOYED = {"rays": True, "withhold_flagged": True}
@@ -509,6 +522,10 @@ def validate(spec: dict) -> list[Issue]:
     pd_design = op.get("detection_probability")
     if pd_design is not None and not 0.0 < float(pd_design) < 1.0:
         err("operation.detection_probability", f"{pd_design}: a probability between 0 and 1 (the detection probability on one ping the budget's margins are stated for)")
+    if op.get("site_kind") == "enclosed" and int(a.get("rows") or 1) > 1 and get(spec, "sound_speed", "rung") != "profile":
+        warn("operation.site_kind", "enclosed water (a fjord, a harbour) and stacked rows: depth from the rows needs the site's sound-speed profile from a cast "
+                                    "(sound_speed.rung: profile with sound_speed.profile; it becomes chain.elevation.ssp). Without it the three-row depth at 150 m was "
+                                    "3 to 4 m off in the fjord rehearsal with a stated sigma of 2.6 m. The profile is site data: nothing stands in for it")
     r0, r1 = op["range_m"]
     blind = 0.5 * c * pulse
     if r1 is None or (r0 is not None and float(r0) >= float(r1)):
@@ -861,6 +878,8 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
     if get(spec, "operation", "coverage") is not None:
         from . import coverage
         chain["coverage"] = coverage.of_build(spec, spec["operation"]["coverage"])     # raises when the site lacks water depth, bottom or wind
+    if get(spec, "operation", "site_kind", "open") == "enclosed":
+        chain = deep_merge(chain, ENCLOSED_WATER_CHAIN)     # a fjord or a harbour: the late tail's clutter stays under 15 dB; the build's own `operation.chain` still wins
     chain = deep_merge(chain, get(spec, "operation", "chain", {}) or {})
     if chain.get("multipath_depth") is not None:            # wherever it is on (the owner): through rays, and no flagged depth reported
         chain["multipath_depth"] = {**MULTIPATH_DEPTH_DEPLOYED, **chain["multipath_depth"]}

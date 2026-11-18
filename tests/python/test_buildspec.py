@@ -442,6 +442,47 @@ def test_the_design_detection_probability_is_a_field_of_the_spec():
     assert 0.0 <= ship["recommended"]["detection_probability"] <= 1.0
 
 
+def test_enclosed_water_is_a_named_option_and_open_water_files_do_not_move():
+    """Change B (fjord and harbour deployment settings): `operation.site_kind: enclosed` writes `chain.min_snr_db: 15`
+    into the deployment file and nothing else; `open`, and no key at all, leave every file as it is."""
+    for name in STAGES:
+        spec = bs.load(name)
+        assert "site_kind" not in spec["operation"] and "min_snr_db" not in bs.chain_config(spec), name       # no shipped build is enclosed
+        named = copy.deepcopy(spec)
+        named["operation"]["site_kind"] = "open"
+        assert bs.files(named) == bs.files(spec), name
+        fjord = copy.deepcopy(spec)
+        fjord["operation"]["site_kind"] = "enclosed"
+        assert not [i for i in bs.validate(fjord) if i.level == "error"], name
+        chain, base = bs.chain_config(fjord), bs.chain_config(spec)
+        assert chain.pop("min_snr_db") == 15.0 == bs.ENCLOSED_WATER_CHAIN["min_snr_db"] and chain == base, name
+        a, b = bs.files(fjord), bs.files(spec)
+        assert sorted(a) == sorted(b) and [k for k in a if a[k] != b[k]] == [f"deploy/{bs.names(spec)['deploy']}.yaml"], name       # the sonar files do not move
+        # stacked rows in enclosed water need the site's profile for their depth: said, not supplied
+        told = [i for i in bs.validate(fjord) if i.where == "operation.site_kind"]
+        assert bool(told) == (spec["array"]["rows"] > 1) and all(i.level == "warning" and "cast" in i.message for i in told), name
+        assert not [i for i in bs.validate(spec) if i.where == "operation.site_kind"], name
+    spec = bs.load("popoto_static_3x32")
+    spec["operation"]["site_kind"] = "enclosed"
+    spec["sound_speed"].update(rung="profile", profile={"depth": [0.0, 20.0, 60.0], "speed": [1480.0, 1495.0, 1490.0]})
+    assert not [i for i in bs.validate(spec) if i.where == "operation.site_kind"]
+    el = bs.chain_config(spec)["elevation"]
+    assert el["ssp"] == spec["sound_speed"]["profile"] and el["gradient_per_s"] is None
+    # a build's own chain settings still win: the short CFAR window with the chain's own floor
+    spec["operation"]["chain"] = {"min_snr_db": 9.0, "cfar": {"guard_m": 30.0, "train_m": 100.0}}
+    chain = bs.chain_config(spec)
+    assert chain["min_snr_db"] == 9.0 and chain["cfar"] == {"guard_m": 30.0, "train_m": 100.0}
+    bad = bs.load("popoto_static_3x32")
+    bad["operation"]["site_kind"] = "fjord"
+    assert any(i.where == "operation.site_kind" and i.level == "error" for i in bs.validate(bad))
+    # the generated chain section loads as a chain configuration
+    from gpusonar.live import LiveChain
+    fjord = bs.load("popoto_testauv_1x32")
+    fjord["operation"]["site_kind"] = "enclosed"
+    with LiveChain(dict(bs.chain_config(fjord, sync=False), engine="python", backend="host")):
+        pass
+
+
 def test_array_gain_against_isotropic_noise_closed_forms():
     """sonar_equation.isotropic_noise_gain_db against the two-hydrophone closed forms, the half-wavelength line and the
     limit of coincident hydrophones; SonarEquation.from_sonar uses it (10 log N only at half a wavelength)."""
