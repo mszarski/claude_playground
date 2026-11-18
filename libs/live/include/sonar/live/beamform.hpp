@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 
 namespace sonar::live {
@@ -54,7 +55,10 @@ struct BeamMap {
 
 /// Conventional far-field beamformer: B(u, f) = sum_n w_n X_n(f) exp(-j 2 pi (f + fc) p_n . u / c).
 /// Each channel is delayed by its plane-wave lead, exactly (a phase ramp over frequency).
-BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& bearings, const std::string& window = "rect");
+/// On the CUDA backend the transforms and the steered sums run on the device
+/// (beamform_batched.hpp); `batched` runs that formulation on the host (for tests).
+BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& bearings, const std::string& window = "rect",
+                          Backend backend = Backend::Host, int device = 0, bool batched = false);
 
 struct MvdrOptions {
   std::int64_t n_subbands = 32;   ///< narrow against c / aperture, so one steering vector fits each
@@ -68,6 +72,16 @@ struct MvdrOptions {
 /// training data would be cancelled), and w = R^-1 a / (a^H R^-1 a). Sub-band outputs are
 /// summed, which restores range resolution; the output is scaled by the number of elements
 /// so that a target reads the same as in the conventional sum.
-BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& bearings, const MvdrOptions& options = {});
+/// On the CUDA backend the sub-band transforms, covariances, Cholesky factors, solves and
+/// the application of the weights run on the device (beamform_batched.hpp); `batched` runs
+/// that formulation on the host (for tests). A covariance that is not positive definite
+/// (possible without loading) sends the whole call to the host code, which then uses LU.
+BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& bearings, const MvdrOptions& options = {},
+                      Backend backend = Backend::Host, int device = 0, bool batched = false);
+
+/// Seconds in each step of the batched beamformers since the last reset (beamform_batched.hpp).
+struct BeamformProfile;
+BeamformProfile beamform_profile();
+void beamform_profile_reset();
 
 }  // namespace sonar::live
