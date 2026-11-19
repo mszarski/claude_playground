@@ -2753,6 +2753,58 @@ by a detection or less, or not at all.
 | `fls_120k_rough_surface` | tracks 56 → 54; movers not on the boat 7 → 8 |
 | `flank_patrol` | detections per ping 5–7 → 3–6 |
 
+### The gallery's changes, seed by seed
+
+Source: `tools/gallery.py`'s scene runners called from a script outside the repository,
+full size, CPU, host backend, Bellhop for the long-range scenes. Sound speed and
+`max_arrivals` set in a copy of the configuration (both the scene's and Bellhop's copy of
+the speed); nothing in the repository changed. At each scene's own seed (63, 61, 51) the
+runs reproduced the stored GPU galleries before and after the four changes exactly
+(classes, speeds, track counts, peaks). "Old" is 1500 m/s and 40 arrivals, "new" is the
+water's speed and the energy rule; the FLS scenes differ only in speed.
+
+`fls_170k_traffic`, crossing boat (true 4.0 m/s), class and fitted speed:
+
+| Seed | 63 | 64 | 65 | 66 | 67 | 68 | 69 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1500 m/s | mover 4.5 | line 12.1 | uncertain 13.1 | uncertain 6.7 | line 17.9 | mover 14.5 | mover 4.3 |
+| 1496.8 m/s | line 15.4 | mover 9.2 | mover 4.2 | uncertain 6.7 | mover 18.1 | uncertain 9.7 | mover 4.3 |
+
+The boat closing head-on is a `mover` at 6.0 m/s on all 14 runs.
+
+`fls_120k_cluttered_seabed`, movers that are not the boat:
+
+| Seed | 61 | 62 | 63 | 64 | 65 | 66 | 67 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1500 m/s | 4 | 2 | 5 | 4 | 6 | 2 | 2 |
+| 1496.8 m/s | 8 | 3 | 6 | 7 | 2 | 1 | 3 |
+
+The boat under way is a `mover` on 6 of 7 seeds at 1500 m/s (`line` on seed 65) and 5 of 7
+at 1496.8 m/s (`line` on 62, `uncertain` on 65). Static tracks 18 to 31 at 1500 m/s.
+
+`popoto_12km`, the ship's own track:
+
+| Seed | 51 | 52 | 53 | 54 | 55 | 56 |
+| --- | --- | --- | --- | --- | --- | --- |
+| old | uncertain 4.3 | uncertain 5.2 | multipath 4.6 | multipath 4.3 | multipath 3.9 | uncertain 5.7 |
+| new | multipath 5.1 | multipath 5.8 | mover 5.3 | multipath 4.7 | mover 5.3 | uncertain 3.2 |
+
+Confirmed tracks: old 8 to 11, new 12 to 13. Movers off a moving object: none in any run.
+
+`popoto_env_gravel_30m` (seeds 51 to 53) and `popoto_env_winter_sand_200m` (its own
+profile water; only the arrivals rule differs):
+
+| Water, setting | Peak over median, 32 hydrophones, dB | Ship position error, m | Movers off a moving object |
+| --- | --- | --- | --- |
+| gravel, old | 34.7, 34.5, 34.7 | 24, 23, 24 | 0, 0, 0 |
+| gravel, new | 31.4, 31.4, 31.2 | 38, 39, 39 | 0, 0, 0 |
+| gravel, 1500 m/s with the energy rule (seed 51) | 31.5 | 39 | 0 |
+| gravel, 1496.8 m/s with 40 arrivals (seed 51) | 34.6 | 23 | 0 |
+| winter sand, 40 arrivals | 30.4, 30.1, 30.1 | 31, 29, 22 | 0, 0, 0 |
+| winter sand, energy rule | 30.1, 29.8, 29.7 | 31, 28, 24 | 1, 0, 0 |
+
+The ship is a tracked `mover` in every gravel and winter-sand run.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

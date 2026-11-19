@@ -190,8 +190,12 @@ Consequences that are open (STATUS items 38 to 43):
   `popoto_12km` ship classed `multipath`; `fls_170k_traffic` crossing boat classed `line`
   at 15.4 m/s (true about 4); `fls_120k_cluttered_seabed` 9 movers, 8 not the boat;
   `popoto_env_winter_sand_200m` one false mover; `popoto_env_gravel_30m` peak down 3.3 dB.
-  A 0.2 % change of sound speed moving track classes this much suggests the tracker and
-  classifier are fragile, which is worth a look before anything else in this list.
+  **Since measured by seed (STATUS item 44, RESULTS "The gallery's changes, seed by
+  seed")**: the 12 km, crossing-boat, cluttered-seabed and winter-sand changes are the luck
+  of one seed; the classes flip from seed to seed under old and new settings alike. The
+  gravel change is real and comes from the energy rule (D-137). What remains open is the
+  fragility itself: the crossing boat is right on only 2 of 7 seeds, the 12 km ship on 0
+  to 2 of 6.
 - The self-test's range criterion now scores the first arrival; `range_m` sits 6 to 32 m
   behind the target in shallow water.
 - The energy rule still stops at its caps (8 bounces, 64 arrivals) with a warning.

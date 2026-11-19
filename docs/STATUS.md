@@ -242,7 +242,8 @@ Grouped; within a group the most consequential first.
     12 km margins did not move).
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
     tree of commit `ebdb22a`) is worse in several scenes than the one before it** (item
-    16). None was examined for its cause.
+    16). Five of the changes were since rerun over several seeds (item 44): four are the
+    luck of one seed, one is caused by D-137.
     - **`popoto_12km`: the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
       true 6.0; it was `uncertain`, and `mover` before that). 12 confirmed tracks (8): 4
       movers, 7 multipath, 1 uncertain; 7 to 15 detections per ping (3 to 13).
@@ -260,6 +261,38 @@ Grouped; within a group the most consequential first.
       with 32 hydrophones) and the ship's position error went from 24 to 38 m.
     - The test of the stored full-size classes was loosened for the cluttered scene (movers
       at most 9, was 6).
+44. **Track classes in the gallery scenes change from seed to seed, so one gallery run
+    cannot show whether a change made them better or worse.** Measured on the CPU, full-size
+    scenes, each scene's own seed and further seeds, old settings against new (RESULTS, "The
+    gallery's changes, seed by seed"). Each run at the scene's own seed reproduced the GPU
+    gallery's numbers exactly, before and after.
+    - `fls_170k_traffic`: the crossing boat (true 4.0 m/s) is a `mover` near its speed on 2
+      of 7 seeds at 1500 m/s and 2 of 7 at 1496.8 m/s; on the others it is `line`,
+      `uncertain` or a `mover` at 6.7 to 18 m/s. The earlier gallery's right answer was one
+      of the lucky seeds. **The tracker usually joins this boat to the wrong detections**;
+      why has not been examined.
+    - `fls_120k_cluttered_seabed`: movers that are not the boat, 2 to 6 per seed at
+      1500 m/s (mean 3.6) and 1 to 8 at 1496.8 m/s (mean 4.3); paired by seed the
+      differences have no consistent sign. The gallery's 8 is the worst of 14 runs.
+    - `popoto_12km`: the ship's own track is a `mover` on 0 of 6 seeds with the old
+      settings (1500 m/s, 40 arrivals) and 2 of 6 with the new; otherwise `multipath` or
+      `uncertain`. **The ship is misclassified on most seeds either way.** The new
+      settings give 12 to 13 confirmed tracks against 8 to 11, the extra ones almost all
+      `multipath`. No run had a mover off a moving object.
+    - `popoto_env_winter_sand_200m`: the mover off a moving object appears on 1 of 3 seeds
+      with the new arrivals rule (the gallery's seed) and on none of 3 with the old.
+    - **`popoto_env_gravel_30m`: the lower peak and the larger position error are real and
+      come from keeping arrivals by energy (D-137), not from the sound speed (D-140).** On
+      every seed the peak is 34.5 to 34.7 dB with 40 arrivals and 31.2 to 31.5 dB with the
+      energy rule, at either speed; the position error 23 to 24 m against 38 to 39 m. The
+      ship stays a tracked `mover`. Why more arrivals lower the peak over the median has not
+      been examined; the larger error fits item 39 (`range_m` is the energy-weighted mean
+      of the bounces).
+    - Not rerun by seed: the thinned 8-ping cluttered scene of item 41, the 12 km waters'
+      other numbers, and the scenes not named here.
+    - `tests/python/test_realistic_scenes.py::test_documented_full_size_classes` checks the
+      stored single-seed classes; it guards the file against silent change, not the
+      classifier's quality.
 
 ### The 12 km design point
 
