@@ -2935,6 +2935,13 @@ output compared number by number with the file it replaced.
 - `docs/figures/sst_validation.*`: moved against the run of `5956b10`; deterministic, cause
   not bisected (STATUS item 42).
 - `docs/figures/fjord_depth_plan.md`: margins 0.1 to 0.2 dB lower; conclusions unchanged.
+- `docs/benchmarks/gpu_benchmark_all_l4.{md,json}`: every stage with a CUDA backend, NVIDIA
+  L4, tree of `e10b17f`: 93 cases, 36 host-only rows, none with an error. The tables it
+  replaces (first run, commit `15f1121`) are kept as `gpu_benchmark_all_l4_15f1121.*`. The
+  C++ live chain on the device, one / two / three rows: 0.0155 / 0.0282 / 0.0395 s a ping
+  (0.0155 / 0.0275 / 0.0380 at `d9cb5b7`; 0.0097 / 0.0212 / 0.0310 at `15f1121`); on the
+  host 0.151 / 0.306 / 0.455 s, unchanged. The 6 to 9 ms slowdown on the device is stable
+  across two runs; its cause is still not measured (issue `sonar-y7a`).
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one
