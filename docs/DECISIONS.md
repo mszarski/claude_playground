@@ -2246,3 +2246,48 @@ track is a `mover` on 2 with either rule, mostly classed as an echo of a stronge
 the gallery's seed it is now `uncertain`; open item 44). Rejected: an optimal one-to-one assignment (Hungarian), which kept
 the rough surface even but added false movers and misclassed anchored boats in the
 crossing-boat scene.
+
+### D-142 The shallow trials keep bounces until the next is 20 dB down: cap 16; the three-row trial too (owner approved)
+
+At the default cap of 8 bounces the energy rule (D-105, D-137) stopped while the next order
+was still 4.1, 4.7 and 18.0 dB below the strongest arrival in `popoto_face_2row_shallow`,
+`popoto_static_trial_2row` and `popoto_testauv_trial_1row`. These three scenarios and the
+generator's own trials (`buildspec.scenario_configs`) now set `propagation.max_order_cap:
+16`: they keep 14, 12 and 9 bounces and no series is cut. The default cap stays 8 for every
+other scenario. Cost: the two-row static trial takes 26 s a ping to simulate (13 at cap 8).
+`popoto_static_trial_3row` no longer states `max_order: 1`: the energy rule keeps 5 bounces
+there, under the cap, with the same detection on 4 of 4 pings and a depth of 16.9 m (17.2
+with one bounce).
+
+What moved with it:
+- `popoto_static_2x32` passes its `shallow` and `rehearsal` self-tests again: its depths
+  are within two of a stated sigma of about 47 m. That sigma is wide, half the water column:
+  honest, not informative. `popoto_face_2x32`'s `rehearsal` failed instead, on the judge's
+  angle rule (D-143). With D-143 all six builds pass 42 of 42 on both engines.
+- The two-row static trial no longer gives candidates: one elevation, -3.42 degrees, read
+  as a sea-bed bounce and folded to 13 to 14 m for a target at 60 m, sigma 123 m.
+- `popoto_face_2row_shallow` reads 73.7 to 92.6 m for 60 m. With the multipath term of the
+  sigma (D-133, on in every stacked-row deployment file) it states 18.7 to 20.0 m (within
+  1.63 sigma); `test_elevation` now runs that case with the term on.
+- In the two-row static trial the decimated and full-rate chains differ by 0.12 to 0.13
+  degrees and up to 6 m on the bounce reading (a tenth of the stated sigma); for detections
+  not on the direct path `test_decimate` now allows a fifth of the stated elevation sigma
+  and a tenth of the depth sigma. Direct-path detections keep the fixed tolerances.
+
+### D-143 The self-test judges an ambiguous elevation by depth, as it judges any other (owner approved)
+
+`tools/build_from_spec.py` `_check_depth` asked, for an ambiguous detection, for the direct
+path's elevation within two sigma of one candidate ANGLE, and for an unambiguous one for the
+true depth within two sigma of the DEPTH. A candidate angle is an arrival angle, and with
+boundaries an arrival may be a bounce whose fold is the right depth: the face two-row
+rehearsal failed with a reported depth of 35 m +- 42 m for 60 m because its angle, -3.9
+degrees, is a bounce's and not the direct path's. Now each candidate angle is folded into a
+depth as the chain folds the reported one (the straight line down the detection's range from
+the ownship's depth, `elevation.fold_depth`), the chosen candidate keeps the chain's own
+depth, and the truth must be within two stated sigma of one. Recorded with it: each
+candidate's depth, the old angle error, and how far the recomputation is from the chain's
+depth for the chosen candidate: at most 1.6 m over the 54 ambiguous detections of the six
+builds (the array's origin is not the ownship's depth), 0.005 m in free field. In the face
+two-row `shallow` and `rehearsal` runs one candidate folds to 60.7 and 64.0 m for a target
+at 60 m: the chain offered the right depth, and the angle rule failed it. Limit: in water
+with a profile the alternatives are folded along straight lines, not traced rays.

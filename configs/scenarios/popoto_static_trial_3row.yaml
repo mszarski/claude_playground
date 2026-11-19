@@ -1,7 +1,8 @@
 # Stage 3 trial: the three-row static array against a target at 150 m, 8 m below it.
 #   tools/sonar_live.py configs/deploy/popoto_static_3row.yaml --scenario popoto_static_trial_3row --out DIR
 # Raw 102.4 kHz samples, twelve boards on their own clocks (the chain must synchronise them), the frame
-# hanging still at 10 m and tilted 2 degrees, 30 m of water over sand (image-source multipath). The third
+# hanging still at 10 m and tilted 2 degrees, 30 m of water over sand (image-source multipath; no `max_order`
+# is stated, so the simulator's energy rule keeps the bounces: five here, D-142). The third
 # row makes the elevation one answer at this short range, where two rows give candidates.
 # Why 150 m: here the surface and bottom echoes arrive 2.4 m and 3.2 m behind the direct one and the chain
 # takes the first. With the same target depth at 300 m they are 1.1 to 1.5 m behind, inside the pulse's range
@@ -15,7 +16,6 @@ sonar_overrides:
 environment: {base: coastal_12c_sand, water_depth_m: 30.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0
-  max_order: 1
 platform: {position: [0, 0, 10.0], rpy: [0.0349, 0.0, 0], velocity: [0, 0, 0]}   # still; tilted 2 deg
 pings: {count: 4, interval: 3.0}
 scene:

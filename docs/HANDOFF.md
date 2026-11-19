@@ -162,8 +162,8 @@ quoting them.
 - GPU (NVIDIA L4, tree `ebdb22a`): 1493 passed, 24 skipped, none failed. The skips are
   data or tools not in the job. One test's expectation was changed after that job and has
   run only on CPU.
-- **Not in either suite: the generator's self-tests. `popoto_static_2x32` fails two of
-  them** (below).
+- Not in either suite: the generator's self-tests. Since D-142 and D-143 all six builds
+  pass every one on both engines (42 of 42).
 - Nothing has run on real hardware or real data. Nothing has run on DGX Spark or Jetson.
 
 ## 7. What was just done, and what it broke
@@ -180,12 +180,10 @@ The owner said "apply the defaults you recommended". Four changes, D-137 to D-14
 
 Consequences that are open (STATUS items 38 to 43):
 
-- **`popoto_static_2x32` fails its `shallow` and `rehearsal` self-tests on both engines**
-  (`sonar-jny`). With eight bounces, two rows 1.5 m apart at 2.6 km in 100 m of water give
-  candidates of +3.7° and −4.4° for a direct path from −0.66°, and the stated sigma does
-  not cover the truth. Restoring `"max_order": 1` in `buildspec.scenario_configs` would
-  make it pass by hiding the result; it was left failing on purpose. The owner has been
-  asked what the self-test should demand and has not answered.
+- `popoto_static_2x32` failed its `shallow` and `rehearsal` self-tests at eight bounces
+  (`sonar-jny`). Resolved by the owner's answers (D-142, D-143): the trials keep the whole
+  series (cap 16) and the judge folds ambiguous candidates into depths. Two rows in 100 m
+  at 2.6 to 3 km still cannot measure depth; they now say so with an honest, wide sigma.
 - **The regenerated gallery is worse in several scenes** (`sonar-ic5`), none examined:
   `popoto_12km` ship classed `multipath`; `fls_170k_traffic` crossing boat classed `line`
   at 15.4 m/s (true about 4); `fls_120k_cluttered_seabed` 9 movers, 8 not the boat;
@@ -224,18 +222,16 @@ Also known: the design report still reads the older `gpu_benchmark_all_l4.json`,
 
 ## 9. Waiting on the owner
 
-Asked in the last messages and unanswered:
-
-1. What should the two-row static build's self-test demand now?
-2. Should `popoto_static_trial_3row` drop its typed bounce count too? (Measured without
-   it: 5 bounces, no cap, same detection, depth 16.9 against 17.2 m.)
-3. Raise the bounce cap above 8 for the 100 m trials, or accept the warning?
+The three questions asked after the defaults were answered and applied (D-142, D-143):
+the shallow trials keep their whole bounce series (cap 16), `popoto_static_trial_3row`
+keeps bounces by energy, and the self-test judges ambiguous elevations by depth. All six
+builds pass their self-tests again.
 
 Standing questions are in `docs/STATUS.md` under "Open questions for the project owner":
 hardware (converter, projector, frame, navigation unit), target classes, operating water,
 recording, wire format, and two defaults not applied (16 and 18). Already decided by the
 owner: two rows recommended on the face; the FLS merge stays off; the deployment defaults
-were accepted.
+were accepted; the tracker takes the most probable pairs first (D-141).
 
 ## 10. Design numbers to keep straight
 

@@ -568,7 +568,10 @@ def test_two_rows_on_the_face_candidates_reach_the_track_and_the_water_depth_dec
         d = strongest(wide[-1])
         assert d["elevation_ambiguous"] and len(d["elevation_alternatives_deg"]) >= 2, engine
         assert all(t["depth_m"] is None for t in wide[-1]["tracks"]), engine         # no track starts on a guess
-        bounded = run(records, dict(CHAIN, elevation=dict(QUIET, water_depth=100.0, sector_from_depth={"bounces": 1, "margin_deg": 1.0})), engine)
+        # With the multipath term of the sigma (D-133) on, as in every stacked-row deployment file: without it the sigma is
+        # the angle's alone and, with the later bounces in the detection, no longer covers the error (D-142).
+        bounded = run(records, dict(CHAIN, elevation=dict(QUIET, water_depth=100.0, sector_from_depth={"bounces": 1, "margin_deg": 1.0},
+                                                          multipath_sigma={})), engine)
         d = strongest(bounded[-1])
         assert not d["elevation_ambiguous"] and d["path"] == "direct", engine
         # Direct path from 0.57 degrees below. The echoes with one surface or bottom bounce on one leg arrive 0.6 to 0.9 m
@@ -579,6 +582,8 @@ def test_two_rows_on_the_face_candidates_reach_the_track_and_the_water_depth_dec
         # to half a degree, 26 m at 3 km (limits 0.7 degrees and 36 m); with the later bounces in the detection it is
         # 0.35 to 0.9 degrees over the four pings, and this ping reads +0.32 degrees and 13 m for a target at 60 m, with
         # a stated sigma of 25 m. The limits are what was measured, not a requirement met: the depth is 47 m wrong.
+        # D-142 (the bounce cap raised from 8 to 16: fourteen bounces here): the pings read 73.7, 89.8 and 92.6 m for 60 m,
+        # with stated sigmas of 18.7 to 20.0 m (0.73 to 1.63 sigma); the angle's sigma alone was 14.5 to 15.1 m (2.23).
         assert d["elevation_deg"] == pytest.approx(-0.57, abs=1.0) and d["depth_m"] == pytest.approx(60.0, abs=50.0), engine
         assert abs(d["depth_m"] - 60.0) <= 2.0 * d["depth_sigma_m"], engine          # the detection's own sigma still owns up to it
         track = bounded[-1]["tracks"][0]
@@ -704,10 +709,13 @@ def test_every_stage_runs_from_its_files_through_both_engines(scenario, deploy, 
             assert "rows" not in last and "elevation_deg" not in d, engine
         elif depth is None:
             # Change A: with eight bounces kept the arrivals of the two-row trial are no longer within half a repeat of
-            # level (the scenario's premise held for one bounce), and two rows report candidates: +3.7 and -4.4 degrees
-            # for a direct path from -0.66. No single elevation is claimed, and the depth's sigma (122 m) says nothing.
-            assert last["rows"] == n_rows and d["elevation_ambiguous"] and d["elevation_alternatives_deg"] and d["path"] != "direct", engine
-            assert d["depth_sigma_m"] > 100.0, engine
+            # level (the scenario's premise held for one bounce), and two rows reported candidates: +3.7 and -4.4 degrees
+            # for a direct path from -0.66. D-142 (cap 16: twelve bounces): one elevation, -3.42 degrees, read as a sea-bed
+            # bounce and folded to 13 to 14 m for a target at 60 m, with a sigma of 123 m. Whether the rows give candidates
+            # changes with the number of bounces; what holds is that the direct path is not claimed and the sigma says how
+            # little the depth means, and covers the truth.
+            assert last["rows"] == n_rows and d["path"] != "direct", engine
+            assert d["depth_sigma_m"] > 100.0 and abs(d["depth_m"] - float(target[2])) <= 2.0 * d["depth_sigma_m"], engine
         else:
             assert last["rows"] == n_rows and not d["elevation_ambiguous"] and d["path"] == "direct", engine
             # The roll at the echo's arrival (the record's attitude samples) is in the depth.

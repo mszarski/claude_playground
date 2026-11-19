@@ -69,7 +69,7 @@ How things are verified, in the words used below:
 | 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test's final assertions had not passed in a job when last reported, and real-time pace loses one burst per run. Not done: the reference's SDK build, any hardware run, the RoCE receiver. The Holoscan `PrepareOp` still applies the old gain law (see open items) |
 | 12 Realistic propagation, reverberation and noise | **in progress**; most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread), the RAM cross-check, a 3-D seamount |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; motion estimation is CPU only. `docs/JETSON.md` is untested |
-| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); five of six builds pass their self-tests on both engines; `popoto_static_2x32` fails two since D-137 (open item 38) |
+| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds pass every self-test on both engines (42 of 42, D-142 and D-143; open item 38) |
 | 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water** | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py` |
 
 ## What works, component by component, and how it was checked
@@ -206,21 +206,23 @@ Grouped; within a group the most consequential first.
 
 ### After the four default changes (D-137 to D-140)
 
-38. **`popoto_static_2x32` fails its `shallow` and `rehearsal` self-tests on both
-    engines; the other five builds pass.** Once the simulator keeps eight bounces instead
-    of one (D-137), two rows 1.5 m apart at 2.6 km in 100 m of water no longer give one
-    elevation: the candidates are +3.7° and -4.4° for a direct path from -0.66°, and the
-    stated sigma (46.5 m, about 1.0°) does not cover the truth. The shipped
-    `popoto_static_trial_2row` shows the same (ambiguous on 4 pings of 4, 75 m for a
-    target at 60 m), and `popoto_face_2row_shallow` reads 88 to 95 m for a target at 60 m.
-    The earlier single elevation was a product of keeping one bounce, and was also wrong
-    (16 to 19 m). The failure is left standing; stating one bounce again in the
-    generator's trials (`buildspec.scenario_configs`) would hide it.
+38. **Two rows in 100 m of water at 2.6 to 3 km do not measure depth; they now say so
+    honestly, and all six builds pass their self-tests** (D-142, D-143). At eight bounces
+    `popoto_static_2x32` failed `shallow` and `rehearsal`: candidates of +3.7° and -4.4°
+    for a direct path from -0.66°, sigma 46.5 m not covering the truth. With the series
+    complete (cap 16, twelve bounces) its depths are within two of a stated sigma of about
+    47 m, half the water column. `popoto_face_2x32`'s `rehearsal` then failed because the
+    judge compared an ambiguous detection's candidate ANGLES with the direct path's: one
+    candidate there folds to 64 m for 60 m. The judge now folds each candidate into a depth
+    as the chain does. What remains true: these depths are honest, not useful (the
+    two-row static trial folds a sea-bed bounce to 13 to 14 m for 60 m, sigma 123 m;
+    `popoto_face_2row_shallow` reads 74 to 93 m for 60 m, sigma 19 to 20 m).
 39. **A detection's `range_m` lies 6 to 32 m behind the target in shallow water**: it is
     the energy-weighted mean of 58 to 142 m of bounces. Its first arrival is within 2.2 m.
     The generator's self-tests now score the first arrival, as both studies already did.
-40. **The energy rule still truncates at its caps.** The three image-source trials stop at
-    8 bounces (the next order is 4.2, 4.8 and 18.8 dB down); `popoto_12km*` and
+40. **The energy rule still truncates at its arrival cap.** The three image-source trials
+    no longer do: they set `max_order_cap: 16` and keep 9, 12 and 14 bounces (D-142).
+    `popoto_12km*` and
     `popoto_env_gravel_30m` stop at 64 arrivals (1.5 % and 14 % of a point's arrival
     energy left out). With the extra arrivals the simulated SNR at 12 km fell 1.6 to
     2.5 dB (24.0 / 22.4 / 23.5 to 22.4 / 19.9 / 21.2 dB for one, two and three rows),
@@ -240,10 +242,11 @@ Grouped; within a group the most consequential first.
     numbers `SCENARIOS.md` quotes for the 44 scenarios whose sound speed moved.
     `docs/figures/sst_validation.*` was already stale before them: regenerating it moves
     Pursuit and ASIAEX rows none of these changes touch (ridge over noise 27.1 to
-    30.1 dB), which is not explained. `docs/figures/gallery.json` and its figures (item 43),
-    `docs/figures/fjord_rehearsal.*`, `DESIGN.md` and `docs/design/derived.json` are
-    current (the last two regenerate byte-identical; the
-    12 km margins did not move).
+    30.1 dB), which is not explained. `docs/figures/fjord_rehearsal.*` is stale again
+    since D-142: its open-water rows run the shallow trials, which now keep their whole
+    bounce series. `docs/figures/gallery.json` and its figures (item 45), `DESIGN.md` and
+    `docs/design/derived.json` are current (the last two regenerate byte-identical after
+    D-142 as after D-137 to D-140; the 12 km margins did not move).
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
     tree of commit `ebdb22a`) is worse in several scenes than the one before it** (item
     16). Five of the changes were since rerun over several seeds (item 44): four are the
@@ -369,8 +372,8 @@ Grouped; within a group the most consequential first.
    still 98.5, 97.0 and 11.0 m for a target at 60 m; the stated sigma is now 25.0, 24.4
    and 41.0 m (it was 14.5, 14.5 and 10.9 m) and the depth is flagged
    `depth_multipath_limited`. No depth is corrected. The self-test's judge now looks at
-   every ping, and all six builds passed 7 of 7 on both engines (since D-137 five do: item 38). **Still wrong: the new
-   sigma is too wide for shallow targets at 1 km with two rows**, 22 to 38 m stated
+   every ping, and all six builds passed 7 of 7 on both engines (after D-137 five did;
+   since D-142 and D-143 all six do again: item 38). **Still wrong: the new sigma is too wide for shallow targets at 1 km with two rows**, 22 to 38 m stated
    against errors of 0.4 to 6.3 m for targets at 10 and 30 m. Boundaries are taken as
    perfect mirrors, and the term has not been checked against Bellhop in refracting
    water. The `shallow` self-test of the two-row builds passes with a 118 m sigma that
@@ -507,8 +510,8 @@ Grouped; within a group the most consequential first.
     decides scenario by scenario. The generator's own trial scenarios and the link budget
     still use the build's nominal 1500 m/s.
 22. **The trial, 12 km and `popoto_env_*` scenarios keep arrivals by energy** (D-137);
-    what that still leaves out is item 40. `popoto_static_trial_3row`, the `ssp_*`, fjord
-    and other shallow scenarios (`popoto_static_passing`, `popoto_elevation_shallow`,
+    what that still leaves out is item 40. `popoto_static_trial_3row` too since D-142 (five
+    bounces). The `ssp_*`, fjord and other shallow scenarios (`popoto_static_passing`, `popoto_elevation_shallow`,
     `popoto_elevation_rehearsal`, `popoto_testauv_direct_overload`, `popoto_far_mover`,
     `popoto_trial_*`) and `tools/popoto_12km_study.py`'s own image-source cases still
     state a count.
@@ -639,12 +642,9 @@ Decisions already taken are in `DECISIONS.md` and are not repeated here.
     `min_snr_db: 15`. No shipped build is enclosed. `elevation.ssp` from a cast is site
     data and is only asked for by a warning.
 18. `propagation.wind_speed > 0` together with range-dependent water as an error.
-19. Applied to the trial, 12 km and `popoto_env_*` scenarios (D-137). Still to decide:
-    drop the stated count from `popoto_static_trial_3row` too (measured without it: 5
-    bounces, no cap, same detection, depth 16.9 against 17.2 m)? Raise `max_order_cap`
-    above 8 for the 100 m trials, or accept the warning? And what should the two-row
-    static build's self-test demand, now that two rows at 2.6 km do not give one
-    elevation (open item 38)?
+19. Applied to the trial, 12 km and `popoto_env_*` scenarios (D-137), to
+    `popoto_static_trial_3row`, with the bounce cap raised to 16 for the shallow trials
+    (D-142); the self-test judges ambiguous elevations by depth (D-143).
 20. Merging close FLS detections before tracking: measured on six full scenes and left
     off (D-135, open item 15); on, with the losses in the cluttered and rough-surface
     scenes, or off with the loosened anchored-boat limit? (The detector's search factor

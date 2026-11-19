@@ -42,6 +42,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from gpusonar import buildspec as bs  # noqa: E402
 from gpusonar import config  # noqa: E402
+from gpusonar import elevation  # noqa: E402
 
 KINDS = ("free", "shallow", "rehearsal", "passing", "submerged", "passive", "stream")
 CRITERIA = {
@@ -49,7 +50,7 @@ CRITERIA = {
             "rows, on every ping: the true depth within two of the depth's stated sigma, and the multipath term of that sigma no more than 3 m + 0.3% of range (nothing shares the range cell in free field)",
     "shallow": "the target: the detection's first arrival within 6 m of the target's range (a detection is the direct echo and the bounces behind it, reported at their energy-weighted range: "
                "that range and the detection's extent are recorded, not judged), bearing within 1 deg; rows, on every ping: the true depth within two of the depth's stated sigma "
-               "(an ambiguous elevation: the truth within that of a listed candidate, or within 0.5 deg), and the sigma's multipath term no wider than the distance from the reported depth to the farther end of the water column. "
+               "(an ambiguous elevation: the truth within that of the depth of a listed candidate, each folded at the boundaries as the chain folds the reported one), and the sigma's multipath term no wider than the distance from the reported depth to the farther end of the water column. "
                "Where direct, surface and bottom echoes share the range cell the rows read a boundary and the depth cannot be right: what is checked is that the report says so",
     "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; first arrival within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
     "passing": "at least one track of kind mover, speed within 1 m/s of the truth, in both engines",
@@ -326,7 +327,7 @@ DEPTH_SIGMAS = 2.0      # a depth is honest when the truth lies within this many
 
 def _check_depth(report, target, water_depth, look_sign=1.0) -> dict | None:
     """Whether one ping's depth of a target is HONEST: the truth within DEPTH_SIGMAS of the sigma the chain states for it
-    (an ambiguous elevation: one of its candidates within that), and the sigma's multipath term (`depth_unresolved_sigma_m`)
+    (an ambiguous elevation: the depth of one of its candidates within that, D-143), and the sigma's multipath term (`depth_unresolved_sigma_m`)
     not so wide that it says nothing. With boundaries (`water_depth`) the term may not exceed the distance from the
     reported depth to the farther end of the water column; without them nothing can share the range cell, so it must
     stay inside the free-field allowance of 3 m + 0.3 % of the range. None: the ping has no detection of the target."""
@@ -342,10 +343,25 @@ def _check_depth(report, target, water_depth, look_sign=1.0) -> dict | None:
         return out
     sigma = float(det["depth_sigma_m"])
     if out["ambiguous"]:
+        # Judged by DEPTH, as an unambiguous one is (D-143). A candidate elevation is an arrival angle, and with boundaries
+        # an arrival may be a bounce: the chain's depth for it is the straight line down the detection's range from the
+        # array, folded at the surface and the sea bed (gpusonar/live.py, elevation.fold_depth). Comparing the angle with
+        # the direct path's instead failed a correct fold of a bounce. The chosen candidate keeps the chain's own depth;
+        # the others are folded here the same way (straight rays: a profile's ray bending is not redone), and how far
+        # that recomputation is from the chain's depth for the chosen one is recorded.
         cands = [e for e in [det.get("elevation_deg")] + list(det.get("elevation_alternatives_deg") or []) if e is not None]
-        out["candidate_error_deg"] = min(abs(e - true_el) for e in cands)
-        sigma_deg = float(np.degrees(sigma / (rng * max(np.cos(np.radians(det["elevation_deg"])), 1e-6))))
-        within = out["candidate_error_deg"] <= max(0.5, DEPTH_SIGMAS * sigma_deg)
+        out["candidate_error_deg"] = min(abs(e - true_el) for e in cands)          # a record, no longer judged
+        slant = float(det["range_m"])
+
+        def depth_of(el_deg):
+            image = float(own[2]) - slant * float(np.sin(np.radians(el_deg)))
+            return float(elevation.fold_depth(image, water_depth)[0])
+        depths = [float(det["depth_m"])] + [depth_of(e) for e in cands[1:]]
+        out["candidate_depths_m"] = depths
+        out["chosen_depth_recomputed_error_m"] = depth_of(cands[0]) - float(det["depth_m"])
+        out["depth_error_m"] = min((d - float(target[2]) for d in depths), key=abs)
+        out["depth_error_sigmas"] = abs(out["depth_error_m"]) / sigma
+        within = out["depth_error_sigmas"] <= DEPTH_SIGMAS
     else:
         out["depth_error_m"] = float(det["depth_m"] - target[2])
         out["depth_error_sigmas"] = abs(out["depth_error_m"]) / sigma

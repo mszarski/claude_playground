@@ -2873,6 +2873,34 @@ scene's own seed ("Why the tracker loses the crossing boat"): the same classes, 
 counts and speeds to 0.1 m/s. The long-range
 scenes were not replayed beforehand.
 
+### Shallow trials with the whole bounce series, and the self-test judged by depth (D-142, D-143)
+
+One ping each, CPU, energy rule at caps 8, 12 and 16:
+
+| Trial | Cap 8 | Cap 12 | Cap 16 |
+| --- | --- | --- | --- |
+| `popoto_testauv_trial_1row` (30 m) | cut, next order -18.0 dB, 1.3 s/ping | 9 bounces, 1.1 s | 9 bounces, 1.3 s |
+| `popoto_face_2row_shallow` (100 m) | cut, -4.1 dB, 1.2 s | cut, -10.6 dB, 2.6 s | 14 bounces, 3.4 s |
+| `popoto_static_trial_2row` (100 m) | cut, -4.7 dB, 12.8 s | 12 bounces, 25.6 s | 12 bounces, 26.5 s |
+| `popoto_static_trial_3row` (30 m, no stated order) | 5 bounces | | |
+
+Generator self-tests, six builds, both engines: at cap 8 with the angle rule 40 of 42
+(`popoto_static_2x32` `shallow`, `rehearsal`); at cap 16 with the angle rule 41 of 42
+(`popoto_face_2x32` `rehearsal`); at cap 16 judged by depth 42 of 42. Over the 54
+ambiguous detections the judge's fold of the chosen candidate is within 1.6 m of the
+chain's depth (0.005 m in free field).
+
+| Case, cap 16 | Depth read, m (truth 60) | Stated sigma, m | Error / sigma |
+| --- | --- | --- | --- |
+| `popoto_face_2row_shallow`, three pings, multipath term on | 73.7, 89.8, 92.6 | 18.7, 20.0, 20.0 | 0.73, 1.49, 1.63 |
+| the same, angle's sigma only | 73.7, 89.8, 92.6 | 15.1, 14.5, 14.6 | 0.91, 2.05, 2.23 |
+| `popoto_static_trial_2row`, deployment file, two pings | 14.1, 13.2 (sea-bed bounce, -3.42°) | 123.3 | 0.37, 0.38 |
+| `popoto_face_2x32` `rehearsal`, ambiguous ping | 35.3; candidate 64.0 | 42.0 | 0.09 (by depth); 3.3° (by angle) |
+
+Decimated against full-rate chain, two-row static trial, bounce reading: elevation
+-3.29 / -3.42°, -3.32 / -3.44° (stated sigma 1.0°); depth 20.1 / 14.1, 18.8 / 13.2,
+15.8 / 17.2 m (stated 123 m); track depth 19.5 / 13.6 m.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

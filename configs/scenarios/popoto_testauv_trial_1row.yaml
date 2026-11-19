@@ -3,7 +3,8 @@
 # Raw 102.4 kHz samples, every board on its own clock (the chain must synchronise them), the
 # vehicle rolled and pitched and still rolling during the ping (the record carries the attitude
 # samples navigation would send), 30 m of water over sand (image-source multipath, bounces kept by
-# the simulator's energy rule: no `max_order` is stated, eight here), a target at
+# the simulator's energy rule: no `max_order` is stated, nine here, with the cap raised to 16 so the
+# series is not cut, D-142), a target at
 # 500 m as in the Popoto trial scenarios (popoto_trial_*). Depths and bottom values are
 # placeholders for a trial site that is not chosen.
 name: popoto_testauv_trial_1row
@@ -14,6 +15,7 @@ sonar_overrides:
 environment: {base: coastal_12c_sand, water_depth_m: 30.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0
+  max_order_cap: 16   # at the default 8 the series was cut with the next order 18 dB down (D-142)
 platform: {position: [0, 0, 10.0], rpy: [0.0524, 0.0175, 0], velocity: [1.0, 0, 0], rates: [0.0349, 0, 0]}   # rolled 3 deg, rolling 2 deg/s
 pings: {count: 4, interval: 3.0}
 scene:
