@@ -2935,6 +2935,11 @@ output compared number by number with the file it replaced.
 - `docs/figures/sst_validation.*`: moved against the run of `5956b10`; deterministic, cause
   not bisected (STATUS item 42).
 - `docs/figures/fjord_depth_plan.md`: margins 0.1 to 0.2 dB lower; conclusions unchanged.
+- `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
+  lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
+  row on the face). Recommended own depths unchanged; reaches on the planner's grid one
+  step shorter where a margin crossed zero (a large AUV at 13 m from the one-row face:
+  5.68 to 4.90 km); three rows in deep water hold a ship from 130 m (125).
 
 ## Not yet measured
 
