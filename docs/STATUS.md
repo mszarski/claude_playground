@@ -580,7 +580,8 @@ Grouped; within a group the most consequential first.
 
 37. **Stale by the 0.11 to 0.15 dB the thresholds moved**:
     `docs/design/popoto_depth_planner.json` and `.png` (the tool had planned one build
-    after 9 minutes and was stopped), `docs/figures/fjord_depth_plan.md`, and the depth
+    after 9 minutes and was stopped), `docs/figures/fjord_depth_plan.md` (regenerated at
+    `e10b17f`: margins 0.1 to 0.2 dB lower, conclusions unchanged), and the depth
     sections of `DESIGN.md` that read the planner file (they still print +3.0 dB of
     free-field margin and +9.0 dB at 225 m for three rows). Hand-written and left as
     they were, with a marker: the prototype table of `docs/design/projector_selection.md`
