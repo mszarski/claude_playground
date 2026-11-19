@@ -2902,6 +2902,31 @@ Decimated against full-rate chain, two-row static trial, bounce reading: elevati
 -3.29 / -3.42°, -3.32 / -3.44° (stated sigma 1.0°); depth 20.1 / 14.1, 18.8 / 13.2,
 15.8 / 17.2 m (stated 123 m); track depth 19.5 / 13.6 m.
 
+### Generated files regenerated after D-137 to D-143
+
+Each tool run on the tree of commit `e10b17f` (CPU, idle machine but for the tool), its
+output compared number by number with the file it replaced.
+
+- `docs/figures/rough_surface_bands.json`: band depths within 0.12 dB (table under "Sea
+  surface: frame and band depth").
+- `docs/design/surface_image_validation.json`: the rough-surface rows' energy with the
+  scattered part 0.1 to 0.16 dB lower; nothing else moved.
+- `docs/design/popoto_range_study.json`, `popoto_elevation_study.json`: identical; they
+  were not stale.
+- `docs/design/popoto_elevation_bench.json`, every entry re-measured on one tree (the old
+  file mixed runs: its notes and under-load timings are gone with it):
+  - `static_2row` reads a sea-bed bounce, 13 to 17 m for 60 m, sigma 123 m (was direct,
+    52 to 58 m, sigma 122 m: D-142, open item 38).
+  - `face_2row` is ambiguous on every ping at -3.87 degrees, 33 m (was about 0 degrees,
+    26 to 34 m). `shallow` reads 46 m (44). `static_3row_300m_shallow` reads the direct
+    path, 21.4 m (a bottom bounce, 27.7 m). `static_3row` 17.05 m (17.36).
+  - `testauv_1row`: range error 10.1 to 10.2 m (0.4 to 0.9) and bearing error -0.24 to
+    -0.28 degrees (under 0.01). The bench scores `range_m`, the energy-weighted centre of
+    the direct echo and its nine bounces (open item 39); the bearing shift was not
+    examined.
+  - Free field: depth errors within 0.05 m, as before. Chain time per ping at scenario
+    size 0.73 / 1.65 / 2.50 s for one, two and three rows (0.63 / 1.41 / 2.54).
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
