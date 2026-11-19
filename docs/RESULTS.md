@@ -2912,8 +2912,6 @@ output compared number by number with the file it replaced.
   surface: frame and band depth").
 - `docs/design/surface_image_validation.json`: the rough-surface rows' energy with the
   scattered part 0.1 to 0.16 dB lower; nothing else moved.
-- `docs/design/popoto_range_study.json`, `popoto_elevation_study.json`: identical; they
-  were not stale.
 - `docs/design/popoto_elevation_bench.json`, every entry re-measured on one tree (the old
   file mixed runs: its notes and under-load timings are gone with it):
   - `static_2row` reads a sea-bed bounce, 13 to 17 m for 60 m, sigma 123 m (was direct,
@@ -2927,6 +2925,16 @@ output compared number by number with the file it replaced.
     examined.
   - Free field: depth errors within 0.05 m, as before. Chain time per ping at scenario
     size 0.73 / 1.65 / 2.50 s for one, two and three rows (0.63 / 1.41 / 2.54).
+- `docs/design/popoto_stage2.json`: the study part regenerated identical; the CUDA
+  timing (NVIDIA L4, Hugging Face job on `e10b17f`) re-measured: one full-rate ping of 0.5
+  to 13 km takes 0.48 / 1.03 / 1.50 s for one, two and three rows (0.48 / 1.02 / 1.51 in
+  the run of `5d91ba6`); decimating first 0.78 / 1.31 / 1.78 s. Load average 9 to 16 on 8
+  threads again (the job builds first): upper figures.
+- `docs/design/popoto_range_study.json`, `popoto_elevation_study.json` and the stage-2
+  study: identical.
+- `docs/figures/sst_validation.*`: moved against the run of `5956b10`; deterministic, cause
+  not bisected (STATUS item 42).
+- `docs/figures/fjord_depth_plan.md`: margins 0.1 to 0.2 dB lower; conclusions unchanged.
 
 ## Not yet measured
 

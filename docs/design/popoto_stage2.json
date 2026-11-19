@@ -1766,18 +1766,18 @@
             500.0,
             13000.0
           ],
-          "simulate_seconds": 0.8898048860000927,
+          "simulate_seconds": 0.8806725019985606,
           "load_average_before": [
-            14.58056640625,
-            11.13427734375,
-            5.27490234375
+            15.82958984375,
+            12.173828125,
+            7.18896484375
           ],
           "backend": "cuda",
           "chain_full_rate": {
-            "seconds": 0.479106632,
+            "seconds": 0.479056886,
             "all_seconds": [
-              1.46945212,
-              0.479106632
+              1.470039739,
+              0.479056886
             ],
             "detections": 4,
             "strongest": {
@@ -1787,10 +1787,10 @@
             }
           },
           "chain_decimate_first": {
-            "seconds": 0.76682975,
+            "seconds": 0.782569682,
             "all_seconds": [
-              0.78630239,
-              0.76682975
+              0.807347589,
+              0.782569682
             ],
             "detections": 4,
             "strongest": {
@@ -1800,10 +1800,10 @@
             }
           },
           "chain_decimate_first_factor_25": {
-            "seconds": 0.977652183,
+            "seconds": 0.991124035,
             "all_seconds": [
-              0.977652183,
-              0.984028717
+              0.997885971,
+              0.991124035
             ],
             "detections": 6,
             "strongest": {
@@ -1812,12 +1812,12 @@
               "snr_db": 90.53280214
             }
           },
-          "stage_whole_ping_seconds": 0.3824927009999328,
+          "stage_whole_ping_seconds": 0.3804287740003929,
           "chain_on_decimated_records": {
-            "seconds": 0.399906377,
+            "seconds": 0.399882709,
             "all_seconds": [
-              0.402044632,
-              0.399906377
+              0.400168301,
+              0.399882709
             ],
             "detections": 4,
             "strongest": {
@@ -1833,16 +1833,16 @@
           "decimated_samples_per_channel": 106416,
           "raw_bytes_in_memory": 231560576,
           "decimated_bytes_in_memory": 27242496,
-          "stage_streaming_seconds_per_second_of_stream": 0.03153381800001398,
+          "stage_streaming_seconds_per_second_of_stream": 0.03143092099981004,
           "stage_streaming_block_samples": 128,
           "recording_raw_bytes": 231587712,
-          "recording_raw_write_seconds": 0.018788294999922073,
+          "recording_raw_write_seconds": 0.01841971399881004,
           "recording_decimated_bytes": 27269632,
-          "recording_decimated_write_seconds": 0.0031099259999791684,
+          "recording_decimated_write_seconds": 0.003016610000486253,
           "load_average_after": [
-            12.56591796875,
-            10.81640625,
-            5.23388671875
+            14.6416015625,
+            11.98828125,
+            7.1552734375
           ]
         },
         "cpu_threads": 8,
@@ -1856,68 +1856,68 @@
             500.0,
             13000.0
           ],
-          "simulate_seconds": 1.730843995999976,
+          "simulate_seconds": 1.735590330001287,
           "load_average_before": [
-            12.56591796875,
-            10.81640625,
-            5.23388671875
+            13.62890625,
+            11.822265625,
+            7.12744140625
           ],
           "backend": "cuda",
           "chain_full_rate": {
-            "seconds": 1.016505809,
+            "seconds": 1.027747413,
             "all_seconds": [
-              1.016505809,
-              1.041978304
+              1.027747413,
+              1.040533589
             ],
             "detections": 4,
             "strongest": {
               "range_m": 6045.002481,
               "bearing_deg": 7.035754551,
               "snr_db": 90.62020043,
-              "depth_m": 9.833910092
+              "depth_m": 9.931543031
             }
           },
           "chain_decimate_first": {
-            "seconds": 1.289297213,
+            "seconds": 1.308185466,
             "all_seconds": [
-              1.336242901,
-              1.289297213
+              1.338731296,
+              1.308185466
             ],
             "detections": 5,
             "strongest": {
               "range_m": 6045.002546,
               "bearing_deg": 7.037480235,
               "snr_db": 90.62448775,
-              "depth_m": 9.834002736
+              "depth_m": 9.930364194
             }
           },
           "chain_decimate_first_factor_25": {
-            "seconds": 1.381080183,
+            "seconds": 1.408703707,
             "all_seconds": [
-              1.39280285,
-              1.381080183
+              1.461549694,
+              1.408703707
             ],
             "detections": 7,
             "strongest": {
               "range_m": 6045.002027,
               "bearing_deg": 7.031576208,
               "snr_db": 90.58718032,
-              "depth_m": 9.833946723
+              "depth_m": 9.931081097
             }
           },
-          "stage_whole_ping_seconds": 0.41950689899999816,
+          "stage_whole_ping_seconds": 0.40963484999883804,
           "chain_on_decimated_records": {
-            "seconds": 0.877422445,
+            "seconds": 0.878031326,
             "all_seconds": [
-              0.877422445,
-              0.898526709
+              0.895613542,
+              0.878031326
             ],
             "detections": 5,
             "strongest": {
               "range_m": 6045.002546,
               "bearing_deg": 7.037480235,
               "snr_db": 90.62448775,
-              "depth_m": 9.834002736
+              "depth_m": 9.930364194
             }
           },
           "factor": 17,
@@ -1927,16 +1927,16 @@
           "decimated_samples_per_channel": 106416,
           "raw_bytes_in_memory": 463121152,
           "decimated_bytes_in_memory": 54484992,
-          "stage_streaming_seconds_per_second_of_stream": 0.06256487550001566,
+          "stage_streaming_seconds_per_second_of_stream": 0.06318669749998662,
           "stage_streaming_block_samples": 64,
           "recording_raw_bytes": 463150768,
-          "recording_raw_write_seconds": 0.03637245499999153,
+          "recording_raw_write_seconds": 0.03613470999880519,
           "recording_decimated_bytes": 54514608,
-          "recording_decimated_write_seconds": 0.005112417999953323,
+          "recording_decimated_write_seconds": 0.005102215998704196,
           "load_average_after": [
-            11.02783203125,
-            10.54248046875,
-            5.2041015625
+            11.6865234375,
+            11.4658203125,
+            7.06103515625
           ]
         },
         "3": {
@@ -1949,68 +1949,68 @@
             500.0,
             13000.0
           ],
-          "simulate_seconds": 2.5558878749999394,
+          "simulate_seconds": 2.5669185139995534,
           "load_average_before": [
-            10.224609375,
-            10.3837890625,
-            5.18115234375
+            10.83056640625,
+            11.2919921875,
+            7.0283203125
           ],
           "backend": "cuda",
           "chain_full_rate": {
-            "seconds": 1.51260677,
+            "seconds": 1.494575097,
             "all_seconds": [
-              1.526343226,
-              1.51260677
+              1.515933433,
+              1.494575097
             ],
             "detections": 4,
             "strongest": {
               "range_m": 6045.002369,
               "bearing_deg": 7.035736927,
               "snr_db": 90.62486722,
-              "depth_m": 9.924200176
+              "depth_m": 10.04678141
             }
           },
           "chain_decimate_first": {
-            "seconds": 1.793468539,
+            "seconds": 1.7768875,
             "all_seconds": [
-              1.793468539,
-              1.797865451
+              1.778728238,
+              1.7768875
             ],
             "detections": 5,
             "strongest": {
               "range_m": 6045.002434,
               "bearing_deg": 7.037463525,
               "snr_db": 90.62749564,
-              "depth_m": 9.924259245
+              "depth_m": 10.04562763
             }
           },
           "chain_decimate_first_factor_25": {
-            "seconds": 1.823668489,
+            "seconds": 1.838472772,
             "all_seconds": [
-              1.833212229,
-              1.823668489
+              1.838472772,
+              1.847197136
             ],
             "detections": 7,
             "strongest": {
               "range_m": 6045.001916,
               "bearing_deg": 7.031573453,
               "snr_db": 90.59899684,
-              "depth_m": 9.924222806
+              "depth_m": 10.0463484
             }
           },
-          "stage_whole_ping_seconds": 0.499614643999962,
+          "stage_whole_ping_seconds": 0.49624375399980636,
           "chain_on_decimated_records": {
-            "seconds": 1.276996484,
+            "seconds": 1.281973289,
             "all_seconds": [
-              1.276996484,
-              1.298837454
+              1.287657372,
+              1.281973289
             ],
             "detections": 5,
             "strongest": {
               "range_m": 6045.002434,
               "bearing_deg": 7.037463525,
               "snr_db": 90.62749564,
-              "depth_m": 9.924259245
+              "depth_m": 10.04562763
             }
           },
           "factor": 17,
@@ -2020,16 +2020,16 @@
           "decimated_samples_per_channel": 106416,
           "raw_bytes_in_memory": 694681728,
           "decimated_bytes_in_memory": 81727488,
-          "stage_streaming_seconds_per_second_of_stream": 0.09540435100001332,
+          "stage_streaming_seconds_per_second_of_stream": 0.09434002950001741,
           "stage_streaming_block_samples": 42,
           "recording_raw_bytes": 694715816,
-          "recording_raw_write_seconds": 0.05379989099992599,
+          "recording_raw_write_seconds": 0.05364236199966399,
           "recording_decimated_bytes": 81761576,
-          "recording_decimated_write_seconds": 0.00759526999991067,
+          "recording_decimated_write_seconds": 0.007462792998921941,
           "load_average_after": [
-            8.5810546875,
-            10.00634765625,
-            5.14111328125
+            8.85546875,
+            10.83544921875,
+            6.94677734375
           ]
         }
       }
