@@ -252,6 +252,8 @@ Grouped; within a group the most consequential first.
     - `popoto_far_mover`: 4 confirmed tracks (2), one more multipath and one uncertain.
       `popoto_env_gravel_30m`: 2 tracks (1), the second attached as multipath.
     - Better: in `fls_170k_transit` the anchored boat is `static` again (was `uncertain`).
+    - **`popoto_env_gravel_30m`: the peak fell 3.3 dB** (34.7 to 31.4 dB over the median
+      with 32 hydrophones) and the ship's position error went from 24 to 38 m.
     - The test of the stored full-size classes was loosened for the cluttered scene (movers
       at most 9, was 6).
 
