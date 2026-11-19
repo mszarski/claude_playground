@@ -26,6 +26,8 @@ CPU result on the same changes (tree of commit `f9f4454` with the regenerated ga
 
 CPU result with the new tracker association (D-141, commit `1442de5`, `tools/test.sh` steps with Bellhop set, 2026-11-19): every test passed, 139 of 139 ctest entries including the whole pytest run. The six builds' self-tests gave results identical to the run before D-141 on both engines (48 of 48 compared); `popoto_static_2x32` still fails the two of open item 38. The gallery was regenerated on the same tree (open item 45) and the one test that reads it was changed after the suite ran; it passes against the new file.
 
+GPU result with the new tracker association (commit `1442de5`, NVIDIA L4 through Hugging Face Jobs, CUDA build with Bellhop, Ceres and the Holoscan C++ operators, 2026-11-19): the whole suite passed, 1497 passed and 24 skipped (data and tools not in the job), none failed. The stored-gallery test and the gallery file it reads were changed after this run (commit `a26d588`) and have run only on the CPU since.
+
 One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
