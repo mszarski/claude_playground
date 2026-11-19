@@ -79,6 +79,8 @@ def boundaries(cfg):
     bed = env.get("water_depth") or prop.get("environment", {}).get("depth") or prop.get("bottom_z")
     surface = 0.0 if (bed is not None or cfg.get("fidelity") == "eigenray") else None
     for b in cfg.get("reverberation", []):
+        if b.get("boundary_z") is None:          # boundaries now come from the environment (water depth), as above
+            continue
         z = float(b["boundary_z"])
         if z <= 0.0 and surface is None:
             surface = z
