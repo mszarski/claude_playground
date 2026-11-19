@@ -47,16 +47,16 @@
     1.65,
     1.85
    ],
-   "excess_before_db": 0.3441888488812881,
-   "excess_after_db": 13.797526498650189,
-   "largest_change_before_onset_db": 4.589534065294783,
+   "excess_before_db": 0.3441984905579359,
+   "excess_after_db": 13.797530314800134,
+   "largest_change_before_onset_db": 4.589532665903479,
    "largest_change_at_s_hz": [
     0.875,
     10045.0
    ],
-   "control_40hz_above_track_db_re_no_bottom": -0.3750345911884615,
-   "on_true_track_db_re_no_bottom": 16.732267594592305,
-   "on_direct_both_ways_track_db_re_no_bottom": 1.1423481118047332,
+   "control_40hz_above_track_db_re_no_bottom": -0.37503684428694506,
+   "on_true_track_db_re_no_bottom": 16.732272337087515,
+   "on_direct_both_ways_track_db_re_no_bottom": 1.1423413556118047,
    "true_track_hz_at_2s": 10051.504314009057,
    "direct_both_ways_track_hz_at_2s": 10132.785126606383
   },
@@ -66,43 +66,43 @@
    "eq68_frequency_hz": 10133.732068174666,
    "exact_kinematics_frequency_hz": 10133.732068174666,
    "measured_frequency_hz": 10133.732068174666,
-   "echo_vs_eq66_residual": 0.0028536442144688288,
-   "echo_amplitude_over_sonar_equation": 1.00101478283221,
-   "level_error_db": 0.008809822414543351,
+   "echo_vs_eq66_residual": 0.0028536446187300765,
+   "echo_amplitude_over_sonar_equation": 1.001014783449596,
+   "level_error_db": 0.008809827771653013,
    "ridge_hz_at_echo_time": 10164.0,
    "separation_from_ridge_hz": 30.267931825334017,
-   "cell_db_above_reverberation": 8.111968541743224,
-   "cell_db_above_noise": 19.33454439565741,
-   "band_level_echo_minus_reverberation_db": -6.434230263829468,
-   "band_level_rise_from_the_echo_db": 0.9024520790164482
+   "cell_db_above_reverberation": 8.293036972201415,
+   "cell_db_above_noise": 22.52591035171192,
+   "band_level_echo_minus_reverberation_db": -6.434224509044241,
+   "band_level_rise_from_the_echo_db": 0.9180891526995721
   },
   "time_spreading": {
    "what": "the echo run again with `time_spread: {surface: {wind_speed}}` (not in the scenario file)",
    "direct_echo_change": 0.0,
-   "surface_bounce_echo_db_re_direct": -5.481312153893068,
-   "surface_bounce_echo_change_db": -0.6689967540961339
+   "surface_bounce_echo_db_re_direct": -5.481312611155643,
+   "surface_bounce_echo_change_db": -0.6689961501557701
   },
   "levels": {
    "ridge_psd_over_noise_psd_db": {
-    "median": 27.132464052933337,
-    "p10": 17.767663992372146
+    "median": 30.14275329006826,
+    "p10": 20.77795377507489
    },
    "band_reverberation_over_noise_db": {
-    "median": 12.582273628945819,
-    "fraction_above": 0.949438202247191
+    "median": 15.592570833478828,
+    "fraction_above": 0.9606741573033708
    },
    "band_hz": [
     9600.0,
     10200.0
    ],
-   "bottom_paths_share_db": -6.261176706827094
+   "bottom_paths_share_db": -6.261182077324527
   },
   "noise": {
    "what": "full record minus echoes minus reverberation (the parts add)",
-   "psd_db_re_upa2_per_hz": 50.512019147077616,
+   "psd_db_re_upa2_per_hz": 50.51201919742883,
    "scenario_spectrum_db": 50.612689758941116
   },
-  "seconds_one_ping": 40.35327219963074,
+  "seconds_one_ping": 15.065861940383911,
   "cross_pairs": {
    "max_error_direct_only_hz": 1.4008716070787273,
    "max_error_with_bottom_paths_hz": 1.5195347739399665,
@@ -115,7 +115,7 @@
    "mean_error_with_bottom_paths_hz": -0.1191459448510482,
    "bottom_path_onset_s": 1.7
   },
-  "seconds": 228.6600284576416
+  "seconds": 82.96355080604553
  },
  "asiaex": {
   "parameters": {
@@ -134,58 +134,58 @@
   "arrivals": {
    "direct": {
     "closed_form_ms": 0.0,
-    "measured_ms": -0.00012611675326978933,
-    "error_us": -0.12611675326978933,
-    "level_db": 0.0025819842930684947,
+    "measured_ms": -0.00012611626787721597,
+    "error_us": -0.12611626787721597,
+    "level_db": 0.00258185784601825,
     "eq36_vertical_m": 20.0,
     "unfolded_vertical_m": 20.0,
     "grazing_deg": 2.290610042638529
    },
    "surface": {
     "closed_form_ms": 3.973143946009561,
-    "measured_ms": 3.972955847353602,
-    "error_us": -0.18809865595859065,
-    "level_db": 0.0026064144404681585,
+    "measured_ms": 3.9729558445119117,
+    "error_us": -0.18810149764902917,
+    "level_db": 0.00260617795504143,
     "eq36_vertical_m": 80.0,
     "unfolded_vertical_m": 80.0,
     "grazing_deg": 9.090276920822323
    },
    "bottom": {
     "closed_form_ms": 9.199043439617027,
-    "measured_ms": 9.19923700539228,
-    "error_us": 0.1935657752536457,
-    "level_db": 0.00238424153715607,
+    "measured_ms": 9.199237006193117,
+    "error_us": 0.19356657609037597,
+    "level_db": 0.002384224589315746,
     "eq36_vertical_m": 120.0,
     "unfolded_vertical_m": 120.0,
     "grazing_deg": 13.495733280795811
    },
    "surface-bottom": {
     "closed_form_ms": 20.675580063723164,
-    "measured_ms": 20.67576808434325,
-    "error_us": 0.18802062008660414,
-    "level_db": 0.0024876922186644803,
+    "measured_ms": 20.675768083151375,
+    "error_us": 0.18801942821156103,
+    "level_db": 0.0024875988816757473,
     "eq36_vertical_m": 180.0,
     "unfolded_vertical_m": 180.0,
     "grazing_deg": 19.798876354524932
    },
    "bottom-surface": {
     "closed_form_ms": 30.573447481356265,
-    "measured_ms": 30.573573821783008,
-    "error_us": 0.12634042674264379,
-    "level_db": 0.002427582509032678,
+    "measured_ms": 30.573573823199233,
+    "error_us": 0.126341842968003,
+    "level_db": 0.0024276736848550164,
     "eq36_vertical_m": 220.0,
     "unfolded_vertical_m": 220.0,
     "grazing_deg": 23.749494492866756
    }
   },
-  "arrival_time_max_error_us": 0.1935657752536457,
-  "arrival_level_max_error_db": 0.0026064144404681585,
+  "arrival_time_max_error_us": 0.19356657609037597,
+  "arrival_level_max_error_db": 0.00260617795504143,
   "no_time_spread": {
-   "ping_to_ping_relative_std": 6.121215401913179e-16,
+   "ping_to_ping_relative_std": 6.151496418724513e-16,
    "db_after_pulse_re_peak": {
-    "direct": -38.66081614937,
-    "surface": -42.70077901457771,
-    "bottom": -42.51977736385396
+    "direct": -38.660816007712945,
+    "surface": -42.700778999903704,
+    "bottom": -42.51977725779413
    },
    "rise_time_10_90_ms": {
     "direct": 0.23437500000000888,
@@ -196,40 +196,40 @@
   },
   "time_spread": {
    "ping_to_ping_std_db": {
-    "direct": 2.424073904128141e-05,
-    "surface": 1.8810067046213894,
-    "bottom": 0.9659067587888588,
-    "surface-bottom": 1.4135640409894152,
-    "bottom-surface": 3.3426683524924012
+    "direct": 3.446462368654389e-05,
+    "surface": 2.8451307603571214,
+    "bottom": 1.2971580185599978,
+    "surface-bottom": 1.7844178715623853,
+    "bottom-surface": 2.631945030958873
    },
    "tail_ping_to_ping_std_db": {
-    "surface": 4.8351249027396905,
-    "bottom": 5.896757829081593
+    "surface": 6.421844287907945,
+    "bottom": 5.379242523306416
    },
    "db_after_pulse_re_peak": {
-    "direct": -39.30151039801901,
-    "surface": -6.336832403772066,
-    "bottom": -15.076453038471929
+    "direct": -39.303611683441574,
+    "surface": -6.001788876222246,
+    "bottom": -14.71839479454883
    },
    "peak_mean_db_re_flat": {
-    "direct": -4.114172693221196e-06,
-    "surface": -0.9050863917315642,
-    "bottom": 0.4669762175397101,
-    "surface-bottom": -5.818845954885211,
-    "bottom-surface": -5.202177747399929
+    "direct": -5.535926285039577e-06,
+    "surface": -0.7116007088360076,
+    "bottom": 0.9058015394553438,
+    "surface-bottom": -5.819296820300279,
+    "bottom-surface": -4.895355740471429
    }
   },
   "tails": {
    "surface": {
     "rule_of_thumb_ms": 2.9052379528190113,
-    "fitted_ms": 2.9446883047135484,
+    "fitted_ms": 2.769352012538666,
     "mean_square_slope": 0.01836,
     "coherent_fraction": 0.7709724547878667,
     "pings": 200
    },
    "bottom": {
     "rule_of_thumb_ms": 7.498726743773088,
-    "fitted_ms": 7.69416055525027,
+    "fitted_ms": 7.694160564608773,
     "mean_square_slope": 0.045,
     "coherent_fraction": 0.9653858526405614,
     "realisations": 40
@@ -237,16 +237,16 @@
   },
   "surface_doppler_spread": {
    "lorentzian": {
-    "measured_hz": 0.31091873027744715,
+    "measured_hz": 0.3109187308350109,
     "closed_form_hz": 0.32656753409597705,
-    "coherence_time_s": 0.25594299666326636,
+    "coherence_time_s": 0.2559429962042894,
     "pings": 800,
     "interval_s": 0.05
    },
    "gaussian": {
-    "measured_hz": 0.593923477212655,
+    "measured_hz": 0.5939234781440765,
     "closed_form_hz": 0.6823844910371427,
-    "coherence_time_s": 0.26797213647594154,
+    "coherence_time_s": 0.26797213605569375,
     "pings": 800,
     "interval_s": 0.05
    },
@@ -270,22 +270,22 @@
     3.0,
     0.3
    ],
-   "sum_over_convolve_early_db": -2.3290160644118267,
-   "sum_over_convolve_late_db": 3.6900313112761687,
-   "sum_over_convolve_after_last_arrival_db": -2.524646453884069,
-   "tail_centroid_sum_ms": 3.1350742466359844,
-   "tail_centroid_convolve_ms": 2.130371970631715,
-   "tail_energy_sum_over_convolve_db": -0.12423357543284544,
-   "peak_sum_db_re_direct": -6.911936494616492,
-   "peak_convolve_db_re_direct": -3.528203407467405,
+   "sum_over_convolve_early_db": -2.8294412508952154,
+   "sum_over_convolve_late_db": 2.9847639487889728,
+   "sum_over_convolve_after_last_arrival_db": -2.0279202461270116,
+   "tail_centroid_sum_ms": 3.1451132723435724,
+   "tail_centroid_convolve_ms": 2.113742598887037,
+   "tail_energy_sum_over_convolve_db": -0.5498082125318062,
+   "peak_sum_db_re_direct": -6.911626418243403,
+   "peak_convolve_db_re_direct": -3.797744396074383,
    "pings": 200,
-   "sum_over_convolve_first_half_of_pulse_db": -1.7147979956795072
+   "sum_over_convolve_first_half_of_pulse_db": -1.4815113598402534
   },
   "two_rough_bounces": {
    "what": "variant: both boundaries rms height 0.2 m, decay times equal on the surface-bottom path (not ASIAEX values)",
-   "sum_over_convolve_first_half_of_pulse_db": 1.6311085975874473,
-   "sum_over_convolve_2_to_5_ms_after_pulse_db": -0.8148932045280338,
-   "tail_energy_sum_over_convolve_db": -0.5026166109612149
+   "sum_over_convolve_first_half_of_pulse_db": 1.6297768430681312,
+   "sum_over_convolve_2_to_5_ms_after_pulse_db": -0.9247243712064924,
+   "tail_energy_sum_over_convolve_db": -0.5746328671461702
   }
  },
  "checks": {
@@ -319,49 +319,49 @@
    "free_field": {
     "pairs": {
      "dd": {
-      "level_error_db": -0.0035269933999261,
-      "time_error_us": 0.005629980925903055,
+      "level_error_db": -0.004015786943305325,
+      "time_error_us": 0.08090553538231404,
       "echo_level_db_re_upa": 85.6573183691161
      }
     },
-    "max_level_error_db": 0.0035269933999261,
-    "max_time_error_us": 0.005629980925903055
+    "max_level_error_db": 0.004015786943305325,
+    "max_time_error_us": 0.08090553538231404
    },
    "image_source": {
     "pairs": {
      "dd": {
-      "level_error_db": -0.0008269928854991773,
-      "time_error_us": 0.1248392704766843,
+      "level_error_db": -0.0027828263732924794,
+      "time_error_us": 0.2001148249330953,
       "echo_level_db_re_upa": 85.6573183691161
      },
      "ds": {
-      "level_error_db": -0.0020342163651824773,
-      "time_error_us": 0.00607533845453645,
+      "level_error_db": -0.0029664835292937263,
+      "time_error_us": 0.06004364494494041,
       "echo_level_db_re_upa": 91.40599442245849
      },
      "ss": {
-      "level_error_db": -0.000845823527243862,
-      "time_error_us": -0.1126885935676114,
+      "level_error_db": -0.002411118875744665,
+      "time_error_us": -0.08002753526525908,
       "echo_level_db_re_upa": 85.11347064924163
      },
      "db": {
-      "level_error_db": -0.002841438165861441,
-      "time_error_us": 0.1154639390765766,
+      "level_error_db": -0.0031167236978203593,
+      "time_error_us": 0.11212602579746545,
       "echo_level_db_re_upa": 82.62551812812136
      },
      "sb": {
-      "level_error_db": -0.0029110654323667496,
-      "time_error_us": -0.0032999929455712618,
+      "level_error_db": -0.0030613503195685956,
+      "time_error_us": -0.02794515441273404,
       "echo_level_db_re_upa": 82.35359426818412
      },
      "bb": {
-      "level_error_db": -0.004552397548098885,
-      "time_error_us": -0.13232997142509362,
+      "level_error_db": -0.004295283873684584,
+      "time_error_us": -0.09507206288894565,
       "echo_level_db_re_upa": 67.55251806056737
      }
     },
-    "max_level_error_db": 0.004552397548098885,
-    "max_time_error_us": 0.13232997142509362
+    "max_level_error_db": 0.004295283873684584,
+    "max_time_error_us": 0.2001148249330953
    },
    "sonar_equation": {
     "source_level_db": 200.0,
@@ -375,10 +375,10 @@
    "true_range_rate": -6.0,
    "bank_range_rate": -6.0,
    "bank_range_rate_fine": -6.0000000000000036,
-   "eq68_time_scale": 1.0080321285140563,
-   "exact_time_scale": 1.0080321285140563,
-   "peak_without_doppler_over_best": 0.09970746909589857,
-   "peak_over_sonar_equation": 1.003495729865791,
+   "eq68_time_scale": 1.008087324776315,
+   "exact_time_scale": 1.0080873247763147,
+   "peak_without_doppler_over_best": 0.10128865544796735,
+   "peak_over_sonar_equation": 1.0110790165633534,
    "synthesis": null
   },
   "sediment_reverberation": {
@@ -392,29 +392,29 @@
     "sigma2": 0.001
    },
    "backscattering_strength_db": {
-    "at_10_deg": -38.13073848767965,
-    "at_30_deg": -26.528747541581765
+    "at_10_deg": -38.12464119449061,
+    "at_30_deg": -26.477452477147963
    },
    "grazing_range_deg": [
     8.214687742070053,
     41.767658899826664
    ],
    "scattering_function_vs_integral_db": {
-    "mean": 0.2703317645763332,
-    "min": -0.1743953701145741,
-    "max": 0.585955501354768,
+    "mean": 0.27072175162355633,
+    "min": -0.17434005904895317,
+    "max": 0.5860447112321087,
     "pings_x_channels": 48
    },
    "point_scatterers_vs_integral_db": {
-    "mean": 0.03869603554156048,
-    "min": -0.7791959145948536,
-    "max": 0.5801867778641165,
+    "mean": 0.038771241234705114,
+    "min": -0.7792539066916769,
+    "max": 0.5807803621665588,
     "realisations_x_channels": 16
    },
    "point_scatterers_vs_scattering_function_db": {
-    "mean": -0.23163572903477267,
-    "min": -1.1540102896457067,
-    "max": 0.33129075757751963
+    "mean": -0.23195051038885126,
+    "min": -1.154121882001167,
+    "max": 0.3312193886387399
    },
    "blocks": 12,
    "sound_speed": 1500.0
@@ -422,29 +422,29 @@
   "signal_to_reverberation": {
    "bands": {
     "1000": {
-     "measured_db": 27.394198614985132,
-     "closed_form_db": 27.435036582850316,
+     "measured_db": 27.381154222506893,
+     "closed_form_db": 27.42220669708354,
      "effective_bandwidth_hz": 948.6365242124807,
-     "echo_peak_over_sonar_equation": 0.9999996389901792
+     "echo_peak_over_sonar_equation": 0.9999996323793118
     },
     "2000": {
-     "measured_db": 30.684987962862643,
-     "closed_form_db": 30.452461008139508,
+     "measured_db": 30.671980981873123,
+     "closed_form_db": 30.43963112237273,
      "effective_bandwidth_hz": 1900.38802136296,
-     "echo_peak_over_sonar_equation": 0.9999996054720243
+     "echo_peak_over_sonar_equation": 0.9999996086783972
     },
     "4000": {
-     "measured_db": 33.38058922737295,
-     "closed_form_db": 33.46165777583417,
+     "measured_db": 33.367565784857874,
+     "closed_form_db": 33.44882789006739,
      "effective_bandwidth_hz": 3799.8106973700933,
-     "echo_peak_over_sonar_equation": 0.9999996557492566
+     "echo_peak_over_sonar_equation": 0.9999996086783972
     }
    },
    "gain_per_octave_db": [
-    3.29078934787751,
-    2.6956012645103087
+    3.2908267593662295,
+    2.695584802984751
    ],
-   "max_error_db": 0.23252695472313434,
+   "max_error_db": 0.2323498595003919,
    "pings_x_channels": 64,
    "target_strength_db": 20.0,
    "slant_range_m": 80.0

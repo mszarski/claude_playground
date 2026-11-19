@@ -1335,10 +1335,11 @@ Pierson–Moskowitz and Cox–Munk wind laws. The one-way path is made with a �
   does not show SST's stated defect with these parameters; it shows
   the opposite sign. On the surface-bottom path the bottom is 93% coherent with the
   longer decay, and `sum` gives all scattered energy the summed delay (8.2 ms mean
-  against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.3 dB right after the
-  pulse and +3.7 dB later (tail centroid 3.1 against 2.1 ms). In a variant with both
+  against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.8 dB right after the
+  pulse and +3.0 dB later (tail centroid 3.1 against 2.1 ms). In a variant with both
   bounces fully rough and of equal decay, `sum` is +1.6 dB in the first half of the pulse
-  and −0.8 dB at 2–5 ms after it, which is the defect as TR 0702 words it. TR 0702 does
+  and −0.9 dB at 2–5 ms after it (regenerated at `e10b17f`; −2.3, +3.7 and −0.8 dB in the
+  run of `5956b10`), which is the defect as TR 0702 words it. TR 0702 does
   not say how SST combined bounces.
 
 ### Closed forms through `run_scenario` and the processing chain

@@ -242,9 +242,12 @@ Grouped; within a group the most consequential first.
     `surface_image_validation.json`, `docs/scenarios/transmission_loss.json`,
     `docs/figures/rough_surface_bands.json`, `docs/figures/ssp_range_study.*`, and the
     numbers `SCENARIOS.md` quotes for the 44 scenarios whose sound speed moved.
-    `docs/figures/sst_validation.*` was already stale before them: regenerating it moves
-    Pursuit and ASIAEX rows none of these changes touch (ridge over noise 27.1 to
-    30.1 dB), which is not explained. `docs/figures/fjord_rehearsal.*` is stale again
+    `docs/figures/sst_validation.*` is regenerated (commit `e10b17f`): the Pursuit and
+    ASIAEX rows moved against the run of `5956b10` (ridge over noise 27.1 to 30.1 dB,
+    ASIAEX ping-to-ping variation 1.88 to 2.85 dB at the surface). The tool is
+    deterministic (two runs on one tree agree in every number but its run time), so the
+    cause is a code change in the 40 or so commits between; the time-spreading commit
+    `f2bf420` is ruled out (opt-in, bit-identical without its keys). Not bisected. `docs/figures/fjord_rehearsal.*` is stale again
     since D-142: its open-water rows run the shallow trials, which now keep their whole
     bounce series. `docs/figures/gallery.json` and its figures (item 45), `DESIGN.md` and
     `docs/design/derived.json` are current (the last two regenerate byte-identical after

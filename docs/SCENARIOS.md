@@ -721,8 +721,8 @@ figures were 1.2 Hz and 1.725 s (`RESULTS.md`).
 
 ASIAEX: arrivals at 0, 3.97, 9.20, 20.68 and 30.57 ms within 0.20 µs of the image
 equations; with time spreading the bounce arrivals grow tails (surface −6 dB, bottom
-−15 dB re peak after the pulse) and vary from ping to ping (surface 1.88 dB, bottom
-0.97 dB standard deviation over 20 pings).
+−15 dB re peak after the pulse) and vary from ping to ping (surface 2.85 dB, bottom
+1.30 dB standard deviation over 20 pings; 1.88 and 0.97 dB in the run of `5956b10`).
 
 Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
 (about 2 minutes on the CPU).
