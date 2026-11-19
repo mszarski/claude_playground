@@ -2848,6 +2848,31 @@ but the Hungarian gives more movers among the wave glints. At 12 km no rule help
 ship's own track is mostly classed as an echo of a stronger track (the classifier's
 multipath rule), not lost by association.
 
+### The gallery with most-probable-first association (D-141)
+
+Source: `tools/gallery.py`, full size, CUDA on an NVIDIA L4 (Hugging Face job, tree of
+commit `1442de5`) → `docs/figures/gallery.json`. Against the gallery before it (tree of
+`ebdb22a`): no image number and no detection count moved in any scene; only tracks and
+classes did. Scenes not listed are unchanged.
+
+| Scene | Before → after |
+| --- | --- |
+| `fls_170k_traffic` | crossing boat `line` 15.4 m/s → **`mover` 4.5 m/s** (true 4.0); tracks 14 → 13; movers off a moving object 3 → 1 |
+| `fls_120k_cluttered_seabed` | movers not the boat 8 → 0; static 21 → 47, line 19 → 10, uncertain 15 → 8; **boat under way `mover` → `line`** (4.9 m/s both) |
+| `fls_120k_rough_surface` | **movers off a moving object 8 → 13**; tracks 54 → 56; boat `mover` 4.9 → 5.5 m/s (true 5.0), 0.7 → 1.4 m off |
+| `fls_170k_transit` | **anchored boat `static` → `uncertain`** (0.24 ± 0.05 m/s) |
+| `fls_120k_transit` | pinnacle still `uncertain`, 0.82 → 0.06 m/s |
+| `popoto_12km` | ship `multipath` 5.1 → `uncertain` 3.3 m/s (true 6.0); 26 → 24 m off |
+| `popoto_env_winter_sand_200m` | **ship 6.0 → 4.8 m/s** (true 6.0), still `mover`; 31 → 20 m off |
+| `popoto_env_deep_silt_1000m` | ship not tracked in either; nearest track 6.1 → 3.1 m/s |
+| `popoto_env_gravel_30m` | tracks 2 → 3 (one `static`) |
+| `flank_patrol` | submarine 25.4 → 25.9 m off |
+
+For the six FLS scenes these are the numbers the replay of saved detections gave for the
+scene's own seed ("Why the tracker loses the crossing boat"): the same classes, false-mover
+counts and speeds to 0.1 m/s. The long-range
+scenes were not replayed beforehand.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

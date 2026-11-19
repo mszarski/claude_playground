@@ -292,9 +292,12 @@ def test_documented_full_size_classes():
         assert c["counts"]["mover"] == 1 and c["movers_not_on_a_moving_object"] == 0, name
         assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["mooring_buoy"]["kind"] == "static", name
     c = g["fls_120k_cluttered_seabed"]["classification"]
-    assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["boat_at_anchor"]["kind"] == "static"
-    # 9 movers, 8 of them not the boat, since the sound speed follows the water (D-140; 5 and 4 at 1500 m/s): worse, not examined
-    assert c["counts"]["mover"] <= 9 and c["counts"]["static"] + c["counts"]["line"] >= 40
+    # Since D-141 no track here is called a mover that is not the boat (8 before), but the boat under way is classed `line`
+    # at its own speed (4.9 m/s; true 5.0): more seabed tracks hold steady and some lie in the corridor ahead of and astern
+    # of it. Worse for the boat, recorded in STATUS item 45.
+    assert c["targets"]["boat_under_way"]["kind"] == "line" and c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
+    assert c["targets"]["boat_at_anchor"]["kind"] == "static"
+    assert c["movers_not_on_a_moving_object"] == 0 and c["counts"]["static"] + c["counts"]["line"] >= 40
     c = g["popoto_far_mover"]["classification"]
     # one multipath track after the detector rework (was four), two since the sound speed follows the water
     assert c["counts"]["mover"] == 1 and c["counts"]["multipath"] >= 1 and c["targets"]["ship"]["kind"] == "mover"

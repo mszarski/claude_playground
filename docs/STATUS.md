@@ -24,6 +24,8 @@ GPU result after the four default changes (D-137 to D-140, tree of commit `ebdb2
 
 CPU result on the same changes (tree of commit `f9f4454` with the regenerated gallery, `tools/test.sh` steps with Bellhop set, 2026-11-19): every test passed, 138 of 138 ctest entries including the whole pytest run, none failed.
 
+CPU result with the new tracker association (D-141, commit `1442de5`, `tools/test.sh` steps with Bellhop set, 2026-11-19): every test passed, 139 of 139 ctest entries including the whole pytest run. The six builds' self-tests gave results identical to the run before D-141 on both engines (48 of 48 compared); `popoto_static_2x32` still fails the two of open item 38. The gallery was regenerated on the same tree (open item 45) and the one test that reads it was changed after the suite ran; it passes against the new file.
+
 One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
@@ -243,7 +245,8 @@ Grouped; within a group the most consequential first.
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
     tree of commit `ebdb22a`) is worse in several scenes than the one before it** (item
     16). Five of the changes were since rerun over several seeds (item 44): four are the
-    luck of one seed, one is caused by D-137.
+    luck of one seed, one is caused by D-137. This list is of that gallery; the one in the
+    repository now is the next (item 45).
     - **`popoto_12km`: the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
       true 6.0; it was `uncertain`, and `mover` before that). 12 confirmed tracks (8): 4
       movers, 7 multipath, 1 uncertain; 7 to 15 detections per ping (3 to 13).
@@ -274,8 +277,8 @@ Grouped; within a group the most consequential first.
       detection, because each track takes its nearest gated detection in list order (RESULTS,
       "Why the tracker loses the crossing boat"). Any best-pair-first rule fixes it on 7 of 7
       seeds; each has costs elsewhere, worst in the rough-surface scene. **Changed (D-141):
-      both engines now take the most probable pairs first by default**; the gallery has not
-      yet been regenerated with it, so its numbers are still those of the old rule.
+      both engines now take the most probable pairs first by default**; the gallery
+      regenerated with it is item 45.
     - `fls_120k_cluttered_seabed`: movers that are not the boat, 2 to 6 per seed at
       1500 m/s (mean 3.6) and 1 to 8 at 1496.8 m/s (mean 4.3); paired by seed the
       differences have no consistent sign. The gallery's 8 is the worst of 14 runs.
@@ -298,6 +301,29 @@ Grouped; within a group the most consequential first.
     - `tests/python/test_realistic_scenes.py::test_documented_full_size_classes` checks the
       stored single-seed classes; it guards the file against silent change, not the
       classifier's quality.
+45. **The gallery regenerated with D-141** (full-size CUDA run on an NVIDIA L4, tree of
+    commit `1442de5`) changed only tracks and classes; every image number and every
+    detection count is the same as in the gallery before it. In the FLS scenes it is what
+    replaying saved detections predicted. One run, one seed per scene.
+    - Better: `fls_170k_traffic` crossing boat `mover` at 4.5 m/s (was `line` at 15.4;
+      true 4.0), movers off a moving object 3 become 1. `fls_120k_cluttered_seabed` movers
+      that are not the boat 8 become 0, static tracks 21 become 47.
+    - **`fls_120k_rough_surface`: 13 movers off a moving object (8)**; the boat's track is
+      1.4 m off (0.7) and reads 5.5 m/s (4.9; true 5.0).
+    - **`fls_120k_cluttered_seabed`: the boat under way is classed `line`** (was `mover`);
+      its track is unchanged (4.9 m/s): the more steady seabed tracks put some in the
+      corridor ahead of and astern of it, and the `line` rule takes it for a feature.
+    - **`fls_170k_transit`: the anchored boat is `uncertain`** at 0.24 ± 0.05 m/s (was
+      `static`).
+    - **`popoto_env_winter_sand_200m`: the ship reads 4.8 ± 0.4 m/s (true 6.0; was 6.0)**,
+      still a `mover`, 20 m from the truth (31). **`popoto_env_deep_silt_1000m`: the track
+      nearest the ship reads 3.1 m/s (6.1)**; the ship is not tracked there in either run.
+      `popoto_env_gravel_30m`: 3 tracks (2), the third `static`.
+    - `popoto_12km`: the ship is `uncertain` at 3.3 ± 0.5 m/s (was `multipath` at 5.1;
+      over six seeds it is a `mover` on 2 with either rule, item 44).
+    - `flank_patrol`: the submarine's track 25.9 m from the truth (25.4).
+    - `test_documented_full_size_classes` was changed for the cluttered scene's boat
+      (`line`, at its speed) and no longer allows movers there that are not the boat.
 
 ### The 12 km design point
 

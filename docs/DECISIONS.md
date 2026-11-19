@@ -2241,7 +2241,8 @@ Known cost, measured on saved detections of full-size scenes before the change: 
 three seeds) and the boat is right on 1 of 3 seeds (2 of 3 before). In the cluttered
 seabed movers that are not a boat fall from 17 to 2 over three seeds; the three transit
 scenes are unchanged but for one anchored boat (`static` to `uncertain`, one seed). The
-12 km ship's misclassification is not changed by any rule tried (its track is classed as
-an echo; open item 44). Rejected: an optimal one-to-one assignment (Hungarian), which kept
+12 km ship's misclassification is not changed by any rule tried: over six seeds its own
+track is a `mover` on 2 with either rule, mostly classed as an echo of a stronger track (at
+the gallery's seed it is now `uncertain`; open item 44). Rejected: an optimal one-to-one assignment (Hungarian), which kept
 the rough surface even but added false movers and misclassed anchored boats in the
 crossing-boat scene.
