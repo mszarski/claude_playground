@@ -13,10 +13,10 @@
       "model_energy_db": -32.66759786954559,
       "model_narrowband_db": -33.00375207794821,
       "textbook_db": -33.003738937170674,
-      "sim_cpp_peak_db": -33.122770298184705,
-      "sim_cpp_energy_db": -33.16749882369032,
-      "sim_numpy_peak_db": -33.122770298184705,
-      "sim_numpy_energy_db": -33.16749882369032
+      "sim_cpp_peak_db": -33.12277029645157,
+      "sim_cpp_energy_db": -33.167498833757584,
+      "sim_numpy_peak_db": -33.12277029645157,
+      "sim_numpy_energy_db": -33.167498833757584
     },
     {
       "range_m": 12000.0,
@@ -26,10 +26,10 @@
       "model_energy_db": -14.50386294400319,
       "model_narrowband_db": -14.82645870307164,
       "textbook_db": -14.826386727043255,
-      "sim_cpp_peak_db": -14.974068963726708,
-      "sim_cpp_energy_db": -14.996062602719103,
-      "sim_numpy_peak_db": -14.974068963726708,
-      "sim_numpy_energy_db": -14.996062602719103
+      "sim_cpp_peak_db": -14.974068977568686,
+      "sim_cpp_energy_db": -14.99606261856112,
+      "sim_numpy_peak_db": -14.974068977568686,
+      "sim_numpy_energy_db": -14.99606261856112
     },
     {
       "range_m": 12000.0,
@@ -39,10 +39,10 @@
       "model_energy_db": 0.4009123579451019,
       "model_narrowband_db": 0.15531161267412602,
       "textbook_db": 0.15566227514767136,
-      "sim_cpp_peak_db": -0.04458978093616696,
-      "sim_cpp_energy_db": -0.04609978780932886,
-      "sim_numpy_peak_db": -0.04458978093616696,
-      "sim_numpy_energy_db": -0.04609978780932886
+      "sim_cpp_peak_db": -0.0445897981931384,
+      "sim_cpp_energy_db": -0.04609980389382675,
+      "sim_numpy_peak_db": -0.0445897981931384,
+      "sim_numpy_energy_db": -0.04609980389382675
     },
     {
       "range_m": 12000.0,
@@ -52,10 +52,10 @@
       "model_energy_db": 9.588940576927502,
       "model_narrowband_db": 9.593411382865876,
       "textbook_db": 9.594307491613902,
-      "sim_cpp_peak_db": 9.375647107197087,
-      "sim_cpp_energy_db": 9.31177861650843,
-      "sim_numpy_peak_db": 9.375647107197087,
-      "sim_numpy_energy_db": 9.31177861650843
+      "sim_cpp_peak_db": 9.375647096107935,
+      "sim_cpp_energy_db": 9.311778604412334,
+      "sim_numpy_peak_db": 9.375647096107935,
+      "sim_numpy_energy_db": 9.311778604412334
     },
     {
       "range_m": 12000.0,
@@ -65,10 +65,10 @@
       "model_energy_db": 11.755741912097157,
       "model_narrowband_db": 12.040639611098761,
       "textbook_db": 12.040723560662201,
-      "sim_cpp_peak_db": 11.885851097347842,
-      "sim_cpp_energy_db": 11.790613007404856,
-      "sim_numpy_peak_db": 11.885851097347842,
-      "sim_numpy_energy_db": 11.790613007404856
+      "sim_cpp_peak_db": 11.885851088664472,
+      "sim_cpp_energy_db": 11.790612997033952,
+      "sim_numpy_peak_db": 11.885851088664472,
+      "sim_numpy_energy_db": 11.790612997033952
     },
     {
       "range_m": 12000.0,
@@ -78,10 +78,10 @@
       "model_energy_db": 9.483068132325535,
       "model_narrowband_db": 9.495815466832852,
       "textbook_db": 9.48927263156601,
-      "sim_cpp_peak_db": 9.496711280927626,
-      "sim_cpp_energy_db": 9.961419905873177,
-      "sim_numpy_peak_db": 9.496711280927626,
-      "sim_numpy_energy_db": 9.961419905873177
+      "sim_cpp_peak_db": 9.496711259886863,
+      "sim_cpp_energy_db": 9.961419877543653,
+      "sim_numpy_peak_db": 9.496711259886863,
+      "sim_numpy_energy_db": 9.961419877543653
     },
     {
       "range_m": 12000.0,
@@ -91,10 +91,10 @@
       "model_energy_db": -3.763452307881872,
       "model_narrowband_db": -82.76201448804696,
       "textbook_db": -333.5789864802086,
-      "sim_cpp_peak_db": -6.975189484713104,
-      "sim_cpp_energy_db": -4.764694693871928,
-      "sim_numpy_peak_db": -6.975189484713104,
-      "sim_numpy_energy_db": -4.764694693871928
+      "sim_cpp_peak_db": -6.975189456908638,
+      "sim_cpp_energy_db": -4.7646946530625485,
+      "sim_numpy_peak_db": -6.975189456908638,
+      "sim_numpy_energy_db": -4.7646946530625485
     },
     {
       "range_m": 12000.0,
@@ -104,10 +104,10 @@
       "model_energy_db": 9.257082493576657,
       "model_narrowband_db": 9.54171992526647,
       "textbook_db": 9.5943074916139,
-      "sim_cpp_peak_db": 7.88254897498816,
-      "sim_cpp_energy_db": 8.515177781683072,
-      "sim_numpy_peak_db": 7.88254897498816,
-      "sim_numpy_energy_db": 8.515177781683072
+      "sim_cpp_peak_db": 7.8825489919218725,
+      "sim_cpp_energy_db": 8.51517780027948,
+      "sim_numpy_peak_db": 7.8825489919218725,
+      "sim_numpy_energy_db": 8.51517780027948
     },
     {
       "range_m": 12000.0,
@@ -117,10 +117,10 @@
       "model_energy_db": 1.3160885582167923,
       "model_narrowband_db": 1.083066919448413,
       "textbook_db": 1.0831604512332893,
-      "sim_cpp_peak_db": 0.9294826679925039,
-      "sim_cpp_energy_db": 0.8767136886177409,
-      "sim_numpy_peak_db": 0.9294826679925039,
-      "sim_numpy_energy_db": 0.8767136886177409
+      "sim_cpp_peak_db": 0.9294826424205381,
+      "sim_cpp_energy_db": 0.8767136628486016,
+      "sim_numpy_peak_db": 0.9294826424205381,
+      "sim_numpy_energy_db": 0.8767136628486016
     },
     {
       "range_m": 12000.0,
@@ -130,10 +130,10 @@
       "model_energy_db": 11.7178484382177,
       "model_narrowband_db": 12.014278892950902,
       "textbook_db": 12.014382772290634,
-      "sim_cpp_peak_db": 11.661892207404774,
-      "sim_cpp_energy_db": 11.779446195726795,
-      "sim_numpy_peak_db": 11.661892207404774,
-      "sim_numpy_energy_db": 11.779446195726795
+      "sim_cpp_peak_db": 11.66189219615138,
+      "sim_cpp_energy_db": 11.77944618038679,
+      "sim_numpy_peak_db": 11.66189219615138,
+      "sim_numpy_energy_db": 11.77944618038679
     },
     {
       "range_m": 12000.0,
@@ -143,10 +143,10 @@
       "model_energy_db": 8.054747878690236,
       "model_narrowband_db": 6.65006650445058,
       "textbook_db": 6.651810177317575,
-      "sim_cpp_peak_db": 5.7464361148787475,
-      "sim_cpp_energy_db": 6.920803300655516,
-      "sim_numpy_peak_db": 5.7464361148787475,
-      "sim_numpy_energy_db": 6.920803300655516
+      "sim_cpp_peak_db": 5.746436137389842,
+      "sim_cpp_energy_db": 6.920803321843103,
+      "sim_numpy_peak_db": 5.746436137389842,
+      "sim_numpy_energy_db": 6.920803321843103
     },
     {
       "range_m": 12000.0,
@@ -156,10 +156,10 @@
       "model_energy_db": 7.724964363733444,
       "model_narrowband_db": 12.014282679498757,
       "textbook_db": 12.014382772290634,
-      "sim_cpp_peak_db": 6.43982834585887,
-      "sim_cpp_energy_db": 8.005971356874667,
-      "sim_numpy_peak_db": 6.43982834585887,
-      "sim_numpy_energy_db": 8.005971356874667
+      "sim_cpp_peak_db": 6.43982836362711,
+      "sim_cpp_energy_db": 8.005971369834132,
+      "sim_numpy_peak_db": 6.43982836362711,
+      "sim_numpy_energy_db": 8.005971369834132
     },
     {
       "range_m": 12000.0,
@@ -169,10 +169,10 @@
       "model_energy_db": 7.861795783393393,
       "model_narrowband_db": 5.321043035236254,
       "textbook_db": 5.281788190543059,
-      "sim_cpp_peak_db": 6.144066340182565,
-      "sim_cpp_energy_db": 7.795906535536865,
-      "sim_numpy_peak_db": 6.144066340182565,
-      "sim_numpy_energy_db": 7.795906535536865
+      "sim_cpp_peak_db": 6.144066332834107,
+      "sim_cpp_energy_db": 7.795906530959604,
+      "sim_numpy_peak_db": 6.144066332834107,
+      "sim_numpy_energy_db": 7.795906530959604
     },
     {
       "range_m": 12000.0,
@@ -182,10 +182,10 @@
       "model_energy_db": 7.7360796534737055,
       "model_narrowband_db": -56.73844395733191,
       "textbook_db": -302.50277387037045,
-      "sim_cpp_peak_db": 6.425676753809244,
-      "sim_cpp_energy_db": 8.044905082295015,
-      "sim_numpy_peak_db": 6.425676753809244,
-      "sim_numpy_energy_db": 8.044905082295015
+      "sim_cpp_peak_db": 6.425676775300068,
+      "sim_cpp_energy_db": 8.044905105007519,
+      "sim_numpy_peak_db": 6.425676775300068,
+      "sim_numpy_energy_db": 8.044905105007519
     },
     {
       "range_m": 12000.0,
@@ -195,10 +195,10 @@
       "model_energy_db": 7.740826335847663,
       "model_narrowband_db": 12.021799942706,
       "textbook_db": 12.014382772290634,
-      "sim_cpp_peak_db": 6.40733977405435,
-      "sim_cpp_energy_db": 8.046872597676277,
-      "sim_numpy_peak_db": 6.40733977405435,
-      "sim_numpy_energy_db": 8.046872597676277
+      "sim_cpp_peak_db": 6.4073397961512235,
+      "sim_cpp_energy_db": 8.046872620167033,
+      "sim_numpy_peak_db": 6.4073397961512235,
+      "sim_numpy_energy_db": 8.046872620167033
     },
     {
       "range_m": 12000.0,
@@ -208,10 +208,10 @@
       "model_energy_db": 7.7444846721609375,
       "model_narrowband_db": -44.26836238519128,
       "textbook_db": -296.48217395709094,
-      "sim_cpp_peak_db": 6.390491239432564,
-      "sim_cpp_energy_db": 8.04181562050789,
-      "sim_numpy_peak_db": 6.390491239432564,
-      "sim_numpy_energy_db": 8.04181562050789
+      "sim_cpp_peak_db": 6.3904912462610275,
+      "sim_cpp_energy_db": 8.041815625562466,
+      "sim_numpy_peak_db": 6.3904912462610275,
+      "sim_numpy_energy_db": 8.041815625562466
     },
     {
       "range_m": 12000.0,
@@ -221,10 +221,10 @@
       "model_energy_db": -0.24302278980705455,
       "model_narrowband_db": -11.646958227982873,
       "textbook_db": -11.665446712198795,
-      "sim_cpp_peak_db": -3.769259105661697,
-      "sim_cpp_energy_db": 0.41896703597655727,
-      "sim_numpy_peak_db": -3.769259105661697,
-      "sim_numpy_energy_db": 0.41896703597655727
+      "sim_cpp_peak_db": -3.7692590975389,
+      "sim_cpp_energy_db": 0.4189670488108439,
+      "sim_numpy_peak_db": -3.7692590975389,
+      "sim_numpy_energy_db": 0.4189670488108439
     },
     {
       "range_m": 12000.0,
@@ -234,10 +234,10 @@
       "model_energy_db": 7.232689611469255,
       "model_narrowband_db": 11.355366216608973,
       "textbook_db": 11.35350674497816,
-      "sim_cpp_peak_db": 5.812762014549372,
-      "sim_cpp_energy_db": 7.710224984526785,
-      "sim_numpy_peak_db": 5.812762014549372,
-      "sim_numpy_energy_db": 7.710224984526785
+      "sim_cpp_peak_db": 5.812761999988876,
+      "sim_cpp_energy_db": 7.710224964794002,
+      "sim_numpy_peak_db": 5.812761999988876,
+      "sim_numpy_energy_db": 7.710224964794002
     },
     {
       "range_m": 12000.0,
@@ -247,10 +247,10 @@
       "model_energy_db": 7.610492194500828,
       "model_narrowband_db": 8.318040352298173,
       "textbook_db": 8.343206788338346,
-      "sim_cpp_peak_db": 5.790773197992745,
-      "sim_cpp_energy_db": 7.643887746423182,
-      "sim_numpy_peak_db": 5.790773197992745,
-      "sim_numpy_energy_db": 7.643887746423182
+      "sim_cpp_peak_db": 5.790773187922907,
+      "sim_cpp_energy_db": 7.643887736117296,
+      "sim_numpy_peak_db": 5.790773187922907,
+      "sim_numpy_energy_db": 7.643887736117296
     },
     {
       "range_m": 12000.0,
@@ -260,10 +260,10 @@
       "model_energy_db": 7.29505443393837,
       "model_narrowband_db": 11.372931259501286,
       "textbook_db": 11.353506744978166,
-      "sim_cpp_peak_db": 5.769900918451533,
-      "sim_cpp_energy_db": 7.646347279123452,
-      "sim_numpy_peak_db": 5.769900918451533,
-      "sim_numpy_energy_db": 7.646347279123452
+      "sim_cpp_peak_db": 5.769900909894413,
+      "sim_cpp_energy_db": 7.646347267200059,
+      "sim_numpy_peak_db": 5.769900909894413,
+      "sim_numpy_energy_db": 7.646347267200059
     },
     {
       "range_m": 12000.0,
@@ -273,10 +273,10 @@
       "model_energy_db": 7.420163476171032,
       "model_narrowband_db": 1.12334288849094,
       "textbook_db": 0.6876930815810609,
-      "sim_cpp_peak_db": 5.427615352869201,
-      "sim_cpp_energy_db": 7.466191158676338,
-      "sim_numpy_peak_db": 5.427615352869201,
-      "sim_numpy_energy_db": 7.466191158676338
+      "sim_cpp_peak_db": 5.427615358060754,
+      "sim_cpp_energy_db": 7.466191165516597,
+      "sim_numpy_peak_db": 5.427615358060754,
+      "sim_numpy_energy_db": 7.466191165516597
     },
     {
       "range_m": 12000.0,
@@ -286,10 +286,10 @@
       "model_energy_db": 7.302146635773189,
       "model_narrowband_db": -27.258926564267014,
       "textbook_db": -302.32260687505874,
-      "sim_cpp_peak_db": 5.591971542214482,
-      "sim_cpp_energy_db": 7.505874956479434,
-      "sim_numpy_peak_db": 5.591971542214482,
-      "sim_numpy_energy_db": 7.505874956479434
+      "sim_cpp_peak_db": 5.5919715839547806,
+      "sim_cpp_energy_db": 7.505875007099327,
+      "sim_numpy_peak_db": 5.5919715839547806,
+      "sim_numpy_energy_db": 7.505875007099327
     },
     {
       "range_m": 12000.0,
@@ -299,10 +299,10 @@
       "model_energy_db": 7.304661119899737,
       "model_narrowband_db": 11.599652815920047,
       "textbook_db": 11.353506744978137,
-      "sim_cpp_peak_db": 5.423063032698839,
-      "sim_cpp_energy_db": 7.350282754088964,
-      "sim_numpy_peak_db": 5.423063032698839,
-      "sim_numpy_energy_db": 7.350282754088964
+      "sim_cpp_peak_db": 5.423063025410557,
+      "sim_cpp_energy_db": 7.350282745715075,
+      "sim_numpy_peak_db": 5.423063025410557,
+      "sim_numpy_energy_db": 7.350282745715075
     },
     {
       "range_m": 12000.0,
@@ -312,10 +312,10 @@
       "model_energy_db": 7.306717285772766,
       "model_narrowband_db": -16.46228147541575,
       "textbook_db": -296.4580670690946,
-      "sim_cpp_peak_db": 5.336250062563281,
-      "sim_cpp_energy_db": 7.300094164339422,
-      "sim_numpy_peak_db": 5.336250062563281,
-      "sim_numpy_energy_db": 7.300094164339422
+      "sim_cpp_peak_db": 5.336250048277877,
+      "sim_cpp_energy_db": 7.300094146189923,
+      "sim_numpy_peak_db": 5.336250048277877,
+      "sim_numpy_energy_db": 7.300094146189923
     }
   ],
   "simulator_3km": [
@@ -327,10 +327,10 @@
       "model_energy_db": -8.860387252317569,
       "model_narrowband_db": -9.16815586799639,
       "textbook_db": -9.167949299286366,
-      "sim_cpp_peak_db": -9.09510714819023,
-      "sim_cpp_energy_db": -9.008524695272566,
-      "sim_numpy_peak_db": -9.09510714819023,
-      "sim_numpy_energy_db": -9.008524695272566
+      "sim_cpp_peak_db": -9.095107117446412,
+      "sim_cpp_energy_db": -9.008524664263561,
+      "sim_numpy_peak_db": -9.095107117446412,
+      "sim_numpy_energy_db": -9.008524664263561
     },
     {
       "range_m": 3000.0,
@@ -340,10 +340,10 @@
       "model_energy_db": 7.299456356197188,
       "model_narrowband_db": 7.197346301448706,
       "textbook_db": 7.198271135788701,
-      "sim_cpp_peak_db": 7.0227668351069115,
-      "sim_cpp_energy_db": 7.201937833848172,
-      "sim_numpy_peak_db": 7.0227668351069115,
-      "sim_numpy_energy_db": 7.201937833848172
+      "sim_cpp_peak_db": 7.0227668115191815,
+      "sim_cpp_energy_db": 7.201937810755239,
+      "sim_numpy_peak_db": 7.0227668115191815,
+      "sim_numpy_energy_db": 7.201937810755239
     },
     {
       "range_m": 3000.0,
@@ -353,10 +353,10 @@
       "model_energy_db": 11.747304380796287,
       "model_narrowband_db": 12.035329900492755,
       "textbook_db": 12.035695333408299,
-      "sim_cpp_peak_db": 11.753118311319222,
-      "sim_cpp_energy_db": 11.7856394028954,
-      "sim_numpy_peak_db": 11.753118311319222,
-      "sim_numpy_energy_db": 11.7856394028954
+      "sim_cpp_peak_db": 11.753118307936196,
+      "sim_cpp_energy_db": 11.785639396890758,
+      "sim_numpy_peak_db": 11.753118307936196,
+      "sim_numpy_energy_db": 11.785639396890758
     },
     {
       "range_m": 3000.0,
@@ -366,10 +366,10 @@
       "model_energy_db": -3.771317146335872,
       "model_narrowband_db": -55.61743848148677,
       "textbook_db": -56.14091724045193,
-      "sim_cpp_peak_db": -7.139670948400046,
-      "sim_cpp_energy_db": -4.85047235772316,
-      "sim_numpy_peak_db": -7.139670948400046,
-      "sim_numpy_energy_db": -4.85047235772316
+      "sim_cpp_peak_db": -7.1396709177571624,
+      "sim_cpp_energy_db": -4.850472332833907,
+      "sim_numpy_peak_db": -7.1396709177571624,
+      "sim_numpy_energy_db": -4.850472332833907
     },
     {
       "range_m": 3000.0,
@@ -379,10 +379,10 @@
       "model_energy_db": 9.308474005302417,
       "model_narrowband_db": 9.690308517102396,
       "textbook_db": 9.742482455345609,
-      "sim_cpp_peak_db": 8.362846180867603,
-      "sim_cpp_energy_db": 9.19167274871764,
-      "sim_numpy_peak_db": 8.362846180867603,
-      "sim_numpy_energy_db": 9.19167274871764
+      "sim_cpp_peak_db": 8.36284616626804,
+      "sim_cpp_energy_db": 9.191672735055755,
+      "sim_numpy_peak_db": 8.36284616626804,
+      "sim_numpy_energy_db": 9.191672735055755
     },
     {
       "range_m": 3000.0,
@@ -392,10 +392,10 @@
       "model_energy_db": 7.533424263088742,
       "model_narrowband_db": 9.740402363533669,
       "textbook_db": 9.322035529865023,
-      "sim_cpp_peak_db": 6.1066208479706665,
-      "sim_cpp_energy_db": 7.927238579070907,
-      "sim_numpy_peak_db": 6.1066208479706665,
-      "sim_numpy_energy_db": 7.927238579070907
+      "sim_cpp_peak_db": 6.10662083757017,
+      "sim_cpp_energy_db": 7.927238571885819,
+      "sim_numpy_peak_db": 6.10662083757017,
+      "sim_numpy_energy_db": 7.927238571885819
     },
     {
       "range_m": 3000.0,
@@ -405,10 +405,10 @@
       "model_energy_db": 8.757537942745481,
       "model_narrowband_db": 10.739441392026292,
       "textbook_db": 10.744099440111562,
-      "sim_cpp_peak_db": 8.433374107322336,
-      "sim_cpp_energy_db": 8.893900887679315,
-      "sim_numpy_peak_db": 8.433374107322336,
-      "sim_numpy_energy_db": 8.893900887679315
+      "sim_cpp_peak_db": 8.433374114470002,
+      "sim_cpp_energy_db": 8.893900891850894,
+      "sim_numpy_peak_db": 8.433374114470002,
+      "sim_numpy_energy_db": 8.893900891850894
     },
     {
       "range_m": 3000.0,
@@ -418,10 +418,10 @@
       "model_energy_db": 7.4088099734461395,
       "model_narrowband_db": -42.661756976553406,
       "textbook_db": -298.59502638081966,
-      "sim_cpp_peak_db": 5.7460416302715664,
-      "sim_cpp_energy_db": 7.60028350207387,
-      "sim_numpy_peak_db": 5.7460416302715664,
-      "sim_numpy_energy_db": 7.60028350207387
+      "sim_cpp_peak_db": 5.746041595333055,
+      "sim_cpp_energy_db": 7.600283464077432,
+      "sim_numpy_peak_db": 5.746041595333055,
+      "sim_numpy_energy_db": 7.600283464077432
     },
     {
       "range_m": 3000.0,
@@ -431,10 +431,10 @@
       "model_energy_db": 6.6043505981271675,
       "model_narrowband_db": 10.775002658795401,
       "textbook_db": 10.744099440111562,
-      "sim_cpp_peak_db": 4.636851797910478,
-      "sim_cpp_energy_db": 6.9251911065334735,
-      "sim_numpy_peak_db": 4.636851797910478,
-      "sim_numpy_energy_db": 6.9251911065334735
+      "sim_cpp_peak_db": 4.6368518148260325,
+      "sim_cpp_energy_db": 6.92519112864471,
+      "sim_numpy_peak_db": 4.6368518148260325,
+      "sim_numpy_energy_db": 6.92519112864471
     },
     {
       "range_m": 3000.0,
@@ -444,10 +444,10 @@
       "model_energy_db": 6.612660070309236,
       "model_narrowband_db": -8.769258037786997,
       "textbook_db": -9.414955969065339,
-      "sim_cpp_peak_db": 4.60267633729197,
-      "sim_cpp_energy_db": 6.907111881012461,
-      "sim_numpy_peak_db": 4.60267633729197,
-      "sim_numpy_energy_db": 6.907111881012461
+      "sim_cpp_peak_db": 4.602676349912067,
+      "sim_cpp_energy_db": 6.907111895248424,
+      "sim_numpy_peak_db": 4.602676349912067,
+      "sim_numpy_energy_db": 6.907111895248424
     },
     {
       "range_m": 3000.0,
@@ -457,10 +457,10 @@
       "model_energy_db": 6.607532770877055,
       "model_narrowband_db": -14.67061704154968,
       "textbook_db": -272.97006630603937,
-      "sim_cpp_peak_db": 4.411905119180494,
-      "sim_cpp_energy_db": 6.851001538041094,
-      "sim_numpy_peak_db": 4.411905119180494,
-      "sim_numpy_energy_db": 6.851001538041094
+      "sim_cpp_peak_db": 4.411905112774475,
+      "sim_cpp_energy_db": 6.851001529388925,
+      "sim_numpy_peak_db": 4.411905112774475,
+      "sim_numpy_energy_db": 6.851001529388925
     },
     {
       "range_m": 3000.0,
@@ -470,21 +470,21 @@
       "model_energy_db": 6.625648945147694,
       "model_narrowband_db": -23.018879423296617,
       "textbook_db": -266.9494663927597,
-      "sim_cpp_peak_db": 4.300035469302693,
-      "sim_cpp_energy_db": 6.644115612591052,
-      "sim_numpy_peak_db": 4.300035469302693,
-      "sim_numpy_energy_db": 6.644115612591052
+      "sim_cpp_peak_db": 4.300035486753628,
+      "sim_cpp_energy_db": 6.644115626834418,
+      "sim_numpy_peak_db": 4.300035486753628,
+      "sim_numpy_energy_db": 6.644115626834418
     }
   ],
   "largest_difference_db": {
-    "simulator_12km_cpp_peak": 0.7975110433764696,
-    "simulator_12km_cpp_energy": 1.1339445780347202,
-    "simulator_12km_numpy_peak": 0.7975110433764696,
-    "simulator_12km_numpy_energy": 1.1339445780347202,
-    "simulator_3km_cpp_peak": 0.9151481399940238,
-    "simulator_3km_cpp_energy": 1.0791552113872882,
-    "simulator_3km_numpy_peak": 0.9151481399940238,
-    "simulator_3km_numpy_energy": 1.0791552113872882
+    "simulator_12km_cpp_peak": 0.7975110514992667,
+    "simulator_12km_cpp_energy": 1.1339445568471334,
+    "simulator_12km_numpy_peak": 0.7975110514992667,
+    "simulator_12km_numpy_energy": 1.1339445568471334,
+    "simulator_3km_cpp_peak": 0.91514810935114,
+    "simulator_3km_cpp_energy": 1.0791551864980349,
+    "simulator_3km_numpy_peak": 0.91514810935114,
+    "simulator_3km_numpy_energy": 1.0791551864980349
   },
   "rough_surface": [
     {
@@ -495,8 +495,8 @@
       "model_peak_db": 0.209920759599942,
       "model_energy_db": 4.037740169286894,
       "model_coherent_share_one_way": 1.0,
-      "sim_coherent_peak_db": -0.19957720880301022,
-      "sim_coherent_energy_db": 3.7264321477077145
+      "sim_coherent_peak_db": -0.1995771973429651,
+      "sim_coherent_energy_db": 3.7264321604698663
     },
     {
       "range_m": 1000.0,
@@ -506,9 +506,9 @@
       "model_peak_db": 0.1710191834179114,
       "model_energy_db": 4.521619745793634,
       "model_coherent_share_one_way": 0.8924810649117328,
-      "sim_coherent_peak_db": -0.17026913965932622,
-      "sim_coherent_energy_db": 2.758118959162552,
-      "sim_with_scattered_energy_db": 3.9191270472212625,
+      "sim_coherent_peak_db": -0.1702691575148677,
+      "sim_coherent_energy_db": 2.7581189315434758,
+      "sim_with_scattered_energy_db": 3.808977493550822,
       "realisations": 8
     },
     {
@@ -519,9 +519,9 @@
       "model_peak_db": 0.09675379888631172,
       "model_energy_db": 5.3045214320857745,
       "model_coherent_share_one_way": 0.6941844634468574,
-      "sim_coherent_peak_db": -0.10752889262875542,
-      "sim_coherent_energy_db": 1.0283220605590628,
-      "sim_with_scattered_energy_db": 4.381523968919999,
+      "sim_coherent_peak_db": -0.10752891218858532,
+      "sim_coherent_energy_db": 1.0283220347521471,
+      "sim_with_scattered_energy_db": 4.220840532602602,
       "realisations": 8
     },
     {
@@ -532,9 +532,9 @@
       "model_peak_db": 0.015300112081878411,
       "model_energy_db": 5.915134898010239,
       "model_coherent_share_one_way": 0.51832500463174,
-      "sim_coherent_peak_db": -0.020098195296957326,
-      "sim_coherent_energy_db": 0.015539752082607383,
-      "sim_with_scattered_energy_db": 4.825484678484643,
+      "sim_coherent_peak_db": -0.0200982163876034,
+      "sim_coherent_energy_db": 0.01553972758112565,
+      "sim_with_scattered_energy_db": 4.711138414462669,
       "realisations": 8
     }
   ],
