@@ -1668,13 +1668,14 @@ well the simulator's models fit a real sea.
 
 ## Sea surface: frame and band depth
 
-Source: `tools/rough_surface_bands.py`, `docs/figures/rough_surface_bands.json`.
+Source: `tools/rough_surface_bands.py`, `docs/figures/rough_surface_bands.json` (regenerated at commit `e10b17f`,
+water at 1496.8 m/s: band depths 12.1 / 10.7 / 8.6 dB and correlation 0.38 at 1500 m/s).
 
 | Quantity | Result |
 | --- | --- |
-| Pattern shift in the world frame over 1 s, waves frozen, sonar advancing 2 m | 0 m (correlation 0.38 after detrending, fresh speckle each ping) |
+| Pattern shift in the world frame over 1 s, waves frozen, sonar advancing 2 m | 0 m (correlation 0.37 after detrending, fresh speckle each ping) |
 | The same, waves travelling | 10 m ahead, 2 m to port |
-| Band depth against flat water: two regular trains / irregular sea / with small-scale roughness | 12.1 / 10.7 / 8.6 dB |
+| Band depth against flat water: two regular trains / irregular sea / with small-scale roughness | 12.0 / 10.8 / 8.5 dB |
 
 ## Results since decision D-82: what the next sections are
 
