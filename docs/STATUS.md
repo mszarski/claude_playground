@@ -28,6 +28,8 @@ CPU result with the new tracker association (D-141, commit `1442de5`, `tools/tes
 
 GPU result with the new tracker association (commit `1442de5`, NVIDIA L4 through Hugging Face Jobs, CUDA build with Bellhop, Ceres and the Holoscan C++ operators, 2026-11-19): the whole suite passed, 1497 passed and 24 skipped (data and tools not in the job), none failed. The stored-gallery test and the gallery file it reads were changed after this run (commit `a26d588`) and have run only on the CPU since.
 
+Results after the shallow trials keep their whole bounce series and the self-test judges ambiguous elevations by depth (D-142, D-143, commit `ecd2526`, 2026-11-19): CPU, every test passed, 139 of 139 ctest entries including the whole pytest run; GPU (NVIDIA L4, same job as above), 1497 passed and 24 skipped, none failed. The six builds' self-tests: 42 of 42 on both engines.
+
 One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
