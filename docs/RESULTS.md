@@ -2733,6 +2733,26 @@ Unweighted MINSAS along-track sidelobe -32.8 dB at 1489.8 m/s (-34.8 at 1500).
 `fls_120k_cluttered_seabed` thinned, 8 pings: 58 confirmed tracks (65), 6 movers (8), both
 boats `uncertain` (were `static` and `line`).
 
+### The gallery after the four changes
+
+Source: `tools/gallery.py`, full size, CUDA on an NVIDIA L4 (Hugging Face job, tree of
+commit `ebdb22a`) → `docs/figures/gallery.json`. Before → after; scenes not listed changed
+by a detection or less, or not at all.
+
+| Scene | What moved |
+| --- | --- |
+| `popoto_12km` | ship `uncertain` (4.3 m/s) → `multipath` (5.1 m/s, true 6.0); tracks 8 → 12 (movers 2 → 4, multipath 3 → 7, uncertain 3 → 1); detections per ping 3–13 → 7–15 |
+| `popoto_far_mover` | tracks 2 → 4 (multipath 1 → 2, uncertain 0 → 1); ship still `mover` (5.9 m/s) |
+| `popoto_env_gravel_30m` | tracks 1 → 2 (one multipath); detections per ping 1–2 → 1–3 |
+| `popoto_env_winter_sand_200m` | movers 1 → 2, one of them not on a moving object (0 before) |
+| `popoto_trial_1000m` | peak over median 30.2 → 29.8 dB |
+| `fls_120k_transit` | pinnacle `static` → `uncertain`; tracks 7 → 8 |
+| `fls_170k_transit` | anchored boat `uncertain` → `static` |
+| `fls_170k_traffic` | crossing boat `mover` (4.5 m/s) → `line` (15.4 m/s); tracks 13 → 14; movers not on a moving object 2 → 3 |
+| `fls_120k_cluttered_seabed` | movers 5 → 9, not on the boat 4 → 8; static 31 → 21, line 16 → 19, uncertain 12 → 15; boat under way 5.7 → 4.9 m/s, still `mover` |
+| `fls_120k_rough_surface` | tracks 56 → 54; movers not on the boat 7 → 8 |
+| `flank_patrol` | detections per ping 5–7 → 3–6 |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

@@ -220,9 +220,10 @@ Grouped; within a group the most consequential first.
     take 2.2 to 2.4 times as long to simulate.
 41. **The thinned `fls_120k_cluttered_seabed` test scene classes neither boat at
     1496.8 m/s** (both `uncertain`; at 1500 m/s `static` and `line`). A 0.2 % change of
-    sound speed decides it. The full-size scene has not been rerun.
-42. **Generated files not yet regenerated after these changes**: `docs/figures/gallery.json`
-    and its figures (23 of 26 scenes), `docs/design/popoto_12km.json` (item 5),
+    sound speed decides it. In the full-size scene (item 43) both boats keep their classes
+    (`mover` at 4.9 m/s, `static`).
+42. **Generated files not yet regenerated after these changes**:
+    `docs/design/popoto_12km.json` (item 5),
     `docs/benchmarks/gpu_benchmark_all_l4*`, `docs/figures/decay_time_sensitivity.*`,
     `docs/design/popoto_elevation_bench.json`, `popoto_elevation_study.json`,
     `popoto_stage2.json`, `popoto_range_study.json`, `popoto_depth_planner.json`,
@@ -231,9 +232,28 @@ Grouped; within a group the most consequential first.
     numbers `SCENARIOS.md` quotes for the 44 scenarios whose sound speed moved.
     `docs/figures/sst_validation.*` was already stale before them: regenerating it moves
     Pursuit and ASIAEX rows none of these changes touch (ridge over noise 27.1 to
-    30.1 dB), which is not explained. `docs/figures/fjord_rehearsal.*`, `DESIGN.md` and
-    `docs/design/derived.json` are current (the last two regenerate byte-identical; the
+    30.1 dB), which is not explained. `docs/figures/gallery.json` and its figures (item 43),
+    `docs/figures/fjord_rehearsal.*`, `DESIGN.md` and `docs/design/derived.json` are
+    current (the last two regenerate byte-identical; the
     12 km margins did not move).
+43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
+    tree of commit `ebdb22a`) is worse in several scenes than the one before it** (item
+    16). None was examined for its cause.
+    - **`popoto_12km`: the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
+      true 6.0; it was `uncertain`, and `mover` before that). 12 confirmed tracks (8): 4
+      movers, 7 multipath, 1 uncertain; 7 to 15 detections per ping (3 to 13).
+    - **`fls_170k_traffic`: the crossing boat is classified `line` at 15.4 m/s** (it was
+      `mover` at 4.5 m/s). Movers not on a moving object 2 become 3.
+    - **`fls_120k_cluttered_seabed`: 9 movers, 8 of them not the boat** (5 and 4). Static
+      tracks 31 become 21. Both boats keep their classes.
+    - `fls_120k_transit`: the pinnacle is `uncertain` (was `static`); 8 tracks (7).
+    - `popoto_env_winter_sand_200m`: one mover not on a moving object (none before).
+      `fls_120k_rough_surface`: 8 such movers (7).
+    - `popoto_far_mover`: 4 confirmed tracks (2), one more multipath and one uncertain.
+      `popoto_env_gravel_30m`: 2 tracks (1), the second attached as multipath.
+    - Better: in `fls_170k_transit` the anchored boat is `static` again (was `uncertain`).
+    - The test of the stored full-size classes was loosened for the cluttered scene (movers
+      at most 9, was 6).
 
 ### The 12 km design point
 
