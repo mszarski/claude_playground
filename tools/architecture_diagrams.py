@@ -44,8 +44,8 @@ STAGES = [
     ("Detection", "CFAR", "C++ kernel", "same kernel, CUDA", "detect.cfar(backend=)", ""),
     ("Detection", "Sparse Bayesian bearings (active gates, passive)", "C++ kernels, OpenMP", "same kernels, CUDA",
      "core.doa_gate(backend=), core.doa_passive, doa: sbl", "2.5x on an L4"),
-    ("Detection", "Stacked rows: per-row maps, elevation at each detection", "C++ (libs/live) and NumPy on the backprojection kernel", "same kernel, CUDA",
-     "chain: {elevation: {...}}", "no kernel of its own; depth, fold and ray trace are CPU"),
+    ("Detection", "Stacked rows: per-row maps, elevation at each detection", "C++ (libs/live) and NumPy", "same kernel, CUDA",
+     "chain: {elevation: {...}}", "on the backprojection kernel, none of its own; depth, fold and ray trace are CPU"),
     ("Detection", "Clustering, tracking, classification", "C++ (libs/live) and NumPy", None, "live chain; detect, classify",
      "tens of objects per ping: nothing to accelerate"),
     ("Live chain", "Board stream to pings, navigation, report", "C++", None, "build/bin/sonar_live",
@@ -222,8 +222,9 @@ def draw_live_chain(path):
     ax.text(pos["cluster"][0] + w / 2, 6.45, "continues below", ha="center", fontsize=7, color=MUTED)
     ax.text(pos["sbl"][0] - 0.12, pos["sbl"][1] + h / 2, ">", ha="center", va="center", fontsize=9, color=MUTED)
     ax.text(0.2, 5.6, "navigation is written into each\nrecord (pose, attitude samples,\nenvironment); the depth stage\nreads it from the record", fontsize=6.8, color=MUTED, va="top")
-    state = "in this tree (chain key present)" if decimate else "not in this tree: being added separately (stage 2)"
-    ax.text(pos["prepare"][0], 8.02, f"decimate first (to twice the band before the chain): {state}", fontsize=7, color=VIOLET)
+    state = ("optional, chain key `decimate`: band-select a raw ping to complex baseband and synchronise the boards in one stage, before the rest"
+             if decimate else "not in this tree")
+    ax.text(pos["sync"][0], 8.02, f"decimate first: {state}", fontsize=7, color=VIOLET)
     # legend and engines
     box(ax, (0.2, 3.45), 1.2, 0.4, "CPU stage", color=BLUE, fs=7.5)
     box(ax, (1.5, 3.45), 1.7, 0.4, "host or CUDA kernel", color=AQUA, fs=7.5)
@@ -256,12 +257,12 @@ def draw_build_deployment(path, sonar="popoto_long_range_3row", deploy="popoto_v
     box(ax, (0.2, 4.4), 2.6, 1.1, f"{d['n_boards']} capture boards\n{d['channels']} channels, {d['sample_rate_hz'] / 1e3:g} kHz\n{d['rate_total_bit_s'] / 1e6:.0f} Mbit/s", color=YELLOW, text_color=INK, fs=8)
     box(ax, (0.2, 2.9), 2.6, 1.0, "navigation unit\n" + ("typed-in pose (nav.static)" if "static" in nav else f"JSON datagrams, UDP {nav.get('port')}"), color=GRID, text_color=INK, fs=8)
     box(ax, (0.2, 1.4), 2.6, 1.0, "vehicle computer / operator\n" + (f"report lines, UDP {out['report_udp'][0]}:{out['report_udp'][1]}" if out.get("report_udp") else "report file"), color=GRID, text_color=INK, fs=8)
-    box(ax, (4.0, 3.5), 4.2, 2.0, "tools/sonar_live.py DEPLOY.yaml   (Python, either engine)\nor\nbuild/bin/sonar_live --udp PORT --template T.h5 --options chain.options\n(C++, no Python at run time; systemd unit configs/deploy/sonar_live.service)", color=BLUE, fs=7.6)
+    box(ax, (4.0, 3.5), 4.7, 2.0, "tools/sonar_live.py DEPLOY.yaml\n(Python, either engine)\nor\nbuild/bin/sonar_live --udp PORT\n--template T.h5 --options chain.options\n(C++, no Python at run time;\nsystemd unit configs/deploy/sonar_live.service)", color=BLUE, fs=7.4)
     arrow(ax, (2.8, 4.95), (4.0, 4.8))
     ax.text(3.4, 5.1, f"UDP {src['port']}", fontsize=7.5, color=MUTED, ha="center")
     arrow(ax, (2.8, 3.4), (4.0, 4.0))
     arrow(ax, (4.0, 3.7), (2.8, 1.9))
-    box(ax, (4.0, 1.4), 4.2, 1.5, "also the same program:\n--scenario NAME (simulator)  --replay FILE (a recording)\n--emulate NAME (simulated pings as board blocks over UDP)\n--listen / --passive (C++ program: passive bearings)", color=VIOLET, fs=7.6)
+    box(ax, (4.0, 1.4), 4.7, 1.5, "also the same program:\n--scenario NAME (simulator)  --replay FILE (a recording)\n--emulate NAME (simulated pings as board blocks over UDP)\n--listen / --passive (C++ program: passive bearings)", color=VIOLET, fs=7.6)
     files = [("configs/sonars/" + src["sonar"] + ".yaml", "array, transmit, sampling, window, board clocks"), ("configs/deploy/" + deploy + ".yaml", "source, nav, chain, output"),
              ("template.h5 + chain.options", "the same two files for the C++ program (--export-template)"), (out.get("recording", "-"), "every raw ping with its pose"),
              (out.get("report", "-"), "one JSON line a ping"), ((out.get("taps") or {}).get("dir", "-"), f"every stage of the first {(out.get('taps') or {}).get('pings', 0)} pings"),
