@@ -2654,6 +2654,85 @@ With `sector_from_rays` more detections carry the ambiguity flag than before (tw
 were 0 to 3 of 6 pings, three rows 1), except in the gravel water, where none does. The
 depth sigma at 12 km is 2960 to 3010 m.
 
+## Four default changes (D-137 to D-140)
+
+CPU build, one run each, shipped deployment files, C++ chain. Every figure is one seed.
+
+### Arrivals kept by energy (D-137)
+
+Measured before the arcs and the water's sound speed were applied. The `popoto_env_*`
+scenarios are at their own ranges.
+
+| Scenario | Kept | Energy left out | Simulation, s per ping | Pings detected | SNR, dB |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_face_2row_shallow` | 1 → 8 bounces (cap) | next order -4.2 dB | 0.2 → 1.0 | 4/4 → 4/4 | 40.4 → 39.2 |
+| `popoto_testauv_trial_1row` | 1 → 8 (cap) | next order -18.8 dB | 0.4 → 0.9 | 4/4 → 4/4 | 55.5 → 58.0 |
+| `popoto_static_trial_2row` | 1 → 8 (cap) | next order -4.8 dB | 0.8 → 10.2 | 4/4 → 4/4 | 39.6 → 38.7 |
+| `popoto_12km` | 40 → 64 arrivals (cap) | 9.8 % → 1.5 % | 18.3 → 41.1 | 6/6 → 6/6 | 24.0 → 22.4 |
+| `popoto_12km_2row` | 40 → 64 (cap) | 9.7 % → 1.5 % | 31.2 → 74.2 | 6/6 → 6/6 | 22.4 → 19.9 |
+| `popoto_12km_3row` | 40 → 64 (cap) | 9.7 % → 1.5 % | 46.5 → 110.1 | 6/6 → 6/6 | 23.5 → 21.2 |
+| `popoto_env_gravel_30m` | 40 → 64 (cap) | 34.1 % → 14.1 % | 15.8 → 36.7 | 6/6 → 6/6 | 33.4 → 30.2 |
+| `popoto_env_winter_sand_200m` | 40 → 50 | 2.7 % → 0.2 % | 15.7 → 22.8 | 6/6 → 6/6 | 21.9 → 21.6 |
+| `popoto_env_summer_mud_60m` | 40 → 13 | 0 → 2.8 % | 3.6 → 2.6 | 0/6 → 0/6 | not detected |
+| `popoto_env_deep_silt_1000m` | 40 → 14 | 0 → 0.3 % | 4.4 → 3.2 | 0/6 → 0/6 | not detected |
+
+Every detected case still confirms its track at ping 3. Detection extent went from 6 m to
+58–104 m in the three trials and from 114–118 m to 128–142 m at 12 km.
+`popoto_12km_2row` gives a depth on 2 pings of 6 (was 6 of 6). `popoto_face_2row_shallow`
+reads 88 to 95 m for a target at 60 m (16 to 18 m before, also wrong). The budget's 12 km
+margins (-1.1 / +1.4 / +2.9 dB) did not move: `tools/design_report.py` rewrites its
+outputs byte-identical.
+
+Generator self-tests after D-137, both engines: `popoto_testauv_1x32`,
+`popoto_static_3x32`, `popoto_face_1x32`, `popoto_face_2x32` and `popoto_face_3x32` pass;
+`popoto_static_2x32` fails `shallow` and `rehearsal` (candidates 3.7° from the truth,
+sigma 46.5 m). First-arrival range errors -2.2 to +0.7 m; `range_m` errors +5.7 to
++31.5 m; extents 58 to 110 m.
+
+### Enclosed water: `min_snr_db: 15` against the short CFAR window (D-138)
+
+Fjord scenarios as shipped; both settings keep the target on 4 pings of 4 with one, two
+and three rows.
+
+| Setting | Other detections per ping (1 / 2 / 3 rows) | Tracks off the target |
+| --- | --- | --- |
+| `min_snr_db: 15` | 1.5 / 1.5 / 0.2 | 0 |
+| short CFAR window (guard 30 m, training 100 m) | 6.0 / 0.5 / 1.8 | 2 (one row) |
+
+In the own-ping what-if neither holds the target everywhere, and the short window finds a
+10 dB target that `min_snr_db: 15` does not (three rows at 150 m: 4/4 at 10.6 dB; one row
+at 1 km: 3/4 at 13.7 dB). With three rows `min_snr_db: 15` confirms the track at ping 4.
+
+Fjord table regenerated (`docs/figures/fjord_rehearsal.md`); the fjord rows are unchanged,
+the open-water rows moved with D-137: one row 55.5 → 58.0 dB at 500 m, 40.9 → 47.4 at
+1 km, 26.2 → 38.5 at 2 km; two rows 39.6 → 38.9 dB with candidates on 4 of 4 pings; three
+rows 76.6 → 76.8 dB.
+
+### Stepped ray against arcs (D-139)
+
+Same records, `ray_method: steps` against `arcs`; the two engines' moves agree to 0.001 m.
+
+| Where | Largest move of `depth_m` |
+| --- | --- |
+| generator self-tests, six builds, both engines | 0.003 m |
+| `popoto_elevation_free`, 1 km | 0.08 m |
+| `popoto_face_2row_shallow`, 3 km | 0.01 m |
+| `ssp_thermocline_static_trial_3row`, `ssp_front_static_trial_2row`, profile given, 2.6 km | 0.33 m |
+| `popoto_12km_2row`, `_3row`, 12 km | 0.46 m, 0.55 m (a track: 0.61 m) |
+| fjord, two and three rows, profile given | 0.04 m, 0.02 m |
+
+Outside the shipped cases (own depth 10 to 225 m, 150 m to 12 km, ±10°): at most 0.9 m in
++0.017 /s; up to 2.8 m at 12 km in -0.017 /s; up to 10 m at 12 km in -0.05 /s. An exactly
+level ray in -0.017 /s at 3 km: the stepped ray is 51 m from the closed form, the arcs
+0.02 m.
+
+### Sound speed from the water (D-140)
+
+Unweighted MINSAS along-track sidelobe -32.8 dB at 1489.8 m/s (-34.8 at 1500).
+`fls_120k_transit` thinned: 10, 11, 10, 13 detections (12, 11, 10, 12).
+`fls_120k_cluttered_seabed` thinned, 8 pings: 58 confirmed tracks (65), 6 movers (8), both
+boats `uncertain` (were `static` and `line`).
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

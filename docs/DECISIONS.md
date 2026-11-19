@@ -2173,3 +2173,48 @@ Rejected: reporting the fitted 29.8 m with a flag; a band that thin cannot tell 
 from another by delay. Limit: for that geometry no depth can be measured by timing at all;
 the range and the two depths set it, not the estimator. Test: `test_refraction_rays.py`;
 `docs/figures/ssp_range_study.md` was regenerated and only those two rows changed.
+
+### D-137 The trial, 12 km and environment scenarios keep arrivals by energy (owner approved; closes D-105's open question for these)
+
+`popoto_face_2row_shallow`, `popoto_static_trial_2row`, `popoto_testauv_trial_1row`,
+`popoto_12km`, `_2row`, `_3row` and the four `popoto_env_*` no longer state `max_order` or
+`max_arrivals`; the generator's trials do not either. The `ssp_*`, fjord and remaining
+scenarios keep their stated counts. Consequences accepted with it: the three image-source
+trials, `popoto_12km*` and the gravel scenario stop at the cap with its warning; a
+detection is 58 to 142 m long and `range_m` is its energy-weighted mean, so the generator's
+`shallow` and `rehearsal` self-tests check the first arrival; two rows 1.5 m apart at
+2.6 km no longer give one elevation, because later bounces arrive from up to 17°, and
+`popoto_static_2x32` fails its self-test on that. The failure is left standing as a known
+wrong rather than removed by stating one bounce again. `test_multipath_sigma` states
+`max_order: 1` itself: its subject is the three first-order paths.
+
+### D-138 Enclosed water is a named option of the build spec: `operation.site_kind: enclosed` writes `min_snr_db: 15` (owner approved)
+
+There is no fjord or harbour deployment file, so the setting is a key of the generator and
+open-water builds do not move. `min_snr_db: 15` over the short CFAR window because, on the
+fjord scenarios as shipped, both keep the target on 4 pings of 4 with one, two and three
+rows, and the first leaves 1.5 / 1.5 / 0.2 other detections per ping and no track off the
+target against 6.0 / 0.5 / 1.8 and two. Known cost: under the own-ping what-if the short
+window finds a 10 dB target that this setting loses (three rows at 150 m; one row at 1 km
+on 3 of 4 pings), and three rows confirm one ping later. The short window stays available
+through `operation.chain`. `elevation.ssp` from a cast is site data: a warning asks for it,
+nothing is generated.
+
+### D-139 `elevation.ray_method: arcs` is the default (owner approved; supersedes the last sentence of D-112)
+
+Both engines trace the stacked rows' depth with the chain's one ray calculation; `steps`
+remains by name. Measured on the same records: 0.003 m in the generator self-tests, at
+most 0.6 m in the shipped scenarios (12 km), no test expectation moved. The 2 m of D-112
+was an estimate for the deployed gradient; in stronger downward refraction at 12 km the
+two differ by up to 10 m, and the stepped ray leaves an exactly level ray unbent. The
+library functions keep their own defaults.
+
+### D-140 Scenario sound speed follows the water (owner approved; D-101, first clause only)
+
+44 of the 47 scenarios take Mackenzie's or Marczak's speed for their temperature and
+salinity (1496.8, 1489.8, 1482.4 m/s); `tank_20c_1480` is removed. Three keep a typed
+speed because it is the intended quantity, each saying why in its `overrides`:
+`popoto_elevation_rehearsal` (1490), `sst_pursuit` and `sst_asiaex` (1500, D-78). The
+speed is the surface value (reference depth 0), as the one rule gives it. The other kinds
+of D-101 (flat surface, unmentioned bottom, two sands) are unchanged. The generator's own
+trial scenarios and the link budget still use the build's nominal 1500 m/s.
