@@ -5,10 +5,12 @@
 #include <complex>
 #include <cstring>
 #include <random>
+#include <stdexcept>
 
 #include <gtest/gtest.h>
 
 #include "sonar/live/chain.hpp"
+#include "sonar/live/options.hpp"
 #include "sonar/live/udp_source.hpp"
 
 using namespace sonar;        // NOLINT(google-build-using-namespace)
@@ -74,6 +76,21 @@ TEST(Tracker, FollowsAMoverAndAStandingObjectAndClassifiesThem) {
   EXPECT_LT(classes[1].speed, 0.5);
   EXPECT_NEAR(classes[0].seen, 1.0, 1e-12);
   EXPECT_STREQ(kind_name(classes[0].kind), "mover");
+}
+
+TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName) {
+  // D-141: the default and the names; the two rules themselves are held to the Python tracker's in
+  // tests/python/test_live_cpp.py, and the case that separates them in tests/python/test_detect.py.
+  EXPECT_EQ(live::TrackerOptions{}.association, live::Association::Likelihood);
+  EXPECT_EQ(live::ChainOptions{}.tracker.association, live::Association::Likelihood);
+  EXPECT_EQ(live::parse_association("likelihood"), live::Association::Likelihood);
+  EXPECT_EQ(live::parse_association("in_order"), live::Association::InOrder);
+  EXPECT_THROW(live::parse_association("nearest"), std::invalid_argument);
+  live::ChainOptions c;
+  live::PassiveOptions p;
+  live::set_option(c, p, "tracker_association", "in_order");
+  EXPECT_EQ(c.tracker.association, live::Association::InOrder);
+  EXPECT_THROW(live::set_option(c, p, "tracker_association", "best"), std::invalid_argument);
 }
 
 TEST(Tracker, DropsATrackThatIsNoLongerSeen) {

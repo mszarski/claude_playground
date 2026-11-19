@@ -171,6 +171,38 @@ def test_tracks_follow_a_moving_target():
     assert sum(any(tr.id == track.id for tr in c) for c in confirmed_history) >= 14
 
 
+def _crossing_boat_tracks(association):
+    """The crossing boat of `fls_170k_traffic` (seed 63, full size), its hull and its wake: the
+    detections within 100 m of it, tracked with the FLS scenes' settings (tools/gallery.py)."""
+    import json, pathlib
+    from gpusonar import classify
+    d = json.loads((pathlib.Path(__file__).parent / "data" / "crossing_boat_wake.json").read_text())
+    tracker = detect.Tracker(range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2,
+                             initial_speed_sigma=6.0, process_noise=0.3, association=association)
+    for t, hits in zip(d["times"], d["detections"]):
+        tracks = tracker.update(t, [detect.Detection(float(np.hypot(x, y)), float(np.arctan2(y, x)), s, 1) for x, y, s in hits])
+    end = np.array(d["boat_position_at_t0"]) + np.array(d["boat_velocity"]) * d["times"][-1]
+    near = min(tracks, key=lambda q: np.hypot(q.state[1] - end[0], q.state[0] - end[1]))   # state: across, forward
+    c = {k.id: k for k in classify.classify_tracks(tracks, min_speed=0.5, max_fit_rms=2.5)}[near.id]
+    return float(np.hypot(near.state[1] - end[0], near.state[0] - end[1])), c.kind, c.speed
+
+
+def test_the_tracker_keeps_a_crossing_boat_whose_wake_would_steal_its_detection():
+    """D-141. The hull gives one strong detection a ping; the wake leaves detections fixed in the water 5 to 10 m apart.
+    New tracks climbing the wake used to take the hull's detection, because each track in turn took its nearest
+    detection ("in_order"): the track at the boat then read 15.4 m/s for a boat doing 4.0. Most probable pairs first
+    ("likelihood", the default) keeps the hull's track on the hull."""
+    err, kind, speed = _crossing_boat_tracks("likelihood")
+    assert err < 1.5 and kind == "mover" and speed == pytest.approx(4.0, abs=0.6)
+    err, kind, speed = _crossing_boat_tracks("in_order")          # the rule before D-141, kept by name
+    assert speed > 10.0
+
+
+def test_the_tracker_refuses_an_unknown_association():
+    with pytest.raises(ValueError, match="association"):
+        detect.Tracker(association="nearest")
+
+
 def test_tracker_drops_a_target_that_disappears():
     tracker = detect.Tracker(confirm_hits=2, max_misses=2)
     for k in range(4):

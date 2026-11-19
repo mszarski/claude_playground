@@ -41,9 +41,11 @@ def test_cluster_matches_python():
         assert g[3] == w.cells and g[2] == pytest.approx(w.snr_db, abs=0.05)
 
 
-def test_tracker_and_classifier_match_python():
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_tracker_and_classifier_match_python(association):
     rng = np.random.default_rng(8)
-    opts = dict(process_noise=0.3, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0)
+    opts = dict(process_noise=0.3, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0,
+                association=association)
     py_tracker, cpp_tracker = detect.Tracker(**opts), core.LiveTracker(**opts)
     # Three movers, a row of five sliding along a line, clutter that comes and goes.
     for i in range(9):
@@ -76,6 +78,11 @@ def test_tracker_and_classifier_match_python():
     want = classify.classify_tracks(a, multipath=mp, **kw)
     got = cpp_tracker.classify(multipath=True, max_excess_range=60.0, multipath_bearing=0.2, multipath_velocity=3.0, **kw)
     assert [(c.kind, c.parent) for c in want] == [(c["kind"], c["parent"]) for c in got]
+
+
+def test_cpp_tracker_refuses_an_unknown_association():
+    with pytest.raises(ValueError, match="association"):
+        core.LiveTracker(association="nearest")
 
 
 def test_cpp_chain_gives_the_python_chains_report(pings):

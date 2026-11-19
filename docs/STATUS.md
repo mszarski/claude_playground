@@ -273,7 +273,9 @@ Grouped; within a group the most consequential first.
       new tracks climb the boat's wake from one detection to the next and take the hull's
       detection, because each track takes its nearest gated detection in list order (RESULTS,
       "Why the tracker loses the crossing boat"). Any best-pair-first rule fixes it on 7 of 7
-      seeds; each has costs elsewhere, worst in the rough-surface scene. Not changed yet.
+      seeds; each has costs elsewhere, worst in the rough-surface scene. **Changed (D-141):
+      both engines now take the most probable pairs first by default**; the gallery has not
+      yet been regenerated with it, so its numbers are still those of the old rule.
     - `fls_120k_cluttered_seabed`: movers that are not the boat, 2 to 6 per seed at
       1500 m/s (mean 3.6) and 1 to 8 at 1496.8 m/s (mean 4.3); paired by seed the
       differences have no consistent sign. The gallery's 8 is the worst of 14 runs.

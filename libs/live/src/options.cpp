@@ -55,6 +55,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
     }
   }
   else if (key == "beamformer") c.beamformer = value;
+  else if (key == "tracker_association") c.tracker.association = parse_association(value);
   else if (key == "doa") c.doa = value;
   else if (key == "mvdr_subbands") c.mvdr.n_subbands = static_cast<std::int64_t>(v);
   else if (key == "mvdr_loading") c.mvdr.loading = v;

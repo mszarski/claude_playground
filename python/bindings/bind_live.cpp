@@ -344,11 +344,14 @@ void bind_live(py::module_& m) {
 
   py::class_<live::Tracker>(m, "LiveTracker")
       .def(py::init([](double process_noise, double range_sigma, double bearing_sigma, double gate, std::int64_t confirm_hits,
-                       std::int64_t max_misses, double initial_speed_sigma) {
-             return live::Tracker({process_noise, range_sigma, bearing_sigma, gate, confirm_hits, max_misses, initial_speed_sigma});
+                       std::int64_t max_misses, double initial_speed_sigma, const std::string& association) {
+             live::TrackerOptions o{process_noise, range_sigma, bearing_sigma, gate, confirm_hits, max_misses, initial_speed_sigma};
+             o.association = live::parse_association(association);
+             return live::Tracker(o);
            }),
            py::arg("process_noise") = 0.05, py::arg("range_sigma") = 2.0, py::arg("bearing_sigma") = 0.017453292519943295,
-           py::arg("gate") = 4.0, py::arg("confirm_hits") = 3, py::arg("max_misses") = 3, py::arg("initial_speed_sigma") = 10.0)
+           py::arg("gate") = 4.0, py::arg("confirm_hits") = 3, py::arg("max_misses") = 3, py::arg("initial_speed_sigma") = 10.0,
+           py::arg("association") = "likelihood")
       .def("update",
            [](live::Tracker& t, double time, const std::vector<std::tuple<double, double, double, std::int64_t>>& dets) {
              std::vector<live::Detection> d;
@@ -676,6 +679,7 @@ void bind_live(py::module_& m) {
         get("multipath_bearing", o.classify.multipath_bearing);
         get("multipath_velocity", o.classify.multipath_velocity);
         if (kw.contains("tracker_confirm_hits")) o.tracker.confirm_hits = kw["tracker_confirm_hits"].cast<std::int64_t>();
+        if (kw.contains("tracker_association")) o.tracker.association = live::parse_association(kw["tracker_association"].cast<std::string>());
         if (kw.contains("tracker_max_misses")) o.tracker.max_misses = kw["tracker_max_misses"].cast<std::int64_t>();
         if (kw.contains("sbl_max_sources")) o.sbl.max_sources = kw["sbl_max_sources"].cast<std::int32_t>();
         if (kw.contains("gate_fft")) o.gate_fft = kw["gate_fft"].cast<std::int64_t>();

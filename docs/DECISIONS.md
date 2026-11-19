@@ -2218,3 +2218,30 @@ speed because it is the intended quantity, each saying why in its `overrides`:
 speed is the surface value (reference depth 0), as the one rule gives it. The other kinds
 of D-101 (flat surface, unmentioned bottom, two sands) are unchanged. The generator's own
 trial scenarios and the link budget still use the build's nominal 1500 m/s.
+
+### D-141 The tracker shares detections out most probable pair first (owner approved; both engines)
+
+`gpusonar.detect.Tracker` and `libs/live` `Tracker` now take the (track, detection) pairs
+inside the gate in order of the Gaussian negative log-likelihood d² + ln|S|, confirmed
+tracks before tentative ones, each track and each detection used once; ties go to the
+earlier track, then the earlier detection, the same in both engines. Before, each track in
+turn took its nearest gated detection by d², so a track earlier in the list could take a
+detection that fitted a later one better. The old rule stays by name:
+`tracker.association: in_order` (`tracker_association` for `sonar_live`).
+
+Why: in `fls_170k_traffic` new tracks climbing the crossing boat's wake (detections fixed in
+the water 5 to 10 m apart; a new track's speed sigma of 6 m/s lets it reach the next one)
+took the hull's detection from the hull's own track. The boat was right on 2 of 7 seeds;
+with this rule on 7 of 7 (RESULTS, "Why the tracker loses the crossing boat"). d² alone was
+tried and rejected: a track with a wide covariance looks close to everything and took the
+head-on boat's detection on one seed; ln|S| charges it for its width.
+
+Known cost, measured on saved detections of full-size scenes before the change: in
+`fls_120k_rough_surface` more tracks among the wave glints are called movers (22 to 34 over
+three seeds) and the boat is right on 1 of 3 seeds (2 of 3 before). In the cluttered
+seabed movers that are not a boat fall from 17 to 2 over three seeds; the three transit
+scenes are unchanged but for one anchored boat (`static` to `uncertain`, one seed). The
+12 km ship's misclassification is not changed by any rule tried (its track is classed as
+an echo; open item 44). Rejected: an optimal one-to-one assignment (Hungarian), which kept
+the rough surface even but added false movers and misclassed anchored boats in the
+crossing-boat scene.

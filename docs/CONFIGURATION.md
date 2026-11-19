@@ -466,7 +466,7 @@ a record that still does, and the imaging, gain and synthesis entry points raise
 | `bearings_deg`, `look`, `window` | `[first, last, step]` from broadside; `starboard` or `port`; aperture weighting |
 | `range_cell_m` | power is averaged into cells this long before detection |
 | `cfar: {guard_m, train_m, false_alarms_per_ping, pfa, ...}`, `min_snr_db` | detector windows in metres (turned into cells by `core.cfar_window`: rounded up); the false-alarm budget per ping (`multiscale`) or per cell (`pfa`: `mean`, `peak`); detections below this SNR are dropped. The other `cfar` keys: below |
-| `tracker: {range_sigma, bearing_sigma_deg, confirm_hits, max_misses, initial_speed_sigma, process_noise}` | the Kalman tracker |
+| `tracker: {range_sigma, bearing_sigma_deg, confirm_hits, max_misses, initial_speed_sigma, process_noise, association}` | the Kalman tracker. `association`: `likelihood` (default; the most probable track–detection pairs first, D-141) or `in_order` (each track in turn takes its nearest detection, the rule before D-141); `tracker_association` for `sonar_live` |
 | `classify: {min_speed, static_speed, max_fit_rms, multipath: {max_excess_range, bearing_deg, velocity}}` | `gpusonar/classify.py`; `multipath: null` switches echo grouping off |
 | `sound_speed` | m/s at the vehicle, when the navigation datagrams do not carry `"sound_speed"`: replaces the record's value for every stage |
 | `dead_channels` | channel rows (after synchronisation and the removal of dedicated reference inputs) left out of every stage |
@@ -553,7 +553,7 @@ resolved is printed once on stderr (`chain settings {...}`) and is `LiveChain.re
 | passive `n_fft`, `hop` | 1024, half of `n_fft` | the next power of two above two transit times of sound across one row, at the record's sample rate |
 
 Not derived, because they are choices about targets, false alarms and the site, not properties of the sonar: `cfar.pfa`,
-`min_snr_db`, `tracker.confirm_hits`, `max_misses`, `initial_speed_sigma`, `process_noise`, `classify.min_speed`,
+`min_snr_db`, `tracker.confirm_hits`, `max_misses`, `initial_speed_sigma`, `process_noise`, `association`, `classify.min_speed`,
 `static_speed`, `multipath.max_excess_range`, `multipath.velocity`, `bearings_deg`, the elevation sector. Their defaults are
 in `ChainOptions` (`libs/live` `chain.hpp`) and `live.DEFAULTS`, which agree.
 

@@ -284,14 +284,30 @@ class Track:
     depth_var: float = float("inf")
 
 
+ASSOCIATIONS = ("likelihood", "in_order")
+
+
 class Tracker:
     """Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal
     plane. Tracks start on any unassociated detection, are confirmed after `confirm_hits`
-    updates and dropped after `max_misses` pings without one."""
+    updates and dropped after `max_misses` pings without one.
+
+    `association` says how detections are shared out among tracks on each ping (D-141).
+    Confirmed tracks always choose before tentative ones. "likelihood" (the default) then
+    takes the (track, detection) pairs inside the gate most probable first, by the
+    Gaussian negative log-likelihood d^2 + ln|S|, each track and each detection used once;
+    ties go to the earlier track, then the earlier detection. "in_order" is the rule before
+    D-141: each track in turn takes its nearest gated detection by d^2, so a track earlier
+    in the list can take a detection that fits a later track better. That let new tracks
+    climbing a boat's wake take the hull's detection from the hull's own track."""
 
     def __init__(self, process_noise: float = 0.05, range_sigma: float = 2.0,
                  bearing_sigma: float = np.radians(1.0), gate: float = 4.0, confirm_hits: int = 3,
-                 max_misses: int = 3, initial_speed_sigma: float = 10.0, depth_process_noise: float = 0.5):
+                 max_misses: int = 3, initial_speed_sigma: float = 10.0, depth_process_noise: float = 0.5,
+                 association: str = "likelihood"):
+        if association not in ASSOCIATIONS:
+            raise ValueError(f"tracker association {association!r}: one of {ASSOCIATIONS}")
+        self.association = association
         self.q = process_noise
         self.depth_q = depth_process_noise     # m per sqrt(s)
         self.range_sigma = range_sigma
@@ -345,31 +361,10 @@ class Tracker:
             t.cov = f @ t.cov @ f.T + q
             if np.isfinite(t.depth_var):
                 t.depth_var += self.depth_q**2 * dt
-        unused = list(range(len(detections)))
-        # Confirmed tracks choose first, each taking its nearest gated detection.
-        for t in sorted(self.tracks, key=lambda tr: not tr.confirmed):
-            best, best_d2 = None, self.gate**2
-            for j in unused:
-                d = detections[j]
-                s = h @ t.cov @ h.T + self._measurement_cov(d)
-                y = d.xy() - h @ t.state
-                d2 = float(y @ np.linalg.solve(s, y))
-                if d2 < best_d2:
-                    best, best_d2 = j, d2
-            if best is None:
-                t.misses += 1
-                continue
-            d = detections[best]
-            unused.remove(best)
-            s = h @ t.cov @ h.T + self._measurement_cov(d)
-            k = t.cov @ h.T @ np.linalg.inv(s)
-            t.state = t.state + k @ (d.xy() - h @ t.state)
-            t.cov = (np.eye(4) - k @ h) @ t.cov
-            t.hits += 1
-            t.snr.append(d.snr_db)
-            self._take_depth(t, d)
-            t.misses = 0
-            t.confirmed = t.confirmed or t.hits >= self.confirm_hits
+        if self.association == "likelihood":
+            unused = self._associate_by_likelihood(detections, h)
+        else:
+            unused = self._associate_in_order(detections, h)
         for t in self.tracks:
             t.history.append((time, float(t.state[0]), float(t.state[1])))
         self.tracks = [t for t in self.tracks if t.misses <= self.max_misses]
@@ -386,3 +381,61 @@ class Tracker:
             self.tracks.append(tr)
             self._next_id += 1
         return [t for t in self.tracks if t.confirmed]
+
+    def _take(self, t: Track, d: Detection, h: np.ndarray) -> None:
+        """The Kalman update of one track with one detection."""
+        s = h @ t.cov @ h.T + self._measurement_cov(d)
+        k = t.cov @ h.T @ np.linalg.inv(s)
+        t.state = t.state + k @ (d.xy() - h @ t.state)
+        t.cov = (np.eye(4) - k @ h) @ t.cov
+        t.hits += 1
+        t.snr.append(d.snr_db)
+        self._take_depth(t, d)
+        t.misses = 0
+        t.confirmed = t.confirmed or t.hits >= self.confirm_hits
+
+    def _associate_by_likelihood(self, detections: list[Detection], h: np.ndarray) -> list[int]:
+        """Most probable gated pairs first, confirmed tracks before tentative ones. Returns
+        the indices of the detections no track took, in their original order."""
+        pairs = []
+        for ti, t in enumerate(self.tracks):
+            for j, d in enumerate(detections):
+                s = h @ t.cov @ h.T + self._measurement_cov(d)
+                y = d.xy() - h @ t.state
+                d2 = float(y @ np.linalg.solve(s, y))
+                if d2 < self.gate**2:
+                    pairs.append((not t.confirmed, d2 + float(np.log(np.linalg.det(s))), ti, j))
+        pairs.sort()
+        taken: dict[int, int] = {}
+        used: set[int] = set()
+        for _, _, ti, j in pairs:
+            if ti in taken or j in used:
+                continue
+            taken[ti] = j
+            used.add(j)
+        for ti, t in enumerate(self.tracks):
+            if ti in taken:
+                self._take(t, detections[taken[ti]], h)
+            else:
+                t.misses += 1
+        return [j for j in range(len(detections)) if j not in used]
+
+    def _associate_in_order(self, detections: list[Detection], h: np.ndarray) -> list[int]:
+        """The rule before D-141. Returns the indices of the detections no track took."""
+        unused = list(range(len(detections)))
+        # Confirmed tracks choose first, each taking its nearest gated detection.
+        for t in sorted(self.tracks, key=lambda tr: not tr.confirmed):
+            best, best_d2 = None, self.gate**2
+            for j in unused:
+                d = detections[j]
+                s = h @ t.cov @ h.T + self._measurement_cov(d)
+                y = d.xy() - h @ t.state
+                d2 = float(y @ np.linalg.solve(s, y))
+                if d2 < best_d2:
+                    best, best_d2 = j, d2
+            if best is None:
+                t.misses += 1
+                continue
+            unused.remove(best)
+            self._take(t, detections[best], h)
+        return unused

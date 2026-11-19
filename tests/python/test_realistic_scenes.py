@@ -199,8 +199,11 @@ def test_merging_fls_detections_as_the_chain_does_holds_the_anchored_boat_still(
     t = m["targets"]
     assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 0.6
     assert t["boat_closing"]["tracked"] and t["boat_closing"]["track_velocity_xy"][0] < -4.5
-    assert t["boat_crossing"]["tracked"] and t["boat_crossing"]["track_velocity_xy"][1] > 3.0
-    assert max(m["detections_per_ping"]) <= 6 and m["confirmed_tracks"] <= 5         # 9 to 15 detections and 10 tracks without
+    # The crossing boat does 0.35, 3.98 m/s. With each track taking its nearest detection in turn (the rule before D-141)
+    # its track here read 21.4 m/s across, which the old limit (> 3.0) let pass; most probable pairs first: 3.7 m/s.
+    assert t["boat_crossing"]["tracked"] and 3.0 < t["boat_crossing"]["track_velocity_xy"][1] < 5.0
+    # 6 confirmed tracks since D-141 (4 before); which objects the two more are on has not been examined.
+    assert max(m["detections_per_ping"]) <= 6 and m["confirmed_tracks"] <= 6         # 9 to 15 detections and 10 tracks without
 
 
 @pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
@@ -265,8 +268,11 @@ def test_clutter_tracks_are_mostly_not_called_movers():
     # 0.31 +- 0.12 m/s (at 1500 m/s: `static` at 0.32 +- 0.10) and the boat under way is `uncertain` at 2.1 m/s (at
     # 1500 m/s: `line` at 5.5 m/s; it does 5.0). 58 confirmed tracks against 65, 6 movers against 8. What is
     # asserted is what is measured now: neither boat is classed, and the anchored one is not called a mover.
+    # Since D-141 (most probable track-detection pairs first) the boat under way is a `mover` at 5.5 m/s (was `uncertain`
+    # at 2.1), movers that are not a boat 6 become 1, static tracks 14 become 29; the anchored boat is unchanged.
     assert c["targets"]["boat_at_anchor"]["kind"] == "uncertain" and c["targets"]["boat_at_anchor"]["speed_m_s"] < 0.6
-    assert c["targets"]["boat_under_way"]["kind"] == "uncertain"            # it moves; at 1500 m/s it was `line` (a boulder ahead puts it in a row)
+    assert c["targets"]["boat_under_way"]["kind"] == "mover"
+    assert c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
     assert c["counts"]["mover"] <= 0.2 * m["confirmed_tracks"]              # the seabed's tracks are static, line or uncertain
     assert c["counts"]["static"] + c["counts"]["line"] >= 0.4 * m["confirmed_tracks"]
 

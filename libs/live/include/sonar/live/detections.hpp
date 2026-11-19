@@ -60,6 +60,15 @@ struct Track {
   double depth_var = std::numeric_limits<double>::infinity();
 };
 
+/// How detections are shared out among tracks on each ping (D-141; python/gpusonar/detect.py).
+/// Confirmed tracks always choose before tentative ones. Likelihood: the gated (track,
+/// detection) pairs most probable first, by d^2 + ln|S|, each track and detection used once;
+/// ties go to the earlier track, then the earlier detection. InOrder: the rule before D-141,
+/// each track in turn takes its nearest gated detection by d^2.
+enum class Association { Likelihood, InOrder };
+/// "likelihood" or "in_order"; throws std::invalid_argument for anything else.
+Association parse_association(const std::string& name);
+
 struct TrackerOptions {
   double process_noise = 0.05;
   double range_sigma = 2.0;                   ///< m
@@ -69,6 +78,7 @@ struct TrackerOptions {
   std::int64_t max_misses = 3;
   double initial_speed_sigma = 10.0;
   double depth_process_noise = 0.5;  ///< m per sqrt(s): how fast a track's depth may wander
+  Association association = Association::Likelihood;
 };
 
 /// Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal plane.

@@ -66,7 +66,8 @@ DEFAULTS = {
     "sbl": {"grid_step_deg": 0.25, "max_sources": 6, "min_snr_db": 6.0, "dynamic_range_db": 20.0,
             "max_gates": 24, "min_contrast_db": 8.0, "max_iterations": 20, "tolerance": 0.01},
     "tracker": {"range_sigma": None, "bearing_sigma_deg": None, "confirm_hits": 3, "max_misses": 2,
-                "initial_speed_sigma": 8.0, "process_noise": 0.05},
+                "initial_speed_sigma": 8.0, "process_noise": 0.05,
+                "association": "likelihood"},     # or "in_order", the rule before D-141 (gpusonar/detect.py, Tracker)
     "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
@@ -377,6 +378,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "sbl_max_iterations": int(s["max_iterations"]), "sbl_tolerance": s["tolerance"],
          "tracker_confirm_hits": int(t["confirm_hits"]), "tracker_max_misses": int(t["max_misses"]),
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
+         "tracker_association": t["association"],
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath"))}
     if cfg["cell_statistic"] == "peak":
@@ -1020,7 +1022,8 @@ class LiveChain:
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=self._bearing_sigma,
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
-                                      depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5))
+                                      depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5),
+                                      association=t["association"])
         self.resolved = json.loads(d["json"])
 
     def _fine_map(self, record):

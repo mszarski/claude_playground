@@ -14,6 +14,7 @@
 //   gate_fft sbl_grid_step_deg sbl_max_sources
 //   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) backend (host | cuda)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
+//   tracker_association (likelihood | in_order)
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
 //   sync (0 | 1) sync_f_start sync_f_stop sync_duration sync_lead sync_tail sync_dedicated (0 | 1)
 //   passive: n_fft hop n_average passive_method (sbl | conventional)
