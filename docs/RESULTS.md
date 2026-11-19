@@ -2805,6 +2805,49 @@ profile water; only the arrivals rule differs):
 
 The ship is a tracked `mover` in every gravel and winter-sand run.
 
+### Why the tracker loses the crossing boat, and four association rules
+
+Source: per-ping detections of full-size scenes saved from `tools/gallery.py`'s runners
+(CPU, scenes as shipped) and replayed through `gpusonar.detect.Tracker` and variants of
+its association step, scored as the gallery scores (`classify_and_score`). Replaying the
+shipped tracker reproduced the stored classes of every run. Scripts outside the
+repository; nothing in it changed.
+
+**The fault.** In `fls_170k_traffic` the crossing boat's hull gives one strong detection
+(SNR 29 to 33 dB) within 1.3 m of the truth on every ping. Its wake gives detections fixed
+in the water 5 to 10 m apart for 60 m astern. A new track starts with a speed sigma of
+6 m/s, so on its second ping its gate reaches the next wake detection forward; taking it
+gives the track a forward speed that predicts it onto the next one. Several such tracks
+climb the wake at 11 to 14 m/s and, because each track takes its nearest gated detection
+in list order rather than the best pair first, they take the hull's detection from the
+hull's own track. The track nearest the boat at the last ping is then one of the climbers
+(seed 64: started 48 m astern, 12.1 m/s, classed `line`).
+
+**Rules compared** (all keep "confirmed tracks choose first" except where stated):
+in order (shipped); closest pair first (Mahalanobis d²); likelihood first (d² + ln|S|);
+most hits first, then d²; optimal one-to-one assignment (Hungarian, d², no tiers).
+A named object is right if a moving one is a `mover` within 20 % of its true speed and a
+still one is `static`; objects no rule tracks (kayak, buoy, pinnacle) count as wrong in all.
+
+| Scene (seeds) | In order | Closest first | Likelihood first | Most hits first | Hungarian |
+| --- | --- | --- | --- | --- | --- |
+| `fls_170k_traffic` (7), right / false movers | 16/21, 11 | 19/21, 11 | **21/21, 7** | 21/21, 10 | 19/21, 17 |
+| `fls_120k_cluttered_seabed` (3) | 5/6, 17 | 4/6, 2 | 4/6, 2 | 4/6, 2 | 4/6, 4 |
+| `fls_120k_rough_surface` (3) | 2/9, 22 | 2/9, 31 | **1/9, 34** | 1/9, 26 | 3/9, 21 |
+| `fls_120k_transit` (3) | 11/12, 0 | 11/12, 0 | 11/12, 0 | 11/12, 1 | 11/12, 0 |
+| `fls_170k_transit` (3) | 9/12, 0 | 8/12, 0 | 8/12, 0 | 8/12, 0 | 8/12, 0 |
+| `fls_330k_transit` (3) | 9/12, 0 | 9/12, 0 | 9/12, 0 | 9/12, 0 | 9/12, 0 |
+| all 22 runs | 52/72, 50 | 53/72, 44 | 54/72, 43 | 54/72, 39 | 54/72, 42 |
+| `popoto_12km` (6), ship a `mover` | 2/6 | – | 2/6 | 1/6 | 3/6 |
+
+The crossing boat is right on 7 of 7 seeds with every rule that does not go in list order
+(2 of 7 in order). In the cluttered scene the boat's track is right with every rule; where
+it becomes `line` it is because twice as many seabed objects now keep steady tracks and
+some fall in the corridor ahead of and astern of it. In the rough-surface scene every rule
+but the Hungarian gives more movers among the wave glints. At 12 km no rule helps: the
+ship's own track is mostly classed as an echo of a stronger track (the classifier's
+multipath rule), not lost by association.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

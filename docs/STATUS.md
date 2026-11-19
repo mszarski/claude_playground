@@ -269,8 +269,11 @@ Grouped; within a group the most consequential first.
     - `fls_170k_traffic`: the crossing boat (true 4.0 m/s) is a `mover` near its speed on 2
       of 7 seeds at 1500 m/s and 2 of 7 at 1496.8 m/s; on the others it is `line`,
       `uncertain` or a `mover` at 6.7 to 18 m/s. The earlier gallery's right answer was one
-      of the lucky seeds. **The tracker usually joins this boat to the wrong detections**;
-      why has not been examined.
+      of the lucky seeds. **The tracker usually joins this boat to the wrong detections**:
+      new tracks climb the boat's wake from one detection to the next and take the hull's
+      detection, because each track takes its nearest gated detection in list order (RESULTS,
+      "Why the tracker loses the crossing boat"). Any best-pair-first rule fixes it on 7 of 7
+      seeds; each has costs elsewhere, worst in the rough-surface scene. Not changed yet.
     - `fls_120k_cluttered_seabed`: movers that are not the boat, 2 to 6 per seed at
       1500 m/s (mean 3.6) and 1 to 8 at 1496.8 m/s (mean 4.3); paired by seed the
       differences have no consistent sign. The gallery's 8 is the worst of 14 runs.
