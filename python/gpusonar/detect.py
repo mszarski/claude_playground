@@ -39,7 +39,8 @@ def normalise(power: np.ndarray, guard: int = 4, train: int = 32) -> np.ndarray:
 
 def cfar_threshold_factor(pfa: float, n_train: int) -> float:
     """Cell-averaging CFAR multiplier for exponentially distributed power (complex Gaussian
-    noise): threshold = factor * mean of n_train cells gives the false-alarm rate `pfa`."""
+    noise): threshold = factor * mean of n_train cells gives the false-alarm rate `pfa`.
+    Source: docs/REFERENCES.md Sec. 12.1."""
     return n_train * (pfa ** (-1.0 / n_train) - 1.0)
 
 
@@ -299,7 +300,8 @@ class Tracker:
     ties go to the earlier track, then the earlier detection. "in_order" is the rule before
     D-141: each track in turn takes its nearest gated detection by d^2, so a track earlier
     in the list can take a detection that fits a later track better. That let new tracks
-    climbing a boat's wake take the hull's detection from the hull's own track."""
+    climbing a boat's wake take the hull's detection from the hull's own track.
+    Sources: docs/REFERENCES.md Sec. 12.3 (the association rule is ours)."""
 
     def __init__(self, process_noise: float = 0.05, range_sigma: float = 2.0,
                  bearing_sigma: float = np.radians(1.0), gate: float = 4.0, confirm_hits: int = 3,

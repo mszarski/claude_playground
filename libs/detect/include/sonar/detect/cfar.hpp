@@ -1,5 +1,6 @@
 // Cell-averaging CFAR and the split-window normaliser on range x bearing power maps.
 // One kernel body for the host and CUDA backends (docs/DECISIONS.md A-03).
+// Sources: docs/REFERENCES.md Sec. 12.1 (cell-averaging factor N (pfa^(-1/N) - 1)).
 #pragma once
 
 #include <cstdint>

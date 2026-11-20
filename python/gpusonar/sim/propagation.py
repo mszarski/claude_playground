@@ -373,6 +373,7 @@ def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
     dB per wavelength, entering as an imaginary part of the sediment sound speed.
     R = (m sin(g) - sqrt(n^2 - cos^2(g))) / (m sin(g) + sqrt(n^2 - cos^2(g))),
     m = rho_b / rho_w, n = c_w / c_b.
+    Sources: docs/REFERENCES.md Sec. 12.4 (the dB/wavelength conversion is ours).
     """
     g = np.asarray(grazing, dtype=float)
     delta = attenuation / (40.0 * np.pi * np.log10(np.e))      # loss tangent from dB/wavelength

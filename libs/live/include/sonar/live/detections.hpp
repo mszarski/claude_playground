@@ -1,6 +1,7 @@
 // Detections from a CFAR map, the tracker that follows them and the classes given to its
 // tracks. The C++ counterparts of python/gpusonar/detect.py (cluster, Tracker) and
 // classify.py; tests/python/test_live_cpp.py checks they give the same answers.
+// Sources: docs/REFERENCES.md Sec. 12.3 (constant-velocity Kalman filter; the association is ours, D-141).
 #pragma once
 
 #include <cstdint>

@@ -10,6 +10,7 @@
 //
 // Both take a conditioned record (complex baseband, pulse compressed: live::prepare) and
 // give a bearing x time map whose time axis is the two-way delay to the array centre.
+// Sources: docs/REFERENCES.md Sec. 12.2 (MVDR, diagonal loading; the 3e-2 loading is our choice).
 #pragma once
 
 #include <complex>
