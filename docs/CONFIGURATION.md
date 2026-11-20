@@ -589,6 +589,85 @@ line); `"part": [k, n]` (a report split over datagrams); `"bearing_corrected": f
 `elevation.correct_bearing` on, the elevation ambiguous: bearing and range are the row's own, where they used to be
 placed by whichever candidate elevation was picked).
 
+### Every `sonar_live` key of the chain: deployment file → option → unit → default
+
+`tools/sonar_live.py CONFIG --export-template` turns a deployment file into these `key=value` options of
+`build/bin/sonar_live` (`gpusonar.live.cpp_chain_options`, then `export_template`); the program reads them in
+`libs/live/src/options.cpp` (`set_option`), in order, from the command line or `--options FILE`. A key it does not
+know is refused. A value where a number is expected must be a number: one that is not (`True`, `{}`, a list in
+brackets) is refused. Switches are `1` or `0`. "Derived" means: left out, the chain takes the size from the first ping
+(the table "Sizes the chain derives" above); the export writes these only when the file gives them. Defaults are
+`ChainOptions` (`libs/live` `chain.hpp`) and `live.DEFAULTS`, which agree except where the row says.
+
+| Deployment file (`chain.` unless stated) | `sonar_live` key | Unit | Default |
+| --- | --- | --- | --- |
+| `bearings_deg: [first, last, step]` | `bearing_first_deg`, `bearing_last_deg`, `bearing_step_deg` | degrees from broadside | −40, 40, 0.5 |
+| `look` | `look` | `starboard` or `port` (any other text is read as `starboard`) | `starboard` |
+| `window` | `window` | `hann`; anything else (the export writes `none`) is no weighting | `hann` |
+| `beamformer` | `beamformer` | `backprojection`, `farfield`, `mvdr` | `backprojection` |
+| `backend` | `backend` | `auto` (CUDA when built and a device is present, else host), `host`, `cuda` | `auto` |
+| `range_cell_m` | `range_cell_m` | m | derived (2 m) |
+| `cell_statistic` | `cell_statistic` | `multiscale`, `mean`, `peak` | `multiscale` |
+| `cfar.pfa` | `cfar_pfa` | probability per cell (`mean`, `peak` only) | 1e-5 |
+| `cfar.guard_m`, `cfar.train_m` | `cfar_guard_m`, `cfar_train_m` | m | derived (100 m, 300 m) |
+| `cfar.false_alarms_per_ping`, `integrate_cells`, `merge_m`, `sidelobe_margin_db`, `sidelobe_floor_db`, `search_factor` | `cfar_<name>` | as in the table above | 1e-3, `[1]`, `tracker.range_sigma`, 10 dB, −40 dB, measured |
+| `min_snr_db` | `min_snr_db` | dB | 9 |
+| `sound_speed` | `sound_speed` | m/s; 0 or absent: the record's (navigation's) | absent |
+| `dead_channels` | `dead_channels` | channel rows after synchronisation, comma-separated | none |
+| `tracker.range_sigma` | `tracker_range_sigma` | m, one sigma of a detection's range | derived (15 m) |
+| `tracker.bearing_sigma_deg` | `tracker_bearing_sigma_deg` | degrees, one sigma of a detection's bearing | derived (1°) |
+| `tracker.confirm_hits` | `tracker_confirm_hits` | detections before a track is confirmed and reported | 3 |
+| `tracker.max_misses` | `tracker_max_misses` | pings without a detection before a track is dropped | 2 (the library's `TrackerOptions` / `detect.Tracker` alone: 3) |
+| `tracker.initial_speed_sigma` | `tracker_initial_speed_sigma` | m/s, one sigma of each velocity component of a new track | 8 (library alone: 10) |
+| `tracker.process_noise` | `tracker_process_noise` | m/s², one sigma of the white acceleration per horizontal axis (Q = G Gᵀ σ², G = [dt²/2, dt]) | 0.05 |
+| `tracker.association` | `tracker_association` | `likelihood` or `in_order` (D-141) | `likelihood` |
+| `elevation.depth_process_noise` | `elevation_depth_process_noise` | m/√s: a track's depth variance grows by σ² dt | 0.5 |
+| `classify.min_speed` | `classify_min_speed` | m/s: a mover is at least this fast. **Also sets `static_speed`** to the same value; give `classify_static_speed` after it to differ (the export does) | 1.0 |
+| `classify.static_speed` | `classify_static_speed` | m/s: below this, seen on most pings, a track is static | 1.0 |
+| `classify.max_fit_rms` | `classify_max_fit_rms` | m: a track whose positions lie further than this (RMS) from their fitted line is `uncertain` | derived (60 m) |
+| `classify.multipath` (`null` switches it off) | `multipath` | 1 or 0 | 1 |
+| `classify.multipath.max_excess_range` | `multipath_max_excess_range` | m: the longest extra path a bounce can have | 800 |
+| `classify.multipath.bearing_deg` | `multipath_bearing_deg` | degrees: bearing gate between a track and its echo | derived (3°) |
+| `classify.multipath.velocity` | `multipath_velocity` | m/s: velocity gate between a track and its echo | 2.5 |
+| `doa` | `doa` | `map` or `sbl` | `map` |
+| `sbl.grid_step_deg` | `sbl_grid_step_deg` | degrees | 0.25 |
+| `sbl.max_sources` | `sbl_max_sources` | peaks used for the noise estimate and reported | 6 |
+| `sbl.min_snr_db` | `sbl_min_snr_db` | dB above the noise | 6 |
+| `sbl.dynamic_range_db` | `sbl_dynamic_range_db` | dB below the strongest peak | 20 |
+| `sbl.max_gates` | `sbl_max_gates` | range gates per ping, strongest detections first | 24 |
+| `sbl.min_contrast_db` | `sbl_min_contrast_db` | dB, a gate's conventional spectrum peak over its median | 8 |
+| `sbl.max_iterations` | `sbl_max_iterations` | iterations | 20 |
+| `sbl.tolerance` | `sbl_tolerance` | relative (L1) change of the source powers at which the iteration stops | 0.01 |
+| `sync` present | `sync` | 1 or 0 | 0 |
+| `sync.reference` or the named sonar's `receive.reference`: `f_start`, `f_stop`, `duration`, `lead`, `tail`, `dedicated` | `sync_f_start`, `sync_f_stop` (Hz), `sync_duration`, `sync_lead`, `sync_tail` (s), `sync_dedicated` (1 or 0) | as stated | from the sonar file (the C++ struct's own 38–48 kHz, 4, 5, 10 ms are never relied on by the export) |
+| `sync.min_quality` | `sync_min_quality` | correlation quality 0 to 1: a burst below it, or clipped, is not used and its board is flagged | 0 (every burst used) |
+| `sync.search_time` | `sync_search_time` | s either side of where a burst is expected | 0.002 |
+| `sync.tolerance_us` | `sync_tolerance_us` | µs the boards must agree within after resampling | 0: a twentieth of a period at the top of the transmit band |
+| `sync.reference.clip_level` (or the sonar's `receive.reference.clip_level`; not a key beside `reference`) | `sync_clip_level` | the record's sample units (V for a calibrated record): a burst on samples at or above 0.98 of it is clipped | 0: the record's ADC full scale (`metadata.adc_full_scale`) when `min_quality` > 0, else not checked |
+| `nav.surface_z` | `nav_surface_z` | m, z of the sea surface in the navigation frame (depth = z − `surface_z`) | 0 |
+| `nav.keep_s`, `nav.profile_step_m`, `nav.history_margin_s` | `nav_keep_s`, `nav_profile_step_m`, `nav_history_margin_s` | s, m, s | 120, 0.5, 2 |
+| `nav.water_depth: {source: altitude, ...}` | `nav_water_depth_from_altitude=1` and `nav_dvl_offset_m`, `nav_altitude_sigma_m`, `nav_depth_sigma_m`, `nav_hold_s`, `nav_hold_sigma_m_per_s`, `nav_hold_sigma_m_per_m`, `nav_max_altitude_m` | m, m, m, s, m/s, m/m, m | 0, 0, 0, 60, 0, 0.05, 0 (no limit) |
+| `elevation: {...}` | `elevation=1` and `elevation_<name>` | as the key's name says; `_deg` keys in degrees | `elevation` keys above |
+| `blanking`, `decimate` (`source.decimate`: `decimate_streaming=1`) | `blanking=1`, `blanking_<name>`; `decimate=1`, `decimate_<name>` | as in their tables | off |
+
+Options of the C++ program only. They are in no deployment file, the export never writes them, and the Python
+engine has no counterpart (its MVDR uses the library's 32 sub-bands and loading 0.03, fixed; its SBL runs in the C++
+engine anyway):
+
+| `sonar_live` key | Unit | Default | What it is |
+| --- | --- | --- | --- |
+| `mvdr_subbands` | count | 32 | sub-bands of the MVDR beamformer (`MvdrOptions::n_subbands`, `beamform.hpp`): each must be narrow against c / aperture; more leave fewer snapshots per covariance |
+| `mvdr_loading` | fraction | 0.03 | diagonal loading, as a fraction of the mean element power in the training data |
+| `gate_fft` | samples | 0 | samples per SBL range gate; 0: the next power of two (at least 16) above fs (2 L / c + 4 / B), L the row's length, B the band (`chain.cpp`) |
+| `sbl_kernels` | 1 or 0 | 1 | 0 runs SBL on the host's Eigen reference instead of the kernels (about half as fast; for checking the kernels) |
+
+Units in the Python binding (`core.LiveChainCpp(options)`, `core.live_derive`, `python/bindings/bind_live.cpp`): the
+dictionary `cpp_chain_options` returns holds some angles in **radians without a suffix**, where the `sonar_live`
+options above are in degrees: `tracker_bearing_sigma`, `multipath_bearing`, and in its `elevation` mapping
+`roll_sigma`, `sector_margin`, `sector_rays_margin` (rad) and `attitude_rate_sigma` (rad/s). Keys that end in
+`_deg` are degrees in both. The tracker's association gate (`TrackerOptions::gate`, `detect.Tracker(gate=)`) is a
+Mahalanobis distance in sigmas (a pair is a candidate when d² < gate²), 4 by default; no deployment key sets it.
+
 ### `passive.tonal` (optional): Goertzel lines and DEMON when listening
 
 Off unless given; without it the passive report lines are what they were, byte for byte.
