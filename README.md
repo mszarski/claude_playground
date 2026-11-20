@@ -123,7 +123,7 @@ build/bin/sonar_live_holoscan --replay run/recording.h5 backend=cuda            
 tools/live_benchmark.py run/recording.h5                                                       # per-ping time: host/CUDA, map/SBL
 tools/inspect_tap.py run/taps/ping0000 --stage prepare --plot ping.png                          # look at any stage's data
 tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit                            # fit the simulator to a real log
-tools/gallery.py --backend host --quick                     # the same, thinned
+tools/gallery.py --backend host --quick                     # the same, thinned, into build/gallery_quick/ (not docs/figures)
 ```
 
 The long-range array's design and study tools. Most write a committed file under

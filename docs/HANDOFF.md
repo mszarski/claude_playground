@@ -147,7 +147,7 @@ Code worth knowing first:
 - `python/gpusonar/buildspec.py` and `tools/build_from_spec.py`: the build-spec generator.
   Six Popoto builds in `configs/builds/`; it writes sonar and deployment files and runs
   per-build self-tests (`--check-shipped` verifies the committed files match).
-- `tools/gallery.py`: runs 26 scenes end to end and writes `docs/figures/gallery.json`.
+- `tools/gallery.py`: runs 26 scenes end to end and writes `docs/figures/gallery.json` (with `--quick`: `build/gallery_quick/`, not committed).
 - `tools/popoto_12km_study.py`, `tools/fjord_rehearsal.py`, `tools/design_report.py`: the
   studies behind the design documents.
 
