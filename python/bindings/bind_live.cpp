@@ -647,7 +647,21 @@ void bind_live(py::module_& m) {
       },
       py::arg("z"), py::arg("water_depth"), py::arg("surface_z") = 0.0);
 
-  py::class_<live::LiveChain>(m, "LiveChainCpp")
+  py::class_<live::LiveChain>(m, "LiveChainCpp",
+                              "The C++ live chain (libs/live chain.hpp), built from one dict of options: the flat keys\n"
+                              "gpusonar.live.cpp_chain_options makes from a deployment file's chain section. Units are SI as\n"
+                              "the C++ fields hold them, not as the deployment file or sonar_live's key=value names give them.\n"
+                              "In radians although the name has no unit suffix (the deployment file and sonar_live take degrees\n"
+                              "under a _deg name):\n"
+                              "  tracker_bearing_sigma (rad; file tracker.bearing_sigma_deg),\n"
+                              "  multipath_bearing (rad; file classify.multipath.bearing_deg),\n"
+                              "  elevation.sector_margin (rad; file elevation.sector_from_depth.margin_deg),\n"
+                              "  elevation.sector_rays_margin (rad; file elevation.sector_from_rays.margin_deg),\n"
+                              "  elevation.roll_sigma (rad; file elevation.roll_sigma_deg),\n"
+                              "  elevation.attitude_rate_sigma (rad/s; file elevation.attitude_rate_sigma_deg_s).\n"
+                              "Also radians: the grazing angles of the surface_loss_grazing lists in `coverage` and\n"
+                              "`multipath_depth`. Keys ending in _deg (bearing_*_deg, sbl_grid_step_deg, elevation first_deg,\n"
+                              "last_deg, step_deg) are degrees.")
       .def(py::init([](const py::dict& kw) {
         live::ChainOptions o;
         auto get = [&](const char* k, double& v) {
