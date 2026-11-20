@@ -7,6 +7,7 @@ The backend table (which stage runs where) is data in this file, STAGES, and is 
 against the code by tests/python/test_architecture.py: a stage listed as having a CUDA
 implementation must expose one.
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -303,7 +304,8 @@ def draw_simcal(path):
     plt.close(fig)
 
 
-def main():
+def main(argv=None):
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args(argv)
     out = ROOT / "docs" / "architecture"
     out.mkdir(parents=True, exist_ok=True)
     draw_dataflow(out / "dataflow.png")

@@ -16,6 +16,7 @@ No part number, price, weight, power draw or specification is invented here: a f
 computed from the files is written as "to be supplied". `parts(d)` is a function of `buildspec.describe(...)`, so
 tools/build_from_spec.py makes the same table for any build.
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -373,4 +374,5 @@ def write_stage_table() -> Path:
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     print("wrote", write_stage_table())
