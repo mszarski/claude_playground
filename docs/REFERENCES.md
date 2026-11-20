@@ -1,11 +1,14 @@
 # References: what the suite's physics rests on
 
 A register of every source behind a formula, table, constant or validation number in the
-simulator, with how we got to it and how far it is confirmed. Written 2026-11-18 after the
+simulator, with how we got to it and how far it is confirmed; and, since 2026-11-20
+(section 12), of the sources behind the processing chain's algorithms (detection,
+beamforming, bearings, tracking, motion estimation) and the open-source oracles the
+simulator is tested against. Written 2026-11-18 after the
 owner allowed a wider literature search ("Propose to unlock literature and let's find more
 references"); earlier rows come from `docs/PHYSICS_NOTES.md`, `docs/OPEN_SOURCE.md`,
 `docs/ORG_ARL_SURVEY.md` and the code's docstrings. Software licences are in
-`docs/OPEN_SOURCE.md`; this file is about physics.
+`docs/OPEN_SOURCE.md`; this file is about physics and algorithms.
 
 Rules that produced it: a value or formula is used only if it was read in a document opened in
 a session of this project, and it is cited with its table, equation or page. Nothing is
@@ -197,6 +200,8 @@ Refused or unusable from this session (nothing was done to get around any of the
 | hal.science | files redirect to institutional subdomains that the session may not reach |
 | api.openalex.org, api.semanticscholar.org | usable but rate-limited (shared anonymous budget); several hundred results were read |
 | repository.tudelft.nl, calhoun.nps.edu, arxiv.org, export.arxiv.org, www.frontiersin.org, zenodo.org, github.com | worked |
+| ocw.mit.edu, ocw.tudelft.nl, munin.uit.no, repository.gatech.edu, ar5iv.labs.arxiv.org | 2026-11-20: refused by the session's network proxy (not tried further) |
+| apps.dtic.mil | 2026-11-20: an HTML page in place of the report PDF (not tried further) |
 
 ## 10. Wanted: documents that would settle open points
 
@@ -235,3 +240,56 @@ documents themselves (which we could not open).
 | Surface backscatter above about 10 kHz | published bubble model saturates at delta_r sin(t) / (8 pi delta): -29 dB at 10 degrees and 30 kHz. Chapman-Harris extrapolated gives -19 dB at 68 kHz, 15 m/s, 10 degrees; the Kraus law -23 dB | the laws are unchanged; they warn once above the frequency where they exceed the saturation level, and take an opt-in `cap: bubble_saturation` (D-87) | done on the owner's decision: `bubble_layer_surface` is the documented choice for 12-70 kHz; no shipped scenario has a surface item in that band, so none was switched |
 | Default Lambert parameter -27 dB (`reverberation` items without a model) | Muggleworth (1994) quotes Mackenzie (1961) as -29 dB at 530 and 1030 Hz; Mackenzie's paper itself was not opened | -29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`, D-89), with a warning at 10 kHz and above | done on the owner's decision; in either case it is a deep-water value at about 1 kHz, not a high-frequency one (measured sands at 45 degrees and 100 kHz and above are near -25 dB, i.e. mu about -22 dB) |
 | Doppler spectrum default `lorentzian` | measured SPACE'08 spectra are Gaussian (PHYSICS_NOTES Sec. 21); no opened paper contradicts | unchanged here (another package owns `timespread.py`) | as already proposed there |
+
+## 12. Algorithms and oracles (processing chain; simulator test oracles)
+
+Added 2026-11-20 for the audit's group C (C1-C8). Not settled first: the Swerling (1960),
+Capon (1969), Lugannani-Rice (1980), Finn-Johnson (1968), Munk (1974) and Bar-Shalom
+originals were not opened; Sæbø 2010 and Cook 2007 could not be reached (open copies are
+listed by search engines, but the hosts are refused from this session, section 9); the
+dB/wavelength conversion and the most-probable-first association are ours. Each
+"confirmed" below names what was opened and what was compared with the code; documents
+opened on 2026-11-20 are in the session's scratch area, `scratchpad/litc/<name>/` (with
+`SOURCE.txt`), not in the repository. Numbers marked "ours" were computed here, not read.
+
+### 12.1 Detection
+
+| Source | Access | Taken, checked against the code | Status |
+|---|---|---|---|
+| Weinberg, "An Introduction to Radar Sliding Window Detectors", arXiv:1709.09786v1, eqs. (6)-(8) | open (arXiv) | cell-averaging CFAR: test Z0 > tau sum of N training cells, P_FA = (1 + tau)^(-N) in exponential clutter, so tau = P_FA^(-1/N) - 1. The code's factor multiplies the training MEAN: N (P_FA^(-1/N) - 1) x mean = tau x sum, the same test (`libs/detect` `cfar.cpp:16-19`, `cfar_kernel.hpp:29-36`; Python `detect.cfar_threshold_factor`). The factor is recomputed for the number of cells that exist at the map's edges (`cfar.cpp:46-50`), which is the same formula with that N. Example, ours: N = 64, P_FA = 1e-4 gives 9.906, and (1 + 9.906 / 64)^-64 = 1.0e-4 | confirmed (formula); Finn and Johnson, RCA Review (1968), the paper's ref. [1], not opened |
+| Kato, Sekine and Yoshikawa, "Order Estimates for the Exact Lugannani-Rice Expansion", arXiv:1310.3347v3, eqs. (1.1), (1.2), (2.1), (2.3) and the expression for Psi_0 | open (arXiv) | P(X > x) ~ 1 - Phi(w) + phi(w) (1/u - 1/w), w = sgn(theta) sqrt(2 (x theta - K(theta))), u = theta sqrt(K''(theta)), K'(theta) = x: `libs/detect` `statistic.cpp:66-102` (`weighted_exponential_tail`) is this with K the cumulant generating function of the weighted sum of exponentials; above the mean theta > 0, so sgn = +1. Below the mean the code returns 0.5 (its own guard, not from the source). Ours: two equal weights, one row (Erlang 2, mean 1) at x = 3: 0.017411 against the exact e^-6 (1 + 6) = 0.017351 (0.3 %) | confirmed (formula); Lugannani and Rice, Adv. Appl. Prob. 12 (1980), not opened |
+| Garcia, Flores Rodriguez and Fraidenraich, arXiv:2012.06878v1, Sec. I and eqs. (8)-(9); Geiger and Vogel, arXiv:1107.1972v2, eqs. (13)-(14), (19) | open (arXiv) | a steady echo's square-law statistic over N independent complex samples is noncentral chi-square with 2N degrees of freedom and noncentrality 2 x (signal power / total noise power) summed over the samples (P_D = Q_N(sqrt(2 zeta), sqrt(2 gamma)), zeta = sum xi / 2 sigma^2); squared magnitudes are normalised by the per-component variance. `live.detection_probability`: dof = 2 rows looks, threshold dof T, noncentrality dof s share (`live.py`, the `steady` helper) - the same with the noise power per sample normalised to 1. That an exponential power fluctuation is the Swerling I and II model: a statement in arXiv:2012.06878 Sec. I. The "swerling1" option averages over an exponential power with 48-point Gauss-Laguerre; ours: one sample, P_FA 1e-4, 13 dB gives 0.644301 against exp(-T / (1 + s)) = 0.644307 (our closed form). The 2 x rows x looks degrees of freedom for a correlated cell mean is an approximation for the signal's share (as the docstring says): ours | confirmed (distribution, dof, noncentrality); exponential model via secondary; Swerling, IRE Trans. IT-6 (1960), not opened |
+
+### 12.2 Beamforming and bearings
+
+| Source | Access | Taken, checked against the code | Status |
+|---|---|---|---|
+| Tsai, Su, Tsao and Wang, "Robust Beamforming Against Direction-of-Arrival Mismatch Using Subspace-Constrained Diagonal Loading", arXiv:1602.02690v2, eqs. (5), (7), (9) | open (arXiv) | MVDR weights w = R^-1 a / (a^H R^-1 a) (their eq. (7), the Capon beamformer of their ref. [1]); diagonal loading as minimising w^H (R + gamma I) w under the same constraint (eq. (9), after Carlson 1988, their ref. [4]). `libs/live` `beamform.cpp:332-352` and `flank.mvdr_beamform` compute R^-1 a by Cholesky (LU if not positive definite) and divide by a^H R^-1 a; the output is then multiplied by the number of elements (documented in `beamform.hpp`) | confirmed (formulas); Capon, Proc. IEEE 57 (1969) and Carlson, IEEE Trans. AES 24 (1988) not opened |
+| The loading 3e-2 x the mean element power (trace R / N) | - | `MvdrOptions::loading`, `flank.mvdr_beamform(loading=3e-2)`; the opened source gives no value ("a way of choosing the diagonal loading factor is still lacking", its Sec. I). Training from the other range blocks with guard blocks, sub-band split: also ours | ours |
+| Gerstoft, Mecklenbräuker and Xenaki, "Multi Snapshot Sparse Bayesian Learning for DOA Estimation", arXiv:1602.09120v1 (TeX source and PDF), eqs. (10), (SBL1), (26), (28) | open (arXiv) | gamma_new = (1/sqrt L) ||mu_m|| / sqrt(a_m^H Sigma_y^-1 a_m), mu_m = gamma_m a_m^H Sigma_y^-1 Y; noise (N - K)^-1 tr((I - A_M A_M^+) S_y); convergence ||gamma_new - gamma_old||_1 / ||gamma_old||_1. `libs/live` `doa.cpp:347-365` (one frequency: the same update), `doa.cpp:398-411` (the same noise estimate, per frequency, with a floor of 1e-6 of the data power: ours), `doa.cpp:366` (the same convergence measure). The journal version cited in `doa.hpp` (IEEE Signal Process. Lett. 23, 2016, with Nannuru) was not opened | confirmed (arXiv version) |
+| Nannuru, Gemba, Gerstoft, Hodgkiss and Mecklenbräuker, "Sparse Bayesian learning with uncertainty models and multiple dictionaries", arXiv:1704.00436v2 (TeX source), the multi-dictionary update and the remark on the exponent b | open (arXiv) | gamma_new = gamma_old (sum_f a^H Sigma^-1 S_y Sigma^-1 a / sum_f a^H Sigma^-1 a)^b over frequencies with one gamma; "b = 0.5 gives the update equation in [Gerstoft 2016]", b = 1 Tipping's; the paper's own runs use b = 1. `doa.cpp:342-365` sums numerator and denominator over frequency and takes the square root: b = 0.5. The coarse-to-fine grid, the pruning and the peak-based noise estimate are ours | confirmed (arXiv version; Signal Processing 159 (2019) not opened) |
+
+### 12.3 Tracking
+
+| Source | Access | Taken, checked against the code | Status |
+|---|---|---|---|
+| Labbe, *Kalman and Bayesian Filters in Python*, GitHub rlabbe/Kalman-and-Bayesian-Filters-in-Python, notebooks 06 and 07 ("Piecewise White Noise Model") | open, CC BY 4.0 (README) | constant-velocity transition F = [[1, dt], [0, 1]]; piecewise-constant acceleration noise Q = Gamma sigma^2 Gamma^T, Gamma = [dt^2 / 2, dt]^T; S = H P H^T + R, K = P H^T S^-1, P = (I - K H) P. `detect.Tracker.update`/`_take` and `libs/live` `tracker.cpp:66-80` use these per horizontal axis, sigma = `process_noise` | confirmed (as a textbook); Bar-Shalom et al. not opened |
+| Gating at d^2 < gate^2, the polar-to-Cartesian measurement covariance (Jacobian of x = r sin b, y = r cos b), and the association (D-141): (track, detection) pairs inside the gate taken most probable first by d^2 + ln|S| (twice the Gaussian negative log-likelihood less a constant), confirmed tracks first, each used once | - | `detect.Tracker._associate_by_likelihood`, `tracker.cpp:105-130` | ours (a greedy global-nearest-neighbour rule; no published source compared) |
+
+### 12.4 Propagation formulas and oracles
+
+| Source | Access | Taken, checked against the code | Status |
+|---|---|---|---|
+| Li and Chitre, "Data-aided Underwater Acoustic Ray Propagation Modeling", arXiv:2205.06066, eqs. (25)-(26) | open (arXiv) | Rayleigh reflection coefficient (attributed to Brekhovskikh and Lysanov, *Fundamentals of Ocean Acoustics*, 2003): Gamma = (rho_r cos g - sqrt((delta_bar / c_r)^2 - sin^2 g)) / (rho_r cos g + ...), delta_bar = 1 + i delta, rho_r and c_r seabed over water; g the incidence angle (the form implies it is measured from the normal). With g = 90 deg - grazing it is the code's R = (m sin t - sqrt(n^2 - cos^2 t)) / (m sin t + ...), n = c_w (1 + i delta) / c_b: `libs/sim` `paths.cpp:140-150`, `propagation.rayleigh_reflection` | via secondary |
+| Olson and Jackson, arXiv:2009.12420, eq. (1); Snellen et al. 2013 (section 3.1), definition of kappa | open (arXiv; repository copy) | complex sound speed c / (1 + i delta), delta the ratio of imaginary to real wavenumber: the code's `c_b = speed / (1 + i delta)` | confirmed |
+| dB per wavelength to delta: delta = alpha / (40 pi log10 e) = alpha / 54.58 (one wavelength attenuates the amplitude by exp(-2 pi delta)) | open (code) | `paths.cpp:141`, `propagation.rayleigh_reflection`. Compared with the Acoustics Toolbox's `misc/AttenMod.f90` (HEAD 8b4682b, read only, GPL-3.0), unit 'W': alpha f / (8.6858896 c) neper/m, entering as an imaginary sound speed alpha_T c^2 / omega = c alpha / (2 pi 8.6858896): the same delta to first order; the Toolbox's form is linear in alpha, ours is exact for the stated loss per wavelength (they differ by the factor 1 + delta^2, below 1e-3 for 1.6 dB/wavelength); the sign of the imaginary part follows each code's time convention | ours; agrees with an opened implementation to first order |
+| Acoustics Toolbox `misc/munk.f90` (HEAD 8b4682b, read only) | open, GPL-3.0 | Munk profile: c = 1500 (1 + 0.00737 (x - 1 + exp(-x))), x = 2 (z - 1300) / 1300: the same constants as `sim.bellhop.munk_profile`'s defaults (axis speed `NOMINAL_SOUND_SPEED` = 1500). The code's `axis_depth` moves only the axis; the scale depth stays 1300 m | via secondary (the Toolbox names it "Munk profile"); Munk, J. Acoust. Soc. Am. 55, 220 (1974), not opened |
+| Acoustics Toolbox: BELLHOP, KRAKEN (github.com/oalib-acoustics/Acoustics-Toolbox) | open, GPL-3.0 | oracle only, run as a separate process; build, version and test cases in `docs/OPEN_SOURCE.md` Sec. 3.6; licence row in its table. Porter's manuals and Porter and Bucker (1987) not opened | software (licence and use: `OPEN_SOURCE.md`) |
+
+### 12.5 Synthetic aperture processing (sources cited in `docs/PAPER_NOTES.md`)
+
+| Source | Access | Taken | Status |
+|---|---|---|---|
+| Gerg, Brown, Wagner, Cook, O'Donnell, Benson and Montgomery, "GPU Acceleration for Synthetic Aperture Sonar Image Reconstruction", arXiv:2101.05888v2 | open (arXiv) | the reconstruction and motion-estimation pipeline, eqs. 3-8, and the speedups compared in the benchmarks: `docs/PAPER_NOTES.md` | confirmed |
+| Sæbø, "Seafloor depth estimation by means of interferometric synthetic aperture sonar", PhD dissertation, University of Tromsø (2010) | no (open copy listed at munin.uit.no; host refused from this session) | coarse delay by quadratic interpolation of the correlation peak, fine delay from the phase at that point: as ASASIN describes it (its ref. [11]); `motion/delay_estimation` | via secondary (ASASIN); the dissertation unconfirmed (not opened) |
+| Cook, "Synthetic aperture sonar motion estimation and compensation", MS thesis, Georgia Institute of Technology (2007) | no (record at repository.gatech.edu; host refused from this session) | the displaced phase centre method that ASASIN's sway and heave estimate derives from (its ref. [5]) | via secondary (ASASIN); the thesis unconfirmed (not opened) |
