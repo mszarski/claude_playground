@@ -13,6 +13,7 @@
 #                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 #        GPUSONAR_JOB=elevbench tools/gpu_job.sh  run tools/popoto_elevation_bench.py --full-rate --backend cuda
+#        GPUSONAR_JOB=liveablate tools/gpu_job.sh  run tools/live_chain_ablation.py --backend cuda (issue sonar-y7a)
 #        GPUSONAR_JOB=benchall tools/gpu_job.sh  run tools/gpu_benchmark_all.py: every stage with a CUDA backend, host
 #                                               against CUDA (GPUSONAR_ORACLES=1 for the Bellhop scenarios; GPUSONAR_SCALE,
 #                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
@@ -100,6 +101,17 @@ if [ "${GPUSONAR_JOB:-tests}" = "elevbench" ]; then
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
     mkdir -p /work/elevbench && cp docs/design/popoto_stage2.json /work/elevbench/ && \
       hf upload "$GPUSONAR_UPLOAD_REPO" /work/elevbench "${GPUSONAR_UPLOAD_PATH:-elevbench}" --type dataset > /dev/null
+  fi
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "liveablate" ]; then
+  # The live chain's time per ping on the device with the deployment files' additions switched off one at a time
+  # (tools/live_chain_ablation.py, issue sonar-y7a); the JSON is uploaded when a repo is set.
+  mkdir -p /work/liveablate
+  status=0
+  PYTHONPATH=python python3 tools/live_chain_ablation.py --backend cuda --json /work/liveablate/live_chain_ablation.json ${GPUSONAR_LIVEABLATE_ARGS:-} || status=$?
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/liveablate/live_chain_ablation.json ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/liveablate "${GPUSONAR_UPLOAD_PATH:-liveablate}" --type dataset > /dev/null
   fi
   exit "$status"
 fi
