@@ -2958,6 +2958,11 @@ output compared number by number with the file it replaced.
   larger with the whole bounce series (+4.6 to +11.2 m at 2 km for one row; first arrivals
   unchanged), the two-row trial one sea-bed elevation, 36 m for 60 m (was candidates; D-142),
   the three-row trial 16.9 m (17.2).
+- `docs/design/popoto_12km.json`, `class_cases` (`--classes`, 21 minutes): every target class
+  detected on the same pings, tracked from ping 3 and classed a mover, as before; SNR within
+  0.4 dB except the submerged mover at 12 km in 100 m over sand with Bellhop (three rows):
+  24.5 dB (31.7) with 64 arrivals kept by energy. Two rows now state a depth for the ship and
+  the submerged movers (sigma 630 to 2510 m, covering the truth), where they stated none.
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one
