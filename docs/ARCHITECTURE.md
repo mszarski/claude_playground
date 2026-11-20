@@ -65,6 +65,14 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   processing, are written once and compiled for the host (OpenMP) and for CUDA. So are
   conditioning (cuFFT on the device) and CFAR. Select with `backend=` or
   `backend: cuda` in a config; `auto` uses the GPU when the build has it and one is present.
+- **Asking for CUDA in a build without it is an error, never a silent fallback.** Every C++
+  entry point that takes a `Backend` throws `std::runtime_error("<name>: built without the CUDA
+  backend")` for `Backend::Cuda` when the library was built with `SONAR_ENABLE_CUDA=OFF`
+  (`libs/core` `SlabAllocator`, `libs/dsp` baseband and pulse compression, `libs/detect` CFAR,
+  `libs/recon` backprojection, `libs/sim` synthesis and reverberation, `libs/live` far-field and
+  MVDR beamformers and SBL); through the bindings this is a Python `RuntimeError`. Only `auto`
+  falls back to the host. `core.cuda_compiled()` says whether the build has the backend and
+  `core.cuda_available()` whether a device is also usable (`libs/core/include/sonar/core/platform.hpp`).
 - **Simulation on a GPU** means synthesis on a GPU: `run_scenario(name, backend=core.Backend.Cuda)`,
   or `tools/gallery.py --backend cuda`. Path geometry, reverberation and noise are
   generated on the CPU; for scenes with many scatterers or long pulses synthesis is nearly
