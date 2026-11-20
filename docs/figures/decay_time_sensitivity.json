@@ -2,89 +2,98 @@
  "popoto_12km, image-source paths (6 pings, 6 taps)": {
   "as shipped": {
    "pings": 6,
-   "pings_detected": 3,
-   "median_snr_db": 13.52607567,
+   "pings_detected": 6,
+   "median_snr_db": 17.662966320000002,
    "snr_db": [
-    10.71913813,
-    13.52607567,
-    13.69713885
+    15.90171626,
+    16.34164814,
+    18.12003144,
+    17.2059012,
+    21.78703144,
+    18.5823877
    ],
-   "track_confirmed_at_ping": 5,
-   "simulate_seconds": 11.8,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 11.3,
    "wind_speed": 5.0
   },
   "facet / seed 0": {
    "pings": 6,
-   "pings_detected": 2,
-   "median_snr_db": 13.5053415,
+   "pings_detected": 6,
+   "median_snr_db": 17.5462298,
    "snr_db": [
-    13.38452983,
-    13.62615317
+    15.80731897,
+    16.37865964,
+    17.97044413,
+    17.12201547,
+    21.71519983,
+    18.51393484
    ],
-   "track_confirmed_at_ping": null,
-   "simulate_seconds": 31.5,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 37.6,
    "wind_speed": 5.0
   },
   "facet / seed 1": {
    "pings": 6,
-   "pings_detected": 2,
-   "median_snr_db": 13.571711595,
+   "pings_detected": 6,
+   "median_snr_db": 17.695510435000003,
    "snr_db": [
-    13.47527025,
-    13.66815294
+    15.82039867,
+    15.95457548,
+    18.1565285,
+    17.23449237,
+    21.78705006,
+    18.55421277
    ],
-   "track_confirmed_at_ping": null,
-   "simulate_seconds": 30.7,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 37.9,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 0": {
    "pings": 6,
-   "pings_detected": 3,
-   "median_snr_db": 13.48369366,
+   "pings_detected": 6,
+   "median_snr_db": 17.81828269,
    "snr_db": [
-    10.82084863,
-    13.48369366,
-    13.64919064
+    15.78687129,
+    16.31644732,
+    18.48147547,
+    17.15508991,
+    21.73784422,
+    18.54245638
    ],
-   "track_confirmed_at_ping": 5,
-   "simulate_seconds": 31.6,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 37.2,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 1": {
    "pings": 6,
-   "pings_detected": 3,
-   "median_snr_db": 13.4892411,
+   "pings_detected": 6,
+   "median_snr_db": 17.7449537,
    "snr_db": [
-    10.77397739,
-    13.4892411,
-    13.65587675
+    15.79683396,
+    16.46293115,
+    18.3086443,
+    17.1812631,
+    21.75956674,
+    18.56015353
    ],
-   "track_confirmed_at_ping": 5,
-   "simulate_seconds": 32.1,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 37.1,
    "wind_speed": 5.0
   },
   "facet, sum / seed 0": {
    "pings": 6,
-   "pings_detected": 2,
-   "median_snr_db": 13.5053415,
+   "pings_detected": 6,
+   "median_snr_db": 17.5462298,
    "snr_db": [
-    13.38452983,
-    13.62615317
+    15.80731897,
+    16.37865964,
+    17.97044413,
+    17.12201547,
+    21.71519983,
+    18.51393484
    ],
-   "track_confirmed_at_ping": null,
-   "simulate_seconds": 30.9,
-   "wind_speed": 5.0
-  },
-  "facet, sum / seed 1": {
-   "pings": 6,
-   "pings_detected": 2,
-   "median_snr_db": 13.571711595,
-   "snr_db": [
-    13.47527025,
-    13.66815294
-   ],
-   "track_confirmed_at_ping": null,
-   "simulate_seconds": 30.8,
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 38.4,
    "wind_speed": 5.0
   }
  },
@@ -92,66 +101,66 @@
   "as shipped": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 15.13964283,
+   "median_snr_db": 20.22303538,
    "snr_db": [
-    15.75839268,
-    15.13964283,
-    13.35961155
+    22.51300741,
+    18.19970791,
+    20.22303538
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 30.4,
+   "simulate_seconds": 31.9,
    "wind_speed": 5.0
   },
   "facet / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 15.03101743,
+   "median_snr_db": 19.71150455,
    "snr_db": [
-    15.35048579,
-    15.03101743,
-    13.12928207
+    22.0977401,
+    18.59662513,
+    19.71150455
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 81.4,
+   "simulate_seconds": 74.3,
    "wind_speed": 5.0
   },
   "facet / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 14.96619613,
+   "median_snr_db": 19.77002197,
    "snr_db": [
-    15.94722534,
-    14.96619613,
-    13.13845353
+    22.33210902,
+    18.24466656,
+    19.77002197
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 81.7,
+   "simulate_seconds": 74.9,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 14.86194525,
+   "median_snr_db": 19.47006809,
    "snr_db": [
-    15.3686109,
-    14.86194525,
-    13.05076385
+    21.863212,
+    18.0491921,
+    19.47006809
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 81.9,
+   "simulate_seconds": 80.3,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 14.67172861,
+   "median_snr_db": 19.36800215,
    "snr_db": [
-    15.48967244,
-    14.67172861,
-    13.06868797
+    22.06980197,
+    18.06269323,
+    19.36800215
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 74.8,
+   "simulate_seconds": 75.3,
    "wind_speed": 5.0
   }
  },
@@ -159,66 +168,66 @@
   "as shipped": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 32.54301432,
+   "median_snr_db": 34.32965034,
    "snr_db": [
-    32.106329,
-    32.63466967,
-    32.54301432
+    34.26210473,
+    34.32965034,
+    34.65730656
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 14.6,
+   "simulate_seconds": 18.5,
    "wind_speed": 5.0
   },
   "facet / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 33.12185107,
+   "median_snr_db": 35.7326488,
    "snr_db": [
-    33.05107329,
-    33.12185107,
-    33.9583367
+    34.75575158,
+    36.08446572,
+    35.7326488
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 62.8,
+   "simulate_seconds": 58.4,
    "wind_speed": 5.0
   },
   "facet / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 32.38069208,
+   "median_snr_db": 34.88707466,
    "snr_db": [
-    31.82769655,
-    32.73731692,
-    32.38069208
+    34.88707466,
+    34.61132594,
+    34.91810265
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 74.0,
+   "simulate_seconds": 59.7,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 32.3610906,
+   "median_snr_db": 34.52230544,
    "snr_db": [
-    31.92804559,
-    32.62451988,
-    32.3610906
+    34.07163058,
+    34.60198502,
+    34.52230544
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 71.9,
+   "simulate_seconds": 62.0,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 32.35053029,
+   "median_snr_db": 35.3600758,
    "snr_db": [
-    31.62253355,
-    32.35053029,
-    33.43498889
+    34.21013375,
+    35.3600758,
+    36.45852009
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 73.3,
+   "simulate_seconds": 60.8,
    "wind_speed": 5.0
   }
  },
@@ -229,7 +238,7 @@
    "median_snr_db": null,
    "snr_db": [],
    "track_confirmed_at_ping": null,
-   "simulate_seconds": 12.4,
+   "simulate_seconds": 9.9,
    "wind_speed": 5.0
   },
   "facet / seed 0": {
@@ -238,7 +247,7 @@
    "median_snr_db": null,
    "snr_db": [],
    "track_confirmed_at_ping": null,
-   "simulate_seconds": 74.0,
+   "simulate_seconds": 60.6,
    "wind_speed": 5.0
   },
   "facet / seed 1": {
@@ -247,7 +256,7 @@
    "median_snr_db": null,
    "snr_db": [],
    "track_confirmed_at_ping": null,
-   "simulate_seconds": 74.8,
+   "simulate_seconds": 61.8,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 0": {
@@ -256,7 +265,7 @@
    "median_snr_db": null,
    "snr_db": [],
    "track_confirmed_at_ping": null,
-   "simulate_seconds": 76.2,
+   "simulate_seconds": 61.2,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 1": {
@@ -265,7 +274,7 @@
    "median_snr_db": null,
    "snr_db": [],
    "track_confirmed_at_ping": null,
-   "simulate_seconds": 73.6,
+   "simulate_seconds": 63.5,
    "wind_speed": 5.0
   }
  },
@@ -273,66 +282,66 @@
   "as shipped": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 22.92545627,
+   "median_snr_db": 30.44548971,
    "snr_db": [
-    22.80831879,
-    22.92545627,
-    24.73468259
+    30.44548971,
+    29.71452328,
+    31.68820954
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 13.2,
+   "simulate_seconds": 16.1,
    "wind_speed": 5.0
   },
   "facet / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 22.86377674,
+   "median_snr_db": 30.6421921,
    "snr_db": [
-    22.58430122,
-    22.86377674,
-    24.11594482
+    30.6421921,
+    29.48560462,
+    31.12535932
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 69.0,
+   "simulate_seconds": 68.0,
    "wind_speed": 5.0
   },
   "facet / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 23.75444888,
+   "median_snr_db": 30.81415595,
    "snr_db": [
-    22.57384296,
-    23.75444888,
-    25.52876697
+    30.63627339,
+    30.81415595,
+    32.61543777
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 61.0,
+   "simulate_seconds": 68.2,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 0": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 23.23531658,
+   "median_snr_db": 29.70088936,
    "snr_db": [
-    23.23531658,
-    22.19110167,
-    24.62232753
+    29.70088936,
+    29.32874135,
+    31.09016018
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 61.3,
+   "simulate_seconds": 68.1,
    "wind_speed": 5.0
   },
   "rule_of_thumb / seed 1": {
    "pings": 3,
    "pings_detected": 3,
-   "median_snr_db": 22.81931913,
+   "median_snr_db": 29.87609951,
    "snr_db": [
-    22.49984164,
-    22.81931913,
-    24.63480428
+    29.87609951,
+    29.14078759,
+    31.20043831
    ],
    "track_confirmed_at_ping": 3,
-   "simulate_seconds": 75.2,
+   "simulate_seconds": 67.7,
    "wind_speed": 5.0
   }
  },
@@ -341,37 +350,37 @@
    "wind_speed": 6.0,
    "pings": 24,
    "facet": {
-    "peak_db": 0.1523246169090271,
-    "peak_median_db": -0.022264614701271057,
-    "peak_std_db": 1.0234087705612183,
+    "peak_db": 0.1523251086473465,
+    "peak_median_db": -0.022263817489147186,
+    "peak_std_db": 1.0234086513519287,
     "energy_db": 0.7174986600875854
    },
    "rule_of_thumb": {
-    "peak_db": 0.06920014321804047,
-    "peak_median_db": -0.5950179100036621,
-    "peak_std_db": 1.0391324758529663,
+    "peak_db": 0.06920064985752106,
+    "peak_median_db": -0.595016360282898,
+    "peak_std_db": 1.0391321182250977,
     "energy_db": 0.6464413404464722
    },
-   "difference_db": -0.08312447369098663,
-   "standard_error_db": 0.29771083663752346
+   "difference_db": -0.08312445878982544,
+   "standard_error_db": 0.2977107675516731
   },
   "popoto_12km geometry (12 km)": {
    "wind_speed": 5.0,
    "pings": 24,
    "facet": {
-    "peak_db": -0.03819707781076431,
-    "peak_median_db": -0.03832869976758957,
-    "peak_std_db": 0.010878460481762886,
-    "energy_db": -0.00452541233971715
+    "peak_db": -0.03819786384701729,
+    "peak_median_db": -0.03832896053791046,
+    "peak_std_db": 0.010878290049731731,
+    "energy_db": -0.004525930620729923
    },
    "rule_of_thumb": {
-    "peak_db": -0.03943378105759621,
-    "peak_median_db": -0.03922520577907562,
-    "peak_std_db": 0.004206705838441849,
-    "energy_db": -0.0068937246687710285
+    "peak_db": -0.0394340418279171,
+    "peak_median_db": -0.03922533616423607,
+    "peak_std_db": 0.004206601995974779,
+    "energy_db": -0.006894243415445089
    },
-   "difference_db": -0.001236703246831894,
-   "standard_error_db": 0.0023808023548135475
+   "difference_db": -0.0012361779808998108,
+   "standard_error_db": 0.002380762262023722
   }
  }
 }

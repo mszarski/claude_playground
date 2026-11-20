@@ -4,11 +4,11 @@ Made by `tools/decay_time_sensitivity.py`: each scenario without time spreading 
 
 | Scenario | wind, m/s | no time spreading | facet | rule of thumb | facet, multi_bounce sum | rule of thumb minus facet, dB | spread between seeds, dB |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| popoto_12km, image-source paths (6 pings, 6 taps) | 5 | 13.5 dB; 3/6, track 5 | 13.5 dB (13.5, 13.6); 2/6, track none; 2/6, track none | 13.5 dB (13.5, 13.5); 3/6, track 5; 3/6, track 5 | 13.5 dB (13.5, 13.6); 2/6, track none; 2/6, track none | -0.1 | 0.1 |
-| popoto_12km, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 15.1 dB; 3/3, track 3 | 15.0 dB (15.0, 15.0); 3/3, track 3; 3/3, track 3 | 14.8 dB (14.9, 14.7); 3/3, track 3; 3/3, track 3 | - | -0.2 | 0.2 |
-| popoto_env_gravel_30m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 32.5 dB; 3/3, track 3 | 32.8 dB (33.1, 32.4); 3/3, track 3; 3/3, track 3 | 32.4 dB (32.4, 32.4); 3/3, track 3; 3/3, track 3 | - | -0.4 | 0.7 |
+| popoto_12km, image-source paths (6 pings, 6 taps) | 5 | 17.7 dB; 6/6, track 3 | 17.6 dB (17.5, 17.7); 6/6, track 3; 6/6, track 3 | 17.8 dB (17.8, 17.7); 6/6, track 3; 6/6, track 3 | 17.5 dB; 6/6, track 3 | +0.2 | 0.1 |
+| popoto_12km, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 20.2 dB; 3/3, track 3 | 19.7 dB (19.7, 19.8); 3/3, track 3; 3/3, track 3 | 19.4 dB (19.5, 19.4); 3/3, track 3; 3/3, track 3 | - | -0.3 | 0.1 |
+| popoto_env_gravel_30m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 34.3 dB; 3/3, track 3 | 35.3 dB (35.7, 34.9); 3/3, track 3; 3/3, track 3 | 34.9 dB (34.5, 35.4); 3/3, track 3; 3/3, track 3 | - | -0.4 | 0.8 |
 | popoto_env_summer_mud_60m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | not detected; 0/3, track none | not detected (-, -); 0/3, track none; 0/3, track none | not detected (-, -); 0/3, track none; 0/3, track none | - | - | - |
-| popoto_env_winter_sand_200m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 22.9 dB; 3/3, track 3 | 23.3 dB (22.9, 23.8); 3/3, track 3; 3/3, track 3 | 23.0 dB (23.2, 22.8); 3/3, track 3; 3/3, track 3 | - | -0.3 | 0.9 |
+| popoto_env_winter_sand_200m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps) | 5 | 30.4 dB; 3/3, track 3 | 30.7 dB (30.6, 30.8); 3/3, track 3; 3/3, track 3 | 29.8 dB (29.7, 29.9); 3/3, track 3; 3/3, track 3 | - | -0.9 | 0.2 |
 
 Without noise, reverberation or a detector: one point target, image-source paths with two bounces, one hydrophone after pulse compression. The strongest sample of the echo, re a flat surface:
 

@@ -2543,14 +2543,15 @@ hydrophones (1.2 km apart): 0.007, the estimator's floor.
 `docs/figures/decay_time_sensitivity.md`; the long-range scenarios ship without time
 spreading, so it was added: the scenario's 5 m/s wind, each rule, two seeds of the taps;
 one row of 32 hydrophones through the C++ chain). Detection SNR of the ship, rule of thumb
-minus facet: -0.1 dB (12 km, image-source paths, 6 pings), -0.2 dB (12 km, Bellhop), -0.4 dB
-(3 km over gravel, 30 m), -0.3 dB (8 km over sand, 200 m); the two seeds of one rule differ
-by 0.1 to 0.9 dB. Time spreading against none: -0.4 to +0.4 dB. Track confirmation: the same
-ping under both rules in the Bellhop cases (the third of three). In the image-source 12 km case detection is at
-threshold (13.5 dB, 3 pings of 6 without spreading): there 0.1 dB decides whether a ping is
-detected, and the facet runs lose one detection and the track that the rule-of-thumb runs
-keep, with the same SNR on the pings both detect. That is the margin of the design point,
-not a property of a rule. Without noise or detector, the echo's strongest sample changes by
+minus facet (regenerated at `e10b17f`): +0.2 dB (12 km, image-source paths, 6 pings), -0.3 dB
+(12 km, Bellhop), -0.4 dB (3 km over gravel, 30 m), -0.9 dB (8 km over sand, 200 m); the two
+seeds of one rule differ by 0.1 to 0.8 dB. Time spreading against none: -0.9 to +1.4 dB.
+Track confirmation: the same ping under every rule in every case detected (the third). In
+the first run (`f68cc4d`, before the detector rework) the image-source 12 km case sat at
+threshold (13.5 dB, 3 pings of 6 without spreading): there 0.1 dB decided whether a ping was
+detected, and the facet runs lost one detection and the track that the rule-of-thumb runs
+kept. That was the margin of the design point, not a property of a rule; now it is detected
+on 6 of 6 at 17.7 dB under every rule. Without noise or detector, the echo's strongest sample changes by
 -0.08 +- 0.30 dB between the rules at 1 km (flank array, 6 m/s) and by 0.00 dB at 12 km
 (grazing angles under a degree: the surface is a mirror for either rule). The Bellhop cases
 were run with the 12 strongest arrivals, 3 taps and 3 pings in every variant (with 40

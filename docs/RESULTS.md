@@ -2384,14 +2384,18 @@ assumed, and each table says which.
 
 **Detection with the long-range array against the decay rule**
 (`tools/decay_time_sensitivity.py` → `docs/figures/decay_time_sensitivity.md`; target SNR,
-one row, C++ chain, two seeds; reduced Bellhop settings of 12 arrivals and 3 taps):
+one row, C++ chain, two seeds; reduced Bellhop settings of 12 arrivals and 3 taps;
+regenerated at `e10b17f`, the run of `f68cc4d` in brackets):
 
 | Case | No spreading | Facet | Rule of thumb | Difference | Seed spread |
 | --- | --- | --- | --- | --- | --- |
-| 12 km, image source, 6 pings | 13.5 dB | 13.5 | 13.5 | -0.1 dB | 0.1 dB |
-| 12 km, Bellhop | 15.1 | 15.0 | 14.8 | -0.2 | 0.2 |
-| 3 km, gravel, 30 m | 32.5 | 32.8 | 32.4 | -0.4 | 0.7 |
-| 8 km, sand, 200 m | 22.9 | 23.3 | 23.0 | -0.3 | 0.9 |
+| 12 km, image source, 6 pings | 17.7 dB (13.5) | 17.6 (13.5) | 17.8 (13.5) | +0.2 dB (-0.1) | 0.1 dB (0.1) |
+| 12 km, Bellhop | 20.2 (15.1) | 19.7 (15.0) | 19.4 (14.8) | -0.3 (-0.2) | 0.1 (0.2) |
+| 3 km, gravel, 30 m | 34.3 (32.5) | 35.3 (32.8) | 34.9 (32.4) | -0.4 (-0.4) | 0.8 (0.7) |
+| 8 km, sand, 200 m | 30.4 (22.9) | 30.7 (23.3) | 29.8 (23.0) | -0.9 (-0.3) | 0.2 (0.9) |
+
+The levels moved with the detector rework, source levels as RMS, the water's own speed and
+the energy rule; the difference between the rules stays under 1 dB.
 | 4 km, mud, summer | not detected | not detected | not detected | | |
 
 These were measured before the detector, level and noise changes.
@@ -2970,6 +2974,14 @@ output compared number by number with the file it replaced.
   unchanged (-1.1 / +1.4 / +2.9 dB); the depth-plan figures 0.1 to 0.2 dB lower and the
   three-row ship depth band 130 to 265 m (125 to 265); the bench and benchmark figures as
   above. Its test-AUV range "within 10.2 m" is the bench's `range_m` (open item 39).
+- `docs/figures/decay_time_sensitivity.*`, rerun with the settings its rows name (the
+  image-source case at 6 pings; the Bellhop cases at 3 pings, 12 arrivals and 3 taps; echo
+  levels over 24 pings) into empty files and assembled under the same labels.
+  `tools/decay_time_sensitivity.py` mended: since D-137 its `--max-arrivals` no longer
+  reached the Bellhop scenarios. The tool runs the `multi_bounce: sum` variant on the first
+  seed only, so that column has one seed (two before). Rule of thumb minus facet within
+  1 dB in every case, as before (table under "Detection with the long-range array against
+  the decay rule").
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one

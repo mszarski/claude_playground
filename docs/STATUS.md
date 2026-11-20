@@ -234,23 +234,23 @@ Grouped; within a group the most consequential first.
     1496.8 m/s** (both `uncertain`; at 1500 m/s `static` and `line`). A 0.2 % change of
     sound speed decides it. In the full-size scene (item 43) both boats keep their classes
     (`mover` at 4.9 m/s, `static`).
-42. **Generated files not yet regenerated after these changes**:
-    `docs/design/popoto_12km.json` (item 5),
-    `docs/benchmarks/gpu_benchmark_all_l4*`, `docs/figures/decay_time_sensitivity.*`,
-    `docs/design/popoto_elevation_bench.json`, `popoto_elevation_study.json`,
-    `popoto_stage2.json`, `popoto_range_study.json`, `popoto_depth_planner.json`,
-    `surface_image_validation.json`, `docs/scenarios/transmission_loss.json`,
-    `docs/figures/rough_surface_bands.json`, `docs/figures/ssp_range_study.*`, and the
-    numbers `SCENARIOS.md` quotes for the 44 scenarios whose sound speed moved.
-    `docs/figures/sst_validation.*` is regenerated (commit `e10b17f`): the Pursuit and
-    ASIAEX rows moved against the run of `5956b10` (ridge over noise 27.1 to 30.1 dB,
-    ASIAEX ping-to-ping variation 1.88 to 2.85 dB at the surface). The tool is
-    deterministic (two runs on one tree agree in every number but its run time), so the
-    cause is a code change in the 40 or so commits between; the time-spreading commit
-    `f2bf420` is ruled out (opt-in, bit-identical without its keys). Not bisected. `docs/figures/fjord_rehearsal.*` is regenerated
-    again (`e10b17f`, from an empty results file). `docs/figures/gallery.json` and its figures (item 45), `DESIGN.md` and
-    `docs/design/derived.json` are current (the last two regenerate byte-identical after
-    D-142 as after D-137 to D-140; the 12 km margins did not move).
+42. **Generated files regenerated after D-137 to D-143** (commit `e10b17f`, 2026-11-19 and
+    20; RESULTS, "Generated files regenerated after D-137 to D-143", lists what moved in
+    each). Every generated file named as stale here before is current: the 12 km study and
+    its class cases, the depth planner and fjord depth plan, the elevation bench, study and
+    stage-2 study (CUDA timing on an L4), the range study, the surface-image validation,
+    the rough-surface bands, the SSP range study, the fjord rehearsal, the decay-time study,
+    the SST validation, the 55 scenario diagrams and their transmission losses, the GPU
+    benchmark of every stage, and `DESIGN.md`. Three tools reuse stored results; they were
+    rerun from empty files with the settings their tables name. Two tools were mended on the
+    way (`tools/scenario_diagrams.py`, `tools/decay_time_sensitivity.py`). Still open:
+    - `docs/figures/sst_validation.*` moved against the run of `5956b10` (ridge over noise
+      27.1 to 30.1 dB, ASIAEX ping-to-ping variation 1.88 to 2.85 dB at the surface). The
+      tool is deterministic (two runs on one tree agree in every number but its run time),
+      so the cause is a code change in the 40 or so commits between; the time-spreading
+      commit `f2bf420` is ruled out. Not bisected.
+    - The hand-written numbers `SCENARIOS.md` quotes for scenarios outside the gallery among
+      the 44 whose sound speed moved (D-140) were measured at 1500 m/s.
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
     tree of commit `ebdb22a`) is worse in several scenes than the one before it** (item
     16). Five of the changes were since rerun over several seeds (item 44): four are the
