@@ -102,7 +102,7 @@
    "psd_db_re_upa2_per_hz": 50.51201919742883,
    "scenario_spectrum_db": 50.612689758941116
   },
-  "seconds_one_ping": 15.065861940383911,
+  "seconds_one_ping": 15.168617963790894,
   "cross_pairs": {
    "max_error_direct_only_hz": 1.4008716070787273,
    "max_error_with_bottom_paths_hz": 1.5195347739399665,
@@ -115,7 +115,7 @@
    "mean_error_with_bottom_paths_hz": -0.1191459448510482,
    "bottom_path_onset_s": 1.7
   },
-  "seconds": 82.96355080604553
+  "seconds": 80.19231247901917
  },
  "asiaex": {
   "parameters": {
@@ -196,33 +196,33 @@
   },
   "time_spread": {
    "ping_to_ping_std_db": {
-    "direct": 3.446462368654389e-05,
-    "surface": 2.8451307603571214,
-    "bottom": 1.2971580185599978,
-    "surface-bottom": 1.7844178715623853,
-    "bottom-surface": 2.631945030958873
+    "direct": 2.4240738917647198e-05,
+    "surface": 1.881006688290299,
+    "bottom": 0.9659066771029859,
+    "surface-bottom": 1.4135640593366348,
+    "bottom-surface": 3.3426684188717286
    },
    "tail_ping_to_ping_std_db": {
-    "surface": 6.421844287907945,
-    "bottom": 5.379242523306416
+    "surface": 4.835124974155255,
+    "bottom": 5.896757734106672
    },
    "db_after_pulse_re_peak": {
-    "direct": -39.303611683441574,
-    "surface": -6.001788876222246,
-    "bottom": -14.71839479454883
+    "direct": -39.30151020247146,
+    "surface": -6.33683229078377,
+    "bottom": -15.076453232427143
    },
    "peak_mean_db_re_flat": {
-    "direct": -5.535926285039577e-06,
-    "surface": -0.7116007088360076,
-    "bottom": 0.9058015394553438,
-    "surface-bottom": -5.819296820300279,
-    "bottom-surface": -4.895355740471429
+    "direct": -4.114178781026259e-06,
+    "surface": -0.9050861564369866,
+    "bottom": 0.46697627457289637,
+    "surface-bottom": -5.818845951199166,
+    "bottom-surface": -5.202177557533746
    }
   },
   "tails": {
    "surface": {
     "rule_of_thumb_ms": 2.9052379528190113,
-    "fitted_ms": 2.769352012538666,
+    "fitted_ms": 2.944688315180635,
     "mean_square_slope": 0.01836,
     "coherent_fraction": 0.7709724547878667,
     "pings": 200
@@ -270,22 +270,22 @@
     3.0,
     0.3
    ],
-   "sum_over_convolve_early_db": -2.8294412508952154,
-   "sum_over_convolve_late_db": 2.9847639487889728,
-   "sum_over_convolve_after_last_arrival_db": -2.0279202461270116,
-   "tail_centroid_sum_ms": 3.1451132723435724,
-   "tail_centroid_convolve_ms": 2.113742598887037,
-   "tail_energy_sum_over_convolve_db": -0.5498082125318062,
-   "peak_sum_db_re_direct": -6.911626418243403,
-   "peak_convolve_db_re_direct": -3.797744396074383,
+   "sum_over_convolve_early_db": -2.3290161339343833,
+   "sum_over_convolve_late_db": 3.6900312975665193,
+   "sum_over_convolve_after_last_arrival_db": -2.524646459339733,
+   "tail_centroid_sum_ms": 3.1350742538656164,
+   "tail_centroid_convolve_ms": 2.1303719673510324,
+   "tail_energy_sum_over_convolve_db": -0.12423359771780632,
+   "peak_sum_db_re_direct": -6.911936584618087,
+   "peak_convolve_db_re_direct": -3.5282033139171576,
    "pings": 200,
-   "sum_over_convolve_first_half_of_pulse_db": -1.4815113598402534
+   "sum_over_convolve_first_half_of_pulse_db": -1.7147980444459545
   },
   "two_rough_bounces": {
    "what": "variant: both boundaries rms height 0.2 m, decay times equal on the surface-bottom path (not ASIAEX values)",
-   "sum_over_convolve_first_half_of_pulse_db": 1.6297768430681312,
-   "sum_over_convolve_2_to_5_ms_after_pulse_db": -0.9247243712064924,
-   "tail_energy_sum_over_convolve_db": -0.5746328671461702
+   "sum_over_convolve_first_half_of_pulse_db": 1.6311085826890381,
+   "sum_over_convolve_2_to_5_ms_after_pulse_db": -0.8148932483993827,
+   "tail_energy_sum_over_convolve_db": -0.5026166248369882
   }
  },
  "checks": {

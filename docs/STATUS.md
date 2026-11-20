@@ -244,11 +244,10 @@ Grouped; within a group the most consequential first.
     benchmark of every stage, and `DESIGN.md`. Three tools reuse stored results; they were
     rerun from empty files with the settings their tables name. Two tools were mended on the
     way (`tools/scenario_diagrams.py`, `tools/decay_time_sensitivity.py`). Still open:
-    - `docs/figures/sst_validation.*` moved against the run of `5956b10` (ridge over noise
-      27.1 to 30.1 dB, ASIAEX ping-to-ping variation 1.88 to 2.85 dB at the surface). The
-      tool is deterministic (two runs on one tree agree in every number but its run time),
-      so the cause is a code change in the 40 or so commits between; the time-spreading
-      commit `f2bf420` is ruled out. Not bisected.
+    - `docs/figures/sst_validation.*`: the shift against the run of `5956b10` is explained
+      by bisection (D-144). Pursuit's levels are 3.01 dB higher by source levels as RMS
+      (D-102), as intended; ASIAEX had taken the Gaussian Doppler spectrum of D-84 and is
+      named Lorentzian again, its values equal to the earlier run.
     - The hand-written numbers `SCENARIOS.md` quotes for scenarios outside the gallery among
       the 44 whose sound speed moved (D-140) were measured at 1500 m/s.
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,

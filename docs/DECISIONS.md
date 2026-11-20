@@ -2295,3 +2295,18 @@ builds (the array's origin is not the ownship's depth), 0.005 m in free field. I
 two-row `shallow` and `rehearsal` runs one candidate folds to 60.7 and 64.0 m for a target
 at 60 m: the chain offered the right depth, and the angle rule failed it. Limit: in water
 with a profile the alternatives are folded along straight lines, not traced rays.
+
+### D-144 The TR 0702 comparison names SST's Lorentzian Doppler spectrum
+
+`tools/sst_validation.py` runs the ASIAEX reproduction with TR 0702's own rules named, so
+that later changes of the suite's defaults do not move it; its comment listed the Doppler
+spectrum among them, but only `decay_time: rule_of_thumb` was named. From D-84 on, the
+ASIAEX runs took the Gaussian default, and the matrix moved without anyone choosing it: the
+surface's ping-to-ping variation 1.88 to 2.85 dB, the sum-against-convolve figures -2.3 /
++3.7 to -2.8 / +3.0 dB. Found by bisecting the file's shift between `5956b10` and `e10b17f`
+(two runs on one tree agree in every number, so each commit's output is fixed): ASIAEX
+moved at `710b7ef` (D-84); Pursuit moved at `99665ef`, source levels as RMS (D-102), 3.01 dB
+in every level with echo or reverberation in it, as that decision intended. The runs now
+name `doppler_spectrum: lorentzian` (SST's AR(1)), as they name the decay rule; the two
+runs that compare the spectra still name their own. With it every ASIAEX value equals the
+`5956b10` run. The suite's default stays Gaussian (D-84).

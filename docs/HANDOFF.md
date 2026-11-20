@@ -200,8 +200,8 @@ Consequences that are open (STATUS items 38 to 43):
 - Stale generated files (`sonar-zxk`, STATUS item 42): regenerated at `e10b17f` on
   2026-11-19 and 20, each compared with the file it replaced (RESULTS). Three tools reuse
   stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`): rerun
-  them into an empty `--json` file, with the settings their tables name. Still open: why
-  `sst_validation` moved since `5956b10` (deterministic; not bisected).
+  them into an empty `--json` file, with the settings their tables name. Why
+  `sst_validation` moved since `5956b10` is bisected and settled (D-144).
 
 ## 8. Other open work (bd issues)
 

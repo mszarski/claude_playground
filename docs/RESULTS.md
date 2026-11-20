@@ -1335,11 +1335,10 @@ Pierson–Moskowitz and Cox–Munk wind laws. The one-way path is made with a �
   does not show SST's stated defect with these parameters; it shows
   the opposite sign. On the surface-bottom path the bottom is 93% coherent with the
   longer decay, and `sum` gives all scattered energy the summed delay (8.2 ms mean
-  against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.8 dB right after the
-  pulse and +3.0 dB later (tail centroid 3.1 against 2.1 ms). In a variant with both
+  against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.3 dB right after the
+  pulse and +3.7 dB later (tail centroid 3.1 against 2.1 ms). In a variant with both
   bounces fully rough and of equal decay, `sum` is +1.6 dB in the first half of the pulse
-  and −0.9 dB at 2–5 ms after it (regenerated at `e10b17f`; −2.3, +3.7 and −0.8 dB in the
-  run of `5956b10`), which is the defect as TR 0702 words it. TR 0702 does
+  and −0.8 dB at 2–5 ms after it, which is the defect as TR 0702 words it. TR 0702 does
   not say how SST combined bounces.
 
 ### Closed forms through `run_scenario` and the processing chain
@@ -2942,8 +2941,12 @@ output compared number by number with the file it replaced.
   threads again (the job builds first): upper figures.
 - `docs/design/popoto_range_study.json`, `popoto_elevation_study.json` and the stage-2
   study: identical.
-- `docs/figures/sst_validation.*`: moved against the run of `5956b10`; deterministic, cause
-  not bisected (STATUS item 42).
+- `docs/figures/sst_validation.*`: the shift against the run of `5956b10` bisected to two
+  commits. Pursuit: `99665ef`, source levels as RMS (D-102), every level involving echo or
+  reverberation 3.01 dB higher (ridge over noise 27.13 to 30.14 dB), as intended. ASIAEX:
+  `710b7ef`, the Gaussian Doppler spectrum by default (D-84), which the reproduction took
+  although it meant to keep SST's rules; named Lorentzian again (D-144), every ASIAEX value
+  equals the `5956b10` run.
 - `docs/figures/fjord_depth_plan.md`: margins 0.1 to 0.2 dB lower; conclusions unchanged.
 - `docs/benchmarks/gpu_benchmark_all_l4.{md,json}`: every stage with a CUDA backend, NVIDIA
   L4, tree of `e10b17f`: 93 cases, 36 host-only rows, none with an error. The tables it

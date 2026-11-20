@@ -642,9 +642,11 @@ def asiaex_runs(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> d
     fast = {"pings": {"count": int(doppler_pings), "interval": 0.05}}
     # TR 0702's own rules are what this reproduction compares with, so they are named: the
     # suite's defaults have since moved to `decay_time: facet` (D-85), `multi_bounce: convolve`
-    # (D-82) and `doppler_spectrum: gaussian` (D-84).
+    # (D-82) and `doppler_spectrum: gaussian` (D-84). The spectrum was not named here until
+    # D-144, so from D-84 on these runs took the Gaussian default (SST's AR(1) is Lorentzian).
     def run(overrides):
-        return _quiet_run(ASIAEX, {**overrides, "time_spread": {"decay_time": "rule_of_thumb", **overrides.get("time_spread", {})}})
+        return _quiet_run(ASIAEX, {**overrides, "time_spread": {"decay_time": "rule_of_thumb", "doppler_spectrum": "lorentzian",
+                                                                 **overrides.get("time_spread", {})}})
 
     return dict(
         flat=_quiet_run(ASIAEX, {"time_spread": None}),
