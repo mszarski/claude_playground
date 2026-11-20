@@ -179,6 +179,7 @@ real array's channel errors.
 | Path | What |
 | --- | --- |
 | `libs/core`, `libs/dsp`, `libs/recon`, `libs/sim`, `libs/detect`, `libs/io` | C++20 / CUDA: record, conditioning, backprojection, synthesis, CFAR, container file |
+| `libs/motion` | C++20 (host only): platform motion estimation, the Ceres solve of ASASIN Eq. 8 (`dpc_solver.hpp`, D-30), used by `python/gpusonar/motion.py`. Built only when a Ceres without SuiteSparse is found (`SONAR_CERES_DIR`, default `/opt/ceres-nosuitesparse`; `SONAR_ALLOW_SUITESPARSE=OFF` keeps a GPL-linked Ceres out); CMake prints `motion estimation ON/OFF` |
 | `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
 | `libs/holoscan_ops`, `apps/sonar_live_holoscan.cpp` | the same chain as C++ Holoscan operators and an application (`-DSONAR_BUILD_HOLOSCAN=ON`) |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |
