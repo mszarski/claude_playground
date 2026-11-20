@@ -364,8 +364,9 @@ Grouped; within a group the most consequential first.
    counts a detection as the ship's by its first arrival and extent: one detection covers
    a group of arrivals 110 to 126 m long in Bellhop's field, and the earlier ±20 m rule
    scored 0 of 6 pings while a mover track sat on the ship. What changed with
-   `sector_from_rays` (D-118) is elevation: item 11. **Stale again** since D-137 and
-   D-140 (64 arrivals, 1496.8 m/s): item 42.
+   `sector_from_rays` (D-118) is elevation: item 11. Regenerated again at `e10b17f` after
+   D-137 and D-140: the same detections and tracks, Bellhop SNRs 0.1 to 2.6 dB lower
+   (RESULTS). Its `class_cases` half is rerun separately (`--classes`).
 
 ### Depth
 

@@ -2637,21 +2637,25 @@ Source: `tools/fjord_rehearsal.py --ranges 300,1000,2000` →
 
 ### The 12 km study, rerun with the shipped deployment files
 
-Source: `tools/popoto_12km_study.py` with Bellhop set → `docs/design/popoto_12km.json`
-(commit `1efa598`). All 21 cases, six pings each; the four `popoto_env_*` waters had never
-been run with three rows. Cells are one / two / three rows.
+Source: `tools/popoto_12km_study.py` with Bellhop set → `docs/design/popoto_12km.json`,
+regenerated at commit `e10b17f` (64 arrivals kept by energy, D-137; water at 1496.8 m/s,
+D-140); the run of `1efa598` in brackets where it differs. All 21 cases, six pings each.
+Cells are one / two / three rows.
 
 | Case | Pings detected | Median SNR, dB | Track confirmed at ping | Pings with several possible elevations |
 | --- | --- | --- | --- | --- |
-| `popoto_12km`, image-source paths | 6 / 6 / 6 | 17.8 / 14.9 / 14.2 | 3 / 3 / 3 | – / 5 / 6 |
-| the same, noise only | 6 / 6 / 6 | 16.4 / 14.9 / 14.4 | 3 / 3 / 3 | – / 5 / 5 |
-| `popoto_12km`, Bellhop (100 m over sand) | 6 / 6 / 6 | 24.0 / 22.4 / 23.5 | 3 / 3 / 3 | – / 6 / 4 |
+| `popoto_12km`, image-source paths | 6 / 6 / 6 | 17.7 / 14.5 / 14.9 (17.8 / 14.9 / 14.2) | 3 / 3 / 3 | – / 5 / 5 (– / 5 / 6) |
+| the same, noise only | 6 / 6 / 6 | 17.2 / 15.0 / 15.2 (16.4 / 14.9 / 14.4) | 3 / 3 / 3 | – / 5 / 4 (– / 5 / 5) |
+| `popoto_12km`, Bellhop (100 m over sand) | 6 / 6 / 6 | 22.4 / 20.1 / 20.9 (24.0 / 22.4 / 23.5) | 3 / 3 / 3 | – / 5 / 4 (– / 6 / 4) |
 | `popoto_env_deep_silt_1000m`, Bellhop | 0 / 0 / 0 | – | none | – |
-| `popoto_env_gravel_30m`, Bellhop | 6 / 6 / 6 | 33.9 / 35.0 / 35.1 | 3 / 3 / 3 | – / 0 / 0 |
+| `popoto_env_gravel_30m`, Bellhop | 6 / 6 / 6 | 33.8 / 34.3 / 34.4 (33.9 / 35.0 / 35.1) | 3 / 3 / 3 | – / 0 / 0 |
 | `popoto_env_summer_mud_60m`, Bellhop | 0 / 0 / 0 | – | none | – |
-| `popoto_env_winter_sand_200m`, Bellhop | 6 / 6 / 6 | 24.7 / 32.9 / 33.9 | 3 / 3 / 3 | – / 6 / 6 |
+| `popoto_env_winter_sand_200m`, Bellhop | 6 / 6 / 6 | 23.6 / 31.4 / 32.6 (24.7 / 32.9 / 33.9) | 3 / 3 / 3 | – / 6 / 6 |
 
-Detection, SNR and tracks are identical to the earlier file in every case that existed.
+Against the run of `1efa598`: the same pings detected and the same track ping in every
+case; the Bellhop SNRs 0.1 to 2.6 dB lower with the extra arrivals and the water's own
+speed, the image-source ones within 0.8 dB either way. At `1efa598` detection, SNR and
+tracks were identical to the file before it in every case that existed.
 With `sector_from_rays` more detections carry the ambiguity flag than before (two rows
 were 0 to 3 of 6 pings, three rows 1), except in the gravel water, where none does. The
 depth sigma at 12 km is 2960 to 3010 m.
