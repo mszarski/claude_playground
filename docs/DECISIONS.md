@@ -131,6 +131,11 @@ makes one allocation; `allocate()` then hands out aligned bump-pointer blocks an
 loudly if a stage asks for more than it reserved. `reset()` rewinds for the next run.
 Default alignment 256 bytes.
 
+Correction 2026-11-20: the call is `reserve(bytes)` (`libs/core/include/sonar/core/allocator.hpp`
+`SlabAllocator::reserve`); the alignment is one per allocator, given to its constructor
+(`SlabAllocator(Backend backend = Backend::Host, std::size_t alignment = 256)`), and every
+reservation and block is rounded up to it.
+
 ### D-09 Ray culling
 - `culling.block: 16` pixels by default; `0` disables culling.
 - Field-of-view test: the angle between the element or array boresight and the direction
@@ -143,6 +148,14 @@ Default alignment 256 bytes.
 - Two levels, as described. Bistatic mode tests transmitter and receiver separately and
   requires both.
 - Acceptance: image identical to the unculled image to within float rounding.
+
+Correction 2026-11-20: there is no `culling.beam_factor`. The parameter is `fov_factor`
+(`BpOptions::fov_factor` in `libs/recon/include/sonar/recon/backproject.hpp`; a `sas_image` /
+`fan_image` stage key): a direction is accepted when its angle from the boresight is within
+`fov_factor · FWHM / 2` in azimuth and in elevation (a half-angle), separately per axis. The
+C++ default is 0 (no limit, and no culling); `recon.sas_image` defaults to `fov_factor` 1.13 and
+`cull_block` 16 (`python/gpusonar/recon/sas.py`). Culling is `cull_block` (C++ default 0, off)
+and needs `fov_factor > 0`. The factor 1.5 above is not a default anywhere in the code.
 
 ### D-10 Symbols
 Beamwidths are `beamwidth_az`, `beamwidth_el`. Attitude is `roll`, `pitch`, `yaw`.
