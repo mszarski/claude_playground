@@ -65,6 +65,14 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   processing, are written once and compiled for the host (OpenMP) and for CUDA. So are
   conditioning (cuFFT on the device) and CFAR. Select with `backend=` or
   `backend: cuda` in a config; `auto` uses the GPU when the build has it and one is present.
+- **Asking for CUDA in a build without it is an error, never a silent fallback.** Every C++
+  entry point that takes a `Backend` throws `std::runtime_error("<name>: built without the CUDA
+  backend")` for `Backend::Cuda` when the library was built with `SONAR_ENABLE_CUDA=OFF`
+  (`libs/core` `SlabAllocator`, `libs/dsp` baseband and pulse compression, `libs/detect` CFAR,
+  `libs/recon` backprojection, `libs/sim` synthesis and reverberation, `libs/live` far-field and
+  MVDR beamformers and SBL); through the bindings this is a Python `RuntimeError`. Only `auto`
+  falls back to the host. `core.cuda_compiled()` says whether the build has the backend and
+  `core.cuda_available()` whether a device is also usable (`libs/core/include/sonar/core/platform.hpp`).
 - **Simulation on a GPU** means synthesis on a GPU: `run_scenario(name, backend=core.Backend.Cuda)`,
   or `tools/gallery.py --backend cuda`. Path geometry, reverberation and noise are
   generated on the CPU; for scenes with many scatterers or long pulses synthesis is nearly
@@ -179,6 +187,7 @@ real array's channel errors.
 | Path | What |
 | --- | --- |
 | `libs/core`, `libs/dsp`, `libs/recon`, `libs/sim`, `libs/detect`, `libs/io` | C++20 / CUDA: record, conditioning, backprojection, synthesis, CFAR, container file |
+| `libs/motion` | C++20 (host only): platform motion estimation, the Ceres solve of ASASIN Eq. 8 (`dpc_solver.hpp`, D-30), used by `python/gpusonar/motion.py`. Built only when a Ceres without SuiteSparse is found (`SONAR_CERES_DIR`, default `/opt/ceres-nosuitesparse`; `SONAR_ALLOW_SUITESPARSE=OFF` keeps a GPL-linked Ceres out); CMake prints `motion estimation ON/OFF` |
 | `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
 | `libs/holoscan_ops`, `apps/sonar_live_holoscan.cpp` | the same chain as C++ Holoscan operators and an application (`-DSONAR_BUILD_HOLOSCAN=ON`) |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |

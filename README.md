@@ -126,8 +126,12 @@ tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit            
 tools/gallery.py --backend host --quick                     # the same, thinned
 ```
 
-The long-range array's design and study tools (each writes a committed file under
-`docs/design/` or `docs/figures/`, named in `docs/RESULTS.md`):
+The long-range array's design and study tools. Most write a committed file under
+`docs/design/` or `docs/figures/`, named in `docs/RESULTS.md`; not all: `tonal_range_study.py`
+only prints (`--json` prints JSON), `coverage_map.py` writes only with `--json PATH` or
+`--figure PATH`, `gpu_benchmark_all.py` prints its table unless given `--out` / `--json`,
+`nav_adapter.py` converts a stream, and `build_from_spec.py` writes sonar and deployment files
+under `configs/`:
 
 ```bash
 tools/build_from_spec.py configs/builds/popoto_face_3x32.yaml --validate   # a build spec: sonar and deployment files, self-tests, checklists
@@ -137,12 +141,12 @@ tools/popoto_depth_planner.py --shipped                     # own depth against 
 tools/projector_requirements.py; tools/projector_candidates.py   # what the projector must do; listed candidates against it
 tools/direct_sound_study.py                                 # the projector's direct sound at every hydrophone
 tools/popoto_12km_study.py                                  # the 12 km design point through the chain (needs Bellhop)
-tools/coverage_map.py --build popoto_face_1x32 --environment shelf_100m_sand --own-depth 50   # where a build can detect
+tools/coverage_map.py --build popoto_face_1x32 --environment shelf_100m_sand --own-depth 50   # where a build can detect (prints; --json, --figure to write)
 tools/multipath_depth_study.py; tools/refraction_depth_study.py --bellhop   # depth from the surface echo; depth against profile knowledge
 tools/ssp_range_study.py; tools/fjord_rehearsal.py          # water that changes with range; a trial in fjord-type water
 tools/nav_adapter.py --help                                 # a vendor's navigation stream to the chain's datagrams
-tools/tonal_range_study.py                                  # passive detection range of a tonal (model figures)
-tools/gpu_benchmark_all.py --backend host                   # every stage with a CUDA backend, timed (the CUDA column on a GPU)
+tools/tonal_range_study.py                                  # passive detection range of a tonal (model figures; prints only)
+tools/gpu_benchmark_all.py --backend host                   # every stage with a CUDA backend, timed (the CUDA column on a GPU; prints, --out / --json to write)
 ```
 
 Simulator validation and fitting: `tools/sst_validation.py` (against TR 0702),
