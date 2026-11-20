@@ -1,4 +1,5 @@
-// Boundary reverberation by the scattering-function method: the per-ping generation of
+// Boundary reverberation by the scattering-function method (after SST: Goddard, APL-UW
+// TR 0702, Sec. 11.3, p. 89-93; docs/PHYSICS_NOTES.md Sec. 5.4): the per-ping generation of
 // python/gpusonar/sim/reverb.py (step 3 and 4 of its header). Given the reverberation
 // power against time and azimuth, it makes the time series every hydrophone receives:
 //

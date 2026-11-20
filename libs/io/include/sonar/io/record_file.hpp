@@ -49,6 +49,17 @@ struct FileInfo {
   std::int64_t n_pings = 0;
 };
 
+/// Reads a record file. Errors are exceptions:
+///   - the constructor throws std::runtime_error when the file cannot be opened as HDF5, when
+///     its schema_name is not this schema's, or when its schema major version differs from the
+///     reader's (a different minor or patch version is accepted);
+///   - read() throws std::out_of_range for an index outside [0, size()), and
+///     std::runtime_error for a ping whose contents are malformed (missing or inconsistent
+///     datasets, an unknown storage type);
+///   - read_truth() throws std::runtime_error when the file has no /truth group or no array of
+///     that name; truth_names() returns an empty list and read_truth_text() an empty string
+///     in those cases instead.
+/// Any other HDF5 failure surfaces as std::runtime_error("HDF5: failed to ...").
 class RecordReader {
  public:
   explicit RecordReader(const std::string& path);

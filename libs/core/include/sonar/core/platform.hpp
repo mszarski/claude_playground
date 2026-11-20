@@ -26,7 +26,9 @@ bool cuda_compiled();
 bool cuda_available();
 /// Number of usable CUDA devices (0 without the CUDA backend).
 int cuda_device_count();
-/// Name of a CUDA device, or an empty string.
+/// Name of a CUDA device, or an empty string (no CUDA backend, or the device could not be
+/// queried). The pointer is into a thread_local buffer that the next call on the same thread
+/// overwrites: copy it (e.g. into a std::string) before calling again. Do not free it.
 const char* cuda_device_name(int device);
 
 }  // namespace sonar
