@@ -60,7 +60,7 @@ def test_live_chain_diagram_marks_gpu_stages_as_the_code_and_the_benchmark_have_
     live = {c["sizes"]["rows"]: c for c in bench["cases"] if c["group"] == "live" and c["case"].endswith("engine cpp, doa map, backprojection")}
     assert set(live) == {1, 2, 3} and all(c["cuda_s"] < c["host_s"] for c in live.values())
     text = (ROOT / "docs" / "ARCHITECTURE.md").read_text()
-    for rows, digits in ((1, "0.010"), (2, "0.021"), (3, "0.031")):
+    for rows, digits in ((1, "0.015"), (2, "0.028"), (3, "0.040")):
         assert f"{live[rows]['cuda_s']:.3f}" == digits and digits in text
     for name in ("architecture/live_chain.png", "architecture/deployment_build.png"):
         assert name in text and (ROOT / "docs" / name).exists()

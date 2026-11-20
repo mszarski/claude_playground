@@ -154,9 +154,13 @@ spectra of a recording gives passive bearing-time records (`sonar_live --passive
   by `tests/python/test_architecture.py`: conditioning, the maps, CFAR, the elevation steering
   (the same backprojection kernel) and the sparse Bayesian bearings. Measured on an L4 with
   decimated pings of scenario size and the row heights before the 1.5 m change
-  (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes 0.010, 0.021 and 0.031 s a ping for
-  one, two and three rows of 32, against 0.15, 0.30 and 0.44 s on that machine's eight CPU threads.
-  Raw pings at the boards' full rate have not been run on a GPU.
+  (`benchmarks/gpu_benchmark_all_l4.md`, tree `e10b17f`): the C++ chain takes 0.015, 0.028 and
+  0.040 s a ping for one, two and three rows of 32, against 0.15, 0.31 and 0.46 s on that machine's
+  eight CPU threads. The first run (`gpu_benchmark_all_l4_15f1121.md`) gave 0.010, 0.021 and
+  0.031 s; the difference is the multiscale cell statistic (D-93), which runs on the CPU (`RESULTS.md`,
+  issue sonar-01u for a device port). Raw pings at the boards' full rate through the C++ chain on a
+  GPU: 0.48, 1.02 and 1.51 s for one, two and three rows (`design/popoto_stage2.json`,
+  `decimation.timing.cuda`; machine still loaded by the build, so upper figures).
 - **Passive** exists in the C++ library and program only.
 - **The sparse Bayesian kernels take at most 64 channels** (`kSblMaxChannels`,
   `libs/live/include/sonar/live/sbl_kernel.hpp`), and there is no fallback: more raise
