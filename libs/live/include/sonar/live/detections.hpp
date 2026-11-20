@@ -70,12 +70,17 @@ enum class Association { Likelihood, InOrder };
 Association parse_association(const std::string& name);
 
 struct TrackerOptions {
+  /// m/s^2: standard deviation of the white acceleration noise on each horizontal axis
+  /// (piecewise-constant over a step: Q = G G^T process_noise^2, G = [dt^2/2, dt] per axis).
   double process_noise = 0.05;
   double range_sigma = 2.0;                   ///< m
-  double bearing_sigma = 0.017453292519943295;  ///< rad
+  double bearing_sigma = 0.017453292519943295;  ///< rad (1 deg)
+  /// Association gate in sigmas of the innovation (Mahalanobis distance, 2-D): a detection
+  /// is a candidate for a track when d^2 < gate^2.
   double gate = 4.0;
-  std::int64_t confirm_hits = 3;
-  std::int64_t max_misses = 3;
+  std::int64_t confirm_hits = 3;  ///< detections (the first included) that confirm a track
+  std::int64_t max_misses = 3;    ///< a track is dropped after more pings than this in a row without a detection
+  /// m/s: standard deviation of each horizontal velocity component of a new track (it starts at 0).
   double initial_speed_sigma = 10.0;
   double depth_process_noise = 0.5;  ///< m per sqrt(s): how fast a track's depth may wander
   Association association = Association::Likelihood;
