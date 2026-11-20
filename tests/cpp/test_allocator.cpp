@@ -8,22 +8,11 @@
 
 using namespace sonar;
 
-namespace {
-struct FakeStage : Stage {
-  std::size_t a, b;
-  FakeStage(std::size_t a_, std::size_t b_) : a(a_), b(b_) {}
-  std::string name() const override { return "fake"; }
-  std::size_t memory_required(std::size_t alignment) const override {
-    return align_up(a, alignment) + align_up(b, alignment);
-  }
-};
-}  // namespace
-
-TEST(SlabAllocator, StagesReportThenOneSlabServesThemAll) {
+TEST(SlabAllocator, UsersReportThenOneSlabServesThemAll) {
   SlabAllocator slab(Backend::Host, 256);
-  const FakeStage s1(1000, 10), s2(4096, 1);
-  slab.reserve(s1.memory_required(slab.alignment()));
-  slab.reserve(s2.memory_required(slab.alignment()));
+  // Two users state their blocks (1000 + 10 bytes, 4096 + 1 bytes), each rounded up to the alignment.
+  slab.reserve(align_up(1000, slab.alignment()) + align_up(10, slab.alignment()));
+  slab.reserve(align_up(4096, slab.alignment()) + align_up(1, slab.alignment()));
   EXPECT_FALSE(slab.committed());
   slab.commit();
   EXPECT_TRUE(slab.committed());

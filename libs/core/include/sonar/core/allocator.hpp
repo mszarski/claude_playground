@@ -19,7 +19,6 @@
 #pragma once
 
 #include <cstddef>
-#include <string>
 
 #include "sonar/core/platform.hpp"
 
@@ -66,16 +65,6 @@ class SlabAllocator {
   std::size_t capacity_ = 0;
   std::size_t used_ = 0;
   std::size_t high_water_ = 0;
-};
-
-/// Base class of processing stages that use slab memory.
-class Stage {
- public:
-  virtual ~Stage() = default;
-  virtual std::string name() const = 0;
-  /// Bytes of slab memory this stage will allocate, including alignment padding
-  /// (round each block up to the allocator's alignment).
-  virtual std::size_t memory_required(std::size_t alignment) const = 0;
 };
 
 /// Round `bytes` up to a multiple of `alignment`.
