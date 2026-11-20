@@ -266,7 +266,7 @@ def draw(name, path):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--only", default="")
     ap.add_argument("--out", default=str(ROOT / "docs" / "scenarios"))
     args = ap.parse_args()
