@@ -2215,10 +2215,10 @@ rows changed (`unresolvable`). The profiles are illustrative.
 | --- | --- | --- | --- |
 | `ssp_front_static_trial_2row`: front 1.2 to 1.4 km out, target at 2.6 km, 60 m deep | detected; SNR | 4/4; 45.7 dB | 4/4; 45.5 dB |
 | | first-arrival range minus straight-line distance | +21.5 m | +10.2 m |
-| | elevation; depth as deployed / with the local profile given | -4.2°; 12.8 / 82.8 m | +3.7°; 75.1 / 81.0 m |
+| | elevation; depth as deployed / with the local profile given | -4.2°; 12.8 / 83.1 m | +3.7°; 75.1 / 80.4 m |
 | `ssp_thermocline_static_trial_3row`: mixed layer 15 m at the array, 45 m at 3 km | detected; SNR | 4/4; 42.6 dB | 4/4; 43.7 dB |
 | | first-arrival range | +14.2 m | +10.2 m |
-| | elevation; depth as deployed / with the local profile given | +1.67°; 50.8 / 55.2 m | -5.4°; 67.7 / 56.6 m |
+| | elevation; depth as deployed / with the local profile given | +1.67°; 50.8 / 55.0 m | -5.4°; 67.7 / 56.9 m |
 | `ssp_front_testauv_trial_1row`: front 200 to 300 m out, target at 500 m, 15 m deep, water 30 m | detected; SNR | 4/4; 57.1 dB | 4/4; 51.5 dB |
 | | first-arrival range; bearing error | +7.0 m; -0.18° | +7.8 m; -0.32° |
 
@@ -2946,6 +2946,9 @@ output compared number by number with the file it replaced.
   (0.0155 / 0.0275 / 0.0380 at `d9cb5b7`; 0.0097 / 0.0212 / 0.0310 at `15f1121`); on the
   host 0.151 / 0.306 / 0.455 s, unchanged. The 6 to 9 ms slowdown on the device is stable
   across two runs; its cause is still not measured (issue `sonar-y7a`).
+- `docs/figures/ssp_range_study.*`, rerun from an empty results file (the tool reuses stored
+  cases): only the depths with the local profile given moved, by 0.2 to 0.6 m (arc rays,
+  D-139); detections, SNRs, elevations and the as-deployed depths are unchanged.
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one

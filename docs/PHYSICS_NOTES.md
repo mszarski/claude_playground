@@ -3498,11 +3498,11 @@ observations, not rates.
 | Two-row static, front 1.2 to 1.4 km out (22 m/s slower at the surface, 6.4 m/s below 35 m), target 2.6 km, 60 m | detected; SNR | 4/4; 45.7 dB | 4/4; 45.5 dB |
 | | range of the first arrival, minus the straight-line distance | +21.5 m | +10.2 m |
 | | bearing error; track confirmed | -0.07 degrees; ping 3 | -0.08 degrees; ping 3 |
-| | elevation; depth as deployed; depth with the local profile (true 60 m; stated sigma 124 to 125 m) | -4.2 degrees; 12.8 m; 82.8 m | +3.7 degrees; 75.1 m; 81.0 m |
+| | elevation; depth as deployed; depth with the local profile (true 60 m; stated sigma 124 to 125 m) | -4.2 degrees; 12.8 m; 83.1 m | +3.7 degrees; 75.1 m; 80.4 m |
 | Three-row static, mixed layer 15 m at the array, 45 m at 3 km, target 2.6 km, 60 m | detected; SNR | 4/4; 42.6 dB | 4/4; 43.7 dB |
 | | range of the first arrival | +14.2 m | +10.2 m |
 | | bearing error; track on the target | +1.02 degrees on 3 pings of 4; none in 4 pings (a track 360 m short instead) | -0.06 degrees; ping 3 |
-| | elevation; depth as deployed; with the local profile (true 60 m; sigma 122 to 124 m) | -31.1 degrees; 19.3 m; 19.0 m | -5.4 degrees; 67.7 m; 56.6 m |
+| | elevation; depth as deployed; with the local profile (true 60 m; sigma 122 to 124 m) | -31.1 degrees; 19.3 m; 19.0 m | -5.4 degrees; 67.7 m; 56.9 m |
 | Test AUV, one row, front 200 to 300 m out, target 500 m, 15 m, water 30 m | detected; SNR | 4/4; 57.1 dB | 4/4; 51.5 dB |
 | | range of the first arrival; bearing error; track | +7.0 m; -0.18 degrees; ping 3 | +7.8 m; -0.32 degrees; ping 3 |
 | | depth from multipath timing (true 15 m) | 30.3 m on all 4 pings, sigma 3.5 m, note `bottom_unmodelled` | none (`single_arrival`) |
