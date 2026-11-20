@@ -378,3 +378,173 @@ def test_program_listens_to_an_untriggered_board_stream(tmp_path):
     assert good >= 0.8 * len(frames)
     raw = list(make_source({"type": "container", "path": str(tmp_path / "rec.h5")}))
     assert len(raw) == n_frames and raw[0].samples.array.shape[1] == N_FFT + 11 * HOP
+
+
+# --- the program's key=value interface and its report lines ---------------------------------------
+
+def _every_option_chain(tmp_path):
+    """A chain section that makes cpp_chain_options emit every key it can, each away from its default where it can be."""
+    from gpusonar import buildspec as bs
+    chain = bs.chain_config(bs.load("popoto_face_1x32"))         # coverage (with the site), sync, decimate
+    chain.update(
+        look="port", window="rect", backend="host", beamformer="farfield", doa="sbl", cell_statistic="multiscale", min_snr_db=10.5,
+        range_cell_m=1.5, sound_speed=1490.0, dead_channels=[3, 7],
+        cfar={"pfa": 2e-6, "guard_m": 90.0, "train_m": 280.0, "false_alarms_per_ping": 2e-3, "integrate_cells": [1, 4, 16], "merge_m": 7.0,
+              "search_factor": 2.5, "sidelobe_margin_db": 9.0, "sidelobe_floor_db": -35.0},
+        sbl={"grid_step_deg": 0.5, "max_sources": 5, "min_snr_db": 7.0, "dynamic_range_db": 18.0, "max_gates": 20, "min_contrast_db": 7.0,
+             "max_iterations": 25, "tolerance": 0.02},
+        tracker={"range_sigma": 4.0, "bearing_sigma_deg": 0.8, "confirm_hits": 4, "max_misses": 3, "initial_speed_sigma": 6.0, "process_noise": 0.07,
+                 "association": "in_order"},
+        classify={"min_speed": 1.2, "static_speed": 0.8, "max_fit_rms": 50.0,
+                  "multipath": {"max_excess_range": 700.0, "bearing_deg": 2.5, "velocity": 2.0}},
+        decimate={"output_rate": 20000.0, "taps": 101, "oversample": 2.5, "band_margin": 1.4},
+        blanking={"recovery_s": 0.002, "taper_s": 0.001, "mode": "ignore"},
+        multipath_depth={"bottom": {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}, "rays": True},
+        elevation={"sector_deg": [-20.0, 25.0, 0.5], "sector_from_depth": {"bounces": 2, "margin_deg": 1.5},
+                   "sector_from_rays": {"bounces": 3, "margin_deg": 2.0, "max_depth_m": 300.0},
+                   "multipath_sigma": {"bounces": 1, "max_depth_m": 250.0}, "range_window_m": 6.0, "max_detections": 20, "arrival": "strongest",
+                   "first_arrival_db": 7.0, "first_arrival_snr_db": 12.0, "min_quality": 0.5, "ambiguity_db": 1.5, "ambiguity_sigma": 2.5,
+                   "alternatives_db": 5.0, "correct_bearing": False, "depth": True, "fold": False, "classify": False, "classify_sigma": 3.0,
+                   "water_depth": 90.0, "water_depth_sigma_m": 4.0, "attitude_time": "arrival", "attitude_rate_sigma_deg_s": 0.3,
+                   "gradient_per_s": 0.017, "gradient_sigma_per_s": 0.04, "surface_z": 0.5,
+                   "ssp": {"depth": [0.0, 50.0, 100.0], "speed": [1500.0, 1495.5, 1493.25]}, "ray_method": "steps", "roll_sigma_deg": 0.2,
+                   "depth_process_noise": 0.4, "row_tolerance_m": 0.03, "min_row_elements": 4,
+                   "profile": {"ladder": ["built", "family", "prior"],
+                               "built": {"bin_m": 3.0, "sample_sigma_m_s": 0.3, "age_sigma_m_s_per_hour": 0.6, "distance_sigma_m_s_per_km": 0.7,
+                                         "max_age_s": 3600.0, "max_distance_m": 5000.0, "min_span_m": 6.0, "extrapolation_sigma_per_s": 0.01,
+                                         "file": str(tmp_path / "profile_bins.txt"), "cast": str(tmp_path / "cast.txt")},
+                               "supplied": {"sigma_m_s": 0.4},
+                               "ensemble": {"gradients_per_s": [0.0, 0.017, -0.05], "extent_m": [20.0, 50.0], "sigma_members": False},
+                               "family": {"kind": "mixed_layer", "gradient_per_s": 0.016, "layer_depth_m": 30.0, "thermocline_gradient_per_s": -0.2,
+                                          "thermocline_thickness_m": 40.0, "sigma_m_s": 0.5}}})
+    (tmp_path / "cast.txt").write_text("0 1500\n50 1495.5\n100 1493.25\n")
+    chain["sync"] = dict(chain["sync"], min_quality=0.5, search_time=0.003, tolerance_us=2.0)
+    chain["sync"]["reference"] = dict(chain["sync"]["reference"], dedicated=True, clip_level=1.5)
+    return chain
+
+
+def _same_options(a: dict, b: dict) -> list:
+    """The keys on which two options_json dumps differ (numbers to 1e-9 relative: key=value text has 10 digits)."""
+    def same(x, y):
+        if isinstance(x, list) and isinstance(y, list):
+            return len(x) == len(y) and all(same(u, v) for u, v in zip(x, y))
+        if isinstance(x, float) or isinstance(y, float):
+            return x is not None and y is not None and float(x) == pytest.approx(float(y), rel=1e-9, abs=1e-12)
+        return x == y
+    return sorted(k for k in set(a) | set(b) if not same(a.get(k), b.get(k)))
+
+
+@pytest.mark.parametrize("cell_statistic", ["multiscale", "peak"])
+def test_every_chain_option_round_trips_through_binding_and_text(cell_statistic, tmp_path):
+    """Every key cpp_chain_options emits gives the same C++ chain through the binding (LiveChainCpp's dictionary) and
+    through the key=value text the tools write (program_options -> set_pair / load_options, as build/bin/sonar_live
+    reads chain.options or its command line). Before: `decimate={}` and the profile's `True` / `[0.0, 0.017]` were read
+    as 0 by the program, so the decimate stage and the ensemble were off and the first gradient read 0."""
+    from gpusonar import live
+    chain = dict(_every_option_chain(tmp_path), cell_statistic=cell_statistic)
+    o = live.cpp_chain_options(chain, live.sync_reference(chain))
+    flat = live.program_options(chain)                           # no record: the binding is given no detection-probability table either
+    via_binding = json.loads(core.LiveChainCpp(dict(o)).options())
+    via_text = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
+    assert _same_options(via_binding, via_text) == []
+    defaults = json.loads(core.live_options_from_text(""))
+    # Every key written is one the dump holds (cell_statistic is the dump's cell_peak / cell_multiscale) and every
+    # value written is one the program ends up with (a key that read as 0 would differ from what was written).
+    assert set(flat) - {"cell_statistic"} <= set(via_text)
+    for key, text in flat.items():
+        if key == "cell_statistic":
+            continue
+        got = via_text[key]
+        if isinstance(got, bool):
+            assert int(text) == int(got), key
+        elif isinstance(got, list):
+            want = [w for w in str(text).split(",") if w]
+            assert len(want) == len(got) and all(str(g) == w if isinstance(g, str) else float(w) == pytest.approx(g, rel=1e-9) for g, w in zip(got, want)), key
+        elif isinstance(got, (int, float)):
+            assert float(text) == pytest.approx(got, rel=1e-9, abs=1e-12), key
+        elif key == "coverage_classes":                             # name:ts_db:depth_lo:depth_hi;...
+            parse = lambda t: [(c.split(":")[0], *map(float, c.split(":")[1:])) for c in t.split(";")]  # noqa: E731
+            assert parse(text) == parse(got), key
+        else:
+            assert str(text) == got, key
+    # The stages a deployment can switch on are on, and most settings are away from the defaults (the test means something).
+    for key in ("decimate", "blanking", "sync", "elevation", "elevation_profile", "elevation_profile_ensemble", "multipath_depth", "coverage"):
+        assert via_text[key] is True and defaults[key] is False, key
+    assert via_text["elevation_profile_ensemble_gradients"] == pytest.approx([0.0, 0.017, -0.05])
+    assert via_text["backend"] == "host" and via_text["look"] == "port" and via_text["window"] == "rect"
+    assert len(_same_options(via_text, defaults)) > 100
+
+
+def test_program_options_carry_navigation_and_the_backend():
+    """nav.surface_z, the water depth from altitude and the backend reach the program's key=value settings."""
+    from gpusonar import live
+    deploy = {"source": {"decimate": {"output_rate": 16000.0}, "sample_bytes": 2, "timeout": 12.0, "host": "127.0.0.1"},
+              "nav": {"surface_z": -1.25, "keep_s": 90.0, "water_depth": {"source": "altitude", "dvl_offset_m": 0.4}},
+              "output": {"report_udp_max_bytes": 9000}}
+    for backend in ("auto", "host", "cuda"):
+        flat = live.program_options({"backend": backend}, None, deploy)
+        assert flat["backend"] == backend
+    flat = live.program_options({"backend": "auto"}, None, deploy)
+    got = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
+    assert got["nav_surface_z"] == -1.25 and got["nav_keep_s"] == 90.0 and got["nav_water_depth_from_altitude"] is True
+    assert got["nav_dvl_offset_m"] == pytest.approx(0.4) and got["decimate"] is True and got["decimate_streaming"] is True
+    assert got["decimate_output_rate"] == 16000.0 and got["stream_sample_bytes"] == 2 and got["idle_seconds"] == 12.0
+    assert got["bind"] == "127.0.0.1" and got["report_udp_max_bytes"] == 9000
+    # auto means what LiveChain makes of it: CUDA when the build has it and a device is present.
+    assert got["backend"] == ("cuda" if core.cuda_available() else "host")
+    assert json.loads(core.live_options_from_text(""))["backend"] == "host"           # the program without the key: the host
+
+
+@pytest.mark.parametrize("pair", ["decimate={}", "elevation_profile_ensemble=None", "cfar_pfa=1e-5x", "range_cell_m=", "tracker_confirm_hits=2.5",
+                                  "elevation_ssp_depth=0,abc", "look=Starboard", "window=hamming", "window=none", "backend=gpu",
+                                  "blanking_mode=zeros", "beamformer=Farfield", "multipath_depth_max_depth=deep", "coverage_n_ranges=1.5",
+                                  "tonal_goertzel_lines=300,x", "nav_surface_z=sea"])
+def test_program_options_refuse_what_they_cannot_read(pair):
+    key = pair.split("=")[0]
+    with pytest.raises(ValueError, match=key):
+        core.live_options_from_text(pair)
+
+
+def test_program_options_take_booleans_as_words_or_numbers():
+    for text in ("1", "true", "True", "2"):
+        assert json.loads(core.live_options_from_text(f"elevation_profile_ensemble={text}"))["elevation_profile_ensemble"] is True
+    for text in ("0", "false", "False"):
+        got = json.loads(core.live_options_from_text(f"cell_multiscale={text}\nmultipath={text}"))
+        assert got["cell_multiscale"] is False and got["multipath"] is False
+    got = json.loads(core.live_options_from_text("cfar_integrate_cells=[1, 4, 16]\nelevation_profile_ensemble_gradients=[0.0, 0.017]"))
+    assert got["cfar_integrate_cells"] == [1, 4, 16] and got["elevation_profile_ensemble_gradients"] == [0.0, 0.017]
+
+
+@pytest.mark.parametrize("key,value", [("look", "Starboard"), ("window", "hamming"), ("backend", "gpu"), ("beamformer", "Farfield")])
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_both_engines_refuse_unknown_words(key, value, engine):
+    """`look: Starboard` silently looked to port and a misspelt window was rectangular; now both engines refuse them."""
+    from gpusonar import live
+    with pytest.raises(ValueError, match=key):
+        LiveChain({key: value, "engine": engine})
+    with pytest.raises(ValueError, match=key):
+        live.cpp_chain_options({key: value})
+
+
+def test_report_fields_match_the_python_chain(pings, tmp_path):
+    """The program's raw report lines (and the binding's) carry the Python chain's fields, pings_without_nav included."""
+    from gpusonar import live
+    with LiveChain(dict(CHAIN, engine="python"), recording=str(tmp_path / "rec.h5")) as chain:
+        want = chain.run(copies(pings))
+    cpp = core.LiveChainCpp(dict(live.cpp_chain_options(CHAIN), backend=core.Backend.Host))
+    raw = [json.loads(cpp.process(p)) for p in copies(pings)]
+    lines = {"binding": raw}
+    if EXE.exists():
+        flat = live.program_options(CHAIN)
+        out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), *[f"{k}={v}" for k, v in flat.items()]],
+                             capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        lines["program"] = [json.loads(line) for line in out.stdout.splitlines()]
+    for name, got in lines.items():
+        assert len(got) == len(want)
+        for g, w in zip(got, want):
+            assert set(g) == set(w), (name, set(g) ^ set(w))
+            assert g["pings_without_nav"] == w["pings_without_nav"] == 0
+            for part in ("detections", "tracks"):
+                for gi, wi in zip(sorted(g[part], key=lambda d: d.get("range_m", 0.0)), sorted(w[part], key=lambda d: d.get("range_m", 0.0))):
+                    assert set(gi) == set(wi), (name, part, set(gi) ^ set(wi))

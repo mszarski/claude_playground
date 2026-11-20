@@ -20,7 +20,6 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
@@ -36,7 +35,7 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     import shlex
 
     from gpusonar import core
-    from gpusonar.live import cpp_chain_options, sync_reference
+    from gpusonar.live import program_options
     from gpusonar.sonar import SonarModel
     src = cfg["source"]
     sonar = SonarModel.load(src["sonar"], src.get("sonar_overrides"))
@@ -45,75 +44,8 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     template = sonar.make_record(core.Pose(), environment=env)
     writer.write(template)
     writer.close()
-    chain = cfg.get("chain") or {}
-    o = cpp_chain_options(chain, sync_reference(chain))
-    sync = o.pop("sync", None)
-    o["look"] = "starboard" if o.pop("starboard") else "port"
-    o["window"] = "hann" if o.pop("hann") else "none"
-    # Sizes the deployment file leaves out are not on the command line either: the program derives them (derive.hpp).
-    if "tracker_bearing_sigma" in o:
-        o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
-    if "multipath_bearing" in o:
-        o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
-    o["multipath"] = int(o["multipath"])
-    # How a range cell is tested, always said: the program's own default is not assumed.
-    multiscale = o.pop("cell_multiscale", False)
-    o["cell_statistic"] = "peak" if o.pop("cell_peak", False) else ("multiscale" if multiscale else "mean")
-    if "cfar_integrate_cells" in o:
-        o["cfar_integrate_cells"] = ",".join(str(v) for v in o["cfar_integrate_cells"])
-    if "dead_channels" in o:
-        o["dead_channels"] = ",".join(str(v) for v in o["dead_channels"])
-    el = o.pop("elevation", None)
-    if el is not None:
-        # Stacked rows: elevation=1 and one elevation_<key> per setting (docs/CONFIGURATION.md).
-        o["elevation"] = 1
-        el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
-        el["sector_margin_deg"] = float(np.degrees(el.pop("sector_margin")))
-        el["sector_rays_margin_deg"] = float(np.degrees(el.pop("sector_rays_margin")))
-        el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
-        for key in ("ssp_depth", "ssp_speed"):
-            values = el.pop(key)
-            if values:
-                el[key] = ",".join(f"{v:.10g}" for v in values)
-        profile = el.pop("profile", None)
-        if profile is not None:
-            o["elevation_profile"] = 1
-            profile["ladder"] = ",".join(profile["ladder"])
-            o.update({f"elevation_profile_{k}": v for k, v in profile.items()})
-        o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
-    from gpusonar.live import program_stage_options
-    program_stage_options(o, template, chain)             # multipath_depth, coverage (with its detection-probability table)
-    # The program around the chain: the board stream's word, socket and queue; when to give up; where to listen.
-    for key, option in (("sample_bytes", "stream_sample_bytes"), ("buffer_bytes", "stream_buffer_bytes"), ("queue_mb", "stream_queue_mb"),
-                        ("timeout", "idle_seconds"), ("host", "bind")):
-        if src.get(key) is not None:
-            o[option] = src[key]
-    if (cfg.get("output") or {}).get("report_udp_max_bytes") is not None:
-        o["report_udp_max_bytes"] = int(cfg["output"]["report_udp_max_bytes"])
-    if sync:
-        o["sync"] = 1
-        o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})
-    # Decimate first: in the receiver (source.decimate: the recording holds decimated pings) or in the chain
-    # (chain.decimate: the recording holds raw pings).
-    from gpusonar.live import WATER_DEPTH_DEFAULTS, decimate_options
-    blanking = o.pop("blanking", None)
-    if blanking is not None:
-        o["blanking"] = 1
-        o.update({f"blanking_{k}": v for k, v in blanking.items()})
-    dec = o.pop("decimate", None)
-    streaming = decimate_options(src.get("decimate"))
-    if streaming is not None or dec is not None:
-        o["decimate"] = 1
-        o["decimate_streaming"] = int(streaming is not None)
-        o.update({f"decimate_{k}": v for k, v in (streaming if streaming is not None else dec).items()})
-    nav = cfg.get("nav") or {}
-    water = nav.get("water_depth") or {}
-    if water.get("source") == "altitude":
-        o["nav_water_depth_from_altitude"] = 1
-        o.update({f"nav_{k}": v for k, v in dict(WATER_DEPTH_DEFAULTS, **water).items() if k != "source"})
-    for key in ("keep_s", "profile_step_m", "history_margin_s"):
-        if nav.get(key) is not None:
-            o[f"nav_{key}"] = nav[key]
+    # The one mapping of a deployment file to the program's key=value settings (also chain.options of a build).
+    o = program_options(cfg.get("chain") or {}, template, cfg)
     out = cfg.get("output") or {}
     if src.get("port") is None:
         raise ValueError("source.port: the deployment file must name the port the boards send to (no default)")
@@ -126,7 +58,7 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
         cmd += ["--report", out["report"]]
     if out.get("report_udp"):
         cmd += ["--report-udp", f"{out['report_udp'][0]}:{out['report_udp'][1]}"]
-    cmd += [f"{k}={v:.10g}" if isinstance(v, float) else f"{k}={v}" for k, v in o.items()]
+    cmd += [f"{k}={v}" for k, v in o.items()]
     passive = cfg.get("passive") or {}
     if passive.get("tonal") is not None:
         # Goertzel lines and DEMON when listening (--listen or --passive): tonal=1 and one tonal_<key> per setting.

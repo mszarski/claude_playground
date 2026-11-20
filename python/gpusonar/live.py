@@ -360,12 +360,26 @@ def _merge(base: dict, over: dict | None) -> dict:
     return out
 
 
+# The words a chain setting may be; libs/live options.cpp refuses anything else in the same way.
+CHOICES = {"beamformer": ("backprojection", "farfield", "mvdr"), "look": ("starboard", "port"), "window": ("hann", "rect"),
+           "backend": ("auto", "host", "cuda")}
+
+
+def check_choices(cfg: dict) -> None:
+    """Refuse a (merged) chain configuration whose `beamformer`, `look`, `window` or `backend` is not one of its words:
+    `look: Starboard` would otherwise look to port and a misspelt window be rectangular."""
+    for key, allowed in CHOICES.items():
+        if cfg.get(key) not in allowed:
+            raise ValueError(f"chain.{key}: {cfg.get(key)!r} ({', '.join(allowed[:-1])} or {allowed[-1]})")
+
+
 def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     """The chain section of a deployment file as the options of the C++ chain (`core.LiveChainCpp`,
-    and `key=value` arguments of build/bin/sonar_live). `cfg` is merged over the defaults first."""
+    and `key=value` arguments of build/bin/sonar_live through `program_options`). `cfg` is merged over the
+    defaults first. `backend` is the configuration's word (auto, host or cuda); LiveChain replaces it with
+    the backend it resolved."""
     cfg = _merge(DEFAULTS, cfg)
-    if cfg["beamformer"] not in ("backprojection", "farfield", "mvdr"):
-        raise ValueError(f"beamformer: {cfg['beamformer']!r} (backprojection, farfield or mvdr)")
+    check_choices(cfg)
     if cfg["cell_statistic"] not in CELL_STATISTICS:
         raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean, peak or multiscale)")
     b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
@@ -380,7 +394,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
          "tracker_association": t["association"],
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
-         "multipath": bool(c.get("multipath"))}
+         "multipath": bool(c.get("multipath")), "backend": cfg["backend"]}
     if cfg["cell_statistic"] == "peak":
         o["cell_peak"] = True
     o["cell_multiscale"] = cfg["cell_statistic"] == "multiscale"      # always said: the C++ default is not assumed
@@ -509,6 +523,102 @@ def program_stage_options(o: dict, record=None, chain_cfg: dict | None = None) -
             snr, pd = pd_table(record, {k: v for k, v in (chain_cfg or {}).items() if k != "engine"})
             o.update(coverage_pd_snr_db=text(snr), coverage_pd_value=text(pd))
     return o
+
+
+def _option_text(key: str, v):
+    """One value of a key=value option as build/bin/sonar_live reads it (libs/live option_value.hpp): booleans 1 / 0,
+    numbers (floats to 10 significant digits), lists comma-separated, words as they are. Anything else is refused here
+    rather than written as Python text that the program would misread."""
+    if isinstance(v, (bool, np.bool_)):
+        return int(bool(v))
+    if isinstance(v, (int, np.integer)):
+        return int(v)
+    if isinstance(v, (float, np.floating)):
+        return f"{float(v):.10g}"
+    if isinstance(v, str):
+        if not v or any(ch in v for ch in "\n#=") or v.strip() != v:
+            raise ValueError(f"{key}: {v!r} cannot be written as a key=value option")
+        return v
+    if isinstance(v, (list, tuple, np.ndarray)):
+        items = [_option_text(key, x) for x in v]
+        if any(isinstance(x, str) and "," in x for x in items):
+            raise ValueError(f"{key}: {v!r}: a list item holds a comma")
+        return ",".join(str(x) for x in items)
+    raise ValueError(f"{key}: {v!r} ({type(v).__name__}) is not a value build/bin/sonar_live can read")
+
+
+def program_options(chain: dict | None, record=None, deploy: dict | None = None) -> dict:
+    """A deployment file's chain section as the key=value settings of build/bin/sonar_live: the ONE mapping that
+    `tools/sonar_live.py --export-template` (the printed command) and `tools/build_from_spec.py` (chain.options) write.
+    `record`: the sonar's template, for the coverage picture's detection-probability table. `deploy`: the whole
+    deployment file, for the settings of the program around the chain (`source`: the board stream and decimation in
+    the receiver; `nav`; `output.report_udp_max_bytes`). Returns {key: text or int}, every value as the program
+    reads it (`_option_text`); nested sections are flattened to the keys libs/live options.cpp knows."""
+    chain = chain or {}
+    deploy = deploy or {}
+    src = deploy.get("source") or {}
+    o = cpp_chain_options(chain, sync_reference(chain))
+    program_stage_options(o, record, chain)               # multipath_depth, coverage (with its detection-probability table)
+    out = {}
+    sync = o.pop("sync", None)
+    out["look"] = "starboard" if o.pop("starboard") else "port"
+    out["window"] = "hann" if o.pop("hann") else "rect"
+    # Sizes the deployment file leaves out are not given either: the program derives them (derive.hpp).
+    if "tracker_bearing_sigma" in o:
+        out["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
+    if "multipath_bearing" in o:
+        out["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
+    # How a range cell is tested, always said: the program's own default is not assumed.
+    multiscale = o.pop("cell_multiscale", False)
+    out["cell_statistic"] = "peak" if o.pop("cell_peak", False) else ("multiscale" if multiscale else "mean")
+    el = o.pop("elevation", None)
+    blanking = o.pop("blanking", None)
+    dec = o.pop("decimate", None)
+    out.update(o)
+    if el is not None:
+        # Stacked rows: elevation=1 and one elevation_<key> per setting (docs/CONFIGURATION.md).
+        el = dict(el)
+        out["elevation"] = 1
+        for name in ("roll_sigma", "sector_margin", "sector_rays_margin"):
+            el[f"{name}_deg"] = float(np.degrees(el.pop(name)))
+        el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
+        for key in ("ssp_depth", "ssp_speed"):
+            if not el.get(key):
+                el.pop(key, None)
+        profile = el.pop("profile", None)
+        out.update({f"elevation_{k}": v for k, v in el.items()})
+        if profile is not None:
+            out["elevation_profile"] = 1
+            out.update({f"elevation_profile_{k}": v for k, v in profile.items()})
+    if sync:
+        out["sync"] = 1
+        out.update({f"sync_{k}": v for k, v in sync.items()})
+    if blanking is not None:
+        out["blanking"] = 1
+        out.update({f"blanking_{k}": v for k, v in blanking.items()})
+    # Decimate first: in the receiver (source.decimate: the recording holds decimated pings) or in the chain
+    # (chain.decimate: the recording holds raw pings).
+    streaming = decimate_options(src.get("decimate"))
+    if streaming is not None or dec is not None:
+        out["decimate"] = 1
+        out["decimate_streaming"] = int(streaming is not None)
+        out.update({f"decimate_{k}": v for k, v in (streaming if streaming is not None else dec).items()})
+    # The program around the chain: the board stream's word, socket and queue; when to give up; where to listen.
+    for key, option in (("sample_bytes", "stream_sample_bytes"), ("buffer_bytes", "stream_buffer_bytes"), ("queue_mb", "stream_queue_mb"),
+                        ("timeout", "idle_seconds"), ("host", "bind")):
+        if src.get(key) is not None:
+            out[option] = src[key]
+    if (deploy.get("output") or {}).get("report_udp_max_bytes") is not None:
+        out["report_udp_max_bytes"] = int(deploy["output"]["report_udp_max_bytes"])
+    nav = deploy.get("nav") or {}
+    water = nav.get("water_depth") or {}
+    if water.get("source") == "altitude":
+        out["nav_water_depth_from_altitude"] = 1
+        out.update({f"nav_{k}": v for k, v in dict(WATER_DEPTH_DEFAULTS, **water).items() if k != "source"})
+    for key in ("keep_s", "surface_z", "profile_step_m", "history_margin_s"):
+        if nav.get(key) is not None:
+            out[f"nav_{key}"] = nav[key]
+    return {k: _option_text(k, v) for k, v in out.items()}
 
 
 NAV_FIELDS = ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude", "bottom_lock",
@@ -851,6 +961,7 @@ class LiveChain:
         self.pings_without_nav = 0
         self._reference = sync_reference(self.cfg)
         self.boards_out_of_sync = 0
+        check_choices(self.cfg)
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
         if self.cfg["cell_statistic"] not in CELL_STATISTICS:
