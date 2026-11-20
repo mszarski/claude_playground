@@ -168,3 +168,20 @@ def test_repair_outline_removes_leftover_stroke():
                   '  frame#n2 "Primary" fill=#2563EB\n'
                   '  frame#n3 "Secondary" fill=#F3F4F6 stroke=#E5E7EB')
     assert repair_doc(before, light) == 0
+
+
+def test_score_survives_named_color():
+    from design_edit.rewards import score
+
+    before = 'frame#n1 "Card" layout=col fill=#FFFFFF\n  text#n2 "Title" text="Hi" size=16 color=#111827'
+    s = score(before, before.replace("color=#111827", "color=#FDE047"), "set n2 color=yellow")
+    assert s.valid
+
+
+def test_strip_fences_inkling2_format():
+    from design_edit.schema import strip_fences
+
+    raw = ("<|message_model|><|content_thinking|>Set the fill. set n1 fill=#000000<|end_message|>"
+           "<|message_model|><|content_text|>set n21 fill=#2563EB<|end_message|><|content_model_end_sampling|>")
+    assert strip_fences(raw) == "set n21 fill=#2563EB"
+    assert strip_fences("<|message_model|><|content_thinking|>still thinking about it") == ""

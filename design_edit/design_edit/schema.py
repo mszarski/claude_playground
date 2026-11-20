@@ -225,8 +225,13 @@ def strip_fences(text: str) -> str:
 
     Handles markdown code fences, and channel-style chat formats (e.g. Muse-Glimmer's ATEM format, where a reply
     may contain a reasoning segment addressed ``to=self`` before the answer addressed ``to=user``): keep only the
-    final ``to=user`` message and drop any leftover channel tokens.
+    final ``to=user`` message and drop any leftover channel tokens. Inkling-2's raw output (thinking, then
+    ``<|content_text|>`` answer) keeps only the answer.
     """
+    if "<|content_text|>" in text:  # Inkling-2 format: thinking block, then the answer after <|content_text|>
+        text = text.rsplit("<|content_text|>", 1)[1].split("<|end_message|>", 1)[0]
+    elif "<|content_thinking|>" in text:
+        return ""  # reasoning ran out of tokens before an answer
     if "to=user" in text:
         text = text.rsplit("to=user", 1)[1]
     text = _CHANNEL_TOKENS.sub("\n", text)

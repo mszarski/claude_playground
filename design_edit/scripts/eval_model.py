@@ -58,6 +58,11 @@ def main() -> None:
     ap.add_argument("--vllm", action="store_true", help="generate with vLLM (much faster for large models)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
     ap.add_argument("--template-kwargs", default=None, help="JSON chat-template kwargs")
+    ap.add_argument("--results-repo", default=None,
+                    help="upload eval JSONs here (prefixed by the model name) instead of to the model repo, e.g. for a third-party model")
+    ap.add_argument("--multimodal", action="store_true",
+                    help="transformers path for models that only load as AutoModelForMultimodalLM + AutoProcessor")
+    ap.add_argument("--max-new-tokens", type=int, default=320)
     ap.add_argument("--adapter", default=None,
                     help="LoRA checkpoint to merge into --model first, as <repo>/<subfolder> (e.g. user/run-ckpt/checkpoint-50)")
     args = ap.parse_args()
@@ -113,6 +118,28 @@ def main() -> None:
                 for t in texts[:2]:
                     print("raw output sample:", repr(t[:200]), flush=True)
             return texts
+    elif args.multimodal:
+        from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+        proc = AutoProcessor.from_pretrained(model_path)
+        tok = getattr(proc, "tokenizer", proc)  # some repos ship only a tokenizer
+        tok.padding_side = "left"
+        model = AutoModelForMultimodalLM.from_pretrained(model_path, device_map="auto").eval()
+        print("loaded", type(model).__name__, "dtype", next(model.parameters()).dtype, flush=True)
+
+        @torch.no_grad()
+        def generate(prompts):
+            texts = [proc.apply_chat_template(p, tokenize=False, add_generation_prompt=True, **tkw) for p in prompts]
+            enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
+            out = model.generate(**enc, max_new_tokens=args.max_new_tokens, do_sample=False,
+                                 pad_token_id=tok.pad_token_id)
+            raw = tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=False)
+            if not getattr(generate, "_shown", False):
+                generate._shown = True
+                print("prompt tail:", repr(texts[0][-300:]), flush=True)
+                for t in raw[:3]:
+                    print("raw output sample:", repr(t[:600]), flush=True)
+            return raw  # strip_fences keeps only the answer segment
     else:
         tok = AutoTokenizer.from_pretrained(model_path)
         tok.padding_side = "left"
@@ -136,7 +163,11 @@ def main() -> None:
         path = f"eval_{split}.json"
         Path(path).write_text(json.dumps(result, indent=1))
         if not args.no_push:
-            upload_file(path_or_fileobj=path, path_in_repo=out_prefix + path, repo_id=out_repo)
+            if args.results_repo:
+                upload_file(path_or_fileobj=path, repo_id=args.results_repo, repo_type="dataset",
+                            path_in_repo=f"{args.model.replace('/', '__')}/{out_prefix}{path}")
+            else:
+                upload_file(path_or_fileobj=path, path_in_repo=out_prefix + path, repo_id=out_repo)
     print("\nSUMMARY " + json.dumps(overall))
     # vLLM engine processes can keep the job alive after all results are uploaded; exit hard.
     sys.stdout.flush()

@@ -157,8 +157,8 @@ def fact_f1(gold: set[Fact], pred: set[Fact], before: Node, relax: list[dict[str
 
 def _luminance(hexv: str) -> float:
     h = hexv.lstrip("#")
-    if len(h) != 6:
-        return 1.0
+    if len(h) != 6 or any(c not in "0123456789abcdefABCDEF" for c in h):
+        return 1.0  # not a hex color (e.g. a model wrote fill=yellow): treat like any other unknown value
     rgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
     lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
     return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]

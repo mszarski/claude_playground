@@ -50,6 +50,7 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--out", default=None, help="write per-row results as JSON")
     ap.add_argument("--no-think", action="store_true", help="disable reasoning (chat_template_kwargs enable_thinking=false)")
+    ap.add_argument("--extra", default=None, help='JSON merged into each request, e.g. {"reasoning_effort": "none"}')
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
 
@@ -57,7 +58,8 @@ def main() -> None:
 
     def generate(prompts):
         with ThreadPoolExecutor(args.workers) as pool:
-            extra = {"chat_template_kwargs": {"enable_thinking": False}} if args.no_think else None
+            extra = {"chat_template_kwargs": {"enable_thinking": False}} if args.no_think else {}
+            extra.update(json.loads(args.extra) if args.extra else {})
             return list(pool.map(lambda p: chat(args.base_url, token, args.model, p, extra=extra), prompts))
 
     result = evaluate(rows, generate, batch_size=args.workers * 4)
