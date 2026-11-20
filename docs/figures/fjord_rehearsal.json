@@ -1,17 +1,17 @@
 {
  "testauv_1row": {
   "open water": {
-   "simulate_seconds": 3.5,
+   "simulate_seconds": 4.4,
    "as deployed": {
     "pings": 4,
     "per_ping": [
      {
       "detected": true,
-      "snr_db": 57.932421,
-      "range_error_m": 9.966886685825102,
+      "snr_db": 57.94568004,
+      "range_error_m": 10.130716285825088,
       "first_range_error_m": -0.7748774141749095,
-      "extent_m": 60,
-      "bearing_error_deg": -0.23205774501535714,
+      "extent_m": 66,
+      "bearing_error_deg": -0.23515950501535698,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -23,21 +23,21 @@
       "true_bearing_deg": 13.897176315015358,
       "all": [
        [
-        509.6,
-        13.67,
+        509.8,
+        13.66,
         57.9,
         498.9,
-        558.9
+        564.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 58.05850939,
-      "range_error_m": 10.013567816135037,
+      "snr_db": 58.06964303,
+      "range_error_m": 10.169658116135054,
       "first_range_error_m": -0.06287188386494336,
-      "extent_m": 58,
-      "bearing_error_deg": -0.2652432491915526,
+      "extent_m": 64,
+      "bearing_error_deg": -0.2617461091915523,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -49,21 +49,21 @@
       "true_bearing_deg": 13.562735409191552,
       "all": [
        [
-        509.0,
+        509.1,
         13.3,
         58.1,
         498.9,
-        556.9
+        562.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 57.81085939,
-      "range_error_m": 10.040408655976535,
+      "snr_db": 57.83436141,
+      "range_error_m": 10.199812855976518,
       "first_range_error_m": 0.6320873559765232,
-      "extent_m": 58,
-      "bearing_error_deg": -0.2815766156379578,
+      "extent_m": 66,
+      "bearing_error_deg": -0.2805421856379571,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -75,21 +75,21 @@
       "true_bearing_deg": 13.227349985637957,
       "all": [
        [
-        508.3,
+        508.4,
         12.95,
         57.8,
         498.9,
-        556.9
+        564.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 57.99143492,
-      "range_error_m": 10.026519378644025,
+      "snr_db": 58.00731989,
+      "range_error_m": 10.180525878644005,
       "first_range_error_m": -0.6900711213559703,
-      "extent_m": 60,
-      "bearing_error_deg": -0.23084438713829236,
+      "extent_m": 66,
+      "bearing_error_deg": -0.23527919713829348,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -101,27 +101,27 @@
       "true_bearing_deg": 12.891039117138293,
       "all": [
        [
-        507.6,
+        507.7,
         12.66,
         58.0,
         496.9,
-        556.9
+        562.9
        ]
       ]
      }
     ],
     "pings_detected": 4,
-    "median_snr_db": 57.96192796,
+    "median_snr_db": 57.976499965,
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.357831001500017,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4418848924997292,
+    "chain_seconds": 1.8
    }
   },
   "profile, section": {
-   "simulate_seconds": 3.6,
+   "simulate_seconds": 3.7,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -236,12 +236,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3698532669995984,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.447792184500031,
+    "chain_seconds": 1.8
    }
   },
   "+ late tail": {
-   "simulate_seconds": 10.7,
+   "simulate_seconds": 14.9,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -510,12 +510,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 5.5,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.42857531899880996,
-    "chain_seconds": 1.7
+    "chain_seconds_per_ping": 0.47193426049989284,
+    "chain_seconds": 1.9
    }
   },
   "+ own ping, what-if": {
-   "simulate_seconds": 19.4,
+   "simulate_seconds": 21.6,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -598,8 +598,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3526596994997817,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.44900257900008,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -683,8 +683,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3591026829999464,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4392876914998851,
+    "chain_seconds": 1.8
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -768,8 +768,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.34633986900007585,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.4349983450001673,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -853,8 +853,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.348353010500432,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.4385054589997708,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -938,12 +938,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3514847735004878,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.39296002699984456,
+    "chain_seconds": 1.6
    }
   },
   "fjord as shipped": {
-   "simulate_seconds": 12.0,
+   "simulate_seconds": 15.2,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -1093,7 +1093,7 @@
       "elsewhere": 3,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 17.05121748,
-      "tracks": 3,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 497.56507112135597,
       "true_bearing_deg": 12.891039117138293,
@@ -1135,8 +1135,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 2.75,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.39386366400049155,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.48333971449983437,
+    "chain_seconds": 2.0
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -1294,8 +1294,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 1.5,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3931679739998799,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.4948150785003236,
+    "chain_seconds": 2.0
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -1579,8 +1579,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 6.0,
     "tracks_off_target_last_ping": 2,
-    "chain_seconds_per_ping": 0.34223967350044404,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.4461884350002947,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -1696,8 +1696,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.36084699100047146,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.44423118700024133,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -1855,12 +1855,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 1.5,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.4068973925004684,
-    "chain_seconds": 1.7
+    "chain_seconds_per_ping": 0.47746792749967426,
+    "chain_seconds": 1.9
    }
   },
   "+ machinery noise": {
-   "simulate_seconds": 12.7,
+   "simulate_seconds": 14.4,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -2101,7 +2101,7 @@
       "elsewhere": 8,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 13.81818765,
-      "tracks": 5,
+      "tracks": 6,
       "tracks_off_target": 0,
       "true_range_m": 497.56507112135597,
       "true_bearing_deg": 12.891039117138293,
@@ -2178,12 +2178,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 7.25,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.36965091599995503,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4915672234997146,
+    "chain_seconds": 2.0
    }
   },
   "open water @ 300 m": {
-   "simulate_seconds": 2.2,
+   "simulate_seconds": 2.4,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -2298,8 +2298,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.29180949550027435,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.36145729049985675,
+    "chain_seconds": 1.5
    }
   },
   "profile, section @ 300 m": {
@@ -2418,12 +2418,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.29135834100088687,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.39220413950033617,
+    "chain_seconds": 1.6
    }
   },
   "+ late tail @ 300 m": {
-   "simulate_seconds": 11.5,
+   "simulate_seconds": 13.3,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -2601,12 +2601,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 2.25,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.5478499664995979,
-    "chain_seconds": 2.2
+    "chain_seconds_per_ping": 0.6188103435001722,
+    "chain_seconds": 2.5
    }
   },
   "+ own ping, what-if @ 300 m": {
-   "simulate_seconds": 16.5,
+   "simulate_seconds": 18.8,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -2689,8 +2689,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.2920480940001653,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.368185417499717,
+    "chain_seconds": 1.5
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -2774,8 +2774,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.2951554804994885,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.3150416359999326,
+    "chain_seconds": 1.3
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -2859,8 +2859,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.2882441319998179,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.3233832519999851,
+    "chain_seconds": 1.3
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -2944,8 +2944,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.2998164999999062,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.34604579549977643,
+    "chain_seconds": 1.4
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -3029,22 +3029,22 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.28953285999978107,
-    "chain_seconds": 1.2
+    "chain_seconds_per_ping": 0.3473195394999493,
+    "chain_seconds": 1.5
    }
   },
   "open water @ 1000 m": {
-   "simulate_seconds": 3.1,
+   "simulate_seconds": 9.3,
    "as deployed": {
     "pings": 4,
     "per_ping": [
      {
       "detected": true,
-      "snr_db": 47.16315254,
-      "range_error_m": 8.372342078123893,
+      "snr_db": 47.21255132,
+      "range_error_m": 14.22669107812385,
       "first_range_error_m": -1.137499921876156,
-      "extent_m": 32,
-      "bearing_error_deg": -0.12012825501535751,
+      "extent_m": 94,
+      "bearing_error_deg": -0.1616880950153572,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -3056,21 +3056,21 @@
       "true_bearing_deg": 13.897176315015358,
       "all": [
        [
-        1008.4,
-        13.78,
+        1014.2,
+        13.74,
         47.2,
         998.9,
-        1030.9
+        1092.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 47.13976589,
-      "range_error_m": 8.316280267222737,
+      "snr_db": 47.25248334,
+      "range_error_m": 14.154846267222752,
       "first_range_error_m": -0.42121173277723756,
-      "extent_m": 32,
-      "bearing_error_deg": -0.13754446730133907,
+      "extent_m": 92,
+      "bearing_error_deg": -0.21857790730133786,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -3082,21 +3082,21 @@
       "true_bearing_deg": 13.730200567301338,
       "all": [
        [
-        1007.6,
-        13.59,
-        47.1,
+        1013.5,
+        13.51,
+        47.3,
         998.9,
-        1030.9
+        1090.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 47.63635342,
-      "range_error_m": 8.305605492028576,
+      "snr_db": 47.75226933,
+      "range_error_m": 14.14912349202848,
       "first_range_error_m": -1.7134225079714724,
-      "extent_m": 34,
-      "bearing_error_deg": -0.08883468042654741,
+      "extent_m": 92,
+      "bearing_error_deg": -0.16066904042654606,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -3108,21 +3108,21 @@
       "true_bearing_deg": 13.562986690426547,
       "all": [
        [
-        1006.9,
-        13.47,
-        47.6,
+        1012.7,
+        13.4,
+        47.8,
         996.9,
-        1030.9
+        1088.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 47.76897244,
-      "range_error_m": 8.312297667941266,
+      "snr_db": 47.84566455,
+      "range_error_m": 14.189977667941207,
       "first_range_error_m": -1.0141503320587617,
-      "extent_m": 32,
-      "bearing_error_deg": -0.10572093908205282,
+      "extent_m": 96,
+      "bearing_error_deg": -0.17806991908205383,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -3134,27 +3134,27 @@
       "true_bearing_deg": 13.395537029082053,
       "all": [
        [
-        1006.2,
-        13.29,
+        1012.1,
+        13.22,
         47.8,
         996.9,
-        1028.9
+        1092.9
        ]
       ]
      }
     ],
     "pings_detected": 4,
-    "median_snr_db": 47.39975298,
+    "median_snr_db": 47.502376334999994,
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.37696880099974805,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4551396499996372,
+    "chain_seconds": 1.8
    }
   },
   "profile, section @ 1000 m": {
-   "simulate_seconds": 3.4,
+   "simulate_seconds": 3.6,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -3269,12 +3269,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.38115630950051127,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.4576583039997786,
+    "chain_seconds": 1.8
    }
   },
   "+ late tail @ 1000 m": {
-   "simulate_seconds": 14.7,
+   "simulate_seconds": 15.5,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -3426,7 +3426,7 @@
       "elsewhere": 7,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 15.16943003,
-      "tracks": 3,
+      "tracks": 2,
       "tracks_off_target": 0,
       "true_range_m": 998.5884225079715,
       "true_bearing_deg": 13.562986690426547,
@@ -3501,8 +3501,8 @@
       "elsewhere": 3,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 15.71627317,
-      "tracks": 5,
-      "tracks_off_target": 0,
+      "tracks": 4,
+      "tracks_off_target": 1,
       "true_range_m": 997.8891503320588,
       "true_bearing_deg": 13.395537029082053,
       "all": [
@@ -3542,13 +3542,13 @@
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.25,
     "elsewhere_per_ping": 5.25,
-    "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.38493406099951244,
-    "chain_seconds": 1.6
+    "tracks_off_target_last_ping": 1,
+    "chain_seconds_per_ping": 0.4685455279995949,
+    "chain_seconds": 1.9
    }
   },
   "+ own ping, what-if @ 1000 m": {
-   "simulate_seconds": 21.3,
+   "simulate_seconds": 23.6,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -3631,7 +3631,7 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3843707275009365,
+    "chain_seconds_per_ping": 0.3889655460002359,
     "chain_seconds": 1.6
    },
    "min_snr_db 15": {
@@ -3716,8 +3716,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.38631466300103057,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.42648118150009395,
+    "chain_seconds": 1.7
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -3825,8 +3825,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.35890790250050486,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4167932700001984,
+    "chain_seconds": 1.7
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -3910,8 +3910,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3610792970002876,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.42395683750009994,
+    "chain_seconds": 1.7
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -3995,22 +3995,22 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.357985721499972,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.41309264049959893,
+    "chain_seconds": 1.6
    }
   },
   "open water @ 2000 m": {
-   "simulate_seconds": 3.4,
+   "simulate_seconds": 10.4,
    "as deployed": {
     "pings": 4,
     "per_ping": [
      {
       "detected": true,
-      "snr_db": 38.17988634,
-      "range_error_m": 4.625392009765392,
+      "snr_db": 38.28596877,
+      "range_error_m": 11.183172009765258,
       "first_range_error_m": -1.1312499902346644,
-      "extent_m": 18,
-      "bearing_error_deg": 0.06033126498464192,
+      "extent_m": 58,
+      "bearing_error_deg": -0.02224763501535776,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -4022,21 +4022,21 @@
       "true_bearing_deg": 13.897176315015358,
       "all": [
        [
-        2004.6,
-        13.96,
-        38.2,
+        2011.2,
+        13.87,
+        38.3,
         1998.9,
-        2016.9
+        2056.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 38.38250623,
-      "range_error_m": 4.635662403862852,
+      "snr_db": 38.50919737,
+      "range_error_m": 11.239572403862894,
       "first_range_error_m": -0.4128325961371502,
-      "extent_m": 18,
-      "bearing_error_deg": 0.0038828170446087995,
+      "extent_m": 56,
+      "bearing_error_deg": -0.0714646429553909,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -4048,21 +4048,21 @@
       "true_bearing_deg": 13.81371835295539,
       "all": [
        [
-        2003.9,
-        13.82,
-        38.4,
+        2010.5,
+        13.74,
+        38.5,
         1998.9,
-        2016.9
+        2054.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 38.56627817,
-      "range_error_m": 4.6825178278465955,
+      "snr_db": 38.65423563,
+      "range_error_m": 11.228495827846473,
       "first_range_error_m": 0.3013398278465047,
-      "extent_m": 16,
-      "bearing_error_deg": 0.007880392698661254,
+      "extent_m": 56,
+      "bearing_error_deg": -0.07585678730133871,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -4074,21 +4074,21 @@
       "true_bearing_deg": 13.730200567301338,
       "all": [
        [
-        2003.3,
-        13.74,
-        38.6,
+        2009.8,
+        13.65,
+        38.7,
         1998.9,
-        2014.9
+        2054.9
        ]
       ]
      },
      {
       "detected": true,
-      "snr_db": 38.53447015,
-      "range_error_m": 4.654280729393122,
+      "snr_db": 38.54481205,
+      "range_error_m": 11.21908972939309,
       "first_range_error_m": -0.9887372706068618,
-      "extent_m": 18,
-      "bearing_error_deg": -0.11475625900001418,
+      "extent_m": 58,
+      "bearing_error_deg": -0.25264132900001357,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -4100,27 +4100,27 @@
       "true_bearing_deg": 13.646623249000013,
       "all": [
        [
-        2002.5,
-        13.53,
+        2009.1,
+        13.39,
         38.5,
         1996.9,
-        2014.9
+        2054.9
        ]
       ]
      }
     ],
     "pings_detected": 4,
-    "median_snr_db": 38.45848819,
+    "median_snr_db": 38.52700471,
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3513348174992643,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.43430943800012756,
+    "chain_seconds": 1.8
    }
   },
   "profile, section @ 2000 m": {
-   "simulate_seconds": 4.3,
+   "simulate_seconds": 4.9,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -4235,12 +4235,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.40428026050085464,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.42729806299985285,
+    "chain_seconds": 1.7
    }
   },
   "+ late tail @ 2000 m": {
-   "simulate_seconds": 14.5,
+   "simulate_seconds": 15.7,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -4453,7 +4453,7 @@
       "elsewhere": 5,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 13.35118747,
-      "tracks": 5,
+      "tracks": 3,
       "tracks_off_target": 0,
       "true_range_m": 1997.8637372706069,
       "true_bearing_deg": 13.646623249000013,
@@ -4509,12 +4509,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 5.5,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3754127395004616,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.42651216449939966,
+    "chain_seconds": 1.8
    }
   },
   "+ own ping, what-if @ 2000 m": {
-   "simulate_seconds": 22.8,
+   "simulate_seconds": 24.6,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -4685,7 +4685,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 12.32673085,
-      "tracks": 3,
+      "tracks": 2,
       "tracks_off_target": 0,
       "true_range_m": 1997.8637372706069,
       "true_bearing_deg": 13.646623249000013,
@@ -4713,8 +4713,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 3.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3943175924996467,
-    "chain_seconds": 1.6
+    "chain_seconds_per_ping": 0.43692430500004775,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -4830,8 +4830,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.35549276099936833,
-    "chain_seconds": 1.5
+    "chain_seconds_per_ping": 0.4293319340004018,
+    "chain_seconds": 1.7
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -4961,8 +4961,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.5,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3497262850005427,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.4436910459999126,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -5078,8 +5078,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3378914569993867,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.43795058999967296,
+    "chain_seconds": 1.8
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -5195,24 +5195,24 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 0.3478158439993422,
-    "chain_seconds": 1.4
+    "chain_seconds_per_ping": 0.40380790600011096,
+    "chain_seconds": 1.6
    }
   }
  },
  "static_2row": {
   "open water": {
-   "simulate_seconds": 42.2,
+   "simulate_seconds": 101.5,
    "as deployed": {
     "pings": 4,
     "per_ping": [
      {
       "detected": true,
-      "snr_db": 39.04234577,
-      "range_error_m": 31.532687155359326,
+      "snr_db": 39.04242384,
+      "range_error_m": 36.281113155359435,
       "first_range_error_m": 0.33870915535953827,
-      "extent_m": 104,
-      "bearing_error_deg": -0.08527271456473873,
+      "extent_m": 120,
+      "bearing_error_deg": -0.08400380356473836,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -5224,30 +5224,30 @@
       "true_bearing_deg": 6.6248798605647385,
       "all": [
        [
-        2632.1,
+        2636.8,
         6.54,
         39.0,
         2600.9,
-        2704.9
+        2720.9
        ]
       ],
-      "elevation_deg": 3.657378275,
-      "elevation_sigma_deg": 1.000142987,
-      "elevation_ambiguous": true,
-      "candidates": 2,
-      "depth_m": 75.17489762,
-      "depth_sigma_m": 122.7797537,
+      "elevation_deg": -3.420556896,
+      "elevation_sigma_deg": 1.001530152,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 34.43252109,
+      "depth_sigma_m": 123.2757418,
       "depth_profile_source": null,
       "true_elevation_deg": -0.6609834743239804,
       "true_depth_m": 60.0
      },
      {
       "detected": true,
-      "snr_db": 39.03837301,
-      "range_error_m": 31.588188155359603,
+      "snr_db": 39.03847411,
+      "range_error_m": 36.274687155359516,
       "first_range_error_m": 0.33870915535953827,
-      "extent_m": 104,
-      "bearing_error_deg": -0.08531302256473872,
+      "extent_m": 120,
+      "bearing_error_deg": -0.08321121256473862,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -5259,30 +5259,30 @@
       "true_bearing_deg": 6.6248798605647385,
       "all": [
        [
-        2632.1,
+        2636.8,
         6.54,
         39.0,
         2600.9,
-        2704.9
+        2720.9
        ]
       ],
-      "elevation_deg": -4.37134668,
-      "elevation_sigma_deg": 1.000132366,
-      "elevation_ambiguous": true,
-      "candidates": 2,
-      "depth_m": 19.29900748,
-      "depth_sigma_m": 122.7596847,
+      "elevation_deg": -3.43922125,
+      "elevation_sigma_deg": 1.001461487,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 33.30049841,
+      "depth_sigma_m": 123.2736951,
       "depth_profile_source": null,
       "true_elevation_deg": -0.6609834743239804,
       "true_depth_m": 60.0
      },
      {
       "detected": true,
-      "snr_db": 38.77250974,
-      "range_error_m": 31.549866155359723,
+      "snr_db": 38.77259976,
+      "range_error_m": 36.21070615535973,
       "first_range_error_m": 0.33870915535953827,
-      "extent_m": 104,
-      "bearing_error_deg": -0.0828506635647388,
+      "extent_m": 120,
+      "bearing_error_deg": -0.08124233356473898,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -5294,30 +5294,30 @@
       "true_bearing_deg": 6.6248798605647385,
       "all": [
        [
-        2632.1,
+        2636.7,
         6.54,
         38.8,
         2600.9,
-        2704.9
+        2720.9
        ]
       ],
-      "elevation_deg": 3.657282582,
-      "elevation_sigma_deg": 1.000150523,
-      "elevation_ambiguous": true,
-      "candidates": 2,
-      "depth_m": 75.17844186,
-      "depth_sigma_m": 122.7813781,
+      "elevation_deg": -3.352481911,
+      "elevation_sigma_deg": 1.001314804,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 38.59017242,
+      "depth_sigma_m": 123.2669665,
       "depth_profile_source": null,
       "true_elevation_deg": -0.6609834743239804,
       "true_depth_m": 60.0
      },
      {
       "detected": true,
-      "snr_db": 38.45723442,
-      "range_error_m": 31.528121155359713,
+      "snr_db": 38.45731666,
+      "range_error_m": 36.20267915535942,
       "first_range_error_m": 0.33870915535953827,
-      "extent_m": 104,
-      "bearing_error_deg": -0.0845771325647382,
+      "extent_m": 120,
+      "bearing_error_deg": -0.08301573256473826,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -5329,72 +5329,72 @@
       "true_bearing_deg": 6.6248798605647385,
       "all": [
        [
-        2632.1,
+        2636.7,
         6.54,
         38.5,
         2600.9,
-        2704.9
+        2720.9
        ]
       ],
-      "elevation_deg": 3.657490941,
-      "elevation_sigma_deg": 1.000151923,
-      "elevation_ambiguous": true,
-      "candidates": 2,
-      "depth_m": 75.16985977,
-      "depth_sigma_m": 122.7795042,
+      "elevation_deg": -3.362084778,
+      "elevation_sigma_deg": 1.001314295,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 38.00236988,
+      "depth_sigma_m": 123.266282,
       "depth_profile_source": null,
       "true_elevation_deg": -0.6609834743239804,
       "true_depth_m": 60.0
      }
     ],
     "pings_detected": 4,
-    "median_snr_db": 38.905441374999995,
+    "median_snr_db": 38.905536935,
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
     "depth_m": {
-     "median": 75.17237869499999,
+     "median": 36.217445485,
      "all": [
-      75.17489762,
-      19.29900748,
-      75.17844186,
-      75.16985977
+      34.43252109,
+      33.30049841,
+      38.59017242,
+      38.00236988
      ],
      "true": 60.0,
      "sigma": [
-      122.7797537,
-      122.7596847,
-      122.7813781,
-      122.7795042
+      123.2757418,
+      123.2736951,
+      123.2669665,
+      123.266282
      ],
      "source": [
       "None"
      ]
     },
     "elevation_deg": {
-     "median": 3.6573304285,
+     "median": -3.391320837,
      "all": [
-      3.657378275,
-      -4.37134668,
-      3.657282582,
-      3.657490941
+      -3.420556896,
+      -3.43922125,
+      -3.352481911,
+      -3.362084778
      ],
      "true": -0.6609834743239804,
-     "ambiguous_pings": 4,
+     "ambiguous_pings": 0,
      "candidates": [
-      2,
-      2,
-      2,
-      2
+      1,
+      1,
+      1,
+      1
      ]
     },
-    "chain_seconds_per_ping": 2.5940876199993,
-    "chain_seconds": 10.4
+    "chain_seconds_per_ping": 2.9947792374996425,
+    "chain_seconds": 12.1
    }
   },
   "profile, section": {
-   "simulate_seconds": 25.3,
+   "simulate_seconds": 30.3,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -5581,8 +5581,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.444260793999092,
-    "chain_seconds": 9.8
+    "chain_seconds_per_ping": 3.0510993460002283,
+    "chain_seconds": 12.3
    },
    "profile given": {
     "pings": 4,
@@ -5770,12 +5770,12 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.4466009955003756,
-    "chain_seconds": 9.9
+    "chain_seconds_per_ping": 2.8904683820001082,
+    "chain_seconds": 11.6
    }
   },
   "+ late tail": {
-   "simulate_seconds": 41.4,
+   "simulate_seconds": 47.2,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -5938,7 +5938,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 25.14598267,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 2600.5362908446405,
       "true_bearing_deg": 6.6248798605647385,
@@ -6009,8 +6009,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7010057515008157,
-    "chain_seconds": 10.9
+    "chain_seconds_per_ping": 3.3262275204997422,
+    "chain_seconds": 13.2
    },
    "profile given": {
     "pings": 4,
@@ -6174,7 +6174,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 25.14598267,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 2600.5362908446405,
       "true_bearing_deg": 6.6248798605647385,
@@ -6245,12 +6245,12 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7772906240006705,
-    "chain_seconds": 11.3
+    "chain_seconds_per_ping": 3.316684961499959,
+    "chain_seconds": 13.6
    }
   },
   "+ own ping, what-if": {
-   "simulate_seconds": 60.8,
+   "simulate_seconds": 73.8,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -6413,7 +6413,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 24.83031262,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 2600.5362908446405,
       "true_bearing_deg": 6.6248798605647385,
@@ -6484,8 +6484,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.8270423005005796,
-    "chain_seconds": 11.4
+    "chain_seconds_per_ping": 3.4546930554997743,
+    "chain_seconds": 13.8
    },
    "profile given": {
     "pings": 4,
@@ -6649,7 +6649,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 24.83031262,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 2600.5362908446405,
       "true_bearing_deg": 6.6248798605647385,
@@ -6720,8 +6720,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.885237591999612,
-    "chain_seconds": 11.6
+    "chain_seconds_per_ping": 3.38831174049983,
+    "chain_seconds": 13.6
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -6878,7 +6878,7 @@
       "elsewhere": 1,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 24.83031262,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 2600.5362908446405,
       "true_bearing_deg": 6.6248798605647385,
@@ -6949,8 +6949,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7904677835003895,
-    "chain_seconds": 11.4
+    "chain_seconds_per_ping": 3.4169877850004013,
+    "chain_seconds": 14.0
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -7138,8 +7138,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.4930285729997195,
-    "chain_seconds": 10.1
+    "chain_seconds_per_ping": 3.2294867119999253,
+    "chain_seconds": 13.1
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -7327,8 +7327,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.4545522075004556,
-    "chain_seconds": 9.9
+    "chain_seconds_per_ping": 3.192701371000112,
+    "chain_seconds": 12.8
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -7556,12 +7556,12 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7199243234999813,
-    "chain_seconds": 11.1
+    "chain_seconds_per_ping": 3.7356086815002527,
+    "chain_seconds": 14.7
    }
   },
   "fjord as shipped": {
-   "simulate_seconds": 45.3,
+   "simulate_seconds": 52.1,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -7788,8 +7788,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7073250714993264,
-    "chain_seconds": 10.9
+    "chain_seconds_per_ping": 3.3406430965001164,
+    "chain_seconds": 13.5
    },
    "profile given": {
     "pings": 4,
@@ -8017,8 +8017,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7440021980009988,
-    "chain_seconds": 11.0
+    "chain_seconds_per_ping": 3.26537612500033,
+    "chain_seconds": 13.3
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -8246,8 +8246,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.825760913000522,
-    "chain_seconds": 11.5
+    "chain_seconds_per_ping": 3.3214365584994994,
+    "chain_seconds": 13.8
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -8449,8 +8449,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.513930322500528,
-    "chain_seconds": 10.1
+    "chain_seconds_per_ping": 2.9044960519995584,
+    "chain_seconds": 11.8
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -8638,8 +8638,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.5006645844996456,
-    "chain_seconds": 10.2
+    "chain_seconds_per_ping": 3.0151751674998195,
+    "chain_seconds": 12.3
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -8867,12 +8867,12 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.800845128999754,
-    "chain_seconds": 11.3
+    "chain_seconds_per_ping": 3.330004888000076,
+    "chain_seconds": 13.5
    }
   },
   "+ machinery noise": {
-   "simulate_seconds": 39.6,
+   "simulate_seconds": 47.2,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -9115,8 +9115,8 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.635226151000097,
-    "chain_seconds": 10.8
+    "chain_seconds_per_ping": 3.128109160999884,
+    "chain_seconds": 12.8
    },
    "profile given": {
     "pings": 4,
@@ -9360,24 +9360,24 @@
       2
      ]
     },
-    "chain_seconds_per_ping": 2.7137727594990793,
-    "chain_seconds": 10.8
+    "chain_seconds_per_ping": 3.1951596220001193,
+    "chain_seconds": 12.7
    }
   }
  },
  "static_3row": {
   "open water": {
-   "simulate_seconds": 2.5,
+   "simulate_seconds": 5.2,
    "as deployed": {
     "pings": 4,
     "per_ping": [
      {
       "detected": true,
-      "snr_db": 76.6018094,
-      "range_error_m": 1.925368090590581,
+      "snr_db": 76.61151233,
+      "range_error_m": 5.7045347905905714,
       "first_range_error_m": -1.366879409409421,
-      "extent_m": 6,
-      "bearing_error_deg": -0.1158168292378825,
+      "extent_m": 64,
+      "bearing_error_deg": -0.4438965592378814,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -9389,30 +9389,30 @@
       "true_bearing_deg": 11.534443019237882,
       "all": [
        [
-        152.2,
-        11.42,
+        155.9,
+        11.09,
         76.6,
         148.9,
-        154.9
+        212.9
        ]
       ],
-      "elevation_deg": -2.775943185,
-      "elevation_sigma_deg": 1.000000077,
+      "elevation_deg": -2.663154057,
+      "elevation_sigma_deg": 1.000000094,
       "elevation_ambiguous": false,
       "candidates": 1,
-      "depth_m": 17.21805779,
-      "depth_sigma_m": 2.647193736,
+      "depth_m": 16.92413137,
+      "depth_sigma_m": 2.648103165,
       "depth_profile_source": null,
       "true_elevation_deg": -3.0268547253500837,
       "true_depth_m": 18.0
      },
      {
       "detected": true,
-      "snr_db": 76.86919309,
-      "range_error_m": 1.9252764905905906,
+      "snr_db": 76.87891443,
+      "range_error_m": 5.704979990590573,
       "first_range_error_m": -1.366879409409421,
-      "extent_m": 6,
-      "bearing_error_deg": -0.1157387592378818,
+      "extent_m": 64,
+      "bearing_error_deg": -0.4438968192378816,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -9424,30 +9424,30 @@
       "true_bearing_deg": 11.534443019237882,
       "all": [
        [
-        152.2,
-        11.42,
+        155.9,
+        11.09,
         76.9,
         148.9,
-        154.9
+        212.9
        ]
       ],
-      "elevation_deg": -2.77832705,
-      "elevation_sigma_deg": 1.000000073,
+      "elevation_deg": -2.66440904,
+      "elevation_sigma_deg": 1.000000089,
       "elevation_ambiguous": false,
       "candidates": 1,
-      "depth_m": 17.22430064,
-      "depth_sigma_m": 2.647186845,
+      "depth_m": 16.92744121,
+      "depth_sigma_m": 2.648108511,
       "depth_profile_source": null,
       "true_elevation_deg": -3.0268547253500837,
       "true_depth_m": 18.0
      },
      {
       "detected": true,
-      "snr_db": 76.89168196,
-      "range_error_m": 1.925121490590584,
+      "snr_db": 76.90146229,
+      "range_error_m": 5.704987390590588,
       "first_range_error_m": -1.366879409409421,
-      "extent_m": 6,
-      "bearing_error_deg": -0.11621722923788269,
+      "extent_m": 64,
+      "bearing_error_deg": -0.44423225923788223,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -9459,30 +9459,30 @@
       "true_bearing_deg": 11.534443019237882,
       "all": [
        [
-        152.2,
-        11.42,
+        155.9,
+        11.09,
         76.9,
         148.9,
-        154.9
+        212.9
        ]
       ],
-      "elevation_deg": -2.777848096,
-      "elevation_sigma_deg": 1.000000072,
+      "elevation_deg": -2.663561829,
+      "elevation_sigma_deg": 1.000000086,
       "elevation_ambiguous": false,
       "candidates": 1,
-      "depth_m": 17.22303825,
-      "depth_sigma_m": 2.647185109,
+      "depth_m": 16.9252206,
+      "depth_sigma_m": 2.648110423,
       "depth_profile_source": null,
       "true_elevation_deg": -3.0268547253500837,
       "true_depth_m": 18.0
      },
      {
       "detected": true,
-      "snr_db": 76.7069801,
-      "range_error_m": 1.9252453905905895,
+      "snr_db": 76.71671079,
+      "range_error_m": 5.7045744905905735,
       "first_range_error_m": -1.366879409409421,
-      "extent_m": 6,
-      "bearing_error_deg": -0.1155526992378828,
+      "extent_m": 64,
+      "bearing_error_deg": -0.4436809292378818,
       "detections": 1,
       "behind_target": 0,
       "elsewhere": 0,
@@ -9494,56 +9494,56 @@
       "true_bearing_deg": 11.534443019237882,
       "all": [
        [
-        152.2,
-        11.42,
+        155.9,
+        11.09,
         76.7,
         148.9,
-        154.9
+        212.9
        ]
       ],
-      "elevation_deg": -2.777552204,
-      "elevation_sigma_deg": 1.000000075,
+      "elevation_deg": -2.664224105,
+      "elevation_sigma_deg": 1.000000091,
       "elevation_ambiguous": false,
       "candidates": 1,
-      "depth_m": 17.22226863,
-      "depth_sigma_m": 2.647187993,
+      "depth_m": 16.92693825,
+      "depth_sigma_m": 2.648101619,
       "depth_profile_source": null,
       "true_elevation_deg": -3.0268547253500837,
       "true_depth_m": 18.0
      }
     ],
     "pings_detected": 4,
-    "median_snr_db": 76.788086595,
+    "median_snr_db": 76.79781261,
     "track_confirmed_at_ping": 3,
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
     "depth_m": {
-     "median": 17.22265344,
+     "median": 16.926079424999998,
      "all": [
-      17.21805779,
-      17.22430064,
-      17.22303825,
-      17.22226863
+      16.92413137,
+      16.92744121,
+      16.9252206,
+      16.92693825
      ],
      "true": 18.0,
      "sigma": [
-      2.647193736,
-      2.647186845,
-      2.647185109,
-      2.647187993
+      2.648103165,
+      2.648108511,
+      2.648110423,
+      2.648101619
      ],
      "source": [
       "None"
      ]
     },
     "elevation_deg": {
-     "median": -2.7777001500000003,
+     "median": -2.663892967,
      "all": [
-      -2.775943185,
-      -2.77832705,
-      -2.777848096,
-      -2.777552204
+      -2.663154057,
+      -2.66440904,
+      -2.663561829,
+      -2.664224105
      ],
      "true": -3.0268547253500837,
      "ambiguous_pings": 0,
@@ -9554,12 +9554,12 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.5753091904998655,
-    "chain_seconds": 6.4
+    "chain_seconds_per_ping": 1.9140233074999742,
+    "chain_seconds": 7.6
    }
   },
   "profile, section": {
-   "simulate_seconds": 4.8,
+   "simulate_seconds": 5.6,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -9746,8 +9746,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.6127786294991893,
-    "chain_seconds": 6.4
+    "chain_seconds_per_ping": 1.9652111780001178,
+    "chain_seconds": 7.9
    },
    "profile given": {
     "pings": 4,
@@ -9935,12 +9935,12 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.6575700974999563,
-    "chain_seconds": 6.7
+    "chain_seconds_per_ping": 1.9365598190001947,
+    "chain_seconds": 7.8
    }
   },
   "+ late tail": {
-   "simulate_seconds": 18.5,
+   "simulate_seconds": 24.3,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -10075,7 +10075,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.23904623,
-      "tracks": 4,
+      "tracks": 3,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10138,7 +10138,7 @@
       "elsewhere": 5,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.64307033,
-      "tracks": 5,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10239,8 +10239,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.0028166755009806,
-    "chain_seconds": 8.1
+    "chain_seconds_per_ping": 2.446219553499759,
+    "chain_seconds": 9.7
    },
    "profile given": {
     "pings": 4,
@@ -10376,7 +10376,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.23904623,
-      "tracks": 4,
+      "tracks": 3,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10439,7 +10439,7 @@
       "elsewhere": 5,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.64307033,
-      "tracks": 5,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10540,12 +10540,12 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.1584449079991828,
-    "chain_seconds": 8.7
+    "chain_seconds_per_ping": 2.5167248899997503,
+    "chain_seconds": 10.0
    }
   },
   "+ own ping, what-if": {
-   "simulate_seconds": 34.6,
+   "simulate_seconds": 42.1,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -10667,7 +10667,7 @@
       "elsewhere": 2,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 18.38029279,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10695,8 +10695,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 2.25,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 2.036945028500668,
-    "chain_seconds": 8.3
+    "chain_seconds_per_ping": 2.3267915930000527,
+    "chain_seconds": 9.5
    },
    "profile given": {
     "pings": 4,
@@ -10819,7 +10819,7 @@
       "elsewhere": 2,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 18.38029279,
-      "tracks": 2,
+      "tracks": 1,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -10847,8 +10847,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 2.25,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 1.9424239649997617,
-    "chain_seconds": 7.8
+    "chain_seconds_per_ping": 2.441452507499889,
+    "chain_seconds": 9.8
    },
    "min_snr_db 15": {
     "pings": 4,
@@ -10964,8 +10964,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 1.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 2.0239549754996915,
-    "chain_seconds": 8.1
+    "chain_seconds_per_ping": 2.3580969869994988,
+    "chain_seconds": 9.6
    },
    "cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -11153,8 +11153,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.588746111000546,
-    "chain_seconds": 6.4
+    "chain_seconds_per_ping": 1.9062340309997126,
+    "chain_seconds": 7.5
    },
    "min_snr_db 15, cfar guard 30 m, train 100 m": {
     "pings": 4,
@@ -11238,8 +11238,8 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 0.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 1.6016168995001863,
-    "chain_seconds": 6.5
+    "chain_seconds_per_ping": 1.9461466620000465,
+    "chain_seconds": 7.8
    },
    "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
@@ -11355,12 +11355,12 @@
     "behind_target_per_ping": 0.0,
     "elsewhere_per_ping": 1.0,
     "tracks_off_target_last_ping": 0,
-    "chain_seconds_per_ping": 1.9555846294997536,
-    "chain_seconds": 7.9
+    "chain_seconds_per_ping": 2.355718422999871,
+    "chain_seconds": 9.5
    }
   },
   "fjord as shipped": {
-   "simulate_seconds": 19.9,
+   "simulate_seconds": 25.9,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -11495,7 +11495,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.26038457,
-      "tracks": 4,
+      "tracks": 3,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -11558,7 +11558,7 @@
       "elsewhere": 5,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.71239832,
-      "tracks": 5,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -11659,8 +11659,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.9791999375001978,
-    "chain_seconds": 7.9
+    "chain_seconds_per_ping": 2.301857764000033,
+    "chain_seconds": 9.1
    },
    "profile given": {
     "pings": 4,
@@ -11796,7 +11796,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.26038457,
-      "tracks": 4,
+      "tracks": 3,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -11859,7 +11859,7 @@
       "elsewhere": 5,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 14.71239832,
-      "tracks": 5,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -11960,10 +11960,682 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 2.0522484285002065,
-    "chain_seconds": 8.2
+    "chain_seconds_per_ping": 2.4225756439996076,
+    "chain_seconds": 9.6
    },
    "min_snr_db 15": {
+    "pings": 4,
+    "per_ping": [
+     {
+      "detected": true,
+      "snr_db": 29.18298389,
+      "range_error_m": 12.625672890590579,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 102,
+      "bearing_error_deg": -0.3960628792378813,
+      "detections": 2,
+      "behind_target": 0,
+      "elsewhere": 1,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 15.12544504,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        235.1,
+        -35.44,
+        15.1,
+        162.9,
+        308.9
+       ],
+       [
+        162.9,
+        11.14,
+        29.2,
+        148.9,
+        250.9
+       ]
+      ],
+      "elevation_deg": -4.455587983,
+      "elevation_sigma_deg": 1.001783292,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.59444648,
+      "depth_sigma_m": 2.688529456,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 29.04134517,
+      "range_error_m": 15.199924690590592,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 104,
+      "bearing_error_deg": -0.3675605292378812,
+      "detections": 1,
+      "behind_target": 0,
+      "elsewhere": 0,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": null,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        165.4,
+        11.17,
+        29.0,
+        148.9,
+        252.9
+       ]
+      ],
+      "elevation_deg": -4.508955123,
+      "elevation_sigma_deg": 1.001884425,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.73100344,
+      "depth_sigma_m": 2.68712122,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 28.96042987,
+      "range_error_m": 13.962665790590592,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 104,
+      "bearing_error_deg": -0.3791323492378815,
+      "detections": 1,
+      "behind_target": 0,
+      "elsewhere": 0,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": null,
+      "tracks": 1,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        164.2,
+        11.16,
+        29.0,
+        148.9,
+        252.9
+       ]
+      ],
+      "elevation_deg": -4.406700617,
+      "elevation_sigma_deg": 1.00182181,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.46917762,
+      "depth_sigma_m": 2.690154606,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 29.06560938,
+      "range_error_m": 14.11797879059057,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 104,
+      "bearing_error_deg": -0.41806082923788246,
+      "detections": 1,
+      "behind_target": 0,
+      "elsewhere": 0,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": null,
+      "tracks": 1,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        164.4,
+        11.12,
+        29.1,
+        148.9,
+        252.9
+       ]
+      ],
+      "elevation_deg": -4.454644543,
+      "elevation_sigma_deg": 1.001817894,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.59202907,
+      "depth_sigma_m": 2.688647497,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     }
+    ],
+    "pings_detected": 4,
+    "median_snr_db": 29.053477275,
+    "track_confirmed_at_ping": 3,
+    "behind_target_per_ping": 0.0,
+    "elsewhere_per_ping": 0.25,
+    "tracks_off_target_last_ping": 0,
+    "depth_m": {
+     "median": 21.593237775,
+     "all": [
+      21.59444648,
+      21.73100344,
+      21.46917762,
+      21.59202907
+     ],
+     "true": 18.0,
+     "sigma": [
+      2.688529456,
+      2.68712122,
+      2.690154606,
+      2.688647497
+     ],
+     "source": [
+      "None"
+     ]
+    },
+    "elevation_deg": {
+     "median": -4.455116263,
+     "all": [
+      -4.455587983,
+      -4.508955123,
+      -4.406700617,
+      -4.454644543
+     ],
+     "true": -3.0268547253500837,
+     "ambiguous_pings": 0,
+     "candidates": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "chain_seconds_per_ping": 2.14348953300032,
+    "chain_seconds": 8.6
+   },
+   "cfar guard 30 m, train 100 m": {
+    "pings": 4,
+    "per_ping": [
+     {
+      "detected": true,
+      "snr_db": 37.07547917,
+      "range_error_m": 8.238246690590586,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 84,
+      "bearing_error_deg": -0.3877764092378815,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.24111822,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        188.6,
+        -58.71,
+        19.2,
+        160.9,
+        226.9
+       ],
+       [
+        158.5,
+        11.15,
+        37.1,
+        148.9,
+        232.9
+       ],
+       [
+        192.3,
+        41.59,
+        18.9,
+        158.9,
+        240.9
+       ]
+      ],
+      "elevation_deg": -4.316812405,
+      "elevation_sigma_deg": 1.000331506,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.23835489,
+      "depth_sigma_m": 2.689106847,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.05825322,
+      "range_error_m": 9.331674490590586,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 92,
+      "bearing_error_deg": -0.3117105092378818,
+      "detections": 2,
+      "behind_target": 0,
+      "elsewhere": 1,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.93210904,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        159.6,
+        11.22,
+        36.1,
+        148.9,
+        240.9
+       ],
+       [
+        192.0,
+        42.45,
+        19.9,
+        158.9,
+        244.9
+       ]
+      ],
+      "elevation_deg": -4.357752851,
+      "elevation_sigma_deg": 1.000384991,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.3436009,
+      "depth_sigma_m": 2.687988236,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.41232854,
+      "range_error_m": 9.256324290590584,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 88,
+      "bearing_error_deg": -0.3513995392378817,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.42385747,
+      "tracks": 2,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        159.5,
+        11.18,
+        36.4,
+        148.9,
+        236.9
+       ],
+       [
+        190.1,
+        49.88,
+        19.4,
+        158.9,
+        224.9
+       ],
+       [
+        196.7,
+        67.93,
+        16.0,
+        194.9,
+        200.9
+       ]
+      ],
+      "elevation_deg": -4.474588778,
+      "elevation_sigma_deg": 1.000326534,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.64306527,
+      "depth_sigma_m": 2.684186233,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.32399446,
+      "range_error_m": 9.72811529059058,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 82,
+      "bearing_error_deg": -0.4048009492378828,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 20.66691473,
+      "tracks": 2,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        160.0,
+        11.13,
+        36.3,
+        148.9,
+        230.9
+       ],
+       [
+        190.2,
+        49.17,
+        20.7,
+        158.9,
+        234.9
+       ],
+       [
+        195.4,
+        60.06,
+        16.1,
+        192.9,
+        198.9
+       ]
+      ],
+      "elevation_deg": -4.319550261,
+      "elevation_sigma_deg": 1.000375792,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.24537427,
+      "depth_sigma_m": 2.689131128,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     }
+    ],
+    "pings_detected": 4,
+    "median_snr_db": 36.3681615,
+    "track_confirmed_at_ping": 3,
+    "behind_target_per_ping": 0.0,
+    "elsewhere_per_ping": 1.75,
+    "tracks_off_target_last_ping": 0,
+    "depth_m": {
+     "median": 21.294487585,
+     "all": [
+      21.23835489,
+      21.3436009,
+      21.64306527,
+      21.24537427
+     ],
+     "true": 18.0,
+     "sigma": [
+      2.689106847,
+      2.687988236,
+      2.684186233,
+      2.689131128
+     ],
+     "source": [
+      "None"
+     ]
+    },
+    "elevation_deg": {
+     "median": -4.338651556,
+     "all": [
+      -4.316812405,
+      -4.357752851,
+      -4.474588778,
+      -4.319550261
+     ],
+     "true": -3.0268547253500837,
+     "ambiguous_pings": 0,
+     "candidates": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "chain_seconds_per_ping": 2.099658972999805,
+    "chain_seconds": 8.4
+   },
+   "min_snr_db 15, cfar guard 30 m, train 100 m": {
+    "pings": 4,
+    "per_ping": [
+     {
+      "detected": true,
+      "snr_db": 37.07547917,
+      "range_error_m": 8.238246690590586,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 84,
+      "bearing_error_deg": -0.3877764092378815,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.24111822,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        188.6,
+        -58.71,
+        19.2,
+        160.9,
+        226.9
+       ],
+       [
+        158.5,
+        11.15,
+        37.1,
+        148.9,
+        232.9
+       ],
+       [
+        192.3,
+        41.59,
+        18.9,
+        158.9,
+        240.9
+       ]
+      ],
+      "elevation_deg": -4.316812405,
+      "elevation_sigma_deg": 1.000331506,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.23835489,
+      "depth_sigma_m": 2.689106847,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.05825322,
+      "range_error_m": 9.331674490590586,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 92,
+      "bearing_error_deg": -0.3117105092378818,
+      "detections": 2,
+      "behind_target": 0,
+      "elsewhere": 1,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.93210904,
+      "tracks": 0,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        159.6,
+        11.22,
+        36.1,
+        148.9,
+        240.9
+       ],
+       [
+        192.0,
+        42.45,
+        19.9,
+        158.9,
+        244.9
+       ]
+      ],
+      "elevation_deg": -4.357752851,
+      "elevation_sigma_deg": 1.000384991,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.3436009,
+      "depth_sigma_m": 2.687988236,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.41232854,
+      "range_error_m": 9.256324290590584,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 88,
+      "bearing_error_deg": -0.3513995392378817,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 19.42385747,
+      "tracks": 2,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        159.5,
+        11.18,
+        36.4,
+        148.9,
+        236.9
+       ],
+       [
+        190.1,
+        49.88,
+        19.4,
+        158.9,
+        224.9
+       ],
+       [
+        196.7,
+        67.93,
+        16.0,
+        194.9,
+        200.9
+       ]
+      ],
+      "elevation_deg": -4.474588778,
+      "elevation_sigma_deg": 1.000326534,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.64306527,
+      "depth_sigma_m": 2.684186233,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     },
+     {
+      "detected": true,
+      "snr_db": 36.32399446,
+      "range_error_m": 9.72811529059058,
+      "first_range_error_m": -1.366879409409421,
+      "extent_m": 82,
+      "bearing_error_deg": -0.4048009492378828,
+      "detections": 3,
+      "behind_target": 0,
+      "elsewhere": 2,
+      "behind_max_snr_db": null,
+      "elsewhere_max_snr_db": 20.66691473,
+      "tracks": 2,
+      "tracks_off_target": 0,
+      "true_range_m": 150.24187940940942,
+      "true_bearing_deg": 11.534443019237882,
+      "all": [
+       [
+        160.0,
+        11.13,
+        36.3,
+        148.9,
+        230.9
+       ],
+       [
+        190.2,
+        49.17,
+        20.7,
+        158.9,
+        234.9
+       ],
+       [
+        195.4,
+        60.06,
+        16.1,
+        192.9,
+        198.9
+       ]
+      ],
+      "elevation_deg": -4.319550261,
+      "elevation_sigma_deg": 1.000375792,
+      "elevation_ambiguous": false,
+      "candidates": 1,
+      "depth_m": 21.24537427,
+      "depth_sigma_m": 2.689131128,
+      "depth_profile_source": null,
+      "true_elevation_deg": -3.0268547253500837,
+      "true_depth_m": 18.0
+     }
+    ],
+    "pings_detected": 4,
+    "median_snr_db": 36.3681615,
+    "track_confirmed_at_ping": 3,
+    "behind_target_per_ping": 0.0,
+    "elsewhere_per_ping": 1.75,
+    "tracks_off_target_last_ping": 0,
+    "depth_m": {
+     "median": 21.294487585,
+     "all": [
+      21.23835489,
+      21.3436009,
+      21.64306527,
+      21.24537427
+     ],
+     "true": 18.0,
+     "sigma": [
+      2.689106847,
+      2.687988236,
+      2.684186233,
+      2.689131128
+     ],
+     "source": [
+      "None"
+     ]
+    },
+    "elevation_deg": {
+     "median": -4.338651556,
+     "all": [
+      -4.316812405,
+      -4.357752851,
+      -4.474588778,
+      -4.319550261
+     ],
+     "true": -3.0268547253500837,
+     "ambiguous_pings": 0,
+     "candidates": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "chain_seconds_per_ping": 2.1102640764997886,
+    "chain_seconds": 8.5
+   },
+   "min_snr_db 15, confirm on 4 of 4": {
     "pings": 4,
     "per_ping": [
      {
@@ -12156,684 +12828,12 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.7765718219998234,
-    "chain_seconds": 7.3
-   },
-   "cfar guard 30 m, train 100 m": {
-    "pings": 4,
-    "per_ping": [
-     {
-      "detected": true,
-      "snr_db": 37.07547917,
-      "range_error_m": 8.238246690590586,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 84,
-      "bearing_error_deg": -0.3877764092378815,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.24111822,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        188.6,
-        -58.71,
-        19.2,
-        160.9,
-        226.9
-       ],
-       [
-        158.5,
-        11.15,
-        37.1,
-        148.9,
-        232.9
-       ],
-       [
-        192.3,
-        41.59,
-        18.9,
-        158.9,
-        240.9
-       ]
-      ],
-      "elevation_deg": -4.316812405,
-      "elevation_sigma_deg": 1.000331506,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.23835489,
-      "depth_sigma_m": 2.689106847,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.05825322,
-      "range_error_m": 9.331674490590586,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 92,
-      "bearing_error_deg": -0.3117105092378818,
-      "detections": 2,
-      "behind_target": 0,
-      "elsewhere": 1,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.93210904,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        159.6,
-        11.22,
-        36.1,
-        148.9,
-        240.9
-       ],
-       [
-        192.0,
-        42.45,
-        19.9,
-        158.9,
-        244.9
-       ]
-      ],
-      "elevation_deg": -4.357752851,
-      "elevation_sigma_deg": 1.000384991,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.3436009,
-      "depth_sigma_m": 2.687988236,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.41232854,
-      "range_error_m": 9.256324290590584,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 88,
-      "bearing_error_deg": -0.3513995392378817,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.42385747,
-      "tracks": 1,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        159.5,
-        11.18,
-        36.4,
-        148.9,
-        236.9
-       ],
-       [
-        190.1,
-        49.88,
-        19.4,
-        158.9,
-        224.9
-       ],
-       [
-        196.7,
-        67.93,
-        16.0,
-        194.9,
-        200.9
-       ]
-      ],
-      "elevation_deg": -4.474588778,
-      "elevation_sigma_deg": 1.000326534,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.64306527,
-      "depth_sigma_m": 2.684186233,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.32399446,
-      "range_error_m": 9.72811529059058,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 82,
-      "bearing_error_deg": -0.4048009492378828,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 20.66691473,
-      "tracks": 2,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        160.0,
-        11.13,
-        36.3,
-        148.9,
-        230.9
-       ],
-       [
-        190.2,
-        49.17,
-        20.7,
-        158.9,
-        234.9
-       ],
-       [
-        195.4,
-        60.06,
-        16.1,
-        192.9,
-        198.9
-       ]
-      ],
-      "elevation_deg": -4.319550261,
-      "elevation_sigma_deg": 1.000375792,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.24537427,
-      "depth_sigma_m": 2.689131128,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     }
-    ],
-    "pings_detected": 4,
-    "median_snr_db": 36.3681615,
-    "track_confirmed_at_ping": 3,
-    "behind_target_per_ping": 0.0,
-    "elsewhere_per_ping": 1.75,
-    "tracks_off_target_last_ping": 0,
-    "depth_m": {
-     "median": 21.294487585,
-     "all": [
-      21.23835489,
-      21.3436009,
-      21.64306527,
-      21.24537427
-     ],
-     "true": 18.0,
-     "sigma": [
-      2.689106847,
-      2.687988236,
-      2.684186233,
-      2.689131128
-     ],
-     "source": [
-      "None"
-     ]
-    },
-    "elevation_deg": {
-     "median": -4.338651556,
-     "all": [
-      -4.316812405,
-      -4.357752851,
-      -4.474588778,
-      -4.319550261
-     ],
-     "true": -3.0268547253500837,
-     "ambiguous_pings": 0,
-     "candidates": [
-      1,
-      1,
-      1,
-      1
-     ]
-    },
-    "chain_seconds_per_ping": 1.8436529124992376,
-    "chain_seconds": 7.5
-   },
-   "min_snr_db 15, cfar guard 30 m, train 100 m": {
-    "pings": 4,
-    "per_ping": [
-     {
-      "detected": true,
-      "snr_db": 37.07547917,
-      "range_error_m": 8.238246690590586,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 84,
-      "bearing_error_deg": -0.3877764092378815,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.24111822,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        188.6,
-        -58.71,
-        19.2,
-        160.9,
-        226.9
-       ],
-       [
-        158.5,
-        11.15,
-        37.1,
-        148.9,
-        232.9
-       ],
-       [
-        192.3,
-        41.59,
-        18.9,
-        158.9,
-        240.9
-       ]
-      ],
-      "elevation_deg": -4.316812405,
-      "elevation_sigma_deg": 1.000331506,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.23835489,
-      "depth_sigma_m": 2.689106847,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.05825322,
-      "range_error_m": 9.331674490590586,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 92,
-      "bearing_error_deg": -0.3117105092378818,
-      "detections": 2,
-      "behind_target": 0,
-      "elsewhere": 1,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.93210904,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        159.6,
-        11.22,
-        36.1,
-        148.9,
-        240.9
-       ],
-       [
-        192.0,
-        42.45,
-        19.9,
-        158.9,
-        244.9
-       ]
-      ],
-      "elevation_deg": -4.357752851,
-      "elevation_sigma_deg": 1.000384991,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.3436009,
-      "depth_sigma_m": 2.687988236,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.41232854,
-      "range_error_m": 9.256324290590584,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 88,
-      "bearing_error_deg": -0.3513995392378817,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 19.42385747,
-      "tracks": 1,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        159.5,
-        11.18,
-        36.4,
-        148.9,
-        236.9
-       ],
-       [
-        190.1,
-        49.88,
-        19.4,
-        158.9,
-        224.9
-       ],
-       [
-        196.7,
-        67.93,
-        16.0,
-        194.9,
-        200.9
-       ]
-      ],
-      "elevation_deg": -4.474588778,
-      "elevation_sigma_deg": 1.000326534,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.64306527,
-      "depth_sigma_m": 2.684186233,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 36.32399446,
-      "range_error_m": 9.72811529059058,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 82,
-      "bearing_error_deg": -0.4048009492378828,
-      "detections": 3,
-      "behind_target": 0,
-      "elsewhere": 2,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 20.66691473,
-      "tracks": 2,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        160.0,
-        11.13,
-        36.3,
-        148.9,
-        230.9
-       ],
-       [
-        190.2,
-        49.17,
-        20.7,
-        158.9,
-        234.9
-       ],
-       [
-        195.4,
-        60.06,
-        16.1,
-        192.9,
-        198.9
-       ]
-      ],
-      "elevation_deg": -4.319550261,
-      "elevation_sigma_deg": 1.000375792,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.24537427,
-      "depth_sigma_m": 2.689131128,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     }
-    ],
-    "pings_detected": 4,
-    "median_snr_db": 36.3681615,
-    "track_confirmed_at_ping": 3,
-    "behind_target_per_ping": 0.0,
-    "elsewhere_per_ping": 1.75,
-    "tracks_off_target_last_ping": 0,
-    "depth_m": {
-     "median": 21.294487585,
-     "all": [
-      21.23835489,
-      21.3436009,
-      21.64306527,
-      21.24537427
-     ],
-     "true": 18.0,
-     "sigma": [
-      2.689106847,
-      2.687988236,
-      2.684186233,
-      2.689131128
-     ],
-     "source": [
-      "None"
-     ]
-    },
-    "elevation_deg": {
-     "median": -4.338651556,
-     "all": [
-      -4.316812405,
-      -4.357752851,
-      -4.474588778,
-      -4.319550261
-     ],
-     "true": -3.0268547253500837,
-     "ambiguous_pings": 0,
-     "candidates": [
-      1,
-      1,
-      1,
-      1
-     ]
-    },
-    "chain_seconds_per_ping": 1.8084103330002108,
-    "chain_seconds": 7.2
-   },
-   "min_snr_db 15, confirm on 4 of 4": {
-    "pings": 4,
-    "per_ping": [
-     {
-      "detected": true,
-      "snr_db": 29.18298389,
-      "range_error_m": 12.625672890590579,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 102,
-      "bearing_error_deg": -0.3960628792378813,
-      "detections": 2,
-      "behind_target": 0,
-      "elsewhere": 1,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": 15.12544504,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        235.1,
-        -35.44,
-        15.1,
-        162.9,
-        308.9
-       ],
-       [
-        162.9,
-        11.14,
-        29.2,
-        148.9,
-        250.9
-       ]
-      ],
-      "elevation_deg": -4.455587983,
-      "elevation_sigma_deg": 1.001783292,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.59444648,
-      "depth_sigma_m": 2.688529456,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 29.04134517,
-      "range_error_m": 15.199924690590592,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 104,
-      "bearing_error_deg": -0.3675605292378812,
-      "detections": 1,
-      "behind_target": 0,
-      "elsewhere": 0,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": null,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        165.4,
-        11.17,
-        29.0,
-        148.9,
-        252.9
-       ]
-      ],
-      "elevation_deg": -4.508955123,
-      "elevation_sigma_deg": 1.001884425,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.73100344,
-      "depth_sigma_m": 2.68712122,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 28.96042987,
-      "range_error_m": 13.962665790590592,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 104,
-      "bearing_error_deg": -0.3791323492378815,
-      "detections": 1,
-      "behind_target": 0,
-      "elsewhere": 0,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": null,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        164.2,
-        11.16,
-        29.0,
-        148.9,
-        252.9
-       ]
-      ],
-      "elevation_deg": -4.406700617,
-      "elevation_sigma_deg": 1.00182181,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.46917762,
-      "depth_sigma_m": 2.690154606,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     },
-     {
-      "detected": true,
-      "snr_db": 29.06560938,
-      "range_error_m": 14.11797879059057,
-      "first_range_error_m": -1.366879409409421,
-      "extent_m": 104,
-      "bearing_error_deg": -0.41806082923788246,
-      "detections": 1,
-      "behind_target": 0,
-      "elsewhere": 0,
-      "behind_max_snr_db": null,
-      "elsewhere_max_snr_db": null,
-      "tracks": 0,
-      "tracks_off_target": 0,
-      "true_range_m": 150.24187940940942,
-      "true_bearing_deg": 11.534443019237882,
-      "all": [
-       [
-        164.4,
-        11.12,
-        29.1,
-        148.9,
-        252.9
-       ]
-      ],
-      "elevation_deg": -4.454644543,
-      "elevation_sigma_deg": 1.001817894,
-      "elevation_ambiguous": false,
-      "candidates": 1,
-      "depth_m": 21.59202907,
-      "depth_sigma_m": 2.688647497,
-      "depth_profile_source": null,
-      "true_elevation_deg": -3.0268547253500837,
-      "true_depth_m": 18.0
-     }
-    ],
-    "pings_detected": 4,
-    "median_snr_db": 29.053477275,
-    "track_confirmed_at_ping": null,
-    "behind_target_per_ping": 0.0,
-    "elsewhere_per_ping": 0.25,
-    "tracks_off_target_last_ping": 0,
-    "depth_m": {
-     "median": 21.593237775,
-     "all": [
-      21.59444648,
-      21.73100344,
-      21.46917762,
-      21.59202907
-     ],
-     "true": 18.0,
-     "sigma": [
-      2.688529456,
-      2.68712122,
-      2.690154606,
-      2.688647497
-     ],
-     "source": [
-      "None"
-     ]
-    },
-    "elevation_deg": {
-     "median": -4.455116263,
-     "all": [
-      -4.455587983,
-      -4.508955123,
-      -4.406700617,
-      -4.454644543
-     ],
-     "true": -3.0268547253500837,
-     "ambiguous_pings": 0,
-     "candidates": [
-      1,
-      1,
-      1,
-      1
-     ]
-    },
-    "chain_seconds_per_ping": 1.875510777999807,
-    "chain_seconds": 7.5
+    "chain_seconds_per_ping": 2.1375487229997816,
+    "chain_seconds": 8.6
    }
   },
   "+ machinery noise": {
-   "simulate_seconds": 18.3,
+   "simulate_seconds": 24.0,
    "as deployed": {
     "pings": 4,
     "per_ping": [
@@ -13031,7 +13031,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 13.86557333,
-      "tracks": 3,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -13125,8 +13125,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.952331428999969,
-    "chain_seconds": 7.8
+    "chain_seconds_per_ping": 2.2980969475001984,
+    "chain_seconds": 9.1
    },
    "profile given": {
     "pings": 4,
@@ -13325,7 +13325,7 @@
       "elsewhere": 4,
       "behind_max_snr_db": null,
       "elsewhere_max_snr_db": 13.86557333,
-      "tracks": 3,
+      "tracks": 4,
       "tracks_off_target": 0,
       "true_range_m": 150.24187940940942,
       "true_bearing_deg": 11.534443019237882,
@@ -13419,8 +13419,8 @@
       1
      ]
     },
-    "chain_seconds_per_ping": 1.9499033319989394,
-    "chain_seconds": 7.8
+    "chain_seconds_per_ping": 2.274991989499995,
+    "chain_seconds": 9.1
    }
   }
  }

@@ -2707,7 +2707,9 @@ and three rows.
 
 In the own-ping what-if neither holds the target everywhere, and the short window finds a
 10 dB target that `min_snr_db: 15` does not (three rows at 150 m: 4/4 at 10.6 dB; one row
-at 1 km: 3/4 at 13.7 dB). With three rows `min_snr_db: 15` confirms the track at ping 4.
+at 1 km: 3/4 at 13.7 dB). With three rows `min_snr_db: 15` confirmed the track at ping 4;
+since the tracker change (D-141) it confirms at ping 3, as the other settings do
+(`docs/figures/fjord_rehearsal.md` regenerated at `e10b17f`).
 
 Fjord table regenerated (`docs/figures/fjord_rehearsal.md`); the fjord rows are unchanged,
 the open-water rows moved with D-137: one row 55.5 → 58.0 dB at 500 m, 40.9 → 47.4 at
@@ -2949,6 +2951,13 @@ output compared number by number with the file it replaced.
 - `docs/figures/ssp_range_study.*`, rerun from an empty results file (the tool reuses stored
   cases): only the depths with the local profile given moved, by 0.2 to 0.6 m (arc rays,
   D-139); detections, SNRs, elevations and the as-deployed depths are unchanged.
+- `docs/figures/fjord_rehearsal.*`, rerun from an empty results file with the one-row ranges
+  of the earlier file (`--ranges 300,1000,2000`): the fjord rows unchanged but for track
+  confirmation (three rows, `min_snr_db: 15`: ping 3, was 4; D-141) and one track off the
+  target in the one-row late tail at 1 km (none before). Open water: `range_m` offsets
+  larger with the whole bounce series (+4.6 to +11.2 m at 2 km for one row; first arrivals
+  unchanged), the two-row trial one sea-bed elevation, 36 m for 60 m (was candidates; D-142),
+  the three-row trial 16.9 m (17.2).
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one

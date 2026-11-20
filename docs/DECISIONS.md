@@ -2200,6 +2200,10 @@ on 3 of 4 pings), and three rows confirm one ping later. The short window stays 
 through `operation.chain`. `elevation.ssp` from a cast is site data: a warning asks for it,
 nothing is generated.
 
+Note after D-141: with the tracker's most-probable-first association the three-row track
+confirms at ping 3 under `min_snr_db: 15` as under the other settings; the cost of one
+ping stated above no longer holds (`docs/figures/fjord_rehearsal.md` at `e10b17f`).
+
 ### D-139 `elevation.ray_method: arcs` is the default (owner approved; supersedes the last sentence of D-112)
 
 Both engines trace the stacked rows' depth with the chain's one ray calculation; `steps`

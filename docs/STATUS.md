@@ -247,9 +247,8 @@ Grouped; within a group the most consequential first.
     ASIAEX ping-to-ping variation 1.88 to 2.85 dB at the surface). The tool is
     deterministic (two runs on one tree agree in every number but its run time), so the
     cause is a code change in the 40 or so commits between; the time-spreading commit
-    `f2bf420` is ruled out (opt-in, bit-identical without its keys). Not bisected. `docs/figures/fjord_rehearsal.*` is stale again
-    since D-142: its open-water rows run the shallow trials, which now keep their whole
-    bounce series. `docs/figures/gallery.json` and its figures (item 45), `DESIGN.md` and
+    `f2bf420` is ruled out (opt-in, bit-identical without its keys). Not bisected. `docs/figures/fjord_rehearsal.*` is regenerated
+    again (`e10b17f`, from an empty results file). `docs/figures/gallery.json` and its figures (item 45), `DESIGN.md` and
     `docs/design/derived.json` are current (the last two regenerate byte-identical after
     D-142 as after D-137 to D-140; the 12 km margins did not move).
 43. **The gallery regenerated after these changes (full-size CUDA run on an NVIDIA L4,
