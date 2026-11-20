@@ -11,13 +11,16 @@ C = 1500.0
 
 
 def test_chapman_harris_values():
+    # The formula is unconfirmed (docs/REFERENCES.md Sec. 4): these check the code against
+    # its own docstring, not against the paper.
     # 30 degrees: the angle term vanishes and S = -42.4 log10(beta) + 2.6.
     v_knots, f = 20.0, 1000.0
     beta = 158.0 * (v_knots * f ** (1 / 3)) ** -0.58
     s30 = acoustics.chapman_harris_db(np.radians(30.0), v_knots / acoustics.KNOTS_PER_MS, f)
     assert s30 == pytest.approx(-42.4 * np.log10(beta) + 2.6, abs=1e-9)
     assert s30 == pytest.approx(-34.0, abs=0.3)
-    # The same formula as published with the wind in m/s uses 107 in place of 158.
+    # The same formula with the wind in m/s uses 107 in place of 158 (the m/s form is
+    # unconfirmed as well, docs/REFERENCES.md Sec. 4).
     for wind in (3.0, 8.0, 15.0):
         for graze in (5.0, 20.0):
             beta_ms = 107.0 * (wind * 3000.0 ** (1 / 3)) ** -0.58

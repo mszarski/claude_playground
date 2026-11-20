@@ -194,6 +194,9 @@ KNOTS_PER_MS = 1.943844
 def chapman_harris_db(grazing, wind_speed: float, frequency: float):
     """Sea-surface backscattering strength in dB (Chapman and Harris, JASA 34, 1962).
 
+    Unconfirmed (docs/REFERENCES.md Sec. 4 and Sec. 10): the paper was not opened, and neither
+    the formula below nor its stated range has been checked against any opened print.
+
     S = 3.3 beta log10(theta / 30) - 42.4 log10(beta) + 2.6,
     beta = 158 (v f^(1/3))^(-0.58), theta the grazing angle in degrees, v the wind speed in
     knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here. The fit was made
@@ -215,7 +218,11 @@ def rms_wave_height(wind_speed: float) -> float:
 
 def mean_square_slope(wind_speed: float) -> float:
     """Mean-square slope of the wind-roughened sea surface (both axes together), Cox and Munk
-    (1954), clean surface: 0.003 + 0.00512 U, U in m/s at 12.5 m (taken as the 10 m wind)."""
+    (1954), clean surface: 0.003 + 0.00512 U, U in m/s at 12.5 m (taken as the 10 m wind).
+
+    Unconfirmed (docs/REFERENCES.md Sec. 4): this total regression was not found printed in
+    an opened document; the opened print of the two components sums to 0.003 + 0.00508 U
+    (`mean_square_slope_components`), 0.8 % lower."""
     return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
 
 
