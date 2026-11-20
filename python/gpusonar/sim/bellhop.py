@@ -167,7 +167,8 @@ class OceanEnvironment:
 
 def munk_profile(depth: float = 5000.0, n: int = 51, axis_depth: float = 1300.0,
                  axis_speed: float = NOMINAL_SOUND_SPEED, epsilon: float = 0.00737):
-    """The canonical Munk deep-water sound-speed profile."""
+    """The canonical Munk deep-water sound-speed profile (constants as in the Acoustics Toolbox's
+    munk.f90; Munk 1974 not opened: docs/REFERENCES.md Sec. 12.4)."""
     z = np.linspace(0.0, depth, n)
     zt = 2.0 * (z - axis_depth) / 1300.0
     return z, axis_speed * (1.0 + epsilon * (zt - 1.0 + np.exp(-zt)))

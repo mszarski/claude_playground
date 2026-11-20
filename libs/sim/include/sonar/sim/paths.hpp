@@ -134,6 +134,7 @@ double image_series_truncation(const ImageSourceConfig& config, double source_z,
 /// Plane-wave pressure reflection coefficient of a fluid half-space at a grazing angle
 /// (radians): R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)),
 /// m = rho_b / rho_w, n = c_w / c_b, attenuation as an imaginary part of c_b.
+/// Sources: docs/REFERENCES.md Sec. 12.4 (the dB/wavelength conversion is ours).
 std::complex<double> rayleigh_reflection(double grazing, double c_water, const FluidBottom& bottom);
 
 /// Least-time paths from a source in the water to points below a flat interface (Snell).

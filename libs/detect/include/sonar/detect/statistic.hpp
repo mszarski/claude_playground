@@ -15,7 +15,7 @@
 //
 // The tail of X is computed exactly for the Erlang case and by the saddlepoint (Lugannani-Rice)
 // formula otherwise; tests/cpp/test_statistic.cpp and tests/python/test_detector.py hold it to exact
-// forms and to Monte Carlo.
+// forms and to Monte Carlo. Sources: docs/REFERENCES.md Sec. 12.1 (Lugannani-Rice).
 #pragma once
 
 #include <cstdint>

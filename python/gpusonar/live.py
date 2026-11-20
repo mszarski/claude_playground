@@ -267,7 +267,7 @@ def detection_probability(snr_db, record, cfg: dict | None = None, rows: int | N
     threshold (multiscale: per test, with the training correction; mean and peak: the cell-averaging factor at
     `cfar.pfa`, as the chain applies it) and with `min_snr_db`. multiscale: the better of its sample test and its
     cell-mean test at each place (their union is slightly higher). tests/python/test_detector.py holds this to the
-    chain on simulated pings."""
+    chain on simulated pings. Sources: docs/REFERENCES.md Sec. 12.1."""
     from scipy import stats
     cfg = _merge(DEFAULTS, cfg)
     statistic = cfg["cell_statistic"]

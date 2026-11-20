@@ -19,6 +19,7 @@
 // Bayesian learning for DOA", IEEE Signal Process. Lett. 23 (2016); multi-frequency form
 // with a common gamma as in S. Nannuru et al., "Sparse Bayesian learning with
 // multiple dictionaries", Signal Processing 159 (2019). Implemented from the papers.
+// What was opened and checked: docs/REFERENCES.md Sec. 12.2 (the arXiv versions).
 #pragma once
 
 #include <complex>

@@ -156,7 +156,8 @@ def mvdr_beamform(record, bearings_rad, n_subbands: int = 32, loading: float = 3
     as interference and cancels the echo itself.
 
     `loading` is diagonal loading as a fraction of the mean element power in the training
-    data: it limits noise gain and makes the weights tolerant of calibration errors.
+    data: it limits noise gain and makes the weights tolerant of calibration errors. The default
+    3e-2 is our choice (docs/REFERENCES.md Sec. 12.2, which also cites MVDR and loading).
 
     The output is scaled by the number of elements so that a target reads the same as in
     the conventional sum beamformer and in backprojection (which have a gain of N).
