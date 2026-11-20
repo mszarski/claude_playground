@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-136); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-145); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -589,6 +589,10 @@ Grouped; within a group the most consequential first.
     `projector_selection.md`, `SCENARIOS.md` and `README.md` were updated from the
     regenerated `DESIGN.md` and `projector_requirements.json`.
 
+API audit, phase 1 (2026-11-20, `API_AUDIT.md`): the comment, citation, stale-document and
+missing-document items (C, D, E, F) and the live-chain items A1 to A6 and B4 are merged
+(D-145); no published number moved. The simulation, tools and dead-code items are next.
+
 ## Open questions for the project owner
 
 Decisions already taken are in `DECISIONS.md` and are not repeated here.
@@ -680,6 +684,14 @@ the arrival-time solve runs (4, 4) passes (D-83).
     looks like DGX Spark or IGX only.
 26. **The Pursuit and ASIAEX parameters** are ours (D-78).
 27. `band_taper` stays opt-in (D-71); time-spread coherence cells at an edge (D-76).
+
+**From the API audit (`API_AUDIT.md`)**
+
+28. **`sonar_live`'s default backend.** The program defaults to `host`; the Python chain
+    and the deployment files default to `auto` (the device when there is one). Should the
+    program's default become `auto` too (D-145)?
+29. **A chain file that asks for `cuda` on a machine without a device** falls back to the
+    host with a warning in the log only. Keep that, or stop with an error?
 
 ## What is next
 

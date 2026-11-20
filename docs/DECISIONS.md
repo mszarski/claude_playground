@@ -2323,3 +2323,20 @@ in every level with echo or reverberation in it, as that decision intended. The 
 name `doppler_spectrum: lorentzian` (SST's AR(1)), as they name the decay rule; the two
 runs that compare the spectra still name their own. With it every ASIAEX value equals the
 `5956b10` run. The suite's default stays Gaussian (D-84).
+
+### D-145 `sonar_live` refuses an option it cannot read
+
+The program's key=value options (`--options`, `options.cpp`) were read with `std::atof`
+and `std::atoi`, so a value the reader did not understand became 0 without a word: the
+one-row builds' `decimate={}` switched decimation off while the chain file asked for it
+(API audit A1), and a list or a `True` in a profile key did the same (A2). The readers in
+`libs/live/include/sonar/live/option_value.hpp` now throw `std::invalid_argument` naming the
+key. Booleans accept `0`, `1`, `true`, `false`, `True` and `False`; `window` accepts `hann`
+and `rect`; `look`, `backend` (`auto|host|cuda`), `blanking_mode`, `beamformer`, `doa` and
+`passive_method` are checked against their choices in both engines (`live.CHOICES`). The
+Python side writes the program's options from one function, `live.program_options`, used
+by `tools/sonar_live.py` and `tools/build_from_spec.py`, and a test round-trips every key
+through both routes. An options file written before this with `window=none` or a profile
+boolean the reader did not know now stops the program instead of running a different chain.
+The program's own default backend stays `host`; whether it should become `auto`, as the
+Python chain's is, is an open owner question (STATUS).

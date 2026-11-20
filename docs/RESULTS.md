@@ -4,7 +4,8 @@ Measured by this repository's tests and tools. Accuracy numbers were produced on
 **CPU (host) backend**; the tests of the earlier sections also passed on the CUDA backend
 (NVIDIA T4), and the sections from "Results since decision D-82" on say for each table
 where it ran. Speed numbers
-are in "Performance" and say which machine each came from.
+are in "Performance" and say which machine each came from; the command that wrote each file
+in `docs/benchmarks/` is in `docs/benchmarks/README.md`.
 Each row names what it is compared with. Where the brief asks for a comparison that
 could not be made, that is stated.
 
@@ -1692,7 +1693,8 @@ trial-site profile or seabed in these tables is a measurement.
 
 ## Every stage with a CUDA backend on an L4 (`tools/gpu_benchmark_all.py`)
 
-Source: `docs/benchmarks/gpu_benchmark_all_l4.md` (first run, tree `15f1121`) and
+Source: `docs/benchmarks/gpu_benchmark_all_l4_15f1121.md` (first run, tree `15f1121`; `gpu_benchmark_all_l4.md` now holds
+the `e10b17f` rerun) and
 `docs/benchmarks/gpu_benchmark_all_l4_batched.md` (after the batched reverberation and
 beamformer kernels, tree `3383429`; its header shows an empty commit field because the
 job ran from a tarball). NVIDIA L4 through Hugging Face Jobs; host is an AMD EPYC 7R13

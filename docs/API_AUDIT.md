@@ -95,14 +95,14 @@ only "confirmed" where the source was actually opened.
 | D2 (R6) **checked** | `PHYSICS_NOTES.md:1580` | "the default stays the rule": `facet` is the default since D-85. |
 | D3 (R7) | `PHYSICS_NOTES.md:2255` | "rule_of_thumb … the suite's defaults": the defaults before D-85. |
 | D4 (R8) | `PHYSICS_NOTES.md:846` | −27 dB Lambert "classic default": the code uses −29 dB (D-89). |
-| D5 (cpp-R1) **checked** | `DECISIONS.md:136-138` (D-09) | `culling.beam_factor` does not exist: the parameter is `fov_factor`, half-angle `fov_factor·FWHM/2`, default 0 (`sas_image` 1.13). |
+| D5 (cpp-R1) **checked** | `DECISIONS.md:136-138` (D-09) | `culling.beam_factor` does not exist: the parameter is `fov_factor`, half-angle `fov_factor·FWHM/2`, default 0 (`sas_image` 1.13). Fix note: `cull_block` defaults to 0, not 16. |
 | D6 (cpp-C2) | `DECISIONS.md:129` (D-08) | `reserve(bytes, alignment)` is `reserve(bytes)`. |
-| D7 (tools-T6) **checked** | `RESULTS.md:1695` | Calls `gpu_benchmark_all_l4.md` the first run; that is `_15f1121.md`. |
+| D7 (tools-T6) **checked** | `RESULTS.md:1695` | Calls `gpu_benchmark_all_l4.md` the first run; that is `_15f1121.md`. Fixed. |
 | D8 (tools-T14) | `README.md:126-127` | Not every study tool writes a committed file (tonal_range_study prints; coverage_map, gpu_benchmark_all write only with an option). |
-| D9 (tools-T7) | `tools/gpu_job.sh:6-21`; `HANDOFF.md:112-120` | The header and HANDOFF's mode table miss `benchmark`, `liveablate` and several variables. |
+| D9 (tools-T7) | `tools/gpu_job.sh:6-21`; `HANDOFF.md:112-120` | The header and HANDOFF's mode table miss `benchmark`, `liveablate` and several variables. Fix note: the header already listed `liveablate`; the rest added. |
 | D10 (cpp-M1) | `ARCHITECTURE.md:181` | The layout table has no row for `libs/motion`. |
 | D11 (K13) | `CONFIGURATION.md:239` | Shows the deprecated `source_level_db`; use `source_level_db_rms`. |
-| D12 (L8) | `CONFIGURATION.md:464` (and `chain.hpp:64`, `live.py:41`) | `farfield` and `mvdr` do run on the device (`chain.cpp:107-109`). |
+| D12 (L8) | `CONFIGURATION.md:464` (and `chain.hpp:64`, `live.py:41`) | `farfield` and `mvdr` do run on the device (`chain.cpp:107-109`). Fix note: `flank.py` runs on the device too. |
 | D13 (P1) | `ORG_ARL_SURVEY.md:252` | Lists self-noise and tonals as "ours better"; `self_noise_spectrum_db` and `add_tones` are not reachable from any scenario. |
 
 ## E. Documentation missing (DOC-ONLY, Markdown files)
