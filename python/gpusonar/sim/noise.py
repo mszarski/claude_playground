@@ -1,4 +1,4 @@
-"""Noise models: ambient spectra, self-noise, and Gaussian noise with a given spectrum
+"""Noise models: ambient spectra and Gaussian noise with a given spectrum
 and the right coherence across an array.
 
 Ambient spectrum: the widely used four-term empirical fit to the Wenz curves (turbulence,
@@ -37,14 +37,6 @@ def wenz_spectrum_db(frequency, wind_speed: float = 5.0, shipping: float = 0.5,
     if components:
         return total, {"turbulence": turbulence, "shipping": ship, "wind": wind, "thermal": thermal}
     return total
-
-
-def self_noise_spectrum_db(frequency, broadband_db: float = -300.0, slope_db_per_octave: float = 0.0,
-                           reference_frequency: float = 1e3):
-    """A configurable platform/flow noise spectrum: a level at the reference frequency
-    with a constant slope per octave. Tones are added separately (`add_tones`)."""
-    f = np.maximum(np.asarray(frequency, dtype=float), 1.0)
-    return broadband_db + slope_db_per_octave * np.log2(f / reference_frequency)
 
 
 def isotropic_coherence(positions, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED) -> np.ndarray:
@@ -349,17 +341,6 @@ def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Gene
                 gamma = isotropic_coherence(positions, f[(a + b) // 2], sound_speed)
                 spectrum[:, a:b] = np.linalg.cholesky(gamma + 1e-9 * np.eye(n_channels)) @ spectrum[:, a:b]
     return np.fft.irfft(spectrum * np.sqrt(psd * sample_rate / 2.0)[None, :], n=n_samples, axis=1).astype(np.float32)
-
-
-def add_tones(noise: np.ndarray, sample_rate: float, tones, rng: np.random.Generator) -> np.ndarray:
-    """Add narrowband self-noise lines: `tones` is a list of (frequency Hz, rms in sample units).
-    Each channel gets a random phase."""
-    t = np.arange(noise.shape[1]) / sample_rate
-    out = noise.astype(np.float64)
-    for freq, rms in tones:
-        phase = rng.uniform(0.0, 2.0 * np.pi, (noise.shape[0], 1))
-        out += np.sqrt(2.0) * rms * np.cos(2.0 * np.pi * freq * t[None, :] + phase)
-    return out.astype(np.float32)
 
 
 def k_texture(positions, shape: float, cell: float, rng: np.random.Generator) -> np.ndarray:
