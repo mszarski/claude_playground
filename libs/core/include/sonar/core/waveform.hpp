@@ -11,7 +11,12 @@ namespace sonar {
 
 /// Plain-data waveform description (a device-friendly copy of sonar::Waveform).
 struct WaveformParams {
-  int type = 0;           ///< WaveformType as int: 0 CW, 1 LFM, 2 Gaussian
+  /// WaveformType as int: 0 CW, 1 LFM, 2 Gaussian, 3 Arbitrary (a sampled replica). The
+  /// closed-form functions below cover types 0 to 2 only; a type 3 pulse has no closed form
+  /// and is read from its samples instead: by the simulator through sim::EnvelopeTable
+  /// (synth.hpp, synth_kernel.hpp pair_sampled) and by pulse compression from the record's
+  /// replica (pulse_compression.cpp build_arbitrary). Do not call them for type 3.
+  int type = 0;
   double f_start = 0.0;   ///< Hz
   double f_stop = 0.0;    ///< Hz
   double duration = 0.0;  ///< s; the pulse occupies emission times [0, duration]
@@ -58,7 +63,9 @@ SONAR_INLINE double waveform_envelope(const WaveformParams& w, double u) {
   return tukey(u / w.duration, w.window_alpha);
 }
 
-/// Evaluate the pulse at emission time u (s). Returns false outside the pulse.
+/// Evaluate the pulse at emission time u (s). Returns false outside the pulse, and for a
+/// type it does not know (3, Arbitrary, included). Pulse compression builds its replicas of
+/// types 0 to 2 with it (libs/dsp/src/pulse_compression.cpp build).
 /// The analytic signal is amplitude * envelope * exp(j 2 pi phase_cycles).
 /// `freq` is the instantaneous frequency (Hz), for frequency-dependent losses.
 SONAR_INLINE bool waveform_eval(const WaveformParams& w, double u, double& envelope,
