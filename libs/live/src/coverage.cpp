@@ -8,6 +8,7 @@
 #include <limits>
 #include <sstream>
 
+#include "sonar/live/option_value.hpp"
 #include "sonar/live/raytrace.hpp"
 
 namespace sonar::live {
@@ -20,17 +21,6 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 double sinc(double x) {
   const double a = kPi * x;
   return std::abs(a) < 1e-12 ? 1.0 : std::sin(a) / a;
-}
-
-std::vector<double> number_list(const std::string& value) {
-  std::string text = value;
-  for (char& ch : text) {
-    if (ch == '[' || ch == ']' || ch == ',') ch = ' ';
-  }
-  std::istringstream in(text);
-  std::vector<double> out;
-  for (double x; in >> x;) out.push_back(x);
-  return out;
 }
 
 struct Leg {
@@ -233,10 +223,11 @@ std::string coverage_site_missing(const CoverageOptions& o) {
 bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::string& value) {
   const std::string prefix = "coverage";
   if (key.compare(0, prefix.size(), prefix) != 0) return false;
-  const double v = std::atof(value.c_str());
-  const auto i = static_cast<std::int64_t>(v);
+  const auto v = [&] { return option_number(key, value); };
+  const auto i = [&] { return option_integer(key, value); };
+  const auto on = [&] { return option_flag(key, value); };
   if (key == prefix) {
-    o.enabled = v != 0.0;
+    o.enabled = on();
     return true;
   }
   if (key.size() < prefix.size() + 2 || key[prefix.size()] != '_') return false;
@@ -248,44 +239,44 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
       std::istringstream one(item);
       std::string name, ts, lo, hi;
       if (!(std::getline(one, name, ':') && std::getline(one, ts, ':') && std::getline(one, lo, ':') && std::getline(one, hi, ':'))) return false;
-      o.classes.push_back({name, std::atof(ts.c_str()), std::atof(lo.c_str()), std::atof(hi.c_str())});
+      o.classes.push_back({name, option_number(key, ts), option_number(key, lo), option_number(key, hi)});
     }
   }
-  else if (k == "source_level_db") o.source_level_db = v;
-  else if (k == "noise_spectrum_db") o.noise_spectrum_db = v;
-  else if (k == "array_gain_db") o.array_gain_db = v;
-  else if (k == "absorption_db_per_km") o.absorption_db_per_km = v;
-  else if (k == "pd") o.pd = v;
-  else if (k == "pd_snr_db") o.pd_snr_db = number_list(value);
-  else if (k == "pd_value") o.pd_value = number_list(value);
-  else if (k == "range_first") o.range_first = v;
-  else if (k == "range_last") o.range_last = v;
-  else if (k == "n_ranges") o.n_ranges = i;
-  else if (k == "n_depths") o.n_depths = i;
-  else if (k == "n_report") o.n_report = i;
-  else if (k == "recommend") o.recommend = v != 0.0;
-  else if (k == "own_depth_min") o.own_depth_min = v;
-  else if (k == "own_depth_max") o.own_depth_max = v;
-  else if (k == "bottom_clearance") o.bottom_clearance = v;
-  else if (k == "n_own") o.n_own = i;
-  else if (k == "refresh_depth") o.refresh_depth = v;
-  else if (k == "refresh_water_depth") o.refresh_water_depth = v;
-  else if (k == "refresh_speed") o.refresh_speed = v;
-  else if (k == "surface_coefficient") o.surface_coefficient = v;
-  else if (k == "surface_rms_height") o.surface_rms_height = v;
-  else if (k == "surface_loss_db") o.surface_loss_db = v;
-  else if (k == "surface_loss_grazing") o.surface_loss_grazing = number_list(value);
-  else if (k == "surface_loss_table_db") o.surface_loss_table_db = number_list(value);
-  else if (k == "bottom") o.bottom = v != 0.0;
-  else if (k == "bottom_speed") o.bottom_speed = v;
-  else if (k == "bottom_density") o.bottom_density = v;
-  else if (k == "bottom_attenuation") o.bottom_attenuation = v;
-  else if (k == "water_depth") o.water_depth = v;
-  else if (k == "ray_fan") o.ray_fan = i;
-  else if (k == "max_bounces") o.max_bounces = i;
-  else if (k == "max_arrivals") o.max_arrivals = i;
-  else if (k == "null_db") o.null_db = v;
-  else if (k == "surface_z") o.surface_z = v;
+  else if (k == "source_level_db") o.source_level_db = v();
+  else if (k == "noise_spectrum_db") o.noise_spectrum_db = v();
+  else if (k == "array_gain_db") o.array_gain_db = v();
+  else if (k == "absorption_db_per_km") o.absorption_db_per_km = v();
+  else if (k == "pd") o.pd = v();
+  else if (k == "pd_snr_db") o.pd_snr_db = option_numbers(key, value);
+  else if (k == "pd_value") o.pd_value = option_numbers(key, value);
+  else if (k == "range_first") o.range_first = v();
+  else if (k == "range_last") o.range_last = v();
+  else if (k == "n_ranges") o.n_ranges = i();
+  else if (k == "n_depths") o.n_depths = i();
+  else if (k == "n_report") o.n_report = i();
+  else if (k == "recommend") o.recommend = on();
+  else if (k == "own_depth_min") o.own_depth_min = v();
+  else if (k == "own_depth_max") o.own_depth_max = v();
+  else if (k == "bottom_clearance") o.bottom_clearance = v();
+  else if (k == "n_own") o.n_own = i();
+  else if (k == "refresh_depth") o.refresh_depth = v();
+  else if (k == "refresh_water_depth") o.refresh_water_depth = v();
+  else if (k == "refresh_speed") o.refresh_speed = v();
+  else if (k == "surface_coefficient") o.surface_coefficient = v();
+  else if (k == "surface_rms_height") o.surface_rms_height = v();
+  else if (k == "surface_loss_db") o.surface_loss_db = v();
+  else if (k == "surface_loss_grazing") o.surface_loss_grazing = option_numbers(key, value);
+  else if (k == "surface_loss_table_db") o.surface_loss_table_db = option_numbers(key, value);
+  else if (k == "bottom") o.bottom = on();
+  else if (k == "bottom_speed") o.bottom_speed = v();
+  else if (k == "bottom_density") o.bottom_density = v();
+  else if (k == "bottom_attenuation") o.bottom_attenuation = v();
+  else if (k == "water_depth") o.water_depth = v();
+  else if (k == "ray_fan") o.ray_fan = i();
+  else if (k == "max_bounces") o.max_bounces = i();
+  else if (k == "max_arrivals") o.max_arrivals = i();
+  else if (k == "null_db") o.null_db = v();
+  else if (k == "surface_z") o.surface_z = v();
   else return false;
   return true;
 }

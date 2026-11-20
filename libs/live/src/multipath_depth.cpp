@@ -12,6 +12,7 @@
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/option_value.hpp"
 #include "sonar/live/raytrace.hpp"
 
 namespace sonar::live {
@@ -145,62 +146,55 @@ void num(std::ostringstream& s, double v) {
 bool set_multipath_option(MultipathOptions& o, const std::string& key, const std::string& value) {
   const std::string prefix = "multipath_depth";
   if (key.compare(0, prefix.size(), prefix) != 0) return false;
-  const double v = std::atof(value.c_str());
-  const auto i = static_cast<std::int64_t>(v);
+  const auto v = [&] { return option_number(key, value); };
+  const auto i = [&] { return option_integer(key, value); };
+  const auto on = [&] { return option_flag(key, value); };
   if (key == prefix) {
-    o.enabled = v != 0.0;
+    o.enabled = on();
     return true;
   }
   if (key.size() < prefix.size() + 2 || key[prefix.size()] != '_') return false;
   const std::string k = key.substr(prefix.size() + 1);
-  if (k == "max_depth") o.max_depth = v;
-  else if (k == "min_delay_bandwidth") o.min_delay_bandwidth = v;
-  else if (k == "window_s") o.window_s = v;
-  else if (k == "range_slack") o.range_slack = v;
-  else if (k == "oversample") o.oversample = i;
-  else if (k == "fringe_points") o.fringe_points = i;
-  else if (k == "noise_cells") o.noise_cells = i;
-  else if (k == "min_gain") o.min_gain = v;
-  else if (k == "ambiguity_drop") o.ambiguity_drop = v;
-  else if (k == "max_detections") o.max_detections = i;
-  else if (k == "min_snr_db") o.min_snr_db = v;
-  else if (k == "surface_coefficient") o.surface_coefficient = v;
-  else if (k == "surface_rms_height") o.surface_rms_height = v;
-  else if (k == "surface_loss_db") o.surface_loss_db = v;
-  else if (k == "surface_min_amplitude") o.surface_min_amplitude = v;
-  else if (k == "bottom") o.bottom = v != 0.0;
-  else if (k == "bottom_speed") o.bottom_speed = v;
-  else if (k == "bottom_density") o.bottom_density = v;
-  else if (k == "bottom_attenuation") o.bottom_attenuation = v;
-  else if (k == "bottom_order") o.bottom_order = i;
-  else if (k == "bottom_grazing_limit_deg") o.bottom_grazing_limit_deg = v;
-  else if (k == "water_depth") o.water_depth = v;
-  else if (k == "surface_z") o.surface_z = v;
-  else if (k == "own_depth_sigma") o.own_depth_sigma = v;
-  else if (k == "model_sigma_fraction") o.model_sigma_fraction = v;
-  else if (k == "gradient") o.gradient = v;
-  else if (k == "gradient_sigma") o.gradient_sigma = v;
-  else if (k == "track_gate") o.track_gate = v;
-  else if (k == "track_step") o.track_step = v;
-  else if (k == "track_min_gain") o.track_min_gain = v;
-  else if (k == "track_memory_pings") o.track_memory_pings = v;
-  else if (k == "consistency_sigma") o.consistency_sigma = v;
-  else if (k == "rays") o.rays = v != 0.0;
-  else if (k == "withhold_flagged") o.withhold_flagged = v != 0.0;
-  else if (k == "ray_fan") o.ray_fan = i;
-  else if (k == "ray_surface_order") o.ray_surface_order = i;
-  else if (k == "ray_min_amplitude") o.ray_min_amplitude = v;
-  else if (k == "ray_sigma_fan_fraction") o.ray_sigma_fan_fraction = v;
-  else if (k == "surface_loss_grazing" || k == "surface_loss_table_db") {
-    std::vector<double> list;                          // comma-separated (brackets and blanks allowed)
-    std::string text = value;
-    for (char& ch : text) {
-      if (ch == '[' || ch == ']' || ch == ',') ch = ' ';
-    }
-    std::istringstream in(text);
-    for (double x; in >> x;) list.push_back(x);
-    (k == "surface_loss_grazing" ? o.surface_loss_grazing : o.surface_loss_table_db) = list;
-  }
+  if (k == "max_depth") o.max_depth = v();
+  else if (k == "min_delay_bandwidth") o.min_delay_bandwidth = v();
+  else if (k == "window_s") o.window_s = v();
+  else if (k == "range_slack") o.range_slack = v();
+  else if (k == "oversample") o.oversample = i();
+  else if (k == "fringe_points") o.fringe_points = i();
+  else if (k == "noise_cells") o.noise_cells = i();
+  else if (k == "min_gain") o.min_gain = v();
+  else if (k == "ambiguity_drop") o.ambiguity_drop = v();
+  else if (k == "max_detections") o.max_detections = i();
+  else if (k == "min_snr_db") o.min_snr_db = v();
+  else if (k == "surface_coefficient") o.surface_coefficient = v();
+  else if (k == "surface_rms_height") o.surface_rms_height = v();
+  else if (k == "surface_loss_db") o.surface_loss_db = v();
+  else if (k == "surface_min_amplitude") o.surface_min_amplitude = v();
+  else if (k == "bottom") o.bottom = on();
+  else if (k == "bottom_speed") o.bottom_speed = v();
+  else if (k == "bottom_density") o.bottom_density = v();
+  else if (k == "bottom_attenuation") o.bottom_attenuation = v();
+  else if (k == "bottom_order") o.bottom_order = i();
+  else if (k == "bottom_grazing_limit_deg") o.bottom_grazing_limit_deg = v();
+  else if (k == "water_depth") o.water_depth = v();
+  else if (k == "surface_z") o.surface_z = v();
+  else if (k == "own_depth_sigma") o.own_depth_sigma = v();
+  else if (k == "model_sigma_fraction") o.model_sigma_fraction = v();
+  else if (k == "gradient") o.gradient = v();
+  else if (k == "gradient_sigma") o.gradient_sigma = v();
+  else if (k == "track_gate") o.track_gate = v();
+  else if (k == "track_step") o.track_step = v();
+  else if (k == "track_min_gain") o.track_min_gain = v();
+  else if (k == "track_memory_pings") o.track_memory_pings = v();
+  else if (k == "consistency_sigma") o.consistency_sigma = v();
+  else if (k == "rays") o.rays = on();
+  else if (k == "withhold_flagged") o.withhold_flagged = on();
+  else if (k == "ray_fan") o.ray_fan = i();
+  else if (k == "ray_surface_order") o.ray_surface_order = i();
+  else if (k == "ray_min_amplitude") o.ray_min_amplitude = v();
+  else if (k == "ray_sigma_fan_fraction") o.ray_sigma_fan_fraction = v();
+  else if (k == "surface_loss_grazing") o.surface_loss_grazing = option_numbers(key, value);   // comma-separated (brackets and blanks allowed)
+  else if (k == "surface_loss_table_db") o.surface_loss_table_db = option_numbers(key, value);
   else return false;
   return true;
 }

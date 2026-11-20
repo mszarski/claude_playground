@@ -145,6 +145,9 @@ struct ReportTrack {
 struct Report {
   std::int64_t ping = 0, sequence = 0, time_ns = 0;
   Vec3d ownship;
+  /// Pings so far (this one included) that found no navigation fix and were processed where the record says it is.
+  /// The chain itself takes no navigation: whoever applies it sets this (apps/sonar_live; gpusonar.live.LiveChain), 0 else.
+  std::int64_t pings_without_nav = 0;
   std::vector<ReportDetection> detections;
   std::vector<ReportTrack> tracks;
   double blanking_min_range_m = -1.0;   ///< >= 0: blanking is on; nothing nearer than this is reported

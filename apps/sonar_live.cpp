@@ -12,7 +12,8 @@
 //   bearing_first_deg bearing_last_deg bearing_step_deg range_cell_m cfar_pfa cfar_guard_m
 //   cfar_train_m min_snr_db beamformer (backprojection | farfield | mvdr) doa (map | sbl)
 //   gate_fft sbl_grid_step_deg sbl_max_sources
-//   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) backend (host | cuda)
+//   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) window (hann | rect)
+//   backend (auto | host | cuda; auto: CUDA when built with it and a device is present; without the key: host)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
 //   tracker_association (likelihood | in_order)
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
@@ -32,9 +33,10 @@
 //   decimate first (docs/DEPLOYMENT.md): decimate (0 | 1) decimate_streaming (0 | 1: the receiver decimates as
 //   blocks arrive and the recording holds the decimated pings; 0: the raw ping is recorded, the chain decimates)
 //   decimate_f_low decimate_f_high decimate_band_margin decimate_output_rate decimate_oversample
-//   decimate_ripple_db decimate_stopband_db decimate_taps
+//   decimate_ripple_db decimate_stopband_db decimate_taps decimate_blank_until_s decimate_blank_taper_s
 //   navigation: nav_water_depth_from_altitude (0 | 1) nav_dvl_offset_m nav_altitude_sigma_m nav_depth_sigma_m
 //   nav_hold_s nav_hold_sigma_m_per_s nav_hold_sigma_m_per_m nav_max_altitude_m nav_keep_s nav_profile_step_m
+//   nav_surface_z (z of the sea surface in the navigation's frame: depth = z - nav_surface_z)
 //   sound-speed ladder: elevation_profile (0 | 1) elevation_profile_ladder (comma-separated rungs)
 //   elevation_profile_bin_m elevation_profile_sample_sigma elevation_profile_age_sigma_per_hour
 //   elevation_profile_distance_sigma_per_km elevation_profile_max_age_s elevation_profile_max_distance_m
@@ -53,7 +55,10 @@
 //
 // --template: a container file holding one ping record of the sonar (geometry, waveform,
 // receive window); write it with `tools/sonar_live.py CONFIG --export-template template.h5`.
-// Reports are JSON lines with the same fields as the Python chain's.
+// Reports are JSON lines with the same fields as the Python chain's (tests/python/test_live_cpp.py
+// test_report_fields_match compares them), pings_without_nav included.
+// A value that is not what its key expects (a number, 0 | 1 | true | false, a comma-separated list, one of
+// the key's words) is refused with the key named: libs/live option_value.hpp.
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -186,7 +191,8 @@ int main(int argc, char** argv) {
         recorder->write(rec);        // raw samples, with the pose, before anything else touches them
         recorder->flush();
       }
-      const live::Report rep = chain.process(rec);
+      live::Report rep = chain.process(rec);
+      rep.pings_without_nav = without_nav;     // as the Python chain reports it: pings so far without a fix, this one included
       report << rep.json() << "\n" << std::flush;
       if (out_socket) send_report(rep.datagrams(report_bytes));
       if (done == 0) {
