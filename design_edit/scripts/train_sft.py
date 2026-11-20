@@ -78,6 +78,7 @@ def main() -> None:
     ap.add_argument("--n-eval", type=int, default=200)
     ap.add_argument("--eval-batch", type=int, default=4)
     ap.add_argument("--max-steps", type=int, default=-1)
+    ap.add_argument("--seed", type=int, default=0, help="data order and LoRA init (0 = the setting all earlier runs used)")
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
     ap.add_argument("--no-think", action="store_true",
@@ -99,7 +100,7 @@ def main() -> None:
         ds = load_dataset("json", data_files={s: str(Path(args.dataset) / f"{s}.jsonl") for s in ("train", "test")})
     else:
         ds = load_dataset(args.dataset)
-    train = ds["train"].shuffle(seed=0)
+    train = ds["train"].shuffle(seed=args.seed)
     if args.max_train:
         train = train.select(range(min(args.max_train, len(train))))
     train = train.select_columns(["prompt", "completion"])
@@ -110,6 +111,8 @@ def main() -> None:
         train = train.add_column("chat_template_kwargs", [template_kwargs] * len(train))
 
     config = SFTConfig(
+        seed=42 + args.seed,  # 42 is the transformers default the earlier runs used
+        data_seed=42 + args.seed,
         output_dir="sft-out",
         num_train_epochs=args.epochs,
         max_steps=args.max_steps,
