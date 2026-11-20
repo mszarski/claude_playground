@@ -73,8 +73,58 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
 | Board synchronisation | a reference signal wired to every board (`configs/sonars/popoto_4x7.yaml`: a dedicated input per board, the plan's scheme; `popoto_4x8`: summed into a hydrophone input) | Tested in simulation with 300 µs offsets and 25 ppm drifts. The reference generator and its wiring are hardware to build. |
 | Navigation | UDP JSON: `{"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}`, north-east-down metres and radians, any rate; optionally `sound_speed`, `altitude`, `bottom_lock`, `water_depth` and one-sigma fields (Stage 2 below); interpolated to each ping's transmit time | `tools/nav_adapter.py` converts a vendor stream by a mapping in YAML (a generic CSV / JSON example is shipped). The mapping for the vehicle's own unit is **a template only**: its interface document and datasheet have not been seen. Without navigation, pings are processed where the record says they are and counted in `pings_without_nav`. |
 | Clock | transmit times and navigation times on one clock | Assumed. A difference shows up as tracks that move with ownship. |
-| Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Field names in `live.py`. A report too long for one datagram goes out as several complete lines, each with `"part": [k, n]` (an open wire-format question for the owner, `STATUS.md`). |
+| Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Fields, units and frames: "The report line" below. A report too long for one datagram goes out as several complete lines, each with `"part": [k, n]` (an open wire-format question for the owner, `STATUS.md`). |
 | Compute | any Linux computer with Python 3 and the built library; a GPU is optional | Not measured on a Jetson. At the boards' full 102.4 kHz real sampling the conditioning step is heavier than in the simulated runs, which start at baseband. |
+
+## The report line
+
+One JSON object per ping, the same fields from both engines (`libs/live/src/chain.cpp`
+`Report::json_part`; `python/gpusonar/live.py` `LiveChain.process`). Frame: the records' world
+frame, north-east-down, metres (`RECORD_FORMAT.md`, "Conventions"). The base fields, present on
+every line:
+
+| Field | Unit, frame, sign | What it is |
+| --- | --- | --- |
+| `ping` | count from 0 | pings this chain has processed before this one (C++ `pings_++`; Python `self.pings`) |
+| `sequence` | integer | the record's `metadata.sequence`: the ping counter from the source, as received |
+| `time_ns` | ns since the Unix epoch, UTC | the record's transmit instant (`transmit.time_ns`), on the clock navigation is also on |
+| `ownship_xyz` | m, world NED: [north, east, down] | the array's reference point at this ping: the mean of the receive elements' world positions from the record's receive pose (with stacked rows, the mean over the rows' elements, `elevation_frame`) |
+| `pings_without_nav` | count | pings since start that had no navigation fix and were processed where the record says they are; cumulative. Both engines (the C++ program's line carries it too) |
+| `sync` | object or `null` | `null` when the boards are not synchronised (one board, or no `chain.sync`). Otherwise `ok` (bool: every board's residual is within `tolerance_us` and no board is flagged), `worst_residual_us` (µs: the largest misalignment measured again after resampling, over the boards), `offsets_us` (µs per board, relative to the first board: a board's samples start this much later, `t = start_time + offset + n / (fs (1 + drift))`, `sync.py`), `drift_ppm` (per board, relative to the first), and, only when a burst was not used, `flagged` (board b timed from one burst: `b`; from none: `-b - 1`) |
+| `detections` | list | one object per detection, below |
+| `tracks` | list | one object per confirmed track, below |
+| `processing_seconds` | s, wall clock | from the start of this ping's processing to the line (Python: includes stamping the pose and writing the recording; C++ program: `LiveChain::process` alone) |
+
+Each detection:
+
+| Field | Unit, frame, sign | What it is |
+| --- | --- | --- |
+| `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`); the centre of the range cell |
+| `bearing_deg` | degrees from broadside, in the horizontal plane | 0 is broadside on the `chain.look` side; positive towards the last receive element along the array (the axis from the first element to the last). Broadside is that axis turned 90° clockwise seen from above for `look: starboard` (north to east), anticlockwise for `port`. With stacked rows and `elevation.correct_bearing`: the horizontal bearing after the elevation correction, and `cone_bearing_deg` is the line's own |
+| `snr_db` | dB | the detector's signal-to-noise ratio: "What `snr_db` is" below (the C++ line writes `null` for a value that is not finite) |
+| `extent_m`, `first_range_m` | m | multiscale detector only: the cluster's extent in range and where it starts (it covers `[first_range_m - cell / 2, first_range_m + extent_m]`) |
+| `arrivals` | list of [range m, SNR dB] | multiscale detector, two or more arrivals along range only |
+
+Each track (classified by `classify.py` / `classify_tracks`, which fits a straight line through the
+track's detections in time):
+
+| Field | Unit, frame, sign | What it is |
+| --- | --- | --- |
+| `id` | integer from 1 | in order of birth; kept for the track's life |
+| `kind` | text | `mover`, `static`, `line`, `multipath` or `uncertain` |
+| `parent` | integer or `null` | for `kind: multipath`, the `id` of the track it echoes; otherwise `null` |
+| `x`, `y` | m, world: x north, y east | the fitted line's position at the last ping (absolute world coordinates, not relative to ownship) |
+| `vx`, `vy` | m/s, north and east | the fitted line's velocity over ground |
+| `speed_m_s` | m/s | `hypot(vx, vy)` |
+| `range_m` | m, horizontal | from `ownship_xyz` to (`x`, `y`) |
+| `mean_snr_db` | dB | the mean of the `snr_db` values (dB, averaged as numbers) of the detections the track took |
+| `seen` | fraction 0 to 1 | pings with a detection over pings since the track's birth |
+
+Present only when something happened or was switched on: `blanking` (`{min_range_m, mode}`),
+`rows` (stacked rows: the number of rows, and the elevation and depth fields of "The staged
+build" below on detections and tracks), `profile` (the sound-speed ladder's rung), `sbl_fallback`,
+`part` (a line split over datagrams), the members of `multipath_depth` and `coverage`
+(`CONFIGURATION.md`). A reader should ignore fields it does not know.
 
 ## First time on the real hardware
 
