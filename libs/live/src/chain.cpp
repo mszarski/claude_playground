@@ -769,7 +769,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
   std::ostringstream s;
   s << std::setprecision(10);
   s << "{\"ping\": " << ping << ", \"sequence\": " << sequence << ", \"time_ns\": " << time_ns << ", \"ownship_xyz\": ["
-    << ownship.x << ", " << ownship.y << ", " << ownship.z << "], \"detections\": [";
+    << ownship.x << ", " << ownship.y << ", " << ownship.z << "], \"pings_without_nav\": " << pings_without_nav << ", \"detections\": [";
   for (std::size_t i = det_first; i < det_last; ++i) {
     const auto& d = detections[i];
     s << (i > det_first ? ", " : "") << "{\"range_m\": " << d.range_m << ", \"bearing_deg\": " << d.bearing_deg << ", \"snr_db\": ";

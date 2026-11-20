@@ -2,10 +2,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <sstream>
+
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/options.hpp"
 #include "sonar/live/sbl_kernel.hpp"
 #include "sonar/live/udp_source.hpp"
 
@@ -647,6 +650,19 @@ void bind_live(py::module_& m) {
       },
       py::arg("z"), py::arg("water_depth"), py::arg("surface_z") = 0.0);
 
+  m.def(
+      "live_options_from_text",
+      [](const std::string& text) {
+        live::ChainOptions c;
+        live::PassiveOptions p;
+        std::istringstream in(text);
+        live::read_options(c, p, in);
+        return live::options_json(c);
+      },
+      py::arg("text"),
+      "key=value lines (one per line, # comments) read as build/bin/sonar_live reads --options (options.hpp), and the active "
+      "chain they give as LiveChainCpp.options() writes it.");
+
   py::class_<live::LiveChain>(m, "LiveChainCpp",
                               "The C++ live chain (libs/live chain.hpp), built from one dict of options: the flat keys\n"
                               "gpusonar.live.cpp_chain_options makes from a deployment file's chain section. Units are SI as\n"
@@ -711,7 +727,10 @@ void bind_live(py::module_& m) {
         get("cfar_merge_m", o.detector.merge_m);
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
-        if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
+        if (kw.contains("backend")) {
+          // core.Backend, or the word of the key=value option: auto | host | cuda (options.hpp parse_backend).
+          o.backend = py::isinstance<py::str>(kw["backend"]) ? live::parse_backend(kw["backend"].cast<std::string>()) : kw["backend"].cast<Backend>();
+        }
         get("sound_speed", o.sound_speed);
         if (kw.contains("dead_channels")) o.dead_channels = kw["dead_channels"].cast<std::vector<std::int64_t>>();
         if (kw.contains("elevation")) {
@@ -815,6 +834,9 @@ void bind_live(py::module_& m) {
       .def("coverage_seconds", [](live::LiveChain& c) { return c.coverage().seconds(); })
       .def("detector", &live::LiveChain::detector_json,
            "The multiscale detector's plan for the last map (detector.hpp), as a JSON line; '{}' when it is not in use.")
+      .def("options", [](const live::LiveChain& c) { return live::options_json(c.options()); },
+           "The chain's settings as a JSON line keyed by the key=value option names (options.hpp options_json); "
+           "before the first ping the sizes left to be derived are null.")
       .def("resolved", &live::LiveChain::resolved_json,
            "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
       .def("last_map", [](const live::LiveChain& c) {

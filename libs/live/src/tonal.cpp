@@ -14,6 +14,7 @@
 #include "sonar/dsp/fft.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/option_value.hpp"
 
 namespace sonar::live {
 namespace {
@@ -183,74 +184,65 @@ std::string event_json(const TonalEvent& e, const TonalAnalyzer& a, bool in_fram
   return s.str();
 }
 
-std::vector<double> number_list(const std::string& value) {
-  std::vector<double> out;
-  std::size_t at = 0;
-  while (at < value.size()) {
-    const std::size_t comma = std::min(value.find(',', at), value.size());
-    if (comma > at) out.push_back(std::atof(value.substr(at, comma - at).c_str()));
-    at = comma + 1;
-  }
-  return out;
-}
 
 }  // namespace
 
 bool set_tonal_option(TonalOptions& o, const std::string& key, const std::string& value) {
   if (key.rfind("tonal", 0) != 0) return false;
-  const double v = std::atof(value.c_str());
-  const auto i = static_cast<std::int64_t>(v);
+  const auto v = [&] { return option_number(key, value); };
+  const auto i = [&] { return option_integer(key, value); };
+  const auto on = [&] { return option_flag(key, value); };
   auto& g = o.goertzel;
   auto& d = o.demon;
-  if (key == "tonal") o.enabled = v != 0.0;
-  else if (key == "tonal_bearing_first_deg") o.bearing_first_deg = v;
-  else if (key == "tonal_bearing_last_deg") o.bearing_last_deg = v;
-  else if (key == "tonal_bearing_step_deg") o.bearing_step_deg = v;
-  else if (key == "tonal_window") o.hann = value == "hann";
-  else if (key == "tonal_row_tolerance_m") o.row_tolerance_m = v;
-  else if (key == "tonal_attach_deg") o.attach_deg = v;
+  if (key == "tonal") o.enabled = on();
+  else if (key == "tonal_bearing_first_deg") o.bearing_first_deg = v();
+  else if (key == "tonal_bearing_last_deg") o.bearing_last_deg = v();
+  else if (key == "tonal_bearing_step_deg") o.bearing_step_deg = v();
+  else if (key == "tonal_window") o.hann = option_choice(key, value, {"hann", "rect"}) == "hann";
+  else if (key == "tonal_row_tolerance_m") o.row_tolerance_m = v();
+  else if (key == "tonal_attach_deg") o.attach_deg = v();
   else if (key == "tonal_goertzel_lines") {
-    g.lines = number_list(value);
+    g.lines = option_numbers(key, value);
     g.enabled = !g.lines.empty();
-  } else if (key == "tonal_goertzel_on") g.beams = value != "hydrophones";
-  else if (key == "tonal_goertzel_block_s") g.block_s = v;
-  else if (key == "tonal_goertzel_hop_s") g.hop_s = v;
-  else if (key == "tonal_goertzel_search_bins") g.search_bins = i;
-  else if (key == "tonal_goertzel_guard_bins") g.guard_bins = i;
-  else if (key == "tonal_goertzel_noise_bins") g.noise_bins = i;
-  else if (key == "tonal_goertzel_min_snr_db") g.min_snr_db = v;
-  else if (key == "tonal_goertzel_track") g.track = v != 0.0;
-  else if (key == "tonal_goertzel_alpha") g.alpha = v;
-  else if (key == "tonal_goertzel_beta") g.beta = v;
-  else if (key == "tonal_goertzel_max_misses") g.max_misses = i;
-  else if (key == "tonal_goertzel_max_shift_hz") g.max_shift_hz = v;
-  else if (key == "tonal_demon") d.enabled = v != 0.0;
-  else if (key == "tonal_demon_f_low") d.f_low = v;
-  else if (key == "tonal_demon_f_high") d.f_high = v;
-  else if (key == "tonal_demon_envelope") d.square = value != "hilbert";
-  else if (key == "tonal_demon_envelope_rate_hz") d.envelope_rate_hz = v;
-  else if (key == "tonal_demon_window_hops") d.window_hops = i;
-  else if (key == "tonal_demon_segment_s") d.segment_s = v;
-  else if (key == "tonal_demon_segment_overlap") d.segment_overlap = v;
-  else if (key == "tonal_demon_n_average") d.n_average = i;
-  else if (key == "tonal_demon_min_segments") d.min_segments = i;
-  else if (key == "tonal_demon_f_min_hz") d.f_min_hz = v;
-  else if (key == "tonal_demon_f_max_hz") d.f_max_hz = v;
-  else if (key == "tonal_demon_background_bins") d.background_bins = i;
-  else if (key == "tonal_demon_guard_bins") d.guard_bins = i;
-  else if (key == "tonal_demon_clip") d.clip = v;
-  else if (key == "tonal_demon_pfa") d.pfa = v;
-  else if (key == "tonal_demon_max_lines") d.max_lines = i;
-  else if (key == "tonal_demon_max_sources") d.max_sources = i;
-  else if (key == "tonal_demon_min_separation_deg") d.min_separation_deg = v;
-  else if (key == "tonal_demon_shaft_min_hz") d.shaft_min_hz = v;
-  else if (key == "tonal_demon_shaft_max_hz") d.shaft_max_hz = v;
-  else if (key == "tonal_demon_max_harmonic") d.max_harmonic = i;
-  else if (key == "tonal_demon_harmonic_tolerance_bins") d.harmonic_tolerance_bins = v;
-  else if (key == "tonal_demon_score_fraction") d.score_fraction = v;
-  else if (key == "tonal_demon_blades_min") d.blades_min = i;
-  else if (key == "tonal_demon_blades_max") d.blades_max = i;
-  else if (key == "tonal_demon_gram") d.gram = v != 0.0;
+  } else if (key == "tonal_goertzel_on") g.beams = option_choice(key, value, {"beams", "hydrophones"}) == "beams";
+  else if (key == "tonal_goertzel_block_s") g.block_s = v();
+  else if (key == "tonal_goertzel_hop_s") g.hop_s = v();
+  else if (key == "tonal_goertzel_search_bins") g.search_bins = i();
+  else if (key == "tonal_goertzel_guard_bins") g.guard_bins = i();
+  else if (key == "tonal_goertzel_noise_bins") g.noise_bins = i();
+  else if (key == "tonal_goertzel_min_snr_db") g.min_snr_db = v();
+  else if (key == "tonal_goertzel_track") g.track = on();
+  else if (key == "tonal_goertzel_alpha") g.alpha = v();
+  else if (key == "tonal_goertzel_beta") g.beta = v();
+  else if (key == "tonal_goertzel_max_misses") g.max_misses = i();
+  else if (key == "tonal_goertzel_max_shift_hz") g.max_shift_hz = v();
+  else if (key == "tonal_demon") d.enabled = on();
+  else if (key == "tonal_demon_f_low") d.f_low = v();
+  else if (key == "tonal_demon_f_high") d.f_high = v();
+  else if (key == "tonal_demon_envelope") d.square = option_choice(key, value, {"square", "hilbert"}) == "square";
+  else if (key == "tonal_demon_envelope_rate_hz") d.envelope_rate_hz = v();
+  else if (key == "tonal_demon_window_hops") d.window_hops = i();
+  else if (key == "tonal_demon_segment_s") d.segment_s = v();
+  else if (key == "tonal_demon_segment_overlap") d.segment_overlap = v();
+  else if (key == "tonal_demon_n_average") d.n_average = i();
+  else if (key == "tonal_demon_min_segments") d.min_segments = i();
+  else if (key == "tonal_demon_f_min_hz") d.f_min_hz = v();
+  else if (key == "tonal_demon_f_max_hz") d.f_max_hz = v();
+  else if (key == "tonal_demon_background_bins") d.background_bins = i();
+  else if (key == "tonal_demon_guard_bins") d.guard_bins = i();
+  else if (key == "tonal_demon_clip") d.clip = v();
+  else if (key == "tonal_demon_pfa") d.pfa = v();
+  else if (key == "tonal_demon_max_lines") d.max_lines = i();
+  else if (key == "tonal_demon_max_sources") d.max_sources = i();
+  else if (key == "tonal_demon_min_separation_deg") d.min_separation_deg = v();
+  else if (key == "tonal_demon_shaft_min_hz") d.shaft_min_hz = v();
+  else if (key == "tonal_demon_shaft_max_hz") d.shaft_max_hz = v();
+  else if (key == "tonal_demon_max_harmonic") d.max_harmonic = i();
+  else if (key == "tonal_demon_harmonic_tolerance_bins") d.harmonic_tolerance_bins = v();
+  else if (key == "tonal_demon_score_fraction") d.score_fraction = v();
+  else if (key == "tonal_demon_blades_min") d.blades_min = i();
+  else if (key == "tonal_demon_blades_max") d.blades_max = i();
+  else if (key == "tonal_demon_gram") d.gram = on();
   else throw std::invalid_argument("unknown option " + key);
   return true;
 }

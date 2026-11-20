@@ -3,13 +3,18 @@
 // code against the Python stages and against simulated pings.
 #include <cmath>
 #include <complex>
+#include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 
 #include <gtest/gtest.h>
 
 #include "sonar/live/chain.hpp"
+#include "sonar/core/platform.hpp"
+#include "sonar/live/option_value.hpp"
 #include "sonar/live/options.hpp"
 #include "sonar/live/udp_source.hpp"
 
@@ -91,6 +96,93 @@ TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName
   live::set_option(c, p, "tracker_association", "in_order");
   EXPECT_EQ(c.tracker.association, live::Association::InOrder);
   EXPECT_THROW(live::set_option(c, p, "tracker_association", "best"), std::invalid_argument);
+}
+
+TEST(Options, RefuseTextThatIsNotWhatTheKeyExpects) {
+  // A tool that passed Python text on (`decimate={}`, `True`, `None`) used to switch a stage off without a word:
+  // atof read it as 0. Every reader now refuses it and names the key.
+  ChainOptions c;
+  PassiveOptions p;
+  for (const char* pair : {"decimate={}", "elevation_profile_ensemble=None", "cfar_pfa=1e-5x", "range_cell_m=", "tracker_confirm_hits=2.5",
+                           "elevation_ssp_depth=0,abc", "dead_channels=1,,2", "look=Starboard", "window=hamming", "backend=gpu", "blanking_mode=zeros",
+                           "doa=SBL", "multipath_depth_max_depth=deep", "coverage_n_ranges=1.5", "tonal_window=hamming", "nav_surface_z=sea"}) {
+    const std::string text = pair;
+    const std::string key = text.substr(0, text.find('='));
+    try {
+      set_pair(c, p, text);
+      ADD_FAILURE() << "accepted " << text;
+    } catch (const std::invalid_argument& e) {
+      EXPECT_NE(std::string(e.what()).find(key), std::string::npos) << e.what();
+    }
+  }
+}
+
+TEST(Options, ReadNumbersSwitchesListsAndWords) {
+  ChainOptions c;
+  PassiveOptions p;
+  for (const char* on : {"1", "true", "True", "2"}) {
+    c.elevation.profile.ensemble = false;
+    set_option(c, p, "elevation_profile_ensemble", on);
+    EXPECT_TRUE(c.elevation.profile.ensemble) << on;
+  }
+  for (const char* off : {"0", "false", "False", " 0 "}) {
+    c.decimate.enabled = true;
+    set_option(c, p, "decimate", off);
+    EXPECT_FALSE(c.decimate.enabled) << off;
+  }
+  set_option(c, p, "elevation_profile_ensemble_gradients", "[0.0, 0.017]");
+  ASSERT_EQ(c.elevation.profile.ensemble_gradients.size(), 2U);
+  EXPECT_DOUBLE_EQ(c.elevation.profile.ensemble_gradients[1], 0.017);
+  set_option(c, p, "cfar_integrate_cells", "1,4,16");
+  EXPECT_EQ(c.detector.integrate_cells, (std::vector<std::int64_t>{1, 4, 16}));
+  set_option(c, p, "decimate_taps", "1e2");
+  EXPECT_EQ(c.decimate.taps, 100);
+  set_option(c, p, "nav_surface_z", "-1.25");
+  EXPECT_DOUBLE_EQ(c.nav.surface_z, -1.25);
+  set_option(c, p, "look", "port");
+  set_option(c, p, "window", "rect");
+  EXPECT_FALSE(c.starboard);
+  EXPECT_FALSE(p.starboard);
+  EXPECT_FALSE(c.hann);
+  set_option(c, p, "backend", "host");
+  EXPECT_EQ(c.backend, Backend::Host);
+  set_option(c, p, "backend", "auto");                 // as gpusonar.live: CUDA when built with it and a device is present
+  EXPECT_EQ(c.backend, cuda_available() ? Backend::Cuda : Backend::Host);
+  EXPECT_EQ(p.sbl.backend, c.backend);
+  EXPECT_EQ(ChainOptions{}.backend, Backend::Host);    // without the key: the host
+  EXPECT_THROW(option_integer("k", "nan"), std::invalid_argument);
+  EXPECT_TRUE(option_numbers("k", "").empty());
+}
+
+TEST(Options, FileTextAndDumpAgree) {
+  // load_options (a file) and read_options (text) are one reader; options_json says what they set, by key name.
+  const std::string text = "# a comment\nlook=port  \nelevation=1\nelevation_profile=1\nelevation_profile_ensemble=1\n"
+                           "elevation_profile_ensemble_gradients=0,0.017\nnav_surface_z=0.5 # trailing\ndecimate=1\n";
+  ChainOptions a, b;
+  PassiveOptions pa, pb;
+  std::istringstream in(text);
+  read_options(a, pa, in);
+  const std::string path = ::testing::TempDir() + "live_options_test.options";
+  {
+    std::ofstream f(path);
+    f << text;
+  }
+  load_options(b, pb, path);
+  std::remove(path.c_str());
+  EXPECT_EQ(options_json(a), options_json(b));
+  const std::string j = options_json(a);
+  for (const char* member : {"\"look\": \"port\"", "\"elevation_profile_ensemble\": true", "\"elevation_profile_ensemble_gradients\": [0, 0.017000000000000001]",
+                             "\"nav_surface_z\": 0.5", "\"decimate\": true", "\"range_cell_m\": null"}) {
+    EXPECT_NE(j.find(member), std::string::npos) << member << " in " << j;
+  }
+  EXPECT_NE(options_json(ChainOptions{}), j);
+}
+
+TEST(Report, CarriesPingsWithoutNavigation) {
+  Report r;
+  EXPECT_NE(r.json().find("\"pings_without_nav\": 0"), std::string::npos);
+  r.pings_without_nav = 3;
+  EXPECT_NE(r.json().find("\"pings_without_nav\": 3"), std::string::npos);
 }
 
 TEST(Tracker, DropsATrackThatIsNoLongerSeen) {

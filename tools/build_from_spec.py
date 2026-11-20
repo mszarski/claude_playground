@@ -86,7 +86,7 @@ def generate(spec: dict, out: Path, template: bool = False, diagrams: bool = Tru
             from gpusonar.sim import make_pose
             from gpusonar.sonar import SonarModel
             table_record = SonarModel.load(deploy["source"]["sonar"]).make_record(make_pose())
-        opts = _options(deploy["chain"], table_record)
+        opts = _options(deploy["chain"], table_record, deploy)
         del table_record
         (out / "chain.options").write_text("".join(f"{k}={v}\n" for k, v in opts.items()))
         lo = bs.listen_options(spec)
@@ -130,40 +130,12 @@ def generate(spec: dict, out: Path, template: bool = False, diagrams: bool = Tru
     return written
 
 
-def _options(chain: dict, record=None) -> dict:
-    """The chain section as the key=value settings of build/bin/sonar_live (the same mapping `--export-template` prints).
-    `record`: the sonar's template, for the coverage picture's detection-probability table."""
-    from gpusonar.live import cpp_chain_options, program_stage_options, sync_reference
-    o = program_stage_options(cpp_chain_options(chain, sync_reference(chain)), record, chain)
-    sync = o.pop("sync", None)
-    o["look"] = "starboard" if o.pop("starboard") else "port"
-    o["window"] = "hann" if o.pop("hann") else "none"
-    # Sizes the deployment file leaves out are not on the command line either: the program derives them (derive.hpp).
-    if "tracker_bearing_sigma" in o:
-        o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
-    if o.pop("cell_peak", False):
-        o["cell_statistic"] = "peak"
-    if "multipath_bearing" in o:
-        o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
-    o["multipath"] = int(o["multipath"])
-    if "dead_channels" in o:
-        o["dead_channels"] = ",".join(str(v) for v in o["dead_channels"])
-    el = o.pop("elevation", None)
-    if el is not None:
-        o["elevation"] = 1
-        el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
-        el["sector_margin_deg"] = float(np.degrees(el.pop("sector_margin")))
-        el["sector_rays_margin_deg"] = float(np.degrees(el.pop("sector_rays_margin")))
-        el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
-        for key in ("ssp_depth", "ssp_speed"):
-            values = el.pop(key)
-            if values:
-                el[key] = ",".join(f"{v:.10g}" for v in values)
-        o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
-    if sync:
-        o["sync"] = 1
-        o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})
-    return {k: (f"{v:.10g}" if isinstance(v, float) else v) for k, v in o.items()}
+def _options(chain: dict, record=None, deploy: dict | None = None) -> dict:
+    """The chain section (and, given the whole deployment file, the program's own settings: board stream, navigation)
+    as the key=value settings of build/bin/sonar_live: `gpusonar.live.program_options`, the one mapping that
+    `--export-template` prints too. `record`: the sonar's template, for the coverage picture's detection-probability table."""
+    from gpusonar.live import program_options
+    return program_options(chain, record, deploy)
 
 
 def _plain(d: dict):

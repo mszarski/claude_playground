@@ -212,8 +212,11 @@ def run(config, backend=None) -> RunResult:
     """Run a processing chain from a config mapping or a YAML file path."""
     cfg = load_yaml(config) if isinstance(config, (str, os.PathLike)) else config
     out_cfg = cfg.get("output", {}) or {}
+    want = cfg.get("backend", "auto")
+    if want not in ("auto", "host", "cuda"):
+        raise ValueError(f"backend: {want!r} (auto, host or cuda; auto, the default, and cuda both use CUDA when a device is present)")
     backend = backend if backend is not None else (
-        core.Backend.Cuda if cfg.get("backend", "auto") != "host" and core.cuda_available() else core.Backend.Host)
+        core.Backend.Cuda if want != "host" and core.cuda_available() else core.Backend.Host)
     log = _Log(out_cfg.get("log"))
     debug_dir = out_cfg.get("debug_dir")
     if debug_dir:
