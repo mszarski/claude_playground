@@ -702,6 +702,38 @@ repaired too). Gemma SFT retrained on it, same settings:
   explanation is run-to-run variance between SFT trainings, which has not been measured: every SFT number in this README
   is a single run. The bootstrap intervals cover test-set sampling only, not training variance.
 
+### Seed-to-seed variance of SFT
+
+The v8 recipe trained three times, identical except for `--seed` (data order and LoRA init; seed 0 is the setting all
+earlier runs used). Exact match:
+
+| Test set | seed 0 | seed 1 | seed 2 | mean | spread (max - min) | v7, one run |
+|---|---|---|---|---|---|---|
+| seen types (500) | 0.936 | 0.950 | 0.950 | 0.945 | 1.4 pts | 0.958 |
+| paraphrased (490) | 0.869 | 0.904 | 0.890 | 0.888 | 3.5 pts | 0.900 |
+| goal requests (450) | 0.918 | 0.884 | 0.944 | 0.916 | 6.0 pts | 0.967 |
+| unseen types v2 (1,050) | 0.833 | 0.811 | 0.786 | 0.810 | 4.8 pts | 0.700 |
+| unseen, without `promote_button` (900) | 0.820 | 0.781 | 0.764 | 0.789 | 5.6 pts | 0.801 |
+
+- **Training variance is larger than test-set sampling.** Seeds of the same recipe differ by up to 6 points overall,
+  and compare.py marks most of those differences as significant, because its bootstrap only resamples test rows.
+  Per edit type the swings are bigger: `set_weight` scores 0.95, 0.87 and 0.70 across the three seeds, `add_border`
+  0.76, 0.63 and 0.71.
+- **So, between two single SFT runs, treat differences under about 5 points overall (and under about 25 points on one
+  edit type) as noise.** Re-reading earlier claims with that rule:
+  - v7 vs v8 on seen types and paraphrased requests: within seed spread, not a real difference.
+  - v7 vs v8 on goal requests (0.967 vs 0.916 mean): v7 is above all three v8 seeds, so probably real, but v7 is
+    a single run.
+  - v7 vs v8 on unseen types without `promote_button` (0.801 vs 0.789): no difference.
+  - v6 vs v7 on seen and paraphrased (-3 points each): within seed spread. The goal (+14) and `promote_button` changes
+    are far outside it and stand.
+  - RL checkpoint gains of 2 to 5 points (for example v7 step 150, +5 on unseen types) are measured on the same
+    starting model, so data order is shared, but RL has its own run-to-run variance that has not been measured either.
+- **Practical rule from here on:** compare recipes on the mean of at least 3 seeds, and report per-edit-type numbers
+  only as averages across seeds.
+
+Models (private): `design-edit-sft-gemma-v8`, `-v8-seed1`, `-v8-seed2`.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
