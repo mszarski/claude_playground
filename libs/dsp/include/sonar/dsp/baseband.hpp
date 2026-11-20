@@ -16,9 +16,10 @@ struct BasebandOptions {
   /// main lobe of the gated tone's spectrum and its first sidelobes).
   double cw_band_factor = 4.0;
   /// Doppler allowance (docs/HARDCODED_AUDIT.md K-6). The band derived from the waveform
-  /// assumes echoes at the transmitted frequency. `max_range_rate` is the largest two-way
-  /// range rate to be kept, m/s (closing or opening): the band is widened on both sides by
-  /// the shift 2 v f_top / c it causes, with c the record's sound speed and f_top the top
+  /// assumes echoes at the transmitted frequency. `max_range_rate` is the largest range
+  /// rate v to be kept, m/s (closing or opening): the rate of change of the one-way range,
+  /// i.e. the radial speed, so the two-way path changes at 2 v. The band is widened on both
+  /// sides by the shift 2 v f_top / c it causes, with c the record's sound speed and f_top the top
   /// of the transmit band. `doppler_allowance_hz` widens it on both sides by that many Hz
   /// directly (a one-way arrival is shifted by v f / c). Both add; 0 = no allowance, which
   /// is right for a stationary scene and silently filters out a mover on a long tone.

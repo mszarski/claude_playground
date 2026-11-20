@@ -168,7 +168,8 @@ void bind_recon(py::module_& m) {
       "The band kept is `bandwidth`, or the transmit bandwidth times `band_margin`, or for a CW pulse\n"
       "`cw_band_factor` / duration. None of these allows for Doppler: an echo closing at v m/s is shifted by\n"
       "2 v f / c, which a long tone's band does not hold (1 m/s at 5 kHz is 6.7 Hz; a 1 s tone keeps 4 Hz).\n"
-      "`max_range_rate` (m/s, the largest two-way closing or opening speed) widens the band by\n"
+      "`max_range_rate` (m/s, the largest closing or opening range rate: the one-way range's rate of change,\n"
+      "so the two-way path changes at twice it) widens the band by\n"
       "2 * (2 v f_top / c) for it, and `doppler_allowance_hz` by twice that many Hz (use it for a one-way\n"
       "arrival: v f / c). Both default to 0: no allowance, as before.");
   m.attr("BASEBAND_BAND_MARGIN") = dsp::BasebandOptions{}.band_margin;

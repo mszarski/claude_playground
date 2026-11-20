@@ -21,8 +21,11 @@ struct PulseCompressionOptions {
   /// (a mismatched filter: lower sidelobes, wider main lobe, slightly lower gain).
   ReplicaWindow window = ReplicaWindow::None;
   /// Time-scale factor of the echo relative to the transmitted pulse: an echo from a
-  /// path closing at range rate v (two-way) has doppler_scale = 1 + 2 v / c. The
-  /// replica is compressed accordingly. 1 = no Doppler.
+  /// target closing at range rate v (the one-way range's rate of change, i.e. the radial
+  /// speed; the two-way path shortens at 2 v) has doppler_scale = 1 + 2 v / c to first
+  /// order (python/gpusonar/processing.py doppler_scale gives the exact (c - r) / (c + r),
+  /// its r being positive when opening, r = -v). The replica is compressed accordingly.
+  /// 1 = no Doppler.
   double doppler_scale = 1.0;
 };
 
