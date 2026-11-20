@@ -14,7 +14,7 @@
 // cfar.hpp is the special case of one sample, one row, and a background estimated from n_train cells.
 //
 // The tail of X is computed exactly for the Erlang case and by the saddlepoint (Lugannani-Rice)
-// formula otherwise; tests/cpp/test_statistic.cpp and tests/python/test_detector.py hold it to exact
+// formula otherwise; tests/cpp/test_detector.cpp and tests/python/test_detector.py hold it to exact
 // forms and to Monte Carlo.
 #pragma once
 

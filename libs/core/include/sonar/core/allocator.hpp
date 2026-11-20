@@ -1,9 +1,15 @@
 // Slab memory allocator (ASASIN Sec. II-C; DECISIONS.md D-08).
 //
-// Every stage reports how much memory it needs before anything runs. One slab is
-// then allocated to cover all requests, and stages take aligned blocks from it. This
-// keeps the suite to a single device allocation, so it cannot fragment GPU memory that
-// other processes (a display, a GIS tool) are also using.
+// A user states every block it will need before anything runs. One slab is then
+// allocated to cover all requests, and the blocks are taken from it, aligned, so the
+// user makes a single device allocation and does not fragment GPU memory that other
+// processes (a display, a GIS tool) are also using.
+//
+// Only the CUDA backprojection (libs/recon/src/backproject_cuda.cu) uses it: one slab
+// per call, plus one per device for the inputs kept resident between calls (its
+// trajectory texture is a separate cudaMallocArray). The other CUDA code (detect, dsp,
+// live, sim) allocates per buffer through DeviceBuffer (parallel_cuda.hpp) and does not
+// go through this allocator.
 //
 // Protocol:
 //   1. reserve(bytes) once per future allocation, while the pipeline is built;
