@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 import gpusonar as gs
+from oracle_gate import pytest_runtest_makereport, pytest_terminal_summary  # noqa: F401  (hooks: oracle skips, GPUSONAR_REQUIRE_ORACLES)
 
 
 def make_record(channels=4, samples=128, complex_data=True, seed=0):
