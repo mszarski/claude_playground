@@ -243,8 +243,8 @@ The other twelve still count against the boards' own noise and against a dead ch
 A higher band would suit the short row (0.09 m is half a wavelength at 8.3 kHz) but would be another projector and another band than
 the full face's, so the prototype keeps 4–6 kHz. Its pulse is 0.1 s: the array cannot listen while it transmits, a 1 s pulse hides everything
 inside 750 m and 0.1 s everything inside 75 m, at 10 dB less processing gain. With a 185 dB projector instead, the 3 m row reaches 3.9 / 1.4 km.
-Simulated trial (raw 102.4 kHz, four boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): the boards synchronise to 0.44 µs and the
-target at 500 m is found within 0.9 m and 0.01°.
+Simulated trial (raw 102.4 kHz, four boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): the boards synchronise to 0.47 µs and the
+target at 500 m is found within 10.2 m and 0.28°.
 
 **Stages 2 and 3, the static drop-in array: where stacked rows first go in the water.** A frame carrying two or three rows, lowered from the surface (or
 stood on the bottom) and left in place. The owner: "have static array the longer row": its rows are the face's own row module (32 over
@@ -284,11 +284,11 @@ Simulated trials of the static array (C++ chain; the Python chain is held to it 
 
 | Scenario | Truth | Reported |
 | --- | --- | --- |
-| `popoto_static_trial_2row`: two rows, raw 102.4 kHz, 8 boards on their own clocks, tilted 2°, 100 m of water, target 2.6 km off | depth 60 m | boards synchronised to 0.49 µs; depth 56, 52, 56, 58 m, one answer with the water-depth bound |
-| `popoto_static_trial_3row`: three rows, 12 boards, tilted 2°, 30 m of water, target 150 m off | depth 18 m | 0.40 µs; depth 17.4, 17.4, 17.4, 17.4 m |
-| the same with the target at 300 m | depth 22 m | 27.7, 27.7, 27.7, 27.7 m, path `bottom`: in 30 m of water the bounces arrive inside the pulse's range sidelobes and pull the estimate |
+| `popoto_static_trial_2row`: two rows, raw 102.4 kHz, 8 boards on their own clocks, tilted 2°, 100 m of water, target 2.6 km off | depth 60 m | boards synchronised to 0.49 µs; depth 14, 13, 17, 17 m, one answer with the water-depth bound |
+| `popoto_static_trial_3row`: three rows, 12 boards, tilted 2°, 30 m of water, target 150 m off | depth 18 m | 0.40 µs; depth 17.1, 17.1, 17.1, 17.1 m |
+| the same with the target at 300 m | depth 22 m | 21.4, 21.4, 21.4, 21.4 m, path `direct`: in 30 m of water the bounces arrive inside the pulse's range sidelobes and pull the estimate |
 | `popoto_static_free`: three rows, free field, targets about 400 m off | depths 10, 40, 90 m | track depth errors -0.0, 0.0, 0.0 m |
-| `popoto_static_passing`: a target crossing at 3 m/s, 20 m deep, 8 pings | one mover | tracks: mover; mover at 3.0 m/s, depth 22.1 m |
+| `popoto_static_passing`: a target crossing at 3 m/s, 20 m deep, 8 pings | one mover | tracks: mover; mover at 3.0 m/s, depth 22.6 m |
 | listening: two noise sources (`sim/passive.py`), tilted 2° | elevations -8.4, 3.2° | both in 10 of 10 frames, elevation within 0.05° |
 
 What the static array cannot show: ownship's motion and the vehicle's attitude sensor. With the long row it does show the full row's beam and reach.
@@ -385,9 +385,9 @@ Three rows are no more accurate than two (the outer rows set that); the third bu
 | Detection against one row | +2.5 dB | +4.0 dB |
 | A dead board | the row it serves loses 8 of 32; the estimate carries on | the same |
 | A dead row | no elevation | two rows left: the two-row behaviour |
-| Processing per ping, scenario size, C++ on 4 shared CPU threads (one row: 0.63 s) | 1.41 s | 2.54 s |
+| Processing per ping, scenario size, C++ on 4 shared CPU threads (one row: 0.73 s) | 1.65 s | 2.50 s |
 | Raw data rate | 157 Mbit/s | 236 Mbit/s |
-| Simulated check | `popoto_face_2row_shallow`: target at 60 m, 3 km: read 34, 26, 34, 34 m with the water-depth bound; without it 5 candidates | free field, channel and rehearsal below |
+| Simulated check | `popoto_face_2row_shallow`: target at 60 m, 3 km: read 33, 33, 33, 33 m with the water-depth bound; without it 2 candidates | free field, channel and rehearsal below |
 
 **Recommended: three rows** as the default of the option, with two rows a sound first step (the middle row can be added later: its boards and
 cables are separate) and the right choice only where the water is shallow against the ranges of interest. Both are shipped, for the frame and for the face.
@@ -451,14 +451,14 @@ Measured on simulated pings of the face (C++ chain; the Python chain agrees to 0
 
 | Scenario | Truth | Reported |
 | --- | --- | --- |
-| `popoto_elevation_free`: three rows, free field, rolled 3°, three targets near 1 km | depths 10, 60, 160 m | track depth errors -0.0, 0.2, 0.2 m |
-| `popoto_elevation_shallow`: 100 m of water, bounces to second order, 1 km | depth 50 m, direct path -1.15° | 44, 44, 44, 44 m, -0.8, -0.8, -0.8, -0.8°, path direct |
-| `popoto_elevation_rehearsal`: raw 102.4 kHz, 12 boards on their own clocks, rolled 4° and rolling 1.5°/s, local sound speed 1490 m/s | targets at 60 m and 8 m, 1 km | boards synchronised to 0.49 µs; 61, 60, 61 m (with the attitude of the ping instead of the arrival: 12, 12, 12 m); the shallow one 2.8, 1.4, 3.2 m, merged with its surface echo |
+| `popoto_elevation_free`: three rows, free field, rolled 3°, three targets near 1 km | depths 10, 60, 160 m | track depth errors 0.0, -0.0, -0.1 m |
+| `popoto_elevation_shallow`: 100 m of water, bounces to second order, 1 km | depth 50 m, direct path -1.15° | 46, 46, 46, 46 m, -0.9, -0.9, -0.9, -0.9°, path direct |
+| `popoto_elevation_rehearsal`: raw 102.4 kHz, 12 boards on their own clocks, rolled 4° and rolling 1.5°/s, local sound speed 1490 m/s | targets at 60 m and 8 m, 1 km | boards synchronised to 0.49 µs; 60, 60, 61 m (with the attitude of the ping instead of the arrival: 11, 12, 12 m); the shallow one 2.8, 3.2, 2.1 m, merged with its surface echo |
 
 **What a channel does to the depth, and the sigma does not say.** An echo that bounced once on one leg arrives just behind the direct echo (0.6 m in the
 two-row check, against a range resolution of 0.375 m) and from another elevation; it is not cleanly separated, and it pulls the angle. In the two-row check at 3 km the target at 60 m reads
-34, 26, 34, 34 m (up to 34 m off, 0.6°); in the three-row check at 1 km the one at 50 m reads 44, 44, 44, 44 m (6 m off); the static array at
-300 m in 30 m of water reads 28, 28, 28, 28 m for 22 m. In free field the same chain is within a metre. The size of the pull depends on the
+33, 33, 33, 33 m (up to 27 m off, 0.5°); in the three-row check at 1 km the one at 50 m reads 46, 46, 46, 46 m (4 m off); the static array at
+300 m in 30 m of water reads 21, 21, 21, 21 m for 22 m. In free field the same chain is within a metre. The size of the pull depends on the
 echoes' phases, so on the geometry to a fraction of a wavelength: with the projector 1.5 m below the array's centre instead of beside it, the two-row case read
 closer to the truth (an earlier run of this bench, not kept in its file). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long
 range treat depth as good to a few tenths of a degree of elevation, whatever the sigma says. Not modelled further here: a longer band or a window with
@@ -526,7 +526,7 @@ fixed channel count; 96 as three rows make the elevation unambiguous.
   Accuracy is set by the outer rows' separation, not the count.
 - **Noise or reverberation.** More source level buys noise-limited range (6 dB is worth four times the hydrophones in a row) and nothing against
   reverberation; a longer row buys both. Where reverberation limits (short and medium range in the scenarios), length is the only one that helps.
-- **Own depth, and the surface.** None of the reach figures here contains the surface-reflected path. Against a target near the surface in water that does not duct, own depth is worth more than any row: the ship class at 12 km, margin over what each build's own detector needs, 1 row: -47 dB at 10 m, +4.9 dB at 225 m; 2 rows: -45 dB at 10 m, +7.5 dB at 225 m; 3 rows: -43 dB at 10 m, +9.0 dB at 225 m (*Surface interference, own depth, and target classes*; every target figure assumed).
+- **Own depth, and the surface.** None of the reach figures here contains the surface-reflected path. Against a target near the surface in water that does not duct, own depth is worth more than any row: the ship class at 12 km, margin over what each build's own detector needs, 1 row: -47 dB at 10 m, +4.8 dB at 225 m; 2 rows: -45 dB at 10 m, +7.4 dB at 225 m; 3 rows: -43 dB at 10 m, +8.8 dB at 225 m (*Surface interference, own depth, and target classes*; every target figure assumed).
 - **Band.** Another band moves every row: spacing and row length scale with the wavelength, the reach with absorption and noise
   (`tools/popoto_range_study.py`), and the rows' repeat spacing with it.
 - **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, 2.46 Mbit/s and 7.3 MB per ping per
@@ -536,11 +536,11 @@ fixed channel count; 96 as three rows make the elevation unambiguous.
 **Data path and compute.** Checked at the boards' rate (102.4 kHz, 24 bit) with 32, 64 and 96 channels: board blocks over UDP (128, 64 and 42 samples a datagram), the C++ and Python
 assemblers, Sensor Bridge frames (307,328 and 460,928 bytes for 1600 samples at 64 and 96 channels), the container file and the chain carry them
 unchanged. The record format already stores every hydrophone's position and the attitude samples: no format change. On pings of the `popoto_12km`
-scenario's size (baseband) the C++ chain takes 0.63, 1.41 and 2.54 s for one, two and three rows on 4 shared CPU threads, against 17.9 s between pings:
+scenario's size (baseband) the C++ chain takes 0.73, 1.65 and 2.50 s for one, two and three rows on 4 shared CPU threads, against 17.9 s between pings:
 real time with room.
 (Timings are from an otherwise idle machine with the earlier row heights; the work does not depend on them.) **At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took 15, 24 and 38 s (measured with
 earlier row heights; the map dominates and does not depend on them). The band is 2 kHz wide, so the samples carry 26 times more than needed. The owner: "Prepare both options":
-converting to baseband and decimating before the chain, and a GPU. Measured on an NVIDIA L4 (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes 0.010, 0.021 and 0.031 s a ping for one, two and three rows against 0.15, 0.30 and 0.44 s on that machine's 8 CPU threads (15 times for one row), on pings of scenario size (15,467 baseband samples a channel) and with the row heights before the 1.5 m change. Raw pings at the boards' full rate have not been run on a GPU. Decimate-first timings: `design/popoto_stage2.json`.
+converting to baseband and decimating before the chain, and a GPU. Measured on an NVIDIA L4 (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes 0.015, 0.028 and 0.040 s a ping for one, two and three rows against 0.15, 0.31 and 0.46 s on that machine's 8 CPU threads (10 times for one row), on pings of scenario size (15,483 baseband samples a channel) and with the row heights before the 1.5 m change. Raw pings at the boards' full rate have not been run on a GPU. Decimate-first timings: `design/popoto_stage2.json`.
 
 **What carries over from stage to stage, and what changes.** Unchanged: the boards and their count per row, the synchronisation scheme, the stream and record
 formats, the software and its settings, the report. From the test AUV to the static array: the row changes from the short module (0.09 m spacing) to the long one (0.15 m),
@@ -600,7 +600,7 @@ The simulator now models this (`transmit.direct_path`, `receive.overload`; `tool
 | Lower source level, longer pulse, same energy | each 3 dB less level is twice the pulse: −3 dB: 2 s, blind inside 1.5 km, −6 dB: 4 s, blind inside 3.0 km, −10 dB: 10 s, blind inside 7.5 km. The 12 km budget is unchanged (it depends on energy); full scale would need −22 dB, a 164 s pulse: not a way out by itself | blind range and ping interval grow with the pulse | yes |
 | Schedule the sync bursts clear of the transmit | the bursts survive | `sync.reference.lead_s` in the spec (after the recovery time), or open the window later | yes, once the recovery time is |
 
-**Position and the multipath depth bias.** The projector's place also moves the bias a shallow channel puts on depth: with the projector beside the rows in the end margin the two-row check at 3 km reads 26–34 m for a target at 60 m (`popoto_elevation_bench.json`); an earlier run with it 1.5 m below the array's centre read closer to the truth. Below the array was better on that count; it is one geometry, not a rule.
+**Position and the multipath depth bias.** The projector's place also moves the bias a shallow channel puts on depth: with the projector beside the rows in the end margin the two-row check at 3 km reads 33–33 m for a target at 60 m (`popoto_elevation_bench.json`); an earlier run with it 1.5 m below the array's centre read closer to the truth. Below the array was better on that count; it is one geometry, not a rule.
 
 **Recommended combination.** (1) Protection first: a clamp or limiter at every input, or confirmation from the board's documentation that the inputs survive the level in the table. (2) The projector as far
 from the nearest hydrophone as the platform allows; every doubling is 6 dB less to recover from. (3) An ignore window in the chain from the trigger to the end of the direct sound plus the measured
@@ -645,51 +645,51 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 
 | Water | Class | Free-field margin (Pd) | At 10 m | Best own depth | Margin there (Pd) | Own depths that hold it | Reach there |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | -43 dB | 225 m | +9.0 dB (1.00) | 125–265 m | 12.7 km |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -24 dB | 280 m | -11.5 dB (0.00) | none | 7.0 km |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | -3 dB | 245 m | +8.6 dB (1.00) | 65–500 m | 12.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -6.8 dB (0.00) | -16 dB | 225 m | -6.0 dB (0.00) | none | 7.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -26.8 dB (0.00) | -32 dB | 480 m | -27.0 dB (0.00) | none | 3.3 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -6.8 dB (0.00) | -11 dB | 395 m | -6.9 dB (0.00) | none | 8.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +16 dB | 5 m | +22.8 dB (1.00) | 5–89 m | 12.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -4 dB | 65 m | -3.1 dB (0.02) | none | 9.6 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +16 dB | 65 m | +16.9 dB (1.00) | 5–89 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | — | 55 m | +10.5 dB (1.00) | 5–405 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | — | 55 m | -5.9 dB (0.00) | none | 3.3 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | — | 80 m | +10.8 dB (1.00) | 5–405 m | 12.0 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +18 dB | 5 m | +32.2 dB (1.00) | 5–189 m | 12.7 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -16 dB | 101 m | -8.1 dB (0.00) | none | 7.2 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +4 dB | 101 m | +11.9 dB (1.00) | 5–189 m | 12.7 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | -96 dB | 5 m | -96.0 dB (0.00) | none | 1.8 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -116 dB | 5 m | -116.0 dB (0.00) | none | 1.0 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | -96 dB | 41 m | -4.6 dB (0.00) | none | 7.2 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +19 dB | 5 m | +31.9 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -15 dB | 85 m | -9.5 dB (0.00) | none | 7.2 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +5 dB | 85 m | +10.5 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +18 dB | 5 m | +33.8 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -14 dB | 189 m (the deepest searched) | -7.3 dB (0.00) | none | 7.2 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +6 dB | 189 m (the deepest searched) | +14.1 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +19 dB | 5 m | +32.5 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -12 dB | 149 m | -10.4 dB (0.00) | none | 6.5 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +8 dB | 149 m | +10.6 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +14 dB | 141 m | +20.6 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -12 dB | 133 m | -6.5 dB (0.00) | none | 6.5 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +8 dB | 5 m | +14.2 dB (1.00) | 5–189 m | 12.7 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | -43 dB | 225 m | +8.8 dB (1.00) | 130–265 m | 12.7 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -24 dB | 280 m | -11.6 dB (0.00) | none | 7.0 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | -3 dB | 245 m | +8.4 dB (1.00) | 65–500 m | 12.7 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -7.0 dB (0.00) | -16 dB | 225 m | -6.1 dB (0.00) | none | 7.7 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -27.0 dB (0.00) | -32 dB | 480 m | -27.1 dB (0.00) | none | 3.3 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -7.0 dB (0.00) | -12 dB | 395 m | -7.1 dB (0.00) | none | 8.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +16 dB | 5 m | +22.7 dB (1.00) | 5–89 m | 12.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -4 dB | 65 m | -3.2 dB (0.02) | none | 9.6 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +16 dB | 65 m | +16.8 dB (1.00) | 5–89 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | — | 55 m | +10.3 dB (1.00) | 5–405 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | — | 55 m | -6.0 dB (0.00) | none | 3.3 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | — | 80 m | +10.6 dB (1.00) | 5–405 m | 12.0 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +32.0 dB (1.00) | 5–189 m | 12.7 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -16 dB | 101 m | -8.3 dB (0.00) | none | 7.2 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +4 dB | 101 m | +11.7 dB (1.00) | 5–189 m | 12.7 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | -96 dB | 5 m | -96.1 dB (0.00) | none | 1.8 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -116 dB | 5 m | -116.1 dB (0.00) | none | 1.0 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | -96 dB | 41 m | -4.7 dB (0.00) | none | 7.2 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +31.7 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -15 dB | 85 m | -9.6 dB (0.00) | none | 7.2 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +5 dB | 85 m | +10.4 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +33.6 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -14 dB | 189 m (the deepest searched) | -7.4 dB (0.00) | none | 7.2 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +6 dB | 189 m (the deepest searched) | +13.9 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +32.3 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -12 dB | 149 m | -10.5 dB (0.00) | none | 5.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +8 dB | 149 m | +10.5 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +14 dB | 141 m | +20.5 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -12 dB | 133 m | -6.6 dB (0.00) | none | 6.5 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +8 dB | 5 m | +14.0 dB (1.00) | 5–189 m | 12.7 km |
 
 ![Detection margin against range and own depth](design/popoto_depth_planner.png)
 
 Every best depth in the table is inside the platform's limit (30 of 30): the search goes no deeper. Where it says *the deepest searched*, the limit or the bottom clearance is what stopped it and a deeper array would do better. The limit is also the depth rating the parts list asks of every wet part.
 
 
-- **A ship in non-ducting water wants the array deep.** Best at 225 m (+9.0 dB); held anywhere in 125–265 m; within 3 dB of the best over 185–240 m. At 10 m it is -43 dB and the reach is 4.0 km; the shallowest depth that holds it at 12 km is 125 m.
-- **One depth for the ship and a deep submerged target:** 125–265 m; best 225 m (+8.0 dB for the weaker).
-- **Depth diversity.** Pinging at more than one depth (or as the vehicle changes depth) fills what one depth leaves: at the ship's target strength, every target depth from 1 to 500 m at 12 km is held by 250 m (98%), then 35 m (100%); the best single depth covers 98%. For weaker targets and other waters: the JSON's `depth_diversity`.
-- **The small submerged class is not reached at 12 km at its low figure** (+5 dB: -11.5 dB at best, reach 7.0 km); at broadside (+22 dB assumed) add 17 dB.
+- **A ship in non-ducting water wants the array deep.** Best at 225 m (+8.8 dB); held anywhere in 130–265 m; within 3 dB of the best over 185–240 m. At 10 m it is -43 dB and the reach is 3.7 km; the shallowest depth that holds it at 12 km is 130 m.
+- **One depth for the ship and a deep submerged target:** 130–265 m; best 225 m (+7.9 dB for the weaker).
+- **Depth diversity.** Pinging at more than one depth (or as the vehicle changes depth) fills what one depth leaves: at the ship's target strength, every target depth from 1 to 500 m at 12 km is held by 325 m (98%), then 45 m (100%); the best single depth covers 98%. For weaker targets and other waters: the JSON's `depth_diversity`.
+- **The small submerged class is not reached at 12 km at its low figure** (+5 dB: -11.6 dB at best, reach 7.0 km); at broadside (+22 dB assumed) add 17 dB.
 - **What depth costs.** The nulls move with the target's depth: the table's last column of the planner (`target_depths_not_held_m`) lists the target depths a chosen own depth leaves uncovered; the bottom limits own depth in shallow water (clearance is a parameter); and with a real profile the answer changes (the profile rows above: the same classes through Bellhop). **The plan rests on the water it is given**: isovelocity unless a profile is supplied, and every shipped water is illustrative.
 
-Rows only move the margin: 1x32: ship best +4.9 dB at 225 m; 2x32: ship best +7.5 dB at 225 m; 3x32: ship best +9.0 dB at 225 m (non-ducting water).
+Rows only move the margin: 1x32: ship best +4.8 dB at 225 m; 2x32: ship best +7.4 dB at 225 m; 3x32: ship best +8.8 dB at 225 m (non-ducting water).
 
-**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+30 dB) / 33 m (+34 dB); `popoto_static_2x32` (3.0 km): 56 m (+28 dB) / 49 m (+31 dB); `popoto_static_3x32` (3.0 km): 56 m (+29 dB) / 49 m (+32 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
+**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+30 dB) / 33 m (+34 dB); `popoto_static_2x32` (3.0 km): 56 m (+27 dB) / 49 m (+31 dB); `popoto_static_3x32` (3.0 km): 56 m (+29 dB) / 49 m (+32 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
 
 **Target classes** (`targets:` in a build spec). The owner wants large subsurface movers as well as ships. Three classes are shipped as examples, each marked `assumed`:
 
@@ -717,17 +717,17 @@ No measured target strength of a ship, an unmanned vehicle or a submarine is cit
 | ship at 12 km, non-ducting water, array at 10 m | 1 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 2 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 3 | 0 of 6 | — | — | no track | | | |  | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 1 | 6 of 6 | 18.0 dB | 3 | mover | +0.3 m/s | -0.3° | none | — | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 2 | 6 of 6 | 18.2 dB | 3 | mover | +0.4 m/s | -0.3° | none | — | 6 |
-| ship at 12 km, non-ducting water, array at the planned depth | 3 | 6 of 6 | 18.2 dB | 3 | mover | +0.2 m/s | -0.6° | 239 ± 2502 m (4 m) | yes | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 22.2 dB | 3 | mover | -0.3 m/s | -0.2° | none | — | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 22.1 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 5 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 22.4 dB | 3 | mover | -0.1 m/s | -0.4° | 227 ± 2502 m (150 m) | yes | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 32.6 dB | 3 | mover | -0.0 m/s | -0.4° | none | — | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 33.2 dB | 3 | mover | -0.3 m/s | -0.2° | none | — | 6 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 33.3 dB | 3 | mover | -0.2 m/s | +0.0° | 74 ± 628 m (150 m) | yes | 0 |
-| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 6 of 6 | 22.7 dB | 3 | mover | -1.7 m/s | -0.3° | 49 ± 627 m (150 m) | yes | 0 |
-| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 6 of 6 | 31.7 dB | 3 | mover | -0.3 m/s | +1.3° | 15 ± 2524 m (60 m) | yes | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 1 | 6 of 6 | 17.9 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 2 | 6 of 6 | 18.0 dB | 3 | mover | -0.4 m/s | -0.3° | 237 ± 2508 m (4 m) | yes | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 3 | 6 of 6 | 18.6 dB | 3 | mover | -0.0 m/s | -0.6° | 239 ± 2508 m (4 m) | yes | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 22.1 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 22.2 dB | 3 | mover | -0.4 m/s | -0.3° | 226 ± 2508 m (150 m) | yes | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 22.4 dB | 3 | mover | -0.3 m/s | -0.4° | 228 ± 2508 m (150 m) | yes | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 32.7 dB | 3 | mover | +0.0 m/s | -0.4° | none | — | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 33.2 dB | 3 | mover | -0.1 m/s | -0.2° | 63 ± 630 m (150 m) | yes | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 33.3 dB | 3 | mover | -0.2 m/s | -0.0° | 79 ± 630 m (150 m) | yes | 0 |
+| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 6 of 6 | 22.7 dB | 3 | mover | -2.0 m/s | -0.2° | 69 ± 629 m (150 m) | yes | 0 |
+| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 6 of 6 | 24.5 dB | 3 | mover | -0.2 m/s | +1.3° | 27 ± 2531 m (60 m) | yes | 0 |
 
 Not run: the submerged mover in 100 m over sand with Bellhop, rows 1 and 2 (minutes each); the cylinder, rows 1 and 2.
 
@@ -784,34 +784,34 @@ In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sa
 
 | Water | Rows | Ship detected on | Median SNR | Track confirmed at ping | Track on the ship | Later arrivals tracked / classed multipath | Other tracks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 6 of 6 pings | 17.8 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 7.3 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.2 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 1 | 6 of 6 pings | 16.4 dB | 3 | mover at 6.4 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 3 | 6 of 6 pings | 14.4 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 24.0 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 23.5 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 6 of 6 pings | 17.7 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.5 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.9 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 1 | 6 of 6 pings | 17.2 dB | 3 | mover at 6.5 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 2 | 6 of 6 pings | 15.0 dB | 3 | mover at 6.6 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 3 | 6 of 6 pings | 15.2 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 20.1 dB | 3 | mover at 5.7 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 20.9 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
-| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.9 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
-| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 35.0 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover, 1 uncertain |
-| popoto_env_gravel_30m at 12 km, Bellhop | 3 | 6 of 6 pings | 35.1 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover, 3 uncertain |
+| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.8 dB | 3 | mover at 6.3 m/s | 0 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 34.3 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover, 1 uncertain |
+| popoto_env_gravel_30m at 12 km, Bellhop | 3 | 6 of 6 pings | 34.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover, 2 uncertain |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 24.7 dB | 3 | mover at 5.9 m/s, multipath at 6.2 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 32.9 dB | 3 | mover at 6.0 m/s, multipath at 6.5 m/s, multipath at 6.9 m/s | 0 / 0 | 1 mover, 2 multipath |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 3 | 6 of 6 pings | 33.9 dB | 3 | mover at 6.0 m/s, uncertain at 1.6 m/s | 1 / 1 | 1 mover, 1 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 23.6 dB | 3 | mover at 5.9 m/s, multipath at 6.2 m/s | 3 / 2 | 2 mover, 3 multipath |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 31.4 dB | 3 | mover at 5.9 m/s, multipath at 6.1 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 3 | 6 of 6 pings | 32.6 dB | 3 | mover at 5.9 m/s, multipath at 6.3 m/s | 1 / 1 | 1 mover, 2 multipath |
 
-A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 16 to 126 m, its first arrival is within 6 m of the ship and its range reads 6 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
+A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 30 to 156 m, its first arrival is within 5 m of the ship and its range reads 10 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
 
 
-Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 17.8 dB against 16.4 dB; 2 rows: 14.9 dB against 14.9 dB; 3 rows: 14.2 dB against 14.4 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
+Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 17.7 dB against 17.2 dB; 2 rows: 14.5 dB against 15.0 dB; 3 rows: 14.9 dB against 15.2 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
 
-**A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do: there the ship is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 17.8 / 14.9 / 14.2 dB over the local background). In Bellhop's field for the same water it is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 24.0 / 22.4 / 23.5 dB over the local background). Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, or on the array's depth, not on the array's size.** The surface term is now in the planner's budget and own depth is planned (*Surface interference, own depth, and target classes* above): in non-ducting water the ship is lost with the array at this depth and held with it deep.
+**A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do: there the ship is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 17.7 / 14.5 / 14.9 dB over the local background). In Bellhop's field for the same water it is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 22.4 / 20.1 / 20.9 dB over the local background). Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, or on the array's depth, not on the array's size.** The surface term is now in the planner's budget and own depth is planned (*Surface interference, own depth, and target classes* above): in non-ducting water the ship is lost with the array at this depth and held with it deep.
 
 The environments differ by far more than the row count does: the row count buys two to four decibels, the water tens. A downward-refracting profile over a soft bottom can leave nothing at 12 km whatever the array.
 
@@ -854,7 +854,7 @@ which arrival of a group came first; how a track's elevation changes over pings.
 - **Hydrophones, boards, synchronisation:** 96 hydrophones on 12 boards (three rows), 64 on 8 (two); rows agree to 0.87 µs for 0.05°.
 - **Data:** 236 Mbit/s while receiving (three rows); 1,733,974 samples a channel and 666 MB a ping for the 750–12700 m window, 134 GB an hour recorded raw (4 bytes a sample), 16 GB an hour decimated by 17. **Recorded raw by default** (the owner's decision; `storage.record`): a decimated recording has lost the synchronisation reference and everything outside the band for good, so raw is the safe default during trials and `decimated` the documented option for storage-limited runs. For one / two / three rows: 45 / 89 / 134 GB an hour raw, 5.2 / 10.5 / 15.7 decimated.
 - **Compute: the plan** (the owner's decision on the stage-2 timings). Over the full window the decimate-first stage on a CPU takes 13.1 / 22.9 / 44.2 s a ping for 1 / 2 / 3 rows against 17.9 s between pings: **one row may run on a CPU; two or three rows need a GPU** (`compute.option` defaults to `gpu` for stacked rows and the validator warns of a CPU option slower than the ping interval). **The full-window GPU figure is still unmeasured**: the L4 numbers below are for scenario-size decimated pings.
-- **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes 0.63 / 1.41 / 2.54 s a ping for 1 / 2 / 3 rows on 4 shared CPU threads, and 0.010 / 0.021 / 0.031 s on an NVIDIA L4 (15 times its own host's 8 threads for one row; the tree before the 1.5 m row heights). A full-length raw ping at the boards' rate took 15 / 24 / 38 s on the CPU: not real time against 17.9 s without decimating first. Decimate-first timings: `docs/design/popoto_stage2.json`.
+- **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes 0.73 / 1.65 / 2.50 s a ping for 1 / 2 / 3 rows on 4 shared CPU threads, and 0.015 / 0.028 / 0.040 s on an NVIDIA L4 (10 times its own host's 8 threads for one row; the tree before the 1.5 m row heights). A full-length raw ping at the boards' rate took 15 / 24 / 38 s on the CPU: not real time against 17.9 s without decimating first. Decimate-first timings: `docs/design/popoto_stage2.json`.
 
 **What the earlier builds reach instead** (noise-limited, ship / small): `popoto_testauv_1x32`: 6.9 / 2.6 km; `popoto_static_2x32`: 8.5 / 3.3 km; `popoto_static_3x32`: 9.0 / 3.5 km. They use a 0.1 s pulse (10 dB less processing gain than 1 s) for short-range trials; the static array with the face's 1 s pulse has the face's reach. No projector is chosen for them either.
 
@@ -907,12 +907,12 @@ Generated from the stage files (`tools/parts_list.py`; the full table with every
 | First usable range, input with no memory (+ per ms of recovery) | 76 m (+0.75 m) | 76 m (+0.75 m) | 76 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) |
 | Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | one row: n/a | 0.87 µs | 0.87 µs |
 | Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |
-| Compute, option A (CPU, decimated pings of scenario size) | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads |
+| Compute, option A (CPU, decimated pings of scenario size) | 0.73 s a ping on 4 shared CPU threads | 1.65 s a ping on 4 shared CPU threads | 2.50 s a ping on 4 shared CPU threads | 0.73 s a ping on 4 shared CPU threads | 1.65 s a ping on 4 shared CPU threads | 2.50 s a ping on 4 shared CPU threads |
 | Compute, CPU at the boards' full rate, no decimation | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads |
 | Compute, option A with the decimate-first stage | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json |
-| Compute, option B (GPU, same decimated pings) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) |
+| Compute, option B (GPU, same decimated pings) | 0.015 s a ping on an NVIDIA L4 against 0.151 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.028 s a ping on an NVIDIA L4 against 0.306 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.040 s a ping on an NVIDIA L4 against 0.455 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.015 s a ping on an NVIDIA L4 against 0.151 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.028 s a ping on an NVIDIA L4 against 0.306 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.040 s a ping on an NVIDIA L4 against 0.455 s on its host (AMD EPYC 7R13 Processor, 8 threads) |
 
-CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, decimated), 4 shared threads, measured on the face's sonar files with 1, 2 and 3 rows of 32: the other stages have the same channel counts and shorter windows, so these are upper figures for them. timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads) Full rate: C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights. GPU figures: C++ chain, bearings from the map, backprojection; median seconds per ping after the first; NVIDIA L4 on AMD EPYC 7R13 Processor (8 threads), 2026-11-17 21:54:16 UTC, 15,467 samples a channel (scenario size, baseband), the tree before the row heights changed to 1.5 m; raw full-rate pings have not been run on a GPU. Decimate-first: docs/design/popoto_stage2.json: decimation.timing.host.1.channels = 32; decimation.timing.host.1.boards = 4; decimation.timing.host.1.board_clocks = 0; decimation.timing.host.1.samples_per_channel = 1.81e+06; decimation.timing.host.1.sample_rate_hz = 1.02e+05; decimation.timing.host.1.simulate_seconds = 1.67; decimation.timing.host.1.chain_full_rate.seconds = 13.3; decimation.timing.host.1.chain_full_rate.detections = 4; decimation.timing.host.1.chain_full_rate.strongest.range_m = 6.04e+03; decimation.timing.host.1.chain_full_rate.strongest.bearing_deg = 7.04; decimation.timing.host.1.chain_full_rate.strongest.snr_db = 80.6; decimation.timing.host.1.chain_decimate_first.seconds = 13.1.
+CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, decimated), 4 shared threads, measured on the face's sonar files with 1, 2 and 3 rows of 32: the other stages have the same channel counts and shorter windows, so these are upper figures for them.  Full rate: C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights. GPU figures: C++ chain, bearings from the map, backprojection; median seconds per ping after the first; NVIDIA L4 on AMD EPYC 7R13 Processor (8 threads), 2026-11-19 22:13:03 UTC, 15,483 samples a channel (scenario size, baseband), the tree before the row heights changed to 1.5 m; raw full-rate pings have not been run on a GPU. Decimate-first: docs/design/popoto_stage2.json: decimation.timing.host.1.channels = 32; decimation.timing.host.1.boards = 4; decimation.timing.host.1.board_clocks = 0; decimation.timing.host.1.samples_per_channel = 1.81e+06; decimation.timing.host.1.sample_rate_hz = 1.02e+05; decimation.timing.host.1.simulate_seconds = 1.67; decimation.timing.host.1.chain_full_rate.seconds = 13.3; decimation.timing.host.1.chain_full_rate.detections = 4; decimation.timing.host.1.chain_full_rate.strongest.range_m = 6.04e+03; decimation.timing.host.1.chain_full_rate.strongest.bearing_deg = 7.04; decimation.timing.host.1.chain_full_rate.strongest.snr_db = 80.6; decimation.timing.host.1.chain_decimate_first.seconds = 13.1.
 
 **Where the plan and the files disagree** (findings, not changes):
 

@@ -2963,6 +2963,13 @@ output compared number by number with the file it replaced.
   0.4 dB except the submerged mover at 12 km in 100 m over sand with Bellhop (three rows):
   24.5 dB (31.7) with 64 arrivals kept by energy. Two rows now state a depth for the ship and
   the submerged movers (sigma 630 to 2510 m, covering the truth), where they stated none.
+- `docs/scenarios/*.png` and `transmission_loss.json` (the 55 scenario diagrams in the
+  repository; `tools/scenario_diagrams.py` mended, it stopped at the first scenario with a
+  reverberation block): one-way losses 0.04 to 0.11 dB lower with the water's own speed.
+- `docs/DESIGN.md` (`tools/design_report.py`, after all of the above): the 12 km margins
+  unchanged (-1.1 / +1.4 / +2.9 dB); the depth-plan figures 0.1 to 0.2 dB lower and the
+  three-row ship depth band 130 to 265 m (125 to 265); the bench and benchmark figures as
+  above. Its test-AUV range "within 10.2 m" is the bench's `range_m` (open item 39).
 - `docs/design/popoto_depth_planner.json`, `.png` (18 minutes): every margin 0.11 to 0.15 dB
   lower, as the detector recount of D-134 moved the thresholds (15.65 to 15.77 dB for one
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one

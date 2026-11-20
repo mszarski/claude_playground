@@ -586,8 +586,9 @@ in free field (detection probability 0.22 on one ping), two rows +1.4 dB (0.87),
 | One-way loss to the target, Bellhop (no absorption) | 67.2 dB, against 81.6 dB for spherical spreading |
 
 - The shallow channel carries 14 dB more each way than spherical spreading, so this case
-  has margin the link budget does not count. (The two losses are not in `gallery.json`
-  and were not measured again with this run.) Eleven of the twelve tracks are not the
+  has margin the link budget does not count. (The two losses are from
+  `docs/scenarios/transmission_loss.json`, regenerated at `e10b17f`: 67.17 dB, 0.08 dB
+  below the earlier file.) Eleven of the twelve tracks are not the
   ship's own: four are attached to a stronger track as later arrivals, four are called
   movers and count as on the ship (no mover is off a moving object), and three are
   uncertain. Why the four movers were not attached was not examined.
@@ -663,8 +664,9 @@ transmission loss are in `docs/scenarios/popoto_env_*.png`.
   same in all four scenes, and in summer over mud every number in `gallery.json` is the
   same. Two runs ago the peak with 32 hydrophones was 0.3 dB higher in winter over sand
   and 3.3 dB higher over gravel.
-- The one-way losses in the table are not in `gallery.json` and were not measured again
-  with this run.
+- The one-way losses in the table are from `docs/scenarios/transmission_loss.json`,
+  regenerated at `e10b17f` (0.04 to 0.11 dB lower with the water's own sound speed); the
+  table's rounded values did not change.
 - Bottom parameters are textbook values for each sediment, not measurements, and the
   Lambert strengths for bottom reverberation are placeholders. Bellhop's loss here excludes
   volume absorption (about 0.3 dB/km at 5 kHz), which the simulation adds separately.
