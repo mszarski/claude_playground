@@ -197,10 +197,11 @@ Consequences that are open (STATUS items 38 to 43):
 - The self-test's range criterion now scores the first arrival; `range_m` sits 6 to 32 m
   behind the target in shallow water.
 - The energy rule still stops at its caps (8 bounces, 64 arrivals) with a warning.
-- **Stale generated files** (`sonar-zxk`, STATUS item 42): `docs/design/popoto_12km.json`
-  (15 Bellhop cases, over an hour on CPU), the benchmark tables, and about a dozen study
-  files. `docs/figures/sst_validation.*` was stale before this work: regenerating it moves
-  Pursuit and ASIAEX rows nothing here touched, unexplained.
+- Stale generated files (`sonar-zxk`, STATUS item 42): regenerated at `e10b17f` on
+  2026-11-19 and 20, each compared with the file it replaced (RESULTS). Three tools reuse
+  stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`): rerun
+  them into an empty `--json` file, with the settings their tables name. Still open: why
+  `sst_validation` moved since `5956b10` (deterministic; not bisected).
 
 ## 8. Other open work (bd issues)
 
