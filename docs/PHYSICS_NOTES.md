@@ -843,7 +843,7 @@ before use".
 | Absorption | Thorp (42) | Francois & Garrison (JASA 72, 1982, two papers) | Thorp is a low-kHz fit; Francois-Garrison covers roughly 0.2 kHz-1 MHz with T, S, depth, pH. Above ~1 MHz (our 2.7 and 5 MHz probes) use the pure-water viscous term (Fisher & Simmons 1977 / F-G third term). Coefficients not reproduced here - take from the papers. |
 | Sound speed | table only | Mackenzie (1981) nine-term equation or Chen-Millero/TEOS-10 | - |
 | Bottom forward loss | "lossy Rayleigh coefficient" (no formula) | Rayleigh fluid-fluid reflection coefficient with complex sediment sound speed | From memory, verify before use: `V = (m sin th - P)/(m sin th + P)`, `P = sqrt(kappa^2 - cos^2 th)`, `m = rho_sed/rho_w`, `kappa = k_sed/k_w = (1/nu)(1 + i delta)^-1`-type complex index, th = grazing angle. Sign of the imaginary part depends on the time convention; SST uses exp(+2 pi i f t). |
-| Bottom backscatter / bistatic | pointer to Jackson models | (a) Lambert's law as a floor; (b) Jackson rough-interface + sediment-volume model (Jackson et al. 1986; Mourad & Jackson 1989; Williams & Jackson 1998; Jackson & Richardson, *High-Frequency Seafloor Acoustics*, 2007) | Lambert, from memory, verify before use: `sigma = mu sin(th_i) sin(th_s)`, `10 log10 mu` ~ -27 dB (Mackenzie value) as a classic default. |
+| Bottom backscatter / bistatic | pointer to Jackson models | (a) Lambert's law as a floor; (b) Jackson rough-interface + sediment-volume model (Jackson et al. 1986; Mourad & Jackson 1989; Williams & Jackson 1998; Jackson & Richardson, *High-Frequency Seafloor Acoustics*, 2007) | Lambert, from memory, verify before use: `sigma = mu sin(th_i) sin(th_s)`, `10 log10 mu` ~ -27 dB (Mackenzie value) as a classic default. Correction 2026-11-20: the code's default is -29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`, D-89), the one printed value found (Muggleworth, NPS 1994, hdl 10945/28529, p. 34, quoting Mackenzie 1961 for deep water at 530 and 1030 Hz); -27 dB was from memory. Either is a low-frequency value, not one for a sonar band. |
 | Surface backscatter | pointer to TR 9407 / McDaniel / Gilbert | Chapman & Harris (JASA 34, 1962) empirical formula for low-mid frequency; a bubble-layer + roughness model for > 10 kHz (Dahl; McDaniel 1993 review) | Chapman-Harris coefficients not reproduced here; take from the paper. |
 | Surface forward loss, coherent part | "simple model of surface roughness" | Rayleigh-parameter coherent reflection | From memory, verify before use: `|R_coh| = exp(-2 k^2 h_rms^2 sin^2 th)`. This is consistent with the TR's qualitative rule (rmsHeight vs lambda/sin th) but the TR does not give it. |
 | Surface loss, bubbles | "fraction absorbed by bubbles" | APL-UW bubble-layer surface loss (TR 9407 family) or the Hall-Novarini bubble population model (Hall 1989; Novarini et al. 1998) with Ainslie (2005) surface-loss treatment | No formula reproduced. |
@@ -1577,7 +1577,7 @@ towards the horizontal at 0.9 of the ray's elevation); shadowing is not modelled
 `T = mss (1 + sin^2 g) t1 t2 / (t1 + t2)`. TR 0702's rule of thumb is `2 mss t1 t2 / (t1 + t2)`:
 the same at normal incidence, twice as long at low grazing angles. The shape is not an
 exponential but `exp(-tau (a + b) / 4ab) I0(tau (a - b) / 4ab) / (2 sqrt(ab))`,
-`a = mss t1 t2 / (t1 + t2)`, `b = a sin^2 g`. (`decay_time: facet`; the default stays the rule.)
+`a = mss t1 t2 / (t1 + t2)`, `b = a sin^2 g`. (`decay_time: facet`, the default since D-85; `rule_of_thumb` stays selectable. Correction 2026-11-20: this note said "the default stays the rule", which was true before D-85.)
 
 **16.4 Frequency.** A boundary displaced by zeta changes the path by `-2 zeta sin g`: the
 field is `exp(i chi zeta(t))`, `chi = 2 k sin g`. For Gaussian zeta of rms height h and rms
@@ -2252,7 +2252,7 @@ profile, and no test of a named sediment.
 *Purple, three recordings.* One number fitted per recording, as before: wind 3.96, 3.70 and
 9.14 m/s (two sigma 0.87, 0.60, 1.91). The third recording is a different sea, which is what
 makes the following a test. 27 surface arrivals, grazing 1.3 to 41.5 degrees. A: gaussian,
-facet, convolve; C: gaussian, rule_of_thumb, convolve (the suite's defaults); B: lorentzian,
+facet, convolve; C: gaussian, rule_of_thumb, convolve (the suite's defaults when this was run, before D-85; the defaults since D-85 are A's: `doppler_spectrum: gaussian`, `decay_time: facet`, `multi_bounce: convolve`, `sim/timespread.py`); B: lorentzian,
 rule_of_thumb, sum.
 
 | Quantity | A | C | B |
