@@ -2,7 +2,7 @@
 """A trial in fjord or harbour water against the open-water rehearsal, through the live chain.
 
     GPUSONAR_BELLHOP=.../bellhop.exe tools/fjord_rehearsal.py [--builds testauv_1row,static_2row,static_3row] [--variants ...]
-                                     [--ranges 300,1000,2000] [--json docs/figures/fjord_rehearsal.json] [--out docs/figures/fjord_rehearsal.md]
+                                     [--ranges 300,1000,2000] [--json docs/figures/fjord_rehearsal.json] [--out docs/figures/fjord_rehearsal.md] [--fresh]
 
 For each of the builds trialled first (the one-row prototype on the test AUV, the two- and three-row static arrays)
 the shipped open-water rehearsal (`popoto_*_trial_*`) and the same sonar, platform, target and window in fjord-type
@@ -27,7 +27,13 @@ it. For the fjord as shipped and the own-ping what-if the same records also go t
 would try against reverberation (`SETTINGS`): a higher detection threshold, a short CFAR window, both. With stacked rows also the elevation and depth of the target's detection, with the
 deployment file's sound-speed assumption (a gradient prior about the local value) and with the profile given to the
 chain (`chain.elevation.ssp`), both from the same records. `--ranges` repeats three variants with the target moved out
-along its bearing (the one-row build). Restartable: the JSON is rewritten after every run. One process, one run at a time.
+along its bearing (the one-row build). One process, one run at a time.
+
+RESUMES FROM THE STORED JSON: a build and variant already in `--json` (by default the committed
+docs/figures/fjord_rehearsal.json) is NOT recomputed; its stored numbers are reported as they are, whatever the code now
+does. The JSON is rewritten after every run, so an interrupted study continues where it stopped. `--fresh` ignores
+everything stored and recomputes every run (the JSON then holds this run's results only). To regenerate a committed file,
+use `--fresh` or an empty `--json` file.
 
 The chain is the one on the branch this is run from (state the commit with the numbers); nothing of it is changed.
 """
@@ -211,8 +217,9 @@ def run_one(cfg: dict, build: dict, engine: str = "cpp", settings: dict | None =
     return out
 
 
-def run(builds: list, variants: list, ranges: list, store: Path, log=print) -> dict:
-    res = json.loads(store.read_text()) if store.exists() else {}
+def run(builds: list, variants: list, ranges: list, store: Path, log=print, fresh: bool = False, run_one=run_one) -> dict:
+    """Every build and variant not yet stored in `store` (all of them with `fresh`), each written to `store` as it ends."""
+    res = {} if fresh or not store.exists() else json.loads(store.read_text())
     todo = [(b, v, None) for b in builds for v in variants]
     todo += [(b, v, r) for b in builds if BUILDS[b]["rows"] == 1 for r in ranges for v in ("open water", "profile, section", "+ late tail", "+ own ping, what-if")]
     for b, v, r in todo:
@@ -301,7 +308,8 @@ def main(argv=None) -> int:
     ap.add_argument("--json", default=str(ROOT / "docs" / "figures" / "fjord_rehearsal.json"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--commit", default="")
-    ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--report-only", action="store_true", help="only the report of the stored JSON; nothing is run")
+    ap.add_argument("--fresh", action="store_true", help="ignore the stored JSON and recompute every run; the JSON then holds this run's results only")
     args = ap.parse_args(argv)
     store = Path(args.json)
     if args.report_only:
@@ -312,7 +320,7 @@ def main(argv=None) -> int:
             print("Bellhop is not installed: set GPUSONAR_BELLHOP to bellhop.exe", file=sys.stderr)
             return 2
         os.environ.setdefault("OMP_NUM_THREADS", "2")
-        res = run([b for b in args.builds.split(",") if b], [v for v in args.variants.split(";") if v], [float(r) for r in args.ranges.split(",") if r], store)
+        res = run([b for b in args.builds.split(",") if b], [v for v in args.variants.split(";") if v], [float(r) for r in args.ranges.split(",") if r], store, fresh=args.fresh)
     text = markdown(res, args.commit)
     if args.out:
         Path(args.out).write_text(text)

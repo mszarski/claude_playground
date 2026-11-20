@@ -2,7 +2,7 @@
 """How much the decay-time rule of the time spreading matters for detection with the long-range array.
 
     tools/decay_time_sensitivity.py [--cases popoto_12km,...] [--seeds 2] [--out docs/figures/decay_time_sensitivity.md]
-                                    [--json docs/figures/decay_time_sensitivity.json] [--pings N]
+                                    [--json docs/figures/decay_time_sensitivity.json] [--pings N] [--fresh]
 
 The long-range scenarios ship without a `time_spread` section (bounce paths are fully coherent).
 Here each is run as shipped and with
@@ -16,8 +16,16 @@ on it is confirmed. The scattered taps are random, so every option is run with `
 and a difference between rules counts only against the spread between seeds.
 
 Cases: popoto_12km (Bellhop, needs GPUSONAR_BELLHOP), popoto_12km with image-source paths, and
-the three shallow popoto_env_* environments at their own ranges (3, 4 and 8 km). One at a time,
-restartable (the JSON is rewritten after every run).
+the three shallow popoto_env_* environments at their own ranges (3, 4 and 8 km). One at a time.
+
+RESUMES FROM THE STORED JSON: a run already in `--json` (by default the committed
+docs/figures/decay_time_sensitivity.json) is NOT recomputed; its stored numbers are reported as
+they are, whatever the code now does. The JSON is rewritten after every run, so an interrupted
+study continues where it stopped. A stored run is found by its case, which names the settings it
+ran with (pings, Bellhop arrivals kept with --max-arrivals, taps), and by its option and seed: a
+run with other --pings, --taps or --max-arrivals is a new case and is computed. `--fresh` ignores
+everything stored and recomputes every run (the JSON then holds this run's results only). To
+regenerate a committed file, use `--fresh` or an empty `--json` file.
 """
 import argparse
 import copy
@@ -50,6 +58,21 @@ def scenario(case: str, pings: int | None) -> dict:
     return cfg
 
 
+def case_label(case: str, cfg: dict, max_arrivals: int | None = None, taps: int | None = None) -> str:
+    """The case's key in the JSON: the scenario, its paths and the settings it runs with, e.g.
+    `popoto_12km, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps)`."""
+    import inspect
+    from gpusonar.sim.timespread import TimeSpreadProvider
+    name, _, how = case.partition(":")
+    fidelity = cfg.get("fidelity")
+    paths = "image-source paths" if how == "image" else "Bellhop" if fidelity == "eigenray" else f"{fidelity} paths"
+    parts = [f"{int(cfg['pings']['count'])} pings"]
+    if max_arrivals and fidelity == "eigenray":
+        parts.append(f"{int(max_arrivals)} strongest arrivals in every variant")
+    parts.append(f"{int(taps) if taps else inspect.signature(TimeSpreadProvider.__init__).parameters['taps'].default} taps")
+    return f"{name}, {paths} ({', '.join(parts)})"
+
+
 def wind_of(cfg: dict) -> float:
     for layer in cfg.get("reverberation", []):
         if "wind_speed" in layer:
@@ -63,11 +86,17 @@ def summary(m: dict) -> dict:
             "track_confirmed_at_ping": m["track_confirmed_at_ping"], "simulate_seconds": m["simulate_seconds"]}
 
 
-def run(cases: list, seeds: int, pings: int | None, store: Path, log=print, options=None, max_arrivals: int | None = None, taps: int | None = None) -> dict:
-    import popoto_12km_study as study
-    res = json.loads(store.read_text()) if store.exists() else {}
+def run(cases: list, seeds: int, pings: int | None, store: Path, log=print, options=None, max_arrivals: int | None = None, taps: int | None = None,
+        fresh: bool = False, measure=None) -> dict:
+    """Every run not yet stored in `store` (all of them with `fresh`), each written to `store` as it ends.
+    measure: the study's `measure(config, seed)` (popoto_12km_study's by default)."""
+    if measure is None:
+        import popoto_12km_study as study
+        measure = study.measure
+    res = {} if fresh or not store.exists() else json.loads(store.read_text())
     for case in cases:
         cfg = scenario(case, pings)
+        label = case_label(case, cfg, max_arrivals, taps)
         # Bellhop cases only. Since D-137 the scenarios no longer state `max_arrivals` (the energy rule keeps arrivals),
         # so the limit cannot wait for the key to be there: it is set whenever the case runs on Bellhop's eigenrays.
         if max_arrivals and cfg.get("fidelity") == "eigenray":
@@ -79,18 +108,18 @@ def run(cases: list, seeds: int, pings: int | None, store: Path, log=print, opti
         todo = [("as shipped", None, None)] + [(name, opt, s) for name, opt in OPTIONS.items() if options is None or name in options for s in range(seeds if "sum" not in name else 1)]
         for name, opt, seed in todo:
             key = name if seed is None else f"{name} / seed {seed}"
-            if key in res.get(case, {}):
+            if key in res.get(label, {}):
                 continue
             c = copy.deepcopy(cfg)
             if opt is not None:
                 c["time_spread"] = dict({"surface": {"wind_speed": wind}, "seed": 1000 + seed}, **opt)
                 if taps:
                     c["time_spread"]["taps"] = int(taps)
-            m = summary(study.measure(c, 1))
+            m = summary(measure(c, 1))
             m["wind_speed"] = wind
-            res.setdefault(case, {})[key] = m
+            res.setdefault(label, {})[key] = m
             store.write_text(json.dumps(res, indent=1))
-            log(f"{case:32s} {key:28s} detected {m['pings_detected']}/{m['pings']} median SNR {m['median_snr_db']} dB, track at ping {m['track_confirmed_at_ping']} "
+            log(f"{label:32s} {key:28s} detected {m['pings_detected']}/{m['pings']} median SNR {m['median_snr_db']} dB, track at ping {m['track_confirmed_at_ping']} "
                 f"({m['simulate_seconds']:.0f} s)")
     return res
 
@@ -190,13 +219,14 @@ def main(argv=None) -> int:
     ap.add_argument("--taps", type=int, default=None, help="scattered taps per bounce ray (default: the model's 6)")
     ap.add_argument("--json", default=str(ROOT / "docs" / "figures" / "decay_time_sensitivity.json"))
     ap.add_argument("--out", default=None)
-    ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--report-only", action="store_true", help="only the report of the stored JSON; nothing is run")
+    ap.add_argument("--fresh", action="store_true", help="ignore the stored JSON and recompute every run (also the echo levels); the JSON then holds this run's results only")
     ap.add_argument("--echo-pings", type=int, default=0, help="also the noise-free echo levels of `echo_levels`, over this many pings")
     args = ap.parse_args(argv)
     store = Path(args.json)
     res = json.loads(store.read_text()) if args.report_only else run([c for c in args.cases.split(",") if c], args.seeds, args.pings, store, options=args.options.split(";") if args.options else None,
-                                                                         max_arrivals=args.max_arrivals, taps=args.taps)
-    if args.echo_pings and "_echo_levels" not in res:
+                                                                         max_arrivals=args.max_arrivals, taps=args.taps, fresh=args.fresh)
+    if args.echo_pings and (args.fresh or "_echo_levels" not in res):
         res["_echo_levels"] = echo_levels(args.echo_pings)
         store.write_text(json.dumps(res, indent=1))
     text = markdown(res)

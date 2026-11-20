@@ -2,7 +2,7 @@
 """Water that changes with range against a chain that knows only the local profile.
 
     GPUSONAR_BELLHOP=.../bellhop.exe tools/ssp_range_study.py [--scenarios a,b] [--json docs/figures/ssp_range_study.json]
-                                                               [--out docs/figures/ssp_range_study.md] [--commit HASH]
+                                                               [--out docs/figures/ssp_range_study.md] [--commit HASH] [--fresh]
 
 Each scenario of `SCENARIOS` (configs/scenarios/ssp_*: `environment.profiles_by_range`, ILLUSTRATIVE water) is simulated
 twice with the same seed, sonar, platform, target and noise:
@@ -27,8 +27,14 @@ the tracks that are somewhere else. Beside it, what the simulated sound itself d
 the eigenrays Bellhop finds from the array to the target in each water (delay as a range at the local sound speed, angle
 at the array, boundary reflections), so that a change in the chain's numbers can be held against the change in the sound.
 
-Few pings (the scenario's own count: four). One process, one run at a time; restartable (the JSON is rewritten after every
-run). The chain is the one on the branch this is run from; nothing of it is changed.
+Few pings (the scenario's own count: four). One process, one run at a time. The chain is the one on the branch this is
+run from; nothing of it is changed.
+
+RESUMES FROM THE STORED JSON: a scenario and water already in `--json` (by default the committed
+docs/figures/ssp_range_study.json) is NOT recomputed; its stored numbers are reported as they are, whatever the code
+now does. The JSON is rewritten after every run, so an interrupted study continues where it stopped. `--fresh` ignores
+everything stored and recomputes every run (the JSON then holds this run's results only). To regenerate a committed
+file, use `--fresh` or an empty `--json` file.
 """
 import argparse
 import copy
@@ -141,8 +147,9 @@ def run_one(name: str, which: str, engine: str = "cpp") -> dict:
     return out
 
 
-def run(names: list, store: Path, log=print) -> dict:
-    res = json.loads(store.read_text()) if store.exists() else {}
+def run(names: list, store: Path, log=print, fresh: bool = False, run_one=run_one) -> dict:
+    """Every scenario and water not yet stored in `store` (all of them with `fresh`), each written to `store` as it ends."""
+    res = {} if fresh or not store.exists() else json.loads(store.read_text())
     for name in names:
         for which in WATERS:
             if which in res.get(name, {}):
@@ -224,7 +231,8 @@ def main(argv=None) -> int:
     ap.add_argument("--json", default=str(ROOT / "docs" / "figures" / "ssp_range_study.json"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--commit", default="")
-    ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--report-only", action="store_true", help="only the report of the stored JSON; nothing is run")
+    ap.add_argument("--fresh", action="store_true", help="ignore the stored JSON and recompute every run; the JSON then holds this run's results only")
     args = ap.parse_args(argv)
     store = Path(args.json)
     if args.report_only:
@@ -235,7 +243,7 @@ def main(argv=None) -> int:
             print("Bellhop is not installed: set GPUSONAR_BELLHOP to bellhop.exe", file=sys.stderr)
             return 2
         os.environ.setdefault("OMP_NUM_THREADS", "2")
-        res = run([s for s in args.scenarios.split(",") if s], store)
+        res = run([s for s in args.scenarios.split(",") if s], store, fresh=args.fresh)
     text = markdown(res, args.commit)
     if args.out:
         Path(args.out).write_text(text)

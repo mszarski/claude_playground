@@ -201,8 +201,10 @@ Consequences that are open (STATUS items 38 to 43):
 - The energy rule still stops at its caps (8 bounces, 64 arrivals) with a warning.
 - Stale generated files (`sonar-zxk`, STATUS item 42): regenerated at `e10b17f` on
   2026-11-19 and 20, each compared with the file it replaced (RESULTS). Three tools reuse
-  stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`): rerun
-  them into an empty `--json` file, with the settings their tables name. Why
+  stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`; their
+  `--help` says so): rerun them with `--fresh` (or into an empty `--json` file), with the
+  settings their tables name. `decay_time_sensitivity` keys a stored run by its pings,
+  Bellhop arrivals kept and taps, so other settings are computed, not served from the file. Why
   `sst_validation` moved since `5956b10` is bisected and settled (D-144).
 
 ## 8. Other open work (bd issues)
