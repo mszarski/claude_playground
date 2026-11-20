@@ -44,12 +44,6 @@ SPREADING = {"two_way": 40.0, "one_way": 20.0}
 _warned_no_water = False     # the "auto" fallback warns once per process
 
 
-def has_water(record) -> bool:
-    """True when the record's environment states both a temperature and a salinity."""
-    env = record.environment
-    return math.isfinite(env.temperature) and math.isfinite(env.salinity)
-
-
 def record_absorption(record, *, frequency: float | None = None, temperature: float | None = None,
                       salinity: float | None = None, depth: float | None = None, ph: float = 8.0,
                       model: str = "francois_garrison") -> float:
