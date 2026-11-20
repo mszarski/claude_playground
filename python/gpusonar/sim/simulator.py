@@ -19,6 +19,10 @@ from .scene import Scene, build_scene
 
 def make_pose(position=(0.0, 0.0, 0.0), rpy=(0.0, 0.0, 0.0), velocity=(0.0, 0.0, 0.0),
               rates=(0.0, 0.0, 0.0)) -> "core.Pose":
+    """A core.Pose from plain sequences, in the record's frames and SI units (record.hpp):
+    `position` NED, m (z down, from the frame origin); `rpy` roll, pitch, yaw, rad (ASASIN
+    Eq. 2 conventions); `velocity` NED, m/s; `rates` d(roll, pitch, yaw)/dt, rad/s. Each is
+    three numbers, converted to float; nothing else is checked."""
     pose = core.Pose()
     pose.position = tuple(float(x) for x in position)
     pose.rpy = tuple(float(x) for x in rpy)

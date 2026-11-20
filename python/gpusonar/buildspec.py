@@ -671,6 +671,10 @@ def clock_errors(spec: dict) -> list[tuple[float, float]]:
 
 
 def adc_full_scale(spec: dict) -> float:
+    """The ADC's full scale in V peak, referred to the gain stage's output (what the records carry as
+    `receive.adc_full_scale`): `boards.adc_full_scale_v` when given, else half of
+    `input_full_scale_vpp` (V peak-to-peak at the input connector) times the gain `gain_db` (0 dB when
+    not given) as an amplitude ratio."""
     b = spec["boards"]
     if b.get("adc_full_scale_v") is not None:
         return float(b["adc_full_scale_v"])
@@ -678,6 +682,9 @@ def adc_full_scale(spec: dict) -> float:
 
 
 def window_range(spec: dict) -> list[float]:
+    """[first, last] range (m) of the receive window: `operation.range_m`, with a first range of null
+    replaced by the pulse's blind range c * duration / 2 (c the build's nominal sound speed, m/s;
+    duration `projector.waveform.duration_s`)."""
     c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     r0, r1 = spec["operation"]["range_m"]
     blind = 0.5 * c * float(spec["projector"]["waveform"]["duration_s"])

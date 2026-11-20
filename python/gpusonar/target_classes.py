@@ -52,6 +52,11 @@ _CACHE: dict = {}
 
 def cylinder_ts_db(length_m: float, diameter_m: float, aspect_deg, f_lo: float, f_hi: float, range_m: float | None = None, caps: bool = True,
                    sound_speed: float = NOMINAL_SOUND_SPEED, n_f: int = 21) -> np.ndarray:
+    """Band-averaged monostatic target strength (dB re 1 m) of a rigid cylinder of `length_m` and
+    `diameter_m` at each aspect in `aspect_deg` (degrees from broadside), over [`f_lo`, `f_hi`] Hz;
+    an array of one value per aspect. `range_m` None is the far field; `caps` includes the end
+    caps; `sound_speed` m/s. See _cylinder_ts_db for the method. Results are cached on the
+    arguments; a copy is returned, so the caller may change it."""
     key = (float(length_m), float(diameter_m), tuple(np.atleast_1d(np.asarray(aspect_deg, dtype=float)).tolist()), float(f_lo), float(f_hi), range_m, bool(caps), float(sound_speed), int(n_f))
     if key not in _CACHE:
         _CACHE[key] = _cylinder_ts_db(*key[:2], np.array(key[2]), *key[3:])

@@ -91,6 +91,10 @@ def _direct(source, points, c):
 
 
 class FreeFieldProvider(EigenrayProvider):
+    """The direct path only, in water of constant `sound_speed` (m/s) with no boundaries: one
+    eigenray per field point, delay r / c, amplitude 1 / r (spherical spreading, no absorption).
+    Tier `free_field`. `engine` picks the C++ or NumPy code (sim/engine.py)."""
+
     tier = "free_field"
 
     def __init__(self, sound_speed: float, engine: str | None = None):
@@ -381,6 +385,17 @@ def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
 
 
 def make_provider(tier: str, sound_speed: float, options: dict | None = None) -> EigenrayProvider:
+    """The eigenray provider of a fidelity tier, with `sound_speed` in m/s and the tier's
+    `options` passed as keyword arguments:
+
+    - `free_field`: FreeFieldProvider (direct path; options are ignored);
+    - `image_source`: ImageSourceProvider (flat surface, bottom and walls);
+    - `sediment`: SedimentProvider (one refracted ray into a fluid sediment);
+    - `eigenray`: sim.bellhop.BellhopProvider; `options["environment"]` is the
+      OceanEnvironment's keyword arguments and the rest go to the provider (`sound_speed`
+      is not used: the environment's profile gives it).
+
+    Any other tier raises ValueError."""
     options = options or {}
     if tier == "free_field":
         return FreeFieldProvider(sound_speed)
