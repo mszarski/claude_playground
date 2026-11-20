@@ -38,7 +38,8 @@ DEFAULTS = {
                                                # inputs for the pulse and their recovery after it: blank that, report no nearer
     "decimate": None,                          # {} or {output_rate: ..., ...}: band-select and decimate a raw ping to complex
                                                # baseband first, boards synchronised in the same stage (libs/live decimate.hpp)
-    "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (host; C++ with engine: cpp)
+    "beamformer": "backprojection",            # the kernel; or "farfield" / "mvdr" (flank.py, the C++ beamformers). All three run
+                                               # on `backend` below, host or CUDA
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
     "look": "starboard",                       # which side of a line array the bearings are on
     # Sizes that follow from the sonar are None here: derived from the first ping's band, pulse and array by

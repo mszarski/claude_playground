@@ -60,8 +60,11 @@ struct StreamOptions {
 struct ChainOptions {
   double bearing_first_deg = -40.0, bearing_last_deg = 40.0, bearing_step_deg = 0.5;  ///< from broadside
   bool hann = true;            ///< Hann aperture weighting for the map
-  /// "backprojection": the kernel, exact in the near field too, host or CUDA.
-  /// "farfield": plane-wave delay and sum in the frequency domain (host). "mvdr": adaptive (host).
+  /// "backprojection": the kernel, exact in the near field too. "farfield": plane-wave delay
+  /// and sum in the frequency domain. "mvdr": adaptive (beamform.hpp). All three run on the
+  /// backend chosen below, host or CUDA (chain.cpp passes `backend` and `device` to
+  /// farfield_beamform and mvdr_beamform); an MVDR covariance that is not positive definite
+  /// sends that call back to the host.
   std::string beamformer = "backprojection";
   MvdrOptions mvdr;
   bool starboard = true;       ///< which side of a line array the bearings are on
