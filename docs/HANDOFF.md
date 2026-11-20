@@ -148,7 +148,7 @@ Code worth knowing first:
 - `python/gpusonar/buildspec.py` and `tools/build_from_spec.py`: the build-spec generator.
   Six Popoto builds in `configs/builds/`; it writes sonar and deployment files and runs
   per-build self-tests (`--check-shipped` verifies the committed files match).
-- `tools/gallery.py`: runs 26 scenes end to end and writes `docs/figures/gallery.json`.
+- `tools/gallery.py`: runs 26 scenes end to end and writes `docs/figures/gallery.json` (with `--quick`: `build/gallery_quick/`, not committed).
 - `tools/popoto_12km_study.py`, `tools/fjord_rehearsal.py`, `tools/design_report.py`: the
   studies behind the design documents.
 
@@ -202,8 +202,10 @@ Consequences that are open (STATUS items 38 to 43):
 - The energy rule still stops at its caps (8 bounces, 64 arrivals) with a warning.
 - Stale generated files (`sonar-zxk`, STATUS item 42): regenerated at `e10b17f` on
   2026-11-19 and 20, each compared with the file it replaced (RESULTS). Three tools reuse
-  stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`): rerun
-  them into an empty `--json` file, with the settings their tables name. Why
+  stored results (`ssp_range_study`, `fjord_rehearsal`, `decay_time_sensitivity`; their
+  `--help` says so): rerun them with `--fresh` (or into an empty `--json` file), with the
+  settings their tables name. `decay_time_sensitivity` keys a stored run by its pings,
+  Bellhop arrivals kept and taps, so other settings are computed, not served from the file. Why
   `sst_validation` moved since `5956b10` is bisected and settled (D-144).
 
 ## 8. Other open work (bd issues)

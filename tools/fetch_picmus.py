@@ -6,6 +6,7 @@ Usage: tools/fetch_picmus.py <directory>
 Then: GPUSONAR_PICMUS_DIR=<directory> tools/test.sh
 """
 
+import argparse
 import pathlib
 import sys
 import urllib.request
@@ -17,11 +18,11 @@ FILES = [
 ]
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print(__doc__)
-        return 2
-    out = pathlib.Path(sys.argv[1])
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("directory", help="where the files go (created if missing); a file already there is not fetched again")
+    args = ap.parse_args(argv)
+    out = pathlib.Path(args.directory)
     out.mkdir(parents=True, exist_ok=True)
     for rel in FILES:
         dst = out / pathlib.Path(rel).name

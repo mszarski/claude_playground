@@ -9,10 +9,12 @@ numbers for each: simulate, condition, (estimate motion,) image, (detect, track)
   3D     buried_objects
   flank  flank_patrol, popoto_far_mover, popoto_trial_1000m (all need Bellhop)
 
-Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out docs/figures]
+Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out DIR]
                         [--quick]   thinned scenes and fewer pings, for a CPU
 
-Writes <out>/<scenario>.png and <out>/gallery.json. The object-over-background figures
+Writes <out>/<scenario>.png and <out>/gallery.json. --out defaults to docs/figures (the committed
+full-size gallery) for a full run and to build/gallery_quick under the repository (not committed)
+with --quick, so a quick run never overwrites the committed gallery; pass --out to put it elsewhere. The object-over-background figures
 are the mean image power over each labelled object's scatterers against the image median.
 """
 
@@ -928,16 +930,24 @@ def _scale_density(cfg, factor):
             item["density"] = float(item["density"]) * factor
 
 
+QUICK_OUT = Path(__file__).resolve().parents[1] / "build" / "gallery_quick"
+
+
+def output_dir(out: str | None, quick: bool) -> Path:
+    """--out as given; else docs/figures for a full run and QUICK_OUT (not committed) for --quick."""
+    return Path(out) if out is not None else (QUICK_OUT if quick else Path("docs/figures"))
+
+
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--backend", default="cuda" if gs.cuda_available() else "host")
     ap.add_argument("--only", default="")
-    ap.add_argument("--out", default="docs/figures")
-    ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--out", default=None, help=f"output directory (default: docs/figures; with --quick: {QUICK_OUT})")
+    ap.add_argument("--quick", action="store_true", help="thinned scenes and fewer pings, for a CPU")
     ap.add_argument("--no-animation", action="store_true", help="figures and numbers only")
     args = ap.parse_args()
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
-    out = Path(args.out)
+    out = output_dir(args.out, args.quick)
     out.mkdir(parents=True, exist_ok=True)
     names = [n for n in args.only.split(",") if n] or list(RUNNERS)
     summary_path = out / "gallery.json"

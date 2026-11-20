@@ -13,6 +13,7 @@ move through the world at the speed of the long waves in the sea.
 
 Writes docs/figures/rough_surface_bands.png and .json.
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -85,7 +86,8 @@ def displacement(a, b, limit=25):
     return float(i - limit), float(j - limit), float(win.max())
 
 
-def main():
+def main(argv=None):
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args(argv)
     regular = [{"amplitude": 0.6, "wavelength": 40.0, "direction_deg": 15.0}, {"amplitude": 0.15, "wavelength": 6.0, "direction_deg": 50.0}]
 
     def flat(s):

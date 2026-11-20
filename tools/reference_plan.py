@@ -12,6 +12,7 @@ Every number is computed here from the build specs and config files (gpusonar.bu
 docs/design/popoto_elevation_study.json, popoto_elevation_bench.json, popoto_range_study.json, popoto_12km.json
 (tools/popoto_12km_study.py), docs/benchmarks/gpu_benchmark_all_l4.json, and popoto_stage2.json when it exists.
 """
+import argparse
 import copy
 import json
 import sys
@@ -681,5 +682,7 @@ def parts_section() -> list:
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(description=__doc__ + "\nRun on its own, it prints the first four sections (writes nothing).",
+                            formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     for fn in (staged_plan, row_modules, projector_options, twelve_km):
         print("\n".join(fn()))
