@@ -68,7 +68,9 @@ def run(cases: list, seeds: int, pings: int | None, store: Path, log=print, opti
     res = json.loads(store.read_text()) if store.exists() else {}
     for case in cases:
         cfg = scenario(case, pings)
-        if max_arrivals and "max_arrivals" in (cfg.get("propagation") or {}):
+        # Bellhop cases only. Since D-137 the scenarios no longer state `max_arrivals` (the energy rule keeps arrivals),
+        # so the limit cannot wait for the key to be there: it is set whenever the case runs on Bellhop's eigenrays.
+        if max_arrivals and cfg.get("fidelity") == "eigenray":
             # Fewer Bellhop arrivals (the strongest), in all variants alike: with time spreading every ray becomes
             # 1 + taps rays and the two-way cost grows with the square.
             cfg["propagation"]["max_arrivals"] = int(max_arrivals)
