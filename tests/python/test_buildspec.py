@@ -88,6 +88,21 @@ def test_shipped_specs_are_valid_and_the_committed_files_are_what_they_generate(
         assert deploy["source"]["sonar"] == clocks.name and ("elevation" in deploy["chain"]) == (spec["array"]["rows"] > 1)
 
 
+def test_the_ac_coupling_corner_is_hardware_description_and_a_receive_key_that_reads_nothing_is_refused():
+    """Audit A7, A16: `receive.highpass_corner_hz` was written and read by nothing (the coupling is modelled only
+    under `receive.overload`); `receive.bandpass_hz` likewise. The corner is kept, flagged, as hardware."""
+    for name in STAGES:
+        cfg = load_sonar_config(bs.names(bs.load(name))["sonar"])
+        assert "highpass_corner_hz" not in cfg["receive"], name
+        assert cfg["hardware"]["boards"]["highpass_hz"] == 100.0
+        assert "hardware.boards.highpass_hz" in cfg["unconfirmed"] and "receive.highpass_corner_hz" not in cfg["unconfirmed"]
+    for key, value in (("highpass_corner_hz", 100.0), ("bandpass_hz", [2000.0, 20000.0])):
+        with pytest.raises(ValueError, match=f"receive.{key} is not simulated"):
+            SonarModel.load("popoto_8", {"receive": {key: value}})
+    with pytest.raises(ValueError, match="overload.highpass_corner_hz"):
+        SonarModel.load("flank_32", {"receive": {"highpass_corner_hz": 10.0}})
+
+
 def test_row_modules_one_long_row_for_static_and_face_the_short_one_only_on_the_test_auv():
     mods = bs.modules()
     assert set(mods) == {"long_4p8m", "testauv_short"} and all(m["array"]["count"] == 32 for m in mods.values())

@@ -38,13 +38,14 @@ receive:
   adc_full_scale: 2.61           # V at the ADC
   sensitivity_db: -208.0         # dB re 1 V/uPa: an AS-1 class passive hydrophone
   gain_db: 43.0
-  highpass_corner_hz: 100.0      # ICD value; 10 Hz has also been quoted
+  # The ICD's 100 Hz AC coupling (10 Hz has also been quoted) is not simulated here: at 4 kHz and up a
+  # one-pole 100 Hz high-pass moves every channel's phase alike by under 1.5 deg and its level by under
+  # 0.003 dB. It matters after an overload: give it as `receive.overload.highpass_corner_hz`.
   window: {range: [50.0, 2000.0]}
 
 unconfirmed:
   - receive.sample_rate          # Popoto ADC rate
   - receive.adc_bits
   - receive.sensitivity_db       # depends on the hydrophones wired to the board
-  - receive.highpass_corner_hz
   - receive.simultaneous_sampling   # whether the 8 inputs record simultaneously
   - transmit.waveform.duration

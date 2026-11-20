@@ -39,7 +39,7 @@ FLANK_SONARS = ["flank_32", "popoto_8", "popoto_8_low", "popoto_array", "popoto_
 # a 0.2 s pulse, eight hydrophones 0.6 m apart, 16 kHz sampling, fresh water.
 OTHER = {"array": {"count": 8, "pitch": 0.6},
          "transmit": {"waveform": {"f_start": 900.0, "f_stop": 1100.0, "duration": 0.2}},
-         "receive": {"sample_rate": 16000.0, "bandpass_hz": [200.0, 6000.0], "window": {"range": [500.0, 1500.0]}}}
+         "receive": {"sample_rate": 16000.0, "window": {"range": [500.0, 1500.0]}}}
 OTHER_C = 1480.0
 TARGET = (180.0, 900.0, 0.0)          # along the array, broadside, down
 

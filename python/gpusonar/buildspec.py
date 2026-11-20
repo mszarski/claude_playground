@@ -731,8 +731,6 @@ def sonar_config(spec: dict) -> dict:
     boards = board_table(spec)
     receive: dict = {"kind": "real", "sample_rate": float(b["sample_rate_hz"]), "adc_bits": int(b["adc_bits"]), "adc_full_scale": adc_full_scale(spec),
                      "sensitivity_db": float(h["sensitivity_db"]), "gain_db": float(b.get("gain_db") or 0.0) + float(h.get("preamp_gain_db") or 0.0)}
-    if b.get("highpass_hz") is not None:
-        receive["highpass_corner_hz"] = float(b["highpass_hz"])
     receive["window"] = {"range": window_range(spec)}
     if all(x["count"] == int(b["inputs"]) for x in boards):
         receive["board_size"] = int(b["inputs"])
@@ -755,7 +753,7 @@ def sonar_config(spec: dict) -> dict:
     hardware = {
         "hydrophone": {k: h.get(k) for k in ("model", "noise_db", "band_hz", "preamp_gain_db") if h.get(k) is not None},
         "boards": {"model": b.get("model"), "inputs": int(b["inputs"]), "gain_db": float(b.get("gain_db") or 0.0),
-                   **{k: b[k] for k in ("input_full_scale_vpp", "simultaneous", "clock_tolerance_ppm", "shared_clock", "overload_damage_vpp", "gain_switchable") if b.get(k) is not None},
+                   **{k: b[k] for k in ("input_full_scale_vpp", "simultaneous", "clock_tolerance_ppm", "shared_clock", "overload_damage_vpp", "gain_switchable", "highpass_hz") if b.get(k) is not None},
                    **({"row_module": a["module"]} if a.get("module") else {}),
                    "wiring": a.get("wiring", "row_by_row"),
                    "position_m": [float(x) for x in (a.get("board_position_m") or [0.0, 0.0, 0.0])], "cable_slack_m": float(a.get("cable_slack_m", 0.5))},
@@ -781,7 +779,7 @@ def sonar_config(spec: dict) -> dict:
             flags.append("platform.row_baseline_m")
     _flag(spec, flags, "hydrophone", "sensitivity_db", "receive.sensitivity_db")
     for key, target in (("sample_rate_hz", "receive.sample_rate"), ("adc_bits", "receive.adc_bits"), ("gain_db", "receive.gain_db"),
-                        ("highpass_hz", "receive.highpass_corner_hz"), ("simultaneous", "receive.simultaneous_sampling")):
+                        ("simultaneous", "receive.simultaneous_sampling")):
         if key == "simultaneous" or b.get(key) is not None:
             _flag(spec, flags, "boards", key, target)
     if not (status(spec, "boards", "input_full_scale_vpp") == "confirmed" or status(spec, "boards", "adc_full_scale_v") == "confirmed"):
@@ -794,7 +792,7 @@ def sonar_config(spec: dict) -> dict:
     else:
         for key, target in tx_keys:
             _flag(spec, flags, "projector", key, target)
-    for section, keys in (("hydrophone", ("model", "noise_db", "band_hz")), ("boards", ("model", "overload_damage_vpp", "gain_switchable")), ("projector", ("model", "amplifier", "blanking_after_s")),
+    for section, keys in (("hydrophone", ("model", "noise_db", "band_hz")), ("boards", ("model", "overload_damage_vpp", "gain_switchable", "highpass_hz")), ("projector", ("model", "amplifier", "blanking_after_s")),
                           ("navigation", ("unit", "rate_hz", "timestamp_sigma_s")), ("compute", ("unit",))):
         for key in keys:
             _flag(spec, flags, section, key, f"hardware.{section}.{key}")
@@ -1358,7 +1356,7 @@ def detector_template(sonar_cfg: dict):
     w = cfg["transmit"]["waveform"]
     band = abs(float(w.get("f_stop", w["f_start"])) - float(w["f_start"])) or 1.0 / float(w["duration"])
     cfg["receive"] = {**cfg["receive"], "kind": "baseband", "sample_rate": 4.0 * band}
-    for key in ("reference", "clock_errors", "highpass_corner_hz"):
+    for key in ("reference", "clock_errors"):
         cfg["receive"].pop(key, None)
     model = SonarModel.from_config(cfg)
     while len(_TEMPLATE_CACHE) >= 2:
