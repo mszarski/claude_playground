@@ -3,22 +3,37 @@
 # Written for a clean nvidia/cuda:*-devel-ubuntu24.04 container (for example a Hugging
 # Face Job); on a provisioned host just run tools/test.sh.
 #
-# Usage: tools/gpu_job.sh            from a checkout
-#        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
+# Usage: tools/gpu_job.sh [pytest args]  from a checkout; the default job (GPUSONAR_JOB unset or "tests") builds,
+#                                        runs ctest and then pytest on tests/python with these args appended
+#        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch gpusonar.tar.gz from that dataset first
+#        SONAR_CMAKE_ARGS="..." tools/gpu_job.sh    extra arguments for the CMake configure step
 #        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
 #        GPUSONAR_HOLOSCAN_CPP=1 tools/gpu_job.sh  also install the Holoscan C++ package and build the C++ operators
 #        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
 #        GPUSONAR_HSB=1 tools/gpu_job.sh        also build Holoscan Sensor Bridge 2.7.0 (emulator, Linux receiver, Python;
-#                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py
-#        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
+#                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py; where raw
+#                                               sockets are refused it sets HSB_UDP_PATCH=1 HSB_EMULATOR_UDP_SOCKET=1 itself
+# Other jobs (GPUSONAR_JOB=<mode>; each runs instead of the tests and exits with the tool's status):
+#        GPUSONAR_JOB=benchmark tools/gpu_job.sh  run tools/benchmark.py --backend cuda (GPUSONAR_SCALE, default 2;
+#                                               GPUSONAR_PIXEL, default 0.05 m; GPUSONAR_MODES, default sas,fls,flank);
+#                                               output in the log only, nothing uploaded
+#        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py --backend cuda --out /work/gallery (set GPUSONAR_ORACLES=1
+#                                               and GPUSONAR_CERES=1 too; GPUSONAR_GALLERY_ARGS appended); uploaded to the
+#                                               dataset folder gallery/ (fixed; GPUSONAR_UPLOAD_PATH is not read)
 #        GPUSONAR_JOB=elevbench tools/gpu_job.sh  run tools/popoto_elevation_bench.py --full-rate --backend cuda
-#        GPUSONAR_JOB=liveablate tools/gpu_job.sh  run tools/live_chain_ablation.py --backend cuda (issue sonar-y7a)
+#                                               (GPUSONAR_ELEVBENCH_ARGS appended); uploads docs/design/popoto_stage2.json
+#                                               to GPUSONAR_UPLOAD_PATH, default elevbench
+#        GPUSONAR_JOB=liveablate tools/gpu_job.sh  run tools/live_chain_ablation.py --backend cuda (issue sonar-y7a;
+#                                               GPUSONAR_LIVEABLATE_ARGS appended); uploads live_chain_ablation.json to
+#                                               GPUSONAR_UPLOAD_PATH, default liveablate
 #        GPUSONAR_JOB=benchall tools/gpu_job.sh  run tools/gpu_benchmark_all.py: every stage with a CUDA backend, host
 #                                               against CUDA (GPUSONAR_ORACLES=1 for the Bellhop scenarios; GPUSONAR_SCALE,
-#                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
+#                                               default 1; GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
 #                                               GPUSONAR_BENCHALL_PYTEST="<-k expression>" runs those tests first;
 #                                               GPUSONAR_UPLOAD_PATH: folder in the upload dataset, default benchall)
+# Uploads (gallery, elevbench, liveablate, benchall) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
+# dataset (the job needs a token that may write to it).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
