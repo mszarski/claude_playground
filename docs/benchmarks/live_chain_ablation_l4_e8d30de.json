@@ -1,0 +1,221 @@
+{
+  "backend": "cuda",
+  "pings": 8,
+  "repeats": 3,
+  "rows": {
+    "1": {
+      "as deployed": {
+        "seconds": [
+          0.015792141999554588,
+          0.015963935999025125,
+          0.015792612997756805
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.01608826799929375,
+          0.01586184299958404,
+          0.015607109002303332
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.0162749029987026,
+          0.015894976000708994,
+          0.01565773999755038
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.010099000002810499,
+          0.009788782001123764,
+          0.009822773001360474
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.015907297001831466,
+          0.01591850700060604,
+          0.015684140998928342
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.00979654299953836,
+          0.009765602000697982,
+          0.009726339998451294
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "2": {
+      "as deployed": {
+        "seconds": [
+          0.029079903000820195,
+          0.028915689999848837,
+          0.028919380998559063
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.02909596099925693,
+          0.029982264000864234,
+          0.029036381998594152
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.028959351999219507,
+          0.028879939000034938,
+          0.02911435399801121
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.02893345899792621,
+          0.02860614399833139,
+          0.028962790998775745
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.030206768002244644,
+          0.03018646900090971,
+          0.03133320200140588
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.028817967002396472,
+          0.028628033000131836,
+          0.028601011999853654
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.030159575999277877,
+          0.029940471998997964,
+          0.029552334002801217
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.02259573299670592,
+          0.02248317900011898,
+          0.02257786100017256
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.02802335799788125,
+          0.02755827800137922,
+          0.027442227001301944
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.021096488999319263,
+          0.021150221000425518,
+          0.02124470300259418
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "3": {
+      "as deployed": {
+        "seconds": [
+          0.04051202000118792,
+          0.040594952002720674,
+          0.04054641100083245
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.040655513999809045,
+          0.04016513299939106,
+          0.04052430099909543
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.040490060000593076,
+          0.040340537001611665,
+          0.040261704998556525
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.04007335100322962,
+          0.039958488996489905,
+          0.039609520998055814
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.042655106000893284,
+          0.04267952699956368,
+          0.04258312499950989
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.040522061000956455,
+          0.040524680000089575,
+          0.04002352799943765
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.04287083199960762,
+          0.0417474569985643,
+          0.04217508700094186
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.0334938490013883,
+          0.03330659499988542,
+          0.033306674002233194
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.037576316000922816,
+          0.03754557499996736,
+          0.03745788499873015
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.03030682899770909,
+          0.030496643001242774,
+          0.030262817999755498
+        ],
+        "detections_last_ping": 3
+      }
+    }
+  }
+}

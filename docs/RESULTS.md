@@ -2953,8 +2953,8 @@ output compared number by number with the file it replaced.
   replaces (first run, commit `15f1121`) are kept as `gpu_benchmark_all_l4_15f1121.*`. The
   C++ live chain on the device, one / two / three rows: 0.0155 / 0.0282 / 0.0395 s a ping
   (0.0155 / 0.0275 / 0.0380 at `d9cb5b7`; 0.0097 / 0.0212 / 0.0310 at `15f1121`); on the
-  host 0.151 / 0.306 / 0.455 s, unchanged. The 6 to 9 ms slowdown on the device is stable
-  across two runs; its cause is still not measured (issue `sonar-y7a`).
+  host 0.151 / 0.306 / 0.455 s. The 6 to 9 ms on the device are the multiscale detector,
+  which runs on the CPU (below, "Where the live chain's time per ping goes on the device").
 - `docs/figures/ssp_range_study.*`, rerun from an empty results file (the tool reuses stored
   cases): only the depths with the local profile given moved, by 0.2 to 0.6 m (arc rays,
   D-139); detections, SNRs, elevations and the as-deployed depths are unchanged.
@@ -2990,6 +2990,33 @@ output compared number by number with the file it replaced.
   row on the face). Recommended own depths unchanged; reaches on the planner's grid one
   step shorter where a margin crossed zero (a large AUV at 13 m from the one-row face:
   5.68 to 4.90 km); three rows in deep water hold a ship from 130 m (125).
+
+### Where the live chain's time per ping goes on the device (issue `sonar-y7a`)
+
+Source: `tools/live_chain_ablation.py --backend cuda` (GPU job `liveablate`, NVIDIA L4, tree
+of `e8d30de`) → `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`. The benchmark's
+live-chain case (C++ engine, map bearings, backprojection, the deployment file's chain without
+`sync`), 8 pings, median after the first, three repeats in turn; repeats agree within 0.5 ms
+(1.2 ms once). Milliseconds a ping, one / two / three rows:
+
+| Variant | Time per ping | Against as deployed |
+| --- | --- | --- |
+| as deployed | 15.79 / 28.92 / 40.55 | |
+| no coverage | 15.86 / 29.10 / 40.52 | +0.1 / +0.2 / -0.0 |
+| no `sector_from_rays` | – / 28.96 / 40.34 | – / +0.0 / -0.2 |
+| elevation step 0.5° (0.25° deployed) | – / 28.93 / 39.96 | – / +0.0 / -0.6 |
+| attitude at transmit (arrival deployed) | – / 30.21 / 42.66 | – / +1.3 / +2.1 |
+| no gradient terms | – / 28.63 / 40.52 | – / -0.3 / -0.0 |
+| `cell_statistic: mean` (multiscale deployed) | 9.82 / 22.58 / 33.31 | **-6.0 / -6.3 / -7.2** |
+| the chain section of `15f1121` | 15.91 / 27.56 / 37.55 | +0.1 / -1.4 / -3.0 |
+| the same with `cell_statistic: mean` | **9.77 / 21.15 / 30.31** | -6.0 / -7.8 / -10.2 |
+
+The first run's device times (`15f1121`) were 9.7 / 21.2 / 31.0 ms: its chain section with the
+detector of that time reproduces them on today's code within 0.7 ms. The multiscale detector
+(D-93) is `multiscale_detect` in `libs/live/src/detector.cpp`, CPU only, fed by the fine
+power map brought back from the device every ping; `mean` runs `detect::cfar` on the
+chain's backend. On the host the same variants are within the run-to-run spread (±20 ms on a
+300 ms ping here). All variants report the same 3 detections on the last ping.
 
 ## Not yet measured
 

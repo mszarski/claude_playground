@@ -210,7 +210,7 @@ Consequences that are open (STATUS items 38 to 43):
 | `sonar-0ra` P1 | Mode that feeds Holoscan Sensor Bridge's receiver, simulator behind its emulator |
 | `sonar-o7m` P1 | Vehicle adapters for the live chain: board samples and navigation |
 | `sonar-sul` P1 | Run simulator calibration and the live chain on real data |
-| `sonar-y7a` P2 | Live chain on CUDA is 6 to 7 ms a ping slower than at commit `3383429`, cause unmeasured |
+| `sonar-01u` P4 | Run the multiscale detector on the device: it is the 6 to 7 ms the live chain on CUDA gained since `15f1121` (`sonar-y7a`, measured and closed) |
 | `sonar-ydi` P2 | False-alarm rate unmeasured at the default budget; three-row cell-mean constant drifts |
 | `sonar-2j3` P2 | Regenerate depth planner and fjord depth plan after the detector recount (D-134) |
 | `sonar-ofa` P2 | 12 km gallery ship misclassified (now overlaps `sonar-ic5`) |
