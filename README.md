@@ -88,6 +88,7 @@ Tests that need something external skip without it. The switches:
 | --- | --- |
 | `GPUSONAR_BELLHOP=/path/to/bellhop.exe` | the `eigenray` tier: every `flank_*`, `popoto_*`, `fjord_*` and `ssp_*` scenario that names Bellhop, and their tests (`tools/build_oracles.sh` builds it) |
 | `GPUSONAR_KRAKEN_DIR` | the rays-against-normal-modes cross-check |
+| `GPUSONAR_REQUIRE_ORACLES=1` | an oracle test (Bellhop, KRAKEN) that would skip fails instead; without it the run ends with a line counting the oracle skips (`tests/python/oracle_gate.py`; `GPUSONAR_ORACLES=1 tools/gpu_job.sh` sets it) |
 | `GPUSONAR_PICMUS_DIR` | the PICMUS ultrasound benchmark (`tools/fetch_picmus.py`) |
 | `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN` | the measured channel data sets (`tools/fetch_channels.py`; not in the repository, see `docs/OPEN_SOURCE.md` 3.13) |
 | `GPUSONAR_SIM_ENGINE=numpy` or `cpp` | which simulator engine the tests use |

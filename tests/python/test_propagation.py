@@ -176,7 +176,7 @@ def test_echo_at_the_eigenray_tier_matches_the_image_source_tier():
 
 def test_make_provider_builds_the_eigenray_tier():
     if find_bellhop() is None:
-        pytest.skip("Bellhop not installed")
+        pytest.skip("Bellhop not installed (GPUSONAR_BELLHOP)")
     p = gs.sim.make_provider("eigenray", 1500.0, {"environment": PEKERIS, "frequency": 8000.0,
                                                   "max_range": 500.0})
     assert isinstance(p, BellhopProvider) and p.tier == "eigenray"

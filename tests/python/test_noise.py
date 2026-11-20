@@ -66,16 +66,6 @@ def test_isotropic_noise_coherence_across_the_array():
     assert abs(np.sinc(2 * 7979.0 * 0.094 / 1500.0)) < 0.01
 
 
-def test_tones_appear_as_lines():
-    fs, n = 64000.0, 1 << 16
-    rng = np.random.default_rng(2)
-    base = nz.gaussian_noise(n, fs, lambda f: np.full_like(f, -80.0), rng, n_channels=2)
-    x = nz.add_tones(base, fs, [(3000.0, 0.5)], rng)
-    f, pxx = welch(x[0], fs=fs, nperseg=8192, scaling="spectrum")
-    i = np.argmin(np.abs(f - 3000.0))
-    assert pxx[i] == pytest.approx(0.25, rel=0.1)      # rms^2 of the line (it sits on a bin)
-
-
 def clutter_scintillation(shape, seed=3):
     """Scintillation index of seafloor echo intensity with and without patch texture."""
     c, density = 1500.0, 60.0

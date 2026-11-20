@@ -85,8 +85,9 @@ Scene conventions:
    the GPU memory it needs. One slab is allocated to cover all requests as algorithms are
    instantiated; the stated purpose is to avoid fragmentation next to other GPU processes.
    Implementation: `core/allocator` slab with a two-phase protocol (`reserve` during
-   pipeline construction, `commit` once, then bump allocation with alignment). Each stage
-   implements `memory_required()`.
+   pipeline construction, `commit` once, then bump allocation with alignment). There is no
+   base class: the one user, the CUDA backprojection, states its need with
+   `backproject_memory_required` (`libs/recon/src/backproject_cuda.cu`).
 2. **Texture position lookup.** Sensor positions are upsampled and stored in GPU texture
    memory; hardware linear interpolation returns the position at a query time.
    Implementation: a 1D float texture per position component with linear filtering in the

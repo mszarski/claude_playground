@@ -85,7 +85,8 @@ here. For a quick check run single pytest files:
 Bellhop (GPL, test oracle only) was built in the session scratchpad at
 `<scratchpad>/at/Bellhop/bellhop.exe`. The scratchpad survived one container restart but
 is not durable. If it is gone, `tools/build_oracles.sh` rebuilds Bellhop and KRAKEN.
-Without `GPUSONAR_BELLHOP` the Bellhop-dependent tests skip.
+Without `GPUSONAR_BELLHOP` the Bellhop-dependent tests skip, and the run ends with a line counting
+those skips; with `GPUSONAR_REQUIRE_ORACLES=1` they fail instead.
 
 A container restart kills background jobs (it happened once, mid-suite). Committed and
 pushed work is safe; anything only in the scratchpad or a running process is not.

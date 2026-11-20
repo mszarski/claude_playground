@@ -20,7 +20,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import struct
 
 import numpy as np
@@ -205,7 +204,3 @@ def read_sim_taps(directory, ping: int = 0) -> dict:
     with open(os.path.join(str(directory), "sim_taps.json"), encoding="utf-8") as f:
         meta = json.load(f)
     return {m["stage"]: np.load(os.path.join(str(directory), m["file"])) for m in meta if m["ping"] == ping}
-
-
-def tap_files(directory) -> list[str]:
-    return sorted(f for f in os.listdir(str(directory)) if re.match(r"\d\d_", f))
