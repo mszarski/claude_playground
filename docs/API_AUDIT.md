@@ -129,7 +129,7 @@ only "confirmed" where the source was actually opened.
 | F2 (cpp-C1) | `allocator.hpp:3-6` | "a single device allocation": only backprojection uses the slab. |
 | F3 (cpp-D1) | `baseband.hpp:19-21`, `pulse_compression.hpp:23-25` | "two-way range rate" is the radial (one-way) rate in the formulas. |
 | F4 (cpp-C4, I1, S3) | `platform.hpp:30`, `record_file.hpp:52-63`, `reverb.hpp:1-10` | Lifetime of `cuda_device_name`'s pointer; the reader's exceptions; reverb's source (SST Sec. 11.3). |
-| F5 (cpp-C3) | `waveform.hpp:14` | Type 3 (Arbitrary) not listed; `waveform_eval` unused (removal is a code change). |
+| F5 (cpp-C3) | `waveform.hpp:14` | Type 3 (Arbitrary) not listed. (`waveform_eval` is used by pulse compression, not dead: see G2.) |
 | F6 (P7 to P10) | `simulator.py:20` `make_pose`; `propagation.py:93,383`; `target_classes.py:53`; `buildspec.py` helpers | Missing docstrings: frame and units of `make_pose`, the provider tiers, `cylinder_ts_db`, `adc_full_scale` (V), `window_range`. |
 | F7 (L8) | `chain.hpp:64`, `live.py:41` | As D12. |
 | F8 (R4, R5) | `acoustics.py:194-206, 216-219` | As C9: mark unconfirmed in the docstrings. |
@@ -140,7 +140,7 @@ only "confirmed" where the source was actually opened.
 | id | what |
 | --- | --- |
 | G1 (cpp-C2) | `core::Stage`: no library subclass. |
-| G2 (cpp-C3) | `core::waveform_eval`: no caller. |
+| ~~G2 (cpp-C3)~~ | ~~`core::waveform_eval`: no caller.~~ Wrong: `libs/dsp/src/pulse_compression.cpp:142` calls it (found while fixing F5). It stays. |
 | G3 (P2, P3) | `recon/gain.py` `has_water`, `taps.py` `tap_files`: no caller. |
 | G4 (P1) | `sim/noise.py` `self_noise_spectrum_db`, `add_tones`: not reachable from a scenario (wire in, or mark library-only). |
 | G5 (tools-T13) | `tools/popoto_truth_check.py`: a script with the ship track hard-coded twice; to a test, or remove. |
