@@ -10,7 +10,8 @@ both read from the records. Delay estimation follows the paper's two-step scheme
    periods;
 3. solve with coarse delays, unwrap the fine delays around that solution, solve again.
 
-The delay estimator is NumPy for now; the solver is C++ (Ceres).
+The delay estimator is NumPy by default (the reference); `delay_backend` selects its C++
+port (`core.estimate_delays`, host or CUDA). The solver is C++ (Ceres) on the CPU.
 
 Units and conventions: metres, seconds, world frame north-east-down (z positive down).
 Delays are two-way, so a range extent of d metres is 2 d fs / c samples. `seafloor_z` is a
@@ -54,6 +55,8 @@ class MotionOptions:
                                      # "auto": from the records (DVL altitude, else water depth)
     bathymetry: object = None        # optional callable z(x, y) for a known seafloor: sets p_s,z (Eq. 5) and the
                                      # seabed under each ping that the DVL altitude is measured from (Eq. 7)
+    delay_backend: str = "numpy"     # where delays are measured: "numpy" (correlate_window, the reference),
+                                     # "host" (the C++ port, core.estimate_delays) or "cuda" (the same on the device)
 
 
 @dataclass
@@ -152,12 +155,30 @@ def resolve_seafloor_z(records, options: MotionOptions) -> float:
     return float(options.seafloor_z)
 
 
+DELAY_BACKENDS = ("numpy", "host", "cuda")
+
+
+def _delay_backend(options: MotionOptions):
+    """None for the NumPy reference, else the core.Backend of the C++ port."""
+    name = options.delay_backend
+    if name not in DELAY_BACKENDS:
+        raise ValueError(f"motion: delay_backend must be one of {DELAY_BACKENDS}, not {name!r}")
+    if name == "numpy":
+        return None
+    if name == "cuda":
+        if not core.cuda_available():
+            raise RuntimeError("motion: delay_backend 'cuda' needs a CUDA build and a usable device")
+        return core.Backend.Cuda
+    return core.Backend.Host
+
+
 def measure_delays(records, options: MotionOptions, stats: dict | None = None):
     """Delay measurements between every consecutive ping pair. Returns a list of dicts with
     the solver's DelayMeasurement (coarse delay filled in), the fine delay and coherence.
     `stats`, when given, receives the window and lag used (samples and metres) and the
     number of windows dropped because the correlation peaked at the edge of the lag span."""
     out, rejected, at_edge = [], 0, 0
+    backend = _delay_backend(options)
     floor_z = resolve_seafloor_z(records, options)
     window, max_lag = window_sizes(records[0], options) if len(records) else (0, 0)
     for i in range(len(records) - 1):
@@ -179,13 +200,23 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
         look_h = np.array([look[0], look[1], 0.0])
         look_h /= np.linalg.norm(look_h)
         tx_lever = np.asarray(ra.geometry.tx.lever_arm)
+        batch = None
+        if backend is not None:
+            # Every (channel pair, centre) of this ping pair in one call, pair-major.
+            batch = core.estimate_delays(xa, xb, list(range(shift, n)), list(range(n - shift)),
+                                         [int(c) for c in centres], half, max_lag, fs, fc, backend)
         for k in range(n - shift):
             lever_a = np.asarray(ra.geometry.rx[k + shift].lever_arm)
             lever_b = np.asarray(rb.geometry.rx[k].lever_arm)
             pc = np.asarray(pose.position) + rot @ (0.5 * (tx_lever + lever_a))
-            for centre in centres:
-                est = correlate_window(xa[k + shift], xb[k], int(centre), half,
-                                       max_lag, fs, fc)
+            for w, centre in enumerate(centres):
+                if batch is None:
+                    est = correlate_window(xa[k + shift], xb[k], int(centre), half,
+                                           max_lag, fs, fc)
+                else:
+                    j = k * len(centres) + w
+                    est = ((float(batch["coarse"][j]), float(batch["fine"][j]), float(batch["coherence"][j]))
+                           if batch["valid"][j] else None)
                 if est is None:
                     rejected += 1
                     at_edge += 1
@@ -217,7 +248,8 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
     if stats is not None and len(records):
         per_m = 2.0 * records[0].samples.sample_rate / records[0].environment.sound_speed
         stats.update(window_samples=window, max_lag_samples=max_lag, window_m=window / per_m,
-                     max_lag_m=max_lag / per_m, seafloor_z=floor_z, rejected_at_lag_edge=at_edge)
+                     max_lag_m=max_lag / per_m, seafloor_z=floor_z, rejected_at_lag_edge=at_edge,
+                     delay_backend=options.delay_backend)
     return out, rejected
 
 
