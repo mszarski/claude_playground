@@ -8,6 +8,7 @@ import importlib.util
 import pathlib
 
 import numpy as np
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("classify_rules_eval", ROOT / "tools" / "classify_rules_eval.py")
@@ -40,7 +41,12 @@ def _capture():
 def test_scoring_of_known_tracks():
     out = cre.evaluate_capture(_capture())
     base = out["cells=off,row=off"]
-    assert base["targets"]["boat"] == {"tracked": True, "kind": "mover", "moving": True, "correct": True}
+    boat = base["targets"]["boat"]
+    assert {k: boat[k] for k in ("tracked", "kind", "moving", "correct")} == {"tracked": True, "kind": "mover", "moving": True, "correct": True}
+    # Its errors (D-156): the state against the boat at the state's time (the last point, t = 7), the classified
+    # position at the last ping against the boat there; no ownship in this capture, so no range / cross-range split.
+    assert boat["state_time_s"] == 7.0 and boat["state_error_m"] < 0.1 and boat["report_error_m"] < 0.1
+    assert boat["speed_m_s"] == pytest.approx(4.0, abs=0.05) and "state_range_error_m" not in boat
     assert base["targets"]["anchored"]["kind"] == "static" and base["targets"]["anchored"]["correct"]
     assert base["targets"]["far_buoy"] == {"tracked": False, "kind": None, "moving": False, "correct": False}
     assert base["false_movers"] == 1 and base["lost"] == [] and base["false_movers_removed"] == 0
@@ -52,6 +58,30 @@ def test_scoring_of_known_tracks():
     # No row test in this capture (no `linear`): row_snr_db changes nothing.
     for m in ("off", 3, 8):
         assert out[f"cells={m},row=6"]["targets"] == out[f"cells={m},row=off"]["targets"]
+
+
+def test_errors_are_split_along_and_across_the_line_of_sight_at_the_states_time():
+    """D-156: a track whose last point is its detection's time (8 s after the last ping) is compared with the object
+    then; its classified position (at the last ping, as the live report gives it) with the object at the last ping.
+    The ownship (due west of the ship at the state's time) comes from the capture's echo-grouping origin (tracker
+    order: y, x). Cross range + is counter-clockwise
+    seen from above (x north, y east)."""
+    cap = _capture()
+    cap["truth"] = {"ship": {"position": [800.0, 12000.0, 0.0], "velocity": [-6.0, 0.0, 0.0]}}
+    hist = [[float(t + 8.0), 12000.0, float(800.0 - 6.0 * (t + 8.0) + 0.05 * (-1) ** i)] for i, t in enumerate(T)]
+    # The state 10 m south of the ship (ahead along its course, to its right seen from the ownship looking east) and
+    # 3 m beyond it.
+    last = hist[-1]
+    cap["tracks"] = [{"id": 1, "state": [last[1] + 3.0, last[2] - 10.0, 0.0, -6.0], "hits": len(T), "history": hist,
+                      "snr": [20.0] * len(T), "cells": [6] * len(T)}]
+    cap["classify_kw"] = {"min_speed": 0.5, "max_fit_rms": 2.5, "multipath": {"max_excess_range": 800.0, "bearing": 0.05,
+                                                                              "velocity": 2.5, "origin": (0.0, 710.0)}}
+    cap["gate"] = 200.0
+    ship = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]["ship"]
+    assert ship["kind"] == "mover" and ship["state_time_s"] == T[-1] + 8.0
+    assert ship["state_range_error_m"] == pytest.approx(3.0, abs=0.5) and ship["state_cross_range_error_m"] == pytest.approx(-10.0, abs=0.5)
+    # The fitted line read at the last ping is where the ship is then, within the jitter.
+    assert ship["report_error_m"] < 0.2 and ship["speed_m_s"] == pytest.approx(6.0, abs=0.05)
 
 
 def test_aggregate_over_seeds():

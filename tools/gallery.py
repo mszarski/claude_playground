@@ -358,6 +358,8 @@ def run_flank(name, cfg, backend, quick):
         hits = detect.cluster(detect.cfar(power, pfa=1e-6, guard=15, train=60), power, ranges, bearings,
                               guard=15, train=60)
         hits = [h for h in hits if h.snr_db > 12.0]
+        for h in hits:
+            h.time = i * interval + echo_delay(rec, h.range)      # where the echo shows the target (D-156)
         counts.append(len(hits))
         tracks = tracker.update(i * interval, hits)
         if first is None:
@@ -373,14 +375,15 @@ def run_flank(name, cfg, backend, quick):
         start += n
     metrics = {"pings": len(result.records), "detections_per_ping": counts, "confirmed_tracks": len(tracks), "targets": {}}
     for label, (pos, vel) in truth.items():
-        end = pos[:2] + vel[:2] * t_last
-        best = min(tracks, key=lambda t: np.linalg.norm(t.state[:2] - end), default=None)
+        def miss(t):                                   # against the truth where the track's state holds (D-156)
+            return float(np.linalg.norm(t.state[:2] - (pos[:2] + vel[:2] * state_time(t))))
+        best = min(tracks, key=miss, default=None)
         if best is None:
             metrics["targets"][label] = {"tracked": False}
             continue
         metrics["targets"][label] = {
-            "tracked": bool(np.linalg.norm(best.state[:2] - end) < 60.0),
-            "position_error_m": float(np.linalg.norm(best.state[:2] - end)),
+            "tracked": bool(miss(best) < 60.0),
+            "position_error_m": miss(best),
             "true_velocity": [float(vel[0]), float(vel[1])],
             "track_velocity": [float(best.state[2]), float(best.state[3])]}
     ranges, power, hits = first
@@ -460,32 +463,48 @@ def run_popoto(name, cfg, backend, quick):
 # --- moving ownship: detection and tracking in the world frame ---------------------------------
 
 def world_tracks(detections_per_ping, times, **tracker_kw):
-    """Track detections given as world (x, y) per ping. Returns the tracker's confirmed
-    tracks; each state is [y, x, vy, vx] (the tracker's across, forward order)."""
+    """Track detections given as world (x, y, snr) or (x, y, snr, delay) per ping, `delay` (s) after the ping's
+    transmit time being when the detection shows the target (range / c for a monostatic echo: `echo_delay`; D-156).
+    Returns the tracker's confirmed tracks; each state is [y, x, vy, vx] (the tracker's across, forward order) and
+    holds at the time of the track's last history point (`state_time`)."""
     tracker = detect.Tracker(**tracker_kw)
     tracks = []
     for t, hits in zip(times, detections_per_ping):
-        tracks = tracker.update(float(t), [detect.Detection(float(np.hypot(x, y)), float(np.arctan2(y, x)), snr, 1)
-                                           for x, y, snr in hits])
+        tracks = tracker.update(float(t), [detect.Detection(float(np.hypot(h[0], h[1])), float(np.arctan2(h[1], h[0])), h[2], 1,
+                                                            time=float(t) + float(h[3]) if len(h) > 3 else None)
+                                           for h in hits])
     return tracks
+
+
+def echo_delay(record, rng):
+    """When, after the ping's transmit time, a monostatic echo from range `rng` (m) shows its target: rng / c, with the
+    record's sound speed c, the one the beamformers turn two-way time into range with (flank.farfield_beamform,
+    recon.fan_image). Every sonar the gallery runs transmits from within a few metres of its array (D-156)."""
+    return float(rng) / float(record.environment.sound_speed)
+
+
+def state_time(tr):
+    """When a track's state holds: the time of its last history point (its last detection, or the last ping after a
+    miss; a capture saved before D-156 holds at the last ping)."""
+    return float(tr.history[-1][0])
 
 
 def score_tracks(tracks, truth, t_last, gate, kinds=None):
     """For each true object (position at t = 0, velocity), its track at the last ping: the one `object_track` picks
     with the classes `kinds` (track id -> kind; D-155), so that the position, the velocity and the class reported for
     an object come from the same track. Without `kinds`, the nearest track within `gate`. No track within `gate`: the
-    nearest track's error, not tracked."""
+    nearest track's error, not tracked. Each track is compared with the object where it was when the track's state
+    holds (`state_time`; D-156). `t_last` is kept for the callers; the states hold at or before it."""
     kinds = kinds if kinds is not None else {tr.id: "uncertain" for tr in tracks}
     out = {}
     for label, (pos, vel) in truth.items():
-        end = pos[:2] + vel[:2] * t_last
-        best = object_track(tracks, kinds, end, gate)
+        best = object_track(tracks, kinds, (pos, vel), gate)
         if best is None:
-            best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
+            best = min(tracks, key=lambda tr: _miss(tr, pos, vel), default=None)
         if best is None:
             out[label] = {"tracked": False}
             continue
-        err = float(np.hypot(best.state[1] - end[0], best.state[0] - end[1]))
+        err = _miss(best, pos, vel)
         out[label] = {"tracked": bool(err < gate), "position_error_m": err,
                       "true_velocity_xy": [float(vel[0]), float(vel[1])],
                       "track_velocity_xy": [float(best.state[3]), float(best.state[2])]}
@@ -520,14 +539,25 @@ KIND_STYLE = {"mover": dict(color="#eb6834", lw=3.0, zorder=4), "static": dict(c
 ESTABLISHED = ("mover", "static", "line")
 
 
-def object_track(tracks, kinds, end, gate):
-    """The track scored for a true object whose position at the last ping is `end` (world x, y): the nearest track of
-    an established kind (mover, static, line) within `gate`; if there is none, the nearest track of any kind within
+def _miss(tr, pos, vel):
+    """How far (m) a track's state is from the object (world position at t = 0, velocity) where the object was when
+    the state holds (`state_time`)."""
+    at = np.asarray(pos, dtype=float)[:2] + np.asarray(vel, dtype=float)[:2] * state_time(tr)
+    return float(np.hypot(tr.state[1] - at[0], tr.state[0] - at[1]))
+
+
+def object_track(tracks, kinds, obj, gate):
+    """The track scored for a true object `obj` = (world position at t = 0, velocity): the nearest track of an
+    established kind (mover, static, line) within `gate`; if there is none, the nearest track of any kind within
     `gate`, so that an object seen only as uncertain or multipath is still reported; None if no track is that near.
-    `kinds` maps track id to kind. Ours (D-155): with an object seen as a dozen arrivals (popoto_12km), the nearest
-    track of any kind is a coin toss among them, often a four-point uncertain track or a multipath child."""
+    Each track is compared with the object where it was when the track's state holds (`state_time`: its last
+    detection's time, D-156). `kinds` maps track id to kind. Ours (D-155): with an object seen as a dozen arrivals
+    (popoto_12km), the nearest track of any kind is a coin toss among them, often a four-point uncertain track or a
+    multipath child."""
+    pos, vel = obj
+
     def dist(tr):
-        return float(np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]))
+        return _miss(tr, pos, vel)
     near = [tr for tr in tracks if dist(tr) < gate]
     est = [tr for tr in near if kinds[tr.id] in ESTABLISHED]
     return min(est or near, key=dist, default=None)
@@ -542,8 +572,9 @@ def count_false_movers(classes, moving_ends, gate):
 def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
     the kind given to each true object's track (object_track) and how many tracks called
-    movers are not on an object that moves (count_false_movers)."""
-    classes = classify.classify_tracks(tracks, **kw)
+    movers are not on an object that moves (count_false_movers). The classes' positions are taken at the last ping
+    (`t_last`), as the live report gives them (D-156)."""
+    classes = classify.classify_tracks(tracks, time=t_last, **kw)
     by_id = {c.id: c for c in classes}
     out = {"counts": classify.summary(classes), "targets": {}}
     moving_ends = []
@@ -551,7 +582,7 @@ def classify_and_score(tracks, truth, t_last, gate, **kw):
         end = pos[:2] + vel[:2] * t_last
         if np.hypot(*vel[:2]) > 0.0:
             moving_ends.append(end)
-        best = object_track(tracks, {c.id: c.kind for c in classes}, end, gate)
+        best = object_track(tracks, {c.id: c.kind for c in classes}, (pos, vel), gate)
         if best is not None:
             c = by_id[best.id]
             out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
@@ -645,8 +676,8 @@ def run_fls_transit(name, cfg, backend, quick):
         hits = detect.cluster(detect.cfar(power, pfa=1e-7, guard=guard, train=train), power, r_cells, bearings,
                               guard=guard, train=train, merge=merge)
         hits = [h for h in hits if h.snr_db > 13.0 and h.cells >= 2]
-        per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db)
-                         for h in hits])
+        per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db,
+                          echo_delay(rec, h.range)) for h in hits])
         if first is None:
             first = (r_cells, power, origin)
         polar.append((display(power.T * r_cells[:, None] ** 3), origin))
@@ -849,8 +880,8 @@ def run_popoto_far(name, cfg, backend, quick):
         hits = detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150)
         hits = [h for h in hits if h.snr_db > 9.0]
         # Bearing is from broadside (+y) towards +x, the array's own axis.
-        per_ping.append([(origin[0] + h.range * np.sin(h.bearing), origin[1] + h.range * np.cos(h.bearing), h.snr_db)
-                         for h in hits])
+        per_ping.append([(origin[0] + h.range * np.sin(h.bearing), origin[1] + h.range * np.cos(h.bearing), h.snr_db,
+                          echo_delay(rec, h.range)) for h in hits])
         if first is None:
             first = (ranges, power)
         maps.append(shrink(np.clip(db(power, np.median(power)), 0, 30)))

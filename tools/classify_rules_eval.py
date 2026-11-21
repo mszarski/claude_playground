@@ -15,11 +15,14 @@ with every other classify option the gallery's own for that scene. row_snr_db ac
 test (the FLS transit scenes); in the Popoto scenes its columns equal "off".
 
 Scoring (the gallery's own, gallery.classify_and_score through gallery.object_track; D-155): a true object is the
-scene item's centre moved by its velocity to the last ping; its track is the nearest confirmed track of an established
-kind (mover, static, line) within the gallery's gate for the scene, else the nearest of any kind within the gate
+scene item's centre moved by its velocity to the time the track's state holds (its last detection's time, transmit +
+range / c, D-156; the last ping for captures made before D-156); its track is the nearest confirmed track of an
+established kind (mover, static, line) within the gallery's gate for the scene, else the nearest of any kind within the gate
 (15 m in the FLS transit scenes, 200 m in the Popoto scenes; set in tools/gallery.py, not in the scene files). A
 target is correctly classed when its track is `mover` if the object moves and `static` if not. A false mover is a
-track classed `mover` that is no closer than the gate to every moving object. Against the grid's (off, off) cell of
+track classed `mover` whose classified position at the last ping is no closer than the gate to every moving object
+there. Each scored track's error against that truth is kept as well (position, and where the scene gives the
+ownship's last position, along and across the line of sight from it), with its fitted speed. Against the grid's (off, off) cell of
 the same capture: "lost" counts targets correct there and not correct with the rule; "gained" the reverse;
 "false movers removed" is the baseline's false movers minus the rule's.
 
@@ -109,24 +112,52 @@ def _gallery():
     return gallery
 
 
-def score(classes, tracks, truth: dict, t_last: float, gate: float) -> dict:
+def _error(p, at, origin) -> dict:
+    """How far world point `p` is from `at`: the distance, and with `origin` (world x, y: the ownship) the part along
+    the line of sight from the origin to `at` (range: + beyond it) and across it (+ counter-clockwise seen from above,
+    x north and y east: to the left of the line of sight; the sign of the sonar-960 diagnosis)."""
+    d = np.asarray(p, dtype=float) - at
+    out = {"error_m": float(np.hypot(*d))}
+    if origin is not None:
+        u = at - np.asarray(origin, dtype=float)
+        u = u / np.hypot(*u)
+        out.update(range_error_m=float(d @ u), cross_range_error_m=float(u[1] * d[0] - u[0] * d[1]))
+    return out
+
+
+def track_error(tr, c, pos, vel, t_last, origin=None) -> dict:
+    """A scored track's error against the object (world position at t = 0, velocity): its state against the object
+    where it was when the state holds (gallery.state_time: its last detection's time, D-156), and its classified
+    position `c` (classify_tracks at t_last: the live report's position) against the object at t_last."""
+    g = _gallery()
+    pos, vel = np.asarray(pos, dtype=float)[:2], np.asarray(vel, dtype=float)[:2]
+    state = _error((tr.state[1], tr.state[0]), pos + vel * g.state_time(tr), origin)
+    report = _error((c.position[1], c.position[0]), pos + vel * t_last, origin)
+    return {"state_time_s": g.state_time(tr), **{"state_" + k: v for k, v in state.items()},
+            **{"report_" + k: v for k, v in report.items()}}
+
+
+def score(classes, tracks, truth: dict, t_last: float, gate: float, origin=None) -> dict:
     """The gallery's scoring (gallery.classify_and_score, through its own object_track and count_false_movers) of one
-    classification: per true object whether a track is within `gate` of where it is at the last ping, the kind of the
-    track scored for it (the nearest established one, else the nearest of any kind) and whether it is the right one;
-    and the number of movers no closer than `gate` to any moving object."""
+    classification: per true object whether a track is within `gate` of where it was when the track's state holds,
+    the kind of the track scored for it (the nearest established one, else the nearest of any kind), whether it is the
+    right one, its error (track_error; `origin` the ownship's world x, y) and fitted speed; and the number of movers
+    whose positions at the last ping (`classes`, classified at t_last) are no closer than `gate` to any moving object."""
     g = _gallery()
     kinds = {c.id: c.kind for c in classes}
+    by_id = {c.id: c for c in classes}
     targets, moving_ends = {}, []
     for label, (pos, vel) in truth.items():
         end = np.asarray(pos)[:2] + np.asarray(vel)[:2] * t_last
         moving = bool(np.hypot(*np.asarray(vel)[:2]) > 0.0)
         if moving:
             moving_ends.append(end)
-        best = g.object_track(tracks, kinds, end, gate)
+        best = g.object_track(tracks, kinds, (pos, vel), gate)
         if best is not None:
             kind = kinds[best.id]
             targets[label] = {"tracked": True, "kind": kind, "moving": moving,
-                              "correct": kind == ("mover" if moving else "static")}
+                              "correct": kind == ("mover" if moving else "static"),
+                              **track_error(best, by_id[best.id], pos, vel, t_last, origin), "speed_m_s": float(by_id[best.id].speed)}
         else:
             targets[label] = {"tracked": False, "kind": None, "moving": moving, "correct": False}
     return {"targets": targets, "false_movers": g.count_false_movers(classes, moving_ends, gate)}
@@ -137,11 +168,14 @@ def evaluate_capture(cap: dict) -> dict:
     from gpusonar import classify
     tracks = [track_from_json(t) for t in cap["tracks"]]
     truth = truth_from_json(cap["truth"])
+    mp = cap["classify_kw"].get("multipath") or {}
+    # The ownship at the last ping, where the scene's echo grouping is given it (the Popoto scenes): tracker (y, x).
+    origin = (mp["origin"][1], mp["origin"][0]) if mp.get("origin") is not None else None
     out, base = {}, None
     for key, rule in grid():
         kw = {k: v for k, v in cap["classify_kw"].items() if k != "detections"}
-        classes = classify.classify_tracks(tracks, **kw, detections=rule)
-        s = score(classes, tracks, truth, cap["t_last"], cap["gate"])
+        classes = classify.classify_tracks(tracks, **kw, detections=rule, time=cap["t_last"])
+        s = score(classes, tracks, truth, cap["t_last"], cap["gate"], origin)
         s["counts"] = classify.summary(classes)
         if base is None:
             base = s
@@ -154,9 +188,15 @@ def evaluate_capture(cap: dict) -> dict:
 
 def compact(evaluated: dict) -> dict:
     """One capture's evaluate_capture result for the JSON: per grid cell the kind of each true object's track (None:
-    not tracked), the false movers, lost, gained and the counts by kind."""
+    not tracked), the false movers, lost, gained and the counts by kind; in the first cell (rules off) also each
+    scored track's error and fitted speed (track_error)."""
+    first = next(iter(evaluated), None)
+    keep = ("state_time_s", "state_error_m", "state_range_error_m", "state_cross_range_error_m", "report_error_m",
+            "report_range_error_m", "report_cross_range_error_m", "speed_m_s")
     return {key: {"kinds": {lab: t["kind"] for lab, t in s["targets"].items()}, "false_movers": s["false_movers"],
-                  "lost": s["lost"], "gained": s["gained"], "counts": s["counts"]} for key, s in evaluated.items()}
+                  "lost": s["lost"], "gained": s["gained"], "counts": s["counts"],
+                  **({"errors": {lab: {k: t[k] for k in keep if k in t} for lab, t in s["targets"].items() if t["tracked"]}}
+                     if key == first else {})} for key, s in evaluated.items()}
 
 
 def _spread(values) -> dict:
@@ -274,12 +314,15 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         tracker, tracks = detect.Tracker(**kw), []
         for t, hits, raw in zip(times, per_ping, calls):
             dets, j = [], 0
-            for x, y, snr in hits:
+            for hit in hits:
+                x, y, snr = hit[:3]
                 while j < len(raw) and raw[j].snr_db != snr:
                     j += 1
                 if j == len(raw):
                     raise RuntimeError(f"{name}: a tracked detection matches no hit of its ping")
-                dets.append(detect.Detection(float(np.hypot(x, y)), float(np.arctan2(y, x)), snr, int(raw[j].cells)))
+                # Its own time, when the gallery gives one (D-156: transmit + range / c).
+                dets.append(detect.Detection(float(np.hypot(x, y)), float(np.arctan2(y, x)), snr, int(raw[j].cells),
+                                             time=float(t) + float(hit[3]) if len(hit) > 3 else None))
                 j += 1
             tracks = tracker.update(float(t), dets)
         return tracks
