@@ -270,7 +270,10 @@ def test_clutter_tracks_are_mostly_not_called_movers():
     # asserted is what is measured now: neither boat is classed, and the anchored one is not called a mover.
     # Since D-141 (most probable track-detection pairs first) the boat under way is a `mover` at 5.5 m/s (was `uncertain`
     # at 2.1), movers that are not a boat 6 become 1, static tracks 14 become 29; the anchored boat is unchanged.
-    assert c["targets"]["boat_at_anchor"]["kind"] == "uncertain" and c["targets"]["boat_at_anchor"]["speed_m_s"] < 0.6
+    # Since D-155 a true object is scored by the nearest track of an established kind within the gate (else the nearest
+    # of any kind): the anchored boat is scored by a `static` track 2.4 m from it (0.11 m/s, 22.7 dB), not the `uncertain`
+    # one 1.3 m from it (0.31 m/s, 15.1 dB) that was scored before. The classes themselves are unchanged.
+    assert c["targets"]["boat_at_anchor"]["kind"] == "static" and c["targets"]["boat_at_anchor"]["speed_m_s"] < 0.6
     assert c["targets"]["boat_under_way"]["kind"] == "mover"
     assert c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
     assert c["counts"]["mover"] <= 0.2 * m["confirmed_tracks"]              # the seabed's tracks are static, line or uncertain

@@ -511,10 +511,32 @@ KIND_STYLE = {"mover": dict(color="#eb6834", lw=3.0, zorder=4), "static": dict(c
               "multipath": dict(color="#eda100", lw=1.5, zorder=2), "uncertain": dict(color="0.72", lw=1.0, zorder=1)}
 
 
+ESTABLISHED = ("mover", "static", "line")
+
+
+def object_track(tracks, kinds, end, gate):
+    """The track scored for a true object whose position at the last ping is `end` (world x, y): the nearest track of
+    an established kind (mover, static, line) within `gate`; if there is none, the nearest track of any kind within
+    `gate`, so that an object seen only as uncertain or multipath is still reported; None if no track is that near.
+    `kinds` maps track id to kind. Ours (D-155): with an object seen as a dozen arrivals (popoto_12km), the nearest
+    track of any kind is a coin toss among them, often a four-point uncertain track or a multipath child."""
+    def dist(tr):
+        return float(np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]))
+    near = [tr for tr in tracks if dist(tr) < gate]
+    est = [tr for tr in near if kinds[tr.id] in ESTABLISHED]
+    return min(est or near, key=dist, default=None)
+
+
+def count_false_movers(classes, moving_ends, gate):
+    """Tracks classed `mover` no closer than `gate` to every moving object's position at the last ping."""
+    return int(sum(c.kind == "mover" and all(np.hypot(c.position[1] - e[0], c.position[0] - e[1]) >= gate for e in moving_ends)
+                   for c in classes))
+
+
 def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
-    the kind given to each true object's track, and how many tracks called movers are
-    not on an object that moves."""
+    the kind given to each true object's track (object_track) and how many tracks called
+    movers are not on an object that moves (count_false_movers)."""
     classes = classify.classify_tracks(tracks, **kw)
     by_id = {c.id: c for c in classes}
     out = {"counts": classify.summary(classes), "targets": {}}
@@ -523,14 +545,12 @@ def classify_and_score(tracks, truth, t_last, gate, **kw):
         end = pos[:2] + vel[:2] * t_last
         if np.hypot(*vel[:2]) > 0.0:
             moving_ends.append(end)
-        best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
-        if best is not None and np.hypot(best.state[1] - end[0], best.state[0] - end[1]) < gate:
+        best = object_track(tracks, {c.id: c.kind for c in classes}, end, gate)
+        if best is not None:
             c = by_id[best.id]
             out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
                                      "truly_moving": bool(np.hypot(*vel[:2]) > 0.0)}
-    out["movers_not_on_a_moving_object"] = int(sum(
-        c.kind == "mover" and all(np.hypot(c.position[1] - e[0], c.position[0] - e[1]) >= gate for e in moving_ends)
-        for c in classes))
+    out["movers_not_on_a_moving_object"] = count_false_movers(classes, moving_ends, gate)
     return classes, out
 
 

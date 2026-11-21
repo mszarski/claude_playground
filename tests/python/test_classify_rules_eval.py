@@ -95,3 +95,31 @@ def test_a_capture_that_carries_the_gallerys_own_rules_is_scored_from_off():
     cap = _capture()
     cap["classify_kw"] = dict(cap["classify_kw"], detections={"row_snr_db": 6.0})
     assert cre.evaluate_capture(cap) == plain
+
+
+def test_an_established_track_is_scored_before_a_nearer_uncertain_one():
+    """D-155: a true object's track is the nearest track of an established kind within the gate, else the nearest of
+    any kind. Before, the nearest of any kind: here a three-point track 2 m from the boat (uncertain), not the mover 8 m
+    from it. The tool scores exactly as the gallery does (it calls gallery.object_track and count_false_movers)."""
+    import sys
+    from gpusonar import classify
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gallery
+    truth = cre.truth_from_json({"boat": {"position": [100.0, 0.0, 0.0], "velocity": [4.0, 0.0, 0.0]}})
+    mover = _track(1, 100.0, 8.0, 4.0, 0.0, cells=6)
+    short = _track(2, 100.0, 2.0, 4.0, 0.0, cells=6)
+    short.update(history=short["history"][-3:], hits=3, snr=short["snr"][-3:], cells=short["cells"][-3:])
+    kw = {"min_speed": 0.5, "max_fit_rms": 2.5}
+    for tracks, want in (([mover, short], "mover"), ([short], "uncertain")):
+        tr = [cre.track_from_json(t) for t in tracks]
+        classes = classify.classify_tracks(tr, **kw)
+        assert {c.id: c.kind for c in classes}.get(2) == "uncertain"
+        s = cre.score(classes, tr, truth, float(T[-1]), 15.0)
+        assert s["targets"]["boat"]["kind"] == want and s["targets"]["boat"]["correct"] == (want == "mover")
+        _, g = gallery.classify_and_score(tr, truth, float(T[-1]), 15.0, **kw)
+        assert g["targets"]["boat"]["kind"] == want and g["movers_not_on_a_moving_object"] == s["false_movers"] == 0
+    # Nothing within the gate: not tracked, in both.
+    tr = [cre.track_from_json(_track(1, 100.0, 40.0, 4.0, 0.0, cells=6))]
+    classes = classify.classify_tracks(tr, **kw)
+    assert cre.score(classes, tr, truth, float(T[-1]), 15.0)["targets"]["boat"]["tracked"] is False
+    assert gallery.classify_and_score(tr, truth, float(T[-1]), 15.0, **kw)[1]["targets"] == {}

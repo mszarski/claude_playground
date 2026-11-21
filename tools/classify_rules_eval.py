@@ -14,12 +14,13 @@ count of its hit (matched on the ping, in order, by SNR). Then the tracks are cl
 with every other classify option the gallery's own for that scene. row_snr_db acts only where the gallery runs the row
 test (the FLS transit scenes); in the Popoto scenes its columns equal "off".
 
-Scoring (the gallery's own, gallery.classify_and_score): a true object is the scene item's centre moved by its
-velocity to the last ping; its track is the confirmed track nearest to that point, if within the gallery's gate for
-the scene (15 m in the FLS transit scenes, 200 m in the Popoto scenes; set in tools/gallery.py, not in the scene
-files). A target is correctly classed when its track is `mover` if the object moves and `static` if not. A false
-mover is a track classed `mover` that is no closer than the gate to every moving object. Against the grid's (off, off)
-cell of the same capture: "lost" counts targets correct there and not correct with the rule; "gained" the reverse;
+Scoring (the gallery's own, gallery.classify_and_score through gallery.object_track; D-155): a true object is the
+scene item's centre moved by its velocity to the last ping; its track is the nearest confirmed track of an established
+kind (mover, static, line) within the gallery's gate for the scene, else the nearest of any kind within the gate
+(15 m in the FLS transit scenes, 200 m in the Popoto scenes; set in tools/gallery.py, not in the scene files). A
+target is correctly classed when its track is `mover` if the object moves and `static` if not. A false mover is a
+track classed `mover` that is no closer than the gate to every moving object. Against the grid's (off, off) cell of
+the same capture: "lost" counts targets correct there and not correct with the rule; "gained" the reverse;
 "false movers removed" is the baseline's false movers minus the rule's.
 
 Usage:
@@ -100,27 +101,35 @@ def _jsonable(v):
 
 # --- scoring -----------------------------------------------------------------------------------
 
+def _gallery():
+    """tools/gallery.py, whose scoring this tool uses (imported on first use: it loads matplotlib and the simulator)."""
+    if str(ROOT / "tools") not in sys.path:
+        sys.path.insert(0, str(ROOT / "tools"))
+    import gallery
+    return gallery
+
+
 def score(classes, tracks, truth: dict, t_last: float, gate: float) -> dict:
-    """The gallery's scoring (gallery.classify_and_score) of one classification: per true object whether a track is
-    within `gate` of where it is at the last ping, the kind of that track and whether it is the right one; and the
-    number of movers no closer than `gate` to any moving object."""
-    by_id = {c.id: c for c in classes}
+    """The gallery's scoring (gallery.classify_and_score, through its own object_track and count_false_movers) of one
+    classification: per true object whether a track is within `gate` of where it is at the last ping, the kind of the
+    track scored for it (the nearest established one, else the nearest of any kind) and whether it is the right one;
+    and the number of movers no closer than `gate` to any moving object."""
+    g = _gallery()
+    kinds = {c.id: c.kind for c in classes}
     targets, moving_ends = {}, []
     for label, (pos, vel) in truth.items():
         end = np.asarray(pos)[:2] + np.asarray(vel)[:2] * t_last
         moving = bool(np.hypot(*np.asarray(vel)[:2]) > 0.0)
         if moving:
             moving_ends.append(end)
-        best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
-        if best is not None and np.hypot(best.state[1] - end[0], best.state[0] - end[1]) < gate:
-            kind = by_id[best.id].kind
+        best = g.object_track(tracks, kinds, end, gate)
+        if best is not None:
+            kind = kinds[best.id]
             targets[label] = {"tracked": True, "kind": kind, "moving": moving,
                               "correct": kind == ("mover" if moving else "static")}
         else:
             targets[label] = {"tracked": False, "kind": None, "moving": moving, "correct": False}
-    false = int(sum(c.kind == "mover" and all(np.hypot(c.position[1] - e[0], c.position[0] - e[1]) >= gate
-                                              for e in moving_ends) for c in classes))
-    return {"targets": targets, "false_movers": false}
+    return {"targets": targets, "false_movers": g.count_false_movers(classes, moving_ends, gate)}
 
 
 def evaluate_capture(cap: dict) -> dict:
@@ -372,7 +381,8 @@ def main(argv=None):
     result = {"tool": "tools/classify_rules_eval.py", "command": "tools/classify_rules_eval.py " + " ".join(argv if argv is not None else sys.argv[1:]),
               "commit": commit, "grid": {k: r for k, r in grid()},
               "association": "a true object (scene item centre moved by its velocity to the last ping) takes the "
-                             "confirmed track nearest to it if within the gallery's gate (gate_m); a false mover is a "
+                             "nearest confirmed track of an established kind (mover, static, line) within the gallery's "
+                             "gate (gate_m), else the nearest of any kind within it; a false mover is a "
                              "mover no closer than the gate to every moving object (gallery.classify_and_score)",
               "captures": info, **agg,
               "per_capture": {sc: {str(sd): compact(v) for sd, v in d.items()} for sc, d in per_capture.items()}}
