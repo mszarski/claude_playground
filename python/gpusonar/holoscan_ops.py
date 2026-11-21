@@ -56,13 +56,20 @@ class PingSourceOp(Operator):
 
 class ConditionOp(Operator):
     """Conditioning and pulse compression: calibration, baseband conversion, matched
-    filter, optional deterministic TVG."""
+    filter, optional time-varying gain.
+
+    The gain is the chain's `tvg` step (`recon.apply_tvg_step`, the function the pipeline's
+    step calls, with its defaults): off unless `tvg` is given, True for the default step
+    (two-way spreading, absorption from the record, DECISIONS.md D-91) or a mapping of the
+    step's keys (`{"absorption": "none"}` is the law before D-91). `tvg_db_per_decade`, the
+    older argument, sets the spreading of that step (see `recon.condition_tvg_step`)."""
 
     def __init__(self, fragment, *args, compress: bool = True, replica_window: str = "none",
-                 tvg_db_per_decade: float | None = None, **kwargs):
+                 tvg=None, tvg_db_per_decade: float | None = None, **kwargs):
         self._compress = compress
         self._window = replica_window
-        self._tvg = tvg_db_per_decade
+        self._tvg = recon.condition_tvg_step(tvg, tvg_db_per_decade)
+        self.tvg_reports = []
         super().__init__(fragment, *args, **kwargs)
 
     def setup(self, spec: OperatorSpec):
@@ -71,12 +78,9 @@ class ConditionOp(Operator):
 
     def compute(self, op_input, op_output, context):
         msg = op_input.receive("ping")
-        record = msg["record"]
-        recon.prepare([record], compress=self._compress, window=self._window)
-        if any(g != 1.0 for g in record.calibration.gain) or any(record.calibration.phase):
-            core.apply_calibration(record)
-        if self._tvg is not None:
-            core.apply_tvg(record, spreading_db_per_decade=self._tvg)
+        report = recon.condition_ping(msg["record"], compress=self._compress, replica_window=self._window, tvg=self._tvg)
+        if report is not None:
+            self.tvg_reports.append(report)
         op_output.emit(msg, "ping")
 
 

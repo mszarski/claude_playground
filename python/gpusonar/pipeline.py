@@ -122,28 +122,13 @@ def _stage(name, params, state: RunResult, backend):
             core.apply_calibration(rec)
         return {}
     if name == "tvg":
-        # `spreading` and `absorption` (names or numbers) are resolved per record; the older
-        # `spreading_db_per_decade` and `absorption_db_per_m` keys pass through unchanged.
-        derive = {k: params[k] for k in ("spreading", "absorption", "frequency", "temperature", "salinity", "depth",
-                                         "ph", "model") if k in params}
-        plain = {k: v for k, v in params.items() if k not in derive}
+        # Every tvg step goes through recon.gain.apply_tvg_step (recon.tvg_parameters), whose default
+        # absorption is "auto": derived from the record (DECISIONS.md D-91). `absorption: none` is the
+        # law before that. The Holoscan ConditionOp calls the same function.
+        from .recon.gain import apply_tvg_step
         facts = {}
-        if "spreading" in derive and "spreading_db_per_decade" in plain:
-            raise ValueError("tvg: give `spreading` or `spreading_db_per_decade`, not both")
-        if "absorption" in derive and "absorption_db_per_m" in plain:
-            raise ValueError("tvg: give `absorption` or `absorption_db_per_m`, not both")
-        from .recon.gain import tvg_parameters
-        # Every tvg step goes through recon.tvg_parameters, whose default absorption is "auto":
-        # derived from the record (DECISIONS.md D-91). `absorption: none` is the law before that.
-        d = dict(derive)
-        if "spreading_db_per_decade" in plain:
-            d["spreading"] = plain.pop("spreading_db_per_decade")
-        if "absorption_db_per_m" in plain:
-            d["absorption"] = plain.pop("absorption_db_per_m")
-        d.update(plain)
         for rec in r:
-            kw = tvg_parameters(rec, **d)
-            report = core.apply_tvg(rec, **kw)
+            kw, report = apply_tvg_step(rec, params)
             if not facts:
                 facts = {"spreading_db_per_decade": kw.get("spreading_db_per_decade", 40.0),
                          "absorption_db_per_m": kw.get("absorption_db_per_m", 0.0),
