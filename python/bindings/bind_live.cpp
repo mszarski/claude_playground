@@ -2,7 +2,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cstring>
 #include <sstream>
+#include <type_traits>
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
@@ -601,6 +603,84 @@ void bind_live(py::module_& m) {
       py::arg("cell_mean"), py::arg("guard"), py::arg("train"),
       "The multiscale detector's background of each cell (libs/live detector.hpp) and, per range cell, the number of independent "
       "training cells it is worth: the C++ reference the NumPy one (detect.background) is tested against.");
+  m.def(
+      "live_multiscale_detect",
+      [](const py::array_t<float, py::array::c_style | py::array::forcecast>& fine, const py::array_t<float, py::array::c_style | py::array::forcecast>& cell_mean,
+         const std::vector<double>& fine_ranges, const std::vector<double>& cell_ranges, const std::vector<double>& bearings, std::int64_t guard,
+         std::int64_t train, const py::dict& plan, Backend backend, std::int64_t fine_offset, int device) {
+        // The plan as live_detector_plan gives it, back into the C++ struct.
+        if (fine.ndim() != 2 || cell_mean.ndim() != 2 || fine.shape(0) != cell_mean.shape(0)) {
+          throw std::invalid_argument("fine [n_bearing, samples] and cell_mean [n_bearing, n_cells]");
+        }
+        live::DetectorPlan p;
+        for (const py::handle h : plan["scales"].cast<py::list>()) {
+          const py::dict d = h.cast<py::dict>();
+          live::DetectorScale c;
+          c.cells = d["cells"].cast<std::int64_t>();
+          c.length_m = d["length_m"].cast<double>();
+          c.looks = d["looks"].cast<double>();
+          c.tests = d["tests"].cast<double>();
+          c.search = d["search"].cast<double>();
+          c.pfa = d["pfa"].cast<double>();
+          c.factor = d["factor"].cast<double>();
+          c.weights = d["weights"].cast<std::vector<double>>();
+          p.scales.push_back(c);
+        }
+        p.rows = plan["rows"].cast<std::int64_t>();
+        p.samples_per_cell = plan["samples_per_cell"].cast<std::int64_t>();
+        p.cell_m = plan["cell_m"].cast<double>();
+        p.step_m = plan["step_m"].cast<double>();
+        p.resolution_m = plan["resolution_m"].cast<double>();
+        p.beams = plan["beams"].cast<double>();
+        p.train_looks_per_cell = plan["train_looks_per_cell"].cast<double>();
+        p.margin = plan["margin"].cast<double>();
+        p.aperture_m = plan["aperture_m"].cast<double>();
+        p.merge_cells = plan["merge_cells"].cast<std::int64_t>();
+        p.merge_u = plan["merge_u"].cast<double>();
+        p.range_envelope = plan["range_envelope"].cast<std::vector<double>>();
+        p.bearing_envelope = plan["bearing_envelope"].cast<std::vector<double>>();
+        p.u_step = plan["u_step"].cast<double>();
+        p.source_ratio = plan["source_ratio"].cast<double>();
+        const std::int64_t n_b = cell_mean.shape(0), n_cells = cell_mean.shape(1), stride = fine.shape(1);
+        if (fine_offset < 0 || fine_offset + n_cells * p.samples_per_cell > stride) throw std::invalid_argument("fine holds fewer samples than the cells need");
+        live::DetectorCells cells;
+        live::multiscale_cells(backend, fine.data(), stride, fine_offset, cell_mean.data(), n_b, n_cells, guard, train, p, cells, device);
+        py::dict out;
+        const auto grid = [&](const auto& v) {
+          using T = typename std::decay_t<decltype(v)>::value_type;
+          py::array_t<T> a({n_b, n_cells});
+          std::memcpy(a.mutable_data(), v.data(), v.size() * sizeof(T));
+          return a;
+        };
+        out["level"] = grid(cells.level);
+        out["background"] = grid(cells.background);
+        out["peak"] = grid(cells.peak);
+        out["flag"] = grid(cells.flag);
+        std::vector<float> background;
+        const std::vector<live::Detection> found =
+            live::multiscale_group(fine.data(), stride, fine_offset, n_b, n_cells, fine_ranges, cell_ranges, bearings, p, cells, background);
+        py::list dets;
+        for (const live::Detection& d : found) {
+          py::dict e;
+          e["range_m"] = d.range;
+          e["bearing"] = d.bearing;
+          e["snr_db"] = d.snr_db;
+          e["cells"] = d.cells;
+          e["first_range_m"] = d.first_range;
+          e["extent_m"] = d.extent;
+          py::list arr;
+          for (const live::Arrival& a : d.arrivals) arr.append(py::make_tuple(a.range, a.snr_db));
+          e["arrivals"] = arr;
+          dets.append(e);
+        }
+        out["detections"] = dets;
+        return out;
+      },
+      py::arg("fine"), py::arg("cell_mean"), py::arg("fine_ranges"), py::arg("cell_ranges"), py::arg("bearings"), py::arg("guard"), py::arg("train"),
+      py::arg("plan"), py::arg("backend") = Backend::Host, py::arg("fine_offset") = 0, py::arg("device") = 0,
+      "The C++ chain's multiscale detector (libs/live detector.hpp) on a map: its statistic on `backend` (multiscale_cells: `level`, "
+      "`background`, `peak`, `flag` [n_bearing, n_cells], flags before sidelobes are dropped) and its `detections`. `plan`: live_detector_plan's. "
+      "For holding the device's statistic to the host's (tests/python/test_detector_device.py).");
   m.def(
       "live_beam_samples",
       [](const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann, Backend backend) {
