@@ -79,3 +79,10 @@ def test_tracks_round_trip_through_json():
     back = cre.track_from_json(cre.track_to_json(tr))
     assert back.id == 7 and back.hits == 3 and back.cells == [4] and back.snr == [15.5]
     assert back.history == [(0.0, 1.0, 2.0)] and np.array_equal(back.state, tr.state)
+
+
+def test_compact_keeps_the_scores():
+    out = cre.evaluate_capture(_capture())
+    c = cre.compact(out)
+    assert c["cells=8,row=off"]["kinds"] == {"boat": "uncertain", "anchored": "static", "far_buoy": None}
+    assert c["cells=8,row=off"]["lost"] == ["boat"] and c["cells=off,row=off"]["false_movers"] == 1

@@ -142,6 +142,13 @@ def evaluate_capture(cap: dict) -> dict:
     return out
 
 
+def compact(evaluated: dict) -> dict:
+    """One capture's evaluate_capture result for the JSON: per grid cell the kind of each true object's track (None:
+    not tracked), the false movers, lost, gained and the counts by kind."""
+    return {key: {"kinds": {lab: t["kind"] for lab, t in s["targets"].items()}, "false_movers": s["false_movers"],
+                  "lost": s["lost"], "gained": s["gained"], "counts": s["counts"]} for key, s in evaluated.items()}
+
+
 def _spread(values) -> dict:
     a = np.asarray(values, dtype=float)
     return {"mean": float(a.mean()), "sd": float(a.std(ddof=1)) if len(a) > 1 else 0.0,
@@ -363,12 +370,12 @@ def main(argv=None):
                              "confirmed track nearest to it if within the gallery's gate (gate_m); a false mover is a "
                              "mover no closer than the gate to every moving object (gallery.classify_and_score)",
               "captures": info, **agg,
-              "per_capture": {sc: {str(sd): v for sd, v in d.items()} for sc, d in per_capture.items()}}
+              "per_capture": {sc: {str(sd): compact(v) for sd, v in d.items()} for sc, d in per_capture.items()}}
     text = table(agg)
     print(text)
     if args.json:
         Path(args.json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.json).write_text(json.dumps(result, indent=1))
+        Path(args.json).write_text(json.dumps(result, separators=(",", ":")) + "\n")
     if args.table:
         Path(args.table).parent.mkdir(parents=True, exist_ok=True)
         Path(args.table).write_text(text)
