@@ -2460,3 +2460,18 @@ no frame lost or damaged, reports equal to the direct chain's. The margin is thi
 on a loaded machine can fail; a failure is reported, not retried. First run at pace 1.0: L4, job
 6b012ef14fdc5ab3c55c698a, the Sensor Bridge and Holoscan selection 22 passed, 0 failed. Deployed hosts should follow
 Sensor Bridge's own setup advice (`DEPLOYMENT.md`).
+
+### D-152 addendum (2026-11-21): the detection rules over ten seeds; they stay off
+
+`tools/classify_rules_eval.py`, 12 gallery scenes with movers, 10 seeds each (the scene's seed + 0..9),
+full size on an L4 (job 6b0130d0efaf5e14f4b46b34; `docs/benchmarks/classify_rules_eval_190f8ce.json`);
+seed 0 reproduces the committed gallery. With the rules off there are 160 false movers over the 120
+captures. `min_mover_cells` 4 is the largest value that loses no real target in any capture and removes
+86 of them (8.6 +- 2.5 a seed), nearly all in `fls_120k_rough_surface`; it has no margin: the
+rough-surface boat's median extent is exactly 4.0 cells in 3 of the 9 captures where it is a mover,
+and 5 loses it in 3 captures, 6 in 4, 8 in 9. Glint and boat extents overlap (glints up to 6.5 cells,
+the traffic scene's closing boat down to 6), and the values hold only for these maps' cells. `row_snr_db`
+6 turns the cluttered scene's boat from `line` into `mover` on all 4 seeds where it was a line, with no
+loss and no new false mover; 3 adds 2 false movers. No Popoto scene changes except `deep_silt` at 8
+cells. Kept off by default. Candidate, for the owner: `row_snr_db: 6` in the gallery's FLS transit
+classification (it would change the committed gallery).

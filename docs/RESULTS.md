@@ -241,6 +241,28 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
   offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
   40.188 mm), so it is a property of the data, not of the kernel.
 
+## Classification: the opt-in detection rules over ten seeds (D-152)
+
+Source: `tools/classify_rules_eval.py`, `docs/benchmarks/classify_rules_eval_190f8ce.json` (12 gallery
+scenes with movers, full size, CUDA on an L4, 10 seeds each; truth association as the gallery's:
+15 m gate for FLS, 200 m for Popoto). False movers with the rules off: 16.0 +- 4.5 a seed index summed
+over the scenes (10 to 25), 160 in all.
+
+| Rule | Real targets lost (captures) | False movers removed (total) | False movers a seed index |
+| --- | --- | --- | --- |
+| off | 0 | 0 | 16.0 +- 4.5 |
+| `min_mover_cells` 3 | 0 | 20 | 14.0 +- 4.0 |
+| `min_mover_cells` 4 | 0 | 86 | 7.4 +- 2.9 |
+| `min_mover_cells` 5 | 3 | 126 | 3.4 +- 1.4 |
+| `min_mover_cells` 6 | 4 | 136 | 2.4 +- 1.0 |
+| `min_mover_cells` 8 | 9 | 139 | 2.1 +- 0.7 |
+| `row_snr_db` 6 | 0 (4 gained) | 0 | 16.0 +- 4.5 |
+| `row_snr_db` 3 | 0 (4 gained) | -2 | 16.2 +- 4.7 |
+
+`fls_120k_rough_surface` decides the trade-off (glint movers 12.3 +- 3.5 a seed); 4 cells has no margin
+on its boat (median extent 4.0 cells in 3 captures). Not changed by any rule: `popoto_12km`'s ship is a
+mover on 3 of 10 seeds; the `summer_mud` and `deep_silt` ships are never tracked.
+
 ## SAS with known navigation
 
 Source: `tests/python/test_sas.py`, scenarios `stripmap_points` and `rail_points`. CPU.

@@ -120,6 +120,7 @@ Job modes of `tools/gpu_job.sh` (its header lists every switch and variable; upl
 | every-stage benchmark | `-e GPUSONAR_JOB=benchall -e GPUSONAR_UPLOAD_PATH=<folder>` | 150m | json and md in that folder |
 | full-rate elevation bench | `-e GPUSONAR_JOB=elevbench -e GPUSONAR_UPLOAD_PATH=<folder>` | 60m | `popoto_stage2.json` |
 | live-chain ablation (issue `sonar-y7a`) | `-e GPUSONAR_JOB=liveablate -e GPUSONAR_UPLOAD_PATH=<folder>` (default folder `liveablate`; `GPUSONAR_LIVEABLATE_ARGS` appended to `tools/live_chain_ablation.py --backend cuda`) | not recorded | `live_chain_ablation.json` in that folder (committed as `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`) |
+| classification rules over seeds | `-e GPUSONAR_JOB=clseval -e GPUSONAR_ORACLES=1 -e GPUSONAR_UPLOAD_PATH=<folder>` (`GPUSONAR_CLSEVAL_ARGS` appended, e.g. `--seeds 10 --commit <hash>`) | about 50 min for 12 scenes x 10 seeds | `classify_rules_eval.json`, `.md` and `captures/` in that folder |
 | imaging benchmark | `-e GPUSONAR_JOB=benchmark` (`GPUSONAR_SCALE` 2, `GPUSONAR_PIXEL` 0.05 m, `GPUSONAR_MODES` `sas,fls,flank` by default; runs `tools/benchmark.py --backend cuda`) | not recorded | log only; nothing uploaded |
 
 Then `hf jobs wait <id>`, `hf jobs logs <id>`, and
