@@ -11,6 +11,25 @@ decision (the owner's rule for this audit: no code change without asking).
 Duplicates found by more than one part are merged (the ids of each part are kept in
 brackets). Line numbers are at `2c5bb8a`.
 
+## Status after the fixes (2026-11-21)
+
+The owner approved every group; all are merged into `claude/gpu-sonar-suite-u289p5`. Done: A1 to
+A16, B1 to B11, C1 to C9, D1 to D13, E1 to E11, F1 to F9, G1, G3, G4, G5 (G2 withdrawn: the
+function is used). Decisions D-145 (strict `sonar_live` options) and D-146 (simulation defaults).
+Not done or partly done:
+- A11: no test against Marczak's published pure-water values (no source opened); the blend
+  below 5 PSU is ours and tested for continuity and linearity only.
+- A7: the AC-coupling corner is hardware description (`hardware.boards.highpass_hz`), not
+  simulated unless given as `receive.overload.highpass_corner_hz`.
+- G4: the self-noise generators were removed, not wired in; scenarios have no platform self-noise.
+- G5: `popoto_truth_check.py` is cited by `RESULTS.md`, so it was kept and its hard-coded ship
+  track replaced by the scenario's.
+- B5: one Bellhop check (`test_lloyd.py`, read from a validation file) still skips silently.
+- B6: the `tools/*.sh` scripts still treat `--help` as an argument (issue filed).
+- B8: the CUDA comparison has run only where a device is present (issue filed).
+
+The findings below are as written at `2c5bb8a`.
+
 ## Overall
 
 The suite is in good shape as an API. Most C++ headers and Python docstrings state units,

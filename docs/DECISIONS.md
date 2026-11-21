@@ -2340,3 +2340,27 @@ through both routes. An options file written before this with `window=none` or a
 boolean the reader did not know now stops the program instead of running a different chain.
 The program's own default backend stays `host`; whether it should become `auto`, as the
 Python chain's is, is an open owner question (STATUS).
+
+### D-146 Simulation inputs that were assumed silently are now stated or refused (API audit)
+
+- **Bellhop's seabed** has no default: an `eigenray` environment with no `sediment` and not
+  all three bottom numbers is an error, as for `image_source` (D-104). All 21 shipped eigenray
+  scenarios already describe their bottom; nothing moved.
+- **`ReverbParams::sound_speed`** defaults to NaN, which the existing check refuses.
+- **Brackish water** (0 < S < 5 PSU) takes a linear blend in salinity between Marczak's pure
+  water (with Mackenzie's linear depth term) at S = 0 and Mackenzie at 5 PSU: our own mix, no
+  new coefficient. The earlier mix stepped down by 0.81, 1.31 and 1.67 m/s at 5 PSU (4, 10,
+  20 C). No shipped configuration has 0 < S < 5; S = 0 and S >= 5 are unchanged.
+- **`lloyd.bellhop_transfer`** references spherical spreading to the slant range, as its
+  docstring and `one_way` do (it used the horizontal range). The depth planner's two-way peak
+  factor moves by at most 0.20 dB at 300 m, 0.018 dB at 1 km and 1e-4 dB at 12 km
+  (`slope_1000m_silt_profile`, own depths 5/20/50 m); at 60 m range with a target 30 m down the
+  old error against the image model was up to 3.7 dB one way. The committed plan files were
+  not regenerated.
+- **The boards' 100 Hz AC coupling** is hardware description (`hardware.boards.highpass_hz`),
+  not a receive key: simulating it needs `receive.overload`, which also turns on clipping.
+  In the band it changes every channel's phase alike by under 1.5 degrees and level by under
+  0.003 dB. `receive.highpass_corner_hz` and `receive.bandpass_hz` (read by nothing) are refused.
+- **An unknown `receive.reference.mode`** is refused (only `sync_chirp` exists).
+- **Python's report line writes a non-finite number as `null`**, as `libs/live` does.
+- **The platform self-noise generators were removed** as unused (audit G4).

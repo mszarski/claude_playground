@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-145); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-146); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -589,9 +589,13 @@ Grouped; within a group the most consequential first.
     `projector_selection.md`, `SCENARIOS.md` and `README.md` were updated from the
     regenerated `DESIGN.md` and `projector_requirements.json`.
 
-API audit, phase 1 (2026-11-20, `API_AUDIT.md`): the comment, citation, stale-document and
-missing-document items (C, D, E, F) and the live-chain items A1 to A6 and B4 are merged
-(D-145); no published number moved. The simulation, tools and dead-code items are next.
+API audit (2026-11-20/21, `API_AUDIT.md`): every approved group is merged (D-145, D-146);
+what is left undone is listed at the top of that file. One result moved, none committed:
+`lloyd.bellhop_transfer` now uses the slant range, which moves the depth planner's peak factor
+by at most 0.20 dB at 300 m and 1e-4 dB at 12 km; the committed plan files were not
+regenerated. The brackish sound-speed blend moves nothing shipped. Oracle tests now count
+their skips, and `GPUSONAR_REQUIRE_ORACLES=1` (set by `GPUSONAR_ORACLES=1 tools/gpu_job.sh`)
+makes them fail instead.
 
 ## Open questions for the project owner
 
