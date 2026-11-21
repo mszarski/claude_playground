@@ -2375,3 +2375,17 @@ naming the backend (`LiveChain` in both engines, `pipeline.run`), where the pipe
 run on the host instead; `auto` is the choice that falls back. `ChainOptions{}` in the library
 keeps `Backend::Host`. Tests: `Options.TheProgramStartsFromAutoAndAChainRefusesCudaWithoutADevice`,
 `test_live_cpp.py::test_backend_cuda_without_a_device_is_an_error_and_auto_falls_back`.
+
+### D-148 Motion estimation: the DVL altitude is referred to the seabed under the ping; delay backends
+
+Eq. 7's altitude was used as if the seabed were at z = 0 while ping 0 was anchored at
+`floor_z - altitude`, so any `seafloor_z` other than 0, including `auto` when it resolves away
+from 0, put a step between ping 0 and the rest (flat seabed 5 m down with `seafloor_z: 5`:
+heave RMS 4.79 m; known undulating bathymetry: sway RMS 62 mm). The altitude now enters as
+`alt - seabed_z`, seabed_z being `seafloor_z` or the bathymetry under the ping (in pass two at
+the coarse pass's sway). Ours: a DVL measures altitude above the local seabed. The default
+(`seafloor_z: 0`, no bathymetry) is arithmetically unchanged; `auto` and non-zero datums move,
+to a common heave offset equal to the datum's error (STATUS, motion limits).
+`MotionOptions.delay_backend`: `numpy` (default and reference), `host` or `cuda` (an error
+without a device, as D-147); one kernel pair for host and device, sums in double. The lambda
+sweep was run (`tools/motion_study.py sweep`); defaults kept (D-16).

@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-147); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-148); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -911,13 +911,29 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 ## Motion estimation limits so far
 
-- **Surge by along-track estimation (ref [9]) is not implemented.** Surge comes from the
-  DVL sample in each record.
-- Delay estimation is NumPy, not C++; only the solve is C++.
-- Tested with zero roll, pitch and yaw. Attitude and lever arms are in the residual
-  (Eq. 4's Ω), but no test perturbs them yet.
-- λ1 and λ2 are at their defaults; the tuning sweep has not been run.
-- Known-bathymetry option: the hook exists and is tested only against a flat function.
+- **Surge by along-track estimation (ASASIN ref. [9]: Brown, Gerg and Blanford, IEEE J. Oceanic
+  Eng. 2019) is not implemented**: the paper is paywalled and no open copy could be opened. Surge
+  comes from the DVL sample in each record.
+- **The acceptance test's sway bound holds on its own seed only.** At the default
+  lambda1 = lambda2 = 1 the bound (lambda/20 RMS) holds on seeds 1 and 3 but not on seed 2:
+  0.87 mm against 0.375 mm (`tools/motion_study.py sweep`). No cell of the sweep grid
+  {0, 0.01, 0.1, 1, 10, 100}^2 holds it on all three seeds (best worst-seed ratio 1.10 at
+  lambda1 0, lambda2 0.01, against 2.32 at the defaults); three seeds are too few to retune on.
+  Defaults unchanged.
+- Delay estimation has a C++ port (host and CUDA, `MotionOptions.delay_backend`), bit-close to
+  NumPy, which stays the default and the reference. On an L4 the CUDA path is slower than the
+  host path (22.6 against 5.2 ms for 1248 windows; per-pair uploads and double sums). The fine
+  delay is the phase at the integer peak (ours); ASASIN takes it at the interpolated point.
+- Attitude and lever arms are tested: 2/1/1 deg RMS roll/pitch/yaw plus lever arms keep the
+  level-platform bounds (sway mean error 0.04 mm).
+- Known bathymetry is tested on a 1-in-10 slope and an undulating seabed; the undulating case
+  leaves a sway bias of -0.32 mm (bound 0.375 mm RMS) from the one footprint point per range
+  window. The test uses the same vertical-beam DVL model as the estimator.
+- The DVL altitude is referred to the seabed under each ping (`seafloor_z` or the bathymetry,
+  D-148). A datum away from the true seabed shifts the whole heave track by its error and
+  nothing else: with `seafloor_z: auto` on seed 6, a 0.59 mm common offset, demeaned heave
+  0.20 mm. Before, the datum put a step between ping 0 and the rest; the old, better-looking
+  auto numbers (sway 0.054, heave 0.122 mm) were chance.
 - The scenario's ping spacing (0.24 m) leaves a quarter of the phase centres overlapping.
   At the full 0.32 m advance there is no overlap and DPC cannot work, as in real systems.
 - Dense linear solver (no SuiteSparse): fine for hundreds of pings.
