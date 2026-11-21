@@ -423,10 +423,13 @@ def main(argv=None):
     agg = aggregate(per_capture)
     result = {"tool": "tools/classify_rules_eval.py", "command": "tools/classify_rules_eval.py " + " ".join(argv if argv is not None else sys.argv[1:]),
               "commit": commit, "grid": {k: r for k, r in grid()},
-              "association": "a true object (scene item centre moved by its velocity to the last ping) takes the "
-                             "nearest confirmed track of an established kind (mover, static, line) within the gallery's "
-                             "gate (gate_m), else the nearest of any kind within it; a false mover is a "
-                             "mover no closer than the gate to every moving object (gallery.classify_and_score)",
+              "association": "a true object takes the nearest confirmed track of an established kind (mover, static, "
+                             "line) within the gallery's gate (gate_m), else the nearest of any kind within it; each track "
+                             "is compared with the object (scene item centre moved by its velocity) at the time the "
+                             "track's state holds, its last detection's reflection time, transmit + R/c (D-156; "
+                             "gallery.object_track, state_time). A false mover is a mover whose class position at the "
+                             "last ping (classify_tracks time = t_last) is no closer than the gate to every moving "
+                             "object's position at the last ping (gallery.classify_and_score, count_false_movers)",
               "captures": info, **agg,
               "per_capture": {sc: {str(sd): compact(v) for sd, v in d.items()} for sc, d in per_capture.items()}}
     text = table(agg)

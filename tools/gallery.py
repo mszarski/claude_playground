@@ -494,7 +494,9 @@ def score_tracks(tracks, truth, t_last, gate, kinds=None):
     with the classes `kinds` (track id -> kind; D-155), so that the position, the velocity and the class reported for
     an object come from the same track. Without `kinds`, the nearest track within `gate`. No track within `gate`: the
     nearest track's error, not tracked. Each track is compared with the object where it was when the track's state
-    holds (`state_time`; D-156). `t_last` is kept for the callers; the states hold at or before it."""
+    holds (`state_time`; D-156). `t_last` is kept for the callers. The states do not all hold at it: a track that took
+    a detection on the last ping holds at t_last + R/c, its reflection time, and one that missed it at t_last or, with a
+    ping interval shorter than R/c, at its last detection's reflection time if that is later."""
     kinds = kinds if kinds is not None else {tr.id: "uncertain" for tr in tracks}
     out = {}
     for label, (pos, vel) in truth.items():
