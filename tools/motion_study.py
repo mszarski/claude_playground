@@ -95,7 +95,10 @@ def timing(args) -> dict:
 
 def sweep(args) -> dict:
     rows = []
-    for seed in args.seeds:
+    if args.rows:
+        rows = json.loads(Path(args.rows).read_text())["rows"]
+        args.seeds = sorted({r["seed"] for r in rows})
+    for seed in ([] if args.rows else args.seeds):
         col, _ = collect(seed=seed, with_target=False)
         truth = col.true_positions[:len(col.records)]
         for l1 in GRID:
@@ -127,14 +130,25 @@ def sweep(args) -> dict:
     default = table[(1.0, 1.0)]
     best_sway = min(table, key=lambda k: table[k][0])
     best_heave = min(table, key=lambda k: table[k][1])
-    # Sum of each error over its acceptance bound (sway lambda/20, heave lambda/4; tests/python/test_motion.py).
+    # The acceptance bounds of tests/python/test_motion.py: sway lambda/20, heave lambda/4 RMS (lambda = 7.5 mm).
     wl = 1500.0 / 200e3 * 1e3
-    best_both = min(table, key=lambda k: table[k][0] / (wl / 20) + table[k][1] / (wl / 4))
-    print(f"default (1, 1): sway {default[0]:.3f} mm, heave {default[1]:.3f} mm")
-    for name, k in (("best sway", best_sway), ("best heave", best_heave), ("best on both bounds", best_both)):
-        print(f"{name}: lambda1 {k[0]:g}, lambda2 {k[1]:g}: sway {table[k][0]:.3f} mm, heave {table[k][1]:.3f} mm")
+    worst = {}
+    print("worst seed, max(sway / bound, heave / bound); below 1 = every seed inside both bounds")
+    print("l1 \\ l2 " + "".join(f"{l2:>10g}" for l2 in GRID))
+    for l1 in GRID:
+        line = f"{l1:7g} "
+        for l2 in GRID:
+            sel = [r for r in rows if r["lambda_smooth"] == l1 and r["lambda_dvl"] == l2]
+            worst[(l1, l2)] = max(max(r["sway_rms_mm"] / (wl / 20), r["heave_rms_mm"] / (wl / 4)) for r in sel)
+            line += f"{worst[(l1, l2)]:10.2f}"
+        print(line)
+    best_both = min(worst, key=lambda k: worst[k])
+    print(f"default (1, 1): sway {default[0]:.3f} mm, heave {default[1]:.3f} mm, worst-seed ratio {worst[(1.0, 1.0)]:.2f}")
+    for name, k in (("best sway", best_sway), ("best heave", best_heave), ("best worst-seed ratio", best_both)):
+        print(f"{name}: lambda1 {k[0]:g}, lambda2 {k[1]:g}: sway {table[k][0]:.3f} mm, heave {table[k][1]:.3f} mm, "
+              f"worst-seed ratio {worst[k]:.2f}")
     return {"grid": GRID, "seeds": list(args.seeds), "rows": rows,
-            "best_sway": best_sway, "best_heave": best_heave, "best_both": best_both}
+            "best_sway": best_sway, "best_heave": best_heave, "best_worst_seed": best_both}
 
 
 def main() -> None:
@@ -146,6 +160,7 @@ def main() -> None:
     s = sub.add_parser("sweep")
     s.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     s.add_argument("--out")
+    s.add_argument("--rows", help="report from the rows of an earlier --out JSON instead of running the grid")
     args = ap.parse_args()
     if not core.HAVE_MOTION:
         sys.exit("gpusonar was built without motion estimation (Ceres not found)")
