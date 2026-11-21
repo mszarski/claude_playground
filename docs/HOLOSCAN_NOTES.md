@@ -543,6 +543,40 @@ Its default config also advertises a different UUID and `hsb_ip_version 0x2602`
 `ac192bb6-24be-c23f-d07e-2e130d9d2f0f` with `BasicEnumerationStrategy(total_sensors=2,
 total_dataplanes=2, sifs_per_sensor=1)` (`US:python/nvus/fpga.py:67`, `US:python/nvus/evm.py:368-378`).
 
+### 7.5 Socket receiver on loopback: what limits real time (measured, not from source)
+
+The emulator (`LinuxDataPlane`, with our opt-in UDP-socket patch, D-79) sends to
+`LinuxReceiverOp` on one machine, in a Hugging Face L4 container (8 vCPUs). Our frames are
+400 samples, 38,528 B, sent as 29 datagrams; 160 frames/s at real time. Source:
+`tests/python/test_hsb.py::test_loopback_loss_study`, jobs `6b010e824fdc5ab3c55c549d` and
+`6b0115de4fdc5ab3c55c5951`. What is still not solved: the margin at real time is less than two
+to one, and the container cannot raise it.
+
+- **Where datagrams are lost.** Every lost datagram was refused by the receiver's full socket
+  buffer. The data socket's kernel drop count (`/proc/net/udp`) equals `RcvbufErrors` and the
+  packet-number gaps in every lossy run. Nothing was lost on the send side (`SndbufErrors` 0),
+  and the container was not CPU-throttled.
+- **Why the buffer is small.** `LinuxReceiverOp::check_buffer_size` raises SO_RCVBUF only when
+  it is smaller than one frame (`HSB@2.7.0:src/hololink/operators/linux_receiver/linux_receiver_op.cpp:235-263`).
+  So the buffer stays at the default, 212,992 B, which is also the container's `rmem_max`.
+  On loopback that is 92 datagrams of 2,304 B accounting each (measured), about 20 ms of
+  the stream.
+- **Why the receiver falls behind.** The receiver is one thread doing one `recv` per
+  datagram (`HSB@2.7.0:.../linux_receiver.cpp:187-345`), pinned to core 2 by default
+  (`.../linux_receiver_op.cpp:35,66-74`). Losses fell while the receiving process ran the
+  chain on a ping on all cores. That delayed the receiver thread and also our sending
+  process, which then sent the frames it owed back to back. Our emulated board now spreads
+  that catch-up by default (`catch_up="spread"`, `python/gpusonar/sources/hsb.py`).
+- **Results.**
+  - At real time: burst lost frames in 3 of 11 runs, spread in 0 of 13.
+  - With the chain on one thread: no loss in 4 runs.
+  - With a halved buffer (106,496 B): losses with spread too.
+- **For a deployed host** Sensor Bridge's guide gives `net.core.rmem_max = 31326208`
+  (`HSB@2.7.0:docs/user_guide/setup.mdx:784-793`, all configurations). It also gives
+  `isolcpus=2`, or `HOLOLINK_AFFINITY` to move the receiver
+  (`HSB@2.7.0:docs/user_guide/setup.mdx:262-296`, Jetson section). Neither was possible in
+  the containers used.
+
 ## 8. Second, low-rate source: 32 channels, 24-bit, 64 kSPS
 
 Rate (derived): 32 x 3 B x 64,000 = 6.144 MB/s = 49.2 Mbit/s.
