@@ -415,9 +415,9 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
-    # Half of real time. At full rate every run on Hugging Face lost 13 to 19 datagrams once (one frame
-    # of 2006, between pings); at half and quarter rate none. The receiver's socket buffer is the system
-    # default (208 KB), which Sensor Bridge leaves alone for frames this small and a container cannot raise.
+    # Half of real time (GPUSONAR_HSB_PACE overrides). At real time the receiver's socket buffer (212,992
+    # bytes, Hugging Face's rmem_max: about 20 ms of the stream) overflowed while the chain ran on a ping
+    # (test_loopback_loss_study; hsb.py FRAME_SAMPLES says what was measured).
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
     board, stats, receive, report = run_loopback(tmp_path, pings, pace, tag="hsb")
     print("sender:", board)
@@ -487,17 +487,19 @@ def test_loopback_loss_study(pings, tmp_path):
     print("cores:", cores, "cpu_count:", os.cpu_count(), "cpu:", hsb.cpu_throttling(), "rmem:",
           {k: pathlib.Path(f"/proc/sys/net/core/{k}").read_text().strip() for k in ("rmem_default", "rmem_max")})
     one = {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
-    runs = [("pace 1.0", 1.0, (), (), ()), ("pace 1.0", 1.0, (), (), ()), ("pace 1.0", 1.0, (), (), ()),
-            ("pace 0.5", 0.5, (), (), ()),
-            ("pace 1.0, chain on one thread", 1.0, (), (), (), one),
-            ("pace 1.0, chain on one thread", 1.0, (), (), (), one),
-            ("pace 1.0, receive buffer 1/2", 1.0, (), ("--socket-buffer", "106496"), ()),
-            ("pace 1.0, receive buffer 1/4", 1.0, (), ("--socket-buffer", "53248"), ()),
+    burst = ("--catch-up", "burst")
+    # The kernel doubles a buffer it is asked for (socket(7)): 53248 asked is 106496, half the default.
+    half = ("--socket-buffer", "53248")
+    runs = [*[("pace 1.0", 1.0, (), (), ())] * 6,
+            ("pace 1.0, catch-up burst (before)", 1.0, burst, (), ()),
+            ("pace 1.0, catch-up burst (before)", 1.0, burst, (), ()),
+            ("pace 1.0, catch-up burst (before)", 1.0, burst, (), ()),
+            ("pace 1.0, receive buffer halved", 1.0, (), half, ()),
+            ("pace 1.0, receive buffer halved", 1.0, (), half, ()),
+            ("pace 1.0, chain on one thread, catch-up burst", 1.0, burst, (), (), one),
+            ("pace 1.0, chain on one thread, catch-up burst", 1.0, burst, (), (), one),
             ("pace 1.0, sender off the receiver's core", 1.0, (), ("--receiver-core", str(receiver_core)),
-             ("taskset", "-c", away) if shutil.which("taskset") and away else ()),
-            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ()),
-            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ()),
-            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ())]
+             ("taskset", "-c", away) if shutil.which("taskset") and away else ())]
     table = []
     for i, (name, pace, serve_args, receive_args, prefix, *receive_env) in enumerate(runs):
         tag = f"study{i}"

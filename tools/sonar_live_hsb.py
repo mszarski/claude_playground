@@ -40,9 +40,9 @@ def parse(argv=None):
     s.add_argument("--linger", type=float, default=10.0, help="seconds to keep streaming after the last ping")
     s.add_argument("--interval", type=float, help="seconds between transmits (default: the records' transmit times)")
     s.add_argument("--connect-timeout", type=float, default=120.0)
-    s.add_argument("--catch-up", choices=hsb.CATCH_UP, default="burst",
-                   help="after the sender falls behind: send the frames it owes back to back (burst) or at most two "
-                        "per frame period (spread)")
+    s.add_argument("--catch-up", choices=hsb.CATCH_UP, default="spread",
+                   help="after the sender falls behind: send the frames it owes at most two per frame period (spread, "
+                        "the default) or back to back (burst, the behaviour before)")
     s.add_argument("--send-log", help="JSON file of every frame's send time")
     r = sub.add_parser("receive", help="receive with Sensor Bridge's LinuxReceiverOp and run the chain")
     r.add_argument("config", nargs="?", help="deployment YAML (source.sonar, chain, nav, output)")

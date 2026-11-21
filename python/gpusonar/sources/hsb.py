@@ -39,11 +39,16 @@ from ..sonar import SonarModel
 from .flank_stream import FULL_SCALE_COUNTS, HEADER_BYTES, BlockError, PingAssembler, encode_block
 
 FRAME_SAMPLES = 400            # 6.25 ms of the 64 kSPS stream: 38,528 bytes with 32 channels, 160 frames a second.
-# A frame leaves the sender as one burst of datagrams into the receiver's socket buffer, which
-# Sensor Bridge's receiver leaves at the system default (208 KB of kernel accounting, about 48
-# datagrams) unless a frame is larger, and which a container may not be able to raise. On loopback
-# 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
-# 400-sample frames still lost one frame per run at real time and none at half of it.
+# A frame leaves the sender as one burst of 29 datagrams (1408-byte payloads) into the receiver's
+# socket buffer, which Sensor Bridge's receiver leaves at the system default unless a frame is
+# larger: 212,992 bytes where net.core.rmem_max is that (Hugging Face containers; it cannot be
+# raised there), which on loopback is 92 datagrams of 2304 bytes of kernel accounting, about 3
+# frames or 20 ms of the stream at real time. Measured (job 6b010e824fdc5ab3c55c549d, L4): every
+# datagram lost at real time was refused by that full buffer (the socket's drop count equals the
+# packet-number gaps and RcvbufErrors), while the receiving process ran the chain on a ping, which
+# delays both Sensor Bridge's receiver thread and the sending process; a sender that had fallen
+# behind then sent the frames it owed back to back. Hence catch_up="spread" (below) by default.
+# On loopback 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
 FRAME_ALIGN = 128              # the Sensor Bridge data plane moves frames in 128-byte pages
 
 
@@ -319,7 +324,7 @@ class HsbBoardEmulator:
 
     def __init__(self, records, frame_samples: int = FRAME_SAMPLES, ip: str = "127.0.0.1", pace: float = 1.0,
                  lead_seconds: float = 1.0, ping_interval: float | None = None, linger: float = 10.0,
-                 catch_up: str = "burst", **stream_options):
+                 catch_up: str = "spread", **stream_options):
         if pace <= 0.0:
             raise ValueError("pace is a multiple of real time and must be positive")
         if catch_up not in CATCH_UP:
@@ -333,10 +338,11 @@ class HsbBoardEmulator:
         return iter(self.stream)
 
     def _wait(self, t0: float, k: int, period: float) -> None:
-        """Sleep until frame k is due (t0 + k periods). With catch_up "burst" a frame that is
-        already late goes at once, so after a stall of the sender the frames it owes leave back
-        to back; with "spread" a frame never leaves sooner than half a period after the one
-        before, so the sender makes up a stall at twice the frame rate."""
+        """Sleep until frame k is due (t0 + k periods). With catch_up "spread" (the default) a
+        frame never leaves sooner than half a period after the one before, so the sender makes
+        up a stall of its own at twice the frame rate, as a board's stream never comes faster;
+        with "burst" (the behaviour before) a late frame goes at once, so after a stall the
+        frames owed leave back to back and can overflow the receiver's socket buffer."""
         due = t0 + k * period
         if self.catch_up == "spread" and self.timing.last_end is not None:
             due = max(due, self.timing.last_start + 0.5 * period)
