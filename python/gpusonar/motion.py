@@ -320,6 +320,8 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
         nav.y, nav.z = y, z
     if options.bathymetry is not None:
         # The seabed under each ping, now at the coarse pass's sway rather than the nominal track.
+        # The footprints p_s are not recomputed: they stay where measure_delays put them, on
+        # the bathymetry below the navigated (nominal) track.
         _refer_dvl(pings, altitude, floor_z, options.bathymetry, list(coarse.y[:len(pings)]))
     fine = core.solve_motion(pings, measurements, so)
     n = len(records)

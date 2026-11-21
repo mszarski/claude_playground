@@ -440,7 +440,9 @@ def test_seafloor_z_auto_is_a_datum_it_shifts_heave_by_a_common_offset_only():
 def test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor(name, surface):
     """Scatterers on a non-flat seafloor; the DVL reports the altitude above it under the
     vehicle. Given the surface, the estimator meets the flat-seafloor bounds (sway lambda/20,
-    heave lambda/4 RMS)."""
+    heave lambda/4 RMS). The simulated DVL (collect) is a single vertical beam, the same
+    model _refer_dvl assumes, so this test cannot catch a wrong DVL geometry (four slanted
+    beams, a footprint average)."""
     col, _ = collect(bathymetry=surface)
     known = motion.estimate_motion([r.copy() for r in col.records], motion.MotionOptions(bathymetry=surface))
     sway_err, heave_err = errors(col, known)
@@ -452,3 +454,9 @@ def test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor(
     flat = motion.estimate_motion([r.copy() for r in col.records])
     flat_sway = np.sqrt(np.mean(errors(col, flat)[0] ** 2))
     assert flat_sway > np.sqrt(np.mean(sway_err**2))
+
+
+def test_simulated_attitude_must_be_one_row_per_ping():
+    sonar = SonarModel.load("sas_auv")
+    with pytest.raises(ValueError, match=r"\(4, 3\)"):
+        simulate_collection(sonar, Scene(), n_pings=4, interval=0.2, attitude=np.zeros(12))   # flat: refused

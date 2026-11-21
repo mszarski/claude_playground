@@ -516,11 +516,17 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
     the nominal straight track (unless `nav_knows_disturbance`), plus a DVL sample with
     the true altitude and surge speed. With `stop_and_go` (a rail) the platform stands
     still during each ping; the disturbances are then position errors of the rail.
-    `attitude`, when given, is the true roll, pitch, yaw of each ping ([n_pings, 3], rad),
-    held constant during the ping; navigation (the INS) reports it exactly. None: level.
+    `attitude`, when given, is the true roll, pitch, yaw of each ping (shape (n_pings, 3),
+    rad), held constant during the ping; navigation (the INS) reports it exactly. None:
+    level. The DVL's velocity_body stays (speed, 0, 0) whatever the attitude.
     """
     rng = rng or np.random.default_rng(0)
-    att = np.zeros((n_pings, 3)) if attitude is None else np.asarray(attitude, dtype=float).reshape(n_pings, 3)
+    if attitude is None:
+        att = np.zeros((n_pings, 3))
+    else:
+        att = np.asarray(attitude, dtype=float)
+        if att.shape != (n_pings, 3):
+            raise ValueError(f"simulate_collection: attitude must have shape ({n_pings}, 3), not {att.shape}")
     start = np.asarray(start, dtype=float)
     t = np.arange(n_pings + 1) * interval
     truth = np.tile(start, (n_pings + 1, 1))
