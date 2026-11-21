@@ -59,6 +59,26 @@ def plane(depth: float, slope=(0.0, 0.0), point=(0.0, 0.0)) -> Bathymetry:
                       flat_depth=d0 if sx == 0.0 and sy == 0.0 else None)
 
 
+def seamount(depth: float, height: float, center, sigma: float) -> Bathymetry:
+    """A Gaussian seamount on a level bed: depth(x, y) = `depth` - `height` exp(-|p - center|^2 / (2 sigma^2)),
+    with its analytic gradient (ours: a smooth, closed-form 3-D feature for the N x 2-D test,
+    tests/python/test_seamount_3d.py; the Acoustics Toolbox's Bellhop3D tests have a cone, Seamount/makebty.m,
+    and a pair of seamounts, DoubleSeamount). The summit is `depth` - `height` deep; `height` >= `depth` would
+    put it through the surface and is refused."""
+    d0, h, (cx, cy), s = float(depth), float(height), (float(v) for v in center), float(sigma)
+    if not (0.0 <= h < d0) or s <= 0.0:
+        raise ValueError("seamount: need 0 <= height < depth (the summit stays under water) and sigma > 0")
+
+    def bump(x, y):
+        return h * np.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2.0 * s * s))
+
+    def gradient(x, y):
+        b = bump(x, y) / (s * s)
+        return b * (x - cx), b * (y - cy)
+
+    return Bathymetry(lambda x, y: d0 - bump(x, y), gradient, flat_depth=d0 if h == 0.0 else None)
+
+
 def _interp_axis(axis, v):
     """Indices and weight for linear interpolation on an increasing axis, held beyond its ends."""
     v = np.clip(v, axis[0], axis[-1])
@@ -128,6 +148,7 @@ def make_bathymetry(spec) -> Bathymetry:
     """A Bathymetry from its description: a Bathymetry, a function depth(x, y), or a mapping
 
         {plane: {depth, slope: [dD/dx, dD/dy], point: [x, y]}}
+        {seamount: {depth, height, center: [x, y], sigma}}        a Gaussian seamount on a level bed
         {x: [...], y: [...], depth: [[...]]}                      depth[len(x)][len(y)]
         {range: [...], depth: [...], azimuth_deg: [...], origin: [x, y]}
 
@@ -139,8 +160,11 @@ def make_bathymetry(spec) -> Bathymetry:
     if "plane" in spec:
         p = spec["plane"]
         return plane(p["depth"], p.get("slope", (0.0, 0.0)), p.get("point", (0.0, 0.0)))
+    if "seamount" in spec:
+        m = spec["seamount"]
+        return seamount(m["depth"], m["height"], m["center"], m["sigma"])
     if "x" in spec and "y" in spec:
         return grid(spec["x"], spec["y"], spec["depth"], spec.get("step"))
     if "range" in spec:
         return polar(spec["range"], spec["depth"], spec.get("azimuth_deg"), spec.get("origin", (0.0, 0.0)), spec.get("step"))
-    raise ValueError("bathymetry: give `plane`, `x`/`y`/`depth`, or `range`/`depth`")
+    raise ValueError("bathymetry: give `plane`, `seamount`, `x`/`y`/`depth`, or `range`/`depth`")

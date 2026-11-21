@@ -47,6 +47,18 @@ def test_reasons_are_recognised_by_the_variable_they_name():
     assert oracle_variable("Bellhop not installed (GPUSONAR_BELLHOP)") == "GPUSONAR_BELLHOP"
     assert oracle_variable("needs KRAKEN (GPUSONAR_KRAKEN_DIR)") == "GPUSONAR_KRAKEN_DIR"
     assert oracle_variable("arlpy is not installed") is None
+    # Bellhop3D's variable contains Bellhop's: names match as whole words, the first of ORACLE_VARIABLES named wins.
+    assert oracle_variable("needs Bellhop3D (GPUSONAR_BELLHOP3D)") == "GPUSONAR_BELLHOP3D"
+    assert oracle_variable("needs Bellhop (GPUSONAR_BELLHOP) and Bellhop3D (GPUSONAR_BELLHOP3D)") == "GPUSONAR_BELLHOP"
+    # An oracle that is a Python module is named by its module: the reasons the PyRAM cross-check gives.
+    import test_ram_crosscheck as ram
+    assert oracle_variable(ram.PYRAM_MISSING) == "pyram"
+    assert oracle_variable(ram.pyram_wrong_version("1.2.0")) == "pyram"
+    assert oracle_variable("pyramid is not installed") is None
+    # The skip marks of the seamount test (Bellhop3D's reason must not be counted as Bellhop's).
+    import test_seamount_3d as sm
+    assert oracle_variable(sm.needs_bellhop3d.kwargs["reason"]) == "GPUSONAR_BELLHOP3D"
+    assert oracle_variable(sm.needs_bellhop.kwargs["reason"]) == "GPUSONAR_BELLHOP"
 
 
 @pytest.mark.parametrize("require", [None, "0"])
@@ -66,12 +78,13 @@ def test_with_the_switch_oracle_skips_fail_and_other_skips_stay(tmp_path):
 
 
 def test_every_oracle_skip_in_this_directory_names_its_variable():
-    """A skip about Bellhop or KRAKEN that does not name GPUSONAR_BELLHOP / GPUSONAR_KRAKEN_DIR would pass the gate."""
+    """A skip about Bellhop, KRAKEN or PyRAM that does not name GPUSONAR_BELLHOP(3D) / GPUSONAR_KRAKEN_DIR / pyram would pass
+    the gate."""
     bad = []
     for path in sorted(HERE.glob("test_*.py")):
         text = path.read_text(encoding="utf-8")
         for m in re.finditer(r"(?:pytest\.skip\(|reason=)\s*(\"[^\"]*\"|'[^']*')", text):
             reason = m.group(1)
-            if re.search(r"bellhop|kraken", reason, re.I) and oracle_variable(reason) is None:
+            if re.search(r"bellhop|kraken|pyram", reason, re.I) and oracle_variable(reason) is None:
                 bad.append(f"{path.name}: {reason}")
     assert not bad, bad
