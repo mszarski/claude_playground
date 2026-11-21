@@ -5,9 +5,10 @@ Rule-based, from the track alone (no image features, no learning):
   mover       it was seen on most pings and its positions fit a straight line through time
               whose speed is well above the scatter of the fit;
   static      it was seen on most pings and its fitted speed is small;
-  multipath   it has the bearing and the velocity of a stronger track and lies a little
-              further out in range: a later arrival of the same object by a longer path
-              (long-range sonar in a channel);
+  multipath   it has the bearing and the velocity of an established track (mover, static, line) and lies
+              within a set distance of it in range, nearer or farther: another arrival of the same
+              object by another path (long-range sonar in a channel). Of such a group the object is
+              the established track nearest in range, the others its multipath;
   line        it appears to move, but along a row of other tracks: a detection sliding
               along a pipeline, a cable or a wake as the aspect changes. Motion along a
               linear feature cannot be told from the feature standing still;
@@ -139,26 +140,36 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
             if c.kind == "mover" and c.extent_cells < det["min_mover_cells"]:
                 c.kind = "uncertain"             # a glint or clutter joined into a line; NaN (no cells) leaves it
     if multipath:
+        # Echo grouping (ours, D-155). An arrival by a longer path has the object's bearing and velocity and lies a
+        # little farther out in range. In a shallow channel the strongest arrival need not be the direct one (popoto_12km,
+        # the ten seed captures of tools/classify_rules_eval.py: the strongest track near the ship is 34 to 93 m beyond its
+        # true range on every seed), so the group is gathered around a strong anchor on both sides in range and its object
+        # is the EARLIEST established arrival, the one nearest the true range (there: 0.3 to 27 m short of it). A track still uncertain is not made the object (a four-point track's fit is poor),
+        # but it can be a member. The cost: two objects at one bearing and velocity within max_excess_range in either
+        # direction are one object (before: only one farther out than a stronger one).
         origin = np.asarray(multipath.get("origin", (0.0, 0.0)), dtype=float)
         polar = {}
         for c in out:
             d = np.asarray(c.position) - origin
             polar[c.id] = (float(np.hypot(*d)), float(np.arctan2(d[0], d[1])))
-        # Strongest first: an echo is the weaker, later copy.
+        established = ("mover", "static", "line")
+        # Anchors strongest first (NaN SNR last); an anchor is itself an established track not yet in a group.
         order = sorted(out, key=lambda c: -(c.mean_snr_db if np.isfinite(c.mean_snr_db) else -np.inf))
-        for i, weak in enumerate(order):
-            for strong in order[:i]:
-                # Only a track that is itself classed as an object explains another as its echo: not an echo, and
-                # not a track still uncertain (a weaker track beside an unproven one is not thereby explained away).
-                if strong.kind not in ("mover", "static", "line"):
-                    continue
-                excess = polar[weak.id][0] - polar[strong.id][0]
-                same_bearing = abs(np.angle(np.exp(1j * (polar[weak.id][1] - polar[strong.id][1])))) <= multipath["bearing"]
-                same_velocity = np.hypot(weak.velocity[0] - strong.velocity[0],
-                                         weak.velocity[1] - strong.velocity[1]) <= multipath["velocity"]
-                if 0.0 < excess <= multipath["max_excess_range"] and same_bearing and same_velocity:
-                    weak.kind, weak.parent = "multipath", strong.id
-                    break
+        taken = set()
+        for anchor in order:
+            if anchor.id in taken or anchor.kind not in established:
+                continue
+            ra, ba = polar[anchor.id]
+            group = [c for c in out if c.id not in taken
+                     and abs(polar[c.id][0] - ra) <= multipath["max_excess_range"]
+                     and abs(np.angle(np.exp(1j * (polar[c.id][1] - ba)))) <= multipath["bearing"]
+                     and np.hypot(c.velocity[0] - anchor.velocity[0], c.velocity[1] - anchor.velocity[1]) <= multipath["velocity"]]
+            # The anchor is in its own group, so an established member always exists. Ties in range: the lowest id.
+            obj = min((c for c in group if c.kind in established), key=lambda c: (polar[c.id][0], c.id))
+            for c in group:
+                taken.add(c.id)
+                if c is not obj:
+                    c.kind, c.parent = "multipath", obj.id
     return out
 
 

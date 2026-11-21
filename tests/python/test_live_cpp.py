@@ -147,6 +147,69 @@ def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
             core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=bad))
 
 
+def test_echo_grouping_matches_python_and_takes_the_earliest_established_arrival():
+    """Echo grouping in both engines on the same tracks (D-155): a ship whose strongest arrival is the later one (1040 m)
+    and a weaker one beyond it (1080 m); a short track before it (980 m, three pings: uncertain); a second ship at another
+    bearing with its own echo. Each ship's object is its earliest established arrival and every other member is its
+    multipath. Before D-155 the 1000 m arrival stayed a second mover beside the strong 1040 m one, and the short track
+    stayed uncertain."""
+    opts = dict(process_noise=0.3, range_sigma=6.0, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0)
+    py_tracker, cpp_tracker = detect.Tracker(**opts), core.LiveTracker(**opts)
+    for i in range(8):
+        t = 2.0 * i
+        dets = [(1040.0 + 3.0 * t, 0.2, 30.0, 2), (1000.0 + 3.0 * t, 0.2, 18.0, 2), (1080.0 + 3.0 * t, 0.2, 14.0, 2),
+                (1500.0 - 2.0 * t, -0.3, 25.0, 2), (1530.0 - 2.0 * t, -0.3, 15.0, 2)]
+        if i >= 5:
+            dets.append((980.0 + 3.0 * t, 0.2, 13.0, 2))
+        a = py_tracker.update(t, [detect.Detection(*d) for d in dets])
+        cpp_tracker.update(t, dets)
+    kw = dict(min_speed=1.0, static_speed=1.0, max_fit_rms=3.0)
+    mp = {"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (0.0, 0.0)}
+    want = classify.classify_tracks(a, multipath=mp, **kw)
+    got = cpp_tracker.classify(multipath=True, max_excess_range=800.0, multipath_bearing=np.radians(3.0), multipath_velocity=2.5, **kw)
+    assert [(c.id, c.kind, c.parent) for c in want] == [(c["id"], c["kind"], c["parent"]) for c in got]
+    by_range = {round(float(np.hypot(*c.position)) / 10.0) * 10: c for c in want}          # start range + 3 m/s * 14 s
+    ship, strong, far, short = by_range[1040], by_range[1080], by_range[1120], by_range[1020]
+    other, other_echo = by_range[1470], by_range[1500]
+    assert ship.kind == "mover" and ship.parent is None and other.kind == "mover" and other.parent is None
+    assert all((c.kind, c.parent) == ("multipath", ship.id) for c in (strong, far, short))
+    assert (other_echo.kind, other_echo.parent) == ("multipath", other.id)
+    assert strong.mean_snr_db > ship.mean_snr_db                    # the object is not the strongest arrival
+
+
+def test_both_chains_group_echoes_alike(pings):
+    """The live chain in both engines with echo grouping on, over pings with a target crossing at 3 m/s, its strongest
+    arrival 25 m beyond it and a weaker one 50 m beyond (point echoes on its bearing, moving with it). Both engines give
+    one mover, the target's own (earliest) arrival, and the other two as its multipath; before D-155 the strong later
+    arrival was a second mover."""
+    from gpusonar.sim import Scene, make_pose, simulate_ping
+    from gpusonar.sonar import SonarModel
+    from test_live import OVERRIDES
+    sonar = SonarModel.load("flank_32", OVERRIDES)
+    rng = np.random.default_rng(5)
+    echoes = []
+    for i in range(8):
+        t = i * INTERVAL
+        p = np.array([40.0 - 3.0 * t, 220.0, 0.0])
+        r = float(np.hypot(p[0], p[1]))
+        scene = (Scene().add_points([p], target_strength_db=6.0).add_points([p * (r + 25.0) / r], target_strength_db=14.0)
+                 .add_points([p * (r + 50.0) / r], target_strength_db=4.0).add_points([[-60.0, 320.0, 0.0]], target_strength_db=10.0))
+        echoes.append(simulate_ping(sonar, make_pose(position=(1.5 * t, 0.0, 0.0), velocity=(1.5, 0.0, 0.0)), scene,
+                                    environment={"sound_speed": 1500.0}, sequence=i, time_ns=int(t * 1e9), noise_rms=1e-5, rng=rng))
+    cfg = dict(CHAIN, classify=dict(CHAIN["classify"], multipath={"max_excess_range": 80.0, "bearing_deg": 3.0, "velocity": 2.5}))
+    reports = {}
+    for engine in ("python", "cpp"):
+        with LiveChain(dict(cfg, engine=engine)) as chain:
+            reports[engine] = chain.run(copies(echoes))
+    for w, g in zip(reports["python"], reports["cpp"]):
+        assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
+    last = sorted(reports["python"][-1]["tracks"], key=lambda t: t["range_m"])
+    moving = [t for t in last if t["kind"] in ("mover", "multipath")]
+    assert [t["kind"] for t in moving] == ["mover", "multipath", "multipath"]
+    assert all(t["parent"] == moving[0]["id"] for t in moving[1:])
+    assert abs(moving[0]["range_m"] - 220.0) < 6.0 and moving[1]["mean_snr_db"] > moving[0]["mean_snr_db"]
+
+
 def test_cpp_tracker_refuses_an_unknown_association():
     with pytest.raises(ValueError, match="association"):
         core.LiveTracker(association="nearest")

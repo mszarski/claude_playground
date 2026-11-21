@@ -588,7 +588,9 @@ def test_an_ambiguous_elevation_does_not_move_the_detection_and_the_mover_keeps_
 def test_a_track_is_called_multipath_only_of_a_track_classed_as_an_object():
     """A weaker track 40 m behind a stronger one on its bearing, with its velocity. When the stronger is a clean mover the
     weaker is its echo. When the stronger is itself `uncertain` (seen on too few pings to be classed) the weaker is
-    not explained away by it: it keeps its own class. Both engines."""
+    not explained away by it: it keeps its own class, and since D-155 (groups on both sides in range, the earliest
+    established arrival the object) it is the object and the uncertain one, nearer in range, its multipath; before
+    D-155 the uncertain one stayed uncertain. Both engines."""
     from gpusonar import classify, detect
 
     def run(late):
@@ -611,7 +613,7 @@ def test_a_track_is_called_multipath_only_of_a_track_classed_as_an_object():
     strong, weak = run(late=False)
     assert (strong.kind, weak.kind, weak.parent) == ("mover", "multipath", strong.id)
     strong, weak = run(late=True)
-    assert strong.kind == "uncertain" and weak.kind == "mover" and weak.parent is None
+    assert weak.kind == "mover" and weak.parent is None and (strong.kind, strong.parent) == ("multipath", weak.id)
 
 
 # --- what snr_db is ---------------------------------------------------------------------------------------------------------

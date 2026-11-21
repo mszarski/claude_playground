@@ -82,6 +82,57 @@ def test_echoes_by_a_longer_path_are_attached_to_the_stronger_track():
     assert classify.summary(list(out.values())) == {"mover": 2, "static": 1, "line": 0, "multipath": 2, "uncertain": 0}
 
 
+MP = {"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (0.0, 0.0)}
+SHIP_KW = dict(min_speed=1.0, static_speed=1.0, max_fit_rms=60.0, multipath=MP)
+
+
+def arrival(tid, rng_m, bearing_deg, snr, n=6, velocity=(0.0, -6.0), seed=0):
+    """A ship's arrival at `rng_m` (at the start) and bearing (from forward, to starboard), twelve seconds a ping."""
+    b = np.radians(bearing_deg)
+    return track(tid, (rng_m * np.sin(b), rng_m * np.cos(b)), velocity, dt=12.0, n=n, sigma=5.0, snr=snr, seed=seed)
+
+
+def test_the_earliest_established_arrival_is_the_object_not_the_strongest():
+    """D-155: the strongest arrival in a shallow channel can be a later path (popoto_12km: 50-83 m beyond the true range).
+    Before, the strongest (2) was the object and the direct arrival (1), nearer than it, stayed a second mover."""
+    out = {c.id: c for c in classify.classify_tracks([arrival(1, 6000.0, 4.0, 14.0), arrival(2, 6070.0, 4.0, 22.0),
+                                                      arrival(3, 6130.0, 4.0, 12.0)], **SHIP_KW)}
+    assert out[1].kind == "mover" and out[1].parent is None
+    assert (out[2].kind, out[2].parent) == ("multipath", 1) and (out[3].kind, out[3].parent) == ("multipath", 1)
+    assert classify.summary(list(out.values()))["mover"] == 1
+
+
+def test_an_earlier_uncertain_arrival_is_multipath_not_the_object():
+    """A three-point track nearer in range than the established ones is grouped with them, but is not made the object:
+    the object is the earliest ESTABLISHED arrival (a short track's fit is poor). Before, it stayed uncertain."""
+    early = arrival(4, 5990.0, 4.0, 13.0, n=3)
+    out = {c.id: c for c in classify.classify_tracks([early, arrival(1, 6000.0, 4.0, 14.0), arrival(2, 6070.0, 4.0, 22.0)],
+                                                     **SHIP_KW)}
+    assert (out[4].kind, out[4].parent) == ("multipath", 1)
+    assert out[1].kind == "mover" and (out[2].kind, out[2].parent) == ("multipath", 1)
+
+
+def test_an_uncertain_track_alone_is_not_an_anchor():
+    """No established track: nothing is grouped (an uncertain track explains nothing away)."""
+    out = classify.classify_tracks([arrival(4, 5990.0, 4.0, 22.0, n=3), arrival(5, 6050.0, 4.0, 13.0, n=3)], **SHIP_KW)
+    assert [(c.kind, c.parent) for c in out] == [("uncertain", None), ("uncertain", None)]
+
+
+def test_two_ships_at_different_bearings_keep_their_own_groups():
+    tracks = [arrival(1, 6000.0, 4.0, 14.0), arrival(2, 6070.0, 4.0, 22.0),
+              arrival(11, 6040.0, 12.0, 13.0), arrival(12, 6100.0, 12.0, 20.0)]
+    out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
+    assert out[1].kind == out[11].kind == "mover"
+    assert (out[2].kind, out[2].parent) == ("multipath", 1) and (out[12].kind, out[12].parent) == ("multipath", 11)
+
+
+def test_equal_ranges_take_the_lowest_id_as_the_object():
+    a, b = arrival(7, 6000.0, 4.0, 14.0), arrival(3, 6000.0, 4.0, 20.0)
+    b.history = [(t, x, y) for t, x, y in a.history]               # the same positions, so the same range exactly
+    out = {c.id: c for c in classify.classify_tracks([a, b], **SHIP_KW)}
+    assert out[3].kind == "mover" and (out[7].kind, out[7].parent) == ("multipath", 3)
+
+
 # --- opt-in rules from the detections themselves (classify.py `detections`) ----------------------------------------
 
 def with_cells(tr, cells):

@@ -144,32 +144,40 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     }
   }
   if (o.multipath) {
+    // Echo grouping (ours, D-155; classify.py has the reasons): around each established track, strongest first, the
+    // tracks not yet grouped at its bearing and velocity within multipath_max_excess_range in range on either side; the
+    // group's object is its established member nearest in range (ties: the lowest id), every other member is multipath.
     std::vector<std::size_t> order(out.size());
     for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
     auto key = [&](std::size_t i) { return std::isfinite(out[i].mean_snr_db) ? out[i].mean_snr_db : -std::numeric_limits<double>::infinity(); };
     std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return key(a) > key(b); });
-    auto polar = [&](std::size_t i, double& r, double& b) {
+    std::vector<double> range(out.size()), bearing(out.size());
+    for (std::size_t i = 0; i < out.size(); ++i) {
       const double dx = out[i].x - o.origin_x, dy = out[i].y - o.origin_y;
-      r = std::hypot(dx, dy);
-      b = std::atan2(dx, dy);
-    };
-    for (std::size_t a = 0; a < order.size(); ++a) {
-      const std::size_t weak = order[a];
-      for (std::size_t b = 0; b < a; ++b) {
-        const std::size_t strong = order[b];
-        // Only a track that is itself classed as an object explains another as its echo: not an echo, and not a
-        // track still uncertain (a weaker track beside an unproven one is not thereby explained away).
-        if (out[strong].kind != Kind::Mover && out[strong].kind != Kind::Static && out[strong].kind != Kind::Line) continue;
-        double rw, bw, rs, bs;
-        polar(weak, rw, bw);
-        polar(strong, rs, bs);
-        const double excess = rw - rs;
-        const double db = std::abs(std::atan2(std::sin(bw - bs), std::cos(bw - bs)));
-        const double dv = std::hypot(out[weak].vx - out[strong].vx, out[weak].vy - out[strong].vy);
-        if (excess > 0.0 && excess <= o.multipath_max_excess_range && db <= o.multipath_bearing && dv <= o.multipath_velocity) {
-          out[weak].kind = Kind::Multipath;
-          out[weak].parent = out[strong].id;
-          break;
+      range[i] = std::hypot(dx, dy);
+      bearing[i] = std::atan2(dx, dy);
+    }
+    auto established = [&](std::size_t i) { return out[i].kind == Kind::Mover || out[i].kind == Kind::Static || out[i].kind == Kind::Line; };
+    std::vector<bool> taken(out.size(), false);
+    for (const std::size_t a : order) {
+      if (taken[a] || !established(a)) continue;
+      std::vector<std::size_t> group;
+      for (std::size_t i = 0; i < out.size(); ++i) {
+        if (taken[i]) continue;
+        const double db = std::abs(std::atan2(std::sin(bearing[i] - bearing[a]), std::cos(bearing[i] - bearing[a])));
+        const double dv = std::hypot(out[i].vx - out[a].vx, out[i].vy - out[a].vy);
+        if (std::abs(range[i] - range[a]) <= o.multipath_max_excess_range && db <= o.multipath_bearing && dv <= o.multipath_velocity) group.push_back(i);
+      }
+      // The anchor is in its own group, so an established member always exists.
+      std::size_t obj = a;
+      for (const std::size_t i : group) {
+        if (established(i) && (range[i] < range[obj] || (range[i] == range[obj] && out[i].id < out[obj].id))) obj = i;
+      }
+      for (const std::size_t i : group) {
+        taken[i] = true;
+        if (i != obj) {
+          out[i].kind = Kind::Multipath;
+          out[i].parent = out[obj].id;
         }
       }
     }
