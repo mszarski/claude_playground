@@ -959,3 +959,33 @@ def test_rms_height_apart_from_the_wind_and_height_scale():
         rays = _one_bounce(surface=cfg).eigenrays([0.0, 0.0, 11.0], pts)
         gamma = 2.0 * (2.0 * np.pi * 12500.0 / 1500.0) * h * np.sin(g)
         assert abs(rays.amplitude[0, 1]) / abs(flat.amplitude[0, 1]) == pytest.approx(np.exp(-0.5 * gamma**2), rel=1e-6)
+
+
+def test_iso_delay_angle_draws_the_von_mises_like_density():
+    """Audit B10: psi on the circle of equal delay has density exp(kappa cos 2 psi) / (2 pi I0(kappa)) over the whole
+    circle (normalised with numpy's modified Bessel function I0, not the code's grid). kappa = 0: uniform, and the
+    first quadrant is exactly u pi / 2."""
+    from gpusonar.sim.timespread import iso_delay_angle
+    rng = np.random.default_rng(5)
+    u = np.linspace(0.0, 1.0, 11)
+    assert np.allclose(iso_delay_angle(np.zeros(11), u, np.zeros(11)), 0.5 * np.pi * u, atol=1e-12)
+    for kappa in (0.0, 1.5, 6.0):
+        n = 200000
+        psi = iso_delay_angle(np.full(n, kappa), rng.random(n), rng.random(n))
+        psi = np.mod(psi, 2.0 * np.pi)
+        counts, edges = np.histogram(psi, bins=48, range=(0.0, 2.0 * np.pi))
+        # the expected count in each bin: the density integrated over it (trapezoids on a fine grid)
+        fine = np.linspace(edges[0], edges[-1], 48 * 64 + 1)
+        dens = np.exp(kappa * np.cos(2.0 * fine)) / (2.0 * np.pi * np.i0(kappa))
+        expected = n * (0.5 * (dens[:-1] + dens[1:]) * np.diff(fine)).reshape(48, 64).sum(axis=1)
+        assert expected.sum() == pytest.approx(n, rel=1e-6)
+        assert np.max(np.abs(counts - expected) / np.sqrt(expected)) < 5.0, kappa         # Poisson: within 5 sigma in every bin
+        # E[cos 2 psi] = I1(kappa) / I0(kappa), within 5 standard errors
+        want = 0.0 if kappa == 0 else float(_i1(kappa) / np.i0(kappa))
+        assert abs(np.mean(np.cos(2.0 * psi)) - want) < 5.0 * np.std(np.cos(2.0 * psi)) / np.sqrt(n), kappa
+
+
+def _i1(x: float) -> float:
+    """Modified Bessel function I1 by its power series (x / 2)^(2m + 1) / (m! (m + 1)!)."""
+    import math
+    return sum((x / 2.0) ** (2 * m + 1) / (math.factorial(m) * math.factorial(m + 1)) for m in range(40))

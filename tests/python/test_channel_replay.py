@@ -565,3 +565,19 @@ def test_watermark_ncs1_scattered_arrivals_are_gaussian_like():
     assert 0.7 < np.median([r["scintillation"] for r in rough]) < 1.15
     ratio = np.mean([r["band_ratio"] for r in rough])
     assert 1.05 < ratio < 1.3                                  # wider in the upper half of the band; proportional would be 1.24
+
+
+def test_coherence_time_of_a_first_order_autoregression():
+    """Audit B10: x_n = a x_(n-1) + w_n has autocorrelation a^|k|, so it falls to 1/e at k = -1 / ln a samples.
+    A tone (constant |autocorrelation|) never decorrelates."""
+    rng = np.random.default_rng(8)
+    fs, a, n, cols = 100.0, 0.95, 4000, 64
+    w = rng.normal(size=(n, cols)) + 1j * rng.normal(size=(n, cols))
+    x = np.empty_like(w)
+    x[0] = w[0] / np.sqrt(1.0 - a * a)
+    for i in range(1, n):
+        x[i] = a * x[i - 1] + w[i]
+    assert cr.coherence_time(x, fs) == pytest.approx(-1.0 / np.log(a) / fs, rel=0.05)
+    assert cr.coherence_time(x, fs, level=0.5) == pytest.approx(np.log(0.5) / np.log(a) / fs, rel=0.05)
+    tone = np.exp(2j * np.pi * 3.0 * np.arange(n) / fs)[:, None] * np.ones((1, 4))
+    assert cr.coherence_time(tone, fs) == float("inf")
