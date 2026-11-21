@@ -6,7 +6,11 @@
 //   DetectorCellKernel     one cell: its background, its strongest sample and whether any test passes
 // What can differ from the host: exp and log of the device's maths library against the host's (each within an ulp or
 // two), so the background differs in the last bits; a flag can differ only where a statistic lies within that of its
-// threshold. Nothing here is contracted into a fused multiply-add: no product is added to anything.
+// threshold. Nothing here is contracted into a fused multiply-add: no product is added to anything, and
+// detector_cuda.cu is compiled with --fmad=false (libs/live/CMakeLists.txt) so that stays so if the code changes.
+// A NaN in the map: the host's median sorts with std::sort, whose order with a NaN is unspecified, and the median kernel
+// with an insertion sort, so a NaN within the first or last two training lengths of a bearing can give the two a
+// different slope there (detector.hpp, multiscale_cells). The chain's maps are powers of finite samples.
 #pragma once
 
 #include <cmath>

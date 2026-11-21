@@ -332,7 +332,8 @@ TEST(Detector, BackgroundFollowsASlopeAtTheEndsOfTheMap) {
 // --- the statistic on the device (multiscale_cells with Backend::Cuda) against the host reference ---------------------
 //
 // The maps of the tests above (noise; a point echo; a 60 dB echo with its sidelobes and two weaker ones; two echoes
-// inside the merge distance; the longer integration lengths; a background that falls with range; a map whose cells
+// inside the merge distance; the longer integration lengths; a background that falls with range; one so steep at both
+// ends that the slope correction is clamped (exp(+-2.3)); a map whose cells
 // start part-way along its rows, as after blanking). Agreement asked for: the same flags and strongest samples, the
 // background within 1e-12 of the host's (exp and log of two maths libraries), and the same detections.
 
@@ -379,6 +380,19 @@ std::vector<StatisticCase> statistic_cases() {
     }
     m.add(30, 20 * 8 + 2, 400.0F);                                    // near the near end, where the window is one-sided
     m.add(120, 690 * 8 + 5, 30.0F);
+  }
+  // Steep at both ends (-0.05 a cell in ln(power), 33 dB over one training length of 150 cells; flat between cells 300 and 400): the
+  // slope times the training centroid's offset passes 2.3 at both ends, so both bounds of the clamp (exp(+-2.3)) are taken.
+  out.push_back({"steep at both ends: the slope correction clamped", Map(17)});
+  {
+    Map& m = out.back().map;
+    for (std::int64_t b = 0; b < m.n_b; ++b) {
+      for (std::int64_t i = 0; i < m.n_cells * m.k; ++i) {
+        const double j = static_cast<double>(i / m.k);
+        m.fine[static_cast<std::size_t>(b * m.n_cells * m.k + i)] *= static_cast<float>(std::exp(-0.05 * (std::min(j, 300.0) + std::max(j - 400.0, 0.0))));
+      }
+    }
+    m.add(100, 350 * 8 + 4, 300.0F);
   }
   out.push_back({"cells starting part-way along the rows", Map(13), 25});
   out.back().map.add(40, 500 * 8 + 1, 60.0F);
@@ -463,7 +477,7 @@ TEST(DetectorKernels, OnHostThreadsTheyGiveTheReferenceExactly) {
     compare_detections(a, multiscale_detect(m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.fine_ranges, cell_ranges,
                                             m.bearings, m.guard, m.train, m.plan, background), c.name);
   }
-  EXPECT_GE(with_detections, 6U);                                       // all but the noise-only map detect something
+  EXPECT_GE(with_detections, 7U);                                       // all but the noise-only map detect something
 }
 
 TEST(DetectorDevice, GivesTheHostsFlagsAndDetections) {

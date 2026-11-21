@@ -165,6 +165,8 @@ struct DetectorCells {
 /// Backend::Cuda runs the same operations on the device (detector_kernel.hpp), one thread per cell, and gives the
 /// reference's flags: its background differs from the host's by the last bits of exp and log (tests/cpp/test_detector.cpp,
 /// DetectorDevice; tests/python/test_detector_device.py). `fine` and `cell_mean` are host memory either way.
+/// Not held: a map with a NaN in the first or last two training lengths of a bearing (the slope's medians), where the
+/// host's std::sort and the device's insertion sort order the NaN differently (detector_kernel.hpp).
 void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
                       std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard_cells, std::int64_t train_cells,
                       const DetectorPlan& plan, DetectorCells& out, int device = 0);
