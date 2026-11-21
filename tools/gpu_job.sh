@@ -80,8 +80,10 @@ if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   # External GPL-3 propagation programs, run as separate processes (docs/OPEN_SOURCE.md).
   apt-get install -y -qq gfortran make > /dev/null
   eval "$(tools/build_oracles.sh /opt/at | tail -1)"
-  # PyRAM (BSD-3, docs/OPEN_SOURCE.md): a parabolic-equation test oracle, imported by tests/python only.
-  pip install -q pyram==1.3.0
+  # PyRAM (BSD-3, docs/OPEN_SOURCE.md): a parabolic-equation test oracle, imported by tests/python only. The numpy
+  # the suite was built against is held (numba bounds numpy); a failure does not stop the job: the oracle gate
+  # then fails the PyRAM tests, which name `pyram`, under GPUSONAR_REQUIRE_ORACLES.
+  pip install -q pyram==1.3.0 "numpy==$(python3 -c 'import numpy; print(numpy.__version__)')" || echo "pyram not installed"
   # The oracles were asked for: a test that skips for want of one fails instead (tests/python/oracle_gate.py).
   export GPUSONAR_REQUIRE_ORACLES="${GPUSONAR_REQUIRE_ORACLES:-1}"
 fi
