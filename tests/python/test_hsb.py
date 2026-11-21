@@ -7,6 +7,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -285,6 +286,82 @@ def test_tool_arguments(tmp_path, pings):
     assert len(records) == 2 and interval is None and hsb.FrameStream(records, FRAME).tx[1] == int(INTERVAL * 64000)
 
 
+class FakeEmulation:
+    """Stands in for `hololink.emulation`: a data plane that takes every frame at once, except
+    that the send of frame `stall_at` takes `stall` seconds (a sender that falls behind)."""
+
+    def __init__(self, stall_at=None, stall=0.0):
+        outer = self
+
+        class DataPlane:
+            def __init__(self, *args):
+                self.k = 0
+
+            def send(self, array):
+                if self.k == outer.stall_at:
+                    time.sleep(outer.stall)
+                self.k += 1
+                return array.size
+
+        self.HSBEmulator = type("HSBEmulator", (), {"start": lambda self: None, "stop": lambda self: None})
+        self.LinuxDataPlane = DataPlane
+        self.IPAddress = lambda ip: ip
+        self.stall_at, self.stall = stall_at, stall
+
+
+def test_a_sender_that_falls_behind_bursts_unless_told_to_spread(pings, monkeypatch):
+    """The emulated board's timing record (for STATUS open item 34): after a 40 ms stall at 160 frames
+    a second the frames owed leave back to back ("burst", as before) or at most two per period ("spread")."""
+    import types
+    monkeypatch.setenv("HSB_EMULATOR_UDP_SOCKET", "1")             # no raw socket needed by the stand-in
+    package = types.ModuleType("hololink")
+    for catch_up in hsb.CATCH_UP:
+        fake = FakeEmulation(stall_at=40, stall=0.040)
+        package.emulation = fake
+        monkeypatch.setitem(sys.modules, "hololink", package)
+        monkeypatch.setitem(sys.modules, "hololink.emulation", fake)
+        board = hsb.HsbBoardEmulator(copies(pings[:2]), FRAME, pace=1.0, lead_seconds=0.1, ping_interval=1.6, linger=0.0,
+                                     catch_up=catch_up)
+        out = board.run(connect_timeout=5.0)
+        t = out["timing"]
+        assert out["frames_sent"] == board.stream.n_frames and out["catch_up"] == catch_up
+        assert t["period_ms"] == pytest.approx(6.25) and t["max_late_ms"] > 30.0 and t["frames_late_by_a_period"] >= 1
+        assert 40 in t["first_late_frames"] or 41 in t["first_late_frames"]
+        if catch_up == "burst":
+            assert t["back_to_back_frames"] >= 4                    # the six frames owed, sent at once
+        else:
+            assert t["back_to_back_frames"] == 0                    # never two within a quarter period
+        print(catch_up, t)
+
+
+def test_the_data_socket_watch_finds_the_receivers_socket_and_counts_its_drops():
+    """DataSocketWatch picks the UDP socket with LinuxReceiver's 100 ms receive timeout and reads the
+    kernel's drop count for it (/proc/net/udp); a datagram refused by a full buffer is counted."""
+    import socket
+    import struct
+    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    other = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        rx.bind(("127.0.0.1", 0))
+        rx.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO, struct.pack("ll", 0, 100000))
+        watch = hsb.DataSocketWatch(receive_buffer=4096)
+        assert watch.locate() and watch.stats()["found"]
+        assert watch.stats()["rcvbuf"] == rx.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)   # set through the dup
+        before = hsb.udp_counters().get("RcvbufErrors", 0)
+        for _ in range(64):                                         # far beyond a 4 KB buffer, nobody reading
+            tx.sendto(b"x" * 1400, rx.getsockname())
+        watch.sample()
+        s = watch.stats()
+        assert s["drops"] > 0 and s["max_rx_queue"] > 0
+        if hsb.udp_counters():
+            assert hsb.udp_counters()["RcvbufErrors"] - before >= s["drops"]
+        print(s, hsb.cpu_throttling())
+    finally:
+        for sock in (rx, other, tx):
+            sock.close()
+
+
 def sensor_bridge_reason():
     try:
         import hololink  # noqa: F401
@@ -303,6 +380,37 @@ def lines(path):
     return [json.loads(line) for line in pathlib.Path(path).read_text().splitlines() if line.startswith("{")]
 
 
+def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_prefix=(), tag="run", receive_env=None):
+    """One loopback: `serve` (the board, through Sensor Bridge's emulator) and `receive` (Sensor
+    Bridge's LinuxReceiverOp -> frames to pings -> chain) as separate processes, as deployed.
+    Returns (sender's statistics, receiver's statistics, the receive process, its report path)."""
+    w = gs.RecordWriter(str(tmp_path / "pings.h5"))
+    for r in copies(pings):
+        w.write(r)
+    w.close()
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
+    serve = subprocess.Popen([*serve_prefix, sys.executable, str(TOOL), "serve", "--replay", str(tmp_path / "pings.h5"),
+                              "--frame-samples", str(FRAME), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20",
+                              "--send-log", str(tmp_path / f"{tag}_send.json"), *serve_args],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+    try:
+        receive = subprocess.run([sys.executable, str(TOOL), "receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES),
+                                  "--chain", json.dumps(CHAIN), "--frame-samples", str(FRAME), "--pings", str(N),
+                                  "--report", str(tmp_path / f"{tag}.jsonl"), "--recording", str(tmp_path / f"{tag}.h5"),
+                                  "--arrival-log", str(tmp_path / f"{tag}_arrivals.json"), *receive_args],
+                                 capture_output=True, text=True, timeout=600, env=dict(env, **(receive_env or {})))
+        sent, _ = serve.communicate(timeout=120)
+    finally:
+        serve.kill()
+    print(sent[-1500:])
+    print(receive.stdout[-3000:])
+    assert receive.returncode == 0, receive.stderr[-3000:]
+    assert serve.returncode == 0, sent[-3000:]
+    board = json.loads([ln for ln in sent.splitlines() if ln.startswith("hsb: ")][-1][5:])
+    stats = json.loads([ln for ln in receive.stdout.splitlines() if ln.startswith("hsb: ")][-1][5:])
+    return board, stats, receive, tmp_path / f"{tag}.jsonl"
+
+
 def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, tmp_path):
     reason = sensor_bridge_reason()
     if reason:
@@ -311,27 +419,8 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     # of 2006, between pings); at half and quarter rate none. The receiver's socket buffer is the system
     # default (208 KB), which Sensor Bridge leaves alone for frames this small and a container cannot raise.
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
-    w = gs.RecordWriter(str(tmp_path / "pings.h5"))
-    for r in copies(pings):
-        w.write(r)
-    w.close()
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
-    serve = subprocess.Popen([sys.executable, str(TOOL), "serve", "--replay", str(tmp_path / "pings.h5"), "--frame-samples", str(FRAME),
-                              "--lead", str(LEAD), "--pace", str(pace), "--linger", "20"],
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
-    try:
-        receive = subprocess.run([sys.executable, str(TOOL), "receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES),
-                                  "--chain", json.dumps(CHAIN), "--frame-samples", str(FRAME), "--pings", str(N),
-                                  "--report", str(tmp_path / "hsb.jsonl"), "--recording", str(tmp_path / "hsb.h5")],
-                                 capture_output=True, text=True, timeout=600, env=env)
-        sent, _ = serve.communicate(timeout=120)
-    finally:
-        serve.kill()
-    print(sent[-1500:])
-    print(receive.stdout[-3000:])
-    assert receive.returncode == 0, receive.stderr[-3000:]
-    assert serve.returncode == 0, sent[-3000:]
-    stats = json.loads([ln for ln in receive.stdout.splitlines() if ln.startswith("hsb: ")][-1][5:])
+    board, stats, receive, report = run_loopback(tmp_path, pings, pace, tag="hsb")
+    print("sender:", board)
     print("transport:", stats)
     assert stats["pings"] == N and stats["frames_lost"] == 0 and stats["frames_damaged"] == 0 and stats["dropped_pings"] == 0
     assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
@@ -340,7 +429,7 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     sent_samples = direct_records[0].samples.array.copy()            # the chain conditions records in place
     with LiveChain(CHAIN) as chain:
         direct = chain.run(direct_records)
-    got = lines(tmp_path / "hsb.jsonl")
+    got = lines(report)
     assert len(got) == len(direct) == N
     worst = {"track_m": 0.0, "range_m": 0.0, "bearing_deg": 0.0}
     for a, b in zip(got, direct):
@@ -360,3 +449,70 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     # What was recorded on the way in is what the board sent.
     raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "hsb.h5")}))
     assert len(raw) == N and np.array_equal(raw[0].samples.array, sent_samples)
+
+
+def loss_around(tmp_path, tag, stats, board, width=3):
+    """For each frame the receiver missed or got damaged: the sender's lateness and gap before it, and the
+    arrival times of the frames around it (ms after the frame before)."""
+    send = {row[0]: row for row in json.loads((tmp_path / f"{tag}_send.json").read_text())["rows"]}
+    log = json.loads((tmp_path / f"{tag}_arrivals.json").read_text())
+    arrived = {row[0]: row for row in log["rows"]}
+    chain = log["chain_wall_ns"]
+    out = []
+    for k in stats["trouble_frames"]:
+        frames = range(k - width, k + width + 1)
+        t = send[k][1] if k in send else None
+        during = [i for i, (a, b) in enumerate(chain) if t is not None and a <= t <= b]
+        after = [round((t - b) * 1e-6, 1) for a, b in chain if t is not None and t > b]
+        out.append({"frame": k, "sent_during_chain_run_of_ping": during, "ms_after_last_chain_run": after[-1] if after else None,
+                    "chain_runs_ms": [round((b - a) * 1e-6, 1) for a, b in chain],
+                    "sender_late_ms": [send[j][2] if j in send else None for j in frames],
+                    "sender_gap_ms": [send[j][3] if j in send else None for j in frames],
+                    "arrived": [j in arrived for j in frames],
+                    "packets": [arrived[j][2] if j in arrived else None for j in frames]})
+    return out
+
+
+@pytest.mark.skipif(os.environ.get("GPUSONAR_HSB_STUDY") != "1", reason="a measurement, run with GPUSONAR_HSB_STUDY=1")
+def test_loopback_loss_study(pings, tmp_path):
+    """Why real time loses datagrams (STATUS open item 34). Each run prints what the sender, the
+    receiver's socket and the kernel saw. Measures, asserts nothing about the transport."""
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    import shutil
+    cores = sorted(os.sched_getaffinity(0))
+    receiver_core = 2 if 2 in cores else cores[-1]
+    away = ",".join(str(c) for c in cores if c != receiver_core)
+    print("cores:", cores, "cpu_count:", os.cpu_count(), "cpu:", hsb.cpu_throttling(), "rmem:",
+          {k: pathlib.Path(f"/proc/sys/net/core/{k}").read_text().strip() for k in ("rmem_default", "rmem_max")})
+    one = {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+    runs = [("pace 1.0", 1.0, (), (), ()), ("pace 1.0", 1.0, (), (), ()), ("pace 1.0", 1.0, (), (), ()),
+            ("pace 0.5", 0.5, (), (), ()),
+            ("pace 1.0, chain on one thread", 1.0, (), (), (), one),
+            ("pace 1.0, chain on one thread", 1.0, (), (), (), one),
+            ("pace 1.0, receive buffer 1/2", 1.0, (), ("--socket-buffer", "106496"), ()),
+            ("pace 1.0, receive buffer 1/4", 1.0, (), ("--socket-buffer", "53248"), ()),
+            ("pace 1.0, sender off the receiver's core", 1.0, (), ("--receiver-core", str(receiver_core)),
+             ("taskset", "-c", away) if shutil.which("taskset") and away else ()),
+            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ()),
+            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ()),
+            ("pace 1.0, catch-up spread", 1.0, ("--catch-up", "spread"), (), ())]
+    table = []
+    for i, (name, pace, serve_args, receive_args, prefix, *receive_env) in enumerate(runs):
+        tag = f"study{i}"
+        board, stats, _, _ = run_loopback(tmp_path, pings, pace, serve_args, receive_args, prefix, tag=tag,
+                                          receive_env=receive_env[0] if receive_env else None)
+        row = {"run": name, "frames": stats["frames"], "lost": stats["frames_lost"], "damaged": stats["frames_damaged"],
+               "datagrams_dropped": stats["packets_dropped"], "pings": stats["pings"], "socket": stats["socket"],
+               "udp": stats["udp_counters"], "cpu_throttled_during": stats["cpu"].get("nr_throttled_during"),
+               "sender": board["timing"], "around_losses": loss_around(tmp_path, tag, stats, board)}
+        print("STUDY", json.dumps(row))
+        table.append(row)
+    print("STUDY SUMMARY")
+    for r in table:
+        t = r["sender"]
+        print(f"  {r['run']:42s} lost {r['lost']} damaged {r['damaged']} datagrams {r['datagrams_dropped']:3d} "
+              f"socket drops {r['socket']['drops']} rcvbuf {r['socket']['rcvbuf']} RcvbufErrors {r['udp'].get('RcvbufErrors')} "
+              f"sender late>period {t.get('frames_late_by_a_period')} back-to-back {t.get('back_to_back_frames')} "
+              f"max late {t.get('max_late_ms', 0):.1f} ms max gc {t.get('max_gc_ms', 0):.1f} ms")

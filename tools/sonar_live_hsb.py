@@ -40,6 +40,10 @@ def parse(argv=None):
     s.add_argument("--linger", type=float, default=10.0, help="seconds to keep streaming after the last ping")
     s.add_argument("--interval", type=float, help="seconds between transmits (default: the records' transmit times)")
     s.add_argument("--connect-timeout", type=float, default=120.0)
+    s.add_argument("--catch-up", choices=hsb.CATCH_UP, default="burst",
+                   help="after the sender falls behind: send the frames it owes back to back (burst) or at most two "
+                        "per frame period (spread)")
+    s.add_argument("--send-log", help="JSON file of every frame's send time")
     r = sub.add_parser("receive", help="receive with Sensor Bridge's LinuxReceiverOp and run the chain")
     r.add_argument("config", nargs="?", help="deployment YAML (source.sonar, chain, nav, output)")
     r.add_argument("--hololink", default="127.0.0.1", help="the board's address")
@@ -53,6 +57,9 @@ def parse(argv=None):
     r.add_argument("--recording", help="container file of the raw pings")
     r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
     r.add_argument("--quiet", action="store_true")
+    r.add_argument("--receiver-core", type=int, help="core for Sensor Bridge's receiver thread (its default is core 2)")
+    r.add_argument("--socket-buffer", type=int, help="receive buffer of the data socket in bytes (to measure; up to rmem_max)")
+    r.add_argument("--arrival-log", help="JSON file of every frame's arrival (frame number, receive time, packets, bytes)")
     for p in (s, r):
         p.add_argument("--frame-samples", type=int, default=hsb.FRAME_SAMPLES, help="samples per frame, the same on both sides")
     return ap.parse_args(argv)
@@ -97,8 +104,10 @@ def main(argv=None):
     if args.role == "serve":
         records, interval = serve_records(args)
         board = hsb.HsbBoardEmulator(records, args.frame_samples, ip=args.ip, pace=args.pace, lead_seconds=args.lead,
-                                     ping_interval=interval, linger=args.linger)
+                                     ping_interval=interval, linger=args.linger, catch_up=args.catch_up)
         print("hsb: " + json.dumps(board.run(connect_timeout=args.connect_timeout, log=lambda t: print(t, flush=True))))
+        if args.send_log:
+            board.timing.dump(args.send_log)
         return 0
     from gpusonar.live import LiveChain, NavListener
     plan = receive_plan(args)
@@ -108,8 +117,14 @@ def main(argv=None):
                    report_udp=plan["report_udp"], taps=plan["taps"]) as chain:
         _, stats = hsb.run_receiver(chain, plan["sonar"], plan["sonar_overrides"], hololink_ip=args.hololink,
                                     frame_samples=args.frame_samples, n_pings=args.pings, sound_speed=plan["sound_speed"],
-                                    idle_timeout=args.idle, queue_frames=args.queue,
+                                    idle_timeout=args.idle, queue_frames=args.queue, receiver_affinity=args.receiver_core,
+                                    socket_buffer=args.socket_buffer, log_arrivals=bool(args.arrival_log),
                                     on_report=None if args.quiet else (lambda r: print(ping_line(r), flush=True)))
+    arrivals, chain_ns = stats.pop("arrivals", None), stats.pop("chain_wall_ns", None)
+    if args.arrival_log:
+        with open(args.arrival_log, "w", encoding="utf-8") as f:
+            json.dump({"columns": ["frame", "received_ns", "packets", "bytes"], "rows": arrivals or [],
+                       "chain_wall_ns": chain_ns or []}, f)
     print("hsb: " + json.dumps(stats), flush=True)
     return 0
 
