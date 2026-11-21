@@ -105,6 +105,51 @@ def test_water_density_against_arlpy():
         assert acoustics.water_density(t, s) == pytest.approx(float(uwa.density(t, s)), rel=1e-13)
 
 
+
+# --- sound speed and Francois-Garrison against arlpy (audit B1, B2, A11) ---------------------------
+
+def test_sea_water_sound_speed_is_mackenzie_as_arlpy_computes_it_and_prints_it():
+    """arlpy `uwa.soundspeed` is an independent transcription of Mackenzie (1981) (REFERENCES.md: arlpy oracle).
+    Its docstring prints 1539.1 m/s at 27 deg C, 35 ppt, 10 m and 1534.6 at 25 deg C, 20 m."""
+    uwa = pytest.importorskip("arlpy.uwa")
+    for t in (-1.0, 0.0, 4.0, 10.0, 15.0, 25.0, 30.0):
+        for sal in (5.0, 25.0, 35.0, 40.0):
+            for d in (0.0, 10.0, 500.0, 2000.0, 8000.0):
+                assert acoustics.sound_speed(t, sal, d) == pytest.approx(float(uwa.soundspeed(t, sal, d)), rel=1e-13, abs=0.0), (t, sal, d)
+    assert round(acoustics.sound_speed(27.0, 35.0, 10.0), 1) == 1539.1
+    assert round(acoustics.sound_speed(25.0, 35.0, 20.0), 1) == 1534.6
+
+
+def test_brackish_sound_speed_is_our_blend_and_has_no_step_at_5_psu():
+    """Audit A11: below 5 PSU the speed is OUR OWN mix (acoustics.sound_speed docstring), linear in salinity from
+    Marczak's pure water at S = 0 to Mackenzie at 5 PSU. Before, it stepped down by 0.81 / 1.31 / 1.67 m/s at
+    4 / 10 / 20 deg C crossing 5 PSU. Marczak's own published check values were not available to test against."""
+    marczak = (1.402385e3, 5.038813, -5.799136e-2, 3.287156e-4, -1.398845e-6, 2.787860e-9)     # the paper's coefficients as coded
+    for t in (0.0, 4.0, 10.0, 20.0, 30.0):
+        assert acoustics.sound_speed(t, 0.0) == pytest.approx(sum(a * t**k for k, a in enumerate(marczak)), abs=1e-9)
+        for d in (0.0, 100.0):
+            below, at = acoustics.sound_speed(t, 5.0 - 1e-9, d), acoustics.sound_speed(t, 5.0, d)
+            assert abs(at - below) < 1e-6, (t, d)                                       # continuous
+            c = [acoustics.sound_speed(t, s, d) for s in (0.0, 1.0, 2.5, 4.0)]
+            assert np.diff(c) / np.diff([0.0, 1.0, 2.5, 4.0]) == pytest.approx([(at - c[0]) / 5.0] * 3, rel=1e-9)   # linear in S
+    # the size of the old step, so that the docstring's numbers stay true
+    old = {t: sum(a * t**k for k, a in enumerate(marczak)) + 1.340 * 5.0 for t in (4.0, 10.0, 20.0)}
+    assert [round(old[t] - acoustics.sound_speed(t, 5.0), 2) for t in (4.0, 10.0, 20.0)] == [0.81, 1.31, 1.67]
+
+
+def test_francois_garrison_at_sonar_frequencies_against_arlpy():
+    """Audit B2: the published-table check stops at 10 kHz and about 1 deg C; the sonars run at 100 to 750 kHz.
+    arlpy `uwa.absorption` (Francois-Garrison, an independent transcription) over 10 kHz to 1 MHz, cold and warm
+    water, surface to 1000 m. Not at exactly 20 deg C: arlpy changes pure-water branch below 20, ours at 20 and
+    below. arlpy's docstring prints -10.71 dB over 1 km at 50 kHz for its default water (27 deg C, 35 ppt, 10 m, pH 8.1)."""
+    uwa = pytest.importorskip("arlpy.uwa")
+    f = np.geomspace(1e4, 1e6, 41)
+    for t, s, d, ph in ((2.0, 34.0, 0.0, 8.0), (10.0, 35.0, 50.0, 8.0), (15.0, 32.0, 500.0, 7.8), (27.0, 35.0, 10.0, 8.1), (30.0, 38.0, 1000.0, 8.2)):
+        ours = acoustics.absorption_francois_garrison(f, t, s, d, ph) * 1e3                       # dB/km
+        theirs = -20.0 * np.log10(np.array([uwa.absorption(x, 1000.0, t, s, d, ph) for x in f]))
+        assert ours == pytest.approx(theirs, rel=1e-9), (t, s, d, ph)
+    assert round(float(acoustics.absorption_francois_garrison(5e4, 27.0, 35.0, 10.0, 8.1)) * 1e3, 2) == 10.71
+
 # --- Thorp ---------------------------------------------------------------------------------------
 
 def test_thorp_absorption():

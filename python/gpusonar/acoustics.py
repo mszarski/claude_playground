@@ -6,6 +6,7 @@ Implemented from the published formulas (no code copied):
 - Ainslie & McColm (1998), J. Acoust. Soc. Am. 103, 1671-1672.
 - Mackenzie (1981), J. Acoust. Soc. Am. 70, 807-812 (sea water sound speed).
 - Marczak (1997), J. Acoust. Soc. Am. 102, 2776-2779 (pure water sound speed).
+- Ours: brackish water below 5 PSU, a linear blend in salinity between the two (`sound_speed`).
 
 `arlpy.uwa` is the test oracle where it covers the same formula.
 """
@@ -21,16 +22,39 @@ environment (gpusonar/environment.py) or a sonar's `nominal_sound_speed` replace
 GRAVITY = 9.81      # m/s^2
 
 
-def sound_speed(temperature: float, salinity: float = 35.0, depth: float = 0.0) -> float:
-    """Sound speed in m/s. Mackenzie for sea water, Marczak for fresh water (S < 5 PSU)."""
-    t, s, d = float(temperature), float(salinity), float(depth)
-    if s < 5.0:
-        c = (1.402385e3 + 5.038813 * t - 5.799136e-2 * t**2 + 3.287156e-4 * t**3
-             - 1.398845e-6 * t**4 + 2.787860e-9 * t**5)
-        # Small corrections so brackish water and depth are not ignored outright.
-        return c + 1.340 * s + 1.630e-2 * d
+FRESH_WATER_SALINITY = 5.0
+"""PSU: below it `sound_speed` blends towards Marczak's pure water (our threshold, not either source's)."""
+
+
+def _mackenzie(t: float, s: float, d: float) -> float:
+    """Mackenzie (1981), the nine-term sea-water equation (coefficients as arlpy `uwa.soundspeed` prints them)."""
     return (1448.96 + 4.591 * t - 5.304e-2 * t**2 + 2.374e-4 * t**3 + 1.340 * (s - 35.0)
             + 1.630e-2 * d + 1.675e-7 * d**2 - 1.025e-2 * t * (s - 35.0) - 7.139e-13 * t * d**3)
+
+
+def _marczak(t: float) -> float:
+    """Marczak (1997), pure water at atmospheric pressure: a fifth-order polynomial in temperature."""
+    return (1.402385e3 + 5.038813 * t - 5.799136e-2 * t**2 + 3.287156e-4 * t**3
+            - 1.398845e-6 * t**4 + 2.787860e-9 * t**5)
+
+
+def sound_speed(temperature: float, salinity: float = 35.0, depth: float = 0.0) -> float:
+    """Sound speed in m/s: Mackenzie (1981) for S >= 5 PSU; below, a mix of OUR OWN.
+
+    Neither source covers brackish water: Mackenzie's equation is for sea water and Marczak's for pure water at
+    one atmosphere. Below `FRESH_WATER_SALINITY` (5 PSU, our threshold) the speed is linear in salinity between
+    Marczak's pure water plus Mackenzie's linear depth term (1.630e-2 m/s per m) at S = 0 and Mackenzie's
+    equation at S = 5, so it is continuous in salinity. Before audit A11 the low branch was Marczak plus
+    Mackenzie's salinity and depth terms (1.340 S + 1.630e-2 d), which was 0.81, 1.31 and 1.67 m/s above
+    Mackenzie's equation at 5 PSU at 4, 10 and 20 deg C (at the surface): a step down with rising salinity.
+    The blend moves 0 < S < 5 by up to those amounts (half of them at 2.5 PSU). At S = 0 the two agree; no shipped environment has
+    0 < S < 5. Nothing in this mix is a published value: pure water under pressure takes only Mackenzie's
+    linear depth term, not a pure-water pressure equation."""
+    t, s, d = float(temperature), float(salinity), float(depth)
+    if s < FRESH_WATER_SALINITY:
+        w = s / FRESH_WATER_SALINITY
+        return (1.0 - w) * (_marczak(t) + 1.630e-2 * d) + w * _mackenzie(t, FRESH_WATER_SALINITY, d)
+    return _mackenzie(t, s, d)
 
 
 def absorption_francois_garrison(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0):
