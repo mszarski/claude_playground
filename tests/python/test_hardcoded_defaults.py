@@ -299,22 +299,26 @@ def test_holoscan_condition_op_applies_the_chains_tvg_step():
     same(op(), chain())                                                   # no gain unless asked: unchanged
     same(op(tvg=True), chain({}))                                         # the default step: absorption from the record
     same(op(tvg={"stage": "tvg", "absorption": "none"}), chain({"absorption": "none"}))
-    # The older argument is the step's spreading; absorption is then the record's too (it was none).
-    assert recon.condition_tvg_step(None, 40.0) == {"spreading_db_per_decade": 40.0}
-    derived = op(tvg_db_per_decade=40.0)
-    same(derived, chain({"spreading_db_per_decade": 40.0}))
-    same(derived, chain({}))
-    same(op(tvg={"absorption": "none"}, tvg_db_per_decade=40.0), chain({"spreading": 40.0, "absorption": "none"}))
-    with pytest.raises(ValueError, match="not both"):
-        recon.condition_tvg_step({"spreading": "one_way"}, 40.0)
-    # Before -> after for the old argument at the far end of the window (52 m): 2 alpha R dB more gain.
+    # The older argument keeps its recorded meaning (D-91): the old law, the same samples as before.
+    assert recon.condition_tvg_step(None, 40.0) == {"spreading_db_per_decade": 40.0, "absorption": "none"}
     old = [r.copy() for r in raw]
     for r in old:
         recon.condition_ping(r)                                          # prepare and calibration, unchanged
         core.apply_tvg(r, spreading_db_per_decade=40.0)                  # the gain ConditionOp applied before
+    same(op(tvg_db_per_decade=40.0), [r.samples.array for r in old])
+    same(op(tvg_db_per_decade=40.0), chain({"spreading_db_per_decade": 40.0, "absorption": "none"}))
+    with pytest.raises(ValueError, match="not both"):
+        recon.condition_tvg_step({"spreading": "one_way"}, 40.0)
+    with pytest.raises(ValueError, match="not both"):
+        recon.condition_tvg_step(True, 40.0)
+    # The old argument needs no frequency or water: a record with neither still takes it.
+    bare = blank("fls_330k", {"sound_speed": C})
+    assert recon.condition_ping(bare, compress=False, tvg=recon.condition_tvg_step(None, 40.0))["clamped_samples"] >= 0
+    # The chain's default step (tvg=True) is the opt-in to absorption: 2 alpha R more gain at the far end.
+    derived = op(tvg=True)
     alpha = recon.record_absorption(raw[0])
     ratio_db = 20 * np.log10(np.abs(derived[0][0, -1]) / np.abs(old[0].samples.array[0, -1]))
-    print(f"ConditionOp(tvg_db_per_decade=40) at the last sample: {ratio_db:.2f} dB more gain; alpha {alpha:.4f} dB/m")
+    print(f"ConditionOp(tvg=True) against the old law at the last sample: {ratio_db:.2f} dB; alpha {alpha:.4f} dB/m")
     assert ratio_db == pytest.approx(2 * alpha * 52.0, abs=0.3)
 
 

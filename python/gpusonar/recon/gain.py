@@ -156,24 +156,23 @@ def apply_tvg_step(record, params: dict | None = None) -> tuple[dict, dict]:
 def condition_tvg_step(tvg=None, tvg_db_per_decade: float | None = None) -> dict | None:
     """The `tvg` step a `ConditionOp` (gpusonar.holoscan_ops) runs, from its arguments: None for
     no gain (the default), else the step's keys for `apply_tvg_step`. `tvg` is True (the chain's
-    default step, absorption from the record) or a mapping of a chain file's `tvg` step keys;
-    `tvg_db_per_decade` (the operator's older argument) is `{spreading_db_per_decade: value}`,
-    so since DECISIONS.md D-91 it also takes absorption from the record unless `tvg` says
-    `absorption: none`."""
+    default step: absorption from the record, DECISIONS.md D-91) or a mapping of a chain file's
+    `tvg` step keys. `tvg_db_per_decade` (the operator's older argument) keeps the meaning D-91
+    records for it, the old law: `{spreading_db_per_decade: value, absorption: "none"}`, the
+    same samples as `core.apply_tvg(record, spreading_db_per_decade=value)`. Give one or the other."""
+    if tvg_db_per_decade is not None:
+        if tvg is not None and tvg is not False:
+            raise ValueError("ConditionOp: give `tvg` (the chain's step) or `tvg_db_per_decade` (the old law), not both")
+        return {"spreading_db_per_decade": float(tvg_db_per_decade), "absorption": "none"}
     if tvg is None or tvg is False:
-        step = None
-    elif tvg is True:
-        step = {}
-    elif hasattr(tvg, "items"):
+        return None
+    if tvg is True:
+        return {}
+    if hasattr(tvg, "items"):
         step = dict(tvg)
         step.pop("stage", None)
-    else:
-        raise ValueError("ConditionOp: tvg is True, False/None or a mapping of the tvg step's keys")
-    if tvg_db_per_decade is not None:
-        if step and ("spreading" in step or "spreading_db_per_decade" in step):
-            raise ValueError("ConditionOp: give the spreading in `tvg` or as `tvg_db_per_decade`, not both")
-        step = dict(step or {}, spreading_db_per_decade=float(tvg_db_per_decade))
-    return step
+        return step
+    raise ValueError("ConditionOp: tvg is True, False/None or a mapping of the tvg step's keys")
 
 
 def condition_ping(record, *, compress: bool = True, replica_window: str = "none", tvg: dict | None = None):

@@ -62,14 +62,16 @@ class ConditionOp(Operator):
     step calls, with its defaults): off unless `tvg` is given, True for the default step
     (two-way spreading, absorption from the record, DECISIONS.md D-91) or a mapping of the
     step's keys (`{"absorption": "none"}` is the law before D-91). `tvg_db_per_decade`, the
-    older argument, sets the spreading of that step (see `recon.condition_tvg_step`)."""
+    older argument, keeps its recorded meaning (DECISIONS.md D-91): that spreading and no
+    absorption, the law before D-91 to the bit (see `recon.condition_tvg_step`)."""
 
     def __init__(self, fragment, *args, compress: bool = True, replica_window: str = "none",
                  tvg=None, tvg_db_per_decade: float | None = None, **kwargs):
         self._compress = compress
         self._window = replica_window
         self._tvg = recon.condition_tvg_step(tvg, tvg_db_per_decade)
-        self.tvg_reports = []
+        from collections import deque
+        self.tvg_reports = deque(maxlen=64)          # the newest 64 pings' tvg reports
         super().__init__(fragment, *args, **kwargs)
 
     def setup(self, spec: OperatorSpec):

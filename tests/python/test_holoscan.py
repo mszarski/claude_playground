@@ -121,7 +121,7 @@ def test_condition_op_output_is_the_chains_prepare_and_gain():
     """STATUS open item 33: ConditionOp, run in the Holoscan runtime, gives the samples of a chain
     run (pipeline.py: prepare, calibrate, tvg) on the same records, for no gain, the chain's
     default gain step (absorption from the record, D-91), the law before D-91 by name, and the
-    operator's older `tvg_db_per_decade` argument."""
+    operator's older `tvg_db_per_decade` argument (the old law, as D-91 records it)."""
     from holoscan.conditions import CountCondition
     from gpusonar import pipeline
     from gpusonar.config import config_dir, load_yaml
@@ -144,7 +144,7 @@ def test_condition_op_output_is_the_chains_prepare_and_gain():
             self.add_flow(self.cond, self.sink, {("ping", "ping")})
 
     cases = [({}, []), ({"tvg": True}, [{}]), ({"tvg": {"absorption": "none"}}, [{"absorption": "none"}]),
-             ({"tvg_db_per_decade": 40.0}, [{"spreading_db_per_decade": 40.0}])]
+             ({"tvg_db_per_decade": 40.0}, [{"spreading_db_per_decade": 40.0, "absorption": "none"}])]
     for arguments, tvg in cases:
         app = ConditionApp([r.copy() for r in raw], **arguments)
         app.run()
