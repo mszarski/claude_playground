@@ -383,12 +383,13 @@ void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stri
     std::vector<std::int64_t> cells;
     const BackgroundWindow bw = cell_thresholds(plan, n_cells, guard, train, threshold, cells);
     const auto n = static_cast<std::size_t>(n_b * n_cells);
-    out.level.assign(n, 0.0);
+    out.level.assign(out.with_level ? n : 0U, 0.0);
     out.background.assign(n, 0.0F);
     out.peak.assign(n, 0.0F);
     out.flag.assign(n, 0);
     multiscale_cells_cuda(fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, bw.sloped, bw.offset, threshold, cells,
-                          plan.samples_per_cell, out.level.data(), out.background.data(), out.peak.data(), out.flag.data(), device);
+                          plan.samples_per_cell, out.with_level ? out.level.data() : nullptr, out.background.data(), out.peak.data(),
+                          out.flag.data(), device);
     return;
 #else
     throw std::runtime_error("multiscale_cells: built without the CUDA backend");
@@ -442,6 +443,7 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
                                          std::int64_t guard, std::int64_t train, const DetectorPlan& plan, std::vector<float>& background,
                                          Backend backend, int device) {
   DetectorCells statistic;
+  statistic.with_level = false;
   multiscale_cells(backend, fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, plan, statistic, device);
   return multiscale_group(fine, fine_stride, fine_offset, n_b, n_cells, fine_ranges, cell_ranges, bearings, plan, statistic, background);
 }

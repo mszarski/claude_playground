@@ -153,6 +153,8 @@ void detector_background(const float* cell_mean, std::int64_t n_bearing, std::in
 /// The detector's statistic, cell by cell [n_bearing * n_cells]: what multiscale_detect tests before it drops sidelobes
 /// and groups.
 struct DetectorCells {
+  /// false: the device path leaves `level` empty (one array fewer brought back; the chain does not read it).
+  bool with_level = true;
   std::vector<double> level;          ///< the background (detector_background)
   std::vector<float> background;      ///< the same in float, as the detector reports it
   std::vector<float> peak;            ///< the cell's strongest sample
