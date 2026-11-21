@@ -2514,3 +2514,44 @@ scored whichever track was nearest the truth (3 of 10 seeds right).
   4.8 to 7.4 m/s (true 6.0); FLS anchored boats and the pinnacle gain 5 correct by the scoring;
   deep_silt false movers 14 -> 12; no target lost and no false mover added in any scene. The rules
   evaluation moves (`classify_rules_eval_a479519.json`: `min_mover_cells` 5 loses no target).
+
+### D-156 Each detection at its reflection time, transmit + R/c (owner's choice, issue sonar-960)
+
+A monostatic echo shows its target where it was when the sound reached it, at transmit + R/c, not
+at transmit. At 12 km that is 8 s, 48 m of a 6 m/s ship's travel; stamped at transmit, the ship's
+track ran about 47 m ahead along its course on every seed (the sonar-960 diagnosis).
+- **Time (ours, geometry):** R is the detection's one-way range, (two-way time)/2 · c, and c is the
+  record's sound speed after `sound_speed`, the same c the beamformers turn time into range with
+  (`beamform.cpp`, `chain.cpp`, `live.py`). Both engines set `Detection.time` = t + R/c (Python
+  None, C++ NaN or any non-finite value: the ping's time, bit-identical to before; golden
+  `tests/python/data/tracker_before_d156.json` from both trackers at 1be89d4). Every shipped sonar
+  is quasi-monostatic (projector within 4 m of the array); a bistatic receiver needs its own
+  geometry. The platform's own motion during the round trip is not modelled: detections are placed
+  from the array's pose at transmit (issue sonar-2hz).
+- **Tracker, both engines** (`detect.Tracker`, `tracker.cpp`): each track is predicted to each
+  detection's own time for the gate and the d² + ln|S| cost (D-141), takes it there, and a new
+  track is born there; history holds those times. A track that takes nothing counts a miss and is
+  predicted to the ping time, or held where it is when it already holds at a later time (a ping
+  interval shorter than R/c), so a missed track never moves back. Prediction to an earlier time
+  still grows the uncertainty: Q = G Gᵀ q² is positive semi-definite for either sign of dt, and the
+  depth's random walk grows by q_d²|dt| (ours). Not handled: a track that takes a nearer, earlier
+  detection within a ping still steps back in time.
+- **Report:** x, y and range are the fitted line at the report's `time_ns`
+  (`classify_tracks(time=)`, `ClassifyOptions::time`); a track under three points is moved there by
+  its Kalman velocity. Echo grouping (D-155) then compares positions at one time.
+- **Gallery and `classify_rules_eval`:** each track's state is compared with the truth at the
+  state's time (its last history point); classes at the last ping with the truth there.
+- **Measured** (`classify_rules_eval_c148f56.json` against `_a479519.json`, ten seeds, the
+  gallery's own pipeline): no target class changes; false movers 158 -> 152. popoto_12km report
+  cross-range error, median -54.6 -> -32.0 m, |range| 11.8 -> 4.4 m; nine seeds shift by +43 to
+  +59 m (v·R/c), seed 56 is worse (+9 -> -91 m) by track hopping between arrivals (sonar-960, open).
+  fls_170k_traffic `boat_closing` 3.2 -> 4.6 m: its detections sit about 4.6 m behind it in range,
+  which transmit stamping had hidden by 1.45 m (sonar-9r2). flank_patrol (seeds 17-26, host):
+  submarine cross-range -0.3 m (was +5.6), report error 29.5 m (29.3) dominated by a +29 m range
+  bias (sonar-a98); no class or count changes.
+- **The live chain at 12 km** (`popoto_vehicle` chain, seeds 51-60, host; Python, C++ and
+  `sonar_live` agree to 5e-6 m): cross-range error +26.1 m mean (was -23.1 m), range +49.5 m
+  (unchanged), total 56.2 m (55.1 m). The timing is right (each seed moves by v·R/c, the last
+  history point is at t + R/c in both engines); the old -48 m error had been hiding a +26 m
+  cross-range bias. Kept because a correct clock is needed to find that bias (sonar-2hz).
+- The committed gallery predates D-156 and was not regenerated.

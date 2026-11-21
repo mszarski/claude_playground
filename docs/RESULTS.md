@@ -1708,6 +1708,18 @@ that is tracked is in its true class. The ship in `popoto_12km` is one mover at 
 track, D-155). `fls_120k_rough_surface` keeps 13 movers off a moving object (issue sonar-9ir). Twenty
 tracks of pure position noise (1 m) give no movers.
 
+This gallery predates D-156 (detections at their reflection time). Ten-seed effect of D-156 on the
+same scenes, gallery pipeline (`docs/benchmarks/classify_rules_eval_c148f56.json` against
+`classify_rules_eval_a479519.json`; L4, job 6b017453efaf5e14f4b4ecc2): no target class changes,
+false movers 158 -> 152, `popoto_12km` report error at the last ping (median over seeds) range
+|11.8| -> |4.4| m and cross-range -54.6 -> -32.0 m (seed 56: +9.0 -> -91.4 m, track hopping),
+`fls_170k_traffic` `boat_closing` 3.2 -> 4.6 m (a range offset of its detections, sonar-9r2).
+The live chain at 12 km (`configs/deploy/popoto_vehicle.yaml`, seeds 51-60, host; Python, C++
+and `sonar_live` within 5e-6 m of each other): range error +49.7 -> +49.5 m, cross-range -23.1 ->
++26.1 m, total 55.1 -> 56.2 m, speed 6.1 m/s in both (true 6.0) (sonar-2hz). `flank_patrol`
+(seeds 17-26, host): submarine cross-range +5.6 -> -0.3 m, report error 29.3 -> 29.5 m (a +29 m
+range bias, sonar-a98), wreck 7.6 m in both, small vehicle never tracked.
+
 ## Simulator calibration against a log with hidden settings
 
 Source: `tests/python/test_simcal.py`; see `SIM_CALIBRATION.md`.
