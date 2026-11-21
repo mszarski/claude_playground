@@ -115,3 +115,43 @@ def test_flank_pipeline_from_an_emulated_capture_board():
         best = max(item["detections"], key=lambda d: d.snr_db)
         assert best.range == pytest.approx(2040.0, abs=1.5)
         assert np.degrees(best.bearing) == pytest.approx(12.0, abs=1.0)
+
+
+def test_condition_op_output_is_the_chains_prepare_and_gain():
+    """STATUS open item 33: ConditionOp, run in the Holoscan runtime, gives the samples of a chain
+    run (pipeline.py: prepare, calibrate, tvg) on the same records, for no gain, the chain's
+    default gain step (absorption from the record, D-91), the law before D-91 by name, and the
+    operator's older `tvg_db_per_decade` argument (the old law, as D-91 records it)."""
+    from holoscan.conditions import CountCondition
+    from gpusonar import pipeline
+    from gpusonar.config import config_dir, load_yaml
+    cfg = load_yaml(config_dir() / "chains" / "stripmap_points.yaml")
+    cfg["source"]["overrides"] = {"pings": {"count": 2}}
+    cfg["output"] = {}
+    host = gs.core.Backend.Host
+    raw = pipeline.run(dict(cfg, steps=[]), backend=host).records
+
+    class ConditionApp(hops.Application):
+        def __init__(self, records, **arguments):
+            self.records, self.arguments = records, arguments
+            super().__init__()
+
+        def compose(self):
+            src = hops.PingSourceOp(self, CountCondition(self, len(self.records)), source=self.records, name="source")
+            self.cond = hops.ConditionOp(self, name="condition", **self.arguments)
+            self.sink = hops.CollectOp(self, port="ping", name="collect")
+            self.add_flow(src, self.cond, {("ping", "ping")})
+            self.add_flow(self.cond, self.sink, {("ping", "ping")})
+
+    cases = [({}, []), ({"tvg": True}, [{}]), ({"tvg": {"absorption": "none"}}, [{"absorption": "none"}]),
+             ({"tvg_db_per_decade": 40.0}, [{"spreading_db_per_decade": 40.0, "absorption": "none"}])]
+    for arguments, tvg in cases:
+        app = ConditionApp([r.copy() for r in raw], **arguments)
+        app.run()
+        got = [m["record"].samples.array for m in app.sink.items]
+        steps = [{"stage": "prepare"}, {"stage": "calibrate"}] + [dict(s, stage="tvg") for s in tvg]
+        want = [r.samples.array for r in pipeline.run(dict(cfg, steps=steps), backend=host).records]
+        assert len(got) == len(want) == 2, arguments
+        for a, b in zip(got, want):
+            np.testing.assert_array_equal(a, b, err_msg=str(arguments))
+        assert len(app.cond.tvg_reports) == (2 if tvg else 0)

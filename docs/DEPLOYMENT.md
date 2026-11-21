@@ -736,7 +736,11 @@ Same flags, options and reports as `build/bin/sonar_live`. The operators are in
 `libs/holoscan_ops` (UDP or replay source → recorder → chain or passive bearings → report
 sink); `tools/gpu_job.sh` with `GPUSONAR_HOLOSCAN_CPP=1` shows the install on a clean
 Ubuntu 24.04 CUDA image. Run and compared with the standalone program on an L4
-(`RESULTS.md`).
+(`RESULTS.md`). Since D-147 both programs start from backend auto, CUDA when a device is
+present. The Holoscan app and its operators had still started from the host backend until
+commit 78153dc. That difference shows only on a GPU, where
+`tests/python/test_holoscan_cpp.py` compares the two programs' reports (it failed in job
+`6b010e824fdc5ab3c55c549d`).
 
 ## Through Holoscan Sensor Bridge's receiver
 
@@ -763,13 +767,45 @@ emulator's environment it sends through an ordinary UDP socket instead
 `tools/gpu_job.sh` sets both when `GPUSONAR_HSB=1` and raw sockets are refused. Without the
 variable the patched emulator behaves as stock.
 
-With the patch the loopback ran on T4 and L4 jobs. At half real time (`serve --pace 0.5`;
-the default `--pace` is 1.0, real time) all frames arrive and the reports equal the direct
-chain's. Two things are not settled. The loopback test's final assertions have not yet
-passed in a job: they were corrected after the last job and await the GPU job on the
-merged tree. And at real-time pace each run loses one burst of datagrams, which costs one
-frame, for a reason not established; the receiver's socket buffer is the system default
-(208 KB), which those containers cannot raise.
+With the patch the loopback ran on T4 and L4 jobs. What is still thin: at real time the margin
+is the receiver's socket buffer, and in a Hugging Face container that buffer cannot be raised.
+The loopback test (`tests/python/test_hsb.py`) runs at half real time (`serve --pace 0.5`;
+the tool's default `--pace` is 1.0). It passed there on an L4, with reports equal to the
+direct chain's (jobs `6b010e824fdc5ab3c55c549d`, `6b0115de4fdc5ab3c55c5951` and
+`6b011b26efaf5e14f4b4597c`).
+
+Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
+(`test_loopback_loss_study`, `GPUSONAR_HSB_STUDY=1`):
+
+- Every lost datagram was refused by the receiver's full socket buffer. In every lossy run
+  the kernel's drop count for the data socket equals `RcvbufErrors` and the gaps in the
+  packet numbers (19 to 115 datagrams per run).
+- That buffer is the system default, 212,992 bytes, which is also `net.core.rmem_max` in
+  those containers. On loopback it holds 92 datagrams of 2,304 bytes of kernel accounting
+  each: about 3 frames, or 20 ms of the stream at real time. Sensor Bridge raises the buffer
+  only when it is smaller than one frame.
+- The losses fell while the receiving process ran the chain on a ping (90-470 ms of
+  multi-threaded work on all 8 cores). That delays Sensor Bridge's receiver thread, which is
+  pinned to core 2 by default, and also the sending process: the sender ran up to 9-29 ms
+  late.
+- Until now the emulated board then sent the frames it owed back to back. `serve
+  --catch-up spread`, now the default, never sends two frames less than half a frame period
+  apart; `--catch-up burst` is the old behaviour. At real time burst lost frames in 3 of 14
+  runs, spread in 0 of 20 (jobs `6b010e824fdc5ab3c55c549d`, `6b0112934fdc5ab3c55c5713`,
+  `6b0115de4fdc5ab3c55c5951`, `6b011b26efaf5e14f4b4597c`). One spread run and one burst run
+  still showed 19 kernel drops outside the frames the receiver counted (before its first frame
+  or after the last report). With the chain on one thread the sender was hardly ever late, and
+  nothing was lost in 6 runs.
+- A halved buffer (`receive --socket-buffer 53248`; the kernel doubles it to 106,496) still
+  lost frames with spread. So the receiver falls more than about 10 ms behind while the chain
+  runs: the margin at the default buffer is less than two to one.
+
+On a deployed host, follow Sensor Bridge's own setup guide (2.7.0
+`docs/user_guide/setup.mdx`). It raises the socket buffer limit with
+`net.core.rmem_max = 31326208` (lines 784-793, "for all configurations"). It also isolates
+the receiver's core with `isolcpus=2`, or moves the receiver with `HOLOLINK_AFFINITY`
+(lines 262-296, the Jetson section); `receive --receiver-core` does the same here. Neither
+was possible in the containers used.
 
 On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock emulator
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network

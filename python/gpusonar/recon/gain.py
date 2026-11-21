@@ -38,6 +38,7 @@ from __future__ import annotations
 import math
 import warnings
 
+from .. import _gpusonar as core
 from .. import acoustics
 
 SPREADING = {"two_way": 40.0, "one_way": 20.0}
@@ -119,6 +120,73 @@ def tvg_parameters(record, *, spreading="two_way", absorption="auto", reference_
     return {"spreading_db_per_decade": float(spreading), "absorption_db_per_m": absorption,
             "reference_range": float(reference_range), "max_gain_db": float(max_gain_db),
             "undo_hardware_ramp": bool(undo_hardware_ramp)}
+
+
+_STEP_DERIVE_KEYS = ("spreading", "absorption", "frequency", "temperature", "salinity", "depth", "ph", "model")
+
+
+def tvg_step_parameters(record, params: dict | None = None) -> dict:
+    """Keyword arguments of `core.apply_tvg` for one record from the keys of a chain file's
+    `{stage: tvg}` step (`params`, without `stage`). `spreading` and `absorption` (names or
+    numbers) go to `tvg_parameters`; the older `spreading_db_per_decade` and
+    `absorption_db_per_m` keys mean the same numbers. An empty step is the default law of
+    DECISIONS.md D-91 (two-way spreading, absorption from the record)."""
+    params = dict(params or {})
+    derive = {k: params.pop(k) for k in _STEP_DERIVE_KEYS if k in params}
+    if "spreading" in derive and "spreading_db_per_decade" in params:
+        raise ValueError("tvg: give `spreading` or `spreading_db_per_decade`, not both")
+    if "absorption" in derive and "absorption_db_per_m" in params:
+        raise ValueError("tvg: give `absorption` or `absorption_db_per_m`, not both")
+    if "spreading_db_per_decade" in params:
+        derive["spreading"] = params.pop("spreading_db_per_decade")
+    if "absorption_db_per_m" in params:
+        derive["absorption"] = params.pop("absorption_db_per_m")
+    derive.update(params)
+    return tvg_parameters(record, **derive)
+
+
+def apply_tvg_step(record, params: dict | None = None) -> tuple[dict, dict]:
+    """The `{stage: tvg}` step of a chain file on one record, in place: `core.apply_tvg` with
+    `tvg_step_parameters(record, params)`. Returns (those keyword arguments, the call's report).
+    The pipeline's `tvg` step and the Holoscan `ConditionOp` both call this."""
+    kw = tvg_step_parameters(record, params)
+    return kw, core.apply_tvg(record, **kw)
+
+
+def condition_tvg_step(tvg=None, tvg_db_per_decade: float | None = None) -> dict | None:
+    """The `tvg` step a `ConditionOp` (gpusonar.holoscan_ops) runs, from its arguments: None for
+    no gain (the default), else the step's keys for `apply_tvg_step`. `tvg` is True (the chain's
+    default step: absorption from the record, DECISIONS.md D-91) or a mapping of a chain file's
+    `tvg` step keys. `tvg_db_per_decade` (the operator's older argument) keeps the meaning D-91
+    records for it, the old law: `{spreading_db_per_decade: value, absorption: "none"}`, the
+    same samples as `core.apply_tvg(record, spreading_db_per_decade=value)`. Give one or the other."""
+    if tvg_db_per_decade is not None:
+        if tvg is not None and tvg is not False:
+            raise ValueError("ConditionOp: give `tvg` (the chain's step) or `tvg_db_per_decade` (the old law), not both")
+        return {"spreading_db_per_decade": float(tvg_db_per_decade), "absorption": "none"}
+    if tvg is None or tvg is False:
+        return None
+    if tvg is True:
+        return {}
+    if hasattr(tvg, "items"):
+        step = dict(tvg)
+        step.pop("stage", None)
+        return step
+    raise ValueError("ConditionOp: tvg is True, False/None or a mapping of the tvg step's keys")
+
+
+def condition_ping(record, *, compress: bool = True, replica_window: str = "none", tvg: dict | None = None):
+    """What `ConditionOp` does to one record, in place, without Holoscan: `recon.prepare`
+    (baseband, matched filter), the record's calibration when it is not the identity, then the
+    chain's `tvg` step (`apply_tvg_step`) when `tvg` is a mapping (see `condition_tvg_step`).
+    Returns the tvg report or None."""
+    from .fls import prepare
+    prepare([record], compress=compress, window=replica_window)
+    if any(g != 1.0 for g in record.calibration.gain) or any(record.calibration.phase):
+        core.apply_calibration(record)
+    if tvg is None:
+        return None
+    return apply_tvg_step(record, tvg)[1]
 
 
 def gain_law_db(range_m, *, spreading_db_per_decade: float = 40.0, absorption_db_per_m: float = 0.0,

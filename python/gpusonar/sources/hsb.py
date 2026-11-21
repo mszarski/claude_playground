@@ -39,11 +39,16 @@ from ..sonar import SonarModel
 from .flank_stream import FULL_SCALE_COUNTS, HEADER_BYTES, BlockError, PingAssembler, encode_block
 
 FRAME_SAMPLES = 400            # 6.25 ms of the 64 kSPS stream: 38,528 bytes with 32 channels, 160 frames a second.
-# A frame leaves the sender as one burst of datagrams into the receiver's socket buffer, which
-# Sensor Bridge's receiver leaves at the system default (208 KB of kernel accounting, about 48
-# datagrams) unless a frame is larger, and which a container may not be able to raise. On loopback
-# 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
-# 400-sample frames still lost one frame per run at real time and none at half of it.
+# A frame leaves the sender as one burst of 29 datagrams (1408-byte payloads) into the receiver's
+# socket buffer, which Sensor Bridge's receiver leaves at the system default unless a frame is
+# larger: 212,992 bytes where net.core.rmem_max is that (Hugging Face containers; it cannot be
+# raised there), which on loopback is 92 datagrams of 2304 bytes of kernel accounting, about 3
+# frames or 20 ms of the stream at real time. Measured (job 6b010e824fdc5ab3c55c549d, L4): every
+# datagram lost at real time was refused by that full buffer (the socket's drop count equals the
+# packet-number gaps and RcvbufErrors), while the receiving process ran the chain on a ping, which
+# delays both Sensor Bridge's receiver thread and the sending process; a sender that had fallen
+# behind then sent the frames it owed back to back. Hence catch_up="spread" (below) by default.
+# On loopback 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
 FRAME_ALIGN = 128              # the Sensor Bridge data plane moves frames in 128-byte pages
 
 
@@ -242,6 +247,92 @@ def raw_sockets_permitted() -> bool:
     return True
 
 
+CATCH_UP = ("burst", "spread")
+
+
+LOG_FRAMES = 100_000            # per-frame logs keep the newest this many frames (10.4 min at 160 frames/s)
+
+
+class SendTiming:
+    """When each frame left the sender against when it was due, to tell a sender that fell
+    behind (and then sent the frames it owed back to back) from losses in the receiver.
+    Times are seconds of `time.perf_counter()`; `wall_ns` maps them to the system clock that
+    the receiver's metadata (`received_s`, `received_ns`) uses. Python's garbage collector
+    pauses are timed alongside. The summary covers every frame; the per-frame rows for
+    `dump` keep the newest LOG_FRAMES. Frame 0 is not recorded: it is the send retried until
+    a receiver has connected, and the moment it goes through defines t0 (it is on time by
+    definition)."""
+
+    def __init__(self):
+        from collections import deque
+        self.t0 = self.period = None
+        self.last_start = self.last_end = None
+        self.records = deque(maxlen=LOG_FRAMES)  # (frame, start - due, start - previous start, send duration)
+        self.wall_offset_ns = None
+        self.n = 0
+        self.max_late = self.max_gap = self.max_send = 0.0
+        self.behind, self.close = [], []          # first 16 frame numbers of each
+        self.n_behind = self.n_close = 0
+        self.gc_pauses, self.max_gc = 0, 0.0
+        self._gc_t = None
+
+    def start(self, t0: float, period: float) -> None:
+        import gc
+        self.t0, self.period = t0, period
+        self.last_start = self.last_end = t0
+        self.wall_offset_ns = time.time_ns() - int(time.perf_counter() * 1e9)
+        gc.callbacks.append(self._on_gc)
+
+    def stop(self) -> None:
+        """Take the garbage-collector callback out again (idempotent; called from a finally)."""
+        import gc
+        if self._on_gc in gc.callbacks:
+            gc.callbacks.remove(self._on_gc)
+
+    def _on_gc(self, phase, info):
+        if phase == "start":
+            self._gc_t = time.perf_counter()
+        elif self._gc_t is not None:
+            self.gc_pauses += 1
+            self.max_gc = max(self.max_gc, time.perf_counter() - self._gc_t)
+
+    def sent(self, k: int, t_start: float, t_end: float) -> None:
+        late, gap, took = t_start - (self.t0 + k * self.period), t_start - self.last_start, t_end - t_start
+        self.records.append((k, late, gap, took))
+        self.n += 1
+        self.max_late, self.max_gap, self.max_send = max(self.max_late, late), max(self.max_gap, gap), max(self.max_send, took)
+        if late > self.period:
+            self.n_behind += 1
+            if len(self.behind) < 16:
+                self.behind.append(k)
+        if gap < 0.25 * self.period:
+            self.n_close += 1
+            if len(self.close) < 16:
+                self.close.append(k)
+        self.last_start, self.last_end = t_start, t_end
+
+    def wall_ns(self, t: float) -> int:
+        return int(t * 1e9) + self.wall_offset_ns
+
+    def dump(self, path: str) -> None:
+        """The kept frames' send times as JSON: frame, system-clock ns at the send's start, ms late, ms since the previous send."""
+        import json
+        rows = [[k, self.wall_ns(self.t0 + k * self.period + late), round(1e3 * late, 3), round(1e3 * gap, 3)]
+                for k, late, gap, _ in self.records]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"period_ms": 1e3 * self.period, "columns": ["frame", "wall_ns", "late_ms", "gap_ms"], "rows": rows}, f)
+
+    def summary(self) -> dict:
+        self.stop()
+        if not self.n:
+            return {}
+        return {"period_ms": 1e3 * self.period, "max_late_ms": 1e3 * self.max_late,
+                "frames_late_by_a_period": self.n_behind, "first_late_frames": list(self.behind),
+                "back_to_back_frames": self.n_close, "first_back_to_back_frames": list(self.close),
+                "max_gap_ms": 1e3 * self.max_gap, "max_send_ms": 1e3 * self.max_send,
+                "gc_pauses": self.gc_pauses, "max_gc_ms": 1e3 * self.max_gc}
+
+
 class HsbBoardEmulator:
     """Sends ping records as the board would, through Sensor Bridge's emulator
     (`hololink.emulation`), from the interface that owns `ip`.
@@ -254,15 +345,32 @@ class HsbBoardEmulator:
     """
 
     def __init__(self, records, frame_samples: int = FRAME_SAMPLES, ip: str = "127.0.0.1", pace: float = 1.0,
-                 lead_seconds: float = 1.0, ping_interval: float | None = None, linger: float = 10.0, **stream_options):
+                 lead_seconds: float = 1.0, ping_interval: float | None = None, linger: float = 10.0,
+                 catch_up: str = "spread", **stream_options):
         if pace <= 0.0:
             raise ValueError("pace is a multiple of real time and must be positive")
+        if catch_up not in CATCH_UP:
+            raise ValueError(f"catch_up is one of {CATCH_UP}")
         self.stream = FrameStream(records, frame_samples, ping_interval=ping_interval, lead_seconds=lead_seconds, **stream_options)
-        self.ip, self.pace, self.linger = ip, float(pace), float(linger)
+        self.ip, self.pace, self.linger, self.catch_up = ip, float(pace), float(linger), catch_up
         self.sent = self.idle_sent = 0
+        self.timing = SendTiming()
 
     def frames(self) -> Iterator[bytes]:
         return iter(self.stream)
+
+    def _wait(self, t0: float, k: int, period: float) -> None:
+        """Sleep until frame k is due (t0 + k periods). With catch_up "spread" (the default) a
+        frame never leaves sooner than half a period after the one before, so the sender makes
+        up a stall of its own at twice the frame rate, as a board's stream never comes faster;
+        with "burst" (the behaviour before) a late frame goes at once, so after a stall the
+        frames owed leave back to back and can overflow the receiver's socket buffer."""
+        due = t0 + k * period
+        if self.catch_up == "spread" and self.timing.last_end is not None:
+            due = max(due, self.timing.last_start + 0.5 * period)
+        wait = due - time.perf_counter()
+        if wait > 0.0:
+            time.sleep(wait)
 
     def run(self, connect_timeout: float = 120.0, log=None) -> dict:
         import hololink.emulation as hemu
@@ -291,12 +399,13 @@ class HsbBoardEmulator:
                             raise TimeoutError(f"no receiver configured the data channel within {connect_timeout:.0f} s")
                         time.sleep(0.02)
                     t0 = time.perf_counter()
+                    self.timing.start(t0, period)
                     log("receiver connected")
                 else:
-                    wait = t0 + k * period - time.perf_counter()
-                    if wait > 0.0:
-                        time.sleep(wait)
+                    self._wait(t0, k, period)
+                    t_send = time.perf_counter()
                     n = data_plane.send(array)
+                    self.timing.sent(k, t_send, time.perf_counter())
                 if n < 0:
                     raise RuntimeError(f"the emulator failed to send frame {k}")
                 if n == 0:
@@ -306,19 +415,20 @@ class HsbBoardEmulator:
             else:
                 k = self.stream.n_frames
                 for frame in self.stream.idle():
-                    wait = t0 + k * period - time.perf_counter()
-                    if wait > 0.0:
-                        time.sleep(wait)
                     if (k - self.stream.n_frames) * period > self.linger:
                         break
+                    self._wait(t0, k, period)
+                    t_send = time.perf_counter()
                     if data_plane.send(np.frombuffer(frame, dtype=np.uint8).copy()) <= 0:
                         break
+                    self.timing.sent(k, t_send, time.perf_counter())
                     self.idle_sent += 1
                     k += 1
         finally:
+            self.timing.stop()
             hsb.stop()
         out = {"frames_sent": self.sent, "idle_frames_sent": self.idle_sent, "frame_bytes": self.stream.frame_bytes,
-               "frames_per_second": 1.0 / period}
+               "frames_per_second": 1.0 / period, "catch_up": self.catch_up, "timing": self.timing.summary()}
         log(f"sent {self.sent} frames and {self.idle_sent} idle frames")
         return out
 
@@ -398,7 +508,108 @@ class Board:
 
 
 METADATA_KEYS = ("frame_number", "frame_bytes_received", "packets_dropped", "bytes_written", "received_frame_number",
-                 "timestamp_s", "timestamp_ns")
+                 "timestamp_s", "timestamp_ns", "received_s", "received_ns", "frame_packets_received")
+
+
+def _proc_udp_sockets() -> dict:
+    """inode -> (rx_queue bytes, drops) for every UDP socket of this network namespace (/proc/net/udp)."""
+    out = {}
+    try:
+        with open("/proc/net/udp", encoding="ascii") as f:
+            next(f)
+            for line in f:
+                p = line.split()
+                out[int(p[9])] = (int(p[4].split(":")[1], 16), int(p[-1]))
+    except (OSError, ValueError, IndexError, StopIteration):
+        pass
+    return out
+
+
+def udp_counters() -> dict:
+    """The namespace's UDP counters (/proc/net/snmp): RcvbufErrors counts datagrams a full receive
+    buffer refused, SndbufErrors sends refused for want of buffer."""
+    try:
+        with open("/proc/net/snmp", encoding="ascii") as f:
+            rows = [line.split() for line in f if line.startswith("Udp:")]
+        return {k: int(v) for k, v in zip(rows[0][1:], rows[1][1:])}
+    except (OSError, ValueError, IndexError):
+        return {}
+
+
+def cpu_throttling() -> dict:
+    """This container's CPU quota and how often it was throttled (cgroup v2 cpu.max, cpu.stat), when readable."""
+    out = {}
+    try:
+        with open("/sys/fs/cgroup/cpu.max", encoding="ascii") as f:
+            out["cpu_max"] = f.read().strip()
+        with open("/sys/fs/cgroup/cpu.stat", encoding="ascii") as f:
+            for line in f:
+                k, v = line.split()
+                if k in ("nr_periods", "nr_throttled", "throttled_usec"):
+                    out[k] = int(v)
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+class DataSocketWatch:
+    """The receiver operator's data socket, found from outside Sensor Bridge: the UDP socket of
+    this process whose receive timeout is LinuxReceiver's 100 ms. Reports its receive buffer and
+    the kernel's count of datagrams it dropped because that buffer was full; can set the buffer
+    (up to net.core.rmem_max) to measure what it does."""
+
+    def __init__(self, receive_buffer: int | None = None):
+        self.receive_buffer = receive_buffer
+        self.fd = self.inode = None
+        self.rcvbuf = None
+        self.drops = 0
+        self.max_rx_queue = 0
+
+    def locate(self) -> bool:
+        # A heuristic, not an interface: the first datagram socket of this process whose receive
+        # timeout is exactly 100 ms (what LinuxReceiver sets on its data socket, Sensor Bridge 2.7.0
+        # linux_receiver.cpp). Another such socket in the process (another receiver, or a library
+        # that happens to use 100 ms) could be taken instead; then the drop count is that socket's,
+        # and with a receive_buffer (receive --socket-buffer) that socket's buffer is the one changed.
+        # `stats()["found"]` and the drop count agreeing with the packet-number gaps are the check.
+        import os
+        import socket
+        import struct
+        if self.inode is not None:
+            return True
+        for name in os.listdir("/proc/self/fd"):
+            fd = int(name)
+            try:
+                if not os.readlink(f"/proc/self/fd/{fd}").startswith("socket:"):
+                    continue
+                sock = socket.socket(fileno=os.dup(fd))
+            except OSError:
+                continue
+            try:
+                if sock.type != socket.SOCK_DGRAM:
+                    continue
+                sec, usec = struct.unpack("ll", sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO, 16))
+                if (sec, usec) != (0, 100000):
+                    continue
+                if self.receive_buffer:
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, int(self.receive_buffer))
+                self.rcvbuf = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+                self.fd, self.inode = fd, os.fstat(sock.fileno()).st_ino
+                return True
+            finally:
+                sock.close()
+        return False
+
+    def sample(self) -> None:
+        if self.inode is None and not self.locate():
+            return
+        entry = _proc_udp_sockets().get(self.inode)
+        if entry is not None:
+            self.max_rx_queue = max(self.max_rx_queue, entry[0])
+            self.drops = max(self.drops, entry[1])
+
+    def stats(self) -> dict:
+        return {"found": self.inode is not None, "rcvbuf": self.rcvbuf, "drops": self.drops, "max_rx_queue": self.max_rx_queue}
 
 try:
     from holoscan.core import Application, Operator
@@ -410,11 +621,15 @@ if Operator is not None:
     class HsbFramesToPingsOp(Operator):
         """Receiver frames in ("input"), ping records out ("ping", `{"record": record}` as PingSourceOp)."""
 
-        def __init__(self, fragment, *args, receiver: FrameReceiver, cuda: CudaDriver | None = None, **kwargs):
+        def __init__(self, fragment, *args, receiver: FrameReceiver, cuda: CudaDriver | None = None,
+                     socket_watch: DataSocketWatch | None = None, arrivals=None, **kwargs):
             self.receiver = receiver
             self._cuda = cuda
             self._ready = []
             self.last_metadata = {}
+            self.socket_watch = socket_watch
+            self.arrivals = arrivals            # (frame_number, received_ns, packets, bytes) per frame, when a list or deque is given
+            self._count = 0
             super().__init__(fragment, *args, **kwargs)
 
         def setup(self, spec):
@@ -434,6 +649,13 @@ if Operator is not None:
             except Exception:  # noqa: BLE001  (metadata switched off in the application)
                 metadata = {}
             self.last_metadata = metadata
+            if self.socket_watch is not None and self._count % 16 == 0:
+                self.socket_watch.sample()
+            self._count += 1
+            if self.arrivals is not None and "frame_number" in metadata:
+                self.arrivals.append((int(metadata["frame_number"]),
+                                      int(metadata.get("received_s", 0)) * 1_000_000_000 + int(metadata.get("received_ns", 0)),
+                                      int(metadata.get("frame_packets_received", -1)), int(metadata.get("frame_bytes_received", -1))))
             self._ready += self.receiver.take(frame, metadata or None)
             if self._ready:                                   # at most one ping completes per frame
                 op_output.emit({"record": self._ready.pop(0), "t_source": time.perf_counter()}, "ping")
@@ -446,6 +668,8 @@ if Operator is not None:
         def __init__(self, fragment, *args, chain=None, n_pings: int | None = None, on_report=None, on_done=None, **kwargs):
             self.chain = chain
             self.reports = []
+            from collections import deque
+            self.wall_ns = deque(maxlen=4096)  # (system-clock ns at the start, at the end) of the newest 4096 chain runs
             self._n = n_pings
             self._on_report, self._on_done = on_report, on_done
             super().__init__(fragment, *args, **kwargs)
@@ -457,7 +681,9 @@ if Operator is not None:
             message = op_input.receive("ping")
             if self._n is not None and len(self.reports) >= self._n:
                 return
+            t0 = time.time_ns()
             report = self.chain.process(message["record"])
+            self.wall_ns.append((t0, time.time_ns()))
             self.reports.append(report)
             if self._on_report:
                 self._on_report(report)
@@ -474,16 +700,20 @@ if Operator is not None:
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
                      n_pings: int | None = None, queue_frames: int = 256, idle_timeout: float | None = 15.0,
-                     on_report=None, receiver_affinity=None):
+                     on_report=None, receiver_affinity=None, socket_buffer: int | None = None, log_arrivals: bool = False):
             self.chain, self.receiver = chain, receiver
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
             self._n, self._queue, self._idle = n_pings, int(queue_frames), idle_timeout
             self._on_report, self._affinity = on_report, receiver_affinity
+            self.socket_watch = DataSocketWatch(socket_buffer)
+            from collections import deque
+            self.arrivals = deque(maxlen=LOG_FRAMES) if log_arrivals else None   # the newest LOG_FRAMES frames
             self.frames_op = self.chain_op = None
             self._running = None
             super().__init__()
 
         def _finish(self):
+            self.socket_watch.sample()
             self._running.disable_tick()
 
         def _watch(self):
@@ -495,6 +725,7 @@ if Operator is not None:
                 if count != seen:
                     seen, t_seen = count, time.perf_counter()
                 elif time.perf_counter() - t_seen > self._idle:
+                    self.socket_watch.sample()
                     self._running.disable_tick()
                     try:
                         self.stop_execution()               # wakes a scheduler that is waiting for a frame
@@ -514,7 +745,8 @@ if Operator is not None:
             rx = hololink.operators.LinuxReceiverOp(
                 self, self._running, name="receiver", frame_size=self._frame_size, frame_context=self._cuda.context,
                 hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue, **options)
-            self.frames_op = HsbFramesToPingsOp(self, receiver=self.receiver, cuda=self._cuda, name="frames_to_pings")
+            self.frames_op = HsbFramesToPingsOp(self, receiver=self.receiver, cuda=self._cuda, socket_watch=self.socket_watch,
+                                                arrivals=self.arrivals, name="frames_to_pings")
             self.chain_op = LiveChainOp(self, chain=self.chain, n_pings=self._n, on_report=self._on_report,
                                         on_done=self._finish, name="chain")
             self.add_flow(rx, self.frames_op, {("output", "input")})
@@ -534,6 +766,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
     import hololink
     receiver = FrameReceiver(sonar, sonar_overrides, sound_speed=sound_speed, frame_samples=frame_samples)
     cuda = CudaDriver()
+    udp0, cpu0 = udp_counters(), cpu_throttling()
     try:
         metadata = hololink.Enumerator.find_channel(channel_ip=hololink_ip, timeout=hololink.Timeout(float(find_timeout)))
         channel = hololink.DataChannel(metadata)
@@ -547,4 +780,14 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
             board.stop()
     finally:
         cuda.release()
-    return app.chain_op.reports, receiver.stats()
+    stats = receiver.stats()
+    udp1, cpu1 = udp_counters(), cpu_throttling()
+    stats["socket"] = app.socket_watch.stats()
+    stats["udp_counters"] = {k: udp1[k] - udp0.get(k, 0) for k in ("InDatagrams", "InErrors", "RcvbufErrors", "SndbufErrors")
+                             if k in udp1}
+    stats["cpu"] = dict(cpu1, **{k + "_during": cpu1[k] - cpu0[k] for k in ("nr_throttled", "throttled_usec")
+                                 if k in cpu1 and k in cpu0})
+    stats["chain_wall_ns"] = list(app.chain_op.wall_ns)
+    if app.arrivals is not None:
+        stats["arrivals"] = list(app.arrivals)
+    return app.chain_op.reports, stats

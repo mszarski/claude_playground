@@ -269,6 +269,59 @@ def test_pipeline_tvg_step_derives_and_logs(tmp_path):
         assert last(old) <= last(result)
 
 
+def test_holoscan_condition_op_applies_the_chains_tvg_step():
+    """STATUS open item 33: the Holoscan ConditionOp's gain is the chain's `tvg` step. Host side of
+    it: `recon.condition_ping`, which the operator's compute calls, with the step that
+    `recon.condition_tvg_step` makes of the operator's arguments, gives the samples of a chain
+    run with prepare, calibrate and tvg, to the bit (the operator itself: test_holoscan.py)."""
+    cfg = load_yaml(config_dir() / "chains" / "stripmap_points.yaml")
+    cfg["source"]["overrides"] = {"pings": {"count": 2}}
+    cfg["output"] = {}
+    raw = pipeline.run(dict(cfg, steps=[]), backend=core.Backend.Host).records
+    assert np.isfinite(raw[0].environment.temperature) and np.isfinite(raw[0].environment.salinity)
+
+    def chain(*tvg_steps):
+        steps = [{"stage": "prepare"}, {"stage": "calibrate"}] + [dict(s, stage="tvg") for s in tvg_steps]
+        return [r.samples.array for r in pipeline.run(dict(cfg, steps=steps), backend=core.Backend.Host).records]
+
+    def op(**arguments):                       # what ConditionOp(**arguments).compute does to each record
+        step = recon.condition_tvg_step(arguments.get("tvg"), arguments.get("tvg_db_per_decade"))
+        out = [r.copy() for r in raw]
+        for r in out:
+            recon.condition_ping(r, tvg=step)
+        return [r.samples.array for r in out]
+
+    def same(a, b):
+        for x, y in zip(a, b, strict=True):
+            np.testing.assert_array_equal(x, y)
+
+    assert recon.condition_tvg_step() is None and recon.condition_tvg_step(False) is None
+    same(op(), chain())                                                   # no gain unless asked: unchanged
+    same(op(tvg=True), chain({}))                                         # the default step: absorption from the record
+    same(op(tvg={"stage": "tvg", "absorption": "none"}), chain({"absorption": "none"}))
+    # The older argument keeps its recorded meaning (D-91): the old law, the same samples as before.
+    assert recon.condition_tvg_step(None, 40.0) == {"spreading_db_per_decade": 40.0, "absorption": "none"}
+    old = [r.copy() for r in raw]
+    for r in old:
+        recon.condition_ping(r)                                          # prepare and calibration, unchanged
+        core.apply_tvg(r, spreading_db_per_decade=40.0)                  # the gain ConditionOp applied before
+    same(op(tvg_db_per_decade=40.0), [r.samples.array for r in old])
+    same(op(tvg_db_per_decade=40.0), chain({"spreading_db_per_decade": 40.0, "absorption": "none"}))
+    with pytest.raises(ValueError, match="not both"):
+        recon.condition_tvg_step({"spreading": "one_way"}, 40.0)
+    with pytest.raises(ValueError, match="not both"):
+        recon.condition_tvg_step(True, 40.0)
+    # The old argument needs no frequency or water: a record with neither still takes it.
+    bare = blank("fls_330k", {"sound_speed": C})
+    assert recon.condition_ping(bare, compress=False, tvg=recon.condition_tvg_step(None, 40.0))["clamped_samples"] >= 0
+    # The chain's default step (tvg=True) is the opt-in to absorption: 2 alpha R more gain at the far end.
+    derived = op(tvg=True)
+    alpha = recon.record_absorption(raw[0])
+    ratio_db = 20 * np.log10(np.abs(derived[0][0, -1]) / np.abs(old[0].samples.array[0, -1]))
+    print(f"ConditionOp(tvg=True) against the old law at the last sample: {ratio_db:.2f} dB; alpha {alpha:.4f} dB/m")
+    assert ratio_db == pytest.approx(2 * alpha * 52.0, abs=0.3)
+
+
 # --- K-5: CFAR windows ------------------------------------------------------------------------
 
 def test_cfar_window_in_resolution_cells_keeps_a_finely_sampled_target():

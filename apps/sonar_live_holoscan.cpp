@@ -15,6 +15,7 @@
 #include "sonar/holoscan_ops/operators.hpp"
 #include "sonar/io/record_file.hpp"
 #include "sonar/live/chain.hpp"
+#include "sonar/live/options.hpp"
 
 namespace ops = sonar::holoscan_ops;
 
@@ -90,6 +91,7 @@ int main(int argc, char** argv) {
     if (s.replay.empty() && (s.udp_port < 0 || s.template_path.empty())) {
       throw std::invalid_argument("give --replay FILE or --udp PORT --template FILE");
     }
+    sonar::live::program_defaults(chain, passive);        // backend auto, as build/bin/sonar_live (D-147)
     ops::apply_options(s.options, chain, passive);        // fail on a bad option before the pipeline starts
     // The stream's own settings go to the source operator; the frame length of a listening run follows from the
     // passive options and, for block sizes left to be derived, from the sonar in the template.
