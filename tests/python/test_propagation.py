@@ -182,6 +182,23 @@ def test_make_provider_builds_the_eigenray_tier():
     assert isinstance(p, BellhopProvider) and p.tier == "eigenray"
 
 
+
+def test_eigenray_tier_assumes_no_seabed():
+    """Audit A8 (D-104 for Bellhop): the ocean used to fall back to 1600 m/s, 1.8 g/cm^3, 0.5 dB per wavelength."""
+    with pytest.raises(ValueError, match="no seabed is assumed"):
+        OceanEnvironment(depth=100.0, sound_speed=1500.0)
+    with pytest.raises(ValueError, match=r"missing \['bottom_attenuation'\]"):
+        OceanEnvironment(depth=100.0, sound_speed=1500.0, bottom_speed=1600.0, bottom_density=1.8)
+    with pytest.raises(ValueError, match="no seabed is assumed"):
+        gs.sim.make_provider("eigenray", 1500.0, {"environment": {"depth": 100.0, "sound_speed": 1500.0}, "frequency": 8000.0,
+                                                  "max_range": 500.0})
+    env = OceanEnvironment(**PEKERIS)
+    assert (env.bottom_speed, env.bottom_density, env.bottom_attenuation) == (1600.0, 1.8, 0.5)
+    sand = OceanEnvironment(depth=100.0, sound_speed=1500.0, sediment="medium_sand")
+    assert sand.sediment_name == "medium_sand" and sand.bottom_speed > 1500.0
+    with pytest.raises(ValueError, match="not both"):
+        OceanEnvironment(depth=100.0, sound_speed=1500.0, sediment="medium_sand", bottom_speed=1600.0)
+
 # --- range-dependent bathymetry: a ridge between source and receiver -------------------------
 
 @needs_bellhop
@@ -209,7 +226,7 @@ def test_ridge_shadows_and_strips_steep_paths():
 
 @needs_bellhop
 def test_bathymetry_is_validated():
-    env = OceanEnvironment(depth=100.0, bathymetry=[[0.0, 100.0], [1000.0, 150.0]])
+    env = OceanEnvironment(**PEKERIS, bathymetry=[[0.0, 100.0], [1000.0, 150.0]])
     from gpusonar.sim.bellhop import BellhopError
     with pytest.raises(BellhopError, match="bathymetry"):
         run_bellhop(env, 8000.0, 30.0, [50.0], [500.0])
