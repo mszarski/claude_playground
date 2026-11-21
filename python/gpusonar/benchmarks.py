@@ -17,10 +17,15 @@ PICMUS_POINTS_MM = [(10.0, 0.0), (15.0, 0.0), (20.0, 0.0), (25.0, 0.0), (30.0, 0
 
 
 # --- The challenge's own evaluation (PICMUS archive `archive_to_download.zip`, opened 2026-11-21) ---------------
-# Source: the challenge's MATLAB evaluation code, code/src/@us_contrast/us_contrast.m and @us_resolution/us_resolution.m
-# (free of use, cite Liebgott et al., IEEE IUS 2016: the challenge site's Copyright page), ported line by line below;
-# the CNR is eq. (1) of the paper (opened, the copy on the challenge site). Geometry from the archive's
-# database/simulation/*_scan.hdf5 and *_phantom.hdf5 files, all confirmed by opening them.
+# Source: the challenge's MATLAB evaluation code in that archive (on the challenge site,
+# https://www.creatis.insa-lyon.fr/Challenge/IEEE_IUS_2016/download), code/src/@us_contrast/us_contrast.m and
+# @us_resolution/us_resolution.m, by Olivier Bernard and Alfonso Rodriguez-Molares, 2016 (as their headers say),
+# ported line by line below; the CNR is eq. (1) of Liebgott, Rodriguez-Molares, Cervenansky, Jensen and Bernard,
+# "Plane-Wave Imaging Challenge in Medical Ultrasound", IEEE IUS 2016 (opened: the copy on the challenge site).
+# Terms: the archive holds no LICENSE file. The site's Copyright page
+# (https://www.creatis.insa-lyon.fr/Challenge/IEEE_IUS_2016/node/48), read 2026-11-21, says "The datasets and code
+# provided on PICMUS are free of use", asking only that PICMUS be referred to and the IUS 2016 paper quoted.
+# Geometry from the archive's database/simulation/*_scan.hdf5 and *_phantom.hdf5 files, all confirmed by opening them.
 #
 # Beamforming grid of every PICMUS image: x (lateral) from -19.05 mm in steps of a third of a wavelength, 387 columns;
 # z (depth) from 5 mm in steps of a quarter wavelength, 609 rows; wavelength 1540 m/s / 5.208 MHz. (The scan files'

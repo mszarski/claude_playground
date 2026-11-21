@@ -176,13 +176,21 @@ def ours_f175():
 @needs_data
 def test_contrast_and_resolution_against_the_challenges_reference_das(ours_f175):
     """Against what the challenge's own evaluation printed for its reference DAS (Tukey 25 % receive window where ours
-    has a hard edge): CNR within 1.5 dB and not above it, axial width within 0.02 mm, lateral width 0 to 15 % narrower
-    (the untapered aperture's narrower main lobe)."""
+    has a hard edge at the same F-number 1.75).
+
+    The bounds are set from what was observed when this test was written, with headroom; they are not derived:
+    - CNR at most 1.5 dB below the reference: observed -1.09 dB (1 wave), -0.64 (11), -0.23 (75);
+    - lateral width 0.85 to 1.0 of the reference: observed ratio 0.895 (1 wave), 0.956 (11), 0.955 (75).
+    "Never above" (CNR not higher, lateral width not wider) rests on an argument, not a proof: an untapered aperture
+    edge gives a narrower main lobe and higher sidelobes than the same aperture tapered, so more sidelobe clutter
+    fills the cysts (lower CNR) and the points are narrower.
+    The axial check is a sanity check only: every configuration, ours and the reference, gives 0.40 mm (the pulse
+    sets it), so it catches a broken image, not a difference between beamformers."""
     cnr = [ours_f175[n][0]["cnr_mean_db"] for n in (1, 11, 75)]
     assert cnr[0] < cnr[1] < cnr[2]                      # compounding raises contrast
     for n in (1, 11, 75):
         contrast, widths = ours_f175[n]
         ref = bm.PICMUS_REFERENCE_DAS_SIMU[n]
         assert ref["cnr_db"] - 1.5 < contrast["cnr_mean_db"] <= ref["cnr_db"], (n, contrast["cnr_mean_db"])
-        assert widths["axial_mm"] == pytest.approx(ref["axial_mm"], abs=0.02), n
+        assert widths["axial_mm"] == pytest.approx(ref["axial_mm"], abs=0.02), n      # sanity check (docstring)
         assert 0.85 * ref["lateral_mm"] < widths["lateral_mm"] <= ref["lateral_mm"], (n, widths["lateral_mm"])
