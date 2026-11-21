@@ -192,7 +192,8 @@ def test_bellhop_environment_by_name():
     assert env.bottom_speed == pytest.approx(1497.44 / 1528.0 * 1480.0)
     with pytest.raises(ValueError, match="not both"):
         OceanEnvironment(depth=80.0, sediment="fine_sand", bottom_speed=1700.0)
-    assert OceanEnvironment(depth=80.0).bottom_speed == 1600.0      # the default is untouched
+    with pytest.raises(ValueError, match="no seabed is assumed"):    # no default seabed (D-146)
+        OceanEnvironment(depth=80.0)
 
 
 @pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
