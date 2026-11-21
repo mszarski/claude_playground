@@ -747,7 +747,7 @@ match:
 | Test set | Mini strict | Mini lenient | Small lenient | Qwen, no-think | Gemma SFT v8, 3-seed mean |
 |---|---|---|---|---|---|
 | seen types (500) | 0.832 | 0.846 | 0.826 | n/a | 0.945 |
-| paraphrased (490) | PARA_STRICT | PARA_LENIENT | 0.771 | n/a | 0.888 |
+| paraphrased (490) | 0.775 | 0.790 | 0.771 | n/a | 0.888 |
 | goal requests (450) | 0.773 | 0.813 | 0.900 | 0.962 | 0.916 |
 | unseen types v2 (1,050) | 0.712 | 0.729 | 0.781 | 0.868 | 0.810 |
 
