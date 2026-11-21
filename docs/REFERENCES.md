@@ -286,6 +286,13 @@ opened on 2026-11-20 are in the session's scratch area, `scratchpad/litc/<name>/
 | Acoustics Toolbox `misc/munk.f90` (HEAD 8b4682b, read only) | open, GPL-3.0 | Munk profile: c = 1500 (1 + 0.00737 (x - 1 + exp(-x))), x = 2 (z - 1300) / 1300: the same constants as `sim.bellhop.munk_profile`'s defaults (axis speed `NOMINAL_SOUND_SPEED` = 1500). The code's `axis_depth` moves only the axis; the scale depth stays 1300 m | via secondary (the Toolbox names it "Munk profile"); Munk, J. Acoust. Soc. Am. 55, 220 (1974), not opened |
 | Acoustics Toolbox: BELLHOP, KRAKEN (github.com/oalib-acoustics/Acoustics-Toolbox) | open, GPL-3.0 | oracle only, run as a separate process; build, version and test cases in `docs/OPEN_SOURCE.md` Sec. 3.6; licence row in its table. Porter's manuals and Porter and Bucker (1987) not opened | software (licence and use: `OPEN_SOURCE.md`) |
 
+### 12.6 Ultrasound benchmark (PICMUS)
+
+| Source | Access | Taken | Status |
+|---|---|---|---|
+| Liebgott, Rodriguez-Molares, Cervenansky, Jensen and Bernard, "Plane-Wave Imaging Challenge in Medical Ultrasound", IEEE IUS 2016 | open (challenge site copy) | eq. (1), the CNR; the −6 dB width; it prints no result values | confirmed |
+| PICMUS challenge archive `archive_to_download.zip` (creatis.insa-lyon.fr): `us_contrast.m`, `us_resolution.m` (Bernard, Rodriguez-Molares 2016), `das_iq.m` (F 1.75, Tukey 25 %), simulation phantom and scan files, `evaluation/*_simu_evaluation_from_iq.txt` | open; no licence file; site terms "free of use", cite the paper (read 2026-11-21) | the metric code (ported in `benchmarks.py`), the phantom geometry and the reference DAS outputs | confirmed |
+
 ### 12.5 Synthetic aperture processing (sources cited in `docs/PAPER_NOTES.md`)
 
 | Source | Access | Taken | Status |

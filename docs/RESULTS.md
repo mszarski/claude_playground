@@ -216,18 +216,30 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
 | 11 | F-number 1.75 | 0.409 mm | 0.500 mm |
 | 75 | F-number 1.75 | 0.408 mm | 0.519 mm |
 
-- **Comparison with published numbers: not done.** The brief asks for it, but the
-  challenge paper and site could not be fetched from the build container (publisher and
-  host blocked), so no published figure is quoted here. The F-number 1.75 rows use the
-  receive aperture the challenge's reference beamformer is commonly run with, so they are
-  the rows to compare once the paper is at hand.
+- **Comparison: with the challenge's own evaluation, not with the paper.** The IUS 2016 paper
+  (Liebgott et al., opened) defines the CNR (eq. 1) and the −6 dB width but prints no values.
+  The challenge archive's evaluation code (`us_contrast.m`, `us_resolution.m`) is ported in
+  `benchmarks.py` and reproduces every value the archive printed for the reference images (36
+  per-cyst CNRs, the width means). Against the archive's reference DAS (F 1.75, Tukey 25 % receive
+  taper), with the challenge's metric, simulation, IQ:
+
+  | Plane waves | CNR, ours | CNR, reference | Axial, ours / reference | Lateral, ours / reference |
+  | --- | --- | --- | --- | --- |
+  | 1 | 8.63 dB | 9.72 dB | 0.402 / 0.40 mm | 0.734 / 0.82 mm |
+  | 11 | 11.62 dB | 12.26 dB | 0.401 / 0.40 mm | 0.516 / 0.54 mm |
+  | 75 | 15.13 dB | 15.36 dB | 0.402 / 0.40 mm | 0.535 / 0.56 mm |
+
+  Our CNR is 0.2 to 1.1 dB below and our lateral width 4 to 10 % narrower: our kernel cuts the
+  receive aperture at F 1.75 with a hard edge where the reference tapers it. With the full
+  aperture our CNR is 7.37 / 10.61 / 15.06 dB. The test's bounds (at most 1.5 dB below, never
+  above; width ratio 0.85 to 1.0) were set from these values.
 - What was checked instead: the kernel matches an independent float64 delay-and-sum on
   this data to 2e-4 relative; all eleven targets are found on the phantom's 5 mm lattice;
   axial width is the same for 1 and 75 plane waves; compounding does not blur.
-- Not yet measured: contrast and CNR on the cyst phantom, and the experimental and
-  in-vivo sets.
+- Not yet measured: the experimental and in-vivo sets, the speckle (KS) and distortion metrics.
 - The targets image 0.2 mm deeper than the nominal lattice (10.2, 15.2, … mm). The
-  offset is uniform; it is a property of the data's time origin and was left alone.
+  offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
+  40.188 mm), so it is a property of the data, not of the kernel.
 
 ## SAS with known navigation
 

@@ -2432,3 +2432,18 @@ datagram in the loopback had been refused by the receiver's full buffer (kernel 
 packet-number gaps in every lossy run). Ours. `sonar_live_holoscan`'s chain operators start from
 `program_defaults` as `sonar_live` does (D-147); only `test_holoscan_cpp.py` on a GPU shows the
 difference.
+
+### D-152 Classification may use the detections, through opt-in rules with no default
+
+Tracks keep each detection's cell count in both engines. `classify.detections` (default null):
+`min_mover_cells`: a mover whose median detection extent is below it becomes `uncertain`;
+`row_snr_db` (gallery only, through `classify_tracks(linear=...)`; refused by the live chain,
+which never runs the row test): a track counts in a mover's row only if its mean SNR is at most
+that far below the mover's. Ours, thresholds included. They stay off: on one seed of the full
+gallery, `min_mover_cells` 3 to 5 removes the rough-surface glint movers (13 to 0 at 5) but the
+real boat there is 5 to 7 cells and turns `uncertain` from 6; `row_snr_db` 3 or 6 returns the
+cluttered scene's boat from `line` to `mover`; nothing changes in the Popoto scenes (the 12 km
+ship's `multipath` comes from echo grouping). The thresholds were seen on these scenes and are not
+validated. The PICMUS evaluation (`benchmarks.py`) is a port of the challenge's MATLAB code
+(Bernard and Rodriguez-Molares, 2016; no licence file in the archive; the site states its datasets
+and code are free of use, cite the IUS 2016 paper; read 2026-11-21).

@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-151); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-152); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -61,7 +61,7 @@ How things are verified, in the words used below:
 | 1 Notes and survey | done | `PAPER_NOTES.md`, `HOLOSCAN_NOTES.md`, `OPEN_SOURCE.md`, `REFERENCES.md`, `ORG_ARL_SURVEY.md`, `DECISIONS.md`; `tools/test.sh` builds and runs GoogleTest and pytest |
 | 2 Record format and file replay | done; schema unchanged at 1.0.0 through all later work | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `test_sources.py` |
 | 3 Simulator, point targets, all sonar configs | done; GPU forward model verified on a T4 and an L4 | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC |
-| 4 Backprojection kernel, FLS mode | done; GPU kernel verified on a T4; PICMUS partly | `test_backproject.py`, `test_fls.py`, `test_picmus.py`. PICMUS: resolution measured; published reference numbers and contrast not done |
+| 4 Backprojection kernel, FLS mode | done; GPU kernel verified on a T4; PICMUS partly | `test_backproject.py`, `test_fls.py`, `test_picmus.py`. PICMUS: resolution and contrast measured with the challenge's own evaluation code (ported; reproduces its printed outputs) and compared with its reference DAS (CNR 0.2 to 1.1 dB below: a hard aperture edge against its taper); the IUS 2016 paper prints no values. Experimental, in-vivo, speckle and distortion not done |
 | 5 Run-time optimisations | done; device slab, CUDA culling and hardware texture lookup verified on a T4 | `test_culling.py`, `tests/cpp/test_allocator.cpp`, `test_position_lookup.py`. The culling pre-test now takes its trajectory allowance from each ping's own table (D-92) |
 | 6 Conditioning, pulse compression, post-processing | done; baseband conversion and pulse compression also on the device (T4, A10G) | `test_conditioning.py`. The gain step derives absorption from the record by default (D-91) |
 | 7 SAS with known navigation | done on CPU | `test_sas.py` |
@@ -726,7 +726,10 @@ the arrival-time solve runs (4, 4) passes (D-83).
    navigation message.
 7. Milestone 11: a job in which the loopback test passes; the reference's SDK build and a
    rig run. Milestone 13: Spark and Jetson measurements.
-8. Milestone 8 leftovers; PICMUS contrast; classification beyond the track.
+8. Milestone 8 leftovers (seed 2's sway bound, ref [9] surge); PICMUS experimental and in-vivo
+   sets; classification beyond the track: opt-in rules from detection extent and SNR exist in both
+   engines (`classify.detections`, D-152, no defaults) and fix none of sonar-ic5, 9ir, 9z8, ofa at
+   one setting.
 
 ## Where the code has run
 
