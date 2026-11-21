@@ -90,10 +90,16 @@ def test_tracker_and_classifier_match_python(association, timed):
     assert [(c.kind, c.parent) for c in want] == [(c["kind"], c["parent"]) for c in got]
 
 
+def _close_to_golden(actual, desired):
+    """Equal to the golden to 1e-12 relative: bit for bit where it was made, a few ulps on another CPU."""
+    np.testing.assert_allclose(np.asarray(actual, dtype=float), np.asarray(desired, dtype=float), rtol=1e-12, atol=1e-12)
+
+
 @pytest.mark.parametrize("association", ["likelihood", "in_order"])
 @pytest.mark.parametrize("stamp", ["none", "ping"])
 def test_cpp_detections_without_their_own_time_track_exactly_as_before(association, stamp):
-    """D-156: core.LiveTracker with detections that carry no time, or the ping's, gives bit for bit what it gave before
+    """D-156: core.LiveTracker with detections that carry no time, or the ping's, gives what it gave before (bit for bit on the CPU that made the golden; to 1e-12 on
+    others, whose vector instructions round in another order)
     (tests/python/data/tracker_before_d156.json, made with the C++ tracker at commit 1be89d4)."""
     from test_detect import SCENARIO_TRACKER, before_d156, tracker_scenario
     want = before_d156()[association]
@@ -102,14 +108,14 @@ def test_cpp_detections_without_their_own_time_track_exactly_as_before(associati
         got = cpp.update(t, [d[:4] for d in dets], None if stamp == "none" else [t] * len(dets))
         assert [tr["id"] for tr in got] == [w["id"] for w in ping["cpp"]]
         for tr, w in zip(got, ping["cpp"]):
-            np.testing.assert_array_equal(tr["state"], w["state"])
-            np.testing.assert_array_equal(np.array(tr["history"][-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
+            _close_to_golden(tr["state"], w["state"])
+            _close_to_golden(np.array(tr["history"][-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
             assert (tr["hits"], tr["misses"]) == (w["hits"], w["misses"])
     for at in (None, t):
         got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=at)
         assert [(c["id"], c["kind"]) for c in got] == [(w["id"], w["kind"]) for w in want["cpp_classes"]]
-        np.testing.assert_array_equal([c["position"] for c in got], [w["position"] for w in want["cpp_classes"]])
-        np.testing.assert_array_equal([c["velocity"] for c in got], [w["velocity"] for w in want["cpp_classes"]])
+        _close_to_golden([c["position"] for c in got], [w["position"] for w in want["cpp_classes"]])
+        _close_to_golden([c["velocity"] for c in got], [w["velocity"] for w in want["cpp_classes"]])
 
 
 def test_both_trackers_place_a_long_range_mover_where_its_echoes_show_it():

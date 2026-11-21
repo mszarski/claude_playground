@@ -27,6 +27,7 @@ WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"ran
 KW = dict(environment={"sound_speed": 1500.0}, adc=False, absorption_model="none")
 POSE = dict(position=(0.0, 0.0, 0.0))
 NOISE = 2e-4
+PING_INTERVAL_NS = 2_000_000_000   # pings 2 s apart: a track's points need time between them for a fit (D-156)
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +49,8 @@ def ping(sonar, points, ts_db, seed, noise=NOISE, sequence=0):
     scene = Scene()
     for p, ts in zip(points, np.broadcast_to(ts_db, len(points))):
         scene.add_points([p], target_strength_db=float(ts))
-    return simulate_ping(sonar, make_pose(**POSE), scene, noise_rms=noise, rng=np.random.default_rng(seed), sequence=sequence, **KW)
+    return simulate_ping(sonar, make_pose(**POSE), scene, noise_rms=noise, rng=np.random.default_rng(seed), sequence=sequence,
+                         time_ns=sequence * PING_INTERVAL_NS, **KW)
 
 
 def budget_snr_db(sonar, r, bearing_deg, ts_db=0.0, noise=NOISE, seed=1):

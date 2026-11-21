@@ -241,11 +241,17 @@ def before_d156():
     return json.loads((pathlib.Path(__file__).parent / "data" / "tracker_before_d156.json").read_text())
 
 
+def _close_to_golden(actual, desired):
+    """Equal to the golden to 1e-12 relative: bit for bit where it was made, a few ulps on another CPU."""
+    np.testing.assert_allclose(np.asarray(actual, dtype=float), np.asarray(desired, dtype=float), rtol=1e-12, atol=1e-12)
+
+
 @pytest.mark.parametrize("association", ["likelihood", "in_order"])
 @pytest.mark.parametrize("stamp", ["none", "ping"])
 def test_detections_without_their_own_time_track_exactly_as_before(association, stamp):
     """D-156: a detection that carries no time (`time` None, the default) is taken at the ping's time, and the tracker
-    gives bit for bit what it gave before (states, covariances, histories, depth, classes), as does a detection given
+    gives what it gave before (bit for bit on the CPU that made the golden; to 1e-12 on
+    others, whose vector instructions round in another order) (states, covariances, histories, depth, classes), as does a detection given
     the ping's time explicitly."""
     from gpusonar import classify
     want = before_d156()[association]
@@ -254,16 +260,16 @@ def test_detections_without_their_own_time_track_exactly_as_before(association, 
         got = tracker.update(t, [detect.Detection(*d, time=None if stamp == "none" else t) for d in dets])
         assert [tr.id for tr in got] == [w["id"] for w in ping["python"]]
         for tr, w in zip(got, ping["python"]):
-            np.testing.assert_array_equal(tr.state, w["state"])
-            np.testing.assert_array_equal(tr.cov.ravel(), w["cov"])
-            np.testing.assert_array_equal(np.array(tr.history[-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
+            _close_to_golden(tr.state, w["state"])
+            _close_to_golden(tr.cov.ravel(), w["cov"])
+            _close_to_golden(np.array(tr.history[-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
             assert (tr.hits, tr.misses) == (w["hits"], w["misses"])
-            np.testing.assert_array_equal([tr.depth, tr.depth_var], [w["depth"], w["depth_var"]])
+            _close_to_golden([tr.depth, tr.depth_var], [w["depth"], w["depth_var"]])
     for at in (None, t):
         classes = classify.classify_tracks(got, min_speed=0.5, max_fit_rms=2.5, time=at)
         assert [(c.id, c.kind) for c in classes] == [(w["id"], w["kind"]) for w in want["classes"]]
-        np.testing.assert_array_equal([c.position for c in classes], [w["position"] for w in want["classes"]])
-        np.testing.assert_array_equal([c.velocity for c in classes], [w["velocity"] for w in want["classes"]])
+        _close_to_golden([c.position for c in classes], [w["position"] for w in want["classes"]])
+        _close_to_golden([c.velocity for c in classes], [w["velocity"] for w in want["classes"]])
 
 
 def long_range_mover(n=10, interval=20.0, c=1500.0, start=(-60.0, 12000.0), velocity=(6.0, 0.0), drop=(), seed=4):
