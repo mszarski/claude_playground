@@ -2402,3 +2402,20 @@ over the flanks (converged beams). The test holds that gap as a characterisation
 agreement bound if 3-D propagation is added. Our tier and Bellhop3D's N×2-D differ by up to
 1.0 dB even over a level bed (cause not found; issue filed). The oracle gate knows `pyram` and
 `GPUSONAR_BELLHOP3D`, matched as whole words; a Bellhop3D build failure only warns.
+
+### D-150 The multiscale detector's statistic runs on the chain's backend
+
+`multiscale_detect` is split into `multiscale_cells` (background, strongest sample, flags) and
+`multiscale_group` (sidelobe dropping and grouping, on the host). With `Backend::Cuda` the cells
+run as three kernels (`detector_kernel.hpp`, `detector_cuda.cu`) doing the host loops'
+operations in the same order, compiled with `--fmad=false` so no product is contracted; the host
+loops are unchanged and the reference. Ours. Agreement: identical flags, strongest samples and
+detections on eight C++ maps (one takes the slope clamp at both ends) and on the benchmark's
+live pings; background within 4.3e-16 relative. **This changes a default result in its last
+bits on a GPU machine**: the default backend is `auto`, so there the background, and the
+`snr_db` computed from it, now come from the device (as CFAR's already did). A NaN in the first
+or last two training lengths of a bearing is not held to the host (the two sorts order it
+differently); the chain's maps are powers of finite samples. The Python engine keeps its NumPy
+statistic. L4 time per ping, as deployed, 1 / 2 / 3 rows: 16.0 / 29.5 / 40.6 ms before,
+12.7 / 25.9 / 37.5 ms after (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`), still 2.8
+to 3.6 ms over `cell_statistic: mean`: the map returns to the host and is uploaded again.

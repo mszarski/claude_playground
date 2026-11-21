@@ -11,6 +11,23 @@ could not be made, that is stated.
 
 ## Performance
 
+**Multiscale statistic on the device (D-150).** L4, `tools/live_chain_ablation.py --backend cuda`,
+median of three repeats, ms a ping, as deployed, 1 / 2 / 3 rows: 16.01 / 29.53 / 40.64 before
+(tree `1368f3d`, job 6b01109defaf5e14f4b45051), 12.73 / 25.92 / 37.52 after (tree `b2a918e`,
+job 6b0119eeefaf5e14f4b457ca, `--fmad=false`); `cell_statistic: mean` in the same run 9.92 /
+22.88 / 33.94. Identical detections; background within 4.2e-16 on the live pings
+(`docs/benchmarks/live_chain_ablation_l4_{1368f3d,b54b4d1,3d666df,b2a918e}.json`).
+
+**Backprojection FLOP/s, derived, not verified.** Flank map (`tools/benchmark.py flank`, scale 1:
+one group, 32 elements, 1,928,000 points): 1,698 float32 and 281 float64 operations a point,
+counted from `backproject_kernel.hpp` (ours; add or multiply 1, fused multiply-add 2; divisions,
+square roots, sines and cosines counted apart, so the counts understate the arithmetic
+executed). Kernel time 4.875 ms (Nsight Systems, median of 6, job 6b01155fefaf5e14f4b45409):
+672 GFLOP/s float32 and 111 GFLOP/s float64. Hardware counters (Nsight Compute) are refused on
+the Hugging Face jobs (ERR_NVGPUCTRPERM); the L4's published peak was not opened. The whole flank
+`BackprojectSession` call takes 38.4 ms, of which the kernel is 4.9 ms and copies 6.4 ms.
+
+
 Source: `tools/benchmark.py`, run through `tools/gpu_job.sh` on rented x86_64 GPU machines
 (Hugging Face Jobs, CUDA 12.6). Raw output: `docs/benchmarks/*.json`. Protocol as in the
 paper: each dataset processed three times in a row, the last run reported. Times cover the
