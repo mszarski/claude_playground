@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-152); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-153); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -573,8 +573,8 @@ Grouped; within a group the most consequential first.
     `rmem_max`, about 20 ms of stream) while the chain ran on a ping and the emulated board then
     sent its owed frames back to back; the board now spreads its catch-up (`catch_up: spread`,
     default; `burst` the old behaviour): at real time burst lost frames in 3 of 14 runs, spread in
-    0 of 20. A halved buffer still loses frames. The test stays at pace 0.5; moving it to 1.0 is
-    an owner decision. Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
+    0 of 20. A halved buffer still loses frames. The test runs at real time since D-153 (owner's
+    ruling). Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
     an isolated receiver core) in `DEPLOYMENT.md`.
 35. **Wire format**: the sample word length is configuration on both ends because the
     block header has no field for it; an over-long report is split into parts; the

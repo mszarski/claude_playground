@@ -769,10 +769,10 @@ variable the patched emulator behaves as stock.
 
 With the patch the loopback ran on T4 and L4 jobs. What is still thin: at real time the margin
 is the receiver's socket buffer, and in a Hugging Face container that buffer cannot be raised.
-The loopback test (`tests/python/test_hsb.py`) runs at half real time (`serve --pace 0.5`;
-the tool's default `--pace` is 1.0). It passed there on an L4, with reports equal to the
-direct chain's (jobs `6b010e824fdc5ab3c55c549d`, `6b0115de4fdc5ab3c55c5951` and
-`6b011b26efaf5e14f4b4597c`).
+The loopback test (`tests/python/test_hsb.py`) runs at real time since D-153 (`serve --pace 1.0`,
+`GPUSONAR_HSB_PACE` overrides). Before that it ran at half real time and passed there on an L4,
+with reports equal to the direct chain's (jobs `6b010e824fdc5ab3c55c549d`,
+`6b0115de4fdc5ab3c55c5951` and `6b011b26efaf5e14f4b4597c`).
 
 Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
 (`test_loopback_loss_study`, `GPUSONAR_HSB_STUDY=1`):

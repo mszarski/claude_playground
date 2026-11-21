@@ -2447,3 +2447,15 @@ ship's `multipath` comes from echo grouping). The thresholds were seen on these 
 validated. The PICMUS evaluation (`benchmarks.py`) is a port of the challenge's MATLAB code
 (Bernard and Rodriguez-Molares, 2016; no licence file in the archive; the site states its datasets
 and code are free of use, cite the IUS 2016 paper; read 2026-11-21).
+
+### D-153 The Sensor Bridge loopback test runs at real time (owner's ruling)
+
+D-79 slowed the loopback test to half real time because real time lost a burst per run. The cause
+was measured since (D-151: datagrams refused by the receiver's full socket buffer while the board sent
+its owed frames back to back after a stall) and the board now spreads its catch-up; at real time 20
+runs with spread lost nothing, 3 of 14 with the old burst did. The owner ruled (2026-11-21) that the
+test runs at pace 1.0 (`GPUSONAR_HSB_PACE` still overrides). The test's assertions are unchanged:
+no frame lost or damaged, reports equal to the direct chain's. The margin is thin: the container's
+`rmem_max` (212,992 B) is about 20 ms of stream, and a halved buffer still loses frames, so a run
+on a loaded machine can fail; a failure is reported, not retried. Deployed hosts should follow
+Sensor Bridge's own setup advice (`DEPLOYMENT.md`).

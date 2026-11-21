@@ -415,10 +415,12 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
-    # Half of real time (GPUSONAR_HSB_PACE overrides). At real time the receiver's socket buffer (212,992
-    # bytes, Hugging Face's rmem_max: about 20 ms of the stream) overflowed while the chain ran on a ping
-    # (test_loopback_loss_study; hsb.py FRAME_SAMPLES says what was measured).
-    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
+    # Real time (owner's ruling 2026-11-21, D-153; GPUSONAR_HSB_PACE overrides). The margin is the receiver's
+    # socket buffer (212,992 bytes, Hugging Face's rmem_max: about 20 ms of the stream): it overflowed while
+    # the chain ran on a ping when the board sent its owed frames back to back; with the board's spread
+    # catch-up (the default) 20 real-time runs lost nothing, and a halved buffer still loses
+    # (test_loopback_loss_study; DEPLOYMENT.md says what a deployed host should set).
+    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
     board, stats, receive, report = run_loopback(tmp_path, pings, pace, tag="hsb")
     print("sender:", board)
     print("transport:", stats)
