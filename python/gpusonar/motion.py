@@ -93,7 +93,8 @@ def correlate_window(s1: np.ndarray, s2: np.ndarray, centre: int, half: int, max
     """Delay of s2 relative to s1 around sample `centre`.
 
     Returns (coarse delay, fine delay within half a period of zero, coherence). The fine
-    delay is ambiguous by multiples of 1 / fc.
+    delay is ambiguous by multiples of 1 / fc. It is the phase at the integer peak (ours);
+    ASASIN Sec. II-D takes the phase at the interpolated point.
     """
     a = s1[centre - half:centre + half]
     lags = np.arange(-max_lag, max_lag + 1)

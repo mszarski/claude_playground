@@ -1,8 +1,9 @@
 // Coarse and fine time-delay estimation between overlapping phase-centre channels of two
-// consecutive pings (ASASIN Sec. II-D; the method is that of its ref. [11], Saebo 2010,
-// as ASASIN describes it): the coarse delay from the quadratic-interpolated peak of the
-// correlation magnitude, the fine delay from the phase of the complex correlation at the
-// integer peak, ambiguous by whole carrier periods.
+// consecutive pings. The coarse delay is ASASIN Sec. II-D's (its ref. [11], Saebo 2010, as
+// ASASIN describes it): the quadratic-interpolated peak of the correlation magnitude. The
+// fine delay is the phase of the complex correlation at the *integer* peak, ambiguous by
+// whole carrier periods. That is ours, inherited from correlate_window: ASASIN takes the
+// phase at the interpolated point (docs/PAPER_NOTES.md, "Delay measurement").
 //
 // This is the port of python/gpusonar/motion.py `correlate_window`, which stays the
 // reference (tests/python/test_motion_delays.py). Sums are in double. Host and CUDA run

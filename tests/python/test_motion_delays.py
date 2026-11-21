@@ -1,8 +1,9 @@
 """Delay estimation in C++ (core.estimate_delays) against the NumPy reference
 (gpusonar.motion.correlate_window), and the CUDA path against the host one.
 
-The method is ASASIN Sec. II-D's (its ref. [11]): coarse delay from the quadratic-
-interpolated peak of the correlation magnitude, fine delay from the phase at that peak.
+Coarse delay: ASASIN Sec. II-D's (its ref. [11]), the quadratic-interpolated peak of the
+correlation magnitude. Fine delay: the phase at the integer peak, which is ours (inherited
+from correlate_window); ASASIN takes the phase at the interpolated point.
 """
 
 import numpy as np
