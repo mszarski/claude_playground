@@ -34,10 +34,14 @@
 #                                               default 1; GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
 #                                               GPUSONAR_BENCHALL_PYTEST="<-k expression>" runs those tests first;
 #                                               GPUSONAR_UPLOAD_PATH: folder in the upload dataset, default benchall)
+#        GPUSONAR_JOB=clseval tools/gpu_job.sh  run tools/classify_rules_eval.py --backend cuda (the opt-in classification
+#                                               rules over several seeds; set GPUSONAR_ORACLES=1 for the Popoto scenes;
+#                                               GPUSONAR_CLSEVAL_ARGS appended, e.g. "--seeds 10 --commit abc1234"); uploads
+#                                               the JSON, the table and the captures to GPUSONAR_UPLOAD_PATH, default clseval
 #        GPUSONAR_JOB=motion tools/gpu_job.sh  (with GPUSONAR_CERES=1) the motion-estimation tests
 #                                               (tests/python/test_motion*.py), then tools/motion_study.py timing
 #                                               (delay estimation: NumPy, C++ host, CUDA); log only, nothing uploaded
-# Uploads (gallery, elevbench, liveablate, benchall) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
+# Uploads (gallery, elevbench, liveablate, benchall, clseval) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
 case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
@@ -156,6 +160,18 @@ if [ "${GPUSONAR_JOB:-tests}" = "benchall" ]; then
   [ -f /work/benchall/gpu_benchmark_all.md ] && cat /work/benchall/gpu_benchmark_all.md
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/benchall/gpu_benchmark_all.md ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/benchall "${GPUSONAR_UPLOAD_PATH:-benchall}" --type dataset > /dev/null
+  fi
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "clseval" ]; then
+  # The opt-in classification rules (D-152) over several seeds of the gallery's mover scenes
+  # (tools/classify_rules_eval.py); the JSON, table and captures are uploaded when a repo is set.
+  mkdir -p /work/clseval
+  status=0
+  PYTHONPATH=python python3 tools/classify_rules_eval.py --backend cuda --captures /work/clseval/captures \
+      --json /work/clseval/classify_rules_eval.json --table /work/clseval/classify_rules_eval.md ${GPUSONAR_CLSEVAL_ARGS:-} || status=$?
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/clseval "${GPUSONAR_UPLOAD_PATH:-clseval}" --type dataset > /dev/null
   fi
   exit "$status"
 fi
