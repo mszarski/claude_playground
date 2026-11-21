@@ -609,6 +609,10 @@ CPU result after the API audit fixes (tree of commit `ba2f37f`, all ctest entrie
 
 GPU result on the same tree (NVIDIA L4 through Hugging Face Jobs, CUDA build with Bellhop, KRAKEN, Ceres and the Holoscan C++ operators, `GPUSONAR_REQUIRE_ORACLES=1`, 2026-11-21): 1559 passed, 78 skipped, the same 1 failed. No oracle test skipped. The multi-GPU tiling's device comparison ran and passed. The skips are data and tools not in the job (UACR, Watermark, Smart Ocean, PICMUS, `arlpy`, the ultrasound reference, Sensor Bridge), two CPU-only tests, and 52 `--help` checks that need a git checkout (the job runs from a tarball).
 
+CPU result after the five work packages of 2026-11-21 (motion, propagation, performance, Holoscan, PICMUS and classification; tree of commit `19e5ac5`, all ctest entries with Bellhop, Bellhop3D and the PICMUS data set): 150 of 150 ctest entries passed, the whole pytest run among them.
+
+GPU result on the same tree (NVIDIA L4 through Hugging Face Jobs, job 6b0120aaefaf5e14f4b45ee7; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0; `GPUSONAR_REQUIRE_ORACLES=1`, 2026-11-21): 1619 passed, 91 skipped, none failed. No oracle test skipped. The skips are data not in the job (PICMUS, UACR, Watermark, Smart Ocean), `arlpy`, the ultrasound reference, the opt-in loopback study, tests that apply only to the other kind of build, and `--help` checks that need a git checkout.
+
 ## Open questions for the project owner
 
 Decisions already taken are in `DECISIONS.md` and are not repeated here.
