@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-150); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-151); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -68,7 +68,7 @@ How things are verified, in the words used below:
 | 8 Motion estimation | done on CPU, with gaps listed below | `test_motion.py` |
 | 9 3D near-field imaging | done on CPU | `test_volume.py` |
 | 10 Flank array and the long-range live chain | done on CPU in Python and in C++ (`libs/live`); far-field and MVDR beamforming also on the device (L4); gaps listed below | `test_live.py`, `test_live_cpp.py`, `test_detector.py`, `test_doa.py`, `test_flank.py`, `test_detect.py`, `test_calibration_sync.py`, `tests/cpp/test_live.cpp`, `test_detector.cpp` |
-| 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test's final assertions had not passed in a job when last reported, and real-time pace loses one burst per run. Not done: the reference's SDK build, any hardware run, the RoCE receiver. The Holoscan `PrepareOp` still applies the old gain law (see open items) |
+| 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test has passed in a job at half real time; at real time the emulated board's spread catch-up lost nothing in 20 runs (open item 34). Not done: the reference's SDK build, any hardware run, the RoCE receiver. The Holoscan `ConditionOp` applies the chain's gain step when asked (open item 33, closed) |
 | 12 Realistic propagation, reverberation and noise | **in progress**; most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread); 3-D propagation (N×2-D only: over a seamount it is 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`). Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised) |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; FLOP/s from hardware counters (Nsight Compute is refused on the Hugging Face jobs, ERR_NVGPUCTRPERM; derived backprojection figures in RESULTS); the synthesis kernel's FLOP count; the Ceres solve of motion estimation is CPU only (its delay estimation has a CUDA path, D-148). The multiscale detector's statistic runs on the device (D-150). `docs/JETSON.md` is untested |
 | 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds pass every self-test on both engines (42 of 42, D-142 and D-143; open item 38) |
@@ -564,10 +564,18 @@ Grouped; within a group the most consequential first.
 
 ### Chain and applications
 
-33. **The Holoscan `PrepareOp` is still on the old gain law** (it does not derive
-    absorption from the record as the chain's gain step does since D-91).
-34. **The Sensor Bridge loopback test had not passed in a job** when last reported, and
-    real-time pace loses one burst of datagrams per run, cause not established.
+33. Closed: the Holoscan `ConditionOp` (named `PrepareOp` here before) applies the chain's tvg step
+    through the same function (`recon.apply_tvg_step`) when asked (`tvg: true` or a mapping); its
+    older `tvg_db_per_decade` keeps the old law, as D-91 records; gain is off by default.
+34. **Sensor Bridge loopback at real time: the margin is the receive buffer.** The test passed on an
+    L4 at half real time (jobs 6b0115de4fdc5ab3c55c5951, 6b011b26efaf5e14f4b4597c). The lost bursts
+    were datagrams refused by the receiver's full socket buffer (212,992 B, the container's
+    `rmem_max`, about 20 ms of stream) while the chain ran on a ping and the emulated board then
+    sent its owed frames back to back; the board now spreads its catch-up (`catch_up: spread`,
+    default; `burst` the old behaviour): at real time burst lost frames in 3 of 14 runs, spread in
+    0 of 20. A halved buffer still loses frames. The test stays at pace 0.5; moving it to 1.0 is
+    an owner decision. Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
+    an isolated receiver core) in `DEPLOYMENT.md`.
 35. **Wire format**: the sample word length is configuration on both ends because the
     block header has no field for it; an over-long report is split into parts; the
     Holoscan report sink cannot split and refuses an over-long line (questions for the

@@ -1295,7 +1295,7 @@ fields. `absorption: record` asks for the derivation by name and raises on such 
 call); a number is dB/m one way.
 What did not change: `core.apply_tvg` itself (C++ and binding) still defaults to no
 absorption, because the library has no model of the water; the Holoscan `PrepareOp`, whose
-gain is off unless `tvg_db_per_decade` is given, calls it directly and keeps the old law.
+gain is off unless `tvg_db_per_decade` is given, calls it directly and keeps the old law (since D-151 through the shared step, `absorption: none`).
 The 120 dB clamp stays as it is (a hardware question of its own): with absorption in the
 law it is reached inside the window of `fls_120k` (273 m), `fls_170k` (237 m), `fls_300k`
 (188 m), `fls_330k` and `sas_minsas120` (179 m), and the step's log entry says where and by
@@ -2419,3 +2419,16 @@ differently); the chain's maps are powers of finite samples. The Python engine k
 statistic. L4 time per ping, as deployed, 1 / 2 / 3 rows: 16.0 / 29.5 / 40.6 ms before,
 12.7 / 25.9 / 37.5 ms after (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`), still 2.8
 to 3.6 ms over `cell_statistic: mean`: the map returns to the host and is uploaded again.
+
+### D-151 Holoscan: the conditioning operator reuses the chain's gain step; the emulated board spreads its catch-up
+
+The tvg step's body moved unchanged from `pipeline._stage` into `recon.gain.apply_tvg_step` /
+`tvg_step_parameters`; the pipeline and the Holoscan `ConditionOp` both call it. `ConditionOp`'s gain
+stays off unless asked: `tvg: true` (the chain's default step, absorption from the record) or a mapping
+of the step's keys; its older `tvg_db_per_decade` keeps the old law of D-91 (`absorption: none`), bit
+for bit. The Sensor Bridge emulated board (`HsbBoardEmulator`) sends frames it owes after a stall no
+faster than two a period (`catch_up: spread`, default; `burst`, the old behaviour): every lost
+datagram in the loopback had been refused by the receiver's full buffer (kernel drop count equal to the
+packet-number gaps in every lossy run). Ours. `sonar_live_holoscan`'s chain operators start from
+`program_defaults` as `sonar_live` does (D-147); only `test_holoscan_cpp.py` on a GPU shows the
+difference.
