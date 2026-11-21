@@ -2389,3 +2389,16 @@ to a common heave offset equal to the datum's error (STATUS, motion limits).
 `MotionOptions.delay_backend`: `numpy` (default and reference), `host` or `cuda` (an error
 without a device, as D-147); one kernel pair for host and device, sums in double. The lambda
 sweep was run (`tools/motion_study.py sweep`); defaults kept (D-16).
+
+### D-149 PyRAM and Bellhop3D as test oracles; out-of-plane propagation quantified, not modelled
+
+PyRAM 1.3.0 (BSD-3; numba BSD-2, llvmlite BSD-2 and Apache-2.0 with the LLVM exception) and
+Bellhop3D (GPL-3, the Acoustics Toolbox pinned at 8b4682b, run as a separate process) are test
+oracles only; the library never imports either. The ray tier is compared with the parabolic
+equation in 500 m range windows (point-by-point interference does not compare: p90 12 dB). Over
+a 180 m seamount in 200 m of water at 8 kHz, Bellhop3D's 3-D mode minus its N×2-D mode is +3.0
+to +3.6 dB over the flanks and -1.1 to -1.2 dB beside them; our N×2-D tier is 3.8 dB too loud
+over the flanks (converged beams). The test holds that gap as a characterisation, to become an
+agreement bound if 3-D propagation is added. Our tier and Bellhop3D's N×2-D differ by up to
+1.0 dB even over a level bed (cause not found; issue filed). The oracle gate knows `pyram` and
+`GPUSONAR_BELLHOP3D`, matched as whole words; a Bellhop3D build failure only warns.
