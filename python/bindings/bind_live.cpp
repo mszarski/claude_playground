@@ -2,7 +2,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <optional>
 #include <sstream>
+#include <utility>
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
@@ -368,14 +370,19 @@ void bind_live(py::module_& m) {
            [](const live::Tracker& t, double min_speed, double static_speed, double significance, double min_seen,
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
               double max_excess_range, double multipath_bearing, double multipath_velocity, double origin_x, double origin_y,
-              double min_mover_cells, double row_snr_db) {
+              std::optional<double> min_mover_cells, std::optional<double> row_snr_db) {
+             // None: the rule is off. Given: zero or more (as classify.py refuses a negative or NaN value).
+             for (const auto& [name, val] : {std::pair{"min_mover_cells", min_mover_cells}, std::pair{"row_snr_db", row_snr_db}}) {
+               if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
+             }
              std::vector<const live::Track*> confirmed;
              for (const auto& tr : t.tracks()) {
                if (tr.confirmed) confirmed.push_back(&tr);
              }
              const live::ClassifyOptions o{min_speed, static_speed, significance, min_seen, min_points, max_fit_rms, linear,
                                            linear_length, linear_width, multipath, max_excess_range, multipath_bearing,
-                                           multipath_velocity, origin_x, origin_y, min_mover_cells, row_snr_db};
+                                           multipath_velocity, origin_x, origin_y,
+                                           min_mover_cells.value_or(-1.0), row_snr_db.value_or(-1.0)};
              py::list out;
              for (const auto& c : live::classify_tracks(confirmed, o)) {
                py::dict d;
@@ -398,7 +405,7 @@ void bind_live(py::module_& m) {
            py::arg("min_points") = 4, py::arg("max_fit_rms") = -1.0, py::arg("linear") = false, py::arg("linear_length") = 40.0,
            py::arg("linear_width") = 2.0, py::arg("multipath") = false, py::arg("max_excess_range") = 800.0,
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
-           py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = -1.0, py::arg("row_snr_db") = -1.0);
+           py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none());
 
   m.def("element_offsets", &live::element_offsets, "Receive element positions along the array axis, m about the centre.");
   m.def(
@@ -709,8 +716,12 @@ void bind_live(py::module_& m) {
         get("classify_min_speed", o.classify.min_speed);
         get("classify_static_speed", o.classify.static_speed);
         get("classify_max_fit_rms", o.classify.max_fit_rms);
-        get("classify_min_mover_cells", o.classify.min_mover_cells);
-        get("classify_row_snr_db", o.classify.row_snr_db);
+        if (kw.contains("classify_min_mover_cells")) {        // off unless given; given, zero or more cells
+          const double m = kw["classify_min_mover_cells"].cast<double>();
+          if (!(m >= 0.0)) throw py::value_error("classify_min_mover_cells: zero or more cells (leave the key out for off)");
+          o.classify.min_mover_cells = m;
+        }
+        if (kw.contains("classify_row_snr_db")) throw py::value_error("classify_row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
         get("multipath_max_excess_range", o.classify.multipath_max_excess_range);
         get("multipath_bearing", o.classify.multipath_bearing);
         get("multipath_velocity", o.classify.multipath_velocity);

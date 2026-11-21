@@ -105,32 +105,46 @@ def test_detection_rules_match_python():
         want = classify.classify_tracks(a, detections=rules, **kw)
         r = rules or {}
         got = cpp_tracker.classify(min_speed=0.5, max_fit_rms=2.5, linear=True, linear_length=40.0, linear_width=3.0,
-                                   min_mover_cells=r.get("min_mover_cells", -1.0), row_snr_db=r.get("row_snr_db", -1.0))
+                                   min_mover_cells=r.get("min_mover_cells"), row_snr_db=r.get("row_snr_db"))
         assert [(c.id, c.kind) for c in want] == [(c["id"], c["kind"]) for c in got], rules
         assert [c.extent_cells for c in want] == pytest.approx([c["extent_cells"] for c in got])
         kinds_by_rule[str(rules)] = [c.kind for c in want]
     # Each rule changes something in this scene, so the comparison above exercises it.
     off = kinds_by_rule["None"]
     assert all(kinds_by_rule[k] != off for k in kinds_by_rule if k != "None")
+    # Negative or NaN refused in both, as classify.py does (None is off).
+    for bad in (-1.0, float("nan")):
+        with pytest.raises(ValueError, match="zero or more"):
+            cpp_tracker.classify(min_mover_cells=bad)
+        with pytest.raises(ValueError, match="zero or more"):
+            classify.classify_tracks(a, detections={"row_snr_db": bad})
 
 
 def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
     """The live chain in both engines: without `classify.detections` the C++ chain's options carry no rule; with the
     extent rule on, the two engines' reports give the same classes. Each target here is 15 cells on every ping: at 16
-    the crossing target, a mover without the rule, is uncertain in both."""
+    the crossing target, a mover without the rule, is uncertain in both. The row rule is refused by both: the chain
+    never runs the row test it acts in."""
     from gpusonar.live import cpp_chain_options
     assert not {"classify_min_mover_cells", "classify_row_snr_db"} & set(cpp_chain_options(dict(CHAIN)))
-    on = {"min_mover_cells": 16.0, "row_snr_db": 6.0}
+    on = {"min_mover_cells": 16.0}
     cfg = dict(CHAIN, classify=dict(CHAIN["classify"], detections=on))
     with LiveChain(cfg) as chain:
         want = chain.run(copies(pings))
-    cpp = core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=16.0, classify_row_snr_db=6.0))
+    cpp = core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=16.0))
     got = [json.loads(cpp.process(r)) for r in copies(pings)]
     for w, g in zip(want, got):
         assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
     assert sorted(t["kind"] for t in got[-1]["tracks"]) == ["static", "uncertain"]      # off: a mover and a static object
-    opts = cpp_chain_options(cfg)
-    assert opts["classify_min_mover_cells"] == 16.0 and opts["classify_row_snr_db"] == 6.0
+    assert cpp_chain_options(cfg)["classify_min_mover_cells"] == 16.0
+    row = dict(CHAIN, classify=dict(CHAIN["classify"], detections={"row_snr_db": 6.0}))
+    for make in (lambda: LiveChain(row), lambda: cpp_chain_options(row),
+                 lambda: core.LiveChainCpp(dict(CPP_CHAIN, classify_row_snr_db=6.0))):
+        with pytest.raises(ValueError, match="row_snr_db.*never runs the row"):
+            make()
+    for bad in (-1.0, float("nan")):
+        with pytest.raises(ValueError, match="zero or more"):
+            core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=bad))
 
 
 def test_cpp_tracker_refuses_an_unknown_association():

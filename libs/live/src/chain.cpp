@@ -220,6 +220,9 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
 LiveChain::LiveChain(const ChainOptions& options)
     : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth), coverage_(options.coverage) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
+  // classify.py `detections` rules: the row rule acts only in the corridor test, which the chain never runs.
+  if (!(opt_.classify.row_snr_db < 0.0)) throw std::invalid_argument("LiveChain: classify row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
+  if (std::isnan(opt_.classify.min_mover_cells)) throw std::invalid_argument("LiveChain: classify min_mover_cells is NaN");
   if (opt_.coverage.enabled && !coverage_site_missing(opt_.coverage).empty()) throw std::invalid_argument("LiveChain: " + coverage_site_missing(opt_.coverage));
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");

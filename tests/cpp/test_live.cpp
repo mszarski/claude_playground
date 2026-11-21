@@ -197,18 +197,34 @@ TEST(Options, FileTextAndDumpAgree) {
 }
 
 TEST(Options, ClassifyDetectionRulesAreOffUnlessGiven) {
-  // classify.py `detections` (ours): off by default (below 0), set by sonar_live's keys, echoed by options_json.
+  // classify.py `detections` (ours): off by default (below 0), set by sonar_live's key, echoed by options_json.
   ChainOptions a;
   PassiveOptions pa;
   EXPECT_LT(a.classify.min_mover_cells, 0.0);
   EXPECT_LT(a.classify.row_snr_db, 0.0);
-  std::istringstream in("classify_min_mover_cells=6\nclassify_row_snr_db=4.5\n");
+  std::istringstream in("classify_min_mover_cells=6\n");
   read_options(a, pa, in);
   EXPECT_DOUBLE_EQ(a.classify.min_mover_cells, 6.0);
-  EXPECT_DOUBLE_EQ(a.classify.row_snr_db, 4.5);
-  const std::string j = options_json(a);
-  EXPECT_NE(j.find("\"classify_min_mover_cells\": 6"), std::string::npos) << j;
-  EXPECT_NE(j.find("\"classify_row_snr_db\": 4.5"), std::string::npos) << j;
+  EXPECT_NE(options_json(a).find("\"classify_min_mover_cells\": 6"), std::string::npos) << options_json(a);
+  // Given explicitly, a negative or NaN count is refused (as classify.py does), not taken as off.
+  for (const char* bad : {"classify_min_mover_cells=-1\n", "classify_min_mover_cells=nan\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+  // The row rule acts only in the corridor test, which the chain never runs: refused with a reason, in the reader and
+  // in the chain itself.
+  ChainOptions c;
+  std::istringstream r("classify_row_snr_db=6\n");
+  try {
+    read_options(c, pa, r);
+    ADD_FAILURE() << "classify_row_snr_db accepted";
+  } catch (const std::invalid_argument& e) {
+    EXPECT_NE(std::string(e.what()).find("never runs the row"), std::string::npos) << e.what();
+  }
+  ChainOptions d;
+  d.classify.row_snr_db = 6.0;
+  EXPECT_THROW(LiveChain{d}, std::invalid_argument);
 }
 
 TEST(Report, CarriesPingsWithoutNavigation) {
