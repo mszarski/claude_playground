@@ -2457,5 +2457,6 @@ runs with spread lost nothing, 3 of 14 with the old burst did. The owner ruled (
 test runs at pace 1.0 (`GPUSONAR_HSB_PACE` still overrides). The test's assertions are unchanged:
 no frame lost or damaged, reports equal to the direct chain's. The margin is thin: the container's
 `rmem_max` (212,992 B) is about 20 ms of stream, and a halved buffer still loses frames, so a run
-on a loaded machine can fail; a failure is reported, not retried. Deployed hosts should follow
+on a loaded machine can fail; a failure is reported, not retried. First run at pace 1.0: L4, job
+6b012ef14fdc5ab3c55c698a, the Sensor Bridge and Holoscan selection 22 passed, 0 failed. Deployed hosts should follow
 Sensor Bridge's own setup advice (`DEPLOYMENT.md`).
