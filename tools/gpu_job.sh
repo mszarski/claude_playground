@@ -33,6 +33,9 @@
 #                                               default 1; GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
 #                                               GPUSONAR_BENCHALL_PYTEST="<-k expression>" runs those tests first;
 #                                               GPUSONAR_UPLOAD_PATH: folder in the upload dataset, default benchall)
+#        GPUSONAR_JOB=motion tools/gpu_job.sh  (with GPUSONAR_CERES=1) the motion-estimation tests
+#                                               (tests/python/test_motion*.py), then tools/motion_study.py timing
+#                                               (delay estimation: NumPy, C++ host, CUDA); log only, nothing uploaded
 # Uploads (gallery, elevbench, liveablate, benchall) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
 case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
@@ -149,6 +152,12 @@ if [ "${GPUSONAR_JOB:-tests}" = "benchall" ]; then
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/benchall/gpu_benchmark_all.md ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/benchall "${GPUSONAR_UPLOAD_PATH:-benchall}" --type dataset > /dev/null
   fi
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "motion" ]; then
+  status=0
+  PYTHONPATH=python python3 -m pytest -q -rs tests/python/test_motion.py tests/python/test_motion_delays.py || status=$?
+  PYTHONPATH=python python3 tools/motion_study.py timing || status=$?
   exit "$status"
 fi
 echo "=== ctest (C++ suites) ==="
