@@ -115,6 +115,33 @@ def test_bistatic_culling_tests_transmitter_and_receiver_separately():
     assert stats["ping_blocks_kept"] <= 0.05 * stats["ping_blocks_total"]
 
 
+def test_cull_mask_never_drops_a_point_a_ping_sees_and_counts_what_backproject_keeps(collection):
+    """Audit B11: the mask on its own (`BackprojectSession.cull_mask`). For each ping alone, every block holding a
+    point with weight (inside the field of view) is visited; a grid on the port side, behind every starboard
+    beam, is visited by no ping; the number of visited blocks is backproject's `ping_blocks_kept`."""
+    _, records, track = collection
+    pts, shape = seafloor_grid(track, 60, 80)
+    block, fov = 8, 1.5
+    session = gs.core.BackprojectSession(records)
+    mask = session.cull_mask(pts, shape, block, fov)
+    assert mask.dtype == np.uint8 and mask.shape == (len(records), -(-60 // block), -(-80 // block))
+    for i in range(0, len(records), 6):
+        _, w = gs.core.backproject([records[i]], pts, interp="linear", fov_factor=fov, return_weight_sum=True)
+        seen = (w.reshape(shape) > 0)
+        padded = np.zeros((mask.shape[1] * block, mask.shape[2] * block), dtype=bool)
+        padded[:shape[0], :shape[1]] = seen
+        needed = padded.reshape(mask.shape[1], block, mask.shape[2], block).any(axis=(1, 3))
+        assert needed.any() and np.all(mask[i][needed] == 1), i
+    stats = {}
+    gs.core.backproject(records, pts, interp="linear", fov_factor=fov, cull_block=block, grid_shape=shape, stats=stats)
+    assert int(mask.sum()) == stats["ping_blocks_kept"] < mask.size == stats["ping_blocks_total"]
+    port = pts * np.array([1.0, -1.0, 1.0])
+    assert not session.cull_mask(port, shape, block, fov).any()
+    with pytest.raises(ValueError, match="fov_factor"):
+        session.cull_mask(pts, shape, block, 0.0)
+    with pytest.raises(ValueError, match="cull_block"):
+        session.cull_mask(pts, shape, 0, fov)
+
 def test_report_cpu_speedup(capsys):
     """Measure and print the culling speedup on this machine's CPU backend.
 

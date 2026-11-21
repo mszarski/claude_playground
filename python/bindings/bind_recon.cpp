@@ -340,6 +340,31 @@ void bind_recon(py::module_& m) {
       .def_property_readonly("resident_bytes", &recon::BpSession::resident_bytes,
                              "Bytes this session holds on CUDA devices.")
       .def(
+          "cull_mask",
+          [](const recon::BpSession& session, const ArrD& points, const std::pair<std::int64_t, std::int64_t>& grid_shape,
+             int cull_block, float fov_factor) {
+            if (cull_block < 1) throw std::invalid_argument("cull_mask: cull_block must be at least 1");
+            const auto pts = point_list(points);
+            const auto opt = make_options("linear", false, fov_factor, false, 0, cull_block, py::cast(grid_shape));
+            std::vector<unsigned char> mask;
+            {
+              py::gil_scoped_release release;
+              mask = recon::cull_mask(session.inputs(), pts, opt);
+            }
+            const auto blocks = [cull_block](std::int64_t n) { return (n + cull_block - 1) / cull_block; };
+            const auto n_groups = static_cast<py::ssize_t>(session.inputs().groups.size());
+            py::array_t<std::uint8_t> out({n_groups, static_cast<py::ssize_t>(blocks(grid_shape.first)),
+                                           static_cast<py::ssize_t>(blocks(grid_shape.second))});
+            if (static_cast<py::ssize_t>(mask.size()) != out.size()) {
+              throw std::logic_error("cull_mask: unexpected mask size");
+            }
+            std::copy(mask.begin(), mask.end(), out.mutable_data());
+            return out;
+          },
+          py::arg("points"), py::arg("grid_shape"), py::arg("cull_block"), py::arg("fov_factor"),
+          "The ray-culling mask backproject uses (host): uint8 [pings, block rows, block cols], 1 = the\n"
+          "ping visits that block of cull_block x cull_block points of the row-major grid `grid_shape`.")
+      .def(
           "backproject",
           [](recon::BpSession& session, const ArrD& points, const std::string& interp, bool stop_and_hop,
              float fov_factor, bool directivity_weight, int spreading, Backend backend,
