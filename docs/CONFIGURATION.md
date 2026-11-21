@@ -470,7 +470,7 @@ a record that still does, and the imaging, gain and synthesis entry points raise
 | `range_cell_m` | power is averaged into cells this long before detection |
 | `cfar: {guard_m, train_m, false_alarms_per_ping, pfa, ...}`, `min_snr_db` | detector windows in metres (turned into cells by `core.cfar_window`: rounded up); the false-alarm budget per ping (`multiscale`) or per cell (`pfa`: `mean`, `peak`); detections below this SNR are dropped. The other `cfar` keys: below |
 | `tracker: {range_sigma, bearing_sigma_deg, confirm_hits, max_misses, initial_speed_sigma, process_noise, association}` | the Kalman tracker. `association`: `likelihood` (default; the most probable track–detection pairs first, D-141) or `in_order` (each track in turn takes its nearest detection, the rule before D-141); `tracker_association` for `sonar_live` |
-| `classify: {min_speed, static_speed, max_fit_rms, multipath: {max_excess_range, bearing_deg, velocity}}` | `gpusonar/classify.py`; `multipath: null` switches echo grouping off |
+| `classify: {min_speed, static_speed, max_fit_rms, multipath: {max_excess_range, bearing_deg, velocity}, detections}` | `gpusonar/classify.py`; `multipath: null` switches echo grouping off. `detections` (default `null`: off): opt-in rules from the detections themselves, below |
 | `sound_speed` | m/s at the vehicle, when the navigation datagrams do not carry `"sound_speed"`: replaces the record's value for every stage |
 | `dead_channels` | channel rows (after synchronisation and the removal of dedicated reference inputs) left out of every stage |
 | `elevation` | absent (default): the chain as it was. Present (even empty) with an array of stacked rows: elevation and depth (`gpusonar/elevation.py`, `DEPLOYMENT.md`). With a one-row array it changes nothing |
@@ -632,6 +632,8 @@ brackets) is refused. Switches are `1` or `0`. "Derived" means: left out, the ch
 | `classify.multipath.max_excess_range` | `multipath_max_excess_range` | m: the longest extra path a bounce can have | 800 |
 | `classify.multipath.bearing_deg` | `multipath_bearing_deg` | degrees: bearing gate between a track and its echo | derived (3°) |
 | `classify.multipath.velocity` | `multipath_velocity` | m/s: velocity gate between a track and its echo | 2.5 |
+| `classify.detections.min_mover_cells` | `classify_min_mover_cells` | opt-in. A mover whose detections are small (median number of flagged map cells over the detections it took below this) is `uncertain`: a wave glint or a clutter peak joined into a line. Applied after the row test, before echo grouping; a track with no recorded cells is left alone. Ours, no published source; the threshold depends on the map's cell size, so there is no default. `null` (C++: below 0) is off | off |
+| `classify.detections.row_snr_db` | `classify_row_snr_db` | opt-in. In the row test (`classify_tracks(linear=...)`, which the gallery runs and the live chain does not), another track is part of a mover's row only if its mean SNR is no more than this many dB below the mover's: a boat running along seabed clutter or a pipeline is not taken for a detection sliding along it. Ours, no published source. `null` (C++: below 0) is off | off |
 | `doa` | `doa` | `map` or `sbl` | `map` |
 | `sbl.grid_step_deg` | `sbl_grid_step_deg` | degrees | 0.25 |
 | `sbl.max_sources` | `sbl_max_sources` | peaks used for the noise estimate and reported | 6 |

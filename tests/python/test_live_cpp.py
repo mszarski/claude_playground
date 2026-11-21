@@ -80,6 +80,59 @@ def test_tracker_and_classifier_match_python(association):
     assert [(c.kind, c.parent) for c in want] == [(c["kind"], c["parent"]) for c in got]
 
 
+def test_detection_rules_match_python():
+    """The opt-in rules from the detections themselves (classify.py `detections`; detections.hpp ClassifyOptions
+    min_mover_cells, row_snr_db): the same tracks, cells and classes in both engines, with each rule off and on."""
+    rng = np.random.default_rng(11)
+    opts = dict(process_noise=0.3, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0)
+    py_tracker, cpp_tracker = detect.Tracker(**opts), core.LiveTracker(**opts)
+    for i in range(9):
+        t = 0.5 * i
+        # (x forward, y across, snr, cells): a row of weak small echoes sliding along a pipeline, a strong large boat
+        # running along it, a small fast glint, a large boat clear of everything, an anchored boat.
+        truth = [(100.0 + 12.0 * k + 2.0 * t, -30.0, 15.0, 2 + (i + k) % 2) for k in range(5)]
+        truth += [(110.0 + 4.0 * t, -29.0, 26.0, 40 + i % 5), (60.0 + 1.0 * t, 80.0 - 6.0 * t, 14.0, 1 + i % 3),
+                  (200.0 - 4.0 * t, 60.0, 22.0, 12 + i % 4), (220.0, -100.0, 24.0, 20)]
+        dets = [(float(np.hypot(x, y)), float(np.arctan2(y, x)), float(s + rng.random()), int(c))
+                for x, y, s, c in [(x + 0.2 * rng.standard_normal(), y + 0.2 * rng.standard_normal(), s, c) for x, y, s, c in truth]]
+        a = py_tracker.update(t, [detect.Detection(*d) for d in dets])
+        b = cpp_tracker.update(t, dets)
+        assert [tr.id for tr in a] == [tr["id"] for tr in b]
+        assert all(tr.cells == cr["cells"] for tr, cr in zip(a, b))
+    kw = dict(min_speed=0.5, max_fit_rms=2.5, linear={"length": 40.0, "width": 3.0})
+    kinds_by_rule = {}
+    for rules in (None, {"min_mover_cells": 6.0}, {"row_snr_db": 6.0}, {"min_mover_cells": 6.0, "row_snr_db": 6.0}):
+        want = classify.classify_tracks(a, detections=rules, **kw)
+        r = rules or {}
+        got = cpp_tracker.classify(min_speed=0.5, max_fit_rms=2.5, linear=True, linear_length=40.0, linear_width=3.0,
+                                   min_mover_cells=r.get("min_mover_cells", -1.0), row_snr_db=r.get("row_snr_db", -1.0))
+        assert [(c.id, c.kind) for c in want] == [(c["id"], c["kind"]) for c in got], rules
+        assert [c.extent_cells for c in want] == pytest.approx([c["extent_cells"] for c in got])
+        kinds_by_rule[str(rules)] = [c.kind for c in want]
+    # Each rule changes something in this scene, so the comparison above exercises it.
+    off = kinds_by_rule["None"]
+    assert all(kinds_by_rule[k] != off for k in kinds_by_rule if k != "None")
+
+
+def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
+    """The live chain in both engines: without `classify.detections` the C++ chain's options carry no rule; with the
+    extent rule on, the two engines' reports give the same classes. Each target here is 15 cells on every ping: at 16
+    the crossing target, a mover without the rule, is uncertain in both."""
+    from gpusonar.live import cpp_chain_options
+    assert not {"classify_min_mover_cells", "classify_row_snr_db"} & set(cpp_chain_options(dict(CHAIN)))
+    on = {"min_mover_cells": 16.0, "row_snr_db": 6.0}
+    cfg = dict(CHAIN, classify=dict(CHAIN["classify"], detections=on))
+    with LiveChain(cfg) as chain:
+        want = chain.run(copies(pings))
+    cpp = core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=16.0, classify_row_snr_db=6.0))
+    got = [json.loads(cpp.process(r)) for r in copies(pings)]
+    for w, g in zip(want, got):
+        assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
+    assert sorted(t["kind"] for t in got[-1]["tracks"]) == ["static", "uncertain"]      # off: a mover and a static object
+    opts = cpp_chain_options(cfg)
+    assert opts["classify_min_mover_cells"] == 16.0 and opts["classify_row_snr_db"] == 6.0
+
+
 def test_cpp_tracker_refuses_an_unknown_association():
     with pytest.raises(ValueError, match="association"):
         core.LiveTracker(association="nearest")

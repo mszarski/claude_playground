@@ -196,6 +196,21 @@ TEST(Options, FileTextAndDumpAgree) {
   EXPECT_NE(options_json(ChainOptions{}), j);
 }
 
+TEST(Options, ClassifyDetectionRulesAreOffUnlessGiven) {
+  // classify.py `detections` (ours): off by default (below 0), set by sonar_live's keys, echoed by options_json.
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_LT(a.classify.min_mover_cells, 0.0);
+  EXPECT_LT(a.classify.row_snr_db, 0.0);
+  std::istringstream in("classify_min_mover_cells=6\nclassify_row_snr_db=4.5\n");
+  read_options(a, pa, in);
+  EXPECT_DOUBLE_EQ(a.classify.min_mover_cells, 6.0);
+  EXPECT_DOUBLE_EQ(a.classify.row_snr_db, 4.5);
+  const std::string j = options_json(a);
+  EXPECT_NE(j.find("\"classify_min_mover_cells\": 6"), std::string::npos) << j;
+  EXPECT_NE(j.find("\"classify_row_snr_db\": 4.5"), std::string::npos) << j;
+}
+
 TEST(Report, CarriesPingsWithoutNavigation) {
   Report r;
   EXPECT_NE(r.json().find("\"pings_without_nav\": 0"), std::string::npos);

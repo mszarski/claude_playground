@@ -80,3 +80,56 @@ def test_echoes_by_a_longer_path_are_attached_to_the_stronger_track():
     assert out[2].kind == out[3].kind == "multipath" and out[2].parent == out[3].parent == 1
     assert out[4].kind == "mover" and out[5].kind == "static"
     assert classify.summary(list(out.values())) == {"mover": 2, "static": 1, "line": 0, "multipath": 2, "uncertain": 0}
+
+
+# --- opt-in rules from the detections themselves (classify.py `detections`) ----------------------------------------
+
+def with_cells(tr, cells):
+    tr.cells = [int(c) for c in np.resize(np.asarray(cells), tr.hits)]
+    return tr
+
+
+def scene():
+    """A row of weak small echoes sliding along a pipeline, a strong large boat running along it (a row of seabed
+    clutter ahead and astern of it), a small fast glint, a large boat under way clear of everything, an anchored boat."""
+    row = [with_cells(track(i, (0.0, 100.0 + 12.0 * i), (0.0, 2.0), snr=15.0), [2, 3]) for i in range(5)]
+    crossing = with_cells(track(10, (1.0, 110.0), (0.0, 4.0), snr=26.0), [40, 44])
+    glint = with_cells(track(11, (80.0, 60.0), (-6.0, 1.0), snr=14.0), [2, 1, 3])
+    boat = with_cells(track(12, (-90.0, 200.0), (0.0, -4.0), snr=22.0), [12, 15])
+    anchored = with_cells(track(13, (40.0, 220.0), (0.0, 0.0), snr=24.0), [20])
+    return row + [crossing, glint, boat, anchored]
+
+
+def test_detection_rules_off_change_nothing():
+    tracks = scene()
+    lin = {"length": 40.0, "width": 3.0}
+    base = classify.classify_tracks(tracks, linear=lin)
+    for off in (None, {}, {"min_mover_cells": None, "row_snr_db": None}):
+        got = classify.classify_tracks(tracks, linear=lin, detections=off)
+        assert [(c.id, c.kind, c.parent, c.speed) for c in got] == [(c.id, c.kind, c.parent, c.speed) for c in base]
+
+
+def test_a_mover_with_small_detections_is_uncertain():
+    k = kinds(scene(), linear={"length": 40.0, "width": 3.0}, detections={"min_mover_cells": 6})
+    assert k[11] == "uncertain"                                      # the glint: 2 cells median
+    assert k[12] == "mover" and k[13] == "static"                    # the large boat stays a mover; static untouched
+    assert k[1] == k[2] == k[3] == "line"                            # the pipeline's row stays a line (rule after the row test)
+    assert kinds(scene(), linear={"length": 40.0, "width": 3.0})[11] == "mover"     # off: the glint is a mover
+    no_cells = track(20, (80.0, 60.0), (-6.0, 1.0))                  # nothing recorded: the rule cannot judge it
+    assert kinds([no_cells], detections={"min_mover_cells": 6}) == {20: "mover"}
+    assert classify.classify_tracks(scene())[5].extent_cells == pytest.approx(42.0)
+
+
+def test_a_strong_boat_running_along_a_row_of_weak_echoes_is_not_part_of_the_row():
+    lin = {"length": 40.0, "width": 3.0}
+    assert kinds(scene(), linear=lin)[10] == "line"                  # off: the corridor test takes it for the row
+    k = kinds(scene(), linear=lin, detections={"row_snr_db": 6.0})
+    assert k[10] == "mover"                                          # 11 dB above the row
+    assert k[1] == k[2] == k[3] == "line"                            # the row's own echoes are within 6 dB of each other
+
+
+def test_detection_rules_refuse_unknown_keys_and_negative_values():
+    with pytest.raises(ValueError, match="unknown"):
+        classify.classify_tracks(scene(), detections={"min_cells": 6})
+    with pytest.raises(ValueError, match="zero or more"):
+        classify.classify_tracks(scene(), detections={"row_snr_db": -1.0})

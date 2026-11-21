@@ -296,6 +296,8 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "classify_min_speed") c.classify.min_speed = c.classify.static_speed = v();
   else if (key == "classify_static_speed") c.classify.static_speed = v();   // after classify_min_speed, which sets both
   else if (key == "classify_max_fit_rms") c.classify.max_fit_rms = v();
+  else if (key == "classify_min_mover_cells") c.classify.min_mover_cells = v();   // < 0: off (the default)
+  else if (key == "classify_row_snr_db") c.classify.row_snr_db = v();             // < 0: off (the default)
   else if (key == "tracker_initial_speed_sigma") c.tracker.initial_speed_sigma = v();
   else if (key == "tracker_process_noise") c.tracker.process_noise = v();
   else if (key == "multipath_max_excess_range") c.classify.multipath_max_excess_range = v();
@@ -423,6 +425,7 @@ std::string options_json(const ChainOptions& c) {
       .text("tracker_association", t.association == Association::InOrder ? "in_order" : "likelihood");
   const ClassifyOptions& k = c.classify;
   j.num("classify_min_speed", k.min_speed).num("classify_static_speed", k.static_speed).num("classify_max_fit_rms", k.max_fit_rms)
+      .num("classify_min_mover_cells", k.min_mover_cells).num("classify_row_snr_db", k.row_snr_db)
       .flag("multipath", k.multipath).num("multipath_max_excess_range", k.multipath_max_excess_range)
       .num("multipath_bearing_deg", k.multipath_bearing / kDeg).num("multipath_velocity", k.multipath_velocity);
   j.flag("sync", c.sync);

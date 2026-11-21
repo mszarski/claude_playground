@@ -89,6 +89,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p = (M4::Identity() - k * h) * p;
     ++t.hits;
     t.snr.push_back(d.snr_db);
+    t.cells.push_back(d.cells);
     take_depth(t, d);
     t.misses = 0;
     t.confirmed = t.confirmed || t.hits >= opt_.confirm_hits;
@@ -179,6 +180,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
     tr.history.push_back({time, p0[0], p0[1]});
     tr.snr.push_back(d.snr_db);
+    tr.cells.push_back(d.cells);
     take_depth(tr, d);
     tracks_.push_back(std::move(tr));
   }
