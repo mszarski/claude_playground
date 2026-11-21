@@ -62,14 +62,18 @@ class OceanEnvironment:
     linear in range (Bellhop's quadrilateral interpolation); beyond the last range the last profile holds, as a
     bathymetry's last depth does. Like the bathymetry this is one section used on every bearing from every
     source: water that changes with distance from the sonar, not a front lying across a map.
+
+    The bottom has NO default (D-104, as for `image_source`): `sediment` (a name in configs/sediments.yaml) or all
+    three of `bottom_speed`, `bottom_density`, `bottom_attenuation`, else ValueError. Before, a missing bottom was
+    silently 1600 m/s, 1.8 g/cm^3, 0.5 dB per wavelength.
     """
 
     depth: float                                   # water depth, m (the deepest point with bathymetry)
     ssp_depth: np.ndarray = None                   # m, from 0 to `depth`
     ssp_speed: np.ndarray = None                   # m/s
-    bottom_speed: float = 1600.0                   # m/s, fluid half-space
-    bottom_density: float = 1.8                    # g/cm^3
-    bottom_attenuation: float = 0.5                # dB per wavelength
+    bottom_speed: float = None                     # m/s, fluid half-space (no default: D-104)
+    bottom_density: float = None                   # g/cm^3
+    bottom_attenuation: float = None               # dB per wavelength
     surface: str = "vacuum"                        # pressure release
     sound_speed: float = NOMINAL_SOUND_SPEED                    # used when no profile is given
     bathymetry: list = None                        # [[range_m, depth_m], ...] from the source, or None
@@ -82,12 +86,19 @@ class OceanEnvironment:
     def __post_init__(self):
         if self.ssp_range is not None or self.ssp_speed_by_range is not None:
             self._check_sections()
+        typed = [f.name for f in dataclasses.fields(self) if f.name.startswith("bottom_") and getattr(self, f.name) is not None]
         if self.sediment is None:
+            # A bottom needs a description; none is assumed (D-104, as for image_source). Before: 1600 m/s,
+            # 1.8 g/cm^3, 0.5 dB per wavelength, silently.
+            missing = sorted({"bottom_speed", "bottom_density", "bottom_attenuation"} - set(typed))
+            if missing:
+                raise ValueError(f"OceanEnvironment: a bottom with no description (missing {missing}). Give `sediment` (a name in "
+                                 "configs/sediments.yaml; a scenario's environment `bottom` supplies it) or all three of bottom_speed, "
+                                 "bottom_density, bottom_attenuation; no seabed is assumed")
             return
         # The table holds ratios: speed = ratio x the water sound speed at the bottom; Bellhop's
         # water density is 1 g/cm^3, so the density ratio is the number it takes.
-        defaults = {f.name: f.default for f in dataclasses.fields(self) if f.name.startswith("bottom_")}
-        if any(getattr(self, k) != v for k, v in defaults.items()):
+        if typed:
             raise ValueError("OceanEnvironment: give `sediment` or the bottom_* numbers, not both")
         from . import bottom
         half = bottom.fluid_halfspace(self.sediment, self.speed_at(self.depth), self.sediment_file)
@@ -231,6 +242,7 @@ class Arrivals:
     arrival_angle: list = field(default_factory=list)
     n_surface: list = field(default_factory=list)
     n_bottom: list = field(default_factory=list)
+    source_depth: float = None                      # m, of the run's (first) source; None when not known
 
     def pressure(self, i_depth: int, i_range: int, frequency: float | None = None) -> complex:
         """Coherent sum of the arrivals: complex pressure for a unit source (1 m reference)."""
@@ -260,13 +272,12 @@ def read_arrivals(path: str) -> Arrivals:
         raise BellhopError("only 2-D arrivals files are supported")
     freq = float(next(it))
     n_sz = int(next(it))
-    for _ in range(n_sz):
-        next(it)
+    source_depths = [float(next(it)) for _ in range(n_sz)]
     n_rz = int(next(it))
     depths = np.array([float(next(it)) for _ in range(n_rz)])
     n_rr = int(next(it))
     ranges = np.array([float(next(it)) for _ in range(n_rr)])
-    arr = Arrivals(freq, depths, ranges)
+    arr = Arrivals(freq, depths, ranges, source_depth=source_depths[0] if source_depths else None)
     next(it)                                   # largest arrival count
     for _ in range(n_rz):
         rows = {k: [] for k in ("amp", "delay", "launch", "arrive", "ns", "nb")}

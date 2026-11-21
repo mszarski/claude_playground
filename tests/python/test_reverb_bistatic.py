@@ -593,3 +593,20 @@ def test_eigenray_pairs_keep_their_own_doppler_and_arrive_no_earlier():
     mixed = (times > onset + 0.05) & (times < 2.0 * (2.0 * depth - z) / C - 0.05)
     assert np.abs(model - num / den)[mixed].max() < 3.0
     assert np.abs(alone - num / den)[mixed].max() > 10.0             # the bottom pairs do pull the mean down
+
+
+def test_scatterer_doppler_variance_closed_form_and_histogram():
+    """Audit B10: the variance of -f / c v . k for Gaussian scatterer velocities, against its closed form for
+    backscatter (|k| = 2, k_z = 2 sin g), zero for forward scatter, and a histogram of drawn shifts."""
+    from gpusonar.sim.reverb_bistatic import scatterer_doppler_variance
+    f, c, s, sv, g = 20e3, 1500.0, 0.05, 0.2, np.radians(25.0)
+    a = np.array([np.cos(g), 0.0, np.sin(g)])                     # the same unit vector both ways: backscatter
+    want = (f / c) ** 2 * (4.0 * s**2 + 4.0 * np.sin(g) ** 2 * sv**2)
+    assert scatterer_doppler_variance(f, c, a, a, s, sv) == pytest.approx(want, rel=1e-14)
+    assert scatterer_doppler_variance(f, c, a, -a, s, sv) == 0.0      # straight through: no shift
+    rng = np.random.default_rng(3)
+    v = rng.normal(0.0, s, (200000, 3)) + np.outer(rng.normal(0.0, sv, 200000), [0.0, 0.0, 1.0])
+    q, p = np.array([0.6, 0.0, 0.8]), np.array([0.0, 0.6, 0.8])      # a bistatic pair
+    shift = -f / c * v @ (q + p)
+    assert np.var(shift) == pytest.approx(scatterer_doppler_variance(f, c, q, p, s, sv), rel=0.01)   # 200000 draws: 0.3 % rms
+    assert scatterer_doppler_variance(f, c, np.stack([a, q]), np.stack([a, p]), s, sv).shape == (2,)

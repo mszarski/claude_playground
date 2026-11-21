@@ -123,6 +123,18 @@ def test_reference_bursts_are_present_only_on_the_reference_inputs():
     assert all(b.clock_offset == 0.0 for b in rec.metadata.boards)   # the processor is not told
 
 
+
+def test_an_unknown_reference_mode_is_refused():
+    """Audit A15: a misspelt `receive.reference.mode` used to add no reference, silently."""
+    for mode in ("sync-chirp", None):
+        with pytest.raises(ValueError, match="receive.reference.mode"):
+            SonarModel.load("popoto_4x8", {"receive": {"reference": {"mode": mode}}})
+    sonar = SonarModel.load("popoto_4x8")
+    sonar.config["receive"]["reference"]["mode"] = "chirp"                     # past the loader: refused where it is used
+    with pytest.raises(ValueError, match="receive.reference.mode"):
+        simulate_ping(sonar, make_pose(), Scene(), environment={"sound_speed": C}, absorption_model="none", adc=False,
+                      rng=np.random.default_rng(0))
+
 def test_sync_recovers_injected_clock_offsets_and_drifts():
     sonar, rec, _, truth = four_board_ping()
     ref = sonar.config["receive"]["reference"]

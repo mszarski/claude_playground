@@ -104,6 +104,35 @@ TEST(Paths, RayleighCoefficientLimits) {
   EXPECT_LT(std::abs(sim::rayleigh_reflection(1.5 * critical, kC, sand)), 0.9);
 }
 
+TEST(Paths, RayleighCoefficientLossyBottom) {
+  // Audit B3: the lossy branch. A loss of alpha dB per wavelength is a plane wave whose
+  // amplitude falls by exp(-2 pi delta) over one wavelength, so delta = -ln(10^(-alpha/20)) / (2 pi)
+  // and the sediment's complex speed is c_b / (1 + i delta) (k = omega (1 + i delta) / c_b).
+  // At normal incidence the coefficient is the impedance ratio (Z2 - Z1) / (Z2 + Z1).
+  const double alpha = 0.8, rho = 1.9, cb = 1650.0;
+  const sim::FluidBottom lossy{cb, rho, alpha, 1.0};
+  const double delta = -std::log(std::pow(10.0, -alpha / 20.0)) / (2.0 * kPi);
+  const std::complex<double> z2 = rho * cb / std::complex<double>(1.0, delta);
+  const std::complex<double> expected = (z2 - kC) / (z2 + kC);
+  const auto normal = sim::rayleigh_reflection(0.5 * kPi, kC, lossy);
+  EXPECT_NEAR(normal.real(), expected.real(), 1e-12);
+  EXPECT_NEAR(normal.imag(), expected.imag(), 1e-12);
+  EXPECT_LT(normal.imag(), 0.0);  // a lossy sediment's impedance has a phase: not a real coefficient
+  // Below the critical angle the lossless bottom reflects everything; a lossy one does not,
+  // and at grazing incidence every fluid bottom reflects -1.
+  const sim::FluidBottom lossless{cb, rho, 0.0, 1.0};
+  const double critical = std::acos(kC / cb);
+  for (const double g : {0.2 * critical, 0.5 * critical, 0.9 * critical}) {
+    EXPECT_NEAR(std::abs(sim::rayleigh_reflection(g, kC, lossless)), 1.0, 1e-12);
+    const double r = std::abs(sim::rayleigh_reflection(g, kC, lossy));
+    EXPECT_LT(r, 1.0 - 1e-4) << g;
+    EXPECT_GT(r, 0.5) << g;
+  }
+  const auto flat = sim::rayleigh_reflection(1e-9, kC, lossy);
+  EXPECT_NEAR(flat.real(), -1.0, 1e-6);
+  EXPECT_NEAR(flat.imag(), 0.0, 1e-6);
+}
+
 TEST(Paths, SnellCrossingObeysSnellsLaw) {
   const double c1 = 1500.0, c2 = 1700.0;
   const Vec3d source{0.0, 0.0, -10.0};
@@ -173,6 +202,7 @@ TEST(Reverb, SigmaInterpolatesThePowerGrid) {
   p.decimation = 2;
   p.n_low = 8;
   p.time0 = 0.0;
+  p.sound_speed = kC;
   const std::vector<double> coarse{0.004, 0.008};
   const std::vector<double> density{2.0, 6.0};
   const sim::ReverbPower power{coarse.data(), 2, density.data(), 1};
@@ -200,6 +230,7 @@ TEST(Reverb, SeriesHasThePowerOfItsSectors) {
   p.center_frequency = 20e3;
   p.n_azimuth = 12;
   p.n_low = 4096;
+  p.sound_speed = kC;
   // sigma = sqrt(density / fs * dphi / 2) = 0.5 throughout.
   const std::vector<double> coarse{-1.0, 1.0};
   const double level = 0.25 * 8000.0 * 2.0 / (2.0 * kPi / 12.0);
@@ -239,6 +270,7 @@ TEST(Reverb, RejectsNormalsThatDoNotMatchTheActiveSectors) {
   p.n_samples = 16;
   p.n_azimuth = 3;
   p.n_low = 16;
+  p.sound_speed = kC;
   const std::vector<double> coarse{-1.0, 1.0}, density{1.0, 1.0}, normals(3 * 2 * 16, 0.0), offsets(3, 0.0);
   const sim::ReverbPower power{coarse.data(), 2, density.data(), 1};
   const std::vector<std::complex<double>> pulse{{1.0, 0.0}};
@@ -248,6 +280,13 @@ TEST(Reverb, RejectsNormalsThatDoNotMatchTheActiveSectors) {
                std::invalid_argument);
   EXPECT_NO_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 3, pulse.data(), 1, offsets.data(), 1,
                                      out.data()));
+  // No sound speed is assumed (audit A9): left unset it is refused.
+  EXPECT_TRUE(std::isnan(sim::ReverbParams{}.sound_speed));
+  sim::ReverbParams unset = p;
+  unset.sound_speed = sim::ReverbParams{}.sound_speed;
+  EXPECT_THROW(sim::reverb_series(Backend::Host, unset, power, normals.data(), 3, pulse.data(), 1, offsets.data(), 1,
+                                  out.data()),
+               std::invalid_argument);
 }
 
 TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {

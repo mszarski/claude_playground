@@ -39,6 +39,12 @@ SOURCE_LEVEL_KEY = "source_level_db_rms"
 SOURCE_LEVEL_ALIAS = "source_level_db"          # deprecated: read as the RMS level, with a warning
 PEAK_OVER_RMS = float(np.sqrt(2.0))
 PEAK_OVER_RMS_DB = float(20.0 * np.log10(PEAK_OVER_RMS))      # 3.01 dB
+# Receive keys that older files carried and nothing reads: refused, with where the model is.
+NOT_SIMULATED_RECEIVE_KEYS = {
+    "highpass_corner_hz": "the AC coupling is modelled only as receive.overload.highpass_corner_hz "
+                          "(a build's corner is kept as hardware.boards.highpass_hz)",
+    "bandpass_hz": "no receive band-pass filter is modelled; remove the key",
+}
 
 
 def peak_pressure_at_1m(source_level_db_rms: float) -> float:
@@ -230,6 +236,13 @@ class SonarModel:
         n = positions.shape[0]
 
         rx = cfg["receive"]
+        for key, where in NOT_SIMULATED_RECEIVE_KEYS.items():
+            if key in rx:
+                raise ValueError(f"receive.{key} is not simulated (it would look modelled and change nothing): {where}")
+        if rx.get("reference"):
+            from .sim.receiver import REFERENCE_MODES
+            if rx["reference"].get("mode") not in REFERENCE_MODES:
+                raise ValueError(f"receive.reference.mode {rx['reference'].get('mode')!r}: the simulated modes are {sorted(REFERENCE_MODES)}")
         mux = rx.get("mux")
         if mux:
             groups = []

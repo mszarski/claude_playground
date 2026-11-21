@@ -74,9 +74,12 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   falls back to the host. `core.cuda_compiled()` says whether the build has the backend and
   `core.cuda_available()` whether a device is also usable (`libs/core/include/sonar/core/platform.hpp`).
 - **Simulation on a GPU** means synthesis on a GPU: `run_scenario(name, backend=core.Backend.Cuda)`,
-  or `tools/gallery.py --backend cuda`. Path geometry, reverberation and noise are
-  generated on the CPU; for scenes with many scatterers or long pulses synthesis is nearly
-  all of the time (91 of about 100 s per ping in `flank_patrol` on four CPU cores).
+  or `tools/gallery.py --backend cuda`. Reverberation's time series is generated there too
+  (`libs/sim` `reverb_batched.hpp`: the Doppler shifts, every transform, the steering sum and
+  the interpolation to the record's rate run on the device in batches); its power against
+  time and direction (NumPy over host eigenrays), its random draws (NumPy, D-61), path geometry and noise are computed on
+  the CPU. For scenes with many scatterers or long pulses synthesis is nearly all of the time
+  (91 of about 100 s per ping in `flank_patrol` on four CPU cores).
   Measured on an L4: the 445,000-scatterer SAS scene in 96 s against 818 s on four CPU
   cores, with the same numbers out; scenes whose background is statistical reverberation
   gain little (`RESULTS.md`).
@@ -89,8 +92,10 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   chain takes 18 ms a ping with bearings from the map and 0.48 s with SBL (`RESULTS.md`).
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
   objects per ping. MVDR, whitening, median TVG, DRC, board synchronisation and motion
-  estimation are CPU code; none is the bottleneck of a chain that uses them. Reverberation generation is NumPy FFTs and is the largest CPU-only cost in the
-  simulator.
+  estimation are CPU code; none is the bottleneck of a chain that uses them. In the simulator,
+  reverberation's power against time and direction and its random draws stay on the CPU; on an L4 they leave
+  the whole generator 2.2 to 4.1 times faster than the host, against 5.6 to 8.8 times for its
+  device kernel alone (`RESULTS.md`, "Reverberation, before and after the batched kernels").
 - The CPU path is complete: everything runs without a GPU and gives the same results.
   `RESULTS.md` has the GPU timings and the comparison.
 

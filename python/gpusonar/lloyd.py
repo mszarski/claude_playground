@@ -273,12 +273,17 @@ def bellhop_transfer(arrivals, i_depth: int, i_range: int, frequencies, surface:
     arrival's amplitude (computed at the run's frequency) with its delay's phase at every frequency of the band,
     relative to spherical spreading over the slant range. Bellhop's surface is flat; the rough surface's coherent
     factor and the bubble loss are applied per surface bounce at the grazing angle Snell's law gives at the surface
-    for the arrival's launch angle. By reciprocity one run from the target's depth serves every own depth in its grid."""
+    for the arrival's launch angle. By reciprocity one run from the target's depth serves every own depth in its grid.
+    The slant range is between the run's source depth (`arrivals.source_depth`, read from Bellhop's file) and the
+    receiver's depth; arrivals with no source depth fall back to the horizontal range (before audit A10 the
+    horizontal range was always used: up to 20 log10(slant / horizontal) dB too low at short range)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     a = np.asarray(arrivals.amplitude[i_depth][i_range])
     t = np.asarray(arrivals.delay[i_depth][i_range])
     ns = np.asarray(arrivals.n_surface[i_depth][i_range])
-    slant = float(np.hypot(arrivals.ranges[i_range], 0.0))                         # reference: spherical spreading over the horizontal range
+    z_src = getattr(arrivals, "source_depth", None)
+    dz = 0.0 if z_src is None else float(arrivals.depths[i_depth]) - float(z_src)
+    slant = float(np.hypot(arrivals.ranges[i_range], dz))                          # reference: spherical spreading over the slant range
     if a.size == 0:
         return np.zeros(f.shape, dtype=complex), np.zeros(f.shape)
     launch = np.asarray(arrivals.launch_angle[i_depth][i_range])

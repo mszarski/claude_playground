@@ -3,6 +3,7 @@
 
 #include <cmath>
 
+#include "sonar/core/directivity.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/core/vec.hpp"
 
@@ -85,4 +86,36 @@ TEST(WorldPosition, AttitudeRateMovesLeverArm) {
   // Bow sweeps east at omega * r.
   EXPECT_NEAR(v.y, 0.2, 1e-6);
   EXPECT_NEAR(v.x, 0.0, 1e-6);
+}
+
+// Audit B7: the element pattern's stated properties, against numbers independent of its formula.
+TEST(Directivity, MinusThreeDbAtHalfTheBeamwidthAndScalesWithFrequency) {
+  const auto axes = sonar::element_axes(sonar::Vec3d{0.0, 1.0, 0.0});  // looking to starboard
+  const double bw = 0.2;                                               // FWHM in the direction cosine
+  const double nan = std::nan("");
+  const auto towards = [&](double s_az) {
+    return sonar::Vec3d{axes.az.x * s_az + axes.boresight.x * std::sqrt(1.0 - s_az * s_az),
+                        axes.az.y * s_az + axes.boresight.y * std::sqrt(1.0 - s_az * s_az),
+                        axes.az.z * s_az + axes.boresight.z * std::sqrt(1.0 - s_az * s_az)};
+  };
+  const double half_power_db = 10.0 * std::log10(0.5);  // -3.01 dB
+  EXPECT_DOUBLE_EQ(sonar::directivity(axes, bw, nan, towards(0.0)), 1.0);
+  for (const double side : {1.0, -1.0}) {
+    const double d = sonar::directivity(axes, bw, nan, towards(side * 0.5 * bw));
+    EXPECT_NEAR(20.0 * std::log10(d), half_power_db, 0.01) << side;  // one way, power
+    // Twice the frequency: half the beamwidth, so -3 dB at a quarter of it.
+    const double d2 = sonar::directivity(axes, bw, nan, towards(side * 0.25 * bw), 2.0);
+    EXPECT_NEAR(20.0 * std::log10(d2), half_power_db, 0.01) << side;
+    EXPECT_LT(sonar::directivity(axes, bw, nan, towards(side * 0.5 * bw), 2.0), d);
+  }
+  // The elevation plane alone, the same way.
+  const sonar::Vec3d down{axes.el.x * 0.05 + axes.boresight.x * std::sqrt(1.0 - 0.0025),
+                          axes.el.y * 0.05 + axes.boresight.y * std::sqrt(1.0 - 0.0025),
+                          axes.el.z * 0.05 + axes.boresight.z * std::sqrt(1.0 - 0.0025)};
+  EXPECT_NEAR(20.0 * std::log10(sonar::directivity(axes, nan, 0.1, down)), half_power_db, 0.01);
+  // A directional element is silent behind its boresight; an omnidirectional one is not.
+  const sonar::Vec3d behind{0.0, -1.0, 0.0};
+  EXPECT_EQ(sonar::directivity(axes, bw, nan, behind), 0.0);
+  EXPECT_EQ(sonar::directivity(axes, nan, 0.1, behind), 0.0);
+  EXPECT_EQ(sonar::directivity(axes, nan, nan, behind), 1.0);
 }

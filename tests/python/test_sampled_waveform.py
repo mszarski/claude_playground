@@ -350,7 +350,8 @@ TIERS = {
                                                        {"boundary_z": 0.0, "model": "chapman_harris", "wind_speed": 6.0}]},
     "sediment": {"propagation": {"sediment_speed": 1650.0, "interface_z": 100.0},
                  "scene": [{"type": "points", "positions": [[5.0, 300.0, 100.5]], "target_strength_db": 10.0}]},
-    "eigenray": {"propagation": {"environment": {"depth": 100.0, "sound_speed": 1500.0}, "frequency": 8000.0,
+    "eigenray": {"propagation": {"environment": {"depth": 100.0, "sound_speed": 1500.0, "bottom_speed": 1600.0, "bottom_density": 1.8,
+                                                 "bottom_attenuation": 0.5}, "frequency": 8000.0,
                                  "max_range": 500.0, "range_step": 25.0, "depth_step": 2.0}},
 }
 
