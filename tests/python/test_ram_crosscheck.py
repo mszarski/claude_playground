@@ -11,7 +11,7 @@ What is compared. Our tier's coherent transmission loss, |sum_k a_k exp(-j 2 pi 
 depths, in two 2-D waveguides a flank array sees: a Pekeris waveguide (100 m, 1500 m/s over a 1600 m/s,
 1.8 g/cm^3, 0.5 dB/wavelength fluid half-space, as test_kraken_crosscheck.py) and an upslope wedge (the same
 water and bottom, 100 m at the source to 30 m at 5 km, 0.8 degrees), at 6, 8 and 10 kHz (flank_32.yaml: LFM 6 to
-10 kHz), source 30 m, from 0.5 to 5 km.
+10 kHz), source 30 m, in 500 m windows from 0.5 to 5 km.
 
 Why the comparison is of 500 m range averages of intensity, and what tolerance (ours, from the physics below and
 the measured spread; measured here on 2026-11-21 with PyRAM 1.3.0, numba 0.68.1, and Bellhop of the Acoustics
@@ -33,16 +33,24 @@ Toolbox at HEAD 8b4682b):
   The comparison is therefore of the intensity averaged over 500 m windows of range at a fixed depth, of the
   coherent ray sum (the quantity PyRAM computes; the incoherent ray sum gives window means within 0.25 dB of
   the same PE averages at 8 kHz, measured).
-* Convergence of the oracle (measured, 8 kHz, from a 1.5 m range step and 0.02 m depth step): halving PyRAM's range and depth steps, or its range step alone
-  four times, or 6 instead of 8 Pade terms, moves these 500 m averages by at most 0.14 dB. Bellhop's receivers
-  sit on the provider's grid nodes, so its first-order delay correction does not enter.
-* Measured, all three frequencies and both cases: the largest window difference is 1.42 dB (Pekeris, 6 kHz,
-  82 m), the mean over the windows of one depth at most 0.49 dB in magnitude (Pekeris, 8 kHz, 50 m); the
-  provider's default arrival selection drops at most 0.14 % of a point's arrival energy. Bounds: every window
-  within 3 dB, each depth's mean within 1 dB: about twice the largest difference seen, which is ours (there is
-  no published bound for this pair of models at these frequencies that we opened).
-  Receivers stay 8 m (over 40 wavelengths at 8 kHz) or more from the boundaries: the Bellhop documentation
-  (doc/bellhop.htm, opened) warns of artifacts for receivers very close to the surface or bottom.
+* Convergence of the oracle (measured, 8 kHz, from a 1.5 m range step and a 0.02 m depth step): halving PyRAM's
+  range and depth steps, or its range step alone four times, or 6 instead of 8 Pade terms, moves these 500 m
+  averages by at most 0.14 dB. Bellhop's receivers sit on the provider's grid nodes, so its first-order delay
+  correction does not enter. Receivers stay 8 m (over 40 wavelengths at 8 kHz) or more from the boundaries:
+  the Bellhop documentation (doc/bellhop.htm, opened) warns of artifacts for receivers very close to them.
+* Measured, all three frequencies and both cases, windows 0.5 to 5 km: the largest window difference is 1.42 dB
+  (Pekeris, 6 kHz, 82 m), the mean over the windows of one depth at most 0.44 dB in magnitude (Pekeris, 8 kHz,
+  50 m); the provider's default arrival selection drops at most 0.14 % of a point's arrival energy. Bounds:
+  every window within 3 dB, each depth's mean within 1 dB: about twice the largest difference seen, which is
+  ours (there is no published bound for this pair of models at these frequencies that we opened).
+* What this does NOT test: the bottom density. Beyond 0.5 km the energy travels below the critical angle,
+  where a 0.5 dB/wavelength bottom loses little per bounce whatever its density; density sets the reflection of
+  steep paths (at normal incidence (rho c_b - c_w) / (rho c_b + c_w) = 0.32 at 1.8 g/cm^3, 0.03 at 1.0), and
+  those have left by then. Measured (8 kHz, Pekeris): giving the provider 1.0 or 2.2 g/cm^3 instead of the PE's
+  1.8 moves the window differences by up to 1.7 dB and the depth means by at most 0.25 dB, inside the bounds.
+  A wrong density in our Bellhop input would pass here. Our own Rayleigh coefficient's density dependence is
+  tested in test_propagation.py (test_rayleigh_reflection_limits); the density Bellhop is given is not checked
+  against an oracle.
 
 PyRAM's inputs are in PYRAM_INPUTS and PyRAM is pinned to 1.3.0 (another version skips): the tolerances are for it.
 """
@@ -60,14 +68,20 @@ from gpusonar.sim import find_bellhop
 from gpusonar.sim.bellhop import BellhopProvider, OceanEnvironment
 
 PYRAM_VERSION = "1.3.0"
+PYRAM_MISSING = f"needs the PE oracle PyRAM {PYRAM_VERSION} (module pyram: pip install pyram=={PYRAM_VERSION})"
+
+
+def pyram_wrong_version(found: str) -> str:
+    return f"PyRAM {found} is installed; the cross-check is for {PYRAM_VERSION} (module pyram: pip install pyram=={PYRAM_VERSION})"
+
+
 try:
     from pyram.PyRAM import PyRAM
     _found = importlib.metadata.version("pyram")
-    _pyram_reason = None if _found == PYRAM_VERSION else (
-        f"PyRAM {_found} is installed; the cross-check is for {PYRAM_VERSION} (module pyram: pip install pyram=={PYRAM_VERSION})")
+    _pyram_reason = None if _found == PYRAM_VERSION else pyram_wrong_version(_found)
 except ImportError:
     PyRAM = None
-    _pyram_reason = f"needs the PE oracle PyRAM {PYRAM_VERSION} (module pyram: pip install pyram=={PYRAM_VERSION})"
+    _pyram_reason = PYRAM_MISSING
 
 needs_bellhop = pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
 needs_pyram = pytest.mark.skipif(_pyram_reason is not None, reason=_pyram_reason or "")
@@ -103,10 +117,14 @@ def pe_loss(frequency, bathymetry):
 
 
 def window_average(ranges, loss):
-    """dB of the intensity averaged over WINDOW-long range windows from FIRST."""
-    edges = np.arange(FIRST, ranges[-1] + 1e-6, WINDOW)
-    return np.array([-10.0 * np.log10(np.mean(10.0 ** (-loss[(ranges >= a) & (ranges < b)] / 10.0)))
-                     for a, b in zip(edges[:-1], edges[1:])])
+    """dB of the intensity averaged over WINDOW-long range windows from FIRST to MAX_RANGE (each window holds points)."""
+    edges = np.arange(FIRST, MAX_RANGE + 1e-6, WINDOW)
+    out = []
+    for a, b in zip(edges[:-1], edges[1:]):
+        keep = (ranges >= a) & (ranges < b)
+        assert keep.sum() > 10, (a, b)
+        out.append(-10.0 * np.log10(np.mean(10.0 ** (-loss[keep] / 10.0))))
+    return np.array(out)
 
 
 def test_the_library_never_imports_pyram():

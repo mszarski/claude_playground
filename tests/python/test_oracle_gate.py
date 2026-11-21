@@ -50,9 +50,15 @@ def test_reasons_are_recognised_by_the_variable_they_name():
     # Bellhop3D's variable contains Bellhop's: names match as whole words, the first of ORACLE_VARIABLES named wins.
     assert oracle_variable("needs Bellhop3D (GPUSONAR_BELLHOP3D)") == "GPUSONAR_BELLHOP3D"
     assert oracle_variable("needs Bellhop (GPUSONAR_BELLHOP) and Bellhop3D (GPUSONAR_BELLHOP3D)") == "GPUSONAR_BELLHOP"
-    # An oracle that is a Python module is named by its module.
-    assert oracle_variable("needs the PE oracle PyRAM 1.3.0 (module pyram)") == "pyram"
+    # An oracle that is a Python module is named by its module: the reasons the PyRAM cross-check gives.
+    import test_ram_crosscheck as ram
+    assert oracle_variable(ram.PYRAM_MISSING) == "pyram"
+    assert oracle_variable(ram.pyram_wrong_version("1.2.0")) == "pyram"
     assert oracle_variable("pyramid is not installed") is None
+    # The skip marks of the seamount test (Bellhop3D's reason must not be counted as Bellhop's).
+    import test_seamount_3d as sm
+    assert oracle_variable(sm.needs_bellhop3d.kwargs["reason"]) == "GPUSONAR_BELLHOP3D"
+    assert oracle_variable(sm.needs_bellhop.kwargs["reason"]) == "GPUSONAR_BELLHOP"
 
 
 @pytest.mark.parametrize("require", [None, "0"])

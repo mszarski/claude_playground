@@ -18,11 +18,14 @@ The incoherent sum is used because the question is where energy goes, not the in
 
 Measured here (2026-11-21, Acoustics Toolbox HEAD 8b4682b), with the test's beams and, in brackets, with four
 times as many (241 x 721; the 3-D range averages move by 1.1 dB at most, the 3-D minus N x 2-D difference by
-0.6 dB): before the seamount (0.2 to 1.8 km) 3-D and N x 2-D agree to 0.07 dB on every bearing, so the two modes
-differ only through the seamount. Averaged over 3.5 to 6.5 km: on bearings that pass over the flanks (-4 to -2
-and 16 to 18 degrees) the 3-D loss is 3.1 to 3.5 dB HIGHER [3.0 to 3.6]: energy is turned out of those bearings;
-on bearings beside the seamount (-20 and 32 degrees) it is 1.1 to 1.2 dB LOWER [1.1 to 1.2]: the energy turned
-out arrives there. Over the summit itself (6 degrees, where the 20 m summit blocks the 50 m paths in both) the
+0.6 dB): from 0.2 to 1.8 km 3-D and N x 2-D agree to 0.07 dB on every bearing. That is not a level bed (at
+1.8 km on the 6 degree bearing the bed is already 64 m shallower): the two modes treat in-plane relief
+alike and differ only by rays turned out of their plane, which shows farther out. Averaged over 3.5 to 6.5 km:
+on bearings that pass over the flanks (-4 to -2 and 16 to 18 degrees) the 3-D loss is 3.1 to 3.5 dB HIGHER
+[3.0 to 3.6], and it is higher on most bearings from -6 to +20 degrees: energy is turned out of them. On
+bearings beside the seamount (-20 and 32 degrees) it is 1.1 to 1.2 dB LOWER [1.1 to 1.2], consistent with that
+energy arriving there (not shown: -1 dB appears also at -18 and -10 degrees). Over the summit itself
+(6 degrees, where the 20 m summit blocks the 50 m paths in both) the
 difference is 0.9 dB [0.4]. N x 2-D sees none of it. Our tier against the converged 3-D field: -3.8 dB at -4
 and at 16 degrees (too loud), -2.2 dB over the summit, 0.0 and -0.7 dB beside it at -20 and 32 degrees
 (against the test's beams: -4.5, -4.5, -3.4, -0.5, -1.2 dB).
@@ -91,6 +94,11 @@ def bellhop3d_runs():
 
 @needs_bellhop3d
 def test_horizontal_refraction_by_the_seamount(bellhop3d_runs, capsys):
+    """Bellhop3D against itself (3-D and N x 2-D modes): this checks our Bellhop3D file writers
+    (bellhop3d_oracle.py) and `bathymetry.seamount`, and fixes the size of the effect the library misses; it
+    does not test library propagation. Margins: the smallest magnitudes measured at either beam count (3.0 dB
+    over the flanks, 1.1 dB beside) less 0.6 dB, the most the 3-D minus N x 2-D difference moved between the
+    two beam counts: 2.4 dB, taken as 2.0, and 0.5 dB."""
     full, flat = bellhop3d_runs["3"], bellhop3d_runs["2"]
     near = range_average(full, RANGES, NEAR) - range_average(flat, RANGES, NEAR)
     far = range_average(full, RANGES, FAR) - range_average(flat, RANGES, FAR)
@@ -99,9 +107,9 @@ def test_horizontal_refraction_by_the_seamount(bellhop3d_runs, capsys):
         print("\n[bellhop3d] 3-D minus N x 2-D, incoherent TL averaged over 3.5 to 6.5 km, by bearing: "
               + ", ".join(f"{b:+.0f} deg {d:+.1f} dB" for b, d in zip(BEARINGS, far))
               + f"; before the seamount max |diff| {np.abs(near).max():.2f} dB")
-    assert np.abs(near).max() < 0.3                       # the two modes agree where the bed is level
-    assert all(at[b] > 2.0 for b in FLANKS), at           # energy turned out of the bearings over the flanks ...
-    assert all(at[b] < -0.8 for b in BESIDE), at          # ... arrives beside the seamount
+    assert np.abs(near).max() < 0.3                       # in-plane relief alone: the two modes agree
+    assert all(at[b] > 2.0 for b in FLANKS), at           # energy turned out of the bearings over the flanks
+    assert all(at[b] < -0.5 for b in BESIDE), at          # more energy beside the seamount
     assert far.max() < 6.0 and far.min() > -3.0
 
 
@@ -136,6 +144,11 @@ def test_our_n_by_2d_tier_over_the_seamount(bellhop3d_runs, capsys):
     to_flat, to_full = np.array(to_flat), np.array(to_full)
     with capsys.disabled():
         print("\n[bellhop3d] incoherent TL averaged over 3.5 to 6.5 km: " + "; ".join(lines))
-    assert np.abs(to_flat).max() < 3.0, to_flat            # the same approximation in two codes
+    # The same approximation in two codes: 2.5 dB measured at most here, and the codes differ by up to 1.0 dB
+    # over a level bed; 3.5 dB is the sum.
+    assert np.abs(to_flat).max() < 3.5, to_flat
+    # CHARACTERISATION OF A KNOWN GAP, not a requirement: our tier has no out-of-plane propagation and is too
+    # loud over the flanks (-3.8 dB converged, -4.5 dB with these beams). When 3-D propagation arrives this
+    # assertion must be changed to an agreement bound with the 3-D field.
     flanks = [k for k, b in enumerate(OURS) if b in FLANKS]
     assert np.all(to_full[flanks] < -2.0), to_full         # ours is too loud over the flanks: the 3-D error
