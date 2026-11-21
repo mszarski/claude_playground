@@ -118,6 +118,9 @@ def test_an_established_track_is_scored_before_a_nearer_uncertain_one():
         assert s["targets"]["boat"]["kind"] == want and s["targets"]["boat"]["correct"] == (want == "mover")
         _, g = gallery.classify_and_score(tr, truth, float(T[-1]), 15.0, **kw)
         assert g["targets"]["boat"]["kind"] == want and g["movers_not_on_a_moving_object"] == s["false_movers"] == 0
+        # The gallery's position and velocity per target come from the same track as its class (score_tracks).
+        pos = gallery.score_tracks(tr, truth, float(T[-1]), 15.0, kinds={c.id: c.kind for c in classes})["boat"]
+        assert pos["tracked"] and abs(pos["position_error_m"] - (8.0 if want == "mover" else 2.0)) < 0.2
     # Nothing within the gate: not tracked, in both.
     tr = [cre.track_from_json(_track(1, 100.0, 40.0, 4.0, 0.0, cells=6))]
     classes = classify.classify_tracks(tr, **kw)

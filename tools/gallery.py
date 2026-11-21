@@ -470,12 +470,18 @@ def world_tracks(detections_per_ping, times, **tracker_kw):
     return tracks
 
 
-def score_tracks(tracks, truth, t_last, gate):
-    """For each true object (position at t = 0, velocity), the nearest confirmed track at the last ping."""
+def score_tracks(tracks, truth, t_last, gate, kinds=None):
+    """For each true object (position at t = 0, velocity), its track at the last ping: the one `object_track` picks
+    with the classes `kinds` (track id -> kind; D-155), so that the position, the velocity and the class reported for
+    an object come from the same track. Without `kinds`, the nearest track within `gate`. No track within `gate`: the
+    nearest track's error, not tracked."""
+    kinds = kinds if kinds is not None else {tr.id: "uncertain" for tr in tracks}
     out = {}
     for label, (pos, vel) in truth.items():
         end = pos[:2] + vel[:2] * t_last
-        best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
+        best = object_track(tracks, kinds, end, gate)
+        if best is None:
+            best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
         if best is None:
             out[label] = {"tracked": False}
             continue
@@ -648,14 +654,14 @@ def run_fls_transit(name, cfg, backend, quick):
     truth = scene_truth(cfg)
     t_last = float(result.times[-1])
     metrics = {"pings": len(result.records), "scatterers": len(result.scene),
-               "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
-               "targets": score_tracks(tracks, truth, t_last, gate=15.0)}
+               "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks)}
     # A mover's fitted speed must be five times its uncertainty; positions must fit a line to 2.5 m.
     # A track counts in a mover's row only if its mean SNR is at most 6 dB below the mover's (D-154, owner's
     # ruling after the ten-seed evaluation: no target lost, the cluttered boat a mover on every seed).
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
         linear={"length": 40.0, "width": 2.0}, detections={"row_snr_db": 6.0})
+    metrics["targets"] = score_tracks(tracks, truth, t_last, 15.0, kinds={c.id: c.kind for c in classes})
     for label, m in metrics["targets"].items():
         if m.get("tracked"):
             m["track_speed_m_s"] = float(np.hypot(*m["track_velocity_xy"]))
@@ -855,12 +861,12 @@ def run_popoto_far(name, cfg, backend, quick):
     t_last = float(result.times[-1])
     metrics = {"pings": len(result.records), "hydrophones": int(n_total),
                "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
-               "targets": score_tracks(tracks, truth, t_last, gate=200.0),
                "peak_over_median_db_by_hydrophone_count": scaling}
     own_last = result.true_positions[-1]
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 200.0, min_speed=1.0, static_speed=1.0, max_fit_rms=60.0,
         multipath={"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (own_last[1], own_last[0])})
+    metrics["targets"] = score_tracks(tracks, truth, t_last, 200.0, kinds={c.id: c.kind for c in classes})
     ranges, power = first
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8), constrained_layout=True)
     m = axes[0].imshow(db(power, np.median(power)), extent=[ranges[0], ranges[-1], np.degrees(bearings[-1]), np.degrees(bearings[0])],
