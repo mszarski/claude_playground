@@ -191,6 +191,7 @@ void LiveChainOp::setup(holoscan::OperatorSpec& spec) {
 void LiveChainOp::start() {
   live::ChainOptions chain;
   live::PassiveOptions unused;
+  live::program_defaults(chain, unused);         // backend auto, as build/bin/sonar_live starts (D-147)
   apply_options(options_.get(), chain, unused);
   chain_ = std::make_unique<live::LiveChain>(chain);
 }
@@ -215,6 +216,7 @@ void PassiveBearingsOp::setup(holoscan::OperatorSpec& spec) {
 void PassiveBearingsOp::start() {
   live::ChainOptions unused;
   passive_ = live::PassiveOptions{};
+  live::program_defaults(unused, passive_);      // backend auto, as build/bin/sonar_live starts (D-147)
   apply_options(options_.get(), unused, passive_);
 }
 
