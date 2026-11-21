@@ -734,6 +734,38 @@ earlier runs used). Exact match:
 
 Models (private): `design-edit-sft-gemma-v8`, `-v8-seed1`, `-v8-seed2`.
 
+### Screening Inkling-2 (Thinking Machines, Apache-2.0), zero-shot
+
+Inkling-2-Mini (26B total, 3.4B active, looped MoE) needs an unmerged transformers branch (`add-inkling2-mini`), so
+it ran on one H200 with `eval_model.py --multimodal` and the branch pinned in the job header. Inkling-2-Small is
+only reachable through the HF router. Neither can turn reasoning off: `reasoning_effort="none"` is rejected by the
+router, and on Mini `"minimal"` still writes a short thinking block before the answer (`strip_fences` keeps only the
+answer segment). Both models often name nodes `#n10` or `frame#n10`; the "lenient" columns rewrite those in the
+target position to `n10` and re-score (`insert` node lines are left alone, where `text#n12` is valid DSL). Exact
+match:
+
+| Test set | Mini strict | Mini lenient | Small lenient | Qwen, no-think | Gemma SFT v8, 3-seed mean |
+|---|---|---|---|---|---|
+| seen types (500) | 0.832 | 0.846 | 0.826 | n/a | 0.945 |
+| paraphrased (490) | PARA_STRICT | PARA_LENIENT | 0.771 | n/a | 0.888 |
+| goal requests (450) | 0.773 | 0.813 | 0.900 | 0.962 | 0.916 |
+| unseen types v2 (1,050) | 0.712 | 0.729 | 0.781 | 0.868 | 0.810 |
+
+- **Mini is below every comparison model on unseen types and goals**, and outside the paired-bootstrap CIs
+  (unseen: Qwen +13.9 [+11.3, +16.6], Small +5.2, weakest Gemma seed +5.7).
+- **Where it misses, it's mostly vocabulary and over-editing, not reasoning:**
+  - `spread_out` 0.23: writes `justify=space-between` (CSS) instead of the DSL's `justify=between`. Qwen also scores only
+    0.31 here.
+  - `add_border` 0.30: adds `radius=8` or a non-existent `stroke-width=1` alongside the stroke.
+  - `promote_button` 0.66: keeps a stroke on the filled button, or also restyles the other button.
+  - `disable_button` 0.61: adds a grey stroke the references don't have.
+- **Verdict: not worth fine-tuning now.** A tuned Mini would mainly be learning the DSL's vocabulary, which every
+  SFT run already teaches, and its zero-shot starting point is lower than Qwen's or Gemma's. It also costs about
+  4x more per eval row than Gemma on vLLM (transformers-only generation, plus forced thinking). Worth re-checking
+  once vLLM supports it and a no-reasoning mode exists.
+
+Results (private dataset): `mszarski/design-edit-screens`, under `thinkingmachines__Inkling-2-Mini/`.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
