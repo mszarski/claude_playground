@@ -173,6 +173,7 @@ TEST(Reverb, SigmaInterpolatesThePowerGrid) {
   p.decimation = 2;
   p.n_low = 8;
   p.time0 = 0.0;
+  p.sound_speed = kC;
   const std::vector<double> coarse{0.004, 0.008};
   const std::vector<double> density{2.0, 6.0};
   const sim::ReverbPower power{coarse.data(), 2, density.data(), 1};
@@ -200,6 +201,7 @@ TEST(Reverb, SeriesHasThePowerOfItsSectors) {
   p.center_frequency = 20e3;
   p.n_azimuth = 12;
   p.n_low = 4096;
+  p.sound_speed = kC;
   // sigma = sqrt(density / fs * dphi / 2) = 0.5 throughout.
   const std::vector<double> coarse{-1.0, 1.0};
   const double level = 0.25 * 8000.0 * 2.0 / (2.0 * kPi / 12.0);
@@ -239,6 +241,7 @@ TEST(Reverb, RejectsNormalsThatDoNotMatchTheActiveSectors) {
   p.n_samples = 16;
   p.n_azimuth = 3;
   p.n_low = 16;
+  p.sound_speed = kC;
   const std::vector<double> coarse{-1.0, 1.0}, density{1.0, 1.0}, normals(3 * 2 * 16, 0.0), offsets(3, 0.0);
   const sim::ReverbPower power{coarse.data(), 2, density.data(), 1};
   const std::vector<std::complex<double>> pulse{{1.0, 0.0}};
@@ -248,6 +251,13 @@ TEST(Reverb, RejectsNormalsThatDoNotMatchTheActiveSectors) {
                std::invalid_argument);
   EXPECT_NO_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 3, pulse.data(), 1, offsets.data(), 1,
                                      out.data()));
+  // No sound speed is assumed (audit A9): left unset it is refused.
+  EXPECT_TRUE(std::isnan(sim::ReverbParams{}.sound_speed));
+  sim::ReverbParams unset = p;
+  unset.sound_speed = sim::ReverbParams{}.sound_speed;
+  EXPECT_THROW(sim::reverb_series(Backend::Host, unset, power, normals.data(), 3, pulse.data(), 1, offsets.data(), 1,
+                                  out.data()),
+               std::invalid_argument);
 }
 
 TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {

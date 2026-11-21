@@ -207,6 +207,7 @@ ReverbCase reverb_case(std::int64_t n_channels, bool uniform) {
   c.params.start_time = 0.025;
   c.params.center_frequency = 20e3;
   c.params.n_azimuth = c.n_rows;
+  c.params.sound_speed = 1500.0;
   c.params.decimation = 3;
   c.params.n_low = 331;                       // a prime
   c.params.velocity = Vec3d{1.5, -0.5, 0.0};

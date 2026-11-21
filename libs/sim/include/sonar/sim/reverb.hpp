@@ -23,6 +23,7 @@
 
 #include <complex>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "sonar/core/platform.hpp"
@@ -38,7 +39,8 @@ struct ReverbParams {
   /// length before the record starts.
   double time0 = 0.0;
   double center_frequency = 0.0;  ///< the carrier the baseband series refers to, Hz
-  double sound_speed = 1500.0;
+  /// m/s. No default (NaN, as in the sibling structs): reverb_series refuses it unset.
+  double sound_speed = std::numeric_limits<double>::quiet_NaN();
   std::int64_t n_azimuth = 0;     ///< sectors over the full circle
   /// The series is generated at sample_rate / decimation with n_low samples and
   /// interpolated to the record's rate.
