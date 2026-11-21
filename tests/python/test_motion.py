@@ -130,6 +130,99 @@ def test_correlation_weighting_downweights_bad_measurements():
     assert e_w < 0.3 * e_u
 
 
+# --- attitude and lever arms (Eq. 4's Omega) ----------------------------------------------------
+
+def rotation_eq2(roll, pitch, yaw):
+    """ASASIN Eq. 2, R = Rz(yaw) Ry(pitch) Rx(roll), written out here independently of libs/core."""
+    cr, sr, cp, sp, cy, sy = np.cos(roll), np.sin(roll), np.cos(pitch), np.sin(pitch), np.cos(yaw), np.sin(yaw)
+    rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
+    ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
+    rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
+    return rz @ ry @ rx
+
+
+def eq4_delay(nav, m, y, z, c=C):
+    """Eq. 4's model delay tau_2 - tau_1 in NumPy (instantaneous transmit, receiver moving
+    with first-order kinematics until t_ref, lever arms rotated by each ping's attitude)."""
+    def tof(i, tx_lever, rx_lever):
+        a = nav[i]
+        dt = nav[i + 1]["time"] - a["time"] if i + 1 < len(nav) else a["time"] - nav[i - 1]["time"]
+        r = rotation_eq2(*a["rpy"])
+        tx = np.array([a["x"], y[i], z[i]]) + r @ np.asarray(tx_lever)
+        v = np.array([a["surge"], (y[i + 1] - y[i]) / dt, (z[i + 1] - z[i]) / dt])
+        rx = np.array([a["x"], y[i], z[i]]) + v * m["t_ref"] + r @ np.asarray(rx_lever)
+        ps = np.asarray(m["footprint"])
+        return (np.linalg.norm(tx - ps) + np.linalg.norm(rx - ps)) / c
+    i = m["ping"]
+    return tof(i + 1, m["tx_lever_2"], m["rx_lever_2"]) - tof(i, m["tx_lever_1"], m["rx_lever_1"])
+
+
+ATTITUDE_RMS = np.radians([2.0, 1.0, 1.0])          # roll, pitch, yaw of the tests below (ours: a lively AUV)
+
+
+def attitude_problem(n=30, seed=11):
+    """synthetic_problem with varying roll, pitch and yaw and non-zero lever arms. The delays
+    come from eq4_delay (NumPy), not from the solver's own predict_delay."""
+    from gpusonar.sim.simulator import smooth_disturbance
+    rng = np.random.default_rng(seed)
+    dt, speed, alt = 0.2, 1.2, 15.0
+    t = np.arange(n + 1) * dt
+    y_true = 0.02 * np.sin(2 * np.pi * t / 3.0)
+    z_true = -alt + 0.01 * np.sin(2 * np.pi * t / 4.0 + 1.0) - 0.01 * np.sin(1.0)
+    rpy = np.stack([smooth_disturbance(n, s, 8.0, rng) + s for s in ATTITUDE_RMS], axis=1)
+    tx_lever = (0.10, 0.05, -0.20)
+    rx_base = np.array([0.0, 0.08, -0.15])
+    nav, pings = [], []
+    for i in range(n):
+        nav.append({"time": t[i], "x": speed * t[i], "surge": speed, "rpy": rpy[i]})
+        p = core.PingNav()
+        p.time, p.x, p.surge = t[i], speed * t[i], speed
+        p.y, p.z = 0.0, -alt
+        p.rpy = tuple(rpy[i])
+        p.dvl_altitude = -z_true[i]
+        pings.append(p)
+    measurements = []
+    for i in range(n - 1):
+        for ground in np.linspace(30.0, 50.0, 8):
+            md = {"ping": i, "tx_lever_1": tx_lever, "tx_lever_2": tx_lever,
+                  "rx_lever_1": tuple(rx_base + [0.24, 0, 0]), "rx_lever_2": tuple(rx_base - [0.24, 0, 0]),
+                  "footprint": (speed * t[i] + 0.12, ground, 0.0), "t_ref": 2 * np.hypot(ground, alt) / C}
+            m = core.DelayMeasurement()
+            for k, v in md.items():
+                setattr(m, k, v)
+            m.delay = eq4_delay(nav, md, y_true, z_true)
+            measurements.append((m, md))
+    return pings, nav, measurements, y_true, z_true
+
+
+def test_eq4_attitude_and_lever_arms_match_an_independent_model():
+    """The solver's Omega (rotation of Eq. 2 applied to each ping's lever arms) against NumPy."""
+    np.testing.assert_allclose(rotation_eq2(0.3, -0.2, 1.1), np.asarray(core.rotation_ned(0.3, -0.2, 1.1)),
+                               atol=1e-15)
+    pings, nav, meas, y_true, z_true = attitude_problem(n=6)
+    rng = np.random.default_rng(2)
+    y = (y_true + 0.01 * rng.standard_normal(y_true.size)).tolist()
+    z = (z_true + 0.01 * rng.standard_normal(z_true.size)).tolist()
+    for m, md in meas:
+        # Two ~50 ms paths differ by ~1e-6 s; double rounding leaves ~1e-17 s.
+        assert core.predict_delay(pings, m, y, z, C) == pytest.approx(eq4_delay(nav, md, y, z), abs=1e-15)
+
+
+def test_solver_recovers_sway_and_heave_under_attitude_and_lever_arms():
+    pings, _, meas, y_true, z_true = attitude_problem()
+    meas = [m for m, _ in meas]
+    sol = core.solve_motion(pings, meas, options(lambda_smooth=0.0, lambda_dvl=1.0))
+    assert sol.converged, sol.report
+    assert np.abs(np.array(sol.y) - y_true).max() < 1e-5
+    assert np.abs(np.array(sol.z) - z_true).max() < 1e-5
+    # The same delays solved as if the platform were level: the attitude is not ignorable,
+    # so the test above is not passing for want of attitude in the data.
+    for p in pings:
+        p.rpy = (0.0, 0.0, 0.0)
+    level = core.solve_motion(pings, meas, options(lambda_smooth=0.0, lambda_dvl=1.0))
+    assert np.abs(np.array(level.y) - y_true).max() > WAVELENGTH / 4
+
+
 def test_solver_rejects_bad_input():
     pings, meas, _, _ = synthetic_problem(n=4)
     with pytest.raises(ValueError):
@@ -141,21 +234,50 @@ def test_solver_rejects_bad_input():
 
 # --- end to end on simulated data --------------------------------------------------------------
 
-def collect(sway_rms=0.01, heave_rms=0.004, n_pings=40, seed=1, with_target=True):
+def collect(sway_rms=0.01, heave_rms=0.004, n_pings=40, seed=1, with_target=True, attitude_rms=None,
+            tx_lever=None, array_origin=None, bathymetry=None):
+    """The simulated scenario. Opt-in extras: `attitude_rms` (roll, pitch, yaw, rad: smooth
+    random attitude about a non-zero mean of the same size, reported exactly by the INS),
+    lever arms (`tx_lever`, `array_origin`, body frame, m), and `bathymetry` z(x, y) for the
+    scatterers (the DVL then reports the altitude above it under the vehicle)."""
     rng = np.random.default_rng(seed)
-    sonar = SonarModel.load("sas_auv", {
+    overrides = {
         "receive": {"kind": "baseband", "sample_rate": 100e3, "window": {"range": [36.0, 52.0]}},
         "transmit": {"waveform": {"type": "gaussian", "f_start": 180e3, "f_stop": 220e3,
-                                  "duration": 1e-4, "window_alpha": 0.0}}})
+                                  "duration": 1e-4, "window_alpha": 0.0}}}
+    if tx_lever is not None:
+        overrides["transmit"]["lever_arm"] = list(tx_lever)
+    if array_origin is not None:
+        overrides["array"] = {"origin": list(array_origin)}
+    sonar = SonarModel.load("sas_auv", overrides)
     track = 0.24 * n_pings
     pts, amp = seafloor_patch((-4.0, track + 4.0), (28.0, 52.0), 25.0, rng=rng)
+    if bathymetry is not None:
+        pts = np.array(pts, dtype=float)
+        pts[:, 2] = bathymetry(pts[:, 0], pts[:, 1])
     scene = Scene().add_points(pts, amp)
     target = np.array([track / 2, 41.0, 0.0])
+    if bathymetry is not None:
+        target[2] = bathymetry(target[0], target[1])
     if with_target:
         scene.add_points([target], amplitude=60.0)       # a bright point to measure focus on
+    attitude = None
+    if attitude_rms is not None:
+        from gpusonar.sim.simulator import smooth_disturbance
+        arng = np.random.default_rng(seed + 1000)        # its own generator: the scene and noise stay the same
+        attitude = np.stack([smooth_disturbance(n_pings, s, 8.0, arng) + s for s in attitude_rms], axis=1)
     col = simulate_collection(sonar, scene, n_pings=n_pings, interval=0.2, speed=1.2,
                               sway_rms=sway_rms, heave_rms=heave_rms, dvl_altitude_noise=1e-3,
-                              environment={"sound_speed": C}, absorption_model="none", adc=False, rng=rng)
+                              environment={"sound_speed": C}, absorption_model="none", adc=False, rng=rng,
+                              attitude=attitude)
+    if bathymetry is not None:
+        drng = np.random.default_rng(seed + 2000)
+        for r, p in zip(col.records, col.true_positions):
+            nav = r.navigation
+            dvl = nav.dvl
+            dvl[0].altitude = float(bathymetry(p[0], p[1]) - p[2] + 1e-3 * drng.standard_normal())
+            nav.dvl = dvl
+            r.navigation = nav
     recon.prepare(col.records)
     return col, target
 
@@ -234,3 +356,41 @@ def test_flat_seafloor_assumption_can_be_replaced_by_known_bathymetry():
     opts = motion.MotionOptions(bathymetry=lambda x, y: 0.0)       # the same seafloor, supplied as a function
     known = motion.estimate_motion(col.records, opts)
     np.testing.assert_allclose(known.y, flat.y, atol=1e-6)
+
+
+LEVERS = {"tx_lever": (0.10, 0.05, -0.20), "array_origin": (-0.30, 0.08, -0.15)}   # body frame, m (ours)
+
+
+def errors(col, result):
+    truth = col.true_positions[:len(col.records)]
+    return result.y - truth[:, 1], result.z - truth[:, 2]
+
+
+def test_attitude_and_lever_arms_leave_sway_and_heave_unbiased(run):
+    """Roll, pitch and yaw (2, 1, 1 degrees RMS about means of the same size) and lever arms
+    on the transmitter and the array: the INS attitude enters Eq. 4 through Omega, so the
+    estimate keeps the level-platform bounds and does not pick up a bias."""
+    base_col, _, base = run
+    col, _ = collect(attitude_rms=ATTITUDE_RMS, **LEVERS)
+    result = motion.estimate_motion(col.records)
+    sway_err, heave_err = errors(col, result)
+    assert result.fine.converged and result.n_measurements > 500
+    # The bounds of test_sway_and_heave_errors_are_a_small_fraction_of_a_wavelength.
+    assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20, np.sqrt(np.mean(sway_err**2))
+    assert np.sqrt(np.mean(heave_err**2)) < WAVELENGTH / 4, np.sqrt(np.mean(heave_err**2))
+    # Unbiased: the mean error moves by less than lambda / 50 from the level case's (same
+    # scene, disturbances and noise). The level case itself has a heave bias of about 0.3 mm.
+    base_sway, base_heave = errors(base_col, base)
+    assert abs(sway_err.mean()) < WAVELENGTH / 50, sway_err.mean()
+    assert abs(heave_err.mean() - base_heave.mean()) < WAVELENGTH / 50, (heave_err.mean(), base_heave.mean())
+    # Control: the same records with the attitude withheld from the estimator. Sway is then
+    # off by several wavelengths (about 36 mm RMS here), so the bounds above are not met by accident.
+    level = [r.copy() for r in col.records]
+    for r in level:
+        geo = r.geometry
+        pose = geo.rx_pose
+        pose.rpy = (0.0, 0.0, 0.0)
+        geo.rx_pose = geo.tx_pose = pose
+        r.geometry = geo
+    ignored = motion.estimate_motion(level)
+    assert np.sqrt(np.mean(errors(col, ignored)[0] ** 2)) > WAVELENGTH

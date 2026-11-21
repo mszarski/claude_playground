@@ -507,7 +507,7 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
                         nav_knows_disturbance: bool = False, dvl_altitude_noise: float = 0.0,
                         environment: dict | None = None, rng: np.random.Generator | None = None,
                         seafloor_depth: float = 0.0, backend=core.Backend.Host,
-                        stop_and_go: bool = False, **ping_kwargs) -> Collection:
+                        stop_and_go: bool = False, attitude=None, **ping_kwargs) -> Collection:
     """Fly a straight line along +x with sway (y) and heave (z) disturbances.
 
     The true trajectory is piecewise linear: during ping i the platform moves at
@@ -516,8 +516,11 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
     the nominal straight track (unless `nav_knows_disturbance`), plus a DVL sample with
     the true altitude and surge speed. With `stop_and_go` (a rail) the platform stands
     still during each ping; the disturbances are then position errors of the rail.
+    `attitude`, when given, is the true roll, pitch, yaw of each ping ([n_pings, 3], rad),
+    held constant during the ping; navigation (the INS) reports it exactly. None: level.
     """
     rng = rng or np.random.default_rng(0)
+    att = np.zeros((n_pings, 3)) if attitude is None else np.asarray(attitude, dtype=float).reshape(n_pings, 3)
     start = np.asarray(start, dtype=float)
     t = np.arange(n_pings + 1) * interval
     truth = np.tile(start, (n_pings + 1, 1))
@@ -530,13 +533,13 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
     records = []
     for i in range(n_pings):
         v_true = np.zeros(3) if stop_and_go else (truth[i + 1] - truth[i]) / interval
-        rec = simulate_ping(sonar, make_pose(truth[i], velocity=v_true), scene, environment=environment,
+        rec = simulate_ping(sonar, make_pose(truth[i], rpy=att[i], velocity=v_true), scene, environment=environment,
                             sequence=i, time_ns=1_700_000_000_000_000_000 + int(round(t[i] * 1e9)),
                             scenario_time=t[i], rng=rng, backend=backend, **ping_kwargs)
         nav_pos = truth[i] if nav_knows_disturbance else nominal[i]
         nav_vel = v_true if (nav_knows_disturbance or stop_and_go) else np.array([speed, 0.0, 0.0])
         geo = rec.geometry
-        geo.rx_pose = make_pose(nav_pos, velocity=nav_vel)
+        geo.rx_pose = make_pose(nav_pos, rpy=att[i], velocity=nav_vel)
         geo.tx_pose = geo.rx_pose
         rec.geometry = geo
         dvl = core.DvlSample()
