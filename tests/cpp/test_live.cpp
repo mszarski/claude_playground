@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -340,6 +341,18 @@ TEST(Navigation, InterpolatesThePoseToTheTransmitTime) {
   EXPECT_NEAR(rec.geometry.rx_pose.position.z, 10.0, 1e-9);
   EXPECT_NEAR(rec.geometry.tx_pose.velocity.x, 1.5, 1e-9);
   EXPECT_NEAR(std::abs(rec.geometry.rx_pose.rpy.z), kPi, 0.05);   // 3.1 to -3.1 goes through pi, not through zero
+}
+
+TEST(Report, WritesNonFiniteNumbersAsNull) {
+  // The Python engine writes the same (live.finite_or_null; tests/python/test_hardcoded.py).
+  Report r;
+  r.detections.push_back({1200.0, -4.5, std::numeric_limits<double>::quiet_NaN()});
+  r.tracks.push_back({7, -1, "mover", 10.0, 20.0, -6.0, 0.1, 6.0, 1200.0, std::numeric_limits<double>::infinity(), 1.0});
+  const std::string j = r.json();
+  EXPECT_NE(j.find("\"snr_db\": null"), std::string::npos) << j;
+  EXPECT_NE(j.find("\"mean_snr_db\": null"), std::string::npos) << j;
+  EXPECT_EQ(j.find("nan"), std::string::npos) << j;
+  EXPECT_EQ(j.find("inf"), std::string::npos) << j;
 }
 
 TEST(Report, IsOneJsonLineWithTheFieldsTheVehicleReads) {

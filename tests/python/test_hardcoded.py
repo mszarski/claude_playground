@@ -270,6 +270,25 @@ def test_a_report_too_long_for_a_datagram_is_split_into_complete_lines_never_cut
         join_report_parts(parts[1:])
 
 
+def test_a_non_finite_number_is_null_in_the_report_line_as_libs_live_writes_it(tmp_path):
+    """Both engines write a snr_db (and a track's mean_snr_db) that is not finite as null: libs/live Report::json by
+    its num(), held by tests/cpp/test_live.cpp Report.WritesNonFiniteNumbersAsNull; Python by finite_or_null. Python
+    used to write NaN, which is not JSON."""
+    report = _long_report(3)
+    report["detections"][1]["snr_db"] = float("nan")
+    report["tracks"][0]["mean_snr_db"] = np.float32("inf")
+    for line in split_report(report, 10**6) + split_report(report, 600):
+        assert "NaN" not in line and "Infinity" not in line
+        json.loads(line, parse_constant=lambda c: pytest.fail(f"non-JSON constant {c}"))
+    whole = json.loads(split_report(report, 10**6)[0])
+    assert whole["detections"][1]["snr_db"] is None and whole["tracks"][0]["mean_snr_db"] is None
+    assert whole["detections"][0]["snr_db"] == 12.0
+    path = tmp_path / "report.jsonl"
+    with LiveChain({"engine": "python", "backend": "host"}, report_path=str(path)) as chain:
+        out = chain._emit(report)
+    assert out["detections"][1]["snr_db"] is None
+    assert json.loads(path.read_text().splitlines()[0]) == whole
+
 def test_the_chain_sends_a_long_report_as_parts_over_udp(other_pings):
     rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     rx.bind(("127.0.0.1", 0))

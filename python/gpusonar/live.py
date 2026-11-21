@@ -95,12 +95,26 @@ def _given(cfg: dict) -> dict:
     return out
 
 
+def finite_or_null(obj):
+    """The report with every non-finite number (NaN, infinity) as None, so that its JSON line says `null`, as
+    libs/live Report::json writes it (a `snr_db` the detector could not form, for one), and stays valid JSON."""
+    if isinstance(obj, dict):
+        return {k: finite_or_null(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [finite_or_null(v) for v in obj]
+    if isinstance(obj, (float, np.floating)) and not np.isfinite(obj):
+        return None
+    return obj
+
+
 def split_report(report: dict, max_bytes: int = REPORT_UDP_MAX_BYTES) -> list[str]:
     """A report as the text of its UDP datagrams, none longer than `max_bytes`: the one line when it fits.
     Otherwise several lines, each a complete report of the same ping holding a share of the detections
     and tracks and a field "part": [k, n] (k from 1). A reader that knows nothing of parts parses each
     as a report with fewer detections; one that does joins the lists of the n parts of a ping
-    (`join_report_parts`). The line is never cut. libs/live Report::datagrams does the same."""
+    (`join_report_parts`). The line is never cut. libs/live Report::datagrams does the same. Non-finite
+    numbers are written as null (`finite_or_null`)."""
+    report = finite_or_null(report)
     line = json.dumps(report)
     if len(line.encode()) <= max_bytes:
         return [line]
@@ -1474,13 +1488,15 @@ class LiveChain:
                                      water=water if el_cfg is not None else None, backend=self.backend, profile=rays_water)
         if self._coverage is not None:         # hook: one member of the report line, refreshed when something changed
             report.update(json.loads("{" + self._coverage.update(record, tuple(float(v) for v in origin), rays_bottom, rays_water) + "}"))
+        report = finite_or_null(report)           # null where libs/live writes null: a non-finite snr_db, for one
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}
         return self._emit(report)
 
     def _emit(self, report: dict) -> dict:
-        line = json.dumps(report)
+        report = finite_or_null(report)
+        line = json.dumps(report, allow_nan=False)
         if self._report:
             self._report.write(line + "\n")
             self._report.flush()
