@@ -771,14 +771,15 @@ With the patch the loopback ran on T4 and L4 jobs. What is still thin: at real t
 is the receiver's socket buffer, and in a Hugging Face container that buffer cannot be raised.
 The loopback test (`tests/python/test_hsb.py`) runs at half real time (`serve --pace 0.5`;
 the tool's default `--pace` is 1.0). It passed there on an L4, with reports equal to the
-direct chain's (jobs `6b010e824fdc5ab3c55c549d` and `6b0115de4fdc5ab3c55c5951`).
+direct chain's (jobs `6b010e824fdc5ab3c55c549d`, `6b0115de4fdc5ab3c55c5951` and
+`6b011b26efaf5e14f4b4597c`).
 
 Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
 (`test_loopback_loss_study`, `GPUSONAR_HSB_STUDY=1`):
 
 - Every lost datagram was refused by the receiver's full socket buffer. In every lossy run
   the kernel's drop count for the data socket equals `RcvbufErrors` and the gaps in the
-  packet numbers (19, 63, 115, 55, 19, 102 and 6 datagrams).
+  packet numbers (19 to 115 datagrams per run).
 - That buffer is the system default, 212,992 bytes, which is also `net.core.rmem_max` in
   those containers. On loopback it holds 92 datagrams of 2,304 bytes of kernel accounting
   each: about 3 frames, or 20 ms of the stream at real time. Sensor Bridge raises the buffer
@@ -789,9 +790,12 @@ Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
   late.
 - Until now the emulated board then sent the frames it owed back to back. `serve
   --catch-up spread`, now the default, never sends two frames less than half a frame period
-  apart; `--catch-up burst` is the old behaviour. At real time burst lost frames in 3 of 11
-  runs, spread in 0 of 13. With the chain on one thread the sender was hardly ever late, and
-  nothing was lost in 4 runs.
+  apart; `--catch-up burst` is the old behaviour. At real time burst lost frames in 3 of 14
+  runs, spread in 0 of 20 (jobs `6b010e824fdc5ab3c55c549d`, `6b0112934fdc5ab3c55c5713`,
+  `6b0115de4fdc5ab3c55c5951`, `6b011b26efaf5e14f4b4597c`). One spread run and one burst run
+  still showed 19 kernel drops outside the frames the receiver counted (before its first frame
+  or after the last report). With the chain on one thread the sender was hardly ever late, and
+  nothing was lost in 6 runs.
 - A halved buffer (`receive --socket-buffer 53248`; the kernel doubles it to 106,496) still
   lost frames with spread. So the receiver falls more than about 10 ms behind while the chain
   runs: the margin at the default buffer is less than two to one.

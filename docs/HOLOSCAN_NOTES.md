@@ -548,8 +548,8 @@ total_dataplanes=2, sifs_per_sensor=1)` (`US:python/nvus/fpga.py:67`, `US:python
 The emulator (`LinuxDataPlane`, with our opt-in UDP-socket patch, D-79) sends to
 `LinuxReceiverOp` on one machine, in a Hugging Face L4 container (8 vCPUs). Our frames are
 400 samples, 38,528 B, sent as 29 datagrams; 160 frames/s at real time. Source:
-`tests/python/test_hsb.py::test_loopback_loss_study`, jobs `6b010e824fdc5ab3c55c549d` and
-`6b0115de4fdc5ab3c55c5951`. What is still not solved: the margin at real time is less than two
+`tests/python/test_hsb.py::test_loopback_loss_study`, jobs `6b010e824fdc5ab3c55c549d`,
+`6b0112934fdc5ab3c55c5713`, `6b0115de4fdc5ab3c55c5951` and `6b011b26efaf5e14f4b4597c`. What is still not solved: the margin at real time is less than two
 to one, and the container cannot raise it.
 
 - **Where datagrams are lost.** Every lost datagram was refused by the receiver's full socket
@@ -568,8 +568,9 @@ to one, and the container cannot raise it.
   process, which then sent the frames it owed back to back. Our emulated board now spreads
   that catch-up by default (`catch_up="spread"`, `python/gpusonar/sources/hsb.py`).
 - **Results.**
-  - At real time: burst lost frames in 3 of 11 runs, spread in 0 of 13.
-  - With the chain on one thread: no loss in 4 runs.
+  - At real time: burst lost frames in 3 of 14 runs, spread in 0 of 20 (four jobs). One run
+    of each still had 19 kernel drops outside the frames the receiver counted.
+  - With the chain on one thread: no loss in 6 runs.
   - With a halved buffer (106,496 B): losses with spread too.
 - **For a deployed host** Sensor Bridge's guide gives `net.core.rmem_max = 31326208`
   (`HSB@2.7.0:docs/user_guide/setup.mdx:784-793`, all configurations). It also gives
