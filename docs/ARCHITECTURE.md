@@ -91,8 +91,8 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   on CPU threads or on the device, selected by the chain's `backend`. On an L4 the whole
   chain takes 18 ms a ping with bearings from the map and 0.48 s with SBL (`RESULTS.md`).
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
-  objects per ping. MVDR, whitening, median TVG, DRC, board synchronisation and motion
-  estimation are CPU code; none is the bottleneck of a chain that uses them. In the simulator,
+  objects per ping. Whitening, median TVG, DRC, board synchronisation and motion
+  estimation are CPU code (MVDR has a device path, `libs/live/src/beamform_cuda.cu`); none is the bottleneck of a chain that uses them. In the simulator,
   reverberation's power against time and direction and its random draws stay on the CPU; on an L4 they leave
   the whole generator 2.2 to 4.1 times faster than the host, against 5.6 to 8.8 times for its
   device kernel alone (`RESULTS.md`, "Reverberation, before and after the batched kernels").
