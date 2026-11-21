@@ -42,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
@@ -149,13 +150,47 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
 void detector_background(const float* cell_mean, std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
                          std::vector<double>& background, std::vector<double>& train_cells);
 
+/// The detector's statistic, cell by cell [n_bearing * n_cells]: what multiscale_detect tests before it drops sidelobes
+/// and groups.
+struct DetectorCells {
+  /// false: the device path leaves `level` empty (one array fewer brought back; the chain does not read it).
+  bool with_level = true;
+  std::vector<double> level;          ///< the background (detector_background)
+  std::vector<float> background;      ///< the same in float, as the detector reports it
+  std::vector<float> peak;            ///< the cell's strongest sample
+  std::vector<unsigned char> flag;    ///< 1 where any test of the plan passes
+};
+
+/// The statistic of multiscale_detect on `backend`. Backend::Host is the reference (the loops of detector.cpp);
+/// Backend::Cuda runs the same operations on the device (detector_kernel.hpp), one thread per cell, and gives the
+/// reference's flags: its background differs from the host's by the last bits of exp and log (tests/cpp/test_detector.cpp,
+/// DetectorDevice; tests/python/test_detector_device.py). `fine` and `cell_mean` are host memory either way.
+/// Not held: a map with a NaN in the first or last two training lengths of a bearing (the slope's medians), where the
+/// host's std::sort and the device's insertion sort order the NaN differently (detector_kernel.hpp).
+void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
+                      std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard_cells, std::int64_t train_cells,
+                      const DetectorPlan& plan, DetectorCells& out, int device = 0);
+
+/// The kernels of the device path run on host threads instead: what the CPU build can test of them against the reference.
+void multiscale_cells_kernels_on_host(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
+                                      std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard_cells, std::int64_t train_cells,
+                                      const DetectorPlan& plan, DetectorCells& out);
+
 /// Detect on `fine` [n_bearing][fine_stride] (power; the cells start at sample `fine_offset` of each row) with
 /// `cell_mean` [n_bearing][n_cells] its cell means. `background` receives the background of each cell
 /// [n_bearing * n_cells]. Detections carry range (m), bearing (rad), snr_db, cells, first_range and extent.
+/// `backend`: where the statistic (multiscale_cells) runs; dropping sidelobes and grouping run on the host.
 std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
                                          std::int64_t n_bearing, std::int64_t n_cells, const std::vector<double>& fine_ranges,
                                          const std::vector<double>& cell_ranges, const std::vector<double>& bearings,
                                          std::int64_t guard_cells, std::int64_t train_cells, const DetectorPlan& plan,
-                                         std::vector<float>& background);
+                                         std::vector<float>& background, Backend backend = Backend::Host, int device = 0);
+
+/// multiscale_detect after its statistic: sidelobes dropped and flagged cells grouped, from `statistic` (its flags are
+/// changed). `background` receives statistic.background.
+std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, std::int64_t n_bearing,
+                                        std::int64_t n_cells, const std::vector<double>& fine_ranges, const std::vector<double>& cell_ranges,
+                                        const std::vector<double>& bearings, const DetectorPlan& plan, DetectorCells& statistic,
+                                        std::vector<float>& background);
 
 }  // namespace sonar::live

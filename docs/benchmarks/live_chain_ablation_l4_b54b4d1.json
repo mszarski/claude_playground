@@ -1,0 +1,223 @@
+{
+  "backend": "cuda",
+  "pings": 8,
+  "repeats": 3,
+  "rows": {
+    "1": {
+      "as deployed": {
+        "seconds": [
+          0.01337654299982205,
+          0.013106535999895641,
+          0.013067366000086622
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.012911141999893516,
+          0.012988583999913317,
+          0.01299277299995083
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.012902621999955954,
+          0.014435587999969357,
+          0.013161237000076653
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.010136246999991272,
+          0.009852000999899246,
+          0.010030285000084405
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.013220979999914562,
+          0.013199938999832739,
+          0.013063614999964557
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.010143897000034485,
+          0.01000920399997085,
+          0.009930712000141284
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "2": {
+      "as deployed": {
+        "seconds": [
+          0.026134900999977617,
+          0.02617845299982946,
+          0.026263699000082852
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.02618240199990396,
+          0.02644926899984057,
+          0.026188356999909956
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.026102810000111276,
+          0.026163741999880585,
+          0.026184685999851354
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.025981997999906525,
+          0.026221612999961508,
+          0.025974882000127764
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.02753129400002763,
+          0.0276281060000656,
+          0.027339384000015343
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.026086950000035358,
+          0.025978192000138733,
+          0.026021642999921824
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.026806007000004684,
+          0.026696497999864732,
+          0.027268071999969834
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.02312794100021165,
+          0.023067182999966462,
+          0.022822267000037755
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.025713812000049074,
+          0.025549531999786268,
+          0.025001528000075268
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.021822299999939787,
+          0.021578468000143403,
+          0.02164913000001434
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "3": {
+      "as deployed": {
+        "seconds": [
+          0.037730878000047596,
+          0.037818925000010495,
+          0.03797066800007087
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.03800072500007445,
+          0.037437545000102546,
+          0.03864113300005556
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.03751349300000584,
+          0.03761744999997063,
+          0.037555909000047905
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.038067985999987286,
+          0.03719337999996242,
+          0.03706992699994771
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.03977367600009529,
+          0.03983521100008147,
+          0.03963240699999915
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.03748807300007684,
+          0.03731100300001344,
+          0.037225440999918646
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.038661340999851745,
+          0.0388504989998637,
+          0.03850285100020301
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.034074787000008655,
+          0.03407672700018338,
+          0.03410876799989637
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.03500122900004499,
+          0.03521818399985932,
+          0.03439631400010512
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.0308129210000061,
+          0.031107717999930173,
+          0.03093306300002041
+        ],
+        "detections_last_ping": 3
+      }
+    }
+  },
+  "source": "tools/live_chain_ablation.py --backend cuda, NVIDIA L4, Hugging Face job 6b01109defaf5e14f4b45051, tree of b54b4d1 (the multiscale statistic on the device, issue sonar-01u; same job as live_chain_ablation_l4_1368f3d.json)",
+  "device_agreement": "tests on the same tree in job 6b01109defaf5e14f4b45051: tests/python/test_detector_device.py on the benchmark's live pings (2 pings each), the device statistic against the host's: identical flags, strongest samples and detections (737 / 887 / 959 flagged cells, 6 detections for 1 / 2 / 3 rows), the background's largest relative difference 4.19e-16 / 4.24e-16 / 3.81e-16; tests/cpp/test_detector.cpp DetectorDevice over its seven maps: 4.33e-16"
+}

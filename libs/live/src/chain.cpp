@@ -370,8 +370,9 @@ Report LiveChain::process(PingRecord& record) {
       plan_train_ = co.train;
       plan_rows_ = n_rows;
     }
+    // The statistic on the chain's backend (the device gives the host's flags: detector.hpp, multiscale_cells).
     found = multiscale_detect(fine_.data(), fine_stride, fine_offset, last_power.data(), n_b, n_cells, fine_ranges_, last_ranges, bearings,
-                              co.guard, co.train, plan_, background_);
+                              co.guard, co.train, plan_, background_, opt_.backend, opt_.device);
   } else {
     det.resize(last_power.size());
     ratio.resize(last_power.size());

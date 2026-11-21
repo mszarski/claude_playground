@@ -164,9 +164,20 @@ spectra of a recording gives passive bearing-time records (`sonar_live --passive
   (`benchmarks/gpu_benchmark_all_l4.md`, tree `e10b17f`): the C++ chain takes 0.015, 0.028 and
   0.040 s a ping for one, two and three rows of 32, against 0.15, 0.31 and 0.46 s on that machine's
   eight CPU threads. The first run (`gpu_benchmark_all_l4_15f1121.md`) gave 0.010, 0.021 and
-  0.031 s; the difference is the multiscale cell statistic (D-93), which runs on the CPU (`RESULTS.md`,
-  issue sonar-01u for a device port). Raw pings at the boards' full rate through the C++ chain on a
-  GPU: 0.48, 1.02 and 1.51 s for one, two and three rows (`design/popoto_stage2.json`,
+  0.031 s; the difference was the multiscale cell statistic (D-93), which then ran on the CPU. It now
+  runs on the chain's backend (issue sonar-01u, `libs/live` detector.hpp `multiscale_cells`), with
+  the sidelobe dropping and grouping still on the host. It gives the host's flags and detections: on
+  the benchmark's live pings the background differs from the host's by at most 4.2e-16 (relative;
+  4.3e-16 on the C++ test maps; `tests/python/test_detector_device.py`, `test_detector.cpp`
+  DetectorDevice, L4 job 6b01109defaf5e14f4b45051). The same benchmark case on the tree of `b54b4d1`
+  (same job): 0.0128, 0.0260 and 0.0369 s a ping. `tools/live_chain_ablation.py` in one job: as
+  deployed 16.0, 29.5 and 40.6 ms on the tree before (`benchmarks/live_chain_ablation_l4_1368f3d.json`)
+  and 13.1, 26.2 and 37.8 ms after (`..._b54b4d1.json`); 12.8, 26.1 and 38.1 ms with one device
+  allocation per call (`..._3d666df.json`, another job); 12.7, 25.9 and 37.5 ms compiled with
+  `--fmad=false` (`..._b2a918e.json`, a third job, same agreement). That is still 2.8 to 3.6 ms over the
+  cell-mean detector: the map comes back to the host before the statistic sends it to the device again.
+  Raw pings at the boards' full rate through the C++ chain on a GPU: 0.48, 1.02 and 1.51 s for one,
+  two and three rows (`design/popoto_stage2.json`,
   `decimation.timing.cuda`; machine still loaded by the build, so upper figures).
 - **Passive** exists in the C++ library and program only.
 - **The sparse Bayesian kernels take at most 64 channels** (`kSblMaxChannels`,

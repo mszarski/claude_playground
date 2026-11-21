@@ -9,13 +9,18 @@
 //   - two echoes further apart than the merge distance are two, nearer are one;
 //   - a background that falls with range is followed at the ends of the map, where the plain mean
 //     of a one-sided window is low.
+//   - the statistic on the device (and its kernels on host threads) gives the host reference's flags and detections.
 // tests/python/test_detector.py holds the same against simulated pings, both engines and Monte Carlo.
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+
+#include "sonar/core/platform.hpp"
 
 #include "sonar/detect/cfar.hpp"
 #include "sonar/detect/statistic.hpp"
@@ -322,6 +327,174 @@ TEST(Detector, BackgroundFollowsASlopeAtTheEndsOfTheMap) {
   double s = 0.0;
   for (std::int64_t j = guard + 1; j <= guard + train && j < 200; ++j) s += static_cast<double>(power[static_cast<std::size_t>(j)]);
   EXPECT_NEAR(level[0], s / 149.0, 1e-9);
+}
+
+// --- the statistic on the device (multiscale_cells with Backend::Cuda) against the host reference ---------------------
+//
+// The maps of the tests above (noise; a point echo; a 60 dB echo with its sidelobes and two weaker ones; two echoes
+// inside the merge distance; the longer integration lengths; a background that falls with range; one so steep at both
+// ends that the slope correction is clamped (exp(+-2.3)); a map whose cells
+// start part-way along its rows, as after blanking). Agreement asked for: the same flags and strongest samples, the
+// background within 1e-12 of the host's (exp and log of two maths libraries), and the same detections.
+
+struct StatisticCase {
+  std::string name;
+  Map map;
+  std::int64_t offset_cells = 0;     // cells of each row before the map starts (fine_offset = offset_cells * k)
+};
+
+std::vector<StatisticCase> statistic_cases() {
+  std::vector<StatisticCase> out;
+  out.push_back({"noise", Map(7)});
+  out.push_back({"point echo", Map(7)});
+  out.back().map.add(60, 300 * 8 + 3, 40.0F);
+  out.push_back({"strong echo, sidelobes and two weaker", Map(11)});
+  {
+    Map& m = out.back().map;
+    const std::int64_t b0 = 80, s0 = 350 * 8 + 4;
+    for (std::int64_t b = 0; b < m.n_b; ++b) {
+      const double du = std::abs(std::sin(m.bearings[static_cast<std::size_t>(b)]) - std::sin(m.bearings[static_cast<std::size_t>(b0)]));
+      const double x = du / 0.0625;
+      const double beam = x < 2.0 ? std::pow(std::cos(0.25 * kPi * x), 4.0) : 6e-4 / (x * x);
+      for (std::int64_t s = s0 - 320; s <= s0 + 320; ++s) {
+        const double r = 0.25 * static_cast<double>(s - s0) / 0.375;
+        const double pulse = std::abs(r) < 1e-9 ? 1.0 : std::pow(std::sin(kPi * r) / (kPi * r), 2.0);
+        m.add(b, s, static_cast<float>(1e6 * beam * pulse));
+      }
+    }
+    m.add(b0 + 40, s0 + 240, static_cast<float>(1e7 / 3.16e4));
+    m.add(b0, s0 + 80, 200.0F);
+  }
+  out.push_back({"two echoes inside the merge distance", Map(21)});
+  out.back().map.add(70, 300 * 8, 300.0F);
+  out.back().map.add(70, 308 * 8, 300.0F);
+  DetectorOptions longer;
+  longer.integrate_cells = {1, 4, 16};
+  out.push_back({"integration over 4 and 16 cells", Map(5, 1, longer)});
+  for (std::int64_t s = 0; s < 40 * 8; ++s) out.back().map.add(90, 400 * 8 + s, 1.2F);        // 80 m at 3.4 dB a sample
+  out.push_back({"three rows, a background falling with range", Map(9, 3)});
+  {
+    Map& m = out.back().map;
+    for (std::int64_t b = 0; b < m.n_b; ++b) {
+      for (std::int64_t i = 0; i < m.n_cells * m.k; ++i) m.fine[static_cast<std::size_t>(b * m.n_cells * m.k + i)] *= static_cast<float>(std::exp(-0.003 * static_cast<double>(i / m.k)));
+    }
+    m.add(30, 20 * 8 + 2, 400.0F);                                    // near the near end, where the window is one-sided
+    m.add(120, 690 * 8 + 5, 30.0F);
+  }
+  // Steep at both ends (-0.05 a cell in ln(power), 33 dB over one training length of 150 cells; flat between cells 300 and 400): the
+  // slope times the training centroid's offset passes 2.3 at both ends, so both bounds of the clamp (exp(+-2.3)) are taken.
+  out.push_back({"steep at both ends: the slope correction clamped", Map(17)});
+  {
+    Map& m = out.back().map;
+    for (std::int64_t b = 0; b < m.n_b; ++b) {
+      for (std::int64_t i = 0; i < m.n_cells * m.k; ++i) {
+        const double j = static_cast<double>(i / m.k);
+        m.fine[static_cast<std::size_t>(b * m.n_cells * m.k + i)] *= static_cast<float>(std::exp(-0.05 * (std::min(j, 300.0) + std::max(j - 400.0, 0.0))));
+      }
+    }
+    m.add(100, 350 * 8 + 4, 300.0F);
+  }
+  out.push_back({"cells starting part-way along the rows", Map(13), 25});
+  out.back().map.add(40, 500 * 8 + 1, 60.0F);
+  return out;
+}
+
+struct CaseInputs {
+  std::vector<float> mean;
+  std::int64_t n_cells = 0, stride = 0, offset = 0;
+};
+
+// The cell means of a case, after its first `offset_cells` cells are dropped (the map plan is that of the whole map).
+CaseInputs inputs(const StatisticCase& c) {
+  const Map& m = c.map;
+  CaseInputs in;
+  in.n_cells = m.n_cells - c.offset_cells;
+  in.stride = m.n_cells * m.k;
+  in.offset = c.offset_cells * m.k;
+  in.mean.assign(static_cast<std::size_t>(m.n_b * in.n_cells), 0.0F);
+  for (std::int64_t b = 0; b < m.n_b; ++b) {
+    for (std::int64_t j = 0; j < in.n_cells; ++j) {
+      double s = 0.0;
+      for (std::int64_t q = 0; q < m.k; ++q) s += static_cast<double>(m.fine[static_cast<std::size_t>(b * in.stride + in.offset + j * m.k + q)]);
+      in.mean[static_cast<std::size_t>(b * in.n_cells + j)] = static_cast<float>(s / static_cast<double>(m.k));
+    }
+  }
+  return in;
+}
+
+// How far `other` is from the reference `ref`; fails on any flag or strongest sample that differs.
+double compare_cells(const DetectorCells& ref, const DetectorCells& other, const std::string& name) {
+  EXPECT_EQ(ref.flag.size(), other.flag.size()) << name;
+  EXPECT_EQ(ref.level.size(), other.level.size()) << name;
+  std::int64_t flags = 0, flagged = 0, peaks = 0;
+  double worst = 0.0;
+  for (std::size_t i = 0; i < ref.flag.size() && i < other.flag.size(); ++i) {
+    flags += ref.flag[i] != other.flag[i] ? 1 : 0;
+    flagged += ref.flag[i];
+    peaks += ref.peak[i] != other.peak[i] ? 1 : 0;
+    worst = std::max(worst, std::abs(other.level[i] - ref.level[i]) / std::max(std::abs(ref.level[i]), 1e-300));
+  }
+  EXPECT_EQ(flags, 0) << name << ": flags that differ, of " << flagged << " flagged";
+  EXPECT_EQ(peaks, 0) << name;
+  return worst;
+}
+
+std::vector<Detection> group(const StatisticCase& c, const CaseInputs& in, DetectorCells cells) {
+  const Map& m = c.map;
+  std::vector<double> cell_ranges(m.cell_ranges.begin() + c.offset_cells, m.cell_ranges.end());
+  std::vector<float> background;
+  return multiscale_group(m.fine.data(), in.stride, in.offset, m.n_b, in.n_cells, m.fine_ranges, cell_ranges, m.bearings, m.plan, cells, background);
+}
+
+void compare_detections(const std::vector<Detection>& a, const std::vector<Detection>& b, const std::string& name) {
+  ASSERT_EQ(a.size(), b.size()) << name;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    EXPECT_EQ(a[i].range, b[i].range) << name;
+    EXPECT_EQ(a[i].bearing, b[i].bearing) << name;
+    EXPECT_EQ(a[i].cells, b[i].cells) << name;
+    EXPECT_EQ(a[i].extent, b[i].extent) << name;
+    EXPECT_NEAR(a[i].snr_db, b[i].snr_db, 1e-5) << name;            // over the float background
+    EXPECT_EQ(a[i].arrivals.size(), b[i].arrivals.size()) << name;
+  }
+}
+
+TEST(DetectorKernels, OnHostThreadsTheyGiveTheReferenceExactly) {
+  // What the CPU build can check of the device path: its kernel bodies, run by parallel_for_host, against the loops.
+  std::size_t with_detections = 0;
+  for (StatisticCase& c : statistic_cases()) {
+    const CaseInputs in = inputs(c);
+    const Map& m = c.map;
+    DetectorCells ref, kernels;
+    multiscale_cells(Backend::Host, m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.guard, m.train, m.plan, ref);
+    multiscale_cells_kernels_on_host(m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.guard, m.train, m.plan, kernels);
+    EXPECT_EQ(compare_cells(ref, kernels, c.name), 0.0) << c.name;          // the same compiler and maths library: bit for bit
+    const auto a = group(c, in, ref), b = group(c, in, kernels);
+    compare_detections(a, b, c.name);
+    with_detections += a.empty() ? 0U : 1U;
+    // multiscale_detect on the host is the reference statistic followed by the grouping.
+    std::vector<double> cell_ranges(m.cell_ranges.begin() + c.offset_cells, m.cell_ranges.end());
+    std::vector<float> background;
+    compare_detections(a, multiscale_detect(m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.fine_ranges, cell_ranges,
+                                            m.bearings, m.guard, m.train, m.plan, background), c.name);
+  }
+  EXPECT_GE(with_detections, 7U);                                       // all but the noise-only map detect something
+}
+
+TEST(DetectorDevice, GivesTheHostsFlagsAndDetections) {
+  if (!cuda_available()) GTEST_SKIP() << "needs a CUDA build and a device (this build: CUDA " << (cuda_compiled() ? "compiled, no device" : "not compiled") << ")";
+  double worst = 0.0;
+  for (StatisticCase& c : statistic_cases()) {
+    const CaseInputs in = inputs(c);
+    const Map& m = c.map;
+    DetectorCells ref, device;
+    multiscale_cells(Backend::Host, m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.guard, m.train, m.plan, ref);
+    multiscale_cells(Backend::Cuda, m.fine.data(), in.stride, in.offset, in.mean.data(), m.n_b, in.n_cells, m.guard, m.train, m.plan, device);
+    const double d = compare_cells(ref, device, c.name);
+    EXPECT_LT(d, 1e-12) << c.name;
+    worst = std::max(worst, d);
+    compare_detections(group(c, in, ref), group(c, in, device), c.name);
+  }
+  std::printf("[ DEVICE   ] the background's largest relative difference from the host's over every case: %.3g\n", worst);
 }
 
 }  // namespace

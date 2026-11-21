@@ -1,0 +1,223 @@
+{
+  "backend": "cuda",
+  "pings": 8,
+  "repeats": 3,
+  "rows": {
+    "1": {
+      "as deployed": {
+        "seconds": [
+          0.012842279000324197,
+          0.012728014000003895,
+          0.012560876999941684
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.013050214000031701,
+          0.012625340999875334,
+          0.012588397999934386
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.012801997999758896,
+          0.012709224999980506,
+          0.012656959999731043
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.010145061000002897,
+          0.009922411999923497,
+          0.009919622999859712
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.012761564999891561,
+          0.012568396999995457,
+          0.012569687999985035
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.01016077199983556,
+          0.009989784000026702,
+          0.010255113000312122
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "2": {
+      "as deployed": {
+        "seconds": [
+          0.02579168500005835,
+          0.025922356999672047,
+          0.026121973000044818
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.025813035999817657,
+          0.026157515000249987,
+          0.02682033000019146
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.025651690999893617,
+          0.025712953000038397,
+          0.026129642999876523
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.02580950399988069,
+          0.025533676000122796,
+          0.02628950899998017
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.02703732999998465,
+          0.027037848999952985,
+          0.02723675200013531
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.02552029600019523,
+          0.025390873000105785,
+          0.025472478000210685
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.026362029999745573,
+          0.02618982599960873,
+          0.026349709999976767
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.022657426000023406,
+          0.022877079999943817,
+          0.023206969000057143
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.024427504999948724,
+          0.024399094999807858,
+          0.024502311000105692
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.021237065000150324,
+          0.021847821999926964,
+          0.021336582000003546
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "3": {
+      "as deployed": {
+        "seconds": [
+          0.037538614999903075,
+          0.03713094299973818,
+          0.037521770000239485
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.03753753699993467,
+          0.037470388999736315,
+          0.03751541900010125
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.037352099000145245,
+          0.03736916599973483,
+          0.0374542479999036
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.036961399000119854,
+          0.03676394900003288,
+          0.03674917600028493
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.03958187399985036,
+          0.039392881999901874,
+          0.04077314100004514
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.03694826799983275,
+          0.036663345000306435,
+          0.03679202900002565
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.038220135000301525,
+          0.03847988699999405,
+          0.03846097500036194
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.033943953000289184,
+          0.03401640999982192,
+          0.03391305700006342
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.034815938000065216,
+          0.03472148099990591,
+          0.03463400700002239
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.031045011000060185,
+          0.031160559999989346,
+          0.0314083970001775
+        ],
+        "detections_last_ping": 3
+      }
+    }
+  },
+  "source": "tools/live_chain_ablation.py --backend cuda, NVIDIA L4, Hugging Face job 6b0119eeefaf5e14f4b457ca, tree of b2a918e (the device statistic compiled with --fmad=false, issue sonar-01u review)",
+  "device_agreement": "tests on the same tree in the same job: tests/python/test_detector_device.py on the benchmark's live pings (2 pings each): identical flags, strongest samples and detections (737 / 887 / 959 flagged cells, 6 detections for 1 / 2 / 3 rows), the background's largest relative difference 4.19e-16 / 4.24e-16 / 3.81e-16; tests/cpp/test_detector.cpp DetectorDevice over its eight maps (both bounds of the slope clamp taken): 4.33e-16"
+}
