@@ -268,8 +268,9 @@ over the scenes (10 to 25), 160 in all.
 | `row_snr_db` 3 | 0 (4 gained) | -2 | 16.2 +- 4.7 |
 
 `fls_120k_rough_surface` decides the trade-off (glint movers 12.3 +- 3.5 a seed); 4 cells has no margin
-on its boat (median extent 4.0 cells in 3 captures). Not changed by any rule: `popoto_12km`'s ship is a
-mover on 3 of 10 seeds; the `summer_mud` and `deep_silt` ships are never tracked.
+on its boat (median extent 4.0 cells in 3 captures). Not changed by any rule: `popoto_12km`'s ship was a
+mover on 3 of 10 seeds (one mover on 10 of 10 since D-155's grouping and scoring,
+`classify_rules_eval_a479519.json`); the `summer_mud` and `deep_silt` ships are never tracked.
 
 ## SAS with known navigation
 
@@ -1687,27 +1688,25 @@ Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
 
 | Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `fls_120k_transit` | 7 | 1 | 5 | 0 | — | 1 | 0 |
+| `fls_120k_transit` | 8 | 1 | 6 | 0 | — | 1 | 0 |
 | `fls_170k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
 | `fls_330k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
-| `fls_120k_cluttered_seabed` | 64 | 5 | 31 | 16 | — | 12 | 4 |
-| `fls_120k_rough_surface` | 56 | 8 | 1 | 8 | — | 39 | 7 |
-| `fls_170k_traffic` | 13 | 5 | 4 | 1 | — | 3 | 2 |
-| `popoto_far_mover` | 2 | 1 | 0 | — | 1 | 0 | 0 |
-| `popoto_12km` | 8 | 2 | 0 | — | 3 | 3 | 0 (the ship's own track is `uncertain`; the two movers count as on the ship) |
-| `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 3 | 1 | 0 |
-| `popoto_env_gravel_30m` | 1 | 1 | 0 | — | 0 | 0 | 0 |
-| `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 1 | 1 | 1 (the ship is not tracked at its true position) |
+| `fls_120k_cluttered_seabed` | 65 | 1 | 47 | 9 | — | 8 | 0 |
+| `fls_120k_rough_surface` | 56 | 15 | 0 | 8 | — | 33 | 13 |
+| `fls_170k_traffic` | 13 | 4 | 3 | 4 | — | 2 | 1 |
+| `popoto_far_mover` | 4 | 1 | 0 | — | 3 | 0 | 0 |
+| `popoto_12km` | 12 | 1 | 0 | — | 11 | 0 | 0 |
+| `popoto_env_winter_sand_200m` | 5 | 2 | 0 | — | 2 | 1 | 1 |
+| `popoto_env_gravel_30m` | 3 | 1 | 1 | — | 1 | 0 | 0 |
+| `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 2 | 0 | 1 (the ship is not tracked at its true position) |
 
-Two named objects are not in their true class. The ship in `popoto_12km` is `uncertain`
-(4.3 ± 1.0 m/s, true 6.0) and the anchored boat in `fls_170k_transit` is `uncertain`
-(0.18 ± 0.17 m/s). In the file before `4530dc4`, a CPU run from a much older tree, both
-were right (mover, static); the cause was not examined (`STATUS.md`, open item 16). Every
-other true mover that was tracked is classified mover and every other tracked static
-object is static. In that older file the counts were 7, 4, 2, 65, 57 and 11 tracks for
-the FLS scenes and 6 and 11 for `popoto_far_mover` and `popoto_12km`, whose multipath
-tracks fell from 4 to 1 and from 8 to 3. Twenty tracks of pure position noise (1 m) give
-no movers.
+Regenerated with D-155's grouping and scoring (L4, job 6b01577eefaf5e14f4b49804). Every named object
+that is tracked is in its true class. The ship in `popoto_12km` is one mover at 6.05 ± 0.35 m/s (true
+6.0), 68 m from truth, with its eleven other tracks its multipath; before D-155 its scored track was
+`uncertain` (3.3 ± 0.5 m/s) among 4 movers, 4 multipath and 4 uncertain tracks. The anchored boat in
+`fls_170k_transit` and the pinnacle in `fls_120k_transit` are `static` (scored by their established
+track, D-155). `fls_120k_rough_surface` keeps 13 movers off a moving object (issue sonar-9ir). Twenty
+tracks of pure position noise (1 m) give no movers.
 
 ## Simulator calibration against a log with hidden settings
 

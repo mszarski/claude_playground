@@ -594,18 +594,14 @@ in free field (detection probability 0.22 on one ping), two rows +1.4 dB (0.87),
 - The shallow channel carries 14 dB more each way than spherical spreading, so this case
   has margin the link budget does not count. (The two losses are from
   `docs/scenarios/transmission_loss.json`, regenerated at `e10b17f`: 67.17 dB, 0.08 dB
-  below the earlier file.) Eleven of the twelve tracks are not the
-  ship's own: four are attached to a stronger track as later arrivals, four are called
-  movers and count as on the ship (no mover is off a moving object), and three are
-  uncertain. Why the four movers were not attached was not examined.
-- **The ship's own track is now classified uncertain, and still not a mover; its speed
-  reads 3.3 ± 0.5 m/s against a true 6.0, and its velocity −3.17 m/s.** In the previous
-  run it was multipath (an echo of a stronger track) at 5.1 ± 0.2 m/s, with velocity
-  −5.03 m/s, 26 m from truth where it is now 24 m, and the classes were 4 mover,
-  7 multipath and 1 uncertain. The tracking changed with D-141; the detections and the
-  peaks are as in the previous run, and the scene still has 12 tracks. Two runs ago the
-  ship's track was uncertain at 4.3 ± 1.0 m/s, with velocity −3.48 m/s, among 8 tracks;
-  in the older CPU run the ship was a mover, with 11 tracks of which 8 were multipath.
+  below the earlier file.) Since D-155 the twelve tracks are one object: the ship, a mover at 6.05 ±
+  0.35 m/s (true 6.0), 68 m from truth, its range within 23 m and the rest across range; the
+  other eleven are its arrivals by longer paths (from the true range to about 130 m beyond),
+  grouped as its multipath. The strongest of them lies about 80 m beyond the true range, which
+  is why the earlier rule (strongest first, echoes only farther out) left four movers and four
+  uncertain tracks unattached, and why the nearest-track scoring called the ship `uncertain`
+  (3.3 m/s) or `multipath` in the runs before (issue sonar-ygc). Over ten seeds the ship is one
+  mover on every seed (was a mover on 3).
 
 ### Other oceans: `popoto_env_*`
 

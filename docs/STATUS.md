@@ -255,7 +255,8 @@ Grouped; within a group the most consequential first.
     16). Five of the changes were since rerun over several seeds (item 44): four are the
     luck of one seed, one is caused by D-137. This list is of that gallery; the one in the
     repository now is the next (item 45).
-    - **`popoto_12km`: the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
+    - `popoto_12km`: fixed by D-155 (one mover on 10 of 10 seeds; the regenerated gallery: 6.05
+      m/s, 68 m off). As it was then: **the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
       true 6.0; it was `uncertain`, and `mover` before that). 12 confirmed tracks (8): 4
       movers, 7 multipath, 1 uncertain; 7 to 15 detections per ping (3 to 13).
     - **`fls_170k_traffic`: the crossing boat is classified `line` at 15.4 m/s** (it was
