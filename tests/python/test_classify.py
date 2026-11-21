@@ -206,3 +206,17 @@ def test_detection_rules_refuse_unknown_keys_and_negative_values():
         classify.classify_tracks(scene(), detections={"min_cells": 6})
     with pytest.raises(ValueError, match="zero or more"):
         classify.classify_tracks(scene(), detections={"row_snr_db": -1.0})
+
+
+def test_positions_are_read_at_the_time_asked():
+    """D-156: classify_tracks(time=...) gives each track's fitted position at that time (the live report's, the ping's
+    transmit time), while a track's last point is its last detection's time, transmit + R/c; without `time`, at the
+    last point, as before."""
+    hist = [(0.0 + 8.0 + 20.0 * k, 100.0 + 6.0 * (8.0 + 20.0 * k), 12000.0) for k in range(6)]
+    tr = Track(1, np.array([hist[-1][1], hist[-1][2], 6.0, 0.0]), np.eye(4), hits=6, history=hist)
+    (at_last,) = classify.classify_tracks([tr])
+    (at_ping,) = classify.classify_tracks([tr], time=100.0)
+    assert at_last.position == pytest.approx((100.0 + 6.0 * 108.0, 12000.0))
+    assert at_ping.position == pytest.approx((100.0 + 6.0 * 100.0, 12000.0))
+    assert at_ping.velocity == at_last.velocity and at_ping.kind == at_last.kind
+

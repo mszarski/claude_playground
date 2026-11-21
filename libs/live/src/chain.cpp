@@ -605,6 +605,9 @@ Report LiveChain::process(PingRecord& record) {
     have_origin_ = true;
   }
   const double t = static_cast<double>(record.transmit.time_ns - t0_ns_) * 1e-9;
+  // A monostatic echo shows the target where it was when the sound reached it: transmit + range / c, with the c that
+  // turned the two-way time into range (the record's, after `sound_speed`). D-156; python/gpusonar/live.py the same.
+  const double c_range = record.environment.sound_speed;
   // What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims.
   auto bend = [&](double level, double range) {
     return laddered && !ladder.depth.empty()
@@ -635,6 +638,7 @@ Report LiveChain::process(PingRecord& record) {
       d.arrivals = h.arrivals;
     }
     Detection m{0.0, 0.0, h.snr_db, h.cells};
+    m.time = t + h.range / c_range;
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
       const Vec3d& u = e.world;
@@ -702,6 +706,7 @@ Report LiveChain::process(PingRecord& record) {
   ClassifyOptions co2 = opt_.classify;
   co2.origin_x = f.origin.y - origin_.y;
   co2.origin_y = f.origin.x - origin_.x;
+  co2.time = t;   // positions at the report's time (the ping's transmit time), not at each track's last detection (D-156)
   for (const TrackClass& tc : classify_tracks(confirmed, co2)) {
     ReportTrack rt{tc.id, tc.parent, kind_name(tc.kind), tc.y + origin_.x, tc.x + origin_.y, tc.vy, tc.vx, tc.speed,
                    std::hypot(tc.y - co2.origin_y, tc.x - co2.origin_x), tc.mean_snr_db, tc.seen};

@@ -44,7 +44,8 @@ from .detect import Track
 class TrackClass:
     id: int
     kind: str                 # "mover", "static", "line", "multipath", "uncertain"
-    position: tuple           # (x, y) in the tracker's frame at the last ping
+    position: tuple           # (x, y) in the tracker's frame: at `time` given to classify_tracks, else at the track's
+                              # last history point (the last ping, or its last detection's time: D-156)
     velocity: tuple           # fitted (vx, vy), m/s
     speed: float              # m/s
     speed_sigma: float        # one-sigma uncertainty of the fitted speed, m/s
@@ -55,9 +56,10 @@ class TrackClass:
     extent_cells: float = float("nan")   # median flagged map cells of the detections it took (NaN: none recorded)
 
 
-def fit_velocity(history) -> tuple[np.ndarray, np.ndarray, float, float]:
+def fit_velocity(history, at: float | None = None) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
-    Returns position at the last time, velocity, RMS residual and the velocity's sigma."""
+    Returns the position on the line at `at` (s; None: at the last point's time), velocity, RMS residual and the
+    velocity's sigma. With fewer than three points, or no time between them, the last point and no velocity."""
     h = np.asarray(history, dtype=float)
     t, xy = h[:, 0], h[:, 1:3]
     if len(t) < 3 or np.ptp(t) <= 0.0:
@@ -68,13 +70,14 @@ def fit_velocity(history) -> tuple[np.ndarray, np.ndarray, float, float]:
     res = xy - fit
     # Two coordinates, two fitted parameters each.
     rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
-    return fit[-1], v, rms, float(rms / np.sqrt((tc**2).sum()))
+    pos = fit[-1] if at is None else xy.mean(axis=0) + (float(at) - t.mean()) * v
+    return pos, v, rms, float(rms / np.sqrt((tc**2).sum()))
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
-                    linear: dict | None = None, detections: dict | None = None) -> list[TrackClass]:
+                    linear: dict | None = None, detections: dict | None = None, time: float | None = None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -87,12 +90,16 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     through this track along its velocity and no further than `length` along it.
     `detections` switches on the rules from the detections themselves (module docstring):
     {"min_mover_cells": cells or None, "row_snr_db": dB or None}; None or {} changes nothing.
+    `time` (s, the tracker's clock): every position is the fitted line's at that time, the report's (D-156: a track's
+    last point is its last detection's time, transmit + range / c, not the ping's); None: at each track's last point,
+    which is the ping's time wherever detections carry no time of their own. The rules that compare positions (row,
+    echo grouping) then compare them at one time.
     """
     det = check_detection_rules(detections)
     out = []
     from scipy import stats
     for tr in tracks:
-        pos, v, rms, sigma = fit_velocity(tr.history)
+        pos, v, rms, sigma = fit_velocity(tr.history, time)
         speed = float(np.hypot(*v))
         n = len(tr.history)
         # The fit's scatter is itself estimated from few points (2n - 4 degrees of freedom), so a

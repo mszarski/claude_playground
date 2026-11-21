@@ -61,28 +61,58 @@ Association parse_association(const std::string& name) {
   throw std::invalid_argument("tracker association '" + name + "': one of likelihood, in_order");
 }
 
-std::vector<const Track*> Tracker::update(double time, const std::vector<Detection>& detections) {
-  const double dt = started_ ? time - time_ : 0.0;
-  started_ = true;
-  time_ = time;
+namespace {
+
+// A track's state, covariance and depth variance moved by the constant-velocity model from its time to `to`.
+struct Prior {
+  V4 x;
+  M4 p;
+  double depth_var;
+};
+
+Prior predict(const Track& t, double to, const TrackerOptions& o) {
+  const double dt = to - t.time;
   M4 f = M4::Identity();
   f(0, 2) = f(1, 3) = dt;
   Eigen::Matrix<double, 4, 2> g;
   g << 0.5 * dt * dt, 0.0, 0.0, 0.5 * dt * dt, dt, 0.0, 0.0, dt;
-  const M4 q = g * g.transpose() * (opt_.process_noise * opt_.process_noise);
+  const M4 q = g * g.transpose() * (o.process_noise * o.process_noise);
+  Eigen::Map<const V4> x(t.state);
+  Eigen::Map<const M4> p(t.cov);
+  Prior out;
+  out.x = f * x;
+  out.p = f * p * f.transpose() + q;
+  out.depth_var = std::isfinite(t.depth_var) ? t.depth_var + o.depth_process_noise * o.depth_process_noise * dt : t.depth_var;
+  return out;
+}
+
+}  // namespace
+
+std::vector<const Track*> Tracker::update(double time, const std::vector<Detection>& detections) {
+  started_ = true;
+  time_ = time;
   H24 h = H24::Zero();
   h(0, 0) = h(1, 1) = 1.0;
-  for (Track& t : tracks_) {
+  // Each detection's own time (D-156): the ping's when it carries none.
+  std::vector<double> when(detections.size());
+  for (std::size_t j = 0; j < detections.size(); ++j) when[j] = std::isnan(detections[j].time) ? time : detections[j].time;
+  // Each track predicted to each distinct detection time, once.
+  std::vector<std::vector<std::pair<double, Prior>>> cache(tracks_.size());
+  auto predicted = [&](std::size_t ti, double to) -> const Prior& {
+    for (const auto& [at, pr] : cache[ti]) {
+      if (at == to) return pr;
+    }
+    cache[ti].emplace_back(to, predict(tracks_[ti], to, opt_));
+    return cache[ti].back().second;
+  };
+  // The Kalman update of one track, predicted to the detection's time, with that detection.
+  auto take = [&](Track& t, const Detection& d, const Prior& prior, double at) {
     Eigen::Map<V4> x(t.state);
     Eigen::Map<M4> p(t.cov);
-    x = f * x;
-    p = f * p * f.transpose() + q;
-    if (std::isfinite(t.depth_var)) t.depth_var += opt_.depth_process_noise * opt_.depth_process_noise * dt;
-  }
-  // The Kalman update of one track with one detection.
-  auto take = [&](Track& t, const Detection& d) {
-    Eigen::Map<V4> x(t.state);
-    Eigen::Map<M4> p(t.cov);
+    x = prior.x;
+    p = prior.p;
+    t.depth_var = prior.depth_var;
+    t.time = at;
     const M2 s = h * p * h.transpose() + measurement_cov(d, opt_);
     const Eigen::Matrix<double, 4, 2> k = p * h.transpose() * s.inverse();
     x = x + k * (xy(d) - h * x);
@@ -106,12 +136,11 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     std::vector<Pair> pairs;
     for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
       const Track& t = tracks_[ti];
-      Eigen::Map<const V4> x(t.state);
-      Eigen::Map<const M4> p(t.cov);
       for (std::size_t j = 0; j < detections.size(); ++j) {
         const Detection& d = detections[j];
-        const M2 s = h * p * h.transpose() + measurement_cov(d, opt_);
-        const V2 y = xy(d) - h * x;
+        const Prior& pr = predicted(ti, when[j]);
+        const M2 s = h * pr.p * h.transpose() + measurement_cov(d, opt_);
+        const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
         if (d2 < opt_.gate * opt_.gate) pairs.push_back({!t.confirmed, d2 + std::log(s.determinant()), ti, j});
       }
@@ -127,8 +156,13 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       used[pr.detection] = 1;
     }
     for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
-      if (taken[ti] >= 0) take(tracks_[ti], detections[static_cast<std::size_t>(taken[ti])]);
-      else ++tracks_[ti].misses;
+      if (taken[ti] >= 0) {
+        const auto j = static_cast<std::size_t>(taken[ti]);
+        const Prior pr = predicted(ti, when[j]);
+        take(tracks_[ti], detections[j], pr, when[j]);
+      } else {
+        ++tracks_[ti].misses;
+      }
     }
     for (std::size_t j = 0; j < detections.size(); ++j) {
       if (!used[j]) unused.push_back(j);
@@ -137,18 +171,19 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     unused.resize(detections.size());
     for (std::size_t j = 0; j < unused.size(); ++j) unused[j] = j;
     // Confirmed tracks choose first, each taking its nearest gated detection.
-    std::vector<Track*> order;
-    for (Track& t : tracks_) order.push_back(&t);
-    std::stable_sort(order.begin(), order.end(), [](const Track* a, const Track* b) { return a->confirmed && !b->confirmed; });
-    for (Track* t : order) {
-      Eigen::Map<V4> x(t->state);
-      Eigen::Map<M4> p(t->cov);
+    std::vector<std::size_t> order(tracks_.size());
+    for (std::size_t ti = 0; ti < order.size(); ++ti) order[ti] = ti;
+    std::stable_sort(order.begin(), order.end(),
+                     [this](std::size_t a, std::size_t b) { return tracks_[a].confirmed && !tracks_[b].confirmed; });
+    for (std::size_t ti : order) {
+      Track& t = tracks_[ti];
       double best_d2 = opt_.gate * opt_.gate;
       std::ptrdiff_t best = -1;
       for (std::size_t k = 0; k < unused.size(); ++k) {
         const Detection& d = detections[unused[k]];
-        const M2 s = h * p * h.transpose() + measurement_cov(d, opt_);
-        const V2 y = xy(d) - h * x;
+        const Prior& pr = predicted(ti, when[unused[k]]);
+        const M2 s = h * pr.p * h.transpose() + measurement_cov(d, opt_);
+        const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
         if (d2 < best_d2) {
           best = static_cast<std::ptrdiff_t>(k);
@@ -156,21 +191,34 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         }
       }
       if (best < 0) {
-        ++t->misses;
+        ++t.misses;
         continue;
       }
-      const Detection d = detections[unused[static_cast<std::size_t>(best)]];
+      const std::size_t j = unused[static_cast<std::size_t>(best)];
       unused.erase(unused.begin() + best);
-      take(*t, d);
+      const Prior pr = predicted(ti, when[j]);
+      take(t, detections[j], pr, when[j]);
     }
   }
-  for (Track& t : tracks_) t.history.push_back({time, t.state[0], t.state[1]});
+  for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
+    Track& t = tracks_[ti];
+    if (t.misses > 0 && t.time != time) {
+      // It took nothing this ping: where it is at the ping.
+      const Prior pr = predicted(ti, time);
+      Eigen::Map<V4>(t.state) = pr.x;
+      Eigen::Map<M4>(t.cov) = pr.p;
+      t.depth_var = pr.depth_var;
+      t.time = time;
+    }
+    t.history.push_back({t.time, t.state[0], t.state[1]});
+  }
   tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [this](const Track& t) { return t.misses > opt_.max_misses; }),
                 tracks_.end());
   for (std::size_t j : unused) {
     const Detection& d = detections[j];
     Track tr;
     tr.id = next_id_++;
+    tr.time = when[j];
     const V2 p0 = xy(d);
     tr.state[0] = p0[0];
     tr.state[1] = p0[1];
@@ -178,7 +226,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p.setZero();
     p.topLeftCorner<2, 2>() = measurement_cov(d, opt_);
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
-    tr.history.push_back({time, p0[0], p0[1]});
+    tr.history.push_back({when[j], p0[0], p0[1]});
     tr.snr.push_back(d.snr_db);
     tr.cells.push_back(d.cells);
     take_depth(tr, d);

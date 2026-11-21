@@ -21,8 +21,8 @@ struct Fit {
   double x, y, vx, vy, rms, sigma;
 };
 
-// Least-squares straight line through (time, x, y).
-Fit fit_velocity(const std::vector<HistoryPoint>& h) {
+// Least-squares straight line through (time, x, y); the position on it at `at` (NaN: at the last point's time).
+Fit fit_velocity(const std::vector<HistoryPoint>& h, double at) {
   const std::size_t n = h.size();
   Fit f{h.back().x, h.back().y, 0.0, 0.0, 0.0, std::numeric_limits<double>::infinity()};
   if (n < 3 || h.back().time - h.front().time <= 0.0) return f;
@@ -50,7 +50,7 @@ Fit fit_velocity(const std::vector<HistoryPoint>& h) {
     const double rx = p.x - (xm + tc * f.vx), ry = p.y - (ym + tc * f.vy);
     ss += rx * rx + ry * ry;
   }
-  const double tc_last = h.back().time - tm;
+  const double tc_last = (std::isnan(at) ? h.back().time : at) - tm;
   f.x = xm + tc_last * f.vx;
   f.y = ym + tc_last * f.vy;
   f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(n) - 4, 1)));
@@ -82,7 +82,7 @@ const char* kind_name(Kind kind) {
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o) {
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
-    const Fit f = fit_velocity(tr->history);
+    const Fit f = fit_velocity(tr->history, o.time);
     TrackClass c;
     c.id = tr->id;
     c.x = f.x;

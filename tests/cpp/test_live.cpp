@@ -84,6 +84,55 @@ TEST(Tracker, FollowsAMoverAndAStandingObjectAndClassifiesThem) {
   EXPECT_STREQ(kind_name(classes[0].kind), "mover");
 }
 
+TEST(Tracker, TakesEachDetectionAtItsOwnTimeAndClassifiesAtThePing) {
+  // D-156: a ship at 12 km crossing at 6 m/s, pinged every 20 s by a monostatic sonar at the origin; each detection
+  // shows it where it was when the sound reached it, transmit + R/c. Stamped so, the track holds at its detections'
+  // times and its fitted position at the ping time is the ship's then; stamped at the transmit time (the rule before,
+  // and what a detection without a time gets) it is v R / c = 48 m ahead along its course.
+  const double c = 1500.0, vx = 6.0, x0 = -60.0, y0 = 12000.0;
+  TrackerOptions o;
+  o.range_sigma = 2.0;
+  o.bearing_sigma = 0.01 * kDeg;
+  Tracker timed(o), plain(o), at_ping(o);
+  std::vector<const Track*> a, b, p;
+  double tp = 0.0, t_last = 0.0;
+  for (int k = 0; k < 10; ++k) {
+    tp = 20.0 * k;
+    double tr = tp;
+    for (int i = 0; i < 8; ++i) tr = tp + std::hypot(x0 + vx * tr, y0) / c;
+    const double px = x0 + vx * tr, py = y0;
+    Detection d{std::hypot(px, py), std::atan2(px, py), 20.0, 4};   // (across, forward)
+    p = plain.update(tp, {d});
+    Detection same = d;
+    same.time = tp;
+    EXPECT_TRUE(std::isnan(d.time));
+    const auto q = at_ping.update(tp, {same});
+    d.time = tp + d.range / c;
+    t_last = d.time;
+    a = timed.update(tp, {d});
+    ASSERT_EQ(q.size(), p.size());
+    for (std::size_t i = 0; i < p.size(); ++i) {   // no time is the ping's time, bit for bit
+      for (int j = 0; j < 4; ++j) EXPECT_EQ(q[i]->state[j], p[i]->state[j]);
+    }
+  }
+  ASSERT_EQ(a.size(), 1U);
+  ASSERT_EQ(p.size(), 1U);
+  EXPECT_NEAR(a[0]->time, t_last, 1e-9);
+  EXPECT_EQ(a[0]->history.back().time, a[0]->time);
+  EXPECT_EQ(p[0]->time, tp);
+  ClassifyOptions co;
+  co.time = tp;
+  const auto ca = classify_tracks(a, co), cp = classify_tracks(p, co);
+  const double truth_x = x0 + vx * tp;
+  EXPECT_NEAR(ca[0].x, truth_x, 0.5);
+  EXPECT_NEAR(ca[0].y, y0, 0.5);
+  EXPECT_NEAR(cp[0].x - truth_x, vx * 8.0, 3.0);
+  EXPECT_NEAR(ca[0].speed, vx, 0.1);
+  // Without a time the fit is read at the last point: the last detection's time for the stamped track.
+  const auto at_last = classify_tracks(a, ClassifyOptions{});
+  EXPECT_NEAR(at_last[0].x - ca[0].x, vx * (t_last - tp), 0.05);
+}
+
 TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName) {
   // D-141: the default and the names; the two rules themselves are held to the Python tracker's in
   // tests/python/test_live_cpp.py, and the case that separates them in tests/python/test_detect.py.

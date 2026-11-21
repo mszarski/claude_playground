@@ -33,6 +33,7 @@ py::dict track_dict(const live::Track& t) {
   d["history"] = h;
   d["snr"] = t.snr;
   d["cells"] = t.cells;
+  d["time"] = t.time;
   return d;
 }
 
@@ -361,18 +362,28 @@ void bind_live(py::module_& m) {
            py::arg("gate") = 4.0, py::arg("confirm_hits") = 3, py::arg("max_misses") = 3, py::arg("initial_speed_sigma") = 10.0,
            py::arg("association") = "likelihood")
       .def("update",
-           [](live::Tracker& t, double time, const std::vector<std::tuple<double, double, double, std::int64_t>>& dets) {
+           [](live::Tracker& t, double time, const std::vector<std::tuple<double, double, double, std::int64_t>>& dets,
+              const std::optional<std::vector<std::optional<double>>>& times) {
+             if (times && times->size() != dets.size()) throw py::value_error("LiveTracker.update: one time per detection");
              std::vector<live::Detection> d;
-             for (const auto& [r, b, s, c] : dets) d.push_back({r, b, s, c});
+             for (std::size_t i = 0; i < dets.size(); ++i) {
+               const auto& [r, b, s, c] = dets[i];
+               d.push_back({r, b, s, c});
+               // Each detection's own time (D-156); None: the ping's.
+               if (times && (*times)[i]) d.back().time = *(*times)[i];
+             }
              py::list out;
              for (const live::Track* tr : t.update(time, d)) out.append(track_dict(*tr));
              return out;
-           })
+           },
+           py::arg("time"), py::arg("detections"), py::arg("times") = py::none(),
+           "Advance to the ping at `time` with detections [(range, bearing, snr_db, cells)]; `times`: each one's own time "
+           "(s; None: the ping's).")
       .def("classify",
            [](const live::Tracker& t, double min_speed, double static_speed, double significance, double min_seen,
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
               double max_excess_range, double multipath_bearing, double multipath_velocity, double origin_x, double origin_y,
-              std::optional<double> min_mover_cells, std::optional<double> row_snr_db) {
+              std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time) {
              // None: the rule is off. Given: zero or more (as classify.py refuses a negative or NaN value).
              for (const auto& [name, val] : {std::pair{"min_mover_cells", min_mover_cells}, std::pair{"row_snr_db", row_snr_db}}) {
                if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
@@ -384,7 +395,8 @@ void bind_live(py::module_& m) {
              const live::ClassifyOptions o{min_speed, static_speed, significance, min_seen, min_points, max_fit_rms, linear,
                                            linear_length, linear_width, multipath, max_excess_range, multipath_bearing,
                                            multipath_velocity, origin_x, origin_y,
-                                           min_mover_cells.value_or(-1.0), row_snr_db.value_or(-1.0)};
+                                           min_mover_cells.value_or(-1.0), row_snr_db.value_or(-1.0),
+                                           time.value_or(std::numeric_limits<double>::quiet_NaN())};
              py::list out;
              for (const auto& c : live::classify_tracks(confirmed, o)) {
                py::dict d;
@@ -407,7 +419,8 @@ void bind_live(py::module_& m) {
            py::arg("min_points") = 4, py::arg("max_fit_rms") = -1.0, py::arg("linear") = false, py::arg("linear_length") = 40.0,
            py::arg("linear_width") = 2.0, py::arg("multipath") = false, py::arg("max_excess_range") = 800.0,
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
-           py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none());
+           py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none(),
+           py::arg("time") = py::none());
 
   m.def("element_offsets", &live::element_offsets, "Receive element positions along the array axis, m about the centre.");
   m.def(

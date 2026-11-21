@@ -1385,6 +1385,9 @@ class LiveChain:
         if self._origin is None:
             self._origin, self._t0 = origin.copy(), record.transmit.time_ns
         t = (record.transmit.time_ns - self._t0) * 1e-9
+        # A monostatic echo shows the target where it was when the sound reached it: transmit + range / c, with the c that
+        # turned the two-way time into range (the record's, after `sound_speed`). D-156; libs/live chain.cpp the same.
+        c_range = float(record.environment.sound_speed)
         local = []
         extra = [None] * len(hits)             # what elevation adds to each detection's report
         for i, h in enumerate(hits):
@@ -1440,13 +1443,14 @@ class LiveChain:
                         alternatives = [float(origin[2] + e.range * w[2]) for w in e.alternatives]
             # The tracker's measurement is (range, bearing) about the frame origin, across then forward.
             local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
-                                          depth_alternatives=alternatives))
+                                          depth_alternatives=alternatives, time=t + float(h.range) / c_range))
         tracks = self.tracker.update(t, local)
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
+        # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"))
+                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t)
         track_extra = {}
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}
