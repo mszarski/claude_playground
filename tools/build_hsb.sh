@@ -17,7 +17,11 @@
 #
 # Tag 2.7.0 is the last one whose CMake accepts Holoscan 4 / CUDA 12. Left out: tests, tools,
 # examples, RoCE (needs ibverbs and real NICs), GPUNetIO, FuSa, SIPL, Argus, PVA.
+case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
+if [ $# -lt 1 ] || [ "${1#-}" != "$1" ]; then
+  echo "usage: $0 <out-dir> (an option is not a directory; --help prints the header)" >&2; exit 2
+fi
 prefix=$(mkdir -p "$1" && cd "$1" && pwd)
 ref=${2:-https://github.com/nvidia-holoscan/holoscan-sensor-bridge}
 tag=2.7.0

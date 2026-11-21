@@ -5,7 +5,11 @@
 #
 # Usage: tools/build_oracles.sh <out-dir>
 #   then: export GPUSONAR_BELLHOP=<out-dir>/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=<out-dir>
+case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
+if [ $# -lt 1 ] || [ "${1#-}" != "$1" ]; then
+  echo "usage: $0 <out-dir> (an option is not a directory; --help prints the header)" >&2; exit 2
+fi
 out=$1
 command -v gfortran > /dev/null || { echo "gfortran is not installed (apt-get install gfortran)" >&2; exit 1; }
 rm -rf "$out"

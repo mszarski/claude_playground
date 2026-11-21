@@ -35,6 +35,7 @@
 #                                               GPUSONAR_UPLOAD_PATH: folder in the upload dataset, default benchall)
 # Uploads (gallery, elevbench, liveablate, benchall) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
+case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv

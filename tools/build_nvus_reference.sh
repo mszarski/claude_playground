@@ -8,7 +8,11 @@
 #   then: export GPUSONAR_NVUS_PYTHON=<out-dir>/pkg GPUSONAR_NVUS_DIR=<out-dir>/src
 # Set NVUS_APPLY_PATCH=0 to build the reference unmodified (0.88 m window limit).
 # On the rig, apply the same patch to the reference before running its ./setup.
+case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
+if [ $# -lt 1 ] || [ "${1#-}" != "$1" ]; then
+  echo "usage: $0 <out-dir> (an option is not a directory; --help prints the header)" >&2; exit 2
+fi
 out=$(mkdir -p "$1" && cd "$1" && pwd)
 ref=${2:-https://github.com/nvidia-holoscan/holoscan-ultrasound-imaging}
 here=$(cd "$(dirname "$0")/.." && pwd)

@@ -25,7 +25,7 @@ Not done or partly done:
 - G5: `popoto_truth_check.py` is cited by `RESULTS.md`, so it was kept and its hard-coded ship
   track replaced by the scenario's.
 - B5: one Bellhop check (`test_lloyd.py`, read from a validation file) still skips silently.
-- B6: the `tools/*.sh` scripts still treat `--help` as an argument (issue filed).
+- B6: done for the shell scripts too (help and an option-like output directory refused).
 - B8: the CUDA comparison has run only where a device is present (issue filed).
 
 The findings below are as written at `2c5bb8a`.
