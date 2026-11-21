@@ -217,11 +217,11 @@ boat at anchor.
 
 | Quantity | Result |
 | --- | --- |
-| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.3 m, velocity 1.69, −4.72 m/s; **classified line** (4.9 ± 0.1 m/s) |
+| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.3 m, velocity 1.69, −4.72 m/s; classified mover (4.9 ± 0.1 m/s; line before D-154) |
 | Boat at anchor | tracked, 0.8 m, 0.04 m/s; classified static |
 | Detections per ping | 54 to 63 |
 | Confirmed tracks | 65 |
-| Track classes | 0 mover, 47 static, 10 line, 8 uncertain |
+| Track classes | 1 mover, 47 static, 9 line, 8 uncertain |
 | Tracks called movers that are not the boat | 0 |
 
 - Everything on the bed makes tracks. From the tracks alone, 47 are static (boulders,
@@ -229,6 +229,10 @@ boat at anchor.
   such as the pipeline cannot be told from the feature standing still), one of them the
   boat under way, and 8 jump about too much to say. Before the line rule and the
   requirement that a mover be seen on most pings, 24 tracks were called movers.
+- **Since D-154 the boat under way is a mover again** (4.9 ± 0.1 m/s against a true 5.0), and it is
+  the only mover: a track counts in its row only if its SNR is within 6 dB of the boat's, and the seabed
+  tracks in its corridor are at most 18.7 dB against its 25.4. Between D-141 and D-154 it was classified
+  line. What follows describes that run.
 - **No track is called a mover, and that includes the boat under way: its track is now
   classified line, at 4.9 ± 0.1 m/s against a true 5.0, where the previous run called it a
   mover.** Its track itself is as before, 0.3 m from the boat's centre. The previous run

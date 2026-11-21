@@ -318,7 +318,8 @@ Grouped; within a group the most consequential first.
       that are not the boat 8 become 0, static tracks 21 become 47.
     - **`fls_120k_rough_surface`: 13 movers off a moving object (8)**; the boat's track is
       1.4 m off (0.7) and reads 5.5 m/s (4.9; true 5.0).
-    - **`fls_120k_cluttered_seabed`: the boat under way is classed `line`** (was `mover`);
+    - `fls_120k_cluttered_seabed`: the boat under way was classed `line` (was `mover`); a
+      mover again since D-154 (the row counts only tracks within 6 dB of its SNR);
       its track is unchanged (4.9 m/s): the more steady seabed tracks put some in the
       corridor ahead of and astern of it, and the `line` rule takes it for a feature.
     - **`fls_170k_transit`: the anchored boat is `uncertain`** at 0.24 ± 0.05 m/s (was

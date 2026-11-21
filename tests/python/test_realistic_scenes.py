@@ -292,10 +292,12 @@ def test_documented_full_size_classes():
         assert c["counts"]["mover"] == 1 and c["movers_not_on_a_moving_object"] == 0, name
         assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["mooring_buoy"]["kind"] == "static", name
     c = g["fls_120k_cluttered_seabed"]["classification"]
-    # Since D-141 no track here is called a mover that is not the boat (8 before), but the boat under way is classed `line`
-    # at its own speed (4.9 m/s; true 5.0): more seabed tracks hold steady and some lie in the corridor ahead of and astern
-    # of it. Worse for the boat, recorded in STATUS item 45.
-    assert c["targets"]["boat_under_way"]["kind"] == "line" and c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
+    # Since D-141 no track here is called a mover that is not the boat (8 before). D-141 left the boat under way classed
+    # `line` (seabed tracks ahead of and astern of it in its corridor); since D-154 only tracks within 6 dB of the boat's
+    # SNR count in its row (the seabed tracks are at most 18.7 dB against its 25.4), and it is a mover again at its own
+    # speed (4.9 m/s; true 5.0).
+    assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
+    assert c["counts"]["mover"] == 1
     assert c["targets"]["boat_at_anchor"]["kind"] == "static"
     assert c["movers_not_on_a_moving_object"] == 0 and c["counts"]["static"] + c["counts"]["line"] >= 40
     c = g["popoto_far_mover"]["classification"]

@@ -241,6 +241,14 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
   offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
   40.188 mm), so it is a property of the data, not of the kernel.
 
+## Gallery regenerated with the row-strength rule (D-154)
+
+Full-size gallery on an L4 (job 6b013d75efaf5e14f4b47980, tree `b394e81`), `docs/figures/`: the one
+change of class is `fls_120k_cluttered_seabed`'s boat under way, `line` → **`mover`** (4.9 m/s; true
+5.0), movers 0 → 1, line tracks 10 → 9; movers not on a moving object stay 0. Everything else agrees
+with the run before (tree of commit `a26d588`'s gallery) to GPU rounding: the largest relative changes
+are in near-zero velocity components (6e-6 m/s), and the timings vary as between any two runs.
+
 ## Classification: the opt-in detection rules over ten seeds (D-152)
 
 Source: `tools/classify_rules_eval.py`, `docs/benchmarks/classify_rules_eval_190f8ce.json` (12 gallery
