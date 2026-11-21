@@ -1,9 +1,11 @@
 """Oracle tests: skip when the external program is missing, or fail when it is expected.
 
-The outside oracles (Bellhop, KRAKEN; GPL-3 programs run as separate processes) are not part of
-the suite, so a test that needs one skips without it, and a plain `pytest` passes with no oracle
-run at all. Every such skip names the variable that points at the program (GPUSONAR_BELLHOP,
-GPUSONAR_KRAKEN_DIR) in its reason; this plugin recognises those skips by that name.
+The outside oracles (Bellhop, Bellhop3D, KRAKEN: GPL-3 programs run as separate processes; PyRAM: a
+BSD-3 Python package imported by the tests only) are not part of the suite, so a test that needs one
+skips without it, and a plain `pytest` passes with no oracle run at all. Every such skip names the
+variable that points at the program (GPUSONAR_BELLHOP, GPUSONAR_BELLHOP3D, GPUSONAR_KRAKEN_DIR), or for
+PyRAM its module `pyram`, in its reason; this plugin recognises those skips by that name (as a whole
+word, the first of ORACLE_VARIABLES that the reason names: GPUSONAR_BELLHOP3D is not GPUSONAR_BELLHOP).
 
 - With GPUSONAR_REQUIRE_ORACLES=1 an oracle skip is turned into a failure (a run that is meant
   to have the oracles, such as `GPUSONAR_ORACLES=1 tools/gpu_job.sh`, then cannot pass without them).
@@ -15,10 +17,11 @@ Loaded by tests/python/conftest.py (`pytest_plugins`).
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
-ORACLE_VARIABLES = ("GPUSONAR_BELLHOP", "GPUSONAR_KRAKEN_DIR")
+ORACLE_VARIABLES = ("GPUSONAR_BELLHOP", "GPUSONAR_BELLHOP3D", "GPUSONAR_KRAKEN_DIR", "pyram")
 REQUIRE_VARIABLE = "GPUSONAR_REQUIRE_ORACLES"
 
 _skipped: dict[str, int] = {}
@@ -31,7 +34,7 @@ def oracles_required() -> bool:
 def oracle_variable(reason: str) -> str | None:
     """The oracle variable a skip reason names, or None for a skip that is not about an oracle."""
     for name in ORACLE_VARIABLES:
-        if name in reason:
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", reason):
             return name
     return None
 

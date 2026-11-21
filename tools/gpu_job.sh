@@ -7,8 +7,9 @@
 #                                        runs ctest and then pytest on tests/python with these args appended
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch gpusonar.tar.gz from that dataset first
 #        SONAR_CMAKE_ARGS="..." tools/gpu_job.sh    extra arguments for the CMake configure step
-#        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them, and set
-#                                               GPUSONAR_REQUIRE_ORACLES=1 so that an oracle test that skips fails instead
+#        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop, Bellhop3D and KRAKEN and install the PE oracle PyRAM
+#                                               1.3.0 for the tests that need them, and set GPUSONAR_REQUIRE_ORACLES=1 so
+#                                               that an oracle test that skips fails instead
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
 #        GPUSONAR_HOLOSCAN_CPP=1 tools/gpu_job.sh  also install the Holoscan C++ package and build the C++ operators
 #        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
@@ -79,6 +80,8 @@ if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   # External GPL-3 propagation programs, run as separate processes (docs/OPEN_SOURCE.md).
   apt-get install -y -qq gfortran make > /dev/null
   eval "$(tools/build_oracles.sh /opt/at | tail -1)"
+  # PyRAM (BSD-3, docs/OPEN_SOURCE.md): a parabolic-equation test oracle, imported by tests/python only.
+  pip install -q pyram==1.3.0
   # The oracles were asked for: a test that skips for want of one fails instead (tests/python/oracle_gate.py).
   export GPUSONAR_REQUIRE_ORACLES="${GPUSONAR_REQUIRE_ORACLES:-1}"
 fi
