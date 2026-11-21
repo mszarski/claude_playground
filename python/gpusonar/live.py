@@ -73,7 +73,10 @@ DEFAULTS = {
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": None,
-                 "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5}},
+                 "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5},
+                 # Opt-in rules from the detections themselves (classify.py, ours): None is off.
+                 # {"min_mover_cells": cells}. row_snr_db is refused here: the chain never runs the row test.
+                 "detections": None},
 }
 # The derived settings: (path in the configuration, C++ option name, factor from the configuration's unit).
 DERIVED = ((("range_cell_m",), "range_cell_m", 1.0), (("cfar", "guard_m"), "cfar_guard_m", 1.0), (("cfar", "train_m"), "cfar_train_m", 1.0),
@@ -388,6 +391,16 @@ def check_choices(cfg: dict) -> None:
             raise ValueError(f"chain.{key}: {cfg.get(key)!r} ({', '.join(allowed[:-1])} or {allowed[-1]})")
 
 
+def live_detection_rules(detections: dict | None) -> dict:
+    """classify.detections for the live chain: classify.check_detection_rules, and `row_snr_db` refused, because the
+    chain (either engine) never runs the row test it acts in; it stays usable through classify_tracks(linear=...)."""
+    det = classify.check_detection_rules(detections)
+    if det["row_snr_db"] is not None:
+        raise ValueError("classify.detections.row_snr_db: the live chain never runs the row (corridor) test, so this rule "
+                         "would do nothing there; it applies only to classify_tracks with linear (the gallery)")
+    return det
+
+
 def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     """The chain section of a deployment file as the options of the C++ chain (`core.LiveChainCpp`,
     and `key=value` arguments of build/bin/sonar_live through `program_options`). `cfg` is merged over the
@@ -424,6 +437,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     if c.get("multipath"):
         m = c["multipath"]
         o.update(multipath_max_excess_range=m["max_excess_range"], multipath_velocity=m["velocity"])
+    det = live_detection_rules(c.get("detections"))
+    if det["min_mover_cells"] is not None:
+        o["classify_min_mover_cells"] = det["min_mover_cells"]
     if cfg.get("dead_channels"):
         o["dead_channels"] = [int(v) for v in cfg["dead_channels"]]
     if cfg.get("sound_speed"):
@@ -937,6 +953,7 @@ class LiveChain:
                  report_udp: tuple | None = None, taps: dict | None = None, nav: NavListener | None = None,
                  report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
         self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
+        live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
         self.report_udp_max_bytes = int(report_udp_max_bytes)
         self.reports_split = 0                 # reports that went out as several datagrams
@@ -1429,7 +1446,7 @@ class LiveChain:
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp)
+                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"))
         track_extra = {}
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}

@@ -281,6 +281,7 @@ class Track:
     confirmed: bool = False
     history: list = field(default_factory=list)   # (time, x, y)
     snr: list = field(default_factory=list)       # SNR (dB) of each detection it took
+    cells: list = field(default_factory=list)     # flagged map cells of each detection it took (Detection.cells)
     depth: float = float("nan")                   # m, from the detections that carried one
     depth_var: float = float("inf")
 
@@ -379,6 +380,7 @@ class Tracker:
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov)
             tr.history.append((time, float(xy[0]), float(xy[1])))
             tr.snr.append(d.snr_db)
+            tr.cells.append(int(d.cells))
             self._take_depth(tr, d)
             self.tracks.append(tr)
             self._next_id += 1
@@ -392,6 +394,7 @@ class Tracker:
         t.cov = (np.eye(4) - k @ h) @ t.cov
         t.hits += 1
         t.snr.append(d.snr_db)
+        t.cells.append(int(d.cells))
         self._take_depth(t, d)
         t.misses = 0
         t.confirmed = t.confirmed or t.hits >= self.confirm_hits

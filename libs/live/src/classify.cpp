@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 #include "sonar/live/detections.hpp"
 
@@ -57,6 +58,15 @@ Fit fit_velocity(const std::vector<HistoryPoint>& h) {
   return f;
 }
 
+// Median of the detections' cell counts, as numpy.median (mean of the middle two); NaN when there are none.
+double median_cells(const std::vector<std::int64_t>& cells) {
+  if (cells.empty()) return std::numeric_limits<double>::quiet_NaN();
+  std::vector<std::int64_t> c(cells);
+  std::sort(c.begin(), c.end());
+  const std::size_t n = c.size();
+  return n % 2 ? static_cast<double>(c[n / 2]) : 0.5 * (static_cast<double>(c[n / 2 - 1]) + static_cast<double>(c[n / 2]));
+}
+
 }  // namespace
 
 const char* kind_name(Kind kind) {
@@ -100,6 +110,7 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     } else {
       c.kind = Kind::Uncertain;
     }
+    c.extent_cells = median_cells(tr->cells);
     out.push_back(c);
   }
   if (o.linear) {
@@ -114,6 +125,8 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
         const double dx = out[j].x - out[i].x, dy = out[j].y - out[i].y;
         const double along = dx * ux + dy * uy, across = std::abs(dx * uy - dy * ux);
         if (std::abs(along) > o.linear_length || across > o.linear_width) continue;
+        // Only echoes of about this one's strength make a row with it; a NaN SNR never does.
+        if (o.row_snr_db >= 0.0 && !(out[j].mean_snr_db >= out[i].mean_snr_db - o.row_snr_db)) continue;
         if (along > 1e-6) ++ahead;
         if (along < -1e-6) ++astern;
       }
@@ -122,6 +135,13 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     // Python changes kinds as it goes, and a track already made a line no longer counts as a mover
     // for later ones only through its own entry, which the loop above never reads: the same result.
     for (std::size_t i = 0; i < out.size(); ++i) out[i].kind = updated[i];
+  }
+  if (o.min_mover_cells >= 0.0) {
+    // After the corridor test (a row of small echoes along a pipeline stays a line), before echo grouping (a track too
+    // small for an object under way explains nothing). A glint or clutter joined into a line; NaN (no cells) leaves it.
+    for (TrackClass& c : out) {
+      if (c.kind == Kind::Mover && c.extent_cells < o.min_mover_cells) c.kind = Kind::Uncertain;
+    }
   }
   if (o.multipath) {
     std::vector<std::size_t> order(out.size());

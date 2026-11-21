@@ -57,6 +57,7 @@ struct Track {
   bool confirmed = false;
   std::vector<HistoryPoint> history;
   std::vector<double> snr;  ///< SNR (dB) of each detection it took
+  std::vector<std::int64_t> cells;  ///< flagged map cells of each detection it took (Detection::cells)
   double depth = std::numeric_limits<double>::quiet_NaN();  ///< m, from the detections that carried one
   double depth_var = std::numeric_limits<double>::infinity();
 };
@@ -113,6 +114,7 @@ struct TrackClass {
   double vx = 0.0, vy = 0.0;  ///< fitted velocity
   double speed = 0.0, speed_sigma = 0.0, fit_rms = 0.0, seen = 0.0, mean_snr_db = 0.0;
   std::int64_t parent = -1;   ///< for multipath: the track it echoes
+  double extent_cells = std::numeric_limits<double>::quiet_NaN();  ///< median flagged map cells of its detections; NaN: none
 };
 
 struct ClassifyOptions {
@@ -124,6 +126,9 @@ struct ClassifyOptions {
   bool multipath = false;
   double multipath_max_excess_range = 800.0, multipath_bearing = 0.05235987755982988, multipath_velocity = 2.5;
   double origin_x = 0.0, origin_y = 0.0;  ///< where the sonar is, for multipath (across, forward)
+  // Rules from the detections themselves (classify.py `detections`; ours), off by default:
+  double min_mover_cells = -1.0;  ///< < 0: off. A mover whose median detection extent is below this many cells is uncertain
+  double row_snr_db = -1.0;       ///< < 0: off. In the corridor test only tracks at most this many dB weaker make a row
 };
 
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).

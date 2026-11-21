@@ -15,6 +15,18 @@ Rule-based, from the track alone (no image features, no learning):
 
 What this cannot do: tell a moored buoy from a rock or from a wave face that holds still,
 or a boat at anchor from a boulder. Those need more than a track (extent, depth, aspect).
+
+Opt-in, off by default (`detections`): two rules that use what the detections themselves carry on every ping,
+not only where the track went. Both rules and their thresholds are ours, with no published source; the thresholds
+have no default, since they depend on the map's cells and on the site (docs/CONFIGURATION.md):
+
+  extent      a mover (after the row test) whose detections are small, the median number of flagged map cells
+              over the detections it took below `min_mover_cells`, is uncertain: a wave glint or a clutter peak
+              that the tracker joined into a straight line is a few cells; a hull at these ranges spans many.
+              A track without recorded cells is left as it is;
+  row         in the corridor test (`linear`), another track counts as part of the row only if its mean SNR is no
+              more than `row_snr_db` below this track's: the echoes of one pipeline or cable are of one strength,
+              and a boat running along a row of seabed clutter is much stronger than the clutter.
 """
 
 from __future__ import annotations
@@ -38,6 +50,7 @@ class TrackClass:
     seen: float               # fraction of pings since birth with a detection
     mean_snr_db: float
     parent: int | None = None  # for multipath: the id of the track it echoes
+    extent_cells: float = float("nan")   # median flagged map cells of the detections it took (NaN: none recorded)
 
 
 def fit_velocity(history) -> tuple[np.ndarray, np.ndarray, float, float]:
@@ -59,7 +72,7 @@ def fit_velocity(history) -> tuple[np.ndarray, np.ndarray, float, float]:
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
-                    linear: dict | None = None) -> list[TrackClass]:
+                    linear: dict | None = None, detections: dict | None = None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -70,7 +83,10 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     `linear` switches on the test for movement along a row of tracks:
     {"length": m, "width": m}: another track ahead and another astern, within `width` of the line
     through this track along its velocity and no further than `length` along it.
+    `detections` switches on the rules from the detections themselves (module docstring):
+    {"min_mover_cells": cells or None, "row_snr_db": dB or None}; None or {} changes nothing.
     """
+    det = check_detection_rules(detections)
     out = []
     from scipy import stats
     for tr in tracks:
@@ -94,8 +110,10 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
             kind = "static"                      # slow and not distinguishable from standing still
         else:
             kind = "uncertain"
+        cells = getattr(tr, "cells", None)
+        extent = float(np.median(cells)) if cells else float("nan")
         out.append(TrackClass(tr.id, kind, (float(pos[0]), float(pos[1])), (float(v[0]), float(v[1])), speed,
-                              sigma, rms, float(seen), snr))
+                              sigma, rms, float(seen), snr, extent_cells=extent))
     if linear:
         xy = np.array([c.position for c in out]).reshape(-1, 2)
         for i, c in enumerate(out):
@@ -107,9 +125,19 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
             along = d @ u
             across = np.abs(d[:, 0] * u[1] - d[:, 1] * u[0])
             in_row = (np.abs(along) <= linear["length"]) & (across <= linear["width"])
+            if det["row_snr_db"] is not None:
+                # Only echoes of about this one's strength make a row with it; NaN SNR never does.
+                snr = np.array([o.mean_snr_db for o in out])
+                in_row &= snr >= c.mean_snr_db - det["row_snr_db"]
             # Both ahead and astern: a boat trailing a wake has tracks astern only and stays a mover.
             if int((in_row & (along > 1e-6)).sum()) >= 1 and int((in_row & (along < -1e-6)).sum()) >= 1:
                 c.kind = "line"
+    if det["min_mover_cells"] is not None:
+        # After the corridor test, so that a row of small echoes along a pipeline stays a line; before echo grouping,
+        # so that a track too small for an object under way does not explain others as its echoes.
+        for c in out:
+            if c.kind == "mover" and c.extent_cells < det["min_mover_cells"]:
+                c.kind = "uncertain"             # a glint or clutter joined into a line; NaN (no cells) leaves it
     if multipath:
         origin = np.asarray(multipath.get("origin", (0.0, 0.0)), dtype=float)
         polar = {}
@@ -131,6 +159,22 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
                 if 0.0 < excess <= multipath["max_excess_range"] and same_bearing and same_velocity:
                     weak.kind, weak.parent = "multipath", strong.id
                     break
+    return out
+
+
+DETECTION_RULES = ("min_mover_cells", "row_snr_db")
+
+
+def check_detection_rules(detections: dict | None) -> dict:
+    """The `detections` option with every rule named (None: off); refuses unknown keys and negative values."""
+    detections = dict(detections or {})
+    unknown = set(detections) - set(DETECTION_RULES)
+    if unknown:
+        raise ValueError(f"classify detections: unknown key(s) {sorted(unknown)}; known: {list(DETECTION_RULES)}")
+    out = {k: (None if detections.get(k) is None else float(detections[k])) for k in DETECTION_RULES}
+    for k, v in out.items():
+        if v is not None and not v >= 0.0:
+            raise ValueError(f"classify detections.{k} = {v}: must be zero or more (None switches it off)")
     return out
 
 
