@@ -41,8 +41,12 @@ def test_cluster_matches_python():
         assert g[3] == w.cells and g[2] == pytest.approx(w.snr_db, abs=0.05)
 
 
+@pytest.mark.parametrize("timed", [False, True, "nan"])
 @pytest.mark.parametrize("association", ["likelihood", "in_order"])
-def test_tracker_and_classifier_match_python(association):
+def test_tracker_and_classifier_match_python(association, timed):
+    """The two trackers and classifiers on the same detections; `timed`: each detection with its own time, transmit +
+    range / c (D-156), and the classes' positions at the ping's time; "nan": every detection's time and the classes'
+    time NaN, which both engines take as not given (the ping's time; each track's last point)."""
     rng = np.random.default_rng(8)
     opts = dict(process_noise=0.3, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0,
                 association=association)
@@ -60,13 +64,19 @@ def test_tracker_and_classifier_match_python(association):
         for _ in range(3):
             if rng.random() < 0.5:
                 dets.append((float(rng.uniform(100, 350)), float(rng.uniform(-0.6, 0.6)), 13.0, 1))
-        a = py_tracker.update(t, [detect.Detection(*d) for d in dets])
-        b = cpp_tracker.update(t, dets)
+        times = None if not timed else [float("nan")] * len(dets) if timed == "nan" else [t + d[0] / 1500.0 for d in dets]
+        a = py_tracker.update(t, [detect.Detection(*d, time=None if times is None else times[j]) for j, d in enumerate(dets)])
+        b = cpp_tracker.update(t, dets, times)
         assert [tr.id for tr in a] == [tr["id"] for tr in b]
         for tr, cr in zip(a, b):
             assert np.allclose(tr.state, cr["state"], atol=1e-8) and tr.hits == cr["hits"] and tr.misses == cr["misses"]
             assert np.allclose(np.array(tr.history), np.array(cr["history"]), atol=1e-8) and np.allclose(tr.snr, cr["snr"])
-    kw = dict(min_speed=0.5, max_fit_rms=2.5)
+            assert tr.time == cr["time"] == tr.history[-1][0]
+        if timed is True and a:                             # the detections' times reach the tracks
+            assert any(tr.time > t for tr in a)
+        if timed == "nan":
+            assert all(tr.time == t for tr in a)
+    kw = dict(min_speed=0.5, max_fit_rms=2.5, time=t if timed is True else float("nan") if timed == "nan" else None)
     want = classify.classify_tracks(a, linear={"length": 40.0, "width": 2.0}, **kw)
     got = cpp_tracker.classify(linear=True, linear_length=40.0, linear_width=2.0, **kw)
     assert [c.kind for c in want] == [c["kind"] for c in got]
@@ -78,6 +88,101 @@ def test_tracker_and_classifier_match_python(association):
     want = classify.classify_tracks(a, multipath=mp, **kw)
     got = cpp_tracker.classify(multipath=True, max_excess_range=60.0, multipath_bearing=0.2, multipath_velocity=3.0, **kw)
     assert [(c.kind, c.parent) for c in want] == [(c["kind"], c["parent"]) for c in got]
+
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+@pytest.mark.parametrize("stamp", ["none", "ping"])
+def test_cpp_detections_without_their_own_time_track_exactly_as_before(association, stamp):
+    """D-156: core.LiveTracker with detections that carry no time, or the ping's, gives bit for bit what it gave before
+    (tests/python/data/tracker_before_d156.json, made with the C++ tracker at commit 1be89d4)."""
+    from test_detect import SCENARIO_TRACKER, before_d156, tracker_scenario
+    want = before_d156()[association]
+    cpp = core.LiveTracker(**SCENARIO_TRACKER, association=association)
+    for (t, dets), ping in zip(tracker_scenario(), want["pings"]):
+        got = cpp.update(t, [d[:4] for d in dets], None if stamp == "none" else [t] * len(dets))
+        assert [tr["id"] for tr in got] == [w["id"] for w in ping["cpp"]]
+        for tr, w in zip(got, ping["cpp"]):
+            np.testing.assert_array_equal(tr["state"], w["state"])
+            np.testing.assert_array_equal(np.array(tr["history"][-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
+            assert (tr["hits"], tr["misses"]) == (w["hits"], w["misses"])
+    for at in (None, t):
+        got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=at)
+        assert [(c["id"], c["kind"]) for c in got] == [(w["id"], w["kind"]) for w in want["cpp_classes"]]
+        np.testing.assert_array_equal([c["position"] for c in got], [w["position"] for w in want["cpp_classes"]])
+        np.testing.assert_array_equal([c["velocity"] for c in got], [w["velocity"] for w in want["cpp_classes"]])
+
+
+def test_both_trackers_place_a_long_range_mover_where_its_echoes_show_it():
+    """D-156, both engines on the same detections of a ship at 12 km crossing at 6 m/s (test_detect.long_range_mover),
+    each stamped transmit + R/c: the same tracks, and the position at the ping's time within 3 m of the ship there."""
+    from test_detect import LONG_RANGE_TRACKER, long_range_mover
+    pings = long_range_mover(drop=(4,))
+    py, cpp = detect.Tracker(**LONG_RANGE_TRACKER), core.LiveTracker(**LONG_RANGE_TRACKER)
+    for tp, d, _, _ in pings:
+        dets = [] if d is None else [d]
+        a = py.update(tp, dets)
+        b = cpp.update(tp, [(q.range, q.bearing, q.snr_db, q.cells) for q in dets], [q.time for q in dets])
+        assert [tr.id for tr in a] == [tr["id"] for tr in b]
+        for tr, cr in zip(a, b):
+            assert np.allclose(tr.state, cr["state"], atol=1e-6) and np.allclose(np.array(tr.history), np.array(cr["history"]), atol=1e-6)
+            assert tr.time == cr["time"]
+    tp, _, at_transmit, _ = pings[-1]
+    (want,) = classify.classify_tracks(a, time=tp)
+    (got,) = cpp.classify(time=tp)
+    assert np.allclose(want.position, got["position"], atol=1e-6) and np.hypot(*(np.asarray(got["position"]) - at_transmit)) < 3.0
+
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_both_trackers_never_move_a_missed_track_back_in_time(association):
+    """D-156 with a ping interval (5 s) shorter than R/c (8 s at 12 km): a track that took a detection at t_k + R/c and
+    misses ping k+1 holds at a time later than t_{k+1}. Both engines keep it there (its state and time) instead of
+    predicting it back to the ping: every history is in time order, and the engines agree."""
+    from test_detect import LONG_RANGE_TRACKER, long_range_mover
+    pings = long_range_mover(n=14, interval=5.0, drop=(4, 7, 8))
+    py, cpp = detect.Tracker(**LONG_RANGE_TRACKER, association=association), core.LiveTracker(**LONG_RANGE_TRACKER, association=association)
+    held = 0
+    for tp, d, _, _ in pings:
+        dets = [] if d is None else [d]
+        before = {tr.id: tr.time for tr in py.tracks}
+        a = py.update(tp, dets)
+        b = cpp.update(tp, [(q.range, q.bearing, q.snr_db, q.cells) for q in dets], [q.time for q in dets])
+        assert [tr.id for tr in a] == [cr["id"] for cr in b]
+        for tr in py.tracks:
+            times = [h[0] for h in tr.history]
+            assert times == sorted(times)
+        for tr, cr in zip(a, b):
+            times = [h[0] for h in tr.history]
+            assert times == sorted(times) and [h[0] for h in cr["history"]] == times
+            assert np.allclose(tr.state, cr["state"], atol=1e-6) and tr.time == cr["time"]
+            if d is None and before.get(tr.id, -np.inf) > tp:
+                assert tr.time == before[tr.id] and tr.misses >= 1        # kept, not moved back to the ping
+                held += 1
+    assert held >= 2
+
+
+def test_both_classifiers_move_a_short_track_to_the_time_asked():
+    """A confirmed track with fewer than three points has no fitted line; with `time` given both engines report its last
+    point moved to that time by its Kalman state's velocity, not the last point itself (D-156: that is the ship
+    v R / c = 6 m/s x 8 s = 48 m along its course from where it is at the ping). Without a time (None, NaN), the last
+    point, as before."""
+    from test_detect import LONG_RANGE_TRACKER, long_range_mover
+    pings = long_range_mover(n=2)
+    opts = dict(LONG_RANGE_TRACKER, confirm_hits=2)
+    py, cpp = detect.Tracker(**opts), core.LiveTracker(**opts)
+    for tp, d, _, _ in pings:
+        a = py.update(tp, [d])
+        cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+    tp, _, at_transmit, _ = pings[-1]
+    assert len(a) == 1 and len(a[0].history) == 2
+    (want,) = classify.classify_tracks(a, time=tp)
+    (got,) = cpp.classify(time=tp)
+    assert np.allclose(want.position, got["position"], atol=1e-6)
+    assert np.hypot(*(np.asarray(want.position) - at_transmit)) < 5.0
+    for at in (None, float("nan")):
+        (w,) = classify.classify_tracks(a, time=at)
+        (g,) = cpp.classify(time=at)
+        assert w.position == tuple(a[0].history[-1][1:]) and tuple(g["position"]) == w.position
+        assert np.hypot(*(np.asarray(w.position) - at_transmit)) > 40.0
 
 
 def test_detection_rules_match_python():
@@ -259,6 +364,39 @@ def test_cpp_chain_gives_the_python_chains_report(pings):
     assert any(t["kind"] == "mover" for t in got[-1]["tracks"]) and any(t["kind"] == "static" for t in got[-1]["tracks"])
     power, ranges, bearings = cpp.last_map()
     assert power.shape == (len(bearings), len(ranges)) and power.max() > 0
+
+
+def test_both_chains_report_track_positions_at_the_ping_time(pings):
+    """D-156, the live chain in both engines: each detection is given to the tracker at transmit + range / c (c the
+    record's sound speed, here 1500 m/s), so a track's last point is its detection's time, and the report gives its
+    position on the fitted line at the report's time_ns (the transmit time), not at that last point. The two engines'
+    reports agree to 0.05 m, less than the 0.5 m the crossing target (3 m/s at 250 m) moves in R/c."""
+    with LiveChain(dict(CHAIN, engine="python")) as chain:
+        want = chain.run(copies(pings))
+        tracker, origin, t0 = chain.tracker, chain._origin, chain._t0
+    t = (want[-1]["time_ns"] - t0) * 1e-9
+    by_id = {tr.id: tr for tr in tracker.tracks}
+    moved = 0
+    for rt in want[-1]["tracks"]:
+        tr = by_id[rt["id"]]
+        r = float(np.hypot(*tr.history[-1][1:]))
+        if tr.misses == 0:                                # took a detection on this ping: at its own time
+            assert tr.history[-1][0] == pytest.approx(t + r / 1500.0, abs=0.01)
+        pos = classify.fit_velocity(tr.history, at=t)[0]
+        assert (rt["x"], rt["y"]) == pytest.approx((pos[1] + origin[0], pos[0] + origin[1]), abs=1e-6)
+        last = classify.fit_velocity(tr.history)[0]
+        if rt["kind"] == "mover":
+            moved += 1
+            assert np.hypot(*(pos - last)) == pytest.approx(rt["speed_m_s"] * (tr.history[-1][0] - t), rel=1e-6)
+            assert np.hypot(*(pos - last)) > 0.3
+    assert moved >= 1
+    with LiveChain(dict(CHAIN, engine="cpp")) as chain:
+        got = chain.run(copies(pings))
+    for w, g in zip(want, got):
+        assert [(q["id"], q["kind"]) for q in w["tracks"]] == [(q["id"], q["kind"]) for q in g["tracks"]]
+        for a, b in zip(w["tracks"], g["tracks"]):
+            for key in ("x", "y", "vx", "vy", "range_m"):
+                assert a[key] == pytest.approx(b[key], abs=0.05), key
 
 
 def test_cpp_assembler_matches_python(pings):

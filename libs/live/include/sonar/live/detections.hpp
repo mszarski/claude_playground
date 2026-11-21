@@ -35,6 +35,10 @@ struct Detection {
   /// target: its direct echo, its surface and bottom echoes and its highlights within the merge distance are all here,
   /// from `first_range` over `extent`. The complex samples behind them: `beam_samples` (chain.hpp).
   std::vector<Arrival> arrivals{};
+  /// s, on the tracker's clock: when the detection shows the target. For a monostatic echo the ping's transmit time +
+  /// range / c, with the c that turned the two-way time into range (D-156). NaN (or any value that is not finite): the
+  /// ping's time given to Tracker::update.
+  double time = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]
@@ -60,6 +64,8 @@ struct Track {
   std::vector<std::int64_t> cells;  ///< flagged map cells of each detection it took (Detection::cells)
   double depth = std::numeric_limits<double>::quiet_NaN();  ///< m, from the detections that carried one
   double depth_var = std::numeric_limits<double>::infinity();
+  /// s: when `state` holds: its last detection's time (Detection::time), or the ping's after a miss.
+  double time = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// How detections are shared out among tracks on each ping (D-141; python/gpusonar/detect.py).
@@ -92,7 +98,11 @@ struct TrackerOptions {
 class Tracker {
  public:
   explicit Tracker(const TrackerOptions& options = {}) : opt_(options) {}
-  /// Advance to `time` (s) with this ping's detections. Returns the confirmed tracks.
+  /// Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
+  /// the detection's own time (Detection::time; the ping's when NaN or otherwise not finite; D-156), a track takes its
+  /// detection at that time and a new track is born there; tracks that take none count a miss and are predicted to
+  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). Returns the
+  /// confirmed tracks.
   std::vector<const Track*> update(double time, const std::vector<Detection>& detections);
   const std::vector<Track>& tracks() const { return tracks_; }
 
@@ -100,8 +110,6 @@ class Tracker {
   TrackerOptions opt_;
   std::vector<Track> tracks_;
   std::int64_t next_id_ = 1;
-  bool started_ = false;
-  double time_ = 0.0;
 };
 
 enum class Kind { Mover, Static, Line, Multipath, Uncertain };
@@ -110,7 +118,7 @@ const char* kind_name(Kind kind);
 struct TrackClass {
   std::int64_t id = 0;
   Kind kind = Kind::Uncertain;
-  double x = 0.0, y = 0.0;    ///< fitted position at the last ping (across, forward)
+  double x = 0.0, y = 0.0;    ///< fitted position (across, forward) at ClassifyOptions::time, else at the track's last point
   double vx = 0.0, vy = 0.0;  ///< fitted velocity
   double speed = 0.0, speed_sigma = 0.0, fit_rms = 0.0, seen = 0.0, mean_snr_db = 0.0;
   std::int64_t parent = -1;   ///< for multipath: the track it echoes
@@ -129,6 +137,10 @@ struct ClassifyOptions {
   // Rules from the detections themselves (classify.py `detections`; ours), off by default:
   double min_mover_cells = -1.0;  ///< < 0: off. A mover whose median detection extent is below this many cells is uncertain
   double row_snr_db = -1.0;       ///< < 0: off. In the corridor test only tracks at most this many dB weaker make a row
+  /// s, the tracker's clock: every position is the fitted line's at this time (the report's: the ping's transmit time;
+  /// D-156). NaN (or any value that is not finite): at each track's last history point (classify.py `time`). A track
+  /// too short for a fit (fewer than three points) is moved from its last point to this time by its state's velocity.
+  double time = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).

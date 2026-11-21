@@ -44,7 +44,8 @@ from .detect import Track
 class TrackClass:
     id: int
     kind: str                 # "mover", "static", "line", "multipath", "uncertain"
-    position: tuple           # (x, y) in the tracker's frame at the last ping
+    position: tuple           # (x, y) in the tracker's frame: at `time` given to classify_tracks, else at the track's
+                              # last history point (the last ping, or its last detection's time: D-156)
     velocity: tuple           # fitted (vx, vy), m/s
     speed: float              # m/s
     speed_sigma: float        # one-sigma uncertainty of the fitted speed, m/s
@@ -55,26 +56,37 @@ class TrackClass:
     extent_cells: float = float("nan")   # median flagged map cells of the detections it took (NaN: none recorded)
 
 
-def fit_velocity(history) -> tuple[np.ndarray, np.ndarray, float, float]:
+def _given(at) -> bool:
+    """A time was given: not None and finite (NaN, as the C++ ClassifyOptions::time, means none)."""
+    return at is not None and bool(np.isfinite(at))
+
+
+def fit_velocity(history, at: float | None = None, velocity=None) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
-    Returns position at the last time, velocity, RMS residual and the velocity's sigma."""
+    Returns the position on the line at `at` (s; None or NaN: at the last point's time), velocity, RMS residual and the
+    velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
+    last point, moved to `at` by `velocity` ((vx, vy), the track's Kalman state's) when both are given."""
     h = np.asarray(history, dtype=float)
     t, xy = h[:, 0], h[:, 1:3]
     if len(t) < 3 or np.ptp(t) <= 0.0:
-        return xy[-1], np.zeros(2), 0.0, np.inf
+        pos = xy[-1]
+        if _given(at) and velocity is not None and np.all(np.isfinite(velocity)):
+            pos = pos + (float(at) - t[-1]) * np.asarray(velocity, dtype=float)
+        return pos, np.zeros(2), 0.0, np.inf
     tc = t - t.mean()
     v = (tc[:, None] * xy).sum(axis=0) / (tc**2).sum()
     fit = xy.mean(axis=0) + tc[:, None] * v
     res = xy - fit
     # Two coordinates, two fitted parameters each.
     rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
-    return fit[-1], v, rms, float(rms / np.sqrt((tc**2).sum()))
+    pos = xy.mean(axis=0) + (float(at) - t.mean()) * v if _given(at) else fit[-1]
+    return pos, v, rms, float(rms / np.sqrt((tc**2).sum()))
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
-                    linear: dict | None = None, detections: dict | None = None) -> list[TrackClass]:
+                    linear: dict | None = None, detections: dict | None = None, time: float | None = None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -87,12 +99,19 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     through this track along its velocity and no further than `length` along it.
     `detections` switches on the rules from the detections themselves (module docstring):
     {"min_mover_cells": cells or None, "row_snr_db": dB or None}; None or {} changes nothing.
+    `time` (s, the tracker's clock): every position is the fitted line's at that time, the report's (D-156: a track's
+    last point is its last detection's time, transmit + range / c, not the ping's); None: at each track's last point,
+    which is the ping's time wherever detections carry no time of their own; NaN as None (the C++ engine's NaN). The
+    rules that compare positions (row, echo grouping) then compare them at one time. A track too short for a fit (fewer
+    than three points) is moved from its last point to `time` by its Kalman state's velocity (`state[2:4]`), when it
+    carries one.
     """
     det = check_detection_rules(detections)
     out = []
     from scipy import stats
     for tr in tracks:
-        pos, v, rms, sigma = fit_velocity(tr.history)
+        state = getattr(tr, "state", None)
+        pos, v, rms, sigma = fit_velocity(tr.history, time, None if state is None or len(state) < 4 else state[2:4])
         speed = float(np.hypot(*v))
         n = len(tr.history)
         # The fit's scatter is itself estimated from few points (2n - 4 degrees of freedom), so a

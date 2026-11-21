@@ -21,11 +21,24 @@ struct Fit {
   double x, y, vx, vy, rms, sigma;
 };
 
-// Least-squares straight line through (time, x, y).
-Fit fit_velocity(const std::vector<HistoryPoint>& h) {
+// Least-squares straight line through (time, x, y); the position on it at `at` (NaN, or any value that is not finite: at
+// the last point's time). With fewer than three points, or no time between them (max - min, as numpy.ptp), no fitted
+// velocity and the last point, moved to `at` by (vx, vy), the track's Kalman state's velocity (classify.py fit_velocity).
+Fit fit_velocity(const std::vector<HistoryPoint>& h, double at, double vx, double vy) {
   const std::size_t n = h.size();
   Fit f{h.back().x, h.back().y, 0.0, 0.0, 0.0, std::numeric_limits<double>::infinity()};
-  if (n < 3 || h.back().time - h.front().time <= 0.0) return f;
+  double t_min = h.front().time, t_max = h.front().time;
+  for (const auto& p : h) {
+    t_min = std::min(t_min, p.time);
+    t_max = std::max(t_max, p.time);
+  }
+  if (n < 3 || t_max - t_min <= 0.0) {
+    if (std::isfinite(at) && std::isfinite(vx) && std::isfinite(vy)) {
+      f.x += (at - h.back().time) * vx;
+      f.y += (at - h.back().time) * vy;
+    }
+    return f;
+  }
   double tm = 0.0, xm = 0.0, ym = 0.0;
   for (const auto& p : h) {
     tm += p.time;
@@ -50,7 +63,7 @@ Fit fit_velocity(const std::vector<HistoryPoint>& h) {
     const double rx = p.x - (xm + tc * f.vx), ry = p.y - (ym + tc * f.vy);
     ss += rx * rx + ry * ry;
   }
-  const double tc_last = h.back().time - tm;
+  const double tc_last = (std::isfinite(at) ? at : h.back().time) - tm;
   f.x = xm + tc_last * f.vx;
   f.y = ym + tc_last * f.vy;
   f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(n) - 4, 1)));
@@ -82,7 +95,7 @@ const char* kind_name(Kind kind) {
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o) {
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
-    const Fit f = fit_velocity(tr->history);
+    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3]);
     TrackClass c;
     c.id = tr->id;
     c.x = f.x;

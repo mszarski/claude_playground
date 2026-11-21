@@ -106,14 +106,16 @@ Each detection:
 | `arrivals` | list of [range m, SNR dB] | multiscale detector, two or more arrivals along range only |
 
 Each track (classified by `classify.py` / `classify_tracks`, which fits a straight line through the
-track's detections in time):
+track's detections in time). Each detection is given to the tracker at the time it shows its target,
+the ping's transmit time + `range_m` / c (c the record's sound speed), not at the transmit time
+(D-156); the report's `x`, `y` are the fitted line's position at the report's `time_ns`:
 
 | Field | Unit, frame, sign | What it is |
 | --- | --- | --- |
 | `id` | integer from 1 | in order of birth; kept for the track's life |
 | `kind` | text | `mover`, `static`, `line`, `multipath` or `uncertain` |
 | `parent` | integer or `null` | for `kind: multipath`, the `id` of the track it echoes; otherwise `null` |
-| `x`, `y` | m, world: x north, y east | the fitted line's position at the last ping (absolute world coordinates, not relative to ownship) |
+| `x`, `y` | m, world: x north, y east | the fitted line's position at the report's `time_ns`, the ping's transmit time (absolute world coordinates, not relative to ownship); a track with fewer than three points: its last position moved to `time_ns` by its tracker velocity |
 | `vx`, `vy` | m/s, north and east | the fitted line's velocity over ground |
 | `speed_m_s` | m/s | `hypot(vx, vy)` |
 | `range_m` | m, horizontal | from `ownship_xyz` to (`x`, `y`) |

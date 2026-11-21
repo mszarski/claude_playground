@@ -76,6 +76,9 @@ class Detection:
     extent: float = float("nan")        # m in range the cluster spans (the multiscale detector); NaN: not reported
     arrivals: list | None = None        # [(range m, snr dB)], nearest first: the local peaks along range inside the detection
                                         # (the multiscale detector; libs/live detections.hpp), at most the 8 strongest
+    time: float | None = None           # s, when the detection shows the target: for a monostatic echo the ping's transmit
+                                        # time + range / c (D-156). None (or NaN, any value that is not finite): the
+                                        # ping's time given to Tracker.update (as before)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -284,6 +287,7 @@ class Track:
     cells: list = field(default_factory=list)     # flagged map cells of each detection it took (Detection.cells)
     depth: float = float("nan")                   # m, from the detections that carried one
     depth_var: float = float("inf")
+    time: float = float("nan")                    # s, when `state` holds: its last detection's time, or the ping's after a miss
 
 
 ASSOCIATIONS = ("likelihood", "in_order")
@@ -321,7 +325,6 @@ class Tracker:
         self.initial_speed_sigma = initial_speed_sigma
         self.tracks: list[Track] = []
         self._next_id = 1
-        self._time = None
 
     def _measurement_cov(self, d: Detection) -> np.ndarray:
         # Polar measurement noise rotated into Cartesian.
@@ -351,25 +354,47 @@ class Tracker:
         t.depth += k * (z - t.depth)
         t.depth_var *= 1.0 - k
 
-    def update(self, time: float, detections: list[Detection]) -> list[Track]:
-        dt = 0.0 if self._time is None else time - self._time
-        self._time = time
+    def _predict(self, t: Track, to: float) -> tuple[np.ndarray, np.ndarray, float]:
+        """The track's state, covariance and depth variance moved by the constant-velocity model from `t.time` to `to`.
+        `to` may be earlier than `t.time` when a detection within a ping is (D-156: each detection at transmit + R/c, so a
+        nearer one is earlier). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
+        positive semi-definite for either sign of dt, and the depth's random walk grows by q_d^2 |dt| (ours: a variance
+        never shrinks by predicting; the same for dt >= 0 as before)."""
+        dt = to - t.time
         f = np.eye(4)
         f[0, 2] = f[1, 3] = dt
         g = np.array([[0.5 * dt**2, 0], [0, 0.5 * dt**2], [dt, 0], [0, dt]])
         q = g @ g.T * self.q**2
+        depth_var = t.depth_var + self.depth_q**2 * abs(dt) if np.isfinite(t.depth_var) else t.depth_var
+        return f @ t.state, f @ t.cov @ f.T + q, depth_var
+
+    def update(self, time: float, detections: list[Detection]) -> list[Track]:
+        """Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
+        the detection's own time (`Detection.time`, the ping's when None: a monostatic echo shows the target where it was
+        when the sound reached it, transmit + range / c; D-156), a track takes its detection at that time and a new track
+        is born there; a time that is not finite (NaN) counts as none, as in the C++ tracker. Tracks that take none count a
+        miss and are predicted to `time`, or stay where they are if they already hold at a later time (the last detection
+        they took was at transmit + R/c after this ping's transmit: a ping interval shorter than R/c), so a track never
+        moves back in time. Returns the confirmed tracks."""
         h = np.eye(2, 4)
-        for t in self.tracks:
-            t.state = f @ t.state
-            t.cov = f @ t.cov @ f.T + q
-            if np.isfinite(t.depth_var):
-                t.depth_var += self.depth_q**2 * dt
+        whens = [time if d.time is None or not np.isfinite(d.time) else float(d.time) for d in detections]
+        cache: dict = {}
+
+        def predicted(ti: int, when: float):
+            key = (ti, when)
+            if key not in cache:
+                cache[key] = self._predict(self.tracks[ti], when)
+            return cache[key]
+
         if self.association == "likelihood":
-            unused = self._associate_by_likelihood(detections, h)
+            unused = self._associate_by_likelihood(detections, whens, h, predicted)
         else:
-            unused = self._associate_in_order(detections, h)
-        for t in self.tracks:
-            t.history.append((time, float(t.state[0]), float(t.state[1])))
+            unused = self._associate_in_order(detections, whens, h, predicted)
+        for ti, t in enumerate(self.tracks):
+            if t.misses and t.time < time:           # took nothing this ping: where it is at the ping, never earlier
+                t.state, t.cov, t.depth_var = predicted(ti, time)
+                t.time = time
+            t.history.append((t.time, float(t.state[0]), float(t.state[1])))
         self.tracks = [t for t in self.tracks if t.misses <= self.max_misses]
         for j in unused:
             d = detections[j]
@@ -377,8 +402,8 @@ class Tracker:
             cov[:2, :2] = self._measurement_cov(d)
             cov[2, 2] = cov[3, 3] = self.initial_speed_sigma**2
             xy = d.xy()
-            tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov)
-            tr.history.append((time, float(xy[0]), float(xy[1])))
+            tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov, time=whens[j])
+            tr.history.append((whens[j], float(xy[0]), float(xy[1])))
             tr.snr.append(d.snr_db)
             tr.cells.append(int(d.cells))
             self._take_depth(tr, d)
@@ -386,8 +411,11 @@ class Tracker:
             self._next_id += 1
         return [t for t in self.tracks if t.confirmed]
 
-    def _take(self, t: Track, d: Detection, h: np.ndarray) -> None:
-        """The Kalman update of one track with one detection."""
+    def _take(self, t: Track, d: Detection, h: np.ndarray, prior, when: float) -> None:
+        """The Kalman update of one track, predicted to the detection's time (`prior`: state, covariance, depth
+        variance there), with that detection."""
+        t.state, t.cov, t.depth_var = prior
+        t.time = when
         s = h @ t.cov @ h.T + self._measurement_cov(d)
         k = t.cov @ h.T @ np.linalg.inv(s)
         t.state = t.state + k @ (d.xy() - h @ t.state)
@@ -399,14 +427,15 @@ class Tracker:
         t.misses = 0
         t.confirmed = t.confirmed or t.hits >= self.confirm_hits
 
-    def _associate_by_likelihood(self, detections: list[Detection], h: np.ndarray) -> list[int]:
-        """Most probable gated pairs first, confirmed tracks before tentative ones. Returns
-        the indices of the detections no track took, in their original order."""
+    def _associate_by_likelihood(self, detections: list[Detection], whens: list[float], h: np.ndarray, predicted) -> list[int]:
+        """Most probable gated pairs first, confirmed tracks before tentative ones, each track predicted to each
+        detection's time. Returns the indices of the detections no track took, in their original order."""
         pairs = []
         for ti, t in enumerate(self.tracks):
             for j, d in enumerate(detections):
-                s = h @ t.cov @ h.T + self._measurement_cov(d)
-                y = d.xy() - h @ t.state
+                x, p, _ = predicted(ti, whens[j])
+                s = h @ p @ h.T + self._measurement_cov(d)
+                y = d.xy() - h @ x
                 d2 = float(y @ np.linalg.solve(s, y))
                 if d2 < self.gate**2:
                     pairs.append((not t.confirmed, d2 + float(np.log(np.linalg.det(s))), ti, j))
@@ -420,21 +449,25 @@ class Tracker:
             used.add(j)
         for ti, t in enumerate(self.tracks):
             if ti in taken:
-                self._take(t, detections[taken[ti]], h)
+                j = taken[ti]
+                self._take(t, detections[j], h, predicted(ti, whens[j]), whens[j])
             else:
                 t.misses += 1
         return [j for j in range(len(detections)) if j not in used]
 
-    def _associate_in_order(self, detections: list[Detection], h: np.ndarray) -> list[int]:
+    def _associate_in_order(self, detections: list[Detection], whens: list[float], h: np.ndarray, predicted) -> list[int]:
         """The rule before D-141. Returns the indices of the detections no track took."""
         unused = list(range(len(detections)))
         # Confirmed tracks choose first, each taking its nearest gated detection.
-        for t in sorted(self.tracks, key=lambda tr: not tr.confirmed):
+        order = sorted(range(len(self.tracks)), key=lambda ti: not self.tracks[ti].confirmed)
+        for ti in order:
+            t = self.tracks[ti]
             best, best_d2 = None, self.gate**2
             for j in unused:
                 d = detections[j]
-                s = h @ t.cov @ h.T + self._measurement_cov(d)
-                y = d.xy() - h @ t.state
+                x, p, _ = predicted(ti, whens[j])
+                s = h @ p @ h.T + self._measurement_cov(d)
+                y = d.xy() - h @ x
                 d2 = float(y @ np.linalg.solve(s, y))
                 if d2 < best_d2:
                     best, best_d2 = j, d2
@@ -442,5 +475,5 @@ class Tracker:
                 t.misses += 1
                 continue
             unused.remove(best)
-            self._take(t, detections[best], h)
+            self._take(t, detections[best], h, predicted(ti, whens[best]), whens[best])
         return unused

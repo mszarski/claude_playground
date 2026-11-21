@@ -176,8 +176,10 @@ objects stay put.
 | Track classes | 1 mover (the boat under way), 6 static, 1 uncertain (the pinnacle) | 1 mover, 2 static, 1 uncertain (the anchored boat) | 1 mover, 2 static, 1 uncertain |
 | Tracks called movers that are not on a moving object | 0 | 0 | 0 |
 
-- Position is the track's distance from the object's centre at the last ping; speed is the
-  track's.
+- Position is the track's distance from the object's centre at the time the track's state
+  holds: its last detection's reflection time, transmit + range / c (D-156), or the last ping
+  after a miss; speed is the track's. The committed table above predates D-156 and was
+  scored at the last ping.
 - The 5 degree beams of the two higher-frequency sonars are tilted up and never reach the
   seabed, so the pinnacle is absent, as designed.
 - **At 120 kHz the pinnacle is still classified uncertain, not static** (it was static
