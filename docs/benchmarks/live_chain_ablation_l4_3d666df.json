@@ -218,5 +218,6 @@
       }
     }
   },
-  "source": "tools/live_chain_ablation.py --backend cuda, NVIDIA L4, Hugging Face job 6b01155fefaf5e14f4b45409, tree of 3d666df (the multiscale statistic on the device with one device allocation per call, issue sonar-01u)"
+  "source": "tools/live_chain_ablation.py --backend cuda, NVIDIA L4, Hugging Face job 6b01155fefaf5e14f4b45409, tree of 3d666df (the multiscale statistic on the device with one device allocation per call, issue sonar-01u)",
+  "device_agreement": "tests on the same tree in job 6b01155fefaf5e14f4b45409: tests/python/test_detector_device.py on the benchmark's live pings (2 pings each), the device statistic against the host's: identical flags, strongest samples and detections (737 / 887 / 959 flagged cells, 6 detections for 1 / 2 / 3 rows), the background's largest relative difference 4.19e-16 / 4.24e-16 / 3.81e-16; tests/cpp/test_detector.cpp DetectorDevice passed (its printed figure not kept in this job's log; 4.33e-16 over its seven maps in job 6b01109defaf5e14f4b45051, tree b54b4d1)"
 }
