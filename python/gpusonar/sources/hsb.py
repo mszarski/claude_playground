@@ -250,19 +250,30 @@ def raw_sockets_permitted() -> bool:
 CATCH_UP = ("burst", "spread")
 
 
+LOG_FRAMES = 100_000            # per-frame logs keep the newest this many frames (10.4 min at 160 frames/s)
+
+
 class SendTiming:
     """When each frame left the sender against when it was due, to tell a sender that fell
     behind (and then sent the frames it owed back to back) from losses in the receiver.
     Times are seconds of `time.perf_counter()`; `wall_ns` maps them to the system clock that
     the receiver's metadata (`received_s`, `received_ns`) uses. Python's garbage collector
-    pauses are timed alongside."""
+    pauses are timed alongside. The summary covers every frame; the per-frame rows for
+    `dump` keep the newest LOG_FRAMES. Frame 0 is not recorded: it is the send retried until
+    a receiver has connected, and the moment it goes through defines t0 (it is on time by
+    definition)."""
 
     def __init__(self):
+        from collections import deque
         self.t0 = self.period = None
         self.last_start = self.last_end = None
-        self.records = []                    # (frame, start - due, start - previous start, send duration)
+        self.records = deque(maxlen=LOG_FRAMES)  # (frame, start - due, start - previous start, send duration)
         self.wall_offset_ns = None
-        self._gc = []
+        self.n = 0
+        self.max_late = self.max_gap = self.max_send = 0.0
+        self.behind, self.close = [], []          # first 16 frame numbers of each
+        self.n_behind = self.n_close = 0
+        self.gc_pauses, self.max_gc = 0, 0.0
         self._gc_t = None
 
     def start(self, t0: float, period: float) -> None:
@@ -272,21 +283,39 @@ class SendTiming:
         self.wall_offset_ns = time.time_ns() - int(time.perf_counter() * 1e9)
         gc.callbacks.append(self._on_gc)
 
+    def stop(self) -> None:
+        """Take the garbage-collector callback out again (idempotent; called from a finally)."""
+        import gc
+        if self._on_gc in gc.callbacks:
+            gc.callbacks.remove(self._on_gc)
+
     def _on_gc(self, phase, info):
         if phase == "start":
             self._gc_t = time.perf_counter()
         elif self._gc_t is not None:
-            self._gc.append((info.get("generation", -1), time.perf_counter() - self._gc_t))
+            self.gc_pauses += 1
+            self.max_gc = max(self.max_gc, time.perf_counter() - self._gc_t)
 
     def sent(self, k: int, t_start: float, t_end: float) -> None:
-        self.records.append((k, t_start - (self.t0 + k * self.period), t_start - self.last_start, t_end - t_start))
+        late, gap, took = t_start - (self.t0 + k * self.period), t_start - self.last_start, t_end - t_start
+        self.records.append((k, late, gap, took))
+        self.n += 1
+        self.max_late, self.max_gap, self.max_send = max(self.max_late, late), max(self.max_gap, gap), max(self.max_send, took)
+        if late > self.period:
+            self.n_behind += 1
+            if len(self.behind) < 16:
+                self.behind.append(k)
+        if gap < 0.25 * self.period:
+            self.n_close += 1
+            if len(self.close) < 16:
+                self.close.append(k)
         self.last_start, self.last_end = t_start, t_end
 
     def wall_ns(self, t: float) -> int:
         return int(t * 1e9) + self.wall_offset_ns
 
     def dump(self, path: str) -> None:
-        """Every frame's send time as JSON: frame, system-clock ns at the send's start, ms late, ms since the previous send."""
+        """The kept frames' send times as JSON: frame, system-clock ns at the send's start, ms late, ms since the previous send."""
         import json
         rows = [[k, self.wall_ns(self.t0 + k * self.period + late), round(1e3 * late, 3), round(1e3 * gap, 3)]
                 for k, late, gap, _ in self.records]
@@ -294,21 +323,14 @@ class SendTiming:
             json.dump({"period_ms": 1e3 * self.period, "columns": ["frame", "wall_ns", "late_ms", "gap_ms"], "rows": rows}, f)
 
     def summary(self) -> dict:
-        import gc
-        if self._on_gc in gc.callbacks:
-            gc.callbacks.remove(self._on_gc)
-        if not self.records:
+        self.stop()
+        if not self.n:
             return {}
-        late = np.array([r[1] for r in self.records])
-        gap = np.array([r[2] for r in self.records])
-        took = np.array([r[3] for r in self.records])
-        behind = [r[0] for r in self.records if r[1] > self.period]
-        close = [r[0] for r in self.records if r[2] < 0.25 * self.period]
-        return {"period_ms": 1e3 * self.period, "max_late_ms": float(1e3 * late.max()),
-                "frames_late_by_a_period": len(behind), "first_late_frames": behind[:16],
-                "back_to_back_frames": len(close), "first_back_to_back_frames": close[:16],
-                "max_gap_ms": float(1e3 * gap.max()), "max_send_ms": float(1e3 * took.max()),
-                "gc_pauses": len(self._gc), "max_gc_ms": float(1e3 * max((p for _, p in self._gc), default=0.0))}
+        return {"period_ms": 1e3 * self.period, "max_late_ms": 1e3 * self.max_late,
+                "frames_late_by_a_period": self.n_behind, "first_late_frames": list(self.behind),
+                "back_to_back_frames": self.n_close, "first_back_to_back_frames": list(self.close),
+                "max_gap_ms": 1e3 * self.max_gap, "max_send_ms": 1e3 * self.max_send,
+                "gc_pauses": self.gc_pauses, "max_gc_ms": 1e3 * self.max_gc}
 
 
 class HsbBoardEmulator:
@@ -403,6 +425,7 @@ class HsbBoardEmulator:
                     self.idle_sent += 1
                     k += 1
         finally:
+            self.timing.stop()
             hsb.stop()
         out = {"frames_sent": self.sent, "idle_frames_sent": self.idle_sent, "frame_bytes": self.stream.frame_bytes,
                "frames_per_second": 1.0 / period, "catch_up": self.catch_up, "timing": self.timing.summary()}
@@ -543,6 +566,12 @@ class DataSocketWatch:
         self.max_rx_queue = 0
 
     def locate(self) -> bool:
+        # A heuristic, not an interface: the first datagram socket of this process whose receive
+        # timeout is exactly 100 ms (what LinuxReceiver sets on its data socket, Sensor Bridge 2.7.0
+        # linux_receiver.cpp). Another such socket in the process (another receiver, or a library
+        # that happens to use 100 ms) could be taken instead; then the drop count is that socket's,
+        # and with a receive_buffer (receive --socket-buffer) that socket's buffer is the one changed.
+        # `stats()["found"]` and the drop count agreeing with the packet-number gaps are the check.
         import os
         import socket
         import struct
@@ -593,13 +622,13 @@ if Operator is not None:
         """Receiver frames in ("input"), ping records out ("ping", `{"record": record}` as PingSourceOp)."""
 
         def __init__(self, fragment, *args, receiver: FrameReceiver, cuda: CudaDriver | None = None,
-                     socket_watch: DataSocketWatch | None = None, arrivals: list | None = None, **kwargs):
+                     socket_watch: DataSocketWatch | None = None, arrivals=None, **kwargs):
             self.receiver = receiver
             self._cuda = cuda
             self._ready = []
             self.last_metadata = {}
             self.socket_watch = socket_watch
-            self.arrivals = arrivals            # (frame_number, received_ns, packets, bytes) per frame, when a list is given
+            self.arrivals = arrivals            # (frame_number, received_ns, packets, bytes) per frame, when a list or deque is given
             self._count = 0
             super().__init__(fragment, *args, **kwargs)
 
@@ -639,7 +668,8 @@ if Operator is not None:
         def __init__(self, fragment, *args, chain=None, n_pings: int | None = None, on_report=None, on_done=None, **kwargs):
             self.chain = chain
             self.reports = []
-            self.wall_ns = []                  # (system-clock ns at the start, at the end) of each ping's chain run
+            from collections import deque
+            self.wall_ns = deque(maxlen=4096)  # (system-clock ns at the start, at the end) of the newest 4096 chain runs
             self._n = n_pings
             self._on_report, self._on_done = on_report, on_done
             super().__init__(fragment, *args, **kwargs)
@@ -676,7 +706,8 @@ if Operator is not None:
             self._n, self._queue, self._idle = n_pings, int(queue_frames), idle_timeout
             self._on_report, self._affinity = on_report, receiver_affinity
             self.socket_watch = DataSocketWatch(socket_buffer)
-            self.arrivals = [] if log_arrivals else None
+            from collections import deque
+            self.arrivals = deque(maxlen=LOG_FRAMES) if log_arrivals else None   # the newest LOG_FRAMES frames
             self.frames_op = self.chain_op = None
             self._running = None
             super().__init__()
@@ -756,7 +787,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
                              if k in udp1}
     stats["cpu"] = dict(cpu1, **{k + "_during": cpu1[k] - cpu0[k] for k in ("nr_throttled", "throttled_usec")
                                  if k in cpu1 and k in cpu0})
-    stats["chain_wall_ns"] = app.chain_op.wall_ns
+    stats["chain_wall_ns"] = list(app.chain_op.wall_ns)
     if app.arrivals is not None:
-        stats["arrivals"] = app.arrivals
+        stats["arrivals"] = list(app.arrivals)
     return app.chain_op.reports, stats
