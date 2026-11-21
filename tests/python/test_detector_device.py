@@ -5,6 +5,7 @@ live: the stacked-row free-field scenario with popoto_long_range[_2row|_3row] an
 The maps are those the Python engine hands its detector (its fine map, cell means, window and plan, captured on the way
 in), which the engine-parity tests hold to the C++ chain's. On each:
   - the C++ detector on the host gives the NumPy one's detections (the binding is the chain's detector);
+  - the binding refuses a negative guard and fewer than one training cell (checked before the plan is read);
   - on a CUDA build with a device, the statistic on the device gives the host's flags and strongest samples, its
     background within 1e-12 of the host's (relative), and the same detections. Skipped otherwise, with the reason.
 """
@@ -87,3 +88,11 @@ def test_the_device_statistic_gives_the_hosts_detections_on_the_benchmark_pings(
           f"background's largest relative difference {worst:.3g}")
     assert worst < 1e-12
     assert found > 0
+
+
+def test_the_binding_refuses_a_negative_guard_or_no_training_cells():
+    fine, mean = np.ones((2, 40), dtype=np.float32), np.ones((2, 20), dtype=np.float32)
+    with pytest.raises(ValueError, match="guard"):
+        core.live_multiscale_detect(fine, mean, list(range(40)), list(range(20)), [0.0, 0.1], -1, 4, {})
+    with pytest.raises(ValueError, match="train"):
+        core.live_multiscale_detect(fine, mean, list(range(40)), list(range(20)), [0.0, 0.1], 1, 0, {})

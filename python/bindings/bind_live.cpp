@@ -612,6 +612,8 @@ void bind_live(py::module_& m) {
         if (fine.ndim() != 2 || cell_mean.ndim() != 2 || fine.shape(0) != cell_mean.shape(0)) {
           throw std::invalid_argument("fine [n_bearing, samples] and cell_mean [n_bearing, n_cells]");
         }
+        if (guard < 0) throw std::invalid_argument("live_multiscale_detect: guard must be >= 0 cells");
+        if (train < 1) throw std::invalid_argument("live_multiscale_detect: train must be >= 1 cell");
         live::DetectorPlan p;
         for (const py::handle h : plan["scales"].cast<py::list>()) {
           const py::dict d = h.cast<py::dict>();
