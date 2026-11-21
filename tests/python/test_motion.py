@@ -413,6 +413,29 @@ def test_dvl_altitude_is_referred_to_a_seafloor_away_from_z_zero():
     assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20, np.sqrt(np.mean(sway_err**2))
 
 
+def test_seafloor_z_auto_is_a_datum_it_shifts_heave_by_a_common_offset_only():
+    """seafloor_z="auto" (mean of z_nav + DVL altitude) is a datum: the ping-0 anchor and
+    Eq. 7 both use it, so it may move the whole heave track by its own error but must not
+    change the relative motion. True seabed at z = 0 here; the auto estimate absorbs the
+    mean heave that navigation does not know (0.63 mm on this seed)."""
+    col, _ = collect(n_pings=24, with_target=False, seed=6)
+    opts = motion.MotionOptions(seafloor_z="auto")
+    floor = motion.resolve_seafloor_z(col.records, opts)
+    auto = motion.estimate_motion([r.copy() for r in col.records], opts)
+    zero = motion.estimate_motion([r.copy() for r in col.records])
+    # The datum moves heave by exactly its value and leaves sway alone. (Before Eq. 7 was
+    # referred to the seabed, a datum away from 0 put a step between ping 0 and the rest:
+    # sway 0.054 mm RMS here, but 0.33 mm for -0.63 mm and 1.37 mm for +5 mm.)
+    # Within 0.1 micrometre: the footprints sit 0.63 mm lower too, which moves the geometry a little (4.5e-8 m seen).
+    np.testing.assert_allclose(auto.y, zero.y, rtol=0, atol=1e-7)
+    np.testing.assert_allclose(auto.z - zero.z, floor, rtol=0, atol=1e-7)
+    sway_err, heave_err = errors(col, auto)
+    assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20
+    assert np.sqrt(np.mean((heave_err - heave_err.mean()) ** 2)) < WAVELENGTH / 4
+    # The common offset is the datum's error against the true seabed at z = 0 (stated: within 0.5 mm).
+    assert abs(heave_err.mean() - floor) < 5e-4, (heave_err.mean(), floor)
+
+
 @pytest.mark.parametrize("name,surface", [("slope", SLOPE), ("undulating", UNDULATING)])
 def test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor(name, surface):
     """Scatterers on a non-flat seafloor; the DVL reports the altitude above it under the
