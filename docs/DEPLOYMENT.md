@@ -1034,7 +1034,7 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `source.host` → `bind` | the sonar network's interface, when the computer has several |
 | `chain.bearings_deg` | the sector is a requirement; the step should be at most half a beamwidth (a warning says when it is not) |
 | `chain.cfar.guard_m`, `train_m` | the standing 100 m and 300 m are for echoes spread by a waveguide at kilometres; a warning says when the receive window is shorter than both sides of them. A short-range sonar should set them |
-| `chain.classify.multipath.max_excess_range` (800 m), `velocity` | the site: the longest extra path a bounce can have at the water depth and range worked |
+| `chain.classify.multipath.max_excess_range` (800 m), `velocity` | the site: the longest extra path a bounce can have at the water depth and range worked; since D-155 also the range window on either side within which tracks are grouped, transitively, so too large a value merges separate objects at one bearing and velocity |
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
 | `chain.tracker.association` | how detections are shared out among tracks: `likelihood` (default, D-141) or `in_order` (the rule before it) |
 | `chain.cfar.false_alarms_per_ping`, `chain.min_snr_db` | the false-alarm rate wanted: expected false detections per ping in noise (10⁻³), and a floor on `snr_db` (9 dB). `chain.cfar.pfa` is for `cell_statistic: mean` and `peak` only |

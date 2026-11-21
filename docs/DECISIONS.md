@@ -2485,3 +2485,32 @@ added no false mover and made the cluttered scene's boat a mover on the 4 seeds 
 line. The live chain is unchanged (it refuses the key, D-152); the Popoto scenes do not run the row test.
 `tools/classify_rules_eval.py` keeps the gallery's own rules apart from its grid, whose first cell stays
 "off". The committed gallery was regenerated with it.
+
+### D-155 Echo grouping on both sides in range, transitively; the object is the earliest established arrival; the gallery scores the object (owner's ruling)
+
+Issue sonar-ygc. In `popoto_12km` one ship gives 11 to 13 confirmed tracks: arrivals by longer
+paths in 100 m of water, from the true range to about 130 m beyond, nearly all at the ship's
+velocity. The old grouping made the strongest track the object and grouped only weaker tracks
+farther out; the strongest arrival lies 34 to 93 m beyond the true range on all ten seeds, so the
+earlier arrivals were never grouped (3 to 6 movers or uncertain tracks a ship), and the gallery
+scored whichever track was nearest the truth (3 of 10 seeds right).
+- **Grouping (ours), both engines identically** (`classify.py`, `classify.cpp`): anchors strongest
+  first by mean SNR, each an established track (mover, static, line) not yet grouped and with a
+  finite range, bearing and velocity. A group grows transitively: every ungrouped track of any kind
+  within `max_excess_range` in range on either side, the bearing gate and the velocity gate of any
+  member joins, until none does. Its object is the established member nearest in range (ties: lowest
+  id), with its own class and fit; the others are its multipath.
+- **Why:** the strongest arrival in a shallow channel need not be the direct one; the earliest
+  established arrival is nearest the true range; a short uncertain track is not made the object
+  because its fit is poor.
+- **Cost:** objects at one bearing and velocity are merged in either direction, and a chain of tracks
+  can link objects farther apart than one gate (not yet measured on a two-object scene). The
+  object's cross-range error at 12 km is up to 117 m (range error -27 to -0.3 m).
+- **Scoring (ours):** `tools/gallery.py` scores a true object by the nearest established track within
+  the gate, else the nearest track of any kind within it; the per-target position and velocity come
+  from that same track; `tools/classify_rules_eval.py` calls the gallery's functions.
+- **Measured** (re-score of the 120 saved captures, no simulation): popoto_12km ship one mover on
+  10 of 10 seeds (was a mover on 3; mover tracks 40 -> 10, uncertain 11 -> 0 over the seeds); speed
+  4.8 to 7.4 m/s (true 6.0); FLS anchored boats and the pinnacle gain 5 correct by the scoring;
+  deep_silt false movers 14 -> 12; no target lost and no false mover added in any scene. The rules
+  evaluation moves (`classify_rules_eval_a479519.json`: `min_mover_cells` 5 loses no target).
