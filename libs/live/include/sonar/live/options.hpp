@@ -16,12 +16,15 @@ namespace sonar::live {
 void set_option(ChainOptions& chain, PassiveOptions& passive, const std::string& key, const std::string& value);
 /// The same from "key=value".
 void set_pair(ChainOptions& chain, PassiveOptions& passive, const std::string& pair);
+/// What build/bin/sonar_live starts from before its options: the structs' defaults with `backend` auto (CUDA when
+/// the build has it and a device is present, else the host), as gpusonar.live has it.
+void program_defaults(ChainOptions& chain, PassiveOptions& passive);
 /// Every line of a file as key=value; # starts a comment.
 void load_options(ChainOptions& chain, PassiveOptions& passive, const std::string& path);
 /// The same from a stream (text already in memory).
 void read_options(ChainOptions& chain, PassiveOptions& passive, std::istream& in);
 /// `backend`: "host", "cuda" or "auto" (CUDA when the build has it and a device is present, else the host: the
-/// meaning gpusonar.live gives it). Anything else throws. A chain given no backend runs on the host.
+/// meaning gpusonar.live gives it). Anything else throws. A ChainOptions given no backend runs on the host; the program starts from program_defaults (auto).
 Backend parse_backend(const std::string& value);
 /// Every setting of the active chain that a key=value option sets, as one JSON object keyed by the option's name
 /// and in its units (degrees where the name says so; derived sizes not yet resolved, and other NaN, are null).

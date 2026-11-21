@@ -121,6 +121,10 @@ Backend parse_backend(const std::string& value) {
   return cuda_available() ? Backend::Cuda : Backend::Host;
 }
 
+void program_defaults(ChainOptions& chain, PassiveOptions& passive) {
+  chain.backend = passive.sbl.backend = parse_backend("auto");
+}
+
 void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, const std::string& value) {
   const auto v = [&] { return option_number(key, value); };
   const auto i = [&] { return option_integer(key, value); };

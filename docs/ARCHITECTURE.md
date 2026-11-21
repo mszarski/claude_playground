@@ -64,7 +64,9 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
 - The two heavy kernels, echo synthesis in the simulator and backprojection in
   processing, are written once and compiled for the host (OpenMP) and for CUDA. So are
   conditioning (cuFFT on the device) and CFAR. Select with `backend=` or
-  `backend: cuda` in a config; `auto` uses the GPU when the build has it and one is present.
+  `backend: cuda` in a config; `auto` (the default everywhere, `sonar_live` included) uses the GPU when the
+  build has it and one is present. A live chain or pipeline given `cuda` where no device is usable stops
+  with an error (D-147).
 - **Asking for CUDA in a build without it is an error, never a silent fallback.** Every C++
   entry point that takes a `Backend` throws `std::runtime_error("<name>: built without the CUDA
   backend")` for `Backend::Cuda` when the library was built with `SONAR_ENABLE_CUDA=OFF`

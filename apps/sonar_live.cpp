@@ -13,7 +13,8 @@
 //   cfar_train_m min_snr_db beamformer (backprojection | farfield | mvdr) doa (map | sbl)
 //   gate_fft sbl_grid_step_deg sbl_max_sources
 //   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) window (hann | rect)
-//   backend (auto | host | cuda; auto: CUDA when built with it and a device is present; without the key: host)
+//   backend (auto | host | cuda; auto, also without the key: CUDA when built with it and a device is present, else
+//   the host; cuda without a usable device is an error)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
 //   tracker_association (likelihood | in_order)
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
@@ -105,6 +106,7 @@ int main(int argc, char** argv) {
   try {
     live::ChainOptions chain_options;
     live::PassiveOptions passive_options;
+    live::program_defaults(chain_options, passive_options);
     bool listen = false;
     std::string replay, passive, template_path, report_path, recording_path, report_host;
     int udp_port = -1, nav_port = -1, report_port = 0;

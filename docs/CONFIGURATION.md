@@ -605,10 +605,10 @@ brackets) is refused. Switches are `1` or `0`. "Derived" means: left out, the ch
 | Deployment file (`chain.` unless stated) | `sonar_live` key | Unit | Default |
 | --- | --- | --- | --- |
 | `bearings_deg: [first, last, step]` | `bearing_first_deg`, `bearing_last_deg`, `bearing_step_deg` | degrees from broadside | −40, 40, 0.5 |
-| `look` | `look` | `starboard` or `port` (any other text is read as `starboard`) | `starboard` |
-| `window` | `window` | `hann`; anything else (the export writes `none`) is no weighting | `hann` |
+| `look` | `look` | `starboard` or `port` (any other text is refused, D-145) | `starboard` |
+| `window` | `window` | `hann` or `rect` (no weighting); any other text is refused (D-145) | `hann` |
 | `beamformer` | `beamformer` | `backprojection`, `farfield`, `mvdr` | `backprojection` |
-| `backend` | `backend` | `auto` (CUDA when built and a device is present, else host), `host`, `cuda` | `auto` |
+| `backend` | `backend` | `auto` (CUDA when built and a device is present, else host), `host`, `cuda` (an error where no CUDA device is usable; D-147) | `auto`, in the program too (D-147) |
 | `range_cell_m` | `range_cell_m` | m | derived (2 m) |
 | `cell_statistic` | `cell_statistic` | `multiscale`, `mean`, `peak` | `multiscale` |
 | `cfar.pfa` | `cfar_pfa` | probability per cell (`mean`, `peak` only) | 1e-5 |

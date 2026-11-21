@@ -492,7 +492,8 @@ def test_program_options_carry_navigation_and_the_backend():
     assert got["bind"] == "127.0.0.1" and got["report_udp_max_bytes"] == 9000
     # auto means what LiveChain makes of it: CUDA when the build has it and a device is present.
     assert got["backend"] == ("cuda" if core.cuda_available() else "host")
-    assert json.loads(core.live_options_from_text(""))["backend"] == "host"           # the program without the key: the host
+    # The program without the key: auto, as the Python chain (owner's ruling 2026-11-21).
+    assert json.loads(core.live_options_from_text(""))["backend"] == ("cuda" if core.cuda_available() else "host")
 
 
 @pytest.mark.parametrize("pair", ["decimate={}", "elevation_profile_ensemble=None", "cfar_pfa=1e-5x", "range_cell_m=", "tracker_confirm_hits=2.5",
@@ -548,3 +549,17 @@ def test_report_fields_match_the_python_chain(pings, tmp_path):
             for part in ("detections", "tracks"):
                 for gi, wi in zip(sorted(g[part], key=lambda d: d.get("range_m", 0.0)), sorted(w[part], key=lambda d: d.get("range_m", 0.0))):
                     assert set(gi) == set(wi), (name, part, set(gi) ^ set(wi))
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_backend_cuda_without_a_device_is_an_error_and_auto_falls_back(engine):
+    """Owner's ruling 2026-11-21: asking for cuda means cuda; only auto runs on the host when there is no device."""
+    from gpusonar import pipeline
+    if gs.core.cuda_available():
+        assert LiveChain({"engine": engine, "backend": "cuda"}).backend == gs.core.Backend.Cuda
+        return
+    with pytest.raises(RuntimeError, match="no CUDA device is usable"):
+        LiveChain({"engine": engine, "backend": "cuda"})
+    assert LiveChain({"engine": engine, "backend": "auto"}).backend == gs.core.Backend.Host
+    with pytest.raises(RuntimeError, match="no CUDA device is usable"):
+        pipeline.run({"backend": "cuda", "steps": []})

@@ -978,6 +978,9 @@ class LiveChain:
         self.boards_out_of_sync = 0
         check_choices(self.cfg)
         want = self.cfg["backend"]
+        if want == "cuda" and not core.cuda_available():   # asking for CUDA means CUDA; auto is the one that falls back
+            raise RuntimeError("backend: cuda, but no CUDA device is usable here (built without CUDA or no device); "
+                               "use backend auto to run on the host when there is none")
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
         if self.cfg["cell_statistic"] not in CELL_STATISTICS:
             raise ValueError(f"cell_statistic: {self.cfg['cell_statistic']!r} (mean, peak or multiscale)")

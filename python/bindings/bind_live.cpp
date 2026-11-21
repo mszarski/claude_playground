@@ -655,6 +655,7 @@ void bind_live(py::module_& m) {
       [](const std::string& text) {
         live::ChainOptions c;
         live::PassiveOptions p;
+        live::program_defaults(c, p);
         std::istringstream in(text);
         live::read_options(c, p, in);
         return live::options_json(c);

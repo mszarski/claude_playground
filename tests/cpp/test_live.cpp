@@ -155,6 +155,23 @@ TEST(Options, ReadNumbersSwitchesListsAndWords) {
   EXPECT_TRUE(option_numbers("k", "").empty());
 }
 
+TEST(Options, TheProgramStartsFromAutoAndAChainRefusesCudaWithoutADevice) {
+  // Owner's rulings 2026-11-21: sonar_live defaults to auto, as gpusonar.live; cuda never falls back silently.
+  ChainOptions c;
+  PassiveOptions p;
+  program_defaults(c, p);
+  EXPECT_EQ(c.backend, cuda_available() ? Backend::Cuda : Backend::Host);
+  EXPECT_EQ(p.sbl.backend, c.backend);
+  ChainOptions want_cuda;
+  want_cuda.backend = Backend::Cuda;
+  if (cuda_available()) {
+    EXPECT_NO_THROW(LiveChain{want_cuda});
+  } else {
+    EXPECT_THROW(LiveChain{want_cuda}, std::runtime_error);
+  }
+  EXPECT_NO_THROW(LiveChain{ChainOptions{}});           // host is always there
+}
+
 TEST(Options, FileTextAndDumpAgree) {
   // load_options (a file) and read_options (text) are one reader; options_json says what they set, by key name.
   const std::string text = "# a comment\nlook=port  \nelevation=1\nelevation_profile=1\nelevation_profile_ensemble=1\n"

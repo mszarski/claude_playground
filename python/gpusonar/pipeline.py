@@ -214,7 +214,11 @@ def run(config, backend=None) -> RunResult:
     out_cfg = cfg.get("output", {}) or {}
     want = cfg.get("backend", "auto")
     if want not in ("auto", "host", "cuda"):
-        raise ValueError(f"backend: {want!r} (auto, host or cuda; auto, the default, and cuda both use CUDA when a device is present)")
+        raise ValueError(f"backend: {want!r} (auto, host or cuda; auto, the default, uses CUDA when a device is present, "
+                         "else the host; cuda without a usable device is an error)")
+    if backend is None and want == "cuda" and not core.cuda_available():
+        raise RuntimeError("backend: cuda, but no CUDA device is usable here (built without CUDA or no device); "
+                           "use backend auto to run on the host when there is none")
     backend = backend if backend is not None else (
         core.Backend.Cuda if want != "host" and core.cuda_available() else core.Backend.Host)
     log = _Log(out_cfg.get("log"))

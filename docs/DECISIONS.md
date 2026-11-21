@@ -2364,3 +2364,14 @@ Python chain's is, is an open owner question (STATUS).
 - **An unknown `receive.reference.mode`** is refused (only `sync_chirp` exists).
 - **Python's report line writes a non-finite number as `null`**, as `libs/live` does.
 - **The platform self-noise generators were removed** as unused (audit G4).
+
+### D-147 `auto` is the default everywhere; `cuda` never falls back (owner's ruling)
+
+The owner ruled on the two questions D-145 left (2026-11-21). `build/bin/sonar_live` now
+starts from `backend` auto (`live::program_defaults`), as the Python chain and the deployment
+files do: CUDA when the build has it and a device is usable, else the host. And a chain or
+pipeline that asks for `cuda` where no device is usable stops at construction with an error
+naming the backend (`LiveChain` in both engines, `pipeline.run`), where the pipeline used to
+run on the host instead; `auto` is the choice that falls back. `ChainOptions{}` in the library
+keeps `Backend::Host`. Tests: `Options.TheProgramStartsFromAutoAndAChainRefusesCudaWithoutADevice`,
+`test_live_cpp.py::test_backend_cuda_without_a_device_is_an_error_and_auto_falls_back`.

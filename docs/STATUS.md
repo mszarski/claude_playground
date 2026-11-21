@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-146); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-147); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -695,11 +695,8 @@ the arrival-time solve runs (4, 4) passes (D-83).
 
 **From the API audit (`API_AUDIT.md`)**
 
-28. **`sonar_live`'s default backend.** The program defaults to `host`; the Python chain
-    and the deployment files default to `auto` (the device when there is one). Should the
-    program's default become `auto` too (D-145)?
-29. **A chain file that asks for `cuda` on a machine without a device** falls back to the
-    host with a warning in the log only. Keep that, or stop with an error?
+28. Answered (D-147): `sonar_live` defaults to `auto`.
+29. Answered (D-147): `cuda` without a usable device is an error; only `auto` falls back.
 
 ## What is next
 

@@ -1,6 +1,7 @@
 #include "sonar/live/chain.hpp"
 
 #include "sonar/live/raytrace.hpp"
+#include "sonar/core/platform.hpp"
 
 #include <utility>
 
@@ -222,6 +223,11 @@ LiveChain::LiveChain(const ChainOptions& options)
   if (opt_.coverage.enabled && !coverage_site_missing(opt_.coverage).empty()) throw std::invalid_argument("LiveChain: " + coverage_site_missing(opt_.coverage));
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");
+  }
+  // Asking for CUDA means CUDA: never a silent run on the host (auto is the choice that falls back).
+  if (opt_.backend == Backend::Cuda && !cuda_available()) {
+    throw std::runtime_error("LiveChain: backend cuda, but no CUDA device is usable here (built without CUDA or no device); "
+                             "use backend auto to run on the host when there is none");
   }
 }
 
