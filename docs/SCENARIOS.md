@@ -48,8 +48,9 @@ pictures, all made from its YAML file:
   (`DECISIONS.md` D-51); those times were 4 to 8 times longer and its note that the host
   backend was single-threaded was wrong.
 - Tracks are classified from the track alone (`classify.py`): mover, static, line (sliding
-  along a row of other tracks), multipath (another arrival of an object at the bearing and velocity
-  of an established track; the object is the earliest established arrival, D-155), uncertain.
+  along a row of other tracks), multipath (another arrival of an object: within the range, bearing
+  and velocity gates of a group grown from an established track, transitively; the object is the
+  group's earliest established arrival, D-155), uncertain.
 
 All of it is simulation. The scenes in the table below are clouds of point scatterers on
 object surfaces (`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle,
