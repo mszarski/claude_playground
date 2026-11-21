@@ -177,6 +177,34 @@ def test_echo_grouping_matches_python_and_takes_the_earliest_established_arrival
     assert strong.mean_snr_db > ship.mean_snr_db                    # the object is not the strongest arrival
 
 
+def test_transitive_echo_grouping_matches_python():
+    """A chain of arrivals 600 m apart in range with the gate at 800 m (the first and the third 1200 m apart), and a
+    chain in velocity, on one tracker in both engines: each chain is one group, its nearest established arrival the
+    object. With a NaN origin nothing is grouped in either engine and neither raises."""
+    opts = dict(process_noise=0.3, range_sigma=6.0, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0)
+    py_tracker, cpp_tracker = detect.Tracker(**opts), core.LiveTracker(**opts)
+    for i in range(8):
+        t = 2.0 * i
+        dets = [(3000.0 + 3.0 * t, 0.2, 30.0, 2), (3600.0 + 3.0 * t, 0.2, 18.0, 2), (4200.0 + 3.0 * t, 0.2, 15.0, 2),
+                (5000.0 - 1.0 * t, -0.3, 25.0, 2), (5040.0 - 3.0 * t, -0.3, 16.0, 2), (5080.0 - 5.0 * t, -0.3, 14.0, 2)]
+        a = py_tracker.update(t, [detect.Detection(*d) for d in dets])
+        cpp_tracker.update(t, dets)
+    kw = dict(min_speed=0.5, static_speed=0.5, max_fit_rms=3.0)
+    for origin in ((0.0, 0.0), (float("nan"), float("nan"))):
+        mp = {"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": origin}
+        want = classify.classify_tracks(a, multipath=mp, **kw)
+        got = cpp_tracker.classify(multipath=True, max_excess_range=800.0, multipath_bearing=np.radians(3.0), multipath_velocity=2.5,
+                                   origin_x=origin[0], origin_y=origin[1], **kw)
+        assert [(c.id, c.kind, c.parent) for c in want] == [(c["id"], c["kind"], c["parent"]) for c in got]
+        if np.isnan(origin[0]):
+            assert all(c.parent is None for c in want) and [c.kind for c in want].count("mover") == 6
+        else:
+            assert sorted(c.kind for c in want) == ["mover", "mover", "multipath", "multipath", "multipath", "multipath"]
+            nearest = {k: min((c for c in want if abs(c.position[0] / np.hypot(*c.position) - np.sin(b)) < 0.01),
+                              key=lambda c: np.hypot(*c.position)) for k, b in (("first", 0.2), ("second", -0.3))}
+            assert all(c.kind == "mover" and c.parent is None for c in nearest.values())
+
+
 def test_both_chains_group_echoes_alike(pings):
     """The live chain in both engines with echo grouping on, over pings with a target crossing at 3 m/s, its strongest
     arrival 25 m beyond it and a weaker one 50 m beyond (point echoes on its bearing, moving with it). Both engines give

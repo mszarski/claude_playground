@@ -126,6 +126,28 @@ def test_two_ships_at_different_bearings_keep_their_own_groups():
     assert (out[2].kind, out[2].parent) == ("multipath", 1) and (out[12].kind, out[12].parent) == ("multipath", 11)
 
 
+def test_a_group_grows_through_any_member_not_only_the_anchor():
+    """A chain: the anchor A (strongest) and B within the gates of each other, A and C not (1200 m apart in range, the
+    gate 800), B and C within. The group grows from A through B to C: one object. Measured to the anchor alone, C was
+    left a second mover (popoto_12km seeds 3 and 9)."""
+    tracks = [arrival(1, 6000.0, 4.0, 22.0), arrival(2, 6600.0, 4.0, 14.0), arrival(3, 7200.0, 4.0, 13.0)]
+    out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
+    assert out[1].kind == "mover" and out[1].parent is None
+    assert (out[2].kind, out[2].parent) == ("multipath", 1) and (out[3].kind, out[3].parent) == ("multipath", 1)
+    # The same chain in velocity: C differs from A by 3 m/s (gate 2.5), from B by 1.5.
+    tracks = [arrival(1, 6000.0, 4.0, 22.0), arrival(2, 6200.0, 4.0, 14.0, velocity=(0.0, -7.5)),
+              arrival(3, 6400.0, 4.0, 13.0, velocity=(0.0, -9.0))]
+    out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
+    assert [(out[i].kind, out[i].parent) for i in (1, 2, 3)] == [("mover", None), ("multipath", 1), ("multipath", 1)]
+
+
+def test_an_anchor_without_a_range_is_left_alone():
+    """A NaN origin gives every track a NaN range: nothing is grouped and nothing raises (C++ does the same)."""
+    out = classify.classify_tracks([arrival(1, 6000.0, 4.0, 14.0), arrival(2, 6070.0, 4.0, 22.0)],
+                                   **dict(SHIP_KW, multipath=dict(MP, origin=(float("nan"), float("nan")))))
+    assert [(c.kind, c.parent) for c in out] == [("mover", None), ("mover", None)]
+
+
 def test_equal_ranges_take_the_lowest_id_as_the_object():
     a, b = arrival(7, 6000.0, 4.0, 14.0), arrival(3, 6000.0, 4.0, 20.0)
     b.history = [(t, x, y) for t, x, y in a.history]               # the same positions, so the same range exactly
