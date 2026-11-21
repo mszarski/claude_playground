@@ -394,3 +394,38 @@ def test_attitude_and_lever_arms_leave_sway_and_heave_unbiased(run):
         r.geometry = geo
     ignored = motion.estimate_motion(level)
     assert np.sqrt(np.mean(errors(col, ignored)[0] ** 2)) > WAVELENGTH
+
+
+# --- known bathymetry (Eq. 5: p_s,z from a known seafloor) ---------------------------------------
+
+SLOPE = lambda x, y: 0.1 * np.asarray(y)                         # 1 in 10 down to starboard (ours)
+UNDULATING = lambda x, y: (0.05 * np.asarray(y) + 0.3 * np.sin(2 * np.pi * np.asarray(x) / 4.0)
+                           + 0.4 * np.sin(2 * np.pi * np.asarray(y) / 9.0))   # ours: 0.3 m under the track
+
+
+def test_dvl_altitude_is_referred_to_a_seafloor_away_from_z_zero():
+    """A flat seabed at z = 5 m, stated as seafloor_z: the DVL altitude is measured from it,
+    so heave must come out near the truth (before, Eq. 7 took the seabed at z = 0)."""
+    col, _ = collect(n_pings=24, with_target=False, seed=6, bathymetry=lambda x, y: 5.0 + 0.0 * np.asarray(y))
+    result = motion.estimate_motion(col.records, motion.MotionOptions(seafloor_z=5.0))
+    sway_err, heave_err = errors(col, result)
+    assert np.sqrt(np.mean(heave_err**2)) < WAVELENGTH / 4, np.sqrt(np.mean(heave_err**2))
+    assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20, np.sqrt(np.mean(sway_err**2))
+
+
+@pytest.mark.parametrize("name,surface", [("slope", SLOPE), ("undulating", UNDULATING)])
+def test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor(name, surface):
+    """Scatterers on a non-flat seafloor; the DVL reports the altitude above it under the
+    vehicle. Given the surface, the estimator meets the flat-seafloor bounds (sway lambda/20,
+    heave lambda/4 RMS)."""
+    col, _ = collect(bathymetry=surface)
+    known = motion.estimate_motion([r.copy() for r in col.records], motion.MotionOptions(bathymetry=surface))
+    sway_err, heave_err = errors(col, known)
+    assert known.fine.converged
+    assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20, np.sqrt(np.mean(sway_err**2))
+    assert np.sqrt(np.mean(heave_err**2)) < WAVELENGTH / 4, np.sqrt(np.mean(heave_err**2))
+    # The flat assumption on the same records does worse (on the undulating seafloor it
+    # misreads the DVL by the 0.3 m relief under the track).
+    flat = motion.estimate_motion([r.copy() for r in col.records])
+    flat_sway = np.sqrt(np.mean(errors(col, flat)[0] ** 2))
+    assert flat_sway > np.sqrt(np.mean(sway_err**2))

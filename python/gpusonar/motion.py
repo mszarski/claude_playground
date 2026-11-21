@@ -52,7 +52,8 @@ class MotionOptions:
     dvl_scale: float = 5e-3          # m
     seafloor_z: float | str = 0.0    # flat seafloor (the paper's default: origin on the seabed), or
                                      # "auto": from the records (DVL altitude, else water depth)
-    bathymetry: object = None        # optional callable z(x, y) for a known seafloor
+    bathymetry: object = None        # optional callable z(x, y) for a known seafloor: sets p_s,z (Eq. 5) and the
+                                     # seabed under each ping that the DVL altitude is measured from (Eq. 7)
 
 
 @dataclass
@@ -220,6 +221,16 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
     return out, rejected
 
 
+def _refer_dvl(pings, altitude, floor_z: float, bathymetry, y) -> None:
+    """Set each ping's dvl_altitude to its measured altitude minus the z of the seabed under
+    it (at the ping's x and the given sway y), the frame the solver's Eq. 7 term assumes."""
+    for nav, alt, yi in zip(pings, altitude, y):
+        if not np.isfinite(alt):
+            continue
+        seabed = float(bathymetry(nav.x, yi)) if bathymetry is not None else floor_z
+        nav.dvl_altitude = float(alt - seabed)
+
+
 def estimate_motion(records, options: MotionOptions | None = None) -> MotionResult:
     """Estimate sway and heave for a straight-line collection (the two-pass scheme).
 
@@ -232,10 +243,16 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     records = list(records)
     prepare(records)
     pings = _ping_nav(records)
-    # Origin on the seafloor below the first ping: its height is its DVL altitude.
     floor_z = resolve_seafloor_z(records, options)
+    # Eq. 7 in the solver reads -z = altitude, i.e. a seabed at z = 0 under every ping. A DVL
+    # altitude is above the seabed under the vehicle, so it is handed over as altitude minus
+    # that seabed's z: floor_z, or the known bathymetry under the ping (ours; with the
+    # default flat seabed at z = 0 this is the altitude unchanged).
+    altitude = [nav.dvl_altitude for nav in pings]
+    _refer_dvl(pings, altitude, floor_z, options.bathymetry, [nav.y for nav in pings])
+    # Origin on the seafloor below the first ping: its height is its DVL altitude.
     if np.isfinite(pings[0].dvl_altitude):
-        pings[0].z = floor_z - pings[0].dvl_altitude
+        pings[0].z = -pings[0].dvl_altitude
     used: dict = {}
     found, rejected = measure_delays(records, options, used)
     if not found:
@@ -268,6 +285,9 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     # Pass 2: unwrapped fine delays, starting from the coarse trajectory.
     for nav, y, z in zip(pings, coarse.y, coarse.z):
         nav.y, nav.z = y, z
+    if options.bathymetry is not None:
+        # The seabed under each ping, now at the coarse pass's sway rather than the nominal track.
+        _refer_dvl(pings, altitude, floor_z, options.bathymetry, list(coarse.y[:len(pings)]))
     fine = core.solve_motion(pings, measurements, so)
     n = len(records)
     log = [f"pass 1 (coarse): {coarse.report}", f"pass 2 (fine): {fine.report}",
