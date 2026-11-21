@@ -86,3 +86,12 @@ def test_compact_keeps_the_scores():
     c = cre.compact(out)
     assert c["cells=8,row=off"]["kinds"] == {"boat": "uncertain", "anchored": "static", "far_buoy": None}
     assert c["cells=8,row=off"]["lost"] == ["boat"] and c["cells=off,row=off"]["false_movers"] == 1
+
+
+def test_a_capture_that_carries_the_gallerys_own_rules_is_scored_from_off():
+    """Since D-154 the gallery classifies with detections={"row_snr_db": 6}; a capture that recorded those options
+    must still be scored over the grid starting from the rules off, the same as one that did not."""
+    plain = cre.evaluate_capture(_capture())
+    cap = _capture()
+    cap["classify_kw"] = dict(cap["classify_kw"], detections={"row_snr_db": 6.0})
+    assert cre.evaluate_capture(cap) == plain

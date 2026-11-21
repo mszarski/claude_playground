@@ -2475,3 +2475,13 @@ the traffic scene's closing boat down to 6), and the values hold only for these 
 loss and no new false mover; 3 adds 2 false movers. No Popoto scene changes except `deep_silt` at 8
 cells. Kept off by default. Candidate, for the owner: `row_snr_db: 6` in the gallery's FLS transit
 classification (it would change the committed gallery).
+
+### D-154 The gallery's FLS classification uses `row_snr_db: 6` (owner's ruling)
+
+After the ten-seed evaluation (D-152 addendum) the owner ruled (2026-11-21) that the gallery's FLS
+transit classification passes `detections={"row_snr_db": 6}` (`tools/gallery.py`): a track counts in a
+mover's row only if its mean SNR is at most 6 dB below the mover's. Over 120 captures it lost no target,
+added no false mover and made the cluttered scene's boat a mover on the 4 seeds where it had been a
+line. The live chain is unchanged (it refuses the key, D-152); the Popoto scenes do not run the row test.
+`tools/classify_rules_eval.py` keeps the gallery's own rules apart from its grid, whose first cell stays
+"off". The committed gallery was regenerated with it.

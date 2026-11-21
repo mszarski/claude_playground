@@ -130,7 +130,8 @@ def evaluate_capture(cap: dict) -> dict:
     truth = truth_from_json(cap["truth"])
     out, base = {}, None
     for key, rule in grid():
-        classes = classify.classify_tracks(tracks, **cap["classify_kw"], detections=rule)
+        kw = {k: v for k, v in cap["classify_kw"].items() if k != "detections"}
+        classes = classify.classify_tracks(tracks, **kw, detections=rule)
         s = score(classes, tracks, truth, cap["t_last"], cap["gate"])
         s["counts"] = classify.summary(classes)
         if base is None:
@@ -300,7 +301,11 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
     return {"scene": name, "scene_seed": own_seed, "seed": own_seed + int(seed_offset), "seed_offset": int(seed_offset),
             "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1),
             "tracks": [track_to_json(t) for t in got["tracks"]], "truth": truth_to_json(got["truth"]),
-            "t_last": got["t_last"], "gate": got["gate"], "classify_kw": _jsonable(got["kw"]),
+            # The grid sets `detections` itself (its first cell is off), so the gallery's own rules (D-154) are
+            # kept apart and not passed on.
+            "t_last": got["t_last"], "gate": got["gate"],
+            "classify_kw": _jsonable({k: v for k, v in got["kw"].items() if k != "detections"}),
+            "gallery_detections": _jsonable(got["kw"].get("detections")),
             "gallery_classification": _jsonable(out[1].get("classification"))}
 
 

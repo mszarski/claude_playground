@@ -631,9 +631,11 @@ def run_fls_transit(name, cfg, backend, quick):
                "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
                "targets": score_tracks(tracks, truth, t_last, gate=15.0)}
     # A mover's fitted speed must be five times its uncertainty; positions must fit a line to 2.5 m.
+    # A track counts in a mover's row only if its mean SNR is at most 6 dB below the mover's (D-154, owner's
+    # ruling after the ten-seed evaluation: no target lost, the cluttered boat a mover on every seed).
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
-        linear={"length": 40.0, "width": 2.0})
+        linear={"length": 40.0, "width": 2.0}, detections={"row_snr_db": 6.0})
     for label, m in metrics["targets"].items():
         if m.get("tracked"):
             m["track_speed_m_s"] = float(np.hypot(*m["track_velocity_xy"]))
