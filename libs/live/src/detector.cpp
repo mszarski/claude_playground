@@ -7,7 +7,9 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "sonar/core/parallel.hpp"
 #include "sonar/detect/statistic.hpp"
+#include "sonar/live/detector_kernel.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 
 namespace sonar::live {
@@ -246,16 +248,26 @@ double median(std::vector<double>& v) {
   return v.size() % 2 ? v[h] : 0.5 * (v[h - 1] + v[h]);
 }
 
-}  // namespace
+// Training cells of each range cell (the same for every bearing): [j - guard - train, j - guard) and (j + guard, j + guard + train];
+// the offset of their centroid from the cell, and what the estimate is worth in independent training cells.
+struct BackgroundWindow {
+  std::vector<std::int64_t> lo0, lo1, hi0, hi1;
+  std::vector<double> offset;
+  bool sloped = false;
+};
 
-void detector_background(const float* cell_mean, std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
-                         std::vector<double>& background, std::vector<double>& train_cells) {
-  background.assign(static_cast<std::size_t>(n_b * n_cells), 0.0);
+BackgroundWindow background_window(std::int64_t n_cells, std::int64_t guard, std::int64_t train, std::vector<double>& train_cells) {
+  BackgroundWindow bw;
   train_cells.assign(static_cast<std::size_t>(n_cells), 1.0);
-  // Training cells of each range cell (the same for every bearing): [j - guard - train, j - guard) and (j + guard, j + guard + train].
-  std::vector<std::int64_t> lo0(static_cast<std::size_t>(n_cells)), lo1(lo0), hi0(lo0), hi1(lo0);
-  std::vector<double> offset(static_cast<std::size_t>(n_cells), 0.0);     // of the training cells' centroid from the cell, cells
+  bw.lo0.assign(static_cast<std::size_t>(n_cells), 0);
+  bw.lo1 = bw.lo0;
+  bw.hi0 = bw.lo0;
+  bw.hi1 = bw.lo0;
+  bw.offset.assign(static_cast<std::size_t>(n_cells), 0.0);     // of the training cells' centroid from the cell, cells
+  std::vector<std::int64_t>&lo0 = bw.lo0, &lo1 = bw.lo1, &hi0 = bw.hi0, &hi1 = bw.hi1;
+  std::vector<double>& offset = bw.offset;
   const bool sloped = n_cells >= 2 * train && train >= 8;
+  bw.sloped = sloped;
   const auto t = static_cast<double>(train);
   for (std::int64_t j = 0; j < n_cells; ++j) {
     const auto q = static_cast<std::size_t>(j);
@@ -272,6 +284,19 @@ void detector_background(const float* cell_mean, std::int64_t n_b, std::int64_t 
     const double r = std::abs(offset[q]) / t;
     train_cells[q] = 1.0 / (1.0 / count + (3.14159265358979323846 * r * r + 2.0 * r) / t);
   }
+  return bw;
+}
+
+}  // namespace
+
+void detector_background(const float* cell_mean, std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
+                         std::vector<double>& background, std::vector<double>& train_cells) {
+  background.assign(static_cast<std::size_t>(n_b * n_cells), 0.0);
+  const BackgroundWindow bw = background_window(n_cells, guard, train, train_cells);
+  const std::vector<std::int64_t>&lo0 = bw.lo0, &lo1 = bw.lo1, &hi0 = bw.hi0, &hi1 = bw.hi1;
+  const std::vector<double>& offset = bw.offset;
+  const bool sloped = bw.sloped;
+  const auto t = static_cast<double>(train);
   std::vector<double> csum(static_cast<std::size_t>(n_cells + 1)), block;
   for (std::int64_t b = 0; b < n_b; ++b) {
     const float* row = cell_mean + b * n_cells;
@@ -299,17 +324,88 @@ void detector_background(const float* cell_mean, std::int64_t n_b, std::int64_t 
   }
 }
 
-std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
-                                         std::int64_t n_b, std::int64_t n_cells, const std::vector<double>& fine_ranges,
-                                         const std::vector<double>& cell_ranges, const std::vector<double>& bearings,
-                                         std::int64_t guard, std::int64_t train, const DetectorPlan& plan, std::vector<float>& background) {
+#if SONAR_HAVE_CUDA
+// detector_cuda.cu: the kernels of detector_kernel.hpp on the device.
+void multiscale_cells_cuda(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean, std::int64_t n_b,
+                           std::int64_t n_cells, std::int64_t guard, std::int64_t train, bool sloped, const std::vector<double>& offset,
+                           const std::vector<double>& threshold, const std::vector<std::int64_t>& cells, std::int64_t k, double* level,
+                           float* background, float* peak, unsigned char* flag, int device);
+#endif
+
+namespace {
+
+// Each test's threshold over the background by range cell, [n_scales * n_cells] (multiscale_detect's thr[s][j]), and the
+// background window's geometry.
+BackgroundWindow cell_thresholds(const DetectorPlan& plan, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
+                                 std::vector<double>& threshold, std::vector<std::int64_t>& cells) {
+  std::vector<double> worth;
+  BackgroundWindow bw = background_window(n_cells, guard, train, worth);
+  threshold.assign(plan.scales.size() * static_cast<std::size_t>(n_cells), 0.0);
+  cells.clear();
+  for (std::size_t s = 0; s < plan.scales.size(); ++s) {
+    cells.push_back(plan.scales[s].cells);
+    for (std::int64_t j = 0; j < n_cells; ++j) {
+      threshold[s * static_cast<std::size_t>(n_cells) + static_cast<std::size_t>(j)] = plan.threshold(s, worth[static_cast<std::size_t>(j)]);
+    }
+  }
+  return bw;
+}
+
+}  // namespace
+
+void multiscale_cells_kernels_on_host(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
+                                      std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
+                                      const DetectorPlan& plan, DetectorCells& out) {
+  std::vector<double> threshold;
+  std::vector<std::int64_t> cells;
+  const BackgroundWindow bw = cell_thresholds(plan, n_cells, guard, train, threshold, cells);
+  const auto n = static_cast<std::size_t>(n_b * n_cells);
+  std::vector<double> scratch(bw.sloped ? static_cast<std::size_t>(n_b * 4 * train) : 0U), median(static_cast<std::size_t>(4 * n_b), 0.0);
+  std::vector<double> csum(static_cast<std::size_t>(n_b * (n_cells + 1))), slope(static_cast<std::size_t>(2 * n_b));
+  out.level.assign(n, 0.0);
+  out.background.assign(n, 0.0F);
+  out.peak.assign(n, 0.0F);
+  out.flag.assign(n, 0);
+  if (bw.sloped) parallel_for_host(4 * n_b, DetectorMedianKernel{cell_mean, scratch.data(), median.data(), n_cells, train});
+  parallel_for_host(n_b, DetectorRowKernel{cell_mean, median.data(), csum.data(), slope.data(), n_cells, train, bw.sloped});
+  parallel_for_host(n_b * n_cells, DetectorCellKernel{fine, fine_stride, fine_offset, csum.data(), slope.data(), bw.offset.data(), threshold.data(),
+                                                      cells.data(), static_cast<std::int64_t>(cells.size()), n_cells, plan.samples_per_cell, guard,
+                                                      train, out.level.data(), out.background.data(), out.peak.data(), out.flag.data()});
+}
+
+void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
+                      std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train, const DetectorPlan& plan,
+                      DetectorCells& out, int device) {
+  (void)device;  // used by the CUDA backend only
+  if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+    std::vector<double> threshold;
+    std::vector<std::int64_t> cells;
+    const BackgroundWindow bw = cell_thresholds(plan, n_cells, guard, train, threshold, cells);
+    const auto n = static_cast<std::size_t>(n_b * n_cells);
+    out.level.assign(n, 0.0);
+    out.background.assign(n, 0.0F);
+    out.peak.assign(n, 0.0F);
+    out.flag.assign(n, 0);
+    multiscale_cells_cuda(fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, bw.sloped, bw.offset, threshold, cells,
+                          plan.samples_per_cell, out.level.data(), out.background.data(), out.peak.data(), out.flag.data(), device);
+    return;
+#else
+    throw std::runtime_error("multiscale_cells: built without the CUDA backend");
+#endif
+  }
+  // The reference.
   const std::int64_t k = plan.samples_per_cell;
   const auto n = static_cast<std::size_t>(n_b * n_cells);
-  std::vector<double> level, worth;
+  std::vector<double>& level = out.level;
+  std::vector<double> worth;
   detector_background(cell_mean, n_b, n_cells, guard, train, level, worth);
+  std::vector<float>& background = out.background;
   background.assign(n, 0.0F);
-  std::vector<float> peak(n, 0.0F);
-  std::vector<unsigned char> flag(n, 0);
+  std::vector<float>& peak = out.peak;
+  peak.assign(n, 0.0F);
+  std::vector<unsigned char>& flag = out.flag;
+  flag.assign(n, 0);
   std::vector<std::vector<double>> thr(plan.scales.size(), std::vector<double>(static_cast<std::size_t>(n_cells)));
   for (std::int64_t j = 0; j < n_cells; ++j) {
     for (std::size_t s = 0; s < plan.scales.size(); ++s) thr[s][static_cast<std::size_t>(j)] = plan.threshold(s, worth[static_cast<std::size_t>(j)]);
@@ -338,6 +434,27 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
       flag[i] = hit ? 1 : 0;
     }
   }
+}
+
+std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
+                                         std::int64_t n_b, std::int64_t n_cells, const std::vector<double>& fine_ranges,
+                                         const std::vector<double>& cell_ranges, const std::vector<double>& bearings,
+                                         std::int64_t guard, std::int64_t train, const DetectorPlan& plan, std::vector<float>& background,
+                                         Backend backend, int device) {
+  DetectorCells statistic;
+  multiscale_cells(backend, fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, plan, statistic, device);
+  return multiscale_group(fine, fine_stride, fine_offset, n_b, n_cells, fine_ranges, cell_ranges, bearings, plan, statistic, background);
+}
+
+std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, std::int64_t n_b,
+                                        std::int64_t n_cells, const std::vector<double>& fine_ranges, const std::vector<double>& cell_ranges,
+                                        const std::vector<double>& bearings, const DetectorPlan& plan, DetectorCells& statistic,
+                                        std::vector<float>& background) {
+  const std::int64_t k = plan.samples_per_cell;
+  const auto n = static_cast<std::size_t>(n_b * n_cells);
+  background = statistic.background;
+  const std::vector<float>& peak = statistic.peak;
+  std::vector<unsigned char>& flag = statistic.flag;
 
   // Cells that a stronger cell's sidelobes explain are dropped, strongest source first.
   std::vector<std::int64_t> flagged, sources;
