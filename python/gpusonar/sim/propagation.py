@@ -2,21 +2,31 @@
 
 An EigenrayProvider returns, for a source point and a set of field points, the
 eigenrays joining them. Echo synthesis sums over every pair of outbound and
-return eigenrays (as in SST). Providers:
+return eigenrays (as in SST; `two_way_paths`). The providers, by fidelity tier
+(`make_provider`):
 
-- FreeFieldProvider: the direct path only. Tier `free_field`.
-- ImageSourceProvider: constant sound speed, flat surface and bottom (and optional
-  vertical walls), with reflection coefficients. Tier `image_source`.
-- Bellhop-backed provider: milestone 12. Tier `eigenray`.
+- FreeFieldProvider (`free_field`): the direct path only.
+- ImageSourceProvider (`image_source`): constant sound speed, flat surface and bottom
+  and optional vertical walls; the bottom is a fluid half-space (Rayleigh coefficient
+  at each ray's grazing angle) or an explicit constant, never assumed (D-104); bounce
+  orders kept by energy with a cap that warns (D-105).
+- SedimentProvider (`sediment`): one refracted ray per point into a fluid sediment
+  under a flat interface (Snell's law), for buried objects.
+- sim.bellhop.BellhopProvider (`eigenray`): arrivals from Bellhop, an external program
+  run as a separate process, for a sound-speed profile, a bathymetry and water that
+  changes with range; its seabed is never assumed either.
+- sim.timespread.TimeSpreadProvider wraps any of them to spread bounce paths in time
+  (rough boundaries, D-62).
 
 The synthesis kernel takes straight-line paths, so each eigenray is handed to it
 as an *apparent position*: the point at distance c * delay from the sonar along
-the ray's direction there. For the first two providers that is exact (it is the
-image position). For traced rays it reproduces the delay and arrival angle at the
-array, with the wavefront curvature of a point at the travel-time distance.
+the ray's direction there. For the free-field and image-source providers that is
+exact (it is the image position). For refracted and traced rays it reproduces the
+delay and arrival angle at the array, with the wavefront curvature of a point at
+the travel-time distance.
 
-The first two providers, the sediment provider and `two_way_paths` also exist in C++
-(libs/sim/src/paths.cpp), which is used by default; `engine="numpy"` or
+The free-field, image-source and sediment providers and `two_way_paths` also exist
+in C++ (libs/sim/src/paths.cpp), which is used by default; `engine="numpy"` or
 GPUSONAR_SIM_ENGINE=numpy selects the NumPy code in this file (sim/engine.py).
 """
 
@@ -328,11 +338,11 @@ class SedimentProvider(EigenrayProvider):
     eigenray per point (Snell's law). Used for buried objects.
 
     Amplitude is spherical spreading over the travel-time distance times a constant
-    two-way-independent transmission factor; angle-dependent transmission and sediment
-    attenuation come with the boundary models in milestone 12.
+    `transmission` factor for points below the interface. Not modelled: transmission
+    that depends on the angle, and attenuation in the sediment.
     """
 
-    tier = "image_source"
+    tier = "sediment"
 
     def __init__(self, sound_speed: float, sediment_speed: float, interface_z: float,
                  transmission: complex = 1.0, engine: str | None = None):

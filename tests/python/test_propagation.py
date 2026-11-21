@@ -230,3 +230,10 @@ def test_bathymetry_is_validated():
     from gpusonar.sim.bellhop import BellhopError
     with pytest.raises(BellhopError, match="bathymetry"):
         run_bellhop(env, 8000.0, 30.0, [50.0], [500.0])
+
+
+def test_every_provider_names_its_own_tier():
+    """The sediment provider used to call itself `image_source`."""
+    for tier, options in (("free_field", {}), ("image_source", {"bottom_z": None}),
+                          ("sediment", {"sediment_speed": 1650.0, "interface_z": 50.0})):
+        assert gs.sim.make_provider(tier, 1500.0, options).tier == tier
