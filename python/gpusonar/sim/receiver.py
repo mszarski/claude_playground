@@ -76,11 +76,19 @@ def reference_times(record: "core.PingRecord", ref: dict) -> tuple[float, float]
     return s.start_time + float(ref["lead"]), t_end - float(ref["tail"]) - float(ref["duration"])
 
 
+REFERENCE_MODES = {"sync_chirp"}
+
+
 def add_reference_signal(record: "core.PingRecord", sonar, clocks: dict) -> None:
     """Sum the shared synchronisation reference into each board's reference input, as that
     board's own (wrong) sample clock sees it."""
     ref = sonar.config["receive"].get("reference")
-    if not ref or ref.get("mode") != "sync_chirp" or record.samples.is_complex():
+    if not ref:
+        return
+    if ref.get("mode") not in REFERENCE_MODES:
+        # A misspelt mode used to remove the reference silently (audit A15).
+        raise ValueError(f"receive.reference.mode {ref.get('mode')!r}: the simulated modes are {sorted(REFERENCE_MODES)}")
+    if record.samples.is_complex():
         return
     s = record.samples
     x = s.array

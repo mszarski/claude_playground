@@ -239,6 +239,10 @@ class SonarModel:
         for key, where in NOT_SIMULATED_RECEIVE_KEYS.items():
             if key in rx:
                 raise ValueError(f"receive.{key} is not simulated (it would look modelled and change nothing): {where}")
+        if rx.get("reference"):
+            from .sim.receiver import REFERENCE_MODES
+            if rx["reference"].get("mode") not in REFERENCE_MODES:
+                raise ValueError(f"receive.reference.mode {rx['reference'].get('mode')!r}: the simulated modes are {sorted(REFERENCE_MODES)}")
         mux = rx.get("mux")
         if mux:
             groups = []
