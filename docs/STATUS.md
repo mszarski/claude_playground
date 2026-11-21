@@ -597,6 +597,10 @@ regenerated. The brackish sound-speed blend moves nothing shipped. Oracle tests 
 their skips, and `GPUSONAR_REQUIRE_ORACLES=1` (set by `GPUSONAR_ORACLES=1 tools/gpu_job.sh`)
 makes them fail instead.
 
+CPU result after the API audit fixes (tree of commit `ba2f37f`, all ctest entries with Bellhop set, 2026-11-21): 145 of 146 ctest entries passed; pytest 1545 passed, 89 skipped, 1 failed. The failure was a test asserting the 1600 m/s placeholder seabed that D-146 removed (`test_sediment_table.py::test_bellhop_environment_by_name`); it now asserts the refusal and passes (commit `be7db6f`).
+
+GPU result on the same tree (NVIDIA L4 through Hugging Face Jobs, CUDA build with Bellhop, KRAKEN, Ceres and the Holoscan C++ operators, `GPUSONAR_REQUIRE_ORACLES=1`, 2026-11-21): 1559 passed, 78 skipped, the same 1 failed. No oracle test skipped. The multi-GPU tiling's device comparison ran and passed. The skips are data and tools not in the job (UACR, Watermark, Smart Ocean, PICMUS, `arlpy`, the ultrasound reference, Sensor Bridge), two CPU-only tests, and 52 `--help` checks that need a git checkout (the job runs from a tarball).
+
 ## Open questions for the project owner
 
 Decisions already taken are in `DECISIONS.md` and are not repeated here.
