@@ -133,6 +133,118 @@ TEST(Tracker, TakesEachDetectionAtItsOwnTimeAndClassifiesAtThePing) {
   EXPECT_NEAR(at_last[0].x - ca[0].x, vx * (t_last - tp), 0.05);
 }
 
+TEST(Tracker, NeverMovesAMissedTrackBackAndKeepsItsDepthVariancePositive) {
+  // D-156 with pings every 5 s, less than R/c = 8 s at 12 km: a track that took a detection at t_k + R/c and misses ping
+  // k+1 already holds later than t_{k+1}. It keeps its state, time and depth variance (predicted back to the ping, the
+  // depth variance lost q_d^2 x 3 s and went below zero, and the history went out of time order).
+  const double c = 1500.0, vx = 6.0, x0 = -60.0, y0 = 12000.0;
+  TrackerOptions o;
+  o.bearing_sigma = 0.01 * kDeg;
+  o.initial_speed_sigma = 8.0;
+  Tracker tracker(o);
+  int held = 0;
+  for (int k = 0; k < 14; ++k) {
+    const double tp = 5.0 * k;
+    double tr = tp;
+    for (int i = 0; i < 8; ++i) tr = tp + std::hypot(x0 + vx * tr, y0) / c;
+    const double px = x0 + vx * tr;
+    std::vector<Detection> dets;
+    const bool miss = k == 4 || k == 7 || k == 8;
+    if (!miss) {
+      Detection d{std::hypot(px, y0), std::atan2(px, y0), 20.0, 4};
+      d.depth = 30.0;
+      d.depth_sigma = 0.3;
+      d.time = tp + d.range / c;
+      dets.push_back(d);
+    }
+    std::vector<double> before_time, before_var;
+    for (const Track& t : tracker.tracks()) {
+      before_time.push_back(t.time);
+      before_var.push_back(t.depth_var);
+    }
+    tracker.update(tp, dets);
+    ASSERT_EQ(tracker.tracks().size(), 1U);
+    const Track& t = tracker.tracks()[0];
+    for (std::size_t i = 1; i < t.history.size(); ++i) EXPECT_LE(t.history[i - 1].time, t.history[i].time);
+    EXPECT_GT(t.depth_var, 0.0);
+    if (miss && !before_time.empty() && before_time[0] > tp) {
+      EXPECT_EQ(t.time, before_time[0]);
+      EXPECT_EQ(t.depth_var, before_var[0]);
+      ++held;
+    }
+  }
+  EXPECT_EQ(held, 2);
+}
+
+TEST(Tracker, APredictionToAnEarlierDetectionStillGrowsTheDepthVariance) {
+  // Within a ping a nearer detection is earlier (D-156): the track predicted back to it gains q_d^2 |dt| of depth
+  // variance (ours), so the update with the detection's depth weighs them as for a forward prediction.
+  TrackerOptions o;
+  o.depth_process_noise = 0.5;
+  Tracker tracker(o);
+  Detection first{1000.0, 0.0, 20.0, 4};
+  first.depth = 20.0;
+  first.depth_sigma = 0.4;
+  first.time = 10.0;
+  tracker.update(0.0, {first});
+  Detection second = first;
+  second.depth = 21.0;
+  second.time = 9.0;
+  tracker.update(1.0, {second});
+  ASSERT_EQ(tracker.tracks().size(), 1U);
+  const Track& t = tracker.tracks()[0];
+  const double prior = 0.16 + 0.25 * 1.0, r = 0.16, k = prior / (prior + r);
+  EXPECT_NEAR(t.depth_var, prior * (1.0 - k), 1e-12);
+  EXPECT_NEAR(t.depth, 20.0 + k * 1.0, 1e-12);
+}
+
+TEST(Tracker, ADetectionTimeThatIsNotFiniteIsThePings) {
+  TrackerOptions o;
+  Tracker plain(o), inf(o);
+  for (int k = 0; k < 5; ++k) {
+    Detection d{200.0 + 3.0 * k, 0.2, 20.0, 4};
+    plain.update(0.5 * k, {d});
+    d.time = std::numeric_limits<double>::infinity();
+    inf.update(0.5 * k, {d});
+  }
+  ASSERT_EQ(plain.tracks().size(), inf.tracks().size());
+  for (int j = 0; j < 4; ++j) EXPECT_EQ(plain.tracks()[0].state[j], inf.tracks()[0].state[j]);
+  EXPECT_EQ(plain.tracks()[0].time, inf.tracks()[0].time);
+}
+
+TEST(Classify, FitsTimeBetweenAllPointsAndMovesAShortTrackByItsState) {
+  // The fit's guard is max - min of the times (numpy.ptp in classify.py), not last - first.
+  Track t;
+  t.id = 1;
+  t.hits = 3;
+  t.confirmed = true;
+  t.history = {{0.0, 0.0, 0.0}, {10.0, 10.0, 0.0}, {0.0, 0.0, 0.0}};
+  ClassifyOptions co;
+  auto out = classify_tracks({&t}, co);
+  EXPECT_NEAR(out[0].vx, 1.0, 1e-12);
+  EXPECT_NEAR(out[0].vy, 0.0, 1e-12);
+  // Fewer than three points: no fit; at a time given, the last point moved there by the state's velocity.
+  Track s;
+  s.id = 2;
+  s.hits = 2;
+  s.confirmed = true;
+  s.history = {{0.0, 46.0, 50.0}, {10.0, 106.0, 50.0}};
+  s.state[0] = 106.0;
+  s.state[1] = 50.0;
+  s.state[2] = 6.0;
+  co.time = 2.0;
+  out = classify_tracks({&s}, co);
+  EXPECT_NEAR(out[0].x, 58.0, 1e-12);
+  EXPECT_NEAR(out[0].y, 50.0, 1e-12);
+  EXPECT_EQ(out[0].vx, 0.0);
+  for (double at : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+    co.time = at;
+    out = classify_tracks({&s}, co);
+    EXPECT_EQ(out[0].x, 106.0);
+    EXPECT_EQ(out[0].y, 50.0);
+  }
+}
+
 TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName) {
   // D-141: the default and the names; the two rules themselves are held to the Python tracker's in
   // tests/python/test_live_cpp.py, and the case that separates them in tests/python/test_detect.py.

@@ -77,7 +77,8 @@ class Detection:
     arrivals: list | None = None        # [(range m, snr dB)], nearest first: the local peaks along range inside the detection
                                         # (the multiscale detector; libs/live detections.hpp), at most the 8 strongest
     time: float | None = None           # s, when the detection shows the target: for a monostatic echo the ping's transmit
-                                        # time + range / c (D-156). None: the ping's time given to Tracker.update (as before)
+                                        # time + range / c (D-156). None (or NaN, any value that is not finite): the
+                                        # ping's time given to Tracker.update (as before)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -324,7 +325,6 @@ class Tracker:
         self.initial_speed_sigma = initial_speed_sigma
         self.tracks: list[Track] = []
         self._next_id = 1
-        self._time = None
 
     def _measurement_cov(self, d: Detection) -> np.ndarray:
         # Polar measurement noise rotated into Cartesian.
@@ -355,23 +355,29 @@ class Tracker:
         t.depth_var *= 1.0 - k
 
     def _predict(self, t: Track, to: float) -> tuple[np.ndarray, np.ndarray, float]:
-        """The track's state, covariance and depth variance moved by the constant-velocity model from `t.time` to `to`."""
+        """The track's state, covariance and depth variance moved by the constant-velocity model from `t.time` to `to`.
+        `to` may be earlier than `t.time` when a detection within a ping is (D-156: each detection at transmit + R/c, so a
+        nearer one is earlier). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
+        positive semi-definite for either sign of dt, and the depth's random walk grows by q_d^2 |dt| (ours: a variance
+        never shrinks by predicting; the same for dt >= 0 as before)."""
         dt = to - t.time
         f = np.eye(4)
         f[0, 2] = f[1, 3] = dt
         g = np.array([[0.5 * dt**2, 0], [0, 0.5 * dt**2], [dt, 0], [0, dt]])
         q = g @ g.T * self.q**2
-        depth_var = t.depth_var + self.depth_q**2 * dt if np.isfinite(t.depth_var) else t.depth_var
+        depth_var = t.depth_var + self.depth_q**2 * abs(dt) if np.isfinite(t.depth_var) else t.depth_var
         return f @ t.state, f @ t.cov @ f.T + q, depth_var
 
     def update(self, time: float, detections: list[Detection]) -> list[Track]:
         """Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
         the detection's own time (`Detection.time`, the ping's when None: a monostatic echo shows the target where it was
         when the sound reached it, transmit + range / c; D-156), a track takes its detection at that time and a new track
-        is born there. Tracks that take none are predicted to `time` and count a miss. Returns the confirmed tracks."""
-        self._time = time
+        is born there; a time that is not finite (NaN) counts as none, as in the C++ tracker. Tracks that take none count a
+        miss and are predicted to `time`, or stay where they are if they already hold at a later time (the last detection
+        they took was at transmit + R/c after this ping's transmit: a ping interval shorter than R/c), so a track never
+        moves back in time. Returns the confirmed tracks."""
         h = np.eye(2, 4)
-        whens = [time if d.time is None else float(d.time) for d in detections]
+        whens = [time if d.time is None or not np.isfinite(d.time) else float(d.time) for d in detections]
         cache: dict = {}
 
         def predicted(ti: int, when: float):
@@ -385,7 +391,7 @@ class Tracker:
         else:
             unused = self._associate_in_order(detections, whens, h, predicted)
         for ti, t in enumerate(self.tracks):
-            if t.misses and t.time != time:          # took nothing this ping: where it is at the ping
+            if t.misses and t.time < time:           # took nothing this ping: where it is at the ping, never earlier
                 t.state, t.cov, t.depth_var = predicted(ti, time)
                 t.time = time
             t.history.append((t.time, float(t.state[0]), float(t.state[1])))

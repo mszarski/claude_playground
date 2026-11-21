@@ -220,3 +220,30 @@ def test_positions_are_read_at_the_time_asked():
     assert at_ping.position == pytest.approx((100.0 + 6.0 * 100.0, 12000.0))
     assert at_ping.velocity == at_last.velocity and at_ping.kind == at_last.kind
 
+
+
+def test_a_time_that_is_not_finite_is_not_given():
+    """time=NaN is time=None (the C++ ClassifyOptions::time NaN): each track's fitted position at its last point."""
+    tracks = [track(1, (10.0, 200.0), (3.0, -1.0)), track(2, (50.0, 80.0), (0.0, 0.0))]
+    for at in (float("nan"), float("inf")):
+        assert classify.fit_velocity(tracks[0].history, at=at)[0] == pytest.approx(classify.fit_velocity(tracks[0].history)[0])
+        want, got = classify.classify_tracks(tracks), classify.classify_tracks(tracks, time=at)
+        assert [(c.kind, c.position, c.velocity) for c in want] == [(c.kind, c.position, c.velocity) for c in got]
+
+
+def test_a_track_too_short_for_a_fit_is_moved_to_the_time_asked_by_its_state():
+    """Fewer than three points: no fitted line, and with `time` the last point moved there by the track's Kalman state
+    velocity; without a time (None, NaN), or without a state, the last point."""
+    tr = Track(1, np.array([106.0, 50.0, 6.0, 0.0]), np.eye(4), hits=2, history=[(0.0, 46.0, 50.0), (10.0, 106.0, 50.0)])
+    (c,) = classify.classify_tracks([tr], time=2.0)
+    assert c.position == pytest.approx((58.0, 50.0)) and c.velocity == (0.0, 0.0) and c.kind == "uncertain"
+    for at in (None, float("nan")):
+        assert classify.classify_tracks([tr], time=at)[0].position == (106.0, 50.0)
+    assert tuple(classify.fit_velocity(tr.history, at=2.0)[0]) == (106.0, 50.0)
+
+
+def test_the_fit_needs_time_between_the_points_not_between_the_first_and_last():
+    """The guard is max - min of the times (numpy.ptp; classify.cpp the same): points out of time order whose first and
+    last share a time still give a line."""
+    pos, v, rms, sigma = classify.fit_velocity([(0.0, 0.0, 0.0), (10.0, 10.0, 0.0), (0.0, 0.0, 0.0)])
+    assert v == pytest.approx([1.0, 0.0]) and np.isfinite(sigma)

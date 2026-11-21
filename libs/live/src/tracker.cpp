@@ -63,7 +63,11 @@ Association parse_association(const std::string& name) {
 
 namespace {
 
-// A track's state, covariance and depth variance moved by the constant-velocity model from its time to `to`.
+// A track's state, covariance and depth variance moved by the constant-velocity model from its time to `to`. `to` may
+// be earlier than the track's time when a detection within a ping is (D-156: each detection at transmit + R/c, so a
+// nearer one is earlier). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
+// positive semi-definite for either sign of dt, and the depth's random walk grows by q_d^2 |dt| (ours: a variance never
+// shrinks by predicting; the same for dt >= 0 as before). python/gpusonar/detect.py Tracker._predict is the same.
 struct Prior {
   V4 x;
   M4 p;
@@ -82,20 +86,18 @@ Prior predict(const Track& t, double to, const TrackerOptions& o) {
   Prior out;
   out.x = f * x;
   out.p = f * p * f.transpose() + q;
-  out.depth_var = std::isfinite(t.depth_var) ? t.depth_var + o.depth_process_noise * o.depth_process_noise * dt : t.depth_var;
+  out.depth_var = std::isfinite(t.depth_var) ? t.depth_var + o.depth_process_noise * o.depth_process_noise * std::abs(dt) : t.depth_var;
   return out;
 }
 
 }  // namespace
 
 std::vector<const Track*> Tracker::update(double time, const std::vector<Detection>& detections) {
-  started_ = true;
-  time_ = time;
   H24 h = H24::Zero();
   h(0, 0) = h(1, 1) = 1.0;
-  // Each detection's own time (D-156): the ping's when it carries none.
+  // Each detection's own time (D-156): the ping's when it carries none (any time that is not finite, as detect.py).
   std::vector<double> when(detections.size());
-  for (std::size_t j = 0; j < detections.size(); ++j) when[j] = std::isnan(detections[j].time) ? time : detections[j].time;
+  for (std::size_t j = 0; j < detections.size(); ++j) when[j] = std::isfinite(detections[j].time) ? detections[j].time : time;
   // Each track predicted to each distinct detection time, once.
   std::vector<std::vector<std::pair<double, Prior>>> cache(tracks_.size());
   auto predicted = [&](std::size_t ti, double to) -> const Prior& {
@@ -202,8 +204,10 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
   }
   for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
     Track& t = tracks_[ti];
-    if (t.misses > 0 && t.time != time) {
-      // It took nothing this ping: where it is at the ping.
+    if (t.misses > 0 && t.time < time) {
+      // It took nothing this ping: where it is at the ping. A track that already holds at a later time (its last
+      // detection at transmit + R/c after this ping's transmit: a ping interval shorter than R/c) stays where it is, so
+      // a track never moves back in time.
       const Prior pr = predicted(ti, time);
       Eigen::Map<V4>(t.state) = pr.x;
       Eigen::Map<M4>(t.cov) = pr.p;

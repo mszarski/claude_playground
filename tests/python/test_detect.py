@@ -337,6 +337,65 @@ def test_misses_are_counted_per_ping_and_a_missed_track_waits_at_the_ping():
     assert [h[0] for h in tr.history] == want
 
 
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_a_detection_time_that_is_not_finite_is_the_pings(association):
+    """A detection whose time is NaN (or infinite) is taken at the ping's time, as one with None, bit for bit; the C++
+    tracker maps NaN so too (test_live_cpp.test_tracker_and_classifier_match_python, "nan")."""
+    from gpusonar import classify
+    stamps = [None, float("nan"), float("inf")]           # (a dict keyed by NaN would not find it again)
+    trackers = [detect.Tracker(**SCENARIO_TRACKER, association=association) for _ in stamps]
+    for t, dets in tracker_scenario():
+        got = [tr.update(t, [detect.Detection(*d, time=k) for d in dets]) for k, tr in zip(stamps, trackers)]
+    assert len(trackers[0].tracks) > 3
+    for i, k in enumerate(stamps[1:], 1):
+        assert len(trackers[i].tracks) == len(trackers[0].tracks)
+        for a, b in zip(trackers[0].tracks, trackers[i].tracks):
+            np.testing.assert_array_equal(a.state, b.state)
+            np.testing.assert_array_equal(a.cov, b.cov)
+            assert a.history == b.history and a.time == b.time
+            np.testing.assert_array_equal([a.depth, a.depth_var], [b.depth, b.depth_var])
+        want = classify.classify_tracks(got[0], min_speed=0.5, max_fit_rms=2.5)
+        nan = classify.classify_tracks(got[i], min_speed=0.5, max_fit_rms=2.5, time=k)
+        assert [(c.id, c.kind, c.position, c.velocity) for c in want] == [(c.id, c.kind, c.position, c.velocity) for c in nan]
+
+
+def test_a_missed_track_is_never_moved_back_and_its_depth_variance_stays_positive():
+    """D-156 with a ping interval (5 s) shorter than R/c (8 s at 12 km): a track that took a detection at t_k + R/c and
+    misses ping k+1 already holds later than t_{k+1}; it keeps its state, time and depth variance (it is not predicted
+    back, which shrank the depth variance by q_d^2 x 3 s, below zero, and put its history out of time order)."""
+    pings = long_range_mover(n=14, interval=5.0, drop=(4, 7, 8))
+    rng = np.random.default_rng(3)
+    tracker = detect.Tracker(**LONG_RANGE_TRACKER)
+    held = 0
+    for tp, d, _, _ in pings:
+        dets = [] if d is None else [detect.Detection(d.range, d.bearing, d.snr_db, d.cells, depth=30.0 + 0.3 * rng.standard_normal(),
+                                                      depth_sigma=0.3, time=d.time)]
+        before = {tr.id: (tr.time, tr.depth_var, tr.state.copy()) for tr in tracker.tracks}
+        tracker.update(tp, dets)
+        for tr in tracker.tracks:
+            times = [h[0] for h in tr.history]
+            assert times == sorted(times)
+            assert tr.depth_var > 0.0
+            if d is None and before.get(tr.id, (-np.inf,))[0] > tp:
+                assert tr.time == before[tr.id][0] and tr.depth_var == before[tr.id][1]
+                np.testing.assert_array_equal(tr.state, before[tr.id][2])
+                held += 1
+    assert held == 2
+
+
+def test_prediction_to_an_earlier_time_still_grows_the_uncertainty():
+    """Within one ping a detection can be earlier than the time a track holds (a nearer echo, D-156). The prediction to
+    it grows the depth variance by q_d^2 |dt| (ours: a prediction never shrinks a variance), and the position process
+    noise G G^T q^2 is positive semi-definite for either sign of dt."""
+    tracker = detect.Tracker(process_noise=0.3, depth_process_noise=0.5)
+    tr = detect.Track(1, np.array([0.0, 100.0, 2.0, -1.0]), np.diag([1.0, 1.0, 0.25, 0.25]), depth=20.0, depth_var=0.1, time=10.0)
+    for to in (12.0, 8.0):
+        x, cov, depth_var = tracker._predict(tr, to)
+        assert depth_var == pytest.approx(0.1 + 0.25 * 2.0)
+        assert np.linalg.eigvalsh(cov).min() > 0.0
+        np.testing.assert_allclose(x, [2.0 * (to - 10.0), 100.0 - (to - 10.0), 2.0, -1.0])
+
+
 def test_tracker_drops_a_target_that_disappears():
     tracker = detect.Tracker(confirm_hits=2, max_misses=2)
     for k in range(4):

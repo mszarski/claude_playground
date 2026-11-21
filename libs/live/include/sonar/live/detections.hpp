@@ -36,7 +36,8 @@ struct Detection {
   /// from `first_range` over `extent`. The complex samples behind them: `beam_samples` (chain.hpp).
   std::vector<Arrival> arrivals{};
   /// s, on the tracker's clock: when the detection shows the target. For a monostatic echo the ping's transmit time +
-  /// range / c, with the c that turned the two-way time into range (D-156). NaN: the ping's time given to Tracker::update.
+  /// range / c, with the c that turned the two-way time into range (D-156). NaN (or any value that is not finite): the
+  /// ping's time given to Tracker::update.
   double time = std::numeric_limits<double>::quiet_NaN();
 };
 
@@ -98,8 +99,9 @@ class Tracker {
  public:
   explicit Tracker(const TrackerOptions& options = {}) : opt_(options) {}
   /// Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
-  /// the detection's own time (Detection::time; the ping's when NaN; D-156), a track takes its detection at that time
-  /// and a new track is born there; tracks that take none are predicted to `time` and count a miss. Returns the
+  /// the detection's own time (Detection::time; the ping's when NaN or otherwise not finite; D-156), a track takes its
+  /// detection at that time and a new track is born there; tracks that take none count a miss and are predicted to
+  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). Returns the
   /// confirmed tracks.
   std::vector<const Track*> update(double time, const std::vector<Detection>& detections);
   const std::vector<Track>& tracks() const { return tracks_; }
@@ -108,8 +110,6 @@ class Tracker {
   TrackerOptions opt_;
   std::vector<Track> tracks_;
   std::int64_t next_id_ = 1;
-  bool started_ = false;
-  double time_ = 0.0;
 };
 
 enum class Kind { Mover, Static, Line, Multipath, Uncertain };
@@ -138,7 +138,8 @@ struct ClassifyOptions {
   double min_mover_cells = -1.0;  ///< < 0: off. A mover whose median detection extent is below this many cells is uncertain
   double row_snr_db = -1.0;       ///< < 0: off. In the corridor test only tracks at most this many dB weaker make a row
   /// s, the tracker's clock: every position is the fitted line's at this time (the report's: the ping's transmit time;
-  /// D-156). NaN: at each track's last history point (classify.py `time`).
+  /// D-156). NaN (or any value that is not finite): at each track's last history point (classify.py `time`). A track
+  /// too short for a fit (fewer than three points) is moved from its last point to this time by its state's velocity.
   double time = std::numeric_limits<double>::quiet_NaN();
 };
 
