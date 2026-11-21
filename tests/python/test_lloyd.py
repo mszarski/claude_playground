@@ -160,6 +160,26 @@ def test_validation_file_holds_the_model_to_the_simulator_the_chain_and_bellhop(
             assert case["one_way_energy_difference_db"]["largest"] < 0.7
 
 
+
+def test_bellhop_transfer_is_one_way_in_isovelocity_water_at_short_steep_range():
+    """Audit A10: `bellhop_transfer` divided by spherical spreading over the HORIZONTAL range while `one_way` uses the
+    slant range; at 60 m with 70 m of depth between the ends that alone is 20 log10(92.2 / 60) = 3.7 dB. Here Bellhop
+    (1000 m of isovelocity water over a bottom that returns nothing) against the image model, one way, band energy."""
+    from gpusonar.sim.bellhop import OceanEnvironment, find_bellhop, run_bellhop
+    if find_bellhop() is None:
+        pytest.skip("Bellhop not installed (GPUSONAR_BELLHOP)")
+    env = OceanEnvironment(depth=1000.0, sound_speed=1500.0, bottom_speed=1500.0, bottom_density=1.0, bottom_attenuation=0.0)
+    f = lloyd.band(F_LO, F_HI, 129)
+    zt, rng, owns = 30.0, 60.0, [5.0, 30.0, 60.0, 100.0]
+    arr = run_bellhop(env, 5000.0, zt, owns, [rng], angles=(-85.0, 85.0))     # reciprocity: the source at the target's depth
+    assert arr.source_depth == pytest.approx(zt)
+    worst = 0.0
+    for i, zo in enumerate(owns):
+        b = lloyd.summarise(*lloyd.bellhop_transfer(arr, i, 0, f))
+        m = lloyd.summarise(*lloyd.one_way(f, zo, zt, rng))
+        worst = max(worst, abs(b["one_way_energy_db"] - m["one_way_energy_db"]))
+    assert worst < 0.3, worst
+
 # --- target classes -----------------------------------------------------------------------------------
 
 def test_cylinder_target_strength_is_the_textbook_figure_at_broadside_near_and_far_and_at_the_end():
