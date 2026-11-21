@@ -1,0 +1,222 @@
+{
+  "backend": "cuda",
+  "pings": 8,
+  "repeats": 3,
+  "rows": {
+    "1": {
+      "as deployed": {
+        "seconds": [
+          0.01611946900015937,
+          0.01600720600004024,
+          0.016011567000077775
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.016055208000125276,
+          0.015846143000089796,
+          0.016542839000067033
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.016317854000135412,
+          0.01593187499997839,
+          0.015993417000117915
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.010449805999996897,
+          0.010053456999912669,
+          0.01044762600008653
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.016054157999860763,
+          0.01607450799997423,
+          0.016303923999885228
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.009913233999895965,
+          0.010000744999842937,
+          0.010065776999908849
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "2": {
+      "as deployed": {
+        "seconds": [
+          0.02952638599981583,
+          0.029761009999901944,
+          0.029424313000163238
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.02941227299993443,
+          0.029464603999940664,
+          0.029518994999989445
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.029934173999890845,
+          0.029945385000019087,
+          0.029525925999905667
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.029042333999996117,
+          0.029133716000160348,
+          0.02867834500011668
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.03101422999998249,
+          0.031149063999919235,
+          0.031085161999953925
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.02943800299999566,
+          0.02921540800002731,
+          0.0291400920000342
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.030217720999871744,
+          0.03014395900004274,
+          0.03073137899991707
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.022840308000013465,
+          0.02275675600003524,
+          0.022969047000060527
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.02821622400006163,
+          0.02822469500006264,
+          0.028112967999959437
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.02136270300002252,
+          0.021081555999899138,
+          0.0220858570000928
+        ],
+        "detections_last_ping": 3
+      }
+    },
+    "3": {
+      "as deployed": {
+        "seconds": [
+          0.04048523700021178,
+          0.04063603700001295,
+          0.04067800799998622
+        ],
+        "detections_last_ping": 3
+      },
+      "no coverage": {
+        "seconds": [
+          0.04098716900011823,
+          0.04040511200014407,
+          0.04087047200005145
+        ],
+        "detections_last_ping": 3
+      },
+      "no sector_from_rays": {
+        "seconds": [
+          0.04036424400010219,
+          0.04089561299997513,
+          0.04114522899999429
+        ],
+        "detections_last_ping": 3
+      },
+      "elevation step 0.5 deg": {
+        "seconds": [
+          0.04028934899997694,
+          0.04073996900001475,
+          0.04042401199990309
+        ],
+        "detections_last_ping": 3
+      },
+      "attitude at transmit": {
+        "seconds": [
+          0.04312978500001918,
+          0.04324117800001659,
+          0.04228036500012422
+        ],
+        "detections_last_ping": 3
+      },
+      "no gradient": {
+        "seconds": [
+          0.04001402200015036,
+          0.04022625700008575,
+          0.040054722999911974
+        ],
+        "detections_last_ping": 3
+      },
+      "all of these off": {
+        "seconds": [
+          0.041534538999940196,
+          0.04266885500010176,
+          0.04177954400006456
+        ],
+        "detections_last_ping": 3
+      },
+      "cell statistic mean": {
+        "seconds": [
+          0.034316948000196135,
+          0.0340252020000662,
+          0.03407754299996668
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section": {
+        "seconds": [
+          0.03847916600011558,
+          0.03803553500006274,
+          0.038240950000044904
+        ],
+        "detections_last_ping": 3
+      },
+      "15f1121 chain section, mean": {
+        "seconds": [
+          0.03134930800001712,
+          0.03141305999997712,
+          0.031271915999923294
+        ],
+        "detections_last_ping": 3
+      }
+    }
+  },
+  "source": "tools/live_chain_ablation.py --backend cuda, NVIDIA L4, Hugging Face job 6b01109defaf5e14f4b45051, tree of 1368f3d (before the device statistic of issue sonar-01u; same job as live_chain_ablation_l4_b54b4d1.json)"
+}
