@@ -169,6 +169,18 @@ def background(cell_mean: np.ndarray, guard: int, train: int) -> tuple[np.ndarra
     return mean, worth
 
 
+def check_plan(plan: dict) -> None:
+    """Refuses a plan whose first scale is not the single-sample test (`cells` 0) or whose other scales are not means of
+    one cell or more: `multiscale` reads scale 0 as the single sample in its flag test, its arrivals and its leading
+    edge. `live_detector_plan` always puts it first, whatever `integrate_cells` holds; a plan built by hand need not
+    (libs/live detector.hpp check_plan; sonar-d99)."""
+    scales = plan.get("scales") or []
+    if not scales or int(scales[0]["cells"]) != 0:
+        raise ValueError("detector plan: its first scale must be the single-sample test (cells 0); plan_detector puts it there")
+    if any(int(s["cells"]) < 1 for s in scales[1:]):
+        raise ValueError("detector plan: scales after the first are means of one cell or more")
+
+
 def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
                plan: dict) -> tuple[list[Detection], np.ndarray]:
     """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
@@ -186,6 +198,8 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
     floor = np.maximum(mean, 1e-300)
     peak = cells.max(axis=2).astype(float)
     scales = plan["scales"]
+    check_plan(plan)
+    sample_factor = float(scales[0]["factor"])          # the single-sample test's: the arrivals and the leading edge (sonar-d99)
     looks = float(plan["train_looks_per_cell"])
     correction = {float(c): [core.training_correction(s["pfa"], float(c) * looks) for s in scales] for c in np.unique(count)}
     thr = np.array([[s["factor"] * correction[float(c)][i] for c in count] for i, s in enumerate(scales)])      # [scale, cell]
@@ -262,7 +276,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             left = np.concatenate([[False], idx[1:] == idx[:-1] + 1])
             right = np.concatenate([idx[:-1] == idx[1:] - 1, [False]])
             prev, nxt = np.concatenate([[0.0], line[:-1]]), np.concatenate([line[1:], [0.0]])
-            is_peak = (line > scales[0]["factor"]) & ~(left & (prev >= line)) & ~(right & (nxt > line))
+            is_peak = (line > sample_factor) & ~(left & (prev >= line)) & ~(right & (nxt > line))
             top = np.flatnonzero(is_peak)
             top = np.sort(top[np.argsort(-line[top], kind="stable")][:8])
             arrivals = [(float(fine_ranges[idx[q]]), float(10 * np.log10(line[q]))) for q in top]
@@ -270,7 +284,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             if plan.get("range_estimate", "centroid") == "first":
                 # The leading edge (libs/live detector.hpp RangeEstimate::First, D-157): the nearest sample above the
                 # single-sample threshold, else the nearest cell's centre.
-                over_ = np.flatnonzero(line > scales[0]["factor"])
+                over_ = np.flatnonzero(line > sample_factor)
                 rng = float(fine_ranges[idx[over_[0]]]) if len(over_) else near
             out.append(Detection(rng, float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,

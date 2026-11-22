@@ -352,3 +352,107 @@ def test_pings_before_the_first_fix_and_after_the_last_take_the_nearest_fix_in_b
             assert rec.environment.sound_speed == pytest.approx(want["sound_speed"]) == py_nav.extras(rec.transmit.time_ns)[0]
             assert rec.environment.water_depth == pytest.approx(100.0)
         assert rec.geometry.tx_pose.position == pose.position
+
+
+# --- sonar-8is: navigation that sends no velocity over ground -------------------------------------
+
+def test_both_receivers_mark_a_pose_without_velocity_and_take_a_missing_or_non_finite_one_as_zero():
+    """sonar-8is: the backprojection follows the array's own motion over the round trip by the pose's velocity (without
+    it -24 m at 12 km, sonar-2hz). A fix that does not send vx, vy and vz as finite numbers is marked: a pose from it
+    (interpolated with it, or held from it) has no velocity from navigation (`velocity_given` False), and the missing
+    or non-finite components are 0 in both receivers, never NaN in the record. Both receivers agree on every time."""
+    t0 = int(1.7e18)
+    s = 1_000_000_000
+    full = {"vx": 1.5, "vy": -0.5, "vz": 0.1}
+    fixes = [dict(full, time_ns=t0, x=0.0),
+             {"time_ns": t0 + s, "x": 1.5, "vx": 1.5, "vy": -0.5},                     # no vz
+             dict(full, time_ns=t0 + 2 * s, x=3.0),
+             dict(full, time_ns=t0 + int(2.5 * s), x=3.75),
+             dict(full, time_ns=t0 + 3 * s, x=4.5, vx=float("nan")),                   # not a finite number
+             dict(full, time_ns=t0 + 4 * s, x=6.0),
+             dict(full, time_ns=t0 + 5 * s, x=7.5, vz=None)]                           # null
+    py, cpp = NavListener(), core.NavigationCpp({})
+    assert not py.velocity_given(t0) and not cpp.velocity_given()                     # nothing yet
+    for f in fixes:
+        py.push(f)
+        assert cpp.push(json.dumps(f))                                                # json writes NaN, strtod reads it
+    # A pose at a fix's own time is interpolated between it and the fix before (both engines): 2.5 s takes 2 and 2.5 s.
+    expect = {-0.5: True, 0.5: False, 1.0: False, 1.5: False, 2.0: False, 2.25: True, 2.5: True, 2.75: False, 3.5: False,
+              4.0: False, 4.5: False, 6.0: False}
+    for t, given in expect.items():
+        when = t0 + int(t * s)
+        rec = blank_record(t0, t=t)
+        assert cpp.apply(rec)
+        assert py.velocity_given(when) is given and cpp.velocity_given() is given, t
+        pos, rpy, vel = py.at(when)
+        assert np.all(np.isfinite(vel)) and np.all(np.isfinite(rec.geometry.rx_pose.velocity)), t
+        assert np.allclose(vel, rec.geometry.rx_pose.velocity, atol=1e-12) and np.allclose(pos, rec.geometry.rx_pose.position, atol=1e-9), t
+    assert py.at(t0 + 4 * s)[2] == pytest.approx([1.5, -0.5, 0.1])                      # a full fix as it was sent
+    assert py.at(t0 + int(5.5 * s))[2] == pytest.approx([1.5, -0.5, 0.0])               # held from a fix without vz: 0
+    # A fixed pose (a bench, a moored array) is at rest unless it says otherwise: its velocity is given.
+    assert NavListener(static={"x": 1.0}).velocity_given(t0)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_the_chain_reports_pings_whose_navigation_had_no_velocity(engine):
+    """sonar-8is: LiveChain counts the pings whose fix had no velocity over ground in `pings_without_velocity` (cumulative,
+    like pings_without_nav) and warns once; the field is on a report line only once a ping lacked it, so a run whose
+    navigation sends velocity writes the lines it wrote before. The program (apps/sonar_live) counts the same with
+    Navigation::velocity_given (tests/cpp/test_live.cpp)."""
+    sonar = SonarModel.load("flank_32", {"receive": {"window": {"range": [100.0, 300.0]}}})
+    recs = [simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), Scene().add_points([[0.0, 200.0, 0.0]], target_strength_db=10.0),
+                          environment={"sound_speed": 1500.0}, sequence=i, time_ns=int(i * 2e9), noise_rms=1e-5,
+                          rng=np.random.default_rng(i)) for i in range(3)]
+    cfg = {"bearings_deg": [-40.0, 40.0, 1.0], "range_cell_m": 1.0, "backend": "host", "engine": engine}
+    with_v, without_v = NavListener(), NavListener()
+    for t in (0.0, 2.0, 3.0, 4.0, 6.0):
+        with_v.push({"time_ns": int(t * 1e9), "x": 0.0, "vx": 0.0, "vy": 0.0, "vz": 0.0})
+        without_v.push({"time_ns": int(t * 1e9), "x": 0.0} if t < 2.5 else {"time_ns": int(t * 1e9), "x": 0.0, "vx": 0.0, "vy": 0.0, "vz": 0.0})
+    with LiveChain(cfg, nav=with_v) as chain:
+        good = chain.run([r.copy() for r in recs])
+    assert all("pings_without_velocity" not in r for r in good) and chain.pings_without_velocity == 0
+    with pytest.warns(RuntimeWarning, match="pings_without_velocity"):
+        with LiveChain(cfg, nav=without_v) as chain:
+            bad = chain.run([r.copy() for r in recs])
+    # The fixes at 0 and 2 s send no velocity: the ping at 0 s is held from the first, the one at 2 s is interpolated
+    # between them; the ping at 4 s lies between the fixes at 3 and 4 s, which send it.
+    assert [r.get("pings_without_velocity") for r in bad] == [1, 2, 2]
+    for r in bad:                                    # where Report::json puts it, on either engine: after pings_without_nav
+        keys = list(r)
+        assert keys.index("pings_without_velocity") == keys.index("pings_without_nav") + 1, keys
+    assert [r["pings_without_nav"] for r in bad] == [0, 0, 0]
+    # The poses are the same (zero velocity either way): so is everything else on the lines.
+    for g, b in zip(good, bad):
+        assert {k: v for k, v in b.items() if k not in ("pings_without_velocity", "processing_seconds")} == \
+            {k: v for k, v in g.items() if k != "processing_seconds"}
+
+
+def test_the_pose_and_its_velocity_flag_come_from_one_snapshot_of_the_fixes():
+    """A fix that arrives between reading the pose and reading its velocity flag must not make them disagree: the
+    chain takes both from one snapshot (NavListener.at_with_velocity). Here a fix without velocity arrives (from the
+    listener's thread, in life) right after the first snapshot is taken; the ping's pose was held from the last full
+    fix before it, so it had a velocity and is not counted (read again afterwards, the new fix would have made it
+    interpolated towards one without)."""
+    class Late(NavListener):
+        def __init__(self):
+            super().__init__()
+            self.late = None
+
+        def _around(self, time_ns):
+            got = super()._around(time_ns)
+            if self.late is not None:
+                fix, self.late = self.late, None
+                self.push(fix)
+            return got
+
+    sonar = SonarModel.load("flank_32", {"receive": {"window": {"range": [100.0, 300.0]}}})
+    rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), Scene().add_points([[0.0, 200.0, 0.0]], target_strength_db=10.0),
+                        environment={"sound_speed": 1500.0}, sequence=0, time_ns=int(3e9), noise_rms=1e-5, rng=np.random.default_rng(0))
+    nav = Late()
+    for t in (0.0, 2.0):
+        nav.push({"time_ns": int(t * 1e9), "x": 0.0, "vx": 0.5, "vy": 0.0, "vz": 0.0})
+    nav.late = {"time_ns": int(4e9), "x": 0.0}                                        # no velocity, after the ping
+    with LiveChain({"bearings_deg": [-40.0, 40.0, 1.0], "range_cell_m": 1.0, "backend": "host"}, nav=nav) as chain:
+        report = chain.process(rec)
+    assert chain.pings_without_velocity == 0 and "pings_without_velocity" not in report
+    assert rec.geometry.rx_pose.velocity[0] == pytest.approx(0.5)

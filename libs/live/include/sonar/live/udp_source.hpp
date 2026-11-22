@@ -143,6 +143,12 @@ class Navigation {
   /// the last ping (environment.hpp). False before any fix has arrived.
   bool apply(PingRecord& record);
   std::size_t size() const { return fixes_.size(); }
+  /// Whether the last apply() had a velocity over ground from navigation: every fix its pose came from (the two
+  /// around the transmit time, or the one it was held from) sent "vx", "vy" and "vz" as finite numbers. Without it
+  /// the pose's velocity is zero there (a component not sent or not finite counts as 0) and the backprojection does
+  /// not follow the array's own motion over the round trip (-24 m at 12 km; sonar-2hz, sonar-8is). False before
+  /// any apply(); apps/sonar_live counts it in Report::pings_without_velocity.
+  bool velocity_given() const { return velocity_given_; }
 
   enum Field { kSoundSpeed = 9, kWaterDepth, kAltitude, kLock, kRollSigma, kPitchSigma, kYawSigma, kPositionSigma, kVelocitySigma,
                kDepthSigma, kAltitudeSigma, kWaterDepthSigma, kSoundSpeedSigma, kFields };
@@ -152,6 +158,7 @@ class Navigation {
     std::int64_t time_ns;
     double v[kFields];  ///< position, rpy, velocity, then the optional fields (NaN: not sent)
     WaterDepth water;   ///< from altitude + depth, when configured
+    bool velocity;      ///< vx, vy and vz were all sent as finite numbers (else the missing ones are 0)
   };
   struct Sample {
     std::int64_t time_ns;
@@ -161,6 +168,17 @@ class Navigation {
   WaterDepthTracker water_;
   std::deque<Fix> fixes_;
   std::deque<Sample> samples_;   ///< for the profile, since the last ping
+  bool velocity_given_ = false;  ///< velocity_given()
+};
+
+/// What a program that applies navigation to its pings counts (apps/sonar_live, holoscan_ops UdpSourceOp; the Python
+/// LiveChain counts the same): pings with no fix (Report::pings_without_nav) and pings whose fix had no velocity over
+/// ground (Navigation::velocity_given; Report::pings_without_velocity). Cumulative.
+struct NavCounts {
+  std::int64_t without_nav = 0, without_velocity = 0;
+  /// Apply `nav` to `record` and count. Call it under whatever guards `nav` (the apply and the velocity flag are read
+  /// together). True the first time a ping has no velocity, for the caller to warn once (sonar-8is).
+  bool apply(Navigation& nav, PingRecord& record);
 };
 
 }  // namespace sonar::live

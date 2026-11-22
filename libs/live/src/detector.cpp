@@ -56,6 +56,20 @@ double DetectorPlan::threshold(std::size_t s, double count) const {
   return sc.factor * detect::training_correction(sc.pfa, count * train_looks_per_cell);
 }
 
+void check_plan(const DetectorPlan& plan) {
+  if (plan.scales.empty() || plan.scales[0].cells != 0) {
+    throw std::invalid_argument("detector plan: its first scale must be the single-sample test (cells 0); plan_detector puts it there");
+  }
+  for (std::size_t s = 1; s < plan.scales.size(); ++s) {
+    if (plan.scales[s].cells < 1) throw std::invalid_argument("detector plan: scales after the first are means of one cell or more");
+  }
+}
+
+double DetectorPlan::sample_factor() const {
+  check_plan(*this);
+  return scales[0].factor;
+}
+
 RangeEstimate parse_range_estimate(const std::string& name) {
   if (name == "centroid") return RangeEstimate::Centroid;
   if (name == "first") return RangeEstimate::First;
@@ -368,6 +382,7 @@ BackgroundWindow cell_thresholds(const DetectorPlan& plan, std::int64_t n_cells,
 void multiscale_cells_kernels_on_host(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
                                       std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
                                       const DetectorPlan& plan, DetectorCells& out) {
+  check_plan(plan);
   std::vector<double> threshold;
   std::vector<std::int64_t> cells;
   const BackgroundWindow bw = cell_thresholds(plan, n_cells, guard, train, threshold, cells);
@@ -389,6 +404,7 @@ void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stri
                       std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train, const DetectorPlan& plan,
                       DetectorCells& out, int device) {
   (void)device;  // used by the CUDA backend only
+  check_plan(plan);
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
     std::vector<double> threshold;
@@ -464,6 +480,8 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
                                         std::int64_t n_cells, const std::vector<double>& fine_ranges, const std::vector<double>& cell_ranges,
                                         const std::vector<double>& bearings, const DetectorPlan& plan, DetectorCells& statistic,
                                         std::vector<float>& background) {
+  // The arrivals and the leading edge are held to the single-sample threshold (sonar-d99: never another scale's).
+  const double sample_factor = plan.sample_factor();
   const std::int64_t k = plan.samples_per_cell;
   const auto n = static_cast<std::size_t>(n_b * n_cells);
   background = statistic.background;
@@ -597,7 +615,7 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
     std::vector<std::pair<double, std::int64_t>> peaks;                // (ratio, sample)
     for (std::size_t q = 0; q < line.size(); ++q) {
       const bool left = q > 0 && line[q - 1].first == line[q].first - 1, right = q + 1 < line.size() && line[q + 1].first == line[q].first + 1;
-      if (line[q].second <= plan.scales[0].factor) continue;
+      if (line[q].second <= sample_factor) continue;
       if ((left && line[q - 1].second >= line[q].second) || (right && line[q + 1].second > line[q].second)) continue;
       peaks.emplace_back(line[q].second, line[q].first);
     }
@@ -610,7 +628,7 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
       // cell's centre. Its placement and its time (transmit + range / c) follow from it in the chain.
       d.range = nearest;
       for (const auto& q : line) {
-        if (q.second > plan.scales[0].factor) {
+        if (q.second > sample_factor) {
           d.range = fine_ranges[static_cast<std::size_t>(fine_offset + q.first)];
           break;
         }

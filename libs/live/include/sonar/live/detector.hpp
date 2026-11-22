@@ -143,7 +143,15 @@ struct DetectorPlan {
   std::string json() const;
   /// The threshold of scale `s` over the background estimated from `count` training cells.
   double threshold(std::size_t s, double count) const;
+  /// The single-sample test's threshold over the true mean noise power: scales[0].factor. plan_detector always puts
+  /// that test first (`cells` 0), whatever `integrate_cells` holds; the flag test, the arrivals and the leading edge
+  /// (RangeEstimate::First) all read scale 0 as it. Throws std::invalid_argument for a plan whose first scale is not
+  /// the single sample (a plan built by hand; sonar-d99).
+  double sample_factor() const;
 };
+/// Throws std::invalid_argument unless the plan's first scale is the single-sample test and every other one a mean of
+/// one cell or more (what multiscale_cells and multiscale_group assume; sonar-d99).
+void check_plan(const DetectorPlan& plan);
 
 /// The amplitude correlation of matched-filtered white noise between map samples `step` metres apart, lags 0..n-1:
 /// the autocorrelation of the replica the chain compresses with (the pulse with its taper), which is the transform of
