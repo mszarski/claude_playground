@@ -23,6 +23,7 @@ import copy
 import json
 import socket
 import time
+import warnings
 
 import numpy as np
 
@@ -673,6 +674,8 @@ NAV_FIELDS = ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_sp
               "roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma", "depth_sigma", "altitude_sigma",
               "water_depth_sigma", "sound_speed_sigma")
 _F = {k: i for i, k in enumerate(NAV_FIELDS)}
+_WATER = slice(len(NAV_FIELDS), len(NAV_FIELDS) + 4)   # a fix's row: NAV_FIELDS, the water depth from altitude (4),
+_VELOCITY = len(NAV_FIELDS) + 4                         # and 1.0 when vx, vy and vz were all sent as finite numbers
 WATER_DEPTH_DEFAULTS = {            # nav.water_depth in a deployment file
     "source": "datagram",           # "altitude": vehicle depth + the Doppler log's altitude above the bottom
     "dvl_offset_m": 0.0,            # the log's transducer below the navigation reference point, m
@@ -727,7 +730,10 @@ class NavListener:
             w.pop("source")
             self._water = core.WaterDepthTracker(dict(w, from_altitude=True))
         if static is not None:
-            self.push(dict(static, time_ns=0))
+            # A fixed pose (a bench, a moored array) is at rest unless it says otherwise: its velocity is given, zero.
+            fixed = {"vx": 0.0, "vy": 0.0, "vz": 0.0}
+            fixed.update(static)
+            self.push(dict(fixed, time_ns=0))
         if port is not None:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.socket.bind((host, port))
@@ -754,11 +760,15 @@ class NavListener:
         def number(key, default):
             v = fix.get(key)
             return default if v is None else float(v)
-        row = np.array([number(k, 0.0 if i < 9 else float("nan")) for i, k in enumerate(NAV_FIELDS)] + [float("nan")] * 4)
+        row = np.array([number(k, 0.0 if i < 9 else float("nan")) for i, k in enumerate(NAV_FIELDS)] + [float("nan")] * 4 + [1.0])
+        # A velocity component not sent, or not a finite number, is 0 as before; the fix is marked (velocity_given, sonar-8is).
+        for i in (6, 7, 8):
+            if fix.get(NAV_FIELDS[i]) is None or not np.isfinite(row[i]):
+                row[i], row[_VELOCITY] = 0.0, 0.0
         time_ns = int(fix["time_ns"])
         if self._water is not None:
             lock = True if np.isnan(row[_F["bottom_lock"]]) else bool(row[_F["bottom_lock"]])
-            row[len(NAV_FIELDS):] = self._water.update(time_ns, row[0], row[1], row[2] - self.surface_z, row[_F["altitude"]], lock,
+            row[_WATER] = self._water.update(time_ns, row[0], row[1], row[2] - self.surface_z, row[_F["altitude"]], lock,
                                                        row[_F["altitude_sigma"]], row[_F["depth_sigma"]])
         with self._lock:
             self._fixes.append((time_ns, row))
@@ -768,18 +778,39 @@ class NavListener:
             if np.isfinite(c) and c > 0.0 and (not self._samples or abs(row[2] - self._samples[-1][3]) >= self.profile_step_m):
                 self._samples.append((time_ns, row[0], row[1], row[2], c))
 
-    def at(self, time_ns: int):
-        """(position [3], rpy [3], velocity [3]) at `time_ns`, or None before any fix has arrived."""
+    def _around(self, time_ns: int):
+        """(the fixes, the index of the first at or after `time_ns`), or None before any fix has arrived."""
         with self._lock:
             fixes = list(self._fixes)
         if not fixes:
             return None
         times = np.array([f[0] for f in fixes], dtype=np.int64)
-        i = int(np.searchsorted(times, time_ns))
+        return fixes, int(np.searchsorted(times, time_ns))
+
+    def velocity_given(self, time_ns: int) -> bool:
+        """Whether the pose `at(time_ns)` has a velocity over ground from navigation: every fix it comes from (the two
+        around the time, or the one it is held from) sent vx, vy and vz as finite numbers. Without it the velocity is
+        zero there and the backprojection does not follow the array's own motion over the round trip (-24 m at
+        12 km; sonar-2hz, sonar-8is). False before any fix. The C++ counterpart: libs/live Navigation::velocity_given."""
+        got = self._around(time_ns)
+        if got is None:
+            return False
+        fixes, i = got
+        if i == 0 or i == len(fixes) or len(fixes) == 1:
+            return bool(fixes[min(i, len(fixes) - 1)][1][_VELOCITY])
+        return bool(fixes[i - 1][1][_VELOCITY] and fixes[i][1][_VELOCITY])
+
+    def at(self, time_ns: int):
+        """(position [3], rpy [3], velocity [3]) at `time_ns`, or None before any fix has arrived."""
+        got = self._around(time_ns)
+        if got is None:
+            return None
+        fixes, i = got
         if i == 0 or i == len(fixes) or len(fixes) == 1:
             row = fixes[min(i, len(fixes) - 1)][1]
         else:
-            w = (time_ns - times[i - 1]) / max(times[i] - times[i - 1], 1)
+            t0, t1 = np.int64(fixes[i - 1][0]), np.int64(fixes[i][0])
+            w = (time_ns - t0) / max(t1 - t0, 1)
             row = (1.0 - w) * fixes[i - 1][1] + w * fixes[i][1]
             # Angles go the short way round.
             row[3:6] = fixes[i - 1][1][3:6] + w * np.angle(np.exp(1j * (fixes[i][1][3:6] - fixes[i - 1][1][3:6])))
@@ -1008,6 +1039,7 @@ class LiveChain:
         self._tap_cfg = taps or {}
         self.nav = nav                         # None: the records already carry the pose (simulation, replay)
         self.pings_without_nav = 0
+        self.pings_without_velocity = 0        # pings whose fix carried no velocity over ground (NavListener.velocity_given)
         self._reference = sync_reference(self.cfg)
         self.boards_out_of_sync = 0
         check_choices(self.cfg)
@@ -1048,6 +1080,11 @@ class LiveChain:
             if fix is None:
                 self.pings_without_nav += 1    # processed where the record says it is; counted and reported
             else:
+                if not self.nav.velocity_given(record.transmit.time_ns):
+                    # Processed with the array at rest over the round trip: counted and reported (sonar-8is).
+                    if self.pings_without_velocity == 0:
+                        warnings.warn("navigation sends no velocity (vx, vy, vz); counted in pings_without_velocity", RuntimeWarning, stacklevel=2)
+                    self.pings_without_velocity += 1
                 apply_pose(record, *fix)
                 apply_environment(record, *self.nav.extras(record.transmit.time_ns))
                 apply_nav_facts(record, self.nav.facts(record.transmit.time_ns))
@@ -1080,6 +1117,8 @@ class LiveChain:
             self.sbl_fallbacks += bool(report.get("sbl_fallback"))
             report.update(ping=index, pings_without_nav=self.pings_without_nav,
                           processing_seconds=time.perf_counter() - t_wall)
+            if self.pings_without_velocity:            # only when some ping had none: every other line is the one it was
+                report["pings_without_velocity"] = self.pings_without_velocity
             if report.get("sync") and not report["sync"]["ok"]:
                 self.boards_out_of_sync += 1
             power, ranges, _ = self._cpp.last_map()
@@ -1502,6 +1541,8 @@ class LiveChain:
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
+            # only when some ping had no velocity from navigation (sonar-8is): every other line is the one it was
+            **({"pings_without_velocity": self.pings_without_velocity} if self.pings_without_velocity else {}),
             "sync": sync_facts,
             "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
                                 **({"extent_m": h.extent, "first_range_m": h.first_range} if np.isfinite(h.extent) else {}),

@@ -395,6 +395,15 @@ TEST(Report, CarriesPingsWithoutNavigation) {
   EXPECT_NE(r.json().find("\"pings_without_nav\": 3"), std::string::npos);
 }
 
+TEST(Report, CarriesPingsWithoutVelocityOnlyWhenThereWereAny) {
+  // sonar-8is: a line is the one it was until a ping's navigation had no velocity over ground.
+  Report r;
+  EXPECT_EQ(r.json().find("pings_without_velocity"), std::string::npos);
+  r.pings_without_velocity = 2;
+  EXPECT_NE(r.json().find("\"pings_without_nav\": 0, \"pings_without_velocity\": 2, \"detections\""), std::string::npos) << r.json();
+  for (const std::string& d : r.datagrams(10)) EXPECT_NE(d.find("\"pings_without_velocity\": 2"), std::string::npos);
+}
+
 TEST(Tracker, DropsATrackThatIsNoLongerSeen) {
   TrackerOptions o;
   o.max_misses = 2;
@@ -550,6 +559,34 @@ TEST(Navigation, InterpolatesThePoseToTheTransmitTime) {
   EXPECT_NEAR(rec.geometry.rx_pose.position.z, 10.0, 1e-9);
   EXPECT_NEAR(rec.geometry.tx_pose.velocity.x, 1.5, 1e-9);
   EXPECT_NEAR(std::abs(rec.geometry.rx_pose.rpy.z), kPi, 0.05);   // 3.1 to -3.1 goes through pi, not through zero
+}
+
+TEST(Navigation, MarksAPoseWithoutVelocityAndTakesAMissingOrNonFiniteComponentAsZero) {
+  // sonar-8is: the backprojection follows the array over the round trip by the pose's velocity; a fix that does not
+  // send vx, vy and vz as finite numbers is marked, and what it lacks is 0 (never NaN in the record).
+  live::Navigation nav;
+  PingRecord rec;
+  EXPECT_FALSE(nav.velocity_given());
+  EXPECT_TRUE(nav.push("{\"time_ns\": 0, \"x\": 0.0, \"vx\": 1.5, \"vy\": -0.5, \"vz\": 0.1}"));
+  EXPECT_TRUE(nav.push("{\"time_ns\": 1000, \"x\": 1.0, \"vx\": 1.5, \"vy\": -0.5, \"vz\": 0.1}"));
+  EXPECT_TRUE(nav.push("{\"time_ns\": 2000, \"x\": 2.0, \"vx\": 1.5, \"vy\": -0.5}"));                     // no vz
+  EXPECT_TRUE(nav.push("{\"time_ns\": 3000, \"x\": 3.0, \"vx\": NaN, \"vy\": -0.5, \"vz\": 0.1}"));       // not finite
+  EXPECT_TRUE(nav.push("{\"time_ns\": 4000, \"x\": 4.0, \"vx\": null, \"vy\": -0.5, \"vz\": 0.1}"));      // null
+  const auto at = [&](std::int64_t t) {
+    rec.transmit.time_ns = t;
+    EXPECT_TRUE(nav.apply(rec));
+    EXPECT_TRUE(std::isfinite(rec.geometry.rx_pose.velocity.x) && std::isfinite(rec.geometry.rx_pose.velocity.z));
+    return nav.velocity_given();
+  };
+  EXPECT_TRUE(at(-5));                     // held from the first fix
+  EXPECT_TRUE(at(500));                    // between two full fixes
+  EXPECT_NEAR(rec.geometry.rx_pose.velocity.z, 0.1, 1e-12);
+  EXPECT_FALSE(at(1500));                  // one of the two has no vz
+  EXPECT_NEAR(rec.geometry.rx_pose.velocity.z, 0.05, 1e-12);
+  EXPECT_FALSE(at(3000));
+  EXPECT_NEAR(rec.geometry.rx_pose.velocity.x, 0.0, 1e-12);       // interpolated to the NaN fix's time: its 0
+  EXPECT_FALSE(at(9000));                  // held from the null one
+  EXPECT_TRUE(at(1000));                   // at a fix's own time: it and the one before
 }
 
 TEST(Report, WritesNonFiniteNumbersAsNull) {

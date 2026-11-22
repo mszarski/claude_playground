@@ -336,9 +336,15 @@ bool Navigation::push(const std::string& json) {
   const char* keys[kFields] = {"x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude",
                                "bottom_lock", "roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma",
                                "depth_sigma", "altitude_sigma", "water_depth_sigma", "sound_speed_sigma"};
+  fix.velocity = true;
   for (int i = 0; i < kFields; ++i) {
     fix.v[i] = i < 9 ? 0.0 : std::nan("");
-    find(keys[i], fix.v[i]);
+    const bool sent = find(keys[i], fix.v[i]);
+    if (i >= 6 && i < 9 && !(sent && std::isfinite(fix.v[i]))) {
+      // A velocity component not sent, or not a finite number, is 0 as before; the fix is marked (velocity_given).
+      fix.v[i] = 0.0;
+      fix.velocity = false;
+    }
   }
   if (json.find("\"bottom_lock\": true") != std::string::npos || json.find("\"bottom_lock\":true") != std::string::npos) fix.v[kLock] = 1.0;
   if (json.find("\"bottom_lock\": false") != std::string::npos || json.find("\"bottom_lock\":false") != std::string::npos) fix.v[kLock] = 0.0;
@@ -365,9 +371,11 @@ bool Navigation::apply(PingRecord& record) {
   if (i == 0 || i == fixes_.size()) {
     // The pose is the first nine of a fix's values (kFields in all): only those are copied.
     std::copy_n(std::begin(fixes_[std::min(i, fixes_.size() - 1)].v), 9, v);
+    velocity_given_ = fixes_[std::min(i, fixes_.size() - 1)].velocity;
   } else {
     const Fix& a = fixes_[i - 1];
     const Fix& b = fixes_[i];
+    velocity_given_ = a.velocity && b.velocity;
     const double w = static_cast<double>(t - a.time_ns) / static_cast<double>(std::max<std::int64_t>(b.time_ns - a.time_ns, 1));
     for (int k = 0; k < 9; ++k) v[k] = (1.0 - w) * a.v[k] + w * b.v[k];
     for (int k = 3; k < 6; ++k) v[k] = a.v[k] + w * std::atan2(std::sin(b.v[k] - a.v[k]), std::cos(b.v[k] - a.v[k]));   // the short way round

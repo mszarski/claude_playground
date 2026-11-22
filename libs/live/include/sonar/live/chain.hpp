@@ -151,6 +151,9 @@ struct Report {
   /// Pings so far (this one included) that found no navigation fix and were processed where the record says it is.
   /// The chain itself takes no navigation: whoever applies it sets this (apps/sonar_live; gpusonar.live.LiveChain), 0 else.
   std::int64_t pings_without_nav = 0;
+  /// Pings so far (this one included) whose navigation fix carried no velocity over ground (Navigation::velocity_given):
+  /// processed with the array at rest over the round trip. Set like pings_without_nav; on the line only when above 0.
+  std::int64_t pings_without_velocity = 0;
   std::vector<ReportDetection> detections;
   std::vector<ReportTrack> tracks;
   double blanking_min_range_m = -1.0;   ///< >= 0: blanking is on; nothing nearer than this is reported

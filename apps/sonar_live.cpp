@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     const live::StreamOptions& stream_options = chain_options.stream;
     if (!report_host.empty()) out_socket = std::make_unique<live::UdpSocket>("0.0.0.0", 0);
     live::Navigation nav(chain_options.nav);
-    std::int64_t done = 0, without_nav = 0, split_reports = 0;
+    std::int64_t done = 0, without_nav = 0, without_velocity = 0, split_reports = 0;
     // A report too long for one datagram goes out as several complete lines ("part": [k, n]); never cut.
     auto send_report = [&](const std::vector<std::string>& datagrams) {
       if (!out_socket) return;
@@ -188,13 +188,22 @@ int main(int argc, char** argv) {
     };
     const auto report_bytes = static_cast<std::size_t>(std::max<std::int64_t>(stream_options.report_max_bytes, 1));
     auto handle = [&](PingRecord& rec, bool use_nav) {
-      if (use_nav && !nav.apply(rec)) ++without_nav;
+      if (use_nav) {
+        if (!nav.apply(rec)) {
+          ++without_nav;
+        } else if (!nav.velocity_given()) {
+          // Navigation sent no velocity over ground: the backprojection takes the array at rest over the round trip.
+          if (without_velocity == 0) std::fprintf(stderr, "sonar_live: navigation sends no velocity (vx, vy, vz); counted in pings_without_velocity\n");
+          ++without_velocity;
+        }
+      }
       if (recorder) {
         recorder->write(rec);        // raw samples, with the pose, before anything else touches them
         recorder->flush();
       }
       live::Report rep = chain.process(rec);
       rep.pings_without_nav = without_nav;     // as the Python chain reports it: pings so far without a fix, this one included
+      rep.pings_without_velocity = without_velocity;
       report << rep.json() << "\n" << std::flush;
       if (out_socket) send_report(rep.datagrams(report_bytes));
       if (done == 0) {

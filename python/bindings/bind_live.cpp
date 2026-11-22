@@ -252,6 +252,8 @@ void bind_live(py::module_& m) {
       .def(py::init([](const py::dict& options) { return live::Navigation(nav_options(options)); }), py::arg("options") = py::dict())
       .def("push", &live::Navigation::push)
       .def("apply", &live::Navigation::apply)
+      .def("velocity_given", &live::Navigation::velocity_given,
+           "Whether the last apply() had a velocity over ground from navigation (udp_source.hpp; sonar-8is).")
       .def("__len__", &live::Navigation::size);
   py::class_<live::WaterDepthTracker>(m, "WaterDepthTracker")
       .def(py::init([](const py::dict& options) { return live::WaterDepthTracker(water_options(options)); }), py::arg("options") = py::dict())
