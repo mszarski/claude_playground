@@ -57,12 +57,14 @@ def _run(m: dict, backend: str) -> dict:
 
 def _same(a: list, b: list) -> bool:
     return len(a) == len(b) and all(x["range_m"] == y["range_m"] and x["bearing"] == y["bearing"] and x["cells"] == y["cells"]
-                                    and x["extent_m"] == y["extent_m"] and abs(x["snr_db"] - y["snr_db"]) < 1e-5 for x, y in zip(a, b))
+                                    and x["extent_m"] == y["extent_m"] and x["centroid_range_m"] == y["centroid_range_m"]
+                                    and abs(x["snr_db"] - y["snr_db"]) < 1e-5 for x, y in zip(a, b))
 
 
 @pytest.mark.parametrize("rows", [1, 2, 3])
 def test_the_device_statistic_gives_the_hosts_detections_on_the_benchmark_pings(rows, monkeypatch):
     maps = _maps(rows, monkeypatch)
+    moved = False
     for m in maps:
         host = _run(m, "host")
         # The binding's detector is the chain's: the NumPy engine's detections on the same map.
@@ -72,6 +74,11 @@ def test_the_device_statistic_gives_the_hosts_detections_on_the_benchmark_pings(
             assert h["range_m"] == pytest.approx(p.range, abs=1e-6)
             assert h["bearing"] == pytest.approx(p.bearing, abs=1e-9)
             assert h["snr_db"] == pytest.approx(p.snr_db, abs=1e-4)
+            # D-158: both engines keep the centroid beside the reported range (the leading edge by default): the elevation,
+            # SBL gates, blanking and the burst filter go by it.
+            assert h["centroid_range_m"] == pytest.approx(p.centroid_range, abs=1e-6)
+            moved = moved or abs(h["centroid_range_m"] - h["range_m"]) > 1e-3
+    assert moved                                   # the default range (the leading edge) is not the centroid here
     if not core.cuda_available():
         pytest.skip("the device comparison needs a CUDA build and a device (CUDA " + ("compiled, no device" if core.cuda_compiled() else "not compiled") + ")")
     worst, flagged, found = 0.0, 0, 0

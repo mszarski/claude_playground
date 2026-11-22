@@ -217,6 +217,11 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
 }
 }  // namespace
 
+RangeEstimate chain_range_estimate(const ChainOptions& c) {
+  if (c.range_estimate) return *c.range_estimate;
+  return c.cell_multiscale ? RangeEstimate::First : RangeEstimate::Centroid;
+}
+
 LiveChain::LiveChain(const ChainOptions& options)
     : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth), coverage_(options.coverage) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
@@ -229,8 +234,13 @@ LiveChain::LiveChain(const ChainOptions& options)
     throw std::invalid_argument("LiveChain: classify max_fit_rms_bearing: a finite angle, 0 (off) or more");
   }
   // A setting of the multiscale detector only (live.py check_choices refuses it the same way).
-  if (opt_.detector.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
-    throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(opt_.detector.range_estimate) + " is a setting of cell_statistic multiscale");
+  // An explicit `first` without it is refused; unset, the chain takes `first` with multiscale and the centroid
+  // otherwise (chain_range_estimate, D-158). The detector's own field is not the chain's setting.
+  if (opt_.detector.range_estimate != RangeEstimate::Centroid) {
+    throw std::invalid_argument("LiveChain: set the range estimate in ChainOptions::range_estimate (cfar_range_estimate), not detector.range_estimate");
+  }
+  if (opt_.range_estimate && *opt_.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
+    throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(*opt_.range_estimate) + " is a setting of cell_statistic multiscale");
   }
   if (opt_.coverage.enabled && !coverage_site_missing(opt_.coverage).empty()) throw std::invalid_argument("LiveChain: " + coverage_site_missing(opt_.coverage));
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
@@ -374,7 +384,9 @@ Report LiveChain::process(PingRecord& record) {
     // statistics; sidelobes of a stronger cell dropped; touching cells one detection (detector.hpp).
     const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
     if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows) {
-      plan_ = plan_detector(record, defaults_.facts, opt_.detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
+      DetectorOptions detector = opt_.detector;
+      detector.range_estimate = chain_range_estimate(opt_);
+      plan_ = plan_detector(record, defaults_.facts, detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
                             n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr",
                             is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma, rows);
       planned_ = true;
@@ -393,10 +405,13 @@ Report LiveChain::process(PingRecord& record) {
   }
   std::vector<Detection> hits;
   for (const Detection& h : found) {
+    // Both filters judge a detection by its centroid, whichever range it reports (D-158): their limits were set for it,
+    // and with the leading edge a detection would pass the far limit up to the echo's spread later than before.
+    const double at = std::isfinite(h.centroid_range) ? h.centroid_range : h.range;
     // A reference summed into hydrophone inputs leaves its bursts in the data near both ends of
     // the window: no detections are taken there.
-    if (burst_lo >= 0.0 && (h.range <= burst_lo || h.range >= burst_hi)) continue;
-    if (bl.enabled && h.range < rep.blanking_min_range_m) continue;
+    if (burst_lo >= 0.0 && (at <= burst_lo || at >= burst_hi)) continue;
+    if (bl.enabled && at < rep.blanking_min_range_m) continue;
     if (h.snr_db > opt_.min_snr_db) hits.push_back(h);
   }
 
@@ -425,6 +440,9 @@ Report LiveChain::process(PingRecord& record) {
     // field: reverberation, an edge the detector tripped on) the map's detections are kept.
     std::vector<Detection> by_snr = hits;
     std::sort(by_snr.begin(), by_snr.end(), [](const Detection& a, const Detection& b) { return a.snr_db > b.snr_db; });
+    // Gates are grouped and centred on each detection's centroid, as before the leading edge became the default range
+    // (D-158): a gate centred on the leading edge holds less of the echo.
+    const auto centre = [](const Detection& d) { return std::isfinite(d.centroid_range) ? d.centroid_range : d.range; };
     std::vector<char> taken(by_snr.size(), 0);
     std::vector<Detection> resolved;
     std::int64_t gates = 0;
@@ -433,13 +451,13 @@ Report LiveChain::process(PingRecord& record) {
       const Detection& h = by_snr[i];
       std::vector<std::size_t> group;
       for (std::size_t j = i; j < by_snr.size(); ++j) {
-        if (!taken[j] && std::abs(by_snr[j].range - h.range) < gate_m) group.push_back(j);
+        if (!taken[j] && std::abs(centre(by_snr[j]) - centre(h)) < gate_m) group.push_back(j);
       }
       for (std::size_t j : group) taken[j] = 1;
       std::vector<DoaPeak> peaks;
       if (gates < opt_.sbl_max_gates) {
         ++gates;
-        const DoaFrame frame = gate_frame(line, 2.0 * h.range / c, n_fft);
+        const DoaFrame frame = gate_frame(line, 2.0 * centre(h) / c, n_fft);
         // The conventional spectrum of the gate costs one pass; SBL is only worth running where
         // that spectrum stands clear of its own median, which a diffuse field's does not.
         DoaOptions solver = opt_.sbl;          // the solver runs where the rest of the chain does
@@ -459,7 +477,14 @@ Report LiveChain::process(PingRecord& record) {
       if (peaks.empty()) {
         for (std::size_t j : group) resolved.push_back(by_snr[j]);
       } else {
-        for (const DoaPeak& p : peaks) resolved.push_back({h.range, p.bearing, p.snr_db, 1});
+        // Each arrival SBL finds is a detection at the gate's range: the leader's reported range and its centroid (the
+        // elevation is searched about it). Its first_range, extent and arrivals are not carried: they were measured
+        // along the leader's bearing of the map, not along the bearing SBL found (as before D-158).
+        for (const DoaPeak& p : peaks) {
+          Detection d{h.range, p.bearing, p.snr_db, 1};
+          d.centroid_range = h.centroid_range;
+          resolved.push_back(d);
+        }
       }
     }
     hits = std::move(resolved);
@@ -497,8 +522,11 @@ Report LiveChain::process(PingRecord& record) {
       for (std::int64_t q = 1; q < n_b; ++q) {
         if (std::abs(bearings[static_cast<std::size_t>(q)] - hits[i].bearing) < std::abs(bearings[static_cast<std::size_t>(ib)] - hits[i].bearing)) ib = q;
       }
+      // The elevation is searched about the cluster's centroid, whichever range the detection reports (D-158): from the
+      // leading edge the search, 1.5 cells beyond it, can stop short of the echo's peak.
+      const double el_range = std::isfinite(hits[i].centroid_range) ? hits[i].centroid_range : hits[i].range;
       for (std::int64_t q = 1; q < n_cells; ++q) {
-        if (std::abs(last_ranges[static_cast<std::size_t>(q)] - hits[i].range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - hits[i].range)) ir = q;
+        if (std::abs(last_ranges[static_cast<std::size_t>(q)] - el_range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - el_range)) ir = q;
       }
       const auto cell_at = static_cast<std::size_t>(ib * n_cells + ir);
       // The mean noise power of the map: with cells holding their largest sample the detector's background is the
@@ -513,7 +541,7 @@ Report LiveChain::process(PingRecord& record) {
       } else {
         background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
       }
-      at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
+      at.push_back({el_range, hits[i].bearing, hits[i].first_range});
     }
     auto climb = [&]() {
       // The best rung of the sound-speed ladder this ping: fed from the record, so a replay climbs it the same way.
@@ -635,6 +663,7 @@ Report LiveChain::process(PingRecord& record) {
     return lim.extra;
   };
   std::vector<Detection> local;
+  const bool placed_by_elevation = chain_range_estimate(opt_) == RangeEstimate::First;
   for (std::size_t i = 0; i < hits.size(); ++i) {
     const Detection& h = hits[i];
     const double sb = std::sin(h.bearing), cb = std::cos(h.bearing);
@@ -665,6 +694,13 @@ Report LiveChain::process(PingRecord& record) {
         // The line array gave the cone angle; with the elevation the horizontal bearing follows.
         px = f.origin.x - origin_.x + e.range * u.x;
         py = f.origin.y - origin_.y + e.range * u.y;
+        if (placed_by_elevation) {
+          // D-158: placed at the elevation's range (the earliest arrival of the window searched about the centroid,
+          // elevation.arrival first; else its strongest): its range_m and time are that range too. With centroid given,
+          // as before D-158: placed there, reported and timed at the centroid. live.py the same.
+          d.range_m = e.range;
+          m.time = t + e.range / c_range;
+        }
         d.bearing_corrected = true;
         d.cone_bearing_deg = h.bearing / kDeg;
         d.bearing_deg = std::atan2(u.x * axis.x + u.y * axis.y, u.x * broadside.x + u.y * broadside.y) / kDeg;
@@ -763,7 +799,10 @@ Report LiveChain::process(PingRecord& record) {
     std::vector<MultipathHit> mh(hits.size());
     for (std::size_t i = 0; i < hits.size(); ++i) {
       const ReportDetection& d = rep.detections[i];
-      mh[i] = {hits[i].range, hits[i].bearing, hits[i].first_range, hits[i].extent, local[i].range * std::sin(local[i].bearing),
+      // The centroid when the detector gave one (D-158): what this stage was built on (with first_range and extent known
+      // it takes their middle anyway; an SBL detection has only its range).
+      const double mh_range = std::isfinite(hits[i].centroid_range) ? hits[i].centroid_range : hits[i].range;
+      mh[i] = {mh_range, hits[i].bearing, hits[i].first_range, hits[i].extent, local[i].range * std::sin(local[i].bearing),
                local[i].range * std::cos(local[i].bearing), hits[i].snr_db, d.has_depth, d.depth_m - eo.surface_z, d.depth_sigma_m, d.depth_refraction_sigma_m, {}};
       for (double z : local[i].depth_alternatives) mh[i].depth_alternatives.push_back(fold_depth(z, water, eo.surface_z).first - eo.surface_z);
     }

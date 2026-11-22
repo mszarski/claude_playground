@@ -603,6 +603,7 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
     // One or two bearings, or the strongest at an end: nothing stands above the level, the plain mean is all there is.
     Detection d{r_sum / w_sum, bw_sum > 0.0 ? b_sum / bw_sum : plain_b / plain_sum, 10.0 * std::log10(best), cells};
     d.first_range = nearest;
+    d.centroid_range = d.range;
     d.extent = farthest - nearest + plan.cell_m;
     // Its arrivals: along range, the strongest sample over the group's bearings; the local peaks of that above the
     // single-sample threshold (a run of samples the group does not hold ends a peak), the 8 strongest, nearest first.
