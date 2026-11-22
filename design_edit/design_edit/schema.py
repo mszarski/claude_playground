@@ -228,6 +228,10 @@ def strip_fences(text: str) -> str:
     final ``to=user`` message and drop any leftover channel tokens. Inkling-2's raw output (thinking, then
     ``<|content_text|>`` answer) keeps only the answer.
     """
+    if "</think>" in text:  # brief-reasoning students (and Qwen-style thinking): keep what follows the reasoning
+        text = text.rsplit("</think>", 1)[1]
+    elif "<think>" in text:
+        return ""  # reasoning ran out of tokens before an answer
     if "<|content_text|>" in text:  # Inkling-2 format: thinking block, then the answer after <|content_text|>
         text = text.rsplit("<|content_text|>", 1)[1].split("<|end_message|>", 1)[0]
     elif "<|content_thinking|>" in text:

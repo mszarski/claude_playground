@@ -217,3 +217,10 @@ def test_dsl_violations():
     assert dsl_violations(doc, apply_patch(doc, "set n2 size=16 color=#374151")) == []
     bad = apply_patch(doc, 'set n1 fill="linear-gradient(#fff,#000)" justify=space-between\nset n2 line_height=20')
     assert len(dsl_violations(doc, bad)) == 3
+
+
+def test_strip_fences_think_block():
+    from design_edit.schema import strip_fences
+
+    assert strip_fences("<think>\nThe other buttons have no stroke.\n</think>\nset n5 fill=#2563EB") == "set n5 fill=#2563EB"
+    assert strip_fences("<think>\nstill going") == ""
