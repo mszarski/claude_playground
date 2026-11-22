@@ -217,6 +217,11 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
 }
 }  // namespace
 
+RangeEstimate chain_range_estimate(const ChainOptions& c) {
+  if (c.range_estimate) return *c.range_estimate;
+  return c.cell_multiscale ? RangeEstimate::First : RangeEstimate::Centroid;
+}
+
 LiveChain::LiveChain(const ChainOptions& options)
     : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth), coverage_(options.coverage) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
@@ -224,8 +229,13 @@ LiveChain::LiveChain(const ChainOptions& options)
   if (!(opt_.classify.row_snr_db < 0.0)) throw std::invalid_argument("LiveChain: classify row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
   if (std::isnan(opt_.classify.min_mover_cells)) throw std::invalid_argument("LiveChain: classify min_mover_cells is NaN");
   // A setting of the multiscale detector only (live.py check_choices refuses it the same way).
-  if (opt_.detector.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
-    throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(opt_.detector.range_estimate) + " is a setting of cell_statistic multiscale");
+  // An explicit `first` without it is refused; unset, the chain takes `first` with multiscale and the centroid
+  // otherwise (chain_range_estimate, D-158). The detector's own field is not the chain's setting.
+  if (opt_.detector.range_estimate != RangeEstimate::Centroid) {
+    throw std::invalid_argument("LiveChain: set the range estimate in ChainOptions::range_estimate (cfar_range_estimate), not detector.range_estimate");
+  }
+  if (opt_.range_estimate && *opt_.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
+    throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(*opt_.range_estimate) + " is a setting of cell_statistic multiscale");
   }
   if (opt_.coverage.enabled && !coverage_site_missing(opt_.coverage).empty()) throw std::invalid_argument("LiveChain: " + coverage_site_missing(opt_.coverage));
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
@@ -369,7 +379,9 @@ Report LiveChain::process(PingRecord& record) {
     // statistics; sidelobes of a stronger cell dropped; touching cells one detection (detector.hpp).
     const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
     if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows) {
-      plan_ = plan_detector(record, defaults_.facts, opt_.detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
+      DetectorOptions detector = opt_.detector;
+      detector.range_estimate = chain_range_estimate(opt_);
+      plan_ = plan_detector(record, defaults_.facts, detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
                             n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr",
                             is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma, rows);
       planned_ = true;
@@ -492,8 +504,11 @@ Report LiveChain::process(PingRecord& record) {
       for (std::int64_t q = 1; q < n_b; ++q) {
         if (std::abs(bearings[static_cast<std::size_t>(q)] - hits[i].bearing) < std::abs(bearings[static_cast<std::size_t>(ib)] - hits[i].bearing)) ib = q;
       }
+      // The elevation is searched about the cluster's centroid, whichever range the detection reports (D-158): from the
+      // leading edge the search, 1.5 cells beyond it, can stop short of the echo's peak.
+      const double el_range = std::isfinite(hits[i].centroid_range) ? hits[i].centroid_range : hits[i].range;
       for (std::int64_t q = 1; q < n_cells; ++q) {
-        if (std::abs(last_ranges[static_cast<std::size_t>(q)] - hits[i].range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - hits[i].range)) ir = q;
+        if (std::abs(last_ranges[static_cast<std::size_t>(q)] - el_range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - el_range)) ir = q;
       }
       const auto cell_at = static_cast<std::size_t>(ib * n_cells + ir);
       // The mean noise power of the map: with cells holding their largest sample the detector's background is the
@@ -508,7 +523,7 @@ Report LiveChain::process(PingRecord& record) {
       } else {
         background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
       }
-      at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
+      at.push_back({el_range, hits[i].bearing, hits[i].first_range});
     }
     auto climb = [&]() {
       // The best rung of the sound-speed ladder this ping: fed from the record, so a replay climbs it the same way.

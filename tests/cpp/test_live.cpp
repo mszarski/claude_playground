@@ -678,26 +678,56 @@ TEST(Classify, FitsTheMeasuredPositionsOfANoiseFree12kmCrossing) {
   }
 }
 
-TEST(Options, RangeEstimateIsCentroidUnlessFirstIsAsked) {
-  // D-157: cfar_range_estimate, centroid (default) or first; any other word refused (D-145), first outside the
-  // multiscale detector refused by the chain; echoed by options_json.
+TEST(Options, RangeEstimateIsFirstWithMultiscaleAndCentroidOtherwiseUnlessGiven) {
+  // D-157, D-158: cfar_range_estimate, centroid or first; any other word refused (D-145). Not given: first with the
+  // multiscale detector (the default), centroid with mean or peak; first given outside multiscale refused by the chain,
+  // centroid always accepted; options_json prints the value used. The detector's own default stays centroid.
   ChainOptions a;
   PassiveOptions pa;
-  EXPECT_EQ(a.detector.range_estimate, RangeEstimate::Centroid);
-  EXPECT_NE(options_json(a).find("\"cfar_range_estimate\": \"centroid\""), std::string::npos) << options_json(a);
-  std::istringstream in("cfar_range_estimate=first\n");
-  read_options(a, pa, in);
-  EXPECT_EQ(a.detector.range_estimate, RangeEstimate::First);
+  EXPECT_EQ(DetectorOptions{}.range_estimate, RangeEstimate::Centroid);
+  EXPECT_FALSE(a.range_estimate.has_value());
+  EXPECT_EQ(chain_range_estimate(a), RangeEstimate::First);
   EXPECT_NE(options_json(a).find("\"cfar_range_estimate\": \"first\""), std::string::npos) << options_json(a);
+  for (const char* statistic : {"mean", "peak"}) {
+    ChainOptions m;
+    std::istringstream t(std::string("cell_statistic=") + statistic + "\n");
+    read_options(m, pa, t);
+    EXPECT_EQ(chain_range_estimate(m), RangeEstimate::Centroid) << statistic;
+    EXPECT_NE(options_json(m).find("\"cfar_range_estimate\": \"centroid\""), std::string::npos) << options_json(m);
+    EXPECT_NO_THROW(LiveChain{m}) << statistic;
+    // Given explicitly, in either order with the statistic: first refused, centroid accepted.
+    for (const std::string text : {std::string("cfar_range_estimate=first\ncell_statistic=") + statistic + "\n",
+                                   std::string("cell_statistic=") + statistic + "\ncfar_range_estimate=first\n"}) {
+      ChainOptions f;
+      std::istringstream ft(text);
+      read_options(f, pa, ft);
+      EXPECT_EQ(chain_range_estimate(f), RangeEstimate::First);
+      EXPECT_THROW(LiveChain{f}, std::invalid_argument) << text;
+    }
+    ChainOptions c;
+    std::istringstream ct(std::string("cfar_range_estimate=centroid\ncell_statistic=") + statistic + "\n");
+    read_options(c, pa, ct);
+    EXPECT_NO_THROW(LiveChain{c}) << statistic;
+  }
+  std::istringstream in("cfar_range_estimate=centroid\n");
+  read_options(a, pa, in);
+  ASSERT_TRUE(a.range_estimate.has_value());
+  EXPECT_EQ(chain_range_estimate(a), RangeEstimate::Centroid);
+  EXPECT_NE(options_json(a).find("\"cfar_range_estimate\": \"centroid\""), std::string::npos) << options_json(a);
   for (const char* bad : {"cfar_range_estimate=leading\n", "cfar_range_estimate=First\n", "cfar_range_estimate=\n"}) {
     ChainOptions b;
     std::istringstream t(bad);
     EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
   }
+  a.range_estimate = RangeEstimate::First;
   a.cell_multiscale = false;
   EXPECT_THROW(LiveChain{a}, std::invalid_argument);
   a.cell_multiscale = true;
   EXPECT_NO_THROW(LiveChain{a});
+  // The chain's setting is ChainOptions::range_estimate: one set on the detector's options is refused, not ignored.
+  ChainOptions d;
+  d.detector.range_estimate = RangeEstimate::First;
+  EXPECT_THROW(LiveChain{d}, std::invalid_argument);
 }
 
 }  // namespace

@@ -60,8 +60,11 @@ DEFAULTS = {
              "search_factor": None, "merge_m": None,
              # range_estimate: a detection's range, "centroid" (the energy-weighted mean of its samples) or "first" (its
              # leading edge: the nearest sample over the single-sample threshold; libs/live detector.hpp RangeEstimate,
-             # D-157). It places the detection and gives its time, transmit + range / c. cell_statistic multiscale only.
-             "range_estimate": "centroid"},
+             # D-157). It places the detection and gives its time, transmit + range / c. None (not given): "first" with
+             # cell_statistic multiscale, else "centroid" (D-158, chain_range_estimate); "first" given with mean or peak is
+             # refused. libs/live ChainOptions::range_estimate is the same rule. The elevation stage searches about the
+             # detection's centroid either way (Detection.centroid_range).
+             "range_estimate": None},
     "min_snr_db": 9.0,
     "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
@@ -394,10 +397,10 @@ def check_choices(cfg: dict) -> None:
     for key, allowed in CHOICES.items():
         if cfg.get(key) not in allowed:
             raise ValueError(f"chain.{key}: {cfg.get(key)!r} ({', '.join(allowed[:-1])} or {allowed[-1]})")
-    estimate = (cfg.get("cfar") or {}).get("range_estimate", "centroid")
-    if estimate not in RANGE_ESTIMATES:
+    estimate = (cfg.get("cfar") or {}).get("range_estimate")
+    if estimate is not None and estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
-    if estimate != "centroid" and cfg.get("cell_statistic") != "multiscale":
+    if estimate not in (None, "centroid") and cfg.get("cell_statistic") != "multiscale":
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} is a setting of cell_statistic multiscale, not "
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
 
@@ -524,7 +527,7 @@ def detector_options(cfg: dict) -> dict:
         o["integrate_cells"] = [int(v) for v in f["integrate_cells"]]
     if f.get("merge_m") is not None:
         o["merge_m"] = float(f["merge_m"])
-    estimate = f.get("range_estimate", "centroid")
+    estimate = chain_range_estimate(cfg)
     if estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
     o["range_estimate"] = estimate
@@ -532,6 +535,15 @@ def detector_options(cfg: dict) -> dict:
 
 
 RANGE_ESTIMATES = ("centroid", "first")        # libs/live detector.hpp parse_range_estimate refuses anything else
+
+
+def chain_range_estimate(cfg: dict) -> str:
+    """The range estimate a (merged) chain configuration uses: `cfar.range_estimate` when given (not None), else "first"
+    with cell_statistic multiscale and "centroid" with mean or peak (D-158; libs/live chain_range_estimate)."""
+    estimate = (cfg.get("cfar") or {}).get("range_estimate")
+    if estimate is not None:
+        return estimate
+    return "first" if cfg.get("cell_statistic", DEFAULTS["cell_statistic"]) == "multiscale" else "centroid"
 
 
 def sync_reference(cfg: dict) -> dict | None:
@@ -1344,8 +1356,11 @@ class LiveChain:
             origin, axis = frame.origin, frame.along[:2]
             mean = background_map if multi else detect._window_mean(np.asarray(power, dtype=float), guard, train)[0]
             order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
+            # The elevation is searched about the cluster's centroid, whichever range the detection reports (D-158; libs/live
+            # chain.cpp the same): from the leading edge the search, 1.5 cells beyond it, can stop short of the echo's peak.
+            el_range = [h.centroid_range if np.isfinite(h.centroid_range) else h.range for h in hits]
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
-                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
+                                     int(np.argmin(np.abs(ranges - el_range[i])))]) / looks for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
             if el_cfg["sector_from_rays"] is not None or (el_cfg["multipath_sigma"] is not None and el_cfg["depth"]):
                 # hook (opt-in): the elevations sound can arrive from, and the echoes that share a range cell, by rays through
@@ -1366,7 +1381,7 @@ class LiveChain:
                 limit_water = (through["depth"], through["speed"])
                 if el_cfg["sector_from_rays"] is not None:
                     el_cfg = dict(el_cfg, _sector_profile=(through["depth"], through["speed"]))
-            got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
+            got = elevation.estimate(record, rows, subs, [(el_range[i], hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
                                      range_cell=cfg["range_cell_m"], backend=self.backend)
             for i, e in zip(order, got):

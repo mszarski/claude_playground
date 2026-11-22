@@ -264,7 +264,8 @@ def test_one_row_and_three_rows_keep_the_same_false_alarm_budget():
 def test_a_point_echo_reads_its_budget_snr_less_window_and_straddling_on_both_engines(sonar, template):
     """The reference is the link budget's number (peak of the noiseless unweighted beam over mean noise). The multiscale
     detector's `snr_db` is 2.3 dB below it (Hann window 1.76 dB, the echo between samples 0.5 dB); the mean of a 2 m cell
-    was 9.4 dB below."""
+    was 9.4 dB below. The range is held to the centroid's 1 m, so range_estimate centroid is given (D-158: the default
+    leading edge of a 0 dB point echo lies 1.4 m before it, as D-157 measured about 1 m)."""
     loss = live.snr_loss_db(template, 2.0, "hann", "multiscale")
     assert loss["window_db"] == pytest.approx(1.76, abs=0.02) and loss["cell_db"] == pytest.approx(0.55, abs=0.15)
     assert live.snr_loss_db(template, 2.0)["total_db"] == pytest.approx(9.4, abs=0.2)             # as before
@@ -276,7 +277,8 @@ def test_a_point_echo_reads_its_budget_snr_less_window_and_straddling_on_both_en
         rec = ping(sonar, [at(r_t, b_t)], 0.0, 60 + trial)
         got = {}
         for engine in ("cpp", "python"):
-            with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+            with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine,
+                            "cfar": {"range_estimate": "centroid"}}) as chain:
                 rep = chain.process(rec.copy())
             assert len(rep["detections"]) == 1, engine
             got[engine] = d = rep["detections"][0]
@@ -336,10 +338,12 @@ def test_detection_probability_is_what_the_chain_does(sonar, template):
     ((1322.0, 5.0), 2),       # both at once
 ])
 def test_two_targets_beyond_the_stated_resolution_are_two_and_nearer_are_one(sonar, second, detections):
+    """Two echoes are one detection or two. A merged pair's range lies between them by the centroid, so that is given
+    (D-158: the default, the leading edge, is the nearer echo's front)."""
     rec = ping(sonar, [at(1300.0, 0.0), at(*second)], [0.0, -3.0], 81)
     got = {}
     for engine in ("cpp", "python"):
-        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
+        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine, "cfar": {"range_estimate": "centroid"}}) as chain:
             got[engine] = chain.process(rec.copy())["detections"]
             assert chain.detector["merge_cells"] == 7 and chain.detector["merge_deg"] == pytest.approx(2.6, abs=0.2)
         assert len(got[engine]) == detections, (engine, got[engine])
@@ -352,20 +356,32 @@ def test_two_targets_beyond_the_stated_resolution_are_two_and_nearer_are_one(son
 
 def test_two_targets_thirty_metres_apart_are_two_tracks_and_a_strong_one_is_one(sonar):
     """Four pings: two targets 30 m apart in range on one bearing keep two tracks, on both engines. A target 30 dB up
-    (62 dB of budget SNR: its range and bearing sidelobes far above the threshold) is one detection and one track."""
+    (62 dB of budget SNR: its range and bearing sidelobes far above the threshold) is one detection and one track.
+    The chain's default range is the leading edge (D-158): the tracks are at 1299 and 1329 m, about 1 m before the two
+    0 dB point echoes (1300 and 1330 m with the centroid, before D-158)."""
     pair = [ping(sonar, [at(1300.0, 3.0), at(1330.0, 3.0)], [0.0, 0.0], 200 + i, sequence=i) for i in range(4)]
     strong = [ping(sonar, [at(1300.0, -8.0)], 30.0, 240 + i, sequence=i) for i in range(4)]
     for engine in ("cpp", "python"):
         with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
             reps = chain.run([r.copy() for r in pair])
         assert [len(r["detections"]) for r in reps] == [2, 2, 2, 2], engine
-        assert len(reps[-1]["tracks"]) == 2 and sorted(round(t["range_m"]) for t in reps[-1]["tracks"]) == [1300, 1330], engine
-        with LiveChain({"cell_statistic": "multiscale", "backend": "host", "engine": engine}) as chain:
-            reps = chain.run([r.copy() for r in strong])
-        assert [len(r["detections"]) for r in reps] == [1, 1, 1, 1], engine
-        d = reps[0]["detections"][0]
-        assert d["snr_db"] > 57.0 and abs(d["range_m"] - 1300.0) < 1.0 and abs(d["bearing_deg"] + 8.0) < 0.3 and d["extent_m"] <= 6.0, d
-        assert len(reps[-1]["tracks"]) == 1
+        assert len(reps[-1]["tracks"]) == 2 and sorted(round(t["range_m"]) for t in reps[-1]["tracks"]) == [1299, 1329], engine
+        for estimate in ("centroid", None):
+            cfg = {"cell_statistic": "multiscale", "backend": "host", "engine": engine}
+            if estimate is not None:
+                cfg["cfar"] = {"range_estimate": estimate}
+            with LiveChain(cfg) as chain:
+                reps = chain.run([r.copy() for r in strong])
+            assert [len(r["detections"]) for r in reps] == [1, 1, 1, 1], engine
+            d = reps[0]["detections"][0]
+            assert d["snr_db"] > 57.0 and abs(d["bearing_deg"] + 8.0) < 0.3 and d["extent_m"] <= 6.0, d
+            if estimate == "centroid":
+                assert abs(d["range_m"] - 1300.0) < 1.0, d
+            else:
+                # The default leading edge of an echo 62 dB over the noise: its onset crosses the single-sample threshold
+                # 2.0 m before the peak (D-158; the centroid is within 0.02 m).
+                assert d["range_m"] == pytest.approx(1298.0, abs=0.25), d
+            assert len(reps[-1]["tracks"]) == 1
 
 
 # --- the detector as it was, and the engines ---------------------------------------------------------------------------
@@ -472,9 +488,10 @@ def test_a_submerged_target_with_a_resolved_surface_echo_is_one_detection_and_on
 
 def test_beam_samples_are_what_the_map_is_the_power_of(sonar):
     """The complex samples behind a detection (libs/live chain.hpp `beam_samples`, `core.live_beam_samples`): over its
-    range window at its bearing their strongest squared magnitude over the background is its `snr_db`, at its range."""
+    range window at its bearing their strongest squared magnitude over the background is its `snr_db`, at its range
+    when that is the centroid (given: the default leading edge lies before the peak, D-158)."""
     rec = ping(sonar, [at(1300.0, 6.0)], 0.0, 91)
-    with LiveChain({"backend": "host", "engine": "cpp"}) as chain:
+    with LiveChain({"backend": "host", "engine": "cpp", "cfar": {"range_estimate": "centroid"}}) as chain:
         d = chain.process(rec)["detections"][0]               # the record is left prepared (baseband, compressed)
         power, ranges, _ = chain._cpp.last_map()
     grid = np.radians(np.arange(-40.0, 40.25, 0.5))
@@ -501,9 +518,9 @@ def _late_arrivals_ping(sonar, r0=1300.0, bearing_deg=5.0, seed=21):
 
 def test_the_leading_edge_is_the_first_arrival_and_the_centroid_lies_behind_it(sonar):
     """D-157: with cfar.range_estimate first the detection's range is its first sample above the single-sample threshold:
-    the weak first arrival, within one range cell; the default (centroid) is the energy-weighted mean, about 25 m behind
-    it. Both engines give the same; the default given explicitly is the default bit for bit; the report's
-    first_range_m (the nearest cell's centre) is coarser than the leading edge and within a cell of it."""
+    the weak first arrival, within one range cell; centroid is the energy-weighted mean, about 25 m behind it. Both
+    engines give the same; the chain's default (first since D-158) is `first` given explicitly bit for bit; the
+    report's first_range_m (the nearest cell's centre) is coarser than the leading edge and within a cell of it."""
     r0 = 1300.0
     rec = _late_arrivals_ping(sonar, r0)
     got = {}
@@ -519,8 +536,8 @@ def test_the_leading_edge_is_the_first_arrival_and_the_centroid_lies_behind_it(s
     slant = float(np.hypot(*at(r0, 5.0)[:2]))
     for engine in ("cpp", "python"):
         first = got["first", engine]["detections"][0]
-        centroid = got[None, engine]["detections"][0]
-        assert got["centroid", engine] ["detections"] == got[None, engine]["detections"]
+        centroid = got["centroid", engine]["detections"][0]
+        assert got["first", engine]["detections"] == got[None, engine]["detections"]      # D-158: the default
         assert abs(first["range_m"] - slant) < cell, (engine, first)
         assert 15.0 < centroid["range_m"] - slant < 35.0, (engine, centroid)
         assert abs(first["first_range_m"] - first["range_m"]) <= cell
@@ -530,8 +547,9 @@ def test_the_leading_edge_is_the_first_arrival_and_the_centroid_lies_behind_it(s
 
 
 def test_the_range_estimate_is_checked_and_reaches_the_program():
-    """D-145: a word that is not centroid or first is refused by both engines, and first outside cell_statistic
-    multiscale too; the key goes through program_options to the program's options."""
+    """D-145: a word that is not centroid or first is refused by both engines, and first given outside cell_statistic
+    multiscale too; the key goes through program_options to the program's options, which print the value used
+    (D-158: first with multiscale when not given, centroid with mean or peak)."""
     with pytest.raises(ValueError, match="range_estimate"):
         live.cpp_chain_options({"cell_statistic": "multiscale", "cfar": {"range_estimate": "peak"}})
     with pytest.raises(ValueError, match="range_estimate"):
@@ -546,8 +564,64 @@ def test_the_range_estimate_is_checked_and_reaches_the_program():
     assert flat["cfar_range_estimate"] == "first"
     text = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
     assert text["cfar_range_estimate"] == "first"
-    assert json.loads(core.live_options_from_text(""))["cfar_range_estimate"] == "centroid"
-    assert live.program_options({"cell_statistic": "multiscale"})["cfar_range_estimate"] == "centroid"
+    assert json.loads(core.live_options_from_text(""))["cfar_range_estimate"] == "first"
+    assert live.program_options({"cell_statistic": "multiscale"})["cfar_range_estimate"] == "first"
+    flat = live.program_options({"cell_statistic": "multiscale", "cfar": {"range_estimate": "centroid"}})
+    assert flat["cfar_range_estimate"] == "centroid"
+    assert json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))["cfar_range_estimate"] == "centroid"
+
+
+# --- D-158: the leading edge is the live chain's default (cell_statistic multiscale) -------------------------------
+
+@pytest.mark.parametrize("statistic, want", [("multiscale", "first"), ("mean", "centroid"), ("peak", "centroid")])
+def test_the_chain_default_range_estimate_is_the_same_in_both_engines(statistic, want):
+    """D-158: left out, the range estimate is first with cell_statistic multiscale and the centroid with mean or peak, the
+    same in both engines: Python's rule (chain_range_estimate, the plan's options), the C++ parser's printed value
+    (options_json), and the C++ chain built from the Python options. The detector's own default stays centroid."""
+    merged = live._merge(live.DEFAULTS, {"cell_statistic": statistic})
+    assert merged["cfar"]["range_estimate"] is None
+    assert live.chain_range_estimate(merged) == want
+    assert json.loads(core.live_options_from_text(f"cell_statistic={statistic}\n"))["cfar_range_estimate"] == want
+    flat = live.program_options({"cell_statistic": statistic})
+    assert json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))["cfar_range_estimate"] == want
+    if statistic == "multiscale":
+        assert live.detector_options(merged)["range_estimate"] == "first"
+        assert flat["cfar_range_estimate"] == "first"
+    # The explicit centroid is accepted with every statistic, in both engines.
+    for engine in ("python", "cpp"):
+        LiveChain({"cell_statistic": statistic, "backend": "host", "engine": engine, "cfar": {"range_estimate": "centroid"}}).close()
+        LiveChain({"cell_statistic": statistic, "backend": "host", "engine": engine}).close()
+    assert json.loads(core.live_options_from_text(f"cell_statistic={statistic}\ncfar_range_estimate=centroid\n"))["cfar_range_estimate"] == "centroid"
+
+
+@pytest.mark.parametrize("statistic", ["mean", "peak"])
+def test_first_given_with_mean_or_peak_is_refused_by_both_engines(statistic):
+    """D-158: an explicit first outside multiscale is refused in Python (check_choices) and by the C++ chain, whichever
+    order the program's keys come in; left out, the same configuration is accepted (the centroid)."""
+    for engine in ("python", "cpp"):
+        with pytest.raises(ValueError, match="range_estimate"):
+            LiveChain({"cell_statistic": statistic, "backend": "host", "engine": engine, "cfar": {"range_estimate": "first"}})
+    for text in (f"cell_statistic={statistic}\ncfar_range_estimate=first\n", f"cfar_range_estimate=first\ncell_statistic={statistic}\n"):
+        o = json.loads(core.live_options_from_text(text))
+        assert o["cfar_range_estimate"] == "first"
+    with pytest.raises(ValueError, match="range_estimate"):
+        core.LiveChainCpp({"cfar_range_estimate": "first", "cell_multiscale": False, "cell_peak": statistic == "peak"})
+    core.LiveChainCpp({"cell_multiscale": False, "cell_peak": statistic == "peak"})
+
+
+def test_mean_without_the_key_gives_the_centroid_on_both_engines(sonar):
+    """D-158: cell_statistic mean with no range_estimate runs as before on both engines: the same detections as with
+    centroid given explicitly (the mean detector has no leading edge)."""
+    rec = _late_arrivals_ping(sonar)
+    got = {}
+    for engine in ("cpp", "python"):
+        for estimate in (None, "centroid"):
+            cfg = {"cell_statistic": "mean", "backend": "host", "engine": engine}
+            if estimate is not None:
+                cfg["cfar"] = {"range_estimate": estimate}
+            with LiveChain(cfg) as chain:
+                got[engine, estimate] = chain.process(rec.copy())["detections"]
+        assert got[engine, None] == got[engine, "centroid"] and len(got[engine, None]) >= 1, engine
 
 
 # --- sonar-d99: the leading edge and the arrivals are held to the single-sample test, whatever integrate_cells holds ---
@@ -595,3 +669,26 @@ def test_a_plan_whose_first_scale_is_not_the_single_sample_is_refused_by_both_en
             detect.multiscale(fine, mean, fr, cr, b, 2, 4, bad)
         with pytest.raises(ValueError, match="detector plan"):
             core.live_multiscale_detect(fine, mean, fr, cr, b, 2, 4, bad, backend=core.Backend.Host)
+
+
+def test_range_estimate_centroid_given_is_the_output_from_before_d158():
+    """D-158: `cfar.range_estimate: centroid` given restores the chain's output from before the default became first,
+    byte for byte: the report lines of both engines on two short scenarios (a flank array with a crossing and a still
+    target; a long-range array with late arrivals) against tests/python/data/centroid_d158.json, which
+    data/make_centroid_d158.py wrote with the code of 42d4539 and no range_estimate given. The default (first) moves
+    the ranges of the multiscale detections, so it is not that output."""
+    import pathlib
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).parent / "data"))
+    try:
+        import make_centroid_d158 as golden
+    finally:
+        sys.path.pop(0)
+    want = json.loads(golden.GOLDEN.read_text())
+    got = golden.reports({"range_estimate": "centroid"})
+    assert got.keys() == want.keys()
+    for name in want:
+        for engine in ("cpp", "python"):
+            assert got[name][engine] == want[name][engine], (name, engine)
+    default = golden.reports()
+    assert any(default[name][engine] != want[name][engine] for name in want for engine in ("cpp", "python"))

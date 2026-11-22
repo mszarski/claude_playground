@@ -100,7 +100,7 @@ Each detection:
 
 | Field | Unit, frame, sign | What it is |
 | --- | --- | --- |
-| `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`); the centre of the range cell |
+| `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`). `cell_statistic: multiscale` (default): the detection's leading edge, its nearest sample above the single-sample threshold (`chain.cfar.range_estimate: first`, the default since D-158), or with `range_estimate: centroid` the energy-weighted mean of its samples (the default until D-158; at 12 km behind the target by about 50 m of multipath spread, D-157); `mean`, `peak`: the centre of the range cell |
 | `bearing_deg` | degrees from broadside, in the horizontal plane | 0 is broadside on the `chain.look` side; positive towards the last receive element along the array (the axis from the first element to the last). Broadside is that axis turned 90° clockwise seen from above for `look: starboard` (north to east), anticlockwise for `port`. With stacked rows and `elevation.correct_bearing`: the horizontal bearing after the elevation correction, and `cone_bearing_deg` is the line's own |
 | `snr_db` | dB | the detector's signal-to-noise ratio: "What `snr_db` is" below (the C++ line writes `null` for a value that is not finite) |
 | `extent_m`, `first_range_m` | m | multiscale detector only: the cluster's extent in range and where it starts (it covers `[first_range_m - cell / 2, first_range_m + extent_m]`) |
@@ -863,7 +863,9 @@ nothing: the threshold on the mean stayed where it was, so two or three rows det
   grouped when they are no further apart in range than `cfar.merge_m` (default: the tracker's range sigma, 15 m) and no
   further apart in bearing than half the beam's half-power width (2.6° for a 32-hydrophone row at 5 kHz); touching cells
   always are. So a target's highlights and the arrivals of one multipath group are one detection. It reports its
-  strongest sample as `snr_db`; its range, the energy-weighted mean of its samples; its bearing, the mean of its beams
+  strongest sample as `snr_db`; its range, its leading edge (the nearest sample above the single-sample threshold;
+  `cfar.range_estimate: first`, the default since D-158) or with `range_estimate: centroid` the energy-weighted mean of
+  its samples; its bearing, the mean of its beams
   weighted by their energy above half the strongest one's (within 0.06° of truth on `popoto_elevation_free`, as before;
   from ping to ping it scatters by 0.02° where the old centroid scattered by 0.01°); and `extent_m`, the range it spans.
 - **What a detection holds of its echo.** `first_range_m` and `extent_m` (it covers the range cells from the one centred
@@ -1041,6 +1043,7 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
 | `chain.tracker.association` | how detections are shared out among tracks: `likelihood` (default, D-141) or `in_order` (the rule before it) |
 | `chain.cfar.false_alarms_per_ping`, `chain.min_snr_db` | the false-alarm rate wanted: expected false detections per ping in noise (10⁻³), and a floor on `snr_db` (9 dB). `chain.cfar.pfa` is for `cell_statistic: mean` and `peak` only |
+| `chain.cfar.range_estimate` | `first` (default with `multiscale`, D-158; the elevation of stacked rows is still searched about the centroid): a detection's range is its leading edge; `centroid` puts it at the energy-weighted mean of its samples, behind the target by the multipath spread (+49.5 m at 12 km on popoto_vehicle against +0.9 m with `first`, D-157). Leave it out unless a comparison with output from before D-158 is wanted |
 | `chain.cfar.merge_m`, `sidelobe_floor_db` | what is one detection: echoes of one bearing within the tracker's range sigma (15 m) are merged; the bearing sidelobe floor (−40 dB) is an assumption about the array's gain and phase errors until it is measured |
 | `chain.sync.reference`, `search_time`, `tolerance_us`, `min_quality` | several boards: the reference burst above the band, how far apart the boards can start (2 ms), how well they must agree (a twentieth of a period; tighter for rows) |
 | `chain.elevation.*` (sector, `min_row_elements`, `water_depth`, sigmas, gradient) | stacked rows only; the row tolerance is derived |

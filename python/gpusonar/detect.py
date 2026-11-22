@@ -79,6 +79,9 @@ class Detection:
     time: float | None = None           # s, when the detection shows the target: for a monostatic echo the ping's transmit
                                         # time + range / c (D-156). None (or NaN, any value that is not finite): the
                                         # ping's time given to Tracker.update (as before)
+    centroid_range: float = float("nan")  # m, the energy-weighted mean range of its samples (the multiscale detector),
+                                          # whichever `range` reports: the elevation is searched about it (D-158). NaN:
+                                          # `range` is the centroid (libs/live detections.hpp)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -280,7 +283,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             top = np.flatnonzero(is_peak)
             top = np.sort(top[np.argsort(-line[top], kind="stable")][:8])
             arrivals = [(float(fine_ranges[idx[q]]), float(10 * np.log10(line[q]))) for q in top]
-            rng = float((w * r).sum() / w.sum())
+            rng = centroid = float((w * r).sum() / w.sum())
             if plan.get("range_estimate", "centroid") == "first":
                 # The leading edge (libs/live detector.hpp RangeEstimate::First, D-157): the nearest sample above the
                 # single-sample threshold, else the nearest cell's centre.
@@ -288,7 +291,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
                 rng = float(fine_ranges[idx[over_[0]]]) if len(over_) else near
             out.append(Detection(rng, float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
-                                 extent=far - near + float(plan["cell_m"]), arrivals=arrivals))
+                                 extent=far - near + float(plan["cell_m"]), arrivals=arrivals, centroid_range=centroid))
     return out, background_map
 
 

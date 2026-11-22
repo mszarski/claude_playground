@@ -525,6 +525,26 @@ def test_navigation_brings_attitude_history_sound_speed_and_water_depth_into_the
     assert all(np.isnan(v) for v in plain.extras(0)) and len(plain.history(0, 10)) == 1
 
 
+def test_the_elevation_is_searched_about_the_centroid_whatever_range_is_reported():
+    """D-158: with the leading edge as the detection's range (the default) the elevation stage still searches about the
+    cluster's centroid, in both engines: the elevations, depths and paths of the static array in free field are those
+    of `range_estimate: centroid`, and the depths are the truth (searched from the leading edge, 1.5 cells beyond it,
+    the 10 m target read at 209 m). Only range_m (and what follows from it: position, time) differs."""
+    sc = load_scenario_config("popoto_static_free")
+    truth_depths = sorted(float(o["positions"][0][2]) for o in sc["scene"])
+    records = run_scenario(dict(sc, pings=dict(sc["pings"], count=3))).records
+    keys = ("elevation_deg", "elevation_sigma_deg", "depth_m", "depth_sigma_m", "path", "elevation_ambiguous", "snr_db", "first_range_m", "extent_m")
+    for engine in ("python", "cpp"):
+        chain = static_chain(sc)
+        first = run(records, chain, engine)[-1]
+        centroid = run(records, dict(chain, cfar=dict(chain.get("cfar") or {}, range_estimate="centroid")), engine)[-1]
+        assert len(first["detections"]) == len(centroid["detections"]) == 3, engine
+        for a, b in zip(sorted(first["detections"], key=lambda d: d["first_range_m"]), sorted(centroid["detections"], key=lambda d: d["first_range_m"])):
+            assert {k: a.get(k) for k in keys} == {k: b.get(k) for k in keys}, (engine, a, b)
+            assert a["range_m"] < b["range_m"], engine
+        assert sorted(t["depth_m"] for t in first["tracks"]) == pytest.approx(truth_depths, abs=1.0), engine
+
+
 def test_local_sound_speed_from_config_replaces_the_records_in_both_engines():
     """The vehicle measures the sound speed where it is. A record whose environment says 1500 m/s while the
     water is at 1470 puts a target at 1 km 20 m too far; `chain.sound_speed` puts it back."""
@@ -533,9 +553,11 @@ def test_local_sound_speed_from_config_replaces_the_records_in_both_engines():
     env = rec.environment
     env.sound_speed = 1500.0
     rec.environment = env
+    # The range is held to the centroid's 1 m (given; D-158): the default leading edge of this strong echo is 2.1 m nearer.
+    chain = dict(CHAIN, cfar=dict(CHAIN["cfar"], range_estimate="centroid"))
     for engine in ("python", "cpp"):
-        assert strongest(run([rec], CHAIN, engine)[0])["range_m"] == pytest.approx(1000.0 * 1500.0 / 1470.0, abs=1.0), engine
-        assert strongest(run([rec], dict(CHAIN, sound_speed=1470.0), engine)[0])["range_m"] == pytest.approx(1000.0, abs=1.0), engine
+        assert strongest(run([rec], chain, engine)[0])["range_m"] == pytest.approx(1000.0 * 1500.0 / 1470.0, abs=1.0), engine
+        assert strongest(run([rec], dict(chain, sound_speed=1470.0), engine)[0])["range_m"] == pytest.approx(1000.0, abs=1.0), engine
 
 
 def test_cpp_chain_gives_the_python_chains_elevation_and_depth(free_field):

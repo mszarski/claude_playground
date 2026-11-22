@@ -30,6 +30,9 @@ struct Detection {
   bool depth_ambiguous = false;
   std::vector<double> depth_alternatives{};
   double extent = std::numeric_limits<double>::quiet_NaN();       ///< m in range the cluster spans (the multiscale detector); NaN: not reported
+  /// m, the energy-weighted mean range of the cluster's samples (the multiscale detector), whichever `range` reports
+  /// (RangeEstimate): the elevation of stacked rows is searched about it (D-158). NaN: `range` is the centroid.
+  double centroid_range = std::numeric_limits<double>::quiet_NaN();
   /// The detection's arrivals, nearest first (the multiscale detector): the local peaks along range of the strongest
   /// sample over its bearings, each above the single-sample threshold; at most 8, the strongest. One detection is one
   /// target: its direct echo, its surface and bottom echoes and its highlights within the merge distance are all here,
