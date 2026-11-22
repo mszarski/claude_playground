@@ -185,3 +185,35 @@ def test_strip_fences_inkling2_format():
            "<|message_model|><|content_text|>set n21 fill=#2563EB<|end_message|><|content_model_end_sampling|>")
     assert strip_fences(raw) == "set n21 fill=#2563EB"
     assert strip_fences("<|message_model|><|content_thinking|>still thinking about it") == ""
+
+
+def test_held_out_signature_flags_every_held_out_kind_and_not_plain_edits():
+    import random as _r
+
+    from design_edit import edits as E
+    from design_edit.generator import generate_design as _gen
+    from design_edit.leak import held_out_signature
+
+    for name, fn in {**E.NOVEL, **E.GOAL}.items():
+        hits = tries = 0
+        for seed in range(200):
+            ex = fn(_gen(seed, max_sections=3), _r.Random(seed))
+            if ex is not None:
+                tries += 1
+                hits += held_out_signature(ex.before, ex.after) == name
+        assert tries and hits == tries, (name, hits, tries)
+    for name in ("change_text", "set_spacing", "reorder", "set_radius"):
+        for seed in range(50):
+            ex = E.FORWARD[name](_gen(seed, max_sections=3), _r.Random(seed))
+            if ex is not None:
+                assert held_out_signature(ex.before, ex.after) is None, name
+
+
+def test_dsl_violations():
+    from design_edit.leak import dsl_violations
+    from design_edit.schema import apply_patch, parse
+
+    doc = parse('frame#n1 "Page" layout=col gap=8 fill=#FFFFFF\n  text#n2 "T" text="Hi" size=14 color=#111827')
+    assert dsl_violations(doc, apply_patch(doc, "set n2 size=16 color=#374151")) == []
+    bad = apply_patch(doc, 'set n1 fill="linear-gradient(#fff,#000)" justify=space-between\nset n2 line_height=20')
+    assert len(dsl_violations(doc, bad)) == 3
