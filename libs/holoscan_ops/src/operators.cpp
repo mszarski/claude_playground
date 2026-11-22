@@ -111,9 +111,17 @@ void UdpSourceOp::stop() {
   stop_ = true;
   if (receiver_.joinable()) receiver_.join();
   if (nav_thread_.joinable()) nav_thread_.join();
+  std::size_t discarded = 0;           // complete pings the assembler still held at stop: not emitted
+  if (pings_) {
+    std::vector<PingRecord> rest;
+    pings_->finish(rest);              // the end of the stream: holes still awaited are counted
+    discarded = rest.size();
+  }
   std::cerr << "UdpSourceOp: " << emitted_ << " emitted, "
             << (pings_ ? pings_->dropped_pings : stream_ ? stream_->dropped_chunks : 0) << " dropped, "
-            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, " << nav_counts_.without_nav
+            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, "
+            << (pings_ ? pings_->late_blocks : 0) << " blocks late, " << (pings_ ? pings_->repeated_blocks : 0) << " blocks repeated, " << discarded << " pings discarded at stop, "
+            << nav_counts_.without_nav
             << " without navigation, " << nav_counts_.without_velocity << " without velocity, " << queue_dropped_ << " blocks dropped at the full queue\n";
 }
 

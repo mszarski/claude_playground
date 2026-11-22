@@ -760,6 +760,38 @@ and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan applic
 Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
 (`python/gpusonar/sources/hsb.py`), and the chain. On a real board only `receive` runs.
 
+What `receive` counts (`FrameReceiver.stats()`, printed as `hsb: {...}` when the run ends,
+after `finish()` has given up whatever was still awaited). Frames are placed by the sample
+counter in their header, so frames out of order still make their ping; the sender's frame
+number is used only to count `frames_lost`, which stays 0 without frame numbers
+(`lost_samples` then says what was lost). `frames_lost` are frame numbers skipped and never
+received by the time their place was given up: their ping emitted or dropped, or, between
+pings, 2 frames later (`reorder_blocks`). `frames_late` are frames that arrived behind a later
+one; those in time are used and their ping kept; `frames_too_late` (part of `frames_late`,
+each frame once) are frames counted lost that came after all, not used. `frames_repeated` are
+duplicates, and frames that did not fit the stream and were not confirmed as a restart.
+`trouble_frames` lists the first 16 frame numbers at which a loss (entered when it is given
+up; a gap filled by late frames is not listed) or a damaged frame was noticed.
+`pings_discarded_at_stop` are complete pings still waiting (for an earlier one to be
+decided) when the run stopped; pings + `dropped_pings` + these = pings heard.
+
+`dropped_pings` includes pings none of whose frames arrived, counted from a jump of d in the
+frame header's ping index as d - 1 only when the transmits are d ping intervals apart: the
+interval is the median of the last 5 between consecutive indices, the gap must be within half
+an interval of d intervals and exceed d - 1 of the longest of those 5 by half an interval.
+Otherwise the jump is a renumbering and counts nothing, and so does any jump before two
+consecutive pings have been heard. How this fails: a sender that skips indices across a gap
+that, with ping-interval jitter not yet seen, happens to be near d intervals is counted as
+d - 1 pings lost (an index skip over 1.6 intervals with steady intervals before it counts one);
+a real loss with jitter beyond half an interval is not counted.
+
+Pings come out in transmit order; one waits only while an earlier one is undecided, at most
+2 frames, and at most 2 pings are open at once. A ping transmitted before the previous
+window has closed (overlapping pings) gives the previous ping up at once, as before. Until
+2026-11 a frame was lost the moment a later number arrived, a late frame was counted as a
+repeat and its ping dropped, and without frame numbers a repeated frame dropped a complete
+ping.
+
 State (`RESULTS.md`, "Sensor Bridge loopback"): Sensor Bridge 2.7.0 builds natively
 against Holoscan 4.6.0, and our operators, run inside Holoscan behind a stand-in that emits
 what the receiver emits, give the direct chain's reports exactly; a withheld frame drops
