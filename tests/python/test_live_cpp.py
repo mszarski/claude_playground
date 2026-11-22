@@ -276,7 +276,11 @@ def test_both_engines_leave_the_same_glinting_measurement_out_of_the_line():
         assert got["position"] == pytest.approx(want.position, abs=1e-6) and got["velocity"] == pytest.approx(want.velocity, abs=1e-6)
         assert got["fit_rms"] == pytest.approx(want.fit_rms, abs=1e-6) and got["speed_sigma"] == pytest.approx(want.speed_sigma, rel=1e-6)
         ahead[alpha] = want.position[0] - at_transmit[0]
-    assert classify.fitted_points(a[0]) == 5 and classify.fitted_points(a[0], outlier_alpha=0.0) == 6
+    assert classify.fitted_points(a[0], outlier_alpha=0.01) == 5 and classify.fitted_points(a[0]) == 6
+    # Off by default in both engines (owner, D-159).
+    (dflt,) = cpp.classify(time=tp)
+    assert dflt["position"] == pytest.approx(classify.classify_tracks(a, time=tp, outlier_alpha=0.0)[0].position, abs=1e-6)
+    assert dflt["position"] == pytest.approx(classify.classify_tracks(a, time=tp)[0].position, abs=1e-6)
     assert abs(ahead[0.01]) < 3.0 and ahead[0.0] > 15.0
     for bad in (-0.1, 1.0):
         with pytest.raises(ValueError, match="outlier_alpha"):
@@ -286,12 +290,13 @@ def test_both_engines_leave_the_same_glinting_measurement_out_of_the_line():
 
 
 def test_the_chain_says_its_outlier_alpha_to_the_cpp_engine():
-    """sonar-ljh: the configuration's classify.outlier_alpha (default 0.01) always goes to the C++ chain's options, and
-    a value out of [0, 1) is refused by the Python chain."""
+    """sonar-ljh: the configuration's classify.outlier_alpha (default 0: off, D-159) always goes to the C++ chain's options,
+    whose own default is 0 too, and a value out of [0, 1) is refused by the Python chain."""
     from gpusonar.live import cpp_chain_options
-    assert cpp_chain_options(dict(CHAIN))["classify_outlier_alpha"] == 0.01
-    off = dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=0.0))
-    assert cpp_chain_options(off)["classify_outlier_alpha"] == 0.0
+    assert cpp_chain_options(dict(CHAIN))["classify_outlier_alpha"] == 0.0
+    assert json.loads(core.LiveChainCpp(dict(CPP_CHAIN)).options())["classify_outlier_alpha"] == 0.0
+    on = dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=0.01))
+    assert cpp_chain_options(on)["classify_outlier_alpha"] == 0.01
     with pytest.raises(ValueError, match="outlier_alpha"):
         LiveChain(dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=1.5)))
 

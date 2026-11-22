@@ -97,7 +97,7 @@ struct ChainOptions {
   TrackerOptions tracker{0.05, kDerive, kDerive, 4.0, 3, 2, 8.0};      // range and bearing sigma: derived
   // fit limit, multipath bearing, the fit limit's growth with range: derived
   ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, kDerive, false, 40.0, 2.0, true, 800.0, kDerive, 2.5, 0.0, 0.0, -1.0, -1.0,
-                           std::numeric_limits<double>::quiet_NaN(), 0.01, kDerive};
+                           std::numeric_limits<double>::quiet_NaN(), 0.0, kDerive};
   bool sync = false;           ///< several capture boards: synchronise on the shared reference first
   Reference reference;
   ElevationOptions elevation;  ///< stacked rows: elevation and depth (off by default)

@@ -248,7 +248,7 @@ TEST(Classify, FitsTimeBetweenAllPointsAndMovesAShortTrackByItsState) {
 TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
   // sonar-ljh (classify.py _outlier): six measured points of a 6 m/s crossing with a small scatter, the last 50 m
   // ahead (80 m: six points give the per-axis test 3 degrees of freedom, so it needs |t| > 13.7, and 50 m over this
-  // scatter is |t| 11.9). By default the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
+  // scatter is |t| 11.9). At 0.01 (opt-in, D-159) the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
   // and pulls the line. A track whose rows record no measurement (the filtered history) is never tested.
   Track t;
   t.id = 1;
@@ -260,7 +260,8 @@ TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
     t.history.push_back({tk, x, 12000.0, x + scatter[k], 12000.0 + (k % 2 ? 1.0 : -1.0)});
   }
   ClassifyOptions co;
-  EXPECT_EQ(co.outlier_alpha, 0.01);
+  EXPECT_EQ(co.outlier_alpha, 0.0);   // off by default (D-159); the test itself at 0.01
+  co.outlier_alpha = 0.01;
   co.time = 100.0;
   auto out = classify_tracks({&t}, co);
   EXPECT_NEAR(out[0].vx, 6.0, 0.1);
@@ -281,11 +282,11 @@ TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
 TEST(Options, ClassifyOutlierAlphaIsReadEchoedAndChecked) {
   ChainOptions a;
   PassiveOptions pa;
-  EXPECT_EQ(a.classify.outlier_alpha, 0.01);
-  std::istringstream in("classify_outlier_alpha=0\n");
+  EXPECT_EQ(a.classify.outlier_alpha, 0.0);   // off by default (D-159)
+  std::istringstream in("classify_outlier_alpha=0.01\n");
   read_options(a, pa, in);
-  EXPECT_EQ(a.classify.outlier_alpha, 0.0);
-  EXPECT_NE(options_json(a).find("\"classify_outlier_alpha\": 0"), std::string::npos) << options_json(a);
+  EXPECT_EQ(a.classify.outlier_alpha, 0.01);
+  EXPECT_NE(options_json(a).find("\"classify_outlier_alpha\": 0.01"), std::string::npos) << options_json(a);
   for (const char* bad : {"classify_outlier_alpha=-0.1\n", "classify_outlier_alpha=1\n", "classify_outlier_alpha=nan\n"}) {
     ChainOptions b;
     std::istringstream t(bad);

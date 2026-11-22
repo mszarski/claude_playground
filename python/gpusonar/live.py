@@ -77,9 +77,10 @@ DEFAULTS = {
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": None,
-                 # Through the measured positions at most one point the deleted-residual test finds an outlier at this
-                 # false-alarm probability per track is left out of the line (classify.py OUTLIER_ALPHA, sonar-ljh); 0: off.
-                 "outlier_alpha": 0.01,
+                 # Opt-in: through the measured positions at most one point the per-axis deleted-residual test finds an
+                 # outlier at this false-alarm probability per track is left out of the line (classify.py, sonar-ljh,
+                 # D-159; 0.01 measured); 0, the default: off.
+                 "outlier_alpha": 0.0,
                  # degrees: a track's fit limit is at least this times its range (rad x m) from the sonar; None: derived,
                  # four times a sixteenth of the beamwidth over sqrt(2) (libs/live derive.hpp, sonar-4jm)
                  "max_fit_rms_bearing_deg": None,

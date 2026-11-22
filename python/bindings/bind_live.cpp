@@ -440,7 +440,7 @@ void bind_live(py::module_& m) {
            py::arg("linear_width") = 2.0, py::arg("multipath") = false, py::arg("max_excess_range") = 800.0,
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
            py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none(),
-           py::arg("time") = py::none(), py::arg("fit_measured") = true, py::arg("outlier_alpha") = 0.01, py::arg("max_fit_rms_bearing") = 0.0,
+           py::arg("time") = py::none(), py::arg("fit_measured") = true, py::arg("outlier_alpha") = 0.0, py::arg("max_fit_rms_bearing") = 0.0,
            "classify_tracks on the confirmed tracks. fit_measured false: through their filtered history instead of the "
            "measured positions (the rule before D-157), for the tests that hold the classifier to its golden. "
            "outlier_alpha, max_fit_rms_bearing (rad): classify.py's (sonar-ljh, sonar-4jm; 0: off).");

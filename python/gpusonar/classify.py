@@ -61,7 +61,7 @@ def _given(at) -> bool:
     return at is not None and bool(np.isfinite(at))
 
 
-OUTLIER_ALPHA = 0.01   # the default false-alarm probability of the outlier test, per track (sonar-ljh; ours)
+OUTLIER_ALPHA = 0.0    # the outlier test off by default (owner, review of sonar-ljh); 0.01 is the probability measured on (D-159)
 
 
 def t_two_sided(t: float, nu: int) -> float:
@@ -215,8 +215,8 @@ def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
     `history` itself.
 
     `outlier_alpha` (sonar-ljh): through measured positions, at most one point is left out of the line, the one the
-    deleted-residual test (`_outlier`) finds an outlier at this false-alarm probability per track; 0 leaves every
-    point in. A glinting echo (popoto_12km: the ship side-on at the last ping, 23 to 66 m ahead of its centre along
+    deleted-residual test (`_outlier`) finds an outlier at this false-alarm probability per track; 0, the default (opt-in,
+    D-159), leaves every point in. A glinting echo (popoto_12km: the ship side-on at the last ping, 23 to 66 m ahead of its centre along
     track) otherwise pulls the line by its leverage at the end of the track. Filtered history is never tested: its
     points are not independent. `origin` ((x, y) in the track's frame): where the sonar is, which sets the range and
     cross-range axes the test takes the residuals in (`_outlier`); (0, 0), the frame's origin, by default."""
@@ -260,7 +260,8 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     track with fewer than three measured rows is a short track as above, from its last filtered point. A track that
     records no measurements (built by hand, a capture saved before D-157) is fitted through its history as before.
     `outlier_alpha` (sonar-ljh): at most one measured point that the deleted-residual test finds an outlier at this
-    false-alarm probability per track is left out of the line (`fit_velocity`); 0: every point in. The test takes the
+    false-alarm probability per track is left out of the line (`fit_velocity`); 0, the default (opt-in, D-159): every
+    point in. The test takes the
     residuals in range and cross-range about `origin` (below), each axis with its own variance. With no origin given and
     no multipath origin it is the frame's origin (0, 0), as libs/live ClassifyOptions::origin_x, origin_y default: the
     sonar's place in a frame that starts at the sonar. Chosen over the residuals' own principal axes, which are fitted to

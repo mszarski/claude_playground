@@ -356,20 +356,23 @@ def glinting_12km_track(glint=-50.0):
 def test_a_glinting_last_measurement_is_left_out_of_the_line():
     """sonar-ljh: a last measurement 80 m ahead along track (cross-range at 12 km) pulls the least-squares line through
     six points by its leverage at the end of the track (more than 15 m ahead, more than 6.4 m/s for 6.0 with every point
-    in); the per-axis deleted-residual test leaves it out at the default false-alarm probability, and the line through the
+    in); the per-axis deleted-residual test (opt-in, at 0.01) leaves it out, and the line through the
     other five is within 3 m and 0.1 m/s. Changed in review: with each axis's own variance the six-point test has 3
     degrees of freedom and needs |t| > 13.7, so the 50 m glint this test used before (|t| = 11.9 over +-3 m of scatter)
     is now kept, and that is asserted too."""
     truth = np.array((12000.0, 800.0 - 6.0 * 99.5))
     tr = glinting_12km_track(glint=-80.0)
-    (c,) = classify.classify_tracks([tr], time=99.5)
-    assert classify.fitted_points(tr) == 5
+    (c,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.01)
+    assert classify.fitted_points(tr, outlier_alpha=0.01) == 5
     assert np.hypot(*(np.asarray(c.position) - truth)) < 3.0 and c.speed == pytest.approx(6.0, abs=0.1)
     assert c.kind == "mover"
     (every,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.0)
     assert classify.fitted_points(tr, outlier_alpha=0.0) == 6
     assert truth[1] - every.position[1] > 15.0 and every.speed > 6.4          # pulled ahead and faster
-    assert classify.fitted_points(glinting_12km_track(glint=-50.0)) == 6     # too little evidence in six points
+    assert classify.fitted_points(glinting_12km_track(glint=-50.0), outlier_alpha=0.01) == 6     # too little evidence in six points
+    # Off by default (owner, D-159): every point in.
+    assert classify.OUTLIER_ALPHA == 0.0 and classify.fitted_points(tr) == 6
+    assert classify.classify_tracks([tr], time=99.5)[0].position == every.position
     # The filtered history is not tested (its points are not independent): the measurements left out, nothing changes.
     hist = classify.fit_velocity(tr.history, 99.5)
     assert np.array_equal(hist[0], classify.fit_velocity(tr.history, 99.5, outlier_alpha=0.0)[0])
@@ -394,7 +397,7 @@ def test_the_outlier_test_leaves_gaussian_scatter_and_exact_lines_alone():
     tracker = detect.Tracker(**LIVE_TRACKER_12KM)
     for at, d in popoto_12km_noise_free():
         tracks = tracker.update(at, [d])
-    assert classify.fitted_points(tracks[0]) == 6
+    assert classify.fitted_points(tracks[0], outlier_alpha=0.01) == 6
 
 
 def test_the_t_tail_is_scipys():

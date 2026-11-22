@@ -19,7 +19,8 @@
 //   tracker_association (likelihood | in_order)
 //   classify_min_speed classify_static_speed classify_max_fit_rms classify_max_fit_rms_bearing_deg (the fit limit's
 //   growth with range, degrees: a track's limit is at least this times its range; 0: off) classify_outlier_alpha
-//   (at most one measured point an outlier test finds at this probability is left out of a track's line; 0: off)
+//   (opt-in: at most one measured point an outlier test finds at this probability is left out of a track's line; 0, the
+//   default: off)
 //   classify_min_mover_cells multipath (0 | 1)
 //   sync (0 | 1) sync_f_start sync_f_stop sync_duration sync_lead sync_tail sync_dedicated (0 | 1)
 //   passive: n_fft hop n_average passive_method (sbl | conventional)

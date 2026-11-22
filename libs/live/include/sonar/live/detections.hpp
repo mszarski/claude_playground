@@ -148,8 +148,9 @@ struct ClassifyOptions {
   /// than three measured rows: a short track, from its last filtered point. No row measured: through x, y as before.
   double time = std::numeric_limits<double>::quiet_NaN();
   /// Through measured positions, at most one point the deleted-residual test finds an outlier at this false-alarm
-  /// probability per track is left out of the line (classify.py `outlier_alpha`, OUTLIER_ALPHA; sonar-ljh). 0: off.
-  double outlier_alpha = 0.01;
+  /// probability per track is left out of the line (classify.py `outlier_alpha`, OUTLIER_ALPHA; sonar-ljh). 0: off, the
+  /// default (opt-in, D-159).
+  double outlier_alpha = 0.0;
   /// rad, > 0: a track's fit limit is at least this times its range from (origin_x, origin_y) (classify.py
   /// `max_fit_rms_bearing`, sonar-4jm): the scatter of measured positions across the line of sight grows with range.
   /// Applies where max_fit_rms is a limit (not below 0). 0: off.
