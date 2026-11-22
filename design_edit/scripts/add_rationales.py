@@ -55,18 +55,26 @@ def main() -> None:
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
     rows = [json.loads(line) for line in open(args.src)]
-    with ThreadPoolExecutor(args.workers) as pool:
-        whys = list(pool.map(lambda r: rationale(r, args.model, token), rows))
-    kept = 0
-    with open(args.dst, "w") as f:
-        for r, why in zip(rows, whys):
+    key = lambda r: (r["before"], r["instruction"])  # noqa: E731
+    done = set()
+    if Path(args.dst).exists():  # resumable: skip rows already written
+        done = {key(json.loads(line)) for line in open(args.dst)}
+    todo = [r for r in rows if key(r) not in done]
+
+    def work(r):
+        return r, rationale(r, args.model, token)
+
+    kept = len(done)
+    with ThreadPoolExecutor(args.workers) as pool, open(args.dst, "a") as f:
+        for r, why in pool.map(work, todo):
             if not why:
                 continue  # rows without a usable rationale are dropped, so every target has the same format
             patch = r["completion"][0]["content"]
             r = {**r, "completion": [{"role": "assistant", "content": f"<think>\n{why}\n</think>\n{patch}"}]}
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush()
             kept += 1
-    print(f"kept {kept}/{len(rows)} -> {args.dst}")
+    print(f"have {kept}/{len(rows)} -> {args.dst}")
 
 
 if __name__ == "__main__":
