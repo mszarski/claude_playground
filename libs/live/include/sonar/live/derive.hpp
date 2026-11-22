@@ -59,7 +59,11 @@ constexpr double kTrainPerGuard = 3.0;           ///< CFAR training >= this many
 /// Tracker bearing sigma >= beamwidth / this. A centroid on a beam of width w at a signal-to-noise ratio s
 /// is good to about w / sqrt(2 s) (s as a power ratio): a sixteenth of a beam at 21 dB. Every array shipped
 /// today (beams of 1 to 14.5 degrees) stays under the standing 1 degree with it; a beam wider than 16 degrees
-/// does not.
+/// does not. Kept at the standing 1 degree for the Popoto array (floor 0.22 degrees) although a point target's bearing
+/// at 12 km scatters by 0.03 to 0.05 degrees in simulation (sonar-ym1): the report's line goes through the detections,
+/// not the filtered state (D-157), so the sigma no longer moves it (tests/python/test_detect.py
+/// test_the_12km_report_does_not_depend_on_the_trackers_bearing_sigma), and a ship's own detections scatter by more
+/// (23 to 66 m along track side-on at 12 km, 0.1 to 0.3 degrees). The sigma still sets the gate (D-99).
 constexpr double kBeamwidthsPerSigma = 16.0;
 constexpr double kMultipathSigmas = 3.0;         ///< multipath bearing gate >= this many bearing-sigma floors
 constexpr double kFitRmsSigmas = 4.0;            ///< classifier's fit limit >= this many range-sigma floors

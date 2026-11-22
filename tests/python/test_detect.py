@@ -515,3 +515,38 @@ def test_flagged_cells_are_grouped_by_the_detectors_rule_and_cluster_merges_only
     assert sorted(h.cells for h in merged) == [1, 1, 2, 3]
     three = max(merged, key=lambda h: h.cells)
     assert three.range == pytest.approx(float(ranges[[10, 13, 17]].mean())) and three.first_range == pytest.approx(float(ranges[10]))
+
+
+def test_the_12km_report_does_not_depend_on_the_trackers_bearing_sigma():
+    """sonar-ym1 (the derived tracker.bearing_sigma kept): the live chain derives 1 deg for the Popoto array (the standing
+    value; its floor, a sixteenth of a 3.57 deg beam, is 0.22 deg), while a point target's bearing at 12 km scatters by
+    0.03 to 0.05 deg in simulation (sonar-2hz). Since D-157 the report's line goes through the detections a track took,
+    not its filtered positions, so a smaller sigma no longer moves the report: the popoto_12km crossing with its last
+    detection 50 m ahead along track (the ship side-on), through both engines' trackers at 1, 0.22 and 0.05 deg, gives
+    one report to 1e-6 m in each engine while the Kalman states differ by metres. (The live chain on popoto_12km seeds
+    51-60 likewise: 0.25 and 0.05 deg give the 1 deg report to the last printed digit.)"""
+    import gpusonar as gs
+    from gpusonar import classify
+    from test_classify import LIVE_TRACKER_12KM, popoto_12km_noise_free
+    pings = popoto_12km_noise_free()
+    shift = np.array([-3.0, 3.0, 2.0, -2.0, 1.0, -50.0])          # along track (forward), m; negative: ahead
+    dets = []
+    for (t, d), s in zip(pings, shift):
+        p = d.xy() + np.array([0.0, s])
+        dets.append((t, detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[0], p[1])), 20.0, 1, time=d.time)))
+    reports, states = {}, {}
+    for deg in (1.0, 0.22, 0.05):
+        kw = dict(LIVE_TRACKER_12KM, bearing_sigma=float(np.radians(deg)))
+        py, cpp = detect.Tracker(**kw), gs.core.LiveTracker(**kw)
+        for t, d in dets:
+            confirmed = py.update(t, [d])
+            cpp.update(t, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+        (a,) = confirmed
+        (c,) = classify.classify_tracks([a], time=99.5)
+        (k,) = cpp.classify(time=99.5)
+        reports[deg] = (np.array(c.position), np.array(k["position"]))
+        states[deg] = a.state[:2].copy()
+    for deg in (0.22, 0.05):
+        for e in (0, 1):
+            np.testing.assert_allclose(reports[deg][e], reports[1.0][e], atol=1e-6)
+        assert np.hypot(*(states[deg] - states[1.0])) > 1.0
