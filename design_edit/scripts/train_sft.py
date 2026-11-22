@@ -81,6 +81,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0, help="data order and LoRA init (0 = the setting all earlier runs used)")
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
+    ap.add_argument("--adapter-only", action="store_true",
+                    help="push only the LoRA adapter (to <output>/adapter) and skip merging and the in-script eval")
     ap.add_argument("--no-think", action="store_true",
                     help="train/eval with enable_thinking=False (hybrid reasoning models, e.g. Qwen3.8)")
     ap.add_argument("--template-kwargs", default=None,
@@ -143,6 +145,19 @@ def main() -> None:
                                target_modules="all-linear", task_type="CAUSAL_LM"),
     )
     trainer.train()
+
+    if args.adapter_only:
+        # ~1 GB instead of a 60 GB merged checkpoint; eval_model.py --adapter <output>/adapter merges it at eval time.
+        trainer.model.save_pretrained("adapter")
+        if os.path.isdir("/data"):  # job volume: keeps the adapter even if the Hub upload fails
+            import shutil
+            shutil.copytree("adapter", f"/data/{args.output.replace('/', '__')}/adapter", dirs_exist_ok=True)
+        if not args.no_push:
+            from huggingface_hub import create_repo, upload_folder
+            create_repo(args.output, private=True, exist_ok=True)
+            upload_folder(repo_id=args.output, folder_path="adapter", path_in_repo="adapter")
+            print(f"pushed LoRA adapter to https://huggingface.co/{args.output}/tree/main/adapter")
+        return
 
     # Merge LoRA into the base so GRPO / serving can load a plain checkpoint.
     model = trainer.model.merge_and_unload()
