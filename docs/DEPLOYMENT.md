@@ -822,9 +822,11 @@ Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
   each: about 3 frames, or 20 ms of the stream at real time. Sensor Bridge raises the buffer
   only when it is smaller than one frame.
 - The losses fell while the receiving process ran the chain on a ping (90-470 ms of
-  multi-threaded work on all 8 cores). That delays Sensor Bridge's receiver thread, which is
-  pinned to core 2 by default, and also the sending process: the sender ran up to 9-29 ms
-  late.
+  multi-threaded work on all 8 cores). That delays Sensor Bridge's receiver thread and also
+  the sending process: the sender ran up to 9-29 ms late. Sensor Bridge 2.7.0's documentation
+  says its receiver thread is pinned to core 2 by default, but when `receive` gives no
+  `--receiver-core`, the thread (named `linux_receiver`) ran on every core in all monitored
+  runs: no thread of the process had a single-core affinity (issue sonar-ihd).
 - Until now the emulated board then sent the frames it owed back to back. `serve
   --catch-up spread`, now the default, never sends two frames less than half a frame period
   apart; `--catch-up burst` is the old behaviour. At real time burst lost frames in 3 of 14
@@ -836,13 +838,39 @@ Why real time lost a burst of datagrams, measured on an L4 with 8 vCPUs
 - A halved buffer (`receive --socket-buffer 53248`; the kernel doubles it to 106,496) still
   lost frames with spread. So the receiver falls more than about 10 ms behind while the chain
   runs: the margin at the default buffer is less than two to one.
+- What holds the receiver back (issue sonar-ihd, L4 jobs `6b035abc130a00b5aa812baf`,
+  `6b036716130a00b5aa814864`, `6b036c958d268c0fbd22dbc6`, `6b0370bd130a00b5aa815f4a`; the host
+  has 8 vCPUs, 4 cores with 2 threads each): the chain's `flank.backprojection_map`, which runs
+  one OpenMP thread per vCPU. While it runs, the receiver thread is ready to run but waits 5-13 ms
+  for a CPU, and the socket fills. The GIL is not involved (the receiver thread never takes it,
+  and a probe thread got the GIL throughout that stage); the C++ engine loses frames the same way;
+  the hypervisor took no time (`/proc/stat` steal 0). With the chain's OpenMP on 4 threads
+  (`receive --chain-omp-threads 4`) the worst delay from the board's send to the receiver
+  thread's receipt of a frame fell from 10-13 ms to 1-2 ms (3.1 ms in one run of 16). Frames
+  were lost under the halved buffer in 0 of 10 runs, against 9 of 15 without the option. Under the
+  default buffer, 0 of 6 runs lost frames, against 1 of 18. The cost is about 10 % on the chain's
+  time per ping (about 100 to 110 ms). Two threads also lost nothing (4 runs) at about +55 %;
+  7 threads still lost frames (4 of 6 halved-buffer runs).
+  Not enough on their own: pinning the receiver alone on a vCPU, a niceness of 10 for the
+  chain's threads. A real-time priority for the receiver could not be tried in these containers.
+  These measurements are ours.
 
 On a deployed host, follow Sensor Bridge's own setup guide (2.7.0
 `docs/user_guide/setup.mdx`). It raises the socket buffer limit with
 `net.core.rmem_max = 31326208` (lines 784-793, "for all configurations"). It also isolates
 the receiver's core with `isolcpus=2`, or moves the receiver with `HOLOLINK_AFFINITY`
 (lines 262-296, the Jetson section); `receive --receiver-core` does the same here. Neither
-was possible in the containers used.
+was possible in the containers used. Two settings work without privilege, and we advise both:
+
+- Cap the chain's OpenMP threads below the core count with `receive --chain-omp-threads N`,
+  for example half the cores. It is applied with `omp_set_num_threads` on the thread that
+  runs the chain, before the first ping, and so applies to the chain's parallel stages only.
+  Without it, OpenMP keeps its default (one thread per core, or `OMP_NUM_THREADS`). The
+  loopback test runs with half the CPUs available to it.
+- Ask for at least `net.core.rmem_max` with `receive --socket-buffer` (in bytes). The kernel
+  doubles what it grants, up to twice `rmem_max`. In those containers that is 425,984 bytes,
+  about 40 ms of the stream, against the 212,992 bytes Sensor Bridge leaves.
+  This adds margin but does not remove the stall.
 
 On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock emulator
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network
