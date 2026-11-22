@@ -15,14 +15,18 @@ with every other classify option the gallery's own for that scene. row_snr_db ac
 test (the FLS transit scenes); in the Popoto scenes its columns equal "off".
 
 Scoring (the gallery's own, gallery.classify_and_score through gallery.object_track; D-155): a true object is the
-scene item's centre moved by its velocity to the time the track's state holds (its last detection's time, transmit +
-range / c, D-156; the last ping for captures made before D-156); its track is the nearest confirmed track of an
+scene item moved by its velocity to the time the track's state holds (its last detection's time, transmit + range / c,
+D-156; the last ping for captures made before D-156), and a track's distance from it is the distance from its outline
+(gallery.TrueObject: the convex hull of an extended item's footprint, 0 inside; D-157) or, for a point object (and in a
+capture saved before D-157), from its centre; its track is the nearest confirmed track of an
 established kind (mover, static, line) within the gallery's gate for the scene, else the nearest of any kind within the gate
 (15 m in the FLS transit scenes, 200 m in the Popoto scenes; set in tools/gallery.py, not in the scene files). A
 target is correctly classed when its track is `mover` if the object moves and `static` if not. A false mover is a
 track classed `mover` whose classified position at the last ping is no closer than the gate to every moving object
 there. Each scored track's error against that truth is kept as well (position, and where the scene gives the
-ownship's last position, along and across the line of sight from it), with its fitted speed. Against the grid's (off, off) cell of
+ownship's last position, along and across the line of sight from it; from the outline, and as `centroid_*` from the
+centre), with its fitted speed. Tracks are classified through their measured positions (D-157) where the capture
+recorded them. Against the grid's (off, off) cell of
 the same capture: "lost" counts targets correct there and not correct with the rule; "gained" the reverse;
 "false movers removed" is the baseline's false movers minus the rule's.
 
@@ -96,11 +100,22 @@ def track_from_json(d: dict):
 
 
 def truth_to_json(truth: dict) -> dict:
-    return {k: {"position": [float(v) for v in pos], "velocity": [float(v) for v in vel]} for k, (pos, vel) in truth.items()}
+    """Each true object's centre and velocity, and its footprint (gallery.TrueObject: the outline at t = 0, world x, y)
+    when it is an extended object."""
+    out = {}
+    for k, obj in truth.items():
+        pos, vel = obj
+        out[k] = {"position": [float(v) for v in pos], "velocity": [float(v) for v in vel]}
+        if getattr(obj, "footprint", None) is not None:
+            out[k]["footprint"] = [[float(a) for a in q] for q in obj.footprint]
+    return out
 
 
 def truth_from_json(d: dict) -> dict:
-    return {k: (np.asarray(v["position"], dtype=float), np.asarray(v["velocity"], dtype=float)) for k, v in d.items()}
+    """gallery.TrueObject per label; a capture saved before D-157 has no footprints: every object is a point there."""
+    g = _gallery()
+    return {k: g.TrueObject(np.asarray(v["position"], dtype=float), np.asarray(v["velocity"], dtype=float), v.get("footprint"))
+            for k, v in d.items()}
 
 
 def _jsonable(v):
@@ -123,28 +138,43 @@ def _gallery():
     return gallery
 
 
-def _error(p, at, origin) -> dict:
-    """How far world point `p` is from `at`: the distance, and with `origin` (world x, y: the ownship) the part along
-    the line of sight from the origin to `at` (range: + beyond it) and across it (+ counter-clockwise seen from above,
-    x north and y east: to the left of the line of sight; the sign of the sonar-960 diagnosis)."""
-    d = np.asarray(p, dtype=float) - at
-    out = {"error_m": float(np.hypot(*d))}
+def _error(p, at, origin, outline=None) -> dict:
+    """How far world point `p` is from the object whose centre is at `at`: the distance, and with `origin` (world x, y:
+    the ownship) the part along the line of sight from the origin to `at` (range: + beyond it) and across it (+
+    counter-clockwise seen from above, x north and y east: to the left of the line of sight; the sign of the sonar-960
+    diagnosis). With `outline` (the object's outline there, gallery.object_outline; D-157) these are measured from the
+    outline's nearest point (0 inside it) and the same from the centre are `centroid_error_m`, `centroid_range_error_m`,
+    `centroid_cross_range_error_m` (the score before D-157); without, from the centre, both."""
+    at = np.asarray(at, dtype=float)
+    u = None
     if origin is not None:
         u = at - np.asarray(origin, dtype=float)
         u = u / np.hypot(*u)
-        out.update(range_error_m=float(d @ u), cross_range_error_m=float(u[1] * d[0] - u[0] * d[1]))
-    return out
+
+    def parts(d):
+        out = {"error_m": float(np.hypot(*d))}
+        if u is not None:
+            out.update(range_error_m=float(d @ u), cross_range_error_m=float(u[1] * d[0] - u[0] * d[1]))
+        return out
+    p = np.asarray(p, dtype=float)
+    centroid = parts(p - at)
+    near = at if outline is None else _gallery().outline_distance(p, outline)[1]
+    return {**parts(p - near), **{"centroid_" + k: v for k, v in centroid.items()}}
 
 
-def track_error(tr, c, pos, vel, t_last, origin=None) -> dict:
-    """A scored track's error against the object (world position at t = 0, velocity): its state against the object
-    where it was when the state holds (gallery.state_time: its last detection's time, D-156), and its classified
-    position `c` (classify_tracks at t_last: the live report's position) against the object at t_last."""
+def track_error(tr, c, obj, t_last, origin=None) -> dict:
+    """A scored track's error against the true object `obj` (gallery.TrueObject, or a (world position at t = 0,
+    velocity) pair: a point object): its state against the object where it was when the state holds (gallery.state_time:
+    its last detection's time, D-156), and its classified position `c` (classify_tracks at t_last: the live report's
+    position) against the object at t_last; each from the object's outline (an extended object, D-157) and from its
+    centre (`_error`)."""
     g = _gallery()
+    pos, vel = obj
     pos, vel = np.asarray(pos, dtype=float)[:2], np.asarray(vel, dtype=float)[:2]
-    state = _error((tr.state[1], tr.state[0]), pos + vel * g.state_time(tr), origin)
-    report = _error((c.position[1], c.position[0]), pos + vel * t_last, origin)
-    return {"state_time_s": g.state_time(tr), **{"state_" + k: v for k, v in state.items()},
+    t_state = g.state_time(tr)
+    state = _error((tr.state[1], tr.state[0]), pos + vel * t_state, origin, g.object_outline(obj, t_state))
+    report = _error((c.position[1], c.position[0]), pos + vel * t_last, origin, g.object_outline(obj, t_last))
+    return {"state_time_s": t_state, **{"state_" + k: v for k, v in state.items()},
             **{"report_" + k: v for k, v in report.items()}}
 
 
@@ -158,17 +188,17 @@ def score(classes, tracks, truth: dict, t_last: float, gate: float, origin=None)
     kinds = {c.id: c.kind for c in classes}
     by_id = {c.id: c for c in classes}
     targets, moving_ends = {}, []
-    for label, (pos, vel) in truth.items():
-        end = np.asarray(pos)[:2] + np.asarray(vel)[:2] * t_last
+    for label, obj in truth.items():
+        pos, vel = obj
         moving = bool(np.hypot(*np.asarray(vel)[:2]) > 0.0)
         if moving:
-            moving_ends.append(end)
-        best = g.object_track(tracks, kinds, (pos, vel), gate)
+            moving_ends.append(g.object_outline(obj, t_last))
+        best = g.object_track(tracks, kinds, obj, gate)
         if best is not None:
             kind = kinds[best.id]
             targets[label] = {"tracked": True, "kind": kind, "moving": moving,
                               "correct": kind == ("mover" if moving else "static"),
-                              **track_error(best, by_id[best.id], pos, vel, t_last, origin), "speed_m_s": float(by_id[best.id].speed)}
+                              **track_error(best, by_id[best.id], obj, t_last, origin), "speed_m_s": float(by_id[best.id].speed)}
         else:
             targets[label] = {"tracked": False, "kind": None, "moving": moving, "correct": False}
     return {"targets": targets, "false_movers": g.count_false_movers(classes, moving_ends, gate)}
@@ -203,7 +233,9 @@ def compact(evaluated: dict) -> dict:
     scored track's error and fitted speed (track_error)."""
     first = next(iter(evaluated), None)
     keep = ("state_time_s", "state_error_m", "state_range_error_m", "state_cross_range_error_m", "report_error_m",
-            "report_range_error_m", "report_cross_range_error_m", "speed_m_s")
+            "report_range_error_m", "report_cross_range_error_m", "state_centroid_error_m", "state_centroid_range_error_m",
+            "state_centroid_cross_range_error_m", "report_centroid_error_m", "report_centroid_range_error_m",
+            "report_centroid_cross_range_error_m", "speed_m_s")
     return {key: {"kinds": {lab: t["kind"] for lab, t in s["targets"].items()}, "false_movers": s["false_movers"],
                   "lost": s["lost"], "gained": s["gained"], "counts": s["counts"],
                   **({"errors": {lab: {k: t[k] for k in keep if k in t} for lab, t in s["targets"].items() if t["tracked"]}}
@@ -436,11 +468,16 @@ def main(argv=None):
               "commit": commit, "grid": {k: r for k, r in grid()},
               "association": "a true object takes the nearest confirmed track of an established kind (mover, static, "
                              "line) within the gallery's gate (gate_m), else the nearest of any kind within it; each track "
-                             "is compared with the object (scene item centre moved by its velocity) at the time the "
-                             "track's state holds, its last detection's reflection time, transmit + R/c (D-156; "
-                             "gallery.object_track, state_time). A false mover is a mover whose class position at the "
-                             "last ping (classify_tracks time = t_last) is no closer than the gate to every moving "
-                             "object's position at the last ping (gallery.classify_and_score, count_false_movers)",
+                             "is compared with the object moved by its velocity to the time the track's state holds, its "
+                             "last detection's reflection time, transmit + R/c (D-156; gallery.object_track, state_time): "
+                             "an extended object (several points, a hull, a boat, a small box) by the distance from its "
+                             "outline (the convex hull of its footprint; 0 inside), ties by the distance from its centre, "
+                             "a point object by the distance from its centre (D-157; gallery._miss). error_m is from the "
+                             "outline, centroid_error_m from the centre (the score before D-157). A false mover is a mover "
+                             "whose class position at the last ping (classify_tracks time = t_last) is no closer than the "
+                             "gate to every moving object's outline at the last ping (gallery.classify_and_score, "
+                             "count_false_movers). Tracks are classified through their measured positions where the "
+                             "capture recorded them (D-157)",
               "captures": info, **agg,
               "per_capture": {sc: {str(sd): compact(v) for sd, v in d.items()} for sc, d in per_capture.items()}}
     text = table(agg)

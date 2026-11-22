@@ -371,19 +371,24 @@ def run_flank(name, cfg, backend, quick):
     for item in cfg["scene"]:
         n = len(item["positions"])
         v = np.asarray(item.get("velocity", (0.0, 0.0, 0.0)), dtype=float)
-        truth[item["label"]] = (np.asarray(item["positions"], dtype=float).mean(axis=0), v)
+        truth[item["label"]] = TrueObject(np.asarray(item["positions"], dtype=float).mean(axis=0), v, item_footprint(item))
         start += n
     metrics = {"pings": len(result.records), "detections_per_ping": counts, "confirmed_tracks": len(tracks), "targets": {}}
-    for label, (pos, vel) in truth.items():
-        def miss(t):                                   # against the truth where the track's state holds (D-156)
-            return float(np.linalg.norm(t.state[:2] - (pos[:2] + vel[:2] * state_time(t))))
-        best = min(tracks, key=miss, default=None)
+    for label, obj in truth.items():
+        pos, vel = obj
+
+        def miss(t, centre=False):                     # against the truth where the track's state holds (D-156)
+            # This tracker's state is (x, y) in the world frame: from the object's outline (D-157), or its centre.
+            if centre:
+                return float(np.linalg.norm(t.state[:2] - (pos[:2] + vel[:2] * state_time(t))))
+            return outline_distance(t.state[:2], object_outline(obj, state_time(t)))[0]
+        best = min(tracks, key=lambda t: (miss(t), miss(t, True)), default=None)
         if best is None:
             metrics["targets"][label] = {"tracked": False}
             continue
         metrics["targets"][label] = {
             "tracked": bool(miss(best) < 60.0),
-            "position_error_m": miss(best),
+            "position_error_m": miss(best), "centroid_error_m": miss(best, True),
             "true_velocity": [float(vel[0]), float(vel[1])],
             "track_velocity": [float(best.state[2]), float(best.state[3])]}
     ranges, power, hits = first
@@ -494,27 +499,121 @@ def score_tracks(tracks, truth, t_last, gate, kinds=None):
     with the classes `kinds` (track id -> kind; D-155), so that the position, the velocity and the class reported for
     an object come from the same track. Without `kinds`, the nearest track within `gate`. No track within `gate`: the
     nearest track's error, not tracked. Each track is compared with the object where it was when the track's state
-    holds (`state_time`; D-156). `t_last` is kept for the callers. The states do not all hold at it: a track that took
-    a detection on the last ping holds at t_last + R/c, its reflection time, and one that missed it at t_last or, with a
-    ping interval shorter than R/c, at its last detection's reflection time if that is later."""
+    holds (`state_time`; D-156): `position_error_m` (and the gate) from its outline for an extended object (`_miss`,
+    D-157), `centroid_error_m` from its centre (the score before D-157; the same for a point object). `t_last` is kept
+    for the callers. The states do not all hold at it: a track that took a detection on the last ping holds at
+    t_last + R/c, its reflection time, and one that missed it at t_last or, with a ping interval shorter than R/c, at
+    its last detection's reflection time if that is later."""
     kinds = kinds if kinds is not None else {tr.id: "uncertain" for tr in tracks}
     out = {}
-    for label, (pos, vel) in truth.items():
-        best = object_track(tracks, kinds, (pos, vel), gate)
+    for label, obj in truth.items():
+        pos, vel = obj
+        best = object_track(tracks, kinds, obj, gate)
         if best is None:
-            best = min(tracks, key=lambda tr: _miss(tr, pos, vel), default=None)
+            best = min(tracks, key=lambda tr: (_miss(tr, obj), _centroid_miss(tr, obj)), default=None)
         if best is None:
             out[label] = {"tracked": False}
             continue
-        err = _miss(best, pos, vel)
-        out[label] = {"tracked": bool(err < gate), "position_error_m": err,
+        err = _miss(best, obj)
+        out[label] = {"tracked": bool(err < gate), "position_error_m": err, "centroid_error_m": _centroid_miss(best, obj),
                       "true_velocity_xy": [float(vel[0]), float(vel[1])],
                       "track_velocity_xy": [float(best.state[3]), float(best.state[2])]}
     return out
 
 
+class TrueObject(tuple):
+    """A true object: (centre at t = 0, velocity), as a pair, with `footprint`, its horizontal outline at t = 0 (world
+    x, y: the corners of the convex hull of what the scene puts there, an (N, 2) array), or None for a point object.
+    An extended object (a ship of several points, a hull, a boat) is scored by the distance from a track to that
+    outline, moved by the velocity (`outline_distance`); a point object by the distance to its centre, as before.
+    Ours (D-157): the popoto_12km ship is five points over 120 m, and a track on its bow or stern was scored 60 m off."""
+
+    def __new__(cls, centre, velocity, footprint=None):
+        obj = super().__new__(cls, (np.asarray(centre, dtype=float), np.asarray(velocity, dtype=float)))
+        obj.footprint = None if footprint is None else convex_hull(np.asarray(footprint, dtype=float).reshape(-1, 2))
+        return obj
+
+    def __reduce__(self):
+        return (TrueObject, (self[0], self[1], self.footprint))
+
+
+def convex_hull(points) -> np.ndarray:
+    """The corners of the convex hull of 2-D points, counter-clockwise (Andrew's monotone chain); collinear points give
+    the segment's two ends, one point itself."""
+    pts = sorted({(float(x), float(y)) for x, y in np.asarray(points, dtype=float).reshape(-1, 2)})
+    if len(pts) <= 2:
+        return np.array(pts, dtype=float).reshape(-1, 2)
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lower, upper = [], []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0.0:
+            lower.pop()
+        lower.append(p)
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0.0:
+            upper.pop()
+        upper.append(p)
+    return np.array(lower[:-1] + upper[:-1], dtype=float)
+
+
+def outline_distance(p, outline) -> tuple[float, np.ndarray]:
+    """How far 2-D point `p` is from a convex outline (`convex_hull`'s corners: one point, a segment or a polygon),
+    and the outline's nearest point to it: 0 and `p` itself inside a polygon."""
+    p = np.asarray(p, dtype=float)[:2]
+    q = np.asarray(outline, dtype=float).reshape(-1, 2)
+    if len(q) >= 3:
+        edges = np.roll(q, -1, axis=0) - q
+        if np.all(edges[:, 0] * (p[1] - q[:, 1]) - edges[:, 1] * (p[0] - q[:, 0]) >= 0.0):
+            return 0.0, p.copy()
+    best, near = np.inf, q[0]
+    for a, b in zip(q, np.roll(q, -1, axis=0) if len(q) > 1 else q):
+        ab = b - a
+        u = 0.0 if not ab @ ab > 0.0 else float(np.clip((p - a) @ ab / (ab @ ab), 0.0, 1.0))
+        c = a + u * ab
+        d = float(np.hypot(*(p - c)))
+        if d < best:
+            best, near = d, c
+    return best, near
+
+
+def object_outline(obj, t: float) -> np.ndarray:
+    """The object's outline at time `t` (world x, y; (N, 2)): its footprint, or its centre for a point object, moved by
+    its velocity."""
+    pos, vel = obj
+    shift = np.asarray(vel, dtype=float)[:2] * float(t)
+    fp = getattr(obj, "footprint", None)
+    base = np.asarray(pos, dtype=float)[:2].reshape(1, 2) if fp is None else fp
+    return base + shift
+
+
+def item_footprint(item):
+    """The horizontal outline at t = 0 of a scene item that is an extended target (world x, y), or None: `points` with
+    more than one position (their convex hull), a `hull` or `boat` (the plan of the simulator's hull, scene.hull_points:
+    `length` along `heading_deg` about `origin`, half-breadth beam / 2 sqrt(1 - |2u - 1|^3)), a box target given by
+    `x_range`, `y_range` (its rectangle). Anything else (a sphere, one point) is a point object."""
+    kind = item.get("type")
+    if "positions" in item and len(item["positions"]) > 1:
+        return convex_hull(np.asarray(item["positions"], dtype=float)[:, :2])
+    if kind in ("hull", "boat") and "origin" in item:
+        length, beam = float(item["length"]), float(item["beam"])
+        u = np.linspace(0.0, 1.0, 41)
+        half = 0.5 * beam * np.sqrt(np.maximum(1.0 - np.abs(2.0 * u - 1.0) ** 3, 0.0))
+        along, across = (u - 0.5) * length, half
+        local = np.concatenate([np.stack([along, across], 1), np.stack([along, -across], 1)])
+        h = np.radians(float(item.get("heading_deg", 0.0)))
+        rot = np.array([[np.cos(h), -np.sin(h)], [np.sin(h), np.cos(h)]])
+        return convex_hull(local @ rot.T + np.asarray(item["origin"], dtype=float)[:2])
+    if "x_range" in item:
+        (x0, x1), (y0, y1) = item["x_range"], item["y_range"]
+        return convex_hull([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+    return None
+
+
 def scene_truth(cfg):
-    """{label: (centre at t = 0, velocity)} of a scenario's scene items."""
+    """{label: TrueObject (centre at t = 0, velocity; with the item's footprint, `item_footprint`)} of a scenario's
+    scene items."""
     truth = {}
     for item in cfg["scene"]:
         if "positions" in item:
@@ -529,7 +628,8 @@ def scene_truth(cfg):
             centre = np.array([np.mean(item["x_range"]), np.mean(item["y_range"]), float(item.get("depth", 0.0))])
         else:
             continue
-        truth[item["label"]] = (centre, np.asarray(item.get("velocity", (0.0, 0.0, 0.0)), dtype=float))
+        truth[item["label"]] = TrueObject(centre, np.asarray(item.get("velocity", (0.0, 0.0, 0.0)), dtype=float),
+                                          item_footprint(item))
     return truth
 
 
@@ -541,50 +641,58 @@ KIND_STYLE = {"mover": dict(color="#eb6834", lw=3.0, zorder=4), "static": dict(c
 ESTABLISHED = ("mover", "static", "line")
 
 
-def _miss(tr, pos, vel):
-    """How far (m) a track's state is from the object (world position at t = 0, velocity) where the object was when
-    the state holds (`state_time`)."""
+def _miss(tr, obj):
+    """How far (m) a track's state is from the true object `obj` (TrueObject, or a (world position at t = 0, velocity)
+    pair: a point object) where the object was when the state holds (`state_time`): from its outline (`object_outline`;
+    0 inside it) for an extended object, from its centre for a point object (D-157)."""
+    return outline_distance((tr.state[1], tr.state[0]), object_outline(obj, state_time(tr)))[0]
+
+
+def _centroid_miss(tr, obj):
+    """`_miss` from the object's centre, whatever its extent (the score before D-157)."""
+    pos, vel = obj
     at = np.asarray(pos, dtype=float)[:2] + np.asarray(vel, dtype=float)[:2] * state_time(tr)
     return float(np.hypot(tr.state[1] - at[0], tr.state[0] - at[1]))
 
 
 def object_track(tracks, kinds, obj, gate):
-    """The track scored for a true object `obj` = (world position at t = 0, velocity): the nearest track of an
-    established kind (mover, static, line) within `gate`; if there is none, the nearest track of any kind within
-    `gate`, so that an object seen only as uncertain or multipath is still reported; None if no track is that near.
-    Each track is compared with the object where it was when the track's state holds (`state_time`: its last
-    detection's time, D-156). `kinds` maps track id to kind. Ours (D-155): with an object seen as a dozen arrivals
-    (popoto_12km), the nearest track of any kind is a coin toss among them, often a four-point uncertain track or a
-    multipath child."""
-    pos, vel = obj
-
+    """The track scored for a true object `obj` (TrueObject; a (world position at t = 0, velocity) pair is a point
+    object): the nearest track of an established kind (mover, static, line) within `gate`; if there is none, the
+    nearest track of any kind within `gate`, so that an object seen only as uncertain or multipath is still reported;
+    None if no track is that near. Each track is compared with the object where it was when the track's state holds
+    (`state_time`: its last detection's time, D-156), by `_miss`: the distance from the object's outline for an
+    extended object (D-157), ties (several tracks on it) broken by the distance from its centre. `kinds` maps track id
+    to kind. Ours (D-155): with an object seen as a dozen arrivals (popoto_12km), the nearest track of any kind is a coin
+    toss among them, often a four-point uncertain track or a multipath child."""
     def dist(tr):
-        return _miss(tr, pos, vel)
-    near = [tr for tr in tracks if dist(tr) < gate]
+        return (_miss(tr, obj), _centroid_miss(tr, obj))
+    near = [tr for tr in tracks if dist(tr)[0] < gate]
     est = [tr for tr in near if kinds[tr.id] in ESTABLISHED]
     return min(est or near, key=dist, default=None)
 
 
 def count_false_movers(classes, moving_ends, gate):
-    """Tracks classed `mover` no closer than `gate` to every moving object's position at the last ping."""
-    return int(sum(c.kind == "mover" and all(np.hypot(c.position[1] - e[0], c.position[0] - e[1]) >= gate for e in moving_ends)
-                   for c in classes))
+    """Tracks classed `mover` no closer than `gate` to every moving object at the last ping: `moving_ends` holds each
+    moving object's outline there (`object_outline` at the last ping; a point object's is its position, one (x, y))."""
+    def far(c, e):
+        return outline_distance((c.position[1], c.position[0]), e)[0] >= gate
+    return int(sum(c.kind == "mover" and all(far(c, e) for e in moving_ends) for c in classes))
 
 
 def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
     the kind given to each true object's track (object_track) and how many tracks called
-    movers are not on an object that moves (count_false_movers). The classes' positions are taken at the last ping
-    (`t_last`), as the live report gives them (D-156)."""
+    movers are not on an object that moves (count_false_movers, against each moving object's outline at the last
+    ping: D-157). The classes' positions are taken at the last ping (`t_last`), as the live report gives them (D-156)."""
     classes = classify.classify_tracks(tracks, time=t_last, **kw)
     by_id = {c.id: c for c in classes}
     out = {"counts": classify.summary(classes), "targets": {}}
     moving_ends = []
-    for label, (pos, vel) in truth.items():
-        end = pos[:2] + vel[:2] * t_last
+    for label, obj in truth.items():
+        pos, vel = obj
         if np.hypot(*vel[:2]) > 0.0:
-            moving_ends.append(end)
-        best = object_track(tracks, {c.id: c.kind for c in classes}, (pos, vel), gate)
+            moving_ends.append(object_outline(obj, t_last))
+        best = object_track(tracks, {c.id: c.kind for c in classes}, obj, gate)
         if best is not None:
             c = by_id[best.id]
             out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
