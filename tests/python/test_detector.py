@@ -671,12 +671,30 @@ def test_a_plan_whose_first_scale_is_not_the_single_sample_is_refused_by_both_en
             core.live_multiscale_detect(fine, mean, fr, cr, b, 2, 4, bad, backend=core.Backend.Host)
 
 
+def _same_report(a, b, path=""):
+    """Two parsed report lines alike: the same keys, lists and words; numbers within 1e-6 (absolute) or 1e-9 (relative)."""
+    if isinstance(a, dict):
+        assert isinstance(b, dict) and a.keys() == b.keys(), path
+        for k in a:
+            _same_report(a[k], b[k], f"{path}.{k}")
+    elif isinstance(a, list):
+        assert isinstance(b, list) and len(a) == len(b), path
+        for n, (x, y) in enumerate(zip(a, b)):
+            _same_report(x, y, f"{path}[{n}]")
+    elif isinstance(a, float) or isinstance(b, float):
+        assert b == pytest.approx(a, rel=1e-9, abs=1e-6), path
+    else:
+        assert a == b, path
+
+
 def test_range_estimate_centroid_given_is_the_output_from_before_d158():
-    """D-158: `cfar.range_estimate: centroid` given restores the chain's output from before the default became first,
-    byte for byte: the report lines of both engines on two short scenarios (a flank array with a crossing and a still
-    target; a long-range array with late arrivals) against tests/python/data/centroid_d158.json, which
-    data/make_centroid_d158.py wrote with the code of 42d4539 and no range_estimate given. The default (first) moves
-    the ranges of the multiscale detections, so it is not that output."""
+    """D-158: `cfar.range_estimate: centroid` given restores the chain's output from before the default became first:
+    the report lines of both engines on two short scenarios (a flank array with a crossing and a still target; a
+    long-range array with late arrivals) against tests/python/data/centroid_d158.json, which data/make_centroid_d158.py
+    wrote with the code of 42d4539 and no range_estimate given. On the machine that wrote the file the lines are
+    byte for byte the same (checked when it was made); elsewhere the floating point of the libraries can differ in
+    the last digits (the L4 job's Python engine did), so here numbers are held to 1e-6 m (1e-9 relative) and the
+    rest exactly. The default (first) moves the ranges of the multiscale detections by 0.25 m and more: not that output."""
     import pathlib
     import sys
     sys.path.insert(0, str(pathlib.Path(__file__).parent / "data"))
@@ -689,6 +707,11 @@ def test_range_estimate_centroid_given_is_the_output_from_before_d158():
     assert got.keys() == want.keys()
     for name in want:
         for engine in ("cpp", "python"):
-            assert got[name][engine] == want[name][engine], (name, engine)
+            assert len(got[name][engine]) == len(want[name][engine]), (name, engine)
+            for n, (g, w) in enumerate(zip(got[name][engine], want[name][engine])):
+                _same_report(json.loads(w), json.loads(g), f"{name}/{engine}/{n}")
     default = golden.reports()
-    assert any(default[name][engine] != want[name][engine] for name in want for engine in ("cpp", "python"))
+    for engine in ("cpp", "python"):
+        moved = [abs(json.loads(g)["detections"][k]["range_m"] - json.loads(w)["detections"][k]["range_m"])
+                 for g, w in zip(default["popoto"][engine], want["popoto"][engine]) for k in range(len(json.loads(w)["detections"]))]
+        assert max(moved) > 0.25, engine
