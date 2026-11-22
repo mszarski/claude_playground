@@ -122,7 +122,7 @@ const char* kind_name(Kind kind);
 struct TrackClass {
   std::int64_t id = 0;
   Kind kind = Kind::Uncertain;
-  double x = 0.0, y = 0.0;    ///< fitted position (across, forward) at ClassifyOptions::time, else at the track's last point
+  double x = 0.0, y = 0.0;    ///< fitted position (across, forward) at ClassifyOptions::time, else at the track's last history point
   double vx = 0.0, vy = 0.0;  ///< fitted velocity
   double speed = 0.0, speed_sigma = 0.0, fit_rms = 0.0, seen = 0.0, mean_snr_db = 0.0;
   std::int64_t parent = -1;   ///< for multipath: the track it echoes

@@ -872,7 +872,7 @@ def test_backend_cuda_without_a_device_is_an_error_and_auto_falls_back(engine):
         pipeline.run({"backend": "cuda", "steps": []})
 
 
-@pytest.mark.parametrize("drop", [(), (3,)])
+@pytest.mark.parametrize("drop", [(), (3,), (5,)])
 def test_both_engines_fit_the_measured_positions_of_a_noise_free_12km_crossing(drop):
     """D-157 in both engines (test_classify.test_a_noise_free_12km_crossing_is_reported_where_the_ship_is): the same
     measured rows (NaN on the missed ping), the same class, position and velocity, within 2 m of the ship at the last
@@ -891,3 +891,11 @@ def test_both_engines_fit_the_measured_positions_of_a_noise_free_12km_crossing(d
     assert want.kind == got["kind"]
     assert np.allclose(want.position, got["position"], atol=1e-6) and np.allclose(want.velocity, got["velocity"], atol=1e-8)
     assert np.hypot(*(np.asarray(got["position"]) - (12000.0, 800.0 - 6.0 * 99.5))) < 2.0
+    # No time given: at the last history row's time (its detection's, or the ping's, 99.5 s, when it missed the last
+    # ping: drop (5,)), both engines.
+    last = tr.history[-1][0]
+    assert (last == 99.5) == (5 in drop)
+    (want,) = classify.classify_tracks(a)
+    (got,) = cpp.classify()
+    assert np.allclose(want.position, got["position"], atol=1e-6)
+    assert np.hypot(*(np.asarray(got["position"]) - (12000.0, 800.0 - 6.0 * last))) < 2.0

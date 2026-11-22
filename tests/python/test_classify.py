@@ -319,3 +319,18 @@ def test_rows_of_misses_are_left_out_of_the_fit():
     assert tuple(pos) == (12.0, 60.0) and tuple(v) == (0.0, 0.0) and sigma == np.inf
     with pytest.raises(ValueError, match="measured rows"):
         classify.fit_velocity(short.history, None, None, short.measured[:2])
+
+
+def test_without_a_time_a_track_that_missed_its_last_ping_is_reported_at_that_ping():
+    """D-157 review: with no time given the position is the fitted line's at the track's last history row (its last
+    ping), not at its last measured row. The ship missed the last ping (transmit 99.5 s): reported where it is at that
+    row's time, not 11.9 s (71 m) behind, where it was at its last detection."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free(drop=(5,)):
+        tracks = tracker.update(t, [] if d is None else [d])
+    (tr,) = tracks
+    assert np.isnan(tr.measured[-1]).all() and tr.history[-1][0] == 99.5
+    for at in (None, float("nan")):
+        (c,) = classify.classify_tracks([tr], time=at)
+        assert np.hypot(*(np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5))) < 1e-6

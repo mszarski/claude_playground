@@ -36,7 +36,7 @@ std::vector<HistoryPoint> fit_points(const std::vector<HistoryPoint>& h) {
 }
 
 // Least-squares straight line through (time, x, y) of fit_points(h); the position on it at `at` (NaN, or any value that
-// is not finite: at the last point's time). With fewer than three points, or no time between them (max - min, as
+// is not finite: at the time of the last row of `history`, the last ping). With fewer than three points, or no time between them (max - min, as
 // numpy.ptp), no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
 // Kalman state's velocity (classify.py fit_velocity). `n_fit` receives the number of points fitted.
 Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, std::int64_t& n_fit) {
@@ -80,7 +80,8 @@ Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx,
     const double rx = p.x - (xm + tc * f.vx), ry = p.y - (ym + tc * f.vy);
     ss += rx * rx + ry * ry;
   }
-  const double tc_last = (std::isfinite(at) ? at : h.back().time) - tm;
+  // No time given: the last history row's (the last ping), also when the measured rows end earlier (classify.py).
+  const double tc_last = (std::isfinite(at) ? at : history.back().time) - tm;
   f.x = xm + tc_last * f.vx;
   f.y = ym + tc_last * f.vy;
   f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(n) - 4, 1)));

@@ -63,7 +63,7 @@ def _given(at) -> bool:
 
 def fit_velocity(history, at: float | None = None, velocity=None, measured=None) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
-    Returns the position on the line at `at` (s; None or NaN: at the last point's time), velocity, RMS residual and the
+    Returns the position on the line at `at` (s; None or NaN: at the time of the last row of `history`), velocity, RMS residual and the
     velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
     last point, moved to `at` by `velocity` ((vx, vy), the track's Kalman state's) when both are given.
 
@@ -94,7 +94,9 @@ def fit_velocity(history, at: float | None = None, velocity=None, measured=None)
     res = xy - fit
     # Two coordinates, two fitted parameters each.
     rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
-    pos = xy.mean(axis=0) + (float(at) - t.mean()) * v if _given(at) else fit[-1]
+    # No time given: the last history row's (the track's last ping), also when the measured rows end earlier (a track
+    # that missed its last pings), as the short-track rule above.
+    pos = xy.mean(axis=0) + ((float(at) if _given(at) else last_t) - t.mean()) * v
     return pos, v, rms, float(rms / np.sqrt((tc**2).sum()))
 
 
@@ -126,8 +128,8 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     `detections` switches on the rules from the detections themselves (module docstring):
     {"min_mover_cells": cells or None, "row_snr_db": dB or None}; None or {} changes nothing.
     `time` (s, the tracker's clock): every position is the fitted line's at that time, the report's (D-156: a track's
-    last point is its last detection's time, transmit + range / c, not the ping's); None: at each track's last point,
-    which is the ping's time wherever detections carry no time of their own; NaN as None (the C++ engine's NaN). The
+    last point is its last detection's time, transmit + range / c, not the ping's); None: at each track's last history
+    point (its last ping, also when it missed it), which is the ping's time wherever detections carry no time of their own; NaN as None (the C++ engine's NaN). The
     rules that compare positions (row, echo grouping) then compare them at one time. A track too short for a fit (fewer
     than three points) is moved from its last point to `time` by its Kalman state's velocity (`state[2:4]`), when it
     carries one.
