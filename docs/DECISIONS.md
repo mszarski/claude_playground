@@ -2712,3 +2712,44 @@ the cross-range mean stays -23.3 m with `first`, a glint spread over several pin
 - **Validated:** merged tree 02593ef: local tests of the touched files 307 passed; GPU suite, HF job
   6b02c630efaf5e14f4b86a50, 1713 passed, 92 skipped, 1 failed (the loopback above).
 
+### D-161 Flank stream receive: blocks placed by their sample counter; pings lost whole counted; repeats told from restarts (owner's request, issues sonar-ilb, sonar-070)
+
+Before, a frame arriving after a later-numbered one opened a gap and its ping was dropped although
+every frame arrived; a ping whose frames were all lost was not counted in `dropped_pings`; and
+without frame numbers a repeated frame was taken for a restart and dropped a complete ping. Both
+assemblers (Python `flank_stream.PingAssembler`, also under `FlankUdpSource` and the Sensor Bridge
+`FrameReceiver`; C++ `live::PingAssembler`, under `sonar_live` and the Holoscan `UdpSourceOp`)
+follow the same rules, all ours:
+- **Placement:** blocks go to their place by the sample counter. An earlier ping stays open beside
+  a later one only for the reorder grace, `reorder_blocks` = 2 blocks; at most 2 are open, so at
+  most 2 raw windows (about 2 x 116 MB with the default flank_32 window; one before). A ping
+  transmitted before the previous window closes gives that one up at once, as before: in-order
+  streams, overlapping ones included, give the records and counts they gave before. Records come
+  out in transmit order; a complete ping waits only while an earlier one is undecided, at most 2
+  blocks (12.5 ms with 400-sample Sensor Bridge frames); in order nothing waits.
+- **Holes** are given up (`lost_samples`) 2 blocks after them, or with the ping whose window they
+  cut. `finish()` gives up what is still awaited at the end of a stream; pings a stopped caller
+  discards are counted in `pings_discarded_at_stop`. Rows held behind holes on the decimating
+  path are at most `max_held_bytes` = 64 MiB in all; past it the earliest open ping is given up.
+- **Pings lost whole:** a jump of d in the header's ping index counts d - 1 dropped pings when the
+  transmits are d median intervals apart (last 5 intervals, within half an interval, and beyond
+  d - 1 of the longest recent interval by half an interval); before an interval is known nothing
+  is counted. Known failure: a sender that skips indices over a gap near d intervals is counted as
+  a loss (4 of 4000 fuzzed streams made to renumber).
+- **Repeats and restarts:** a block that does not fit the stream is held. A restart needs two
+  contiguous blocks of another capture start, or of the same one lying a restart span before the
+  first sample heard, or 8 consistent blocks in a row; a stale copy (samples already received)
+  meets none of these except as a burst of 8 while the stream is silent. A capture left is never
+  returned to. Without frame numbers `frames_lost` stays 0.
+- **Counters:** `frames_lost` (numbered frames given up), `frames_late`, `frames_too_late` (once
+  per frame), `frames_repeated` (duplicates only), `trouble_frames` (when a loss is given up),
+  `pings_discarded_at_stop`, `open_peak`, `held_peak_bytes`. pings + dropped_pings +
+  pings_discarded_at_stop = pings heard; no ping is both emitted and dropped.
+- **Refused:** a block naming a transmit at or beyond its own end, and sample indices at or above
+  2^62 (Python `BlockError`, C++ `bad_blocks`).
+- **Reviewed twice** (independent reviewers with cross-engine fuzz: 1000-4000 streams per script,
+  hostile headers, a comparison with the code before over 600 in-order streams, 310 of them
+  overlapping, records identical). **Validated:** local receive tests 119 passed; GPU suite on the
+  merged tree, HF job 6b036ba48d268c0fbd22d9fe, 1808 passed, 92 skipped, Holoscan operators
+  compiled.
+
