@@ -9,6 +9,7 @@ dimensions only noticed changes to *other* elements.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import re
@@ -75,7 +76,7 @@ def judge(before_png: bytes, after_png: bytes, request: str, patch: str, model: 
                 out = json.loads(m.group(0))
                 if all(isinstance(out.get(d), bool) for d in DIMENSIONS):
                     return out
-        except (urllib.error.URLError, OSError, ValueError, KeyError):
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError):
             pass
         time.sleep(2 ** (attempt + 1))
     return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -42,7 +43,7 @@ def chat(model: str, messages: list[dict], max_tokens: int = 16, temperature: fl
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.load(resp)["choices"][0]["message"]["content"] or ""
-        except (urllib.error.URLError, OSError, ValueError, KeyError):
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError):
             if attempt == retries - 1:
                 return ""
             time.sleep(2 ** (attempt + 1))

@@ -10,6 +10,7 @@ that the fine-tuned small model has to beat.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import sys
@@ -41,7 +42,7 @@ def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens
             REASONING_TOKENS.append(((d.get("usage") or {}).get("completion_tokens_details") or {})
                                     .get("reasoning_tokens") or 0)
             return d["choices"][0]["message"]["content"] or ""
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:  # incl. resets, bad JSON
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:  # incl. resets, bad JSON
             if attempt == 3:
                 return f"// request failed: {e}"
             time.sleep(2 ** (attempt + 1))
