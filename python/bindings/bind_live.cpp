@@ -31,6 +31,9 @@ py::dict track_dict(const live::Track& t) {
   py::list h;
   for (const auto& p : t.history) h.append(py::make_tuple(p.time, p.x, p.y));
   d["history"] = h;
+  py::list m;   // the measured position of each history row, NaN on a miss (detect.py Track.measured; D-157)
+  for (const auto& p : t.history) m.append(py::make_tuple(p.mx, p.my));
+  d["measured"] = m;
   d["snr"] = t.snr;
   d["cells"] = t.cells;
   d["time"] = t.time;
@@ -383,15 +386,25 @@ void bind_live(py::module_& m) {
            [](const live::Tracker& t, double min_speed, double static_speed, double significance, double min_seen,
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
               double max_excess_range, double multipath_bearing, double multipath_velocity, double origin_x, double origin_y,
-              std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time) {
+              std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time, bool fit_measured) {
              // None: the rule is off. Given: zero or more (as classify.py refuses a negative or NaN value).
              for (const auto& [name, val] : {std::pair{"min_mover_cells", min_mover_cells}, std::pair{"row_snr_db", row_snr_db}}) {
                if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
              }
              std::vector<const live::Track*> confirmed;
+             // fit_measured false: copies of the tracks without their measured positions, which classify_tracks fits
+             // through their filtered history (the rule before D-157; for the tests holding it to its golden).
+             std::vector<live::Track> stripped;
              for (const auto& tr : t.tracks()) {
-               if (tr.confirmed) confirmed.push_back(&tr);
+               if (!tr.confirmed) continue;
+               if (fit_measured) {
+                 confirmed.push_back(&tr);
+                 continue;
+               }
+               stripped.push_back(tr);
+               for (auto& p : stripped.back().history) p.mx = p.my = std::numeric_limits<double>::quiet_NaN();
              }
+             for (const auto& tr : stripped) confirmed.push_back(&tr);
              const live::ClassifyOptions o{min_speed, static_speed, significance, min_seen, min_points, max_fit_rms, linear,
                                            linear_length, linear_width, multipath, max_excess_range, multipath_bearing,
                                            multipath_velocity, origin_x, origin_y,
@@ -420,7 +433,9 @@ void bind_live(py::module_& m) {
            py::arg("linear_width") = 2.0, py::arg("multipath") = false, py::arg("max_excess_range") = 800.0,
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
            py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none(),
-           py::arg("time") = py::none());
+           py::arg("time") = py::none(), py::arg("fit_measured") = true,
+           "classify_tracks on the confirmed tracks. fit_measured false: through their filtered history instead of the "
+           "measured positions (the rule before D-157), for the tests that hold the classifier to its golden.");
 
   m.def("element_offsets", &live::element_offsets, "Receive element positions along the array axis, m about the centre.");
   m.def(
@@ -564,6 +579,7 @@ void bind_live(py::module_& m) {
         number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
         number(kw, "sidelobe_floor_db", o.sidelobe_floor_db);
         number(kw, "search_factor", o.search_factor);
+        if (kw.contains("range_estimate") && !kw["range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["range_estimate"].cast<std::string>());
         if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
         double tolerance = live::kDerive;
         number(kw, "row_tolerance_m", tolerance);
@@ -606,6 +622,7 @@ void bind_live(py::module_& m) {
         out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
         out["u_step"] = p.u_step;
         out["source_ratio"] = p.source_ratio;
+        out["range_estimate"] = live::range_estimate_name(p.range_estimate);
         out["json"] = p.json();
         return out;
       },
@@ -666,6 +683,7 @@ void bind_live(py::module_& m) {
         p.bearing_envelope = plan["bearing_envelope"].cast<std::vector<double>>();
         p.u_step = plan["u_step"].cast<double>();
         p.source_ratio = plan["source_ratio"].cast<double>();
+        if (plan.contains("range_estimate")) p.range_estimate = live::parse_range_estimate(plan["range_estimate"].cast<std::string>());
         const std::int64_t n_b = cell_mean.shape(0), n_cells = cell_mean.shape(1), stride = fine.shape(1);
         if (fine_offset < 0 || fine_offset + n_cells * p.samples_per_cell > stride) throw std::invalid_argument("fine holds fewer samples than the cells need");
         live::DetectorCells cells;
@@ -837,6 +855,7 @@ void bind_live(py::module_& m) {
         get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
         get("cfar_search_factor", o.detector.search_factor);
         get("cfar_merge_m", o.detector.merge_m);
+        if (kw.contains("cfar_range_estimate")) o.detector.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) {

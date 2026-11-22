@@ -247,3 +247,90 @@ def test_the_fit_needs_time_between_the_points_not_between_the_first_and_last():
     last share a time still give a line."""
     pos, v, rms, sigma = classify.fit_velocity([(0.0, 0.0, 0.0), (10.0, 10.0, 0.0), (0.0, 0.0, 0.0)])
     assert v == pytest.approx([1.0, 0.0]) and np.isfinite(sigma)
+
+
+# --- D-157: the fit goes through the measured positions ------------------------------------------------------------
+
+C_12KM = 1496.82
+LIVE_TRACKER_12KM = dict(range_sigma=15.0, bearing_sigma=float(np.radians(1.0)), confirm_hits=3, max_misses=2,
+                         initial_speed_sigma=8.0, process_noise=0.05, association="likelihood")
+
+
+def popoto_12km_noise_free(drop=()):
+    """The popoto_12km geometry without noise: a ship crossing at 6 m/s 12 km away, six pings 19.9 s apart from an
+    ownship making 1.5 m/s, each detection exact at transmit + R/c (R from the ownship, solved by iteration), placed
+    about the first ping's position as the live chain places it. Per ping (transmit time, detection or None); the
+    ship's true (across, forward) position at time T is (12000, 800 - 6 T). The tracker the live chain derives for that
+    array (LIVE_TRACKER_12KM: 15 m and 1 deg sigmas, the deployment's other tracker settings). Ours (D-157), after the
+    sonar-2hz diagnosis (scratchpad diag2hz/noisefree.py)."""
+    from gpusonar import detect
+    out = []
+    for i in range(6):
+        t = 19.9 * i
+        own = np.array([1.5 * t, 0.0])
+        tau = np.hypot(800 - 6 * t - own[0], 12000) / C_12KM
+        for _ in range(4):
+            tau = np.hypot(800 - 6 * (t + tau) - own[0], 12000) / C_12KM
+        p = np.array([800 - 6 * (t + tau), 12000.0])            # world (x forward, y across) about the first ping's origin
+        r = np.hypot(*(p - own))
+        d = detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), 20.0, 1, time=t + r / C_12KM)
+        out.append((t, None if i in drop else d))
+    return out
+
+
+def test_a_noise_free_12km_crossing_is_reported_where_the_ship_is():
+    """D-157: exact detections of the popoto_12km ship through the live chain's tracker, classified at the last ping's
+    transmit time: the reported position within 2 m of the ship along track and across. A track is born at zero
+    velocity with a 1 deg bearing sigma (210 m at 12 km), so its filtered positions lag the ship; the fit through them
+    (before D-157) put the ship 38.7 m behind along track and 1.1 m off across. The fit through the measured positions
+    is exact, and its rms is zero."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free():
+        tracks = tracker.update(t, [d])
+    (tr,) = tracks
+    assert len(tr.measured) == len(tr.history) == 6
+    (c,) = classify.classify_tracks([tr], time=99.5)
+    err = np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5)
+    assert abs(err[1]) < 2.0 and abs(err[0]) < 2.0
+    assert c.speed == pytest.approx(6.0, abs=0.01) and c.fit_rms < 1e-6
+    # The filtered history alone (the fit before D-157) lags: the same tracker, the measurements left out.
+    lag = np.asarray(classify.fit_velocity(tr.history, 99.5)[0]) - (12000.0, 800.0 - 6.0 * 99.5)
+    assert lag[1] > 30.0
+
+
+def test_rows_of_misses_are_left_out_of_the_fit():
+    """D-157: a row of a ping the track missed carries no measurement (NaN) and is not fitted; the fit's degrees of
+    freedom count the measured rows. Fewer than three measured rows: the short-track rule, from the last filtered point
+    moved by the state's velocity."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free(drop=(3,)):
+        tracks = tracker.update(t, [] if d is None else [d])
+    (tr,) = tracks
+    assert np.isnan(tr.measured[3]).all() and np.isfinite(np.asarray(tr.measured)[[0, 1, 2, 4, 5]]).all()
+    assert classify.fitted_points(tr) == 5
+    (c,) = classify.classify_tracks([tr], time=99.5)
+    assert np.hypot(*(np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5))) < 1e-6
+    # Two measured rows of five: no line; the last history point moved by the state's velocity.
+    short = Track(1, np.array([10.0, 60.0, 2.0, 0.0]), np.eye(4), hits=2, history=[(0.0, 0.0, 50.0), (1.0, 3.0, 55.0), (2.0, 10.0, 60.0)],
+                  measured=[(0.0, 50.0), (float("nan"), float("nan")), (11.0, 61.0)])
+    pos, v, rms, sigma = classify.fit_velocity(short.history, 3.0, short.state[2:4], short.measured)
+    assert tuple(pos) == (12.0, 60.0) and tuple(v) == (0.0, 0.0) and sigma == np.inf
+    with pytest.raises(ValueError, match="measured rows"):
+        classify.fit_velocity(short.history, None, None, short.measured[:2])
+
+
+def test_without_a_time_a_track_that_missed_its_last_ping_is_reported_at_that_ping():
+    """D-157 review: with no time given the position is the fitted line's at the track's last history row (its last
+    ping), not at its last measured row. The ship missed the last ping (transmit 99.5 s): reported where it is at that
+    row's time, not 11.9 s (71 m) behind, where it was at its last detection."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free(drop=(5,)):
+        tracks = tracker.update(t, [] if d is None else [d])
+    (tr,) = tracks
+    assert np.isnan(tr.measured[-1]).all() and tr.history[-1][0] == 99.5
+    for at in (None, float("nan")):
+        (c,) = classify.classify_tracks([tr], time=at)
+        assert np.hypot(*(np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5))) < 1e-6

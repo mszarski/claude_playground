@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -21,21 +22,37 @@ struct Fit {
   double x, y, vx, vy, rms, sigma;
 };
 
-// Least-squares straight line through (time, x, y); the position on it at `at` (NaN, or any value that is not finite: at
-// the last point's time). With fewer than three points, or no time between them (max - min, as numpy.ptp), no fitted
-// velocity and the last point, moved to `at` by (vx, vy), the track's Kalman state's velocity (classify.py fit_velocity).
-Fit fit_velocity(const std::vector<HistoryPoint>& h, double at, double vx, double vy) {
+// The points the line is fitted through (classify.py fit_velocity, D-157): the measured positions of the rows that have
+// one (mx, my finite: the detection the track took there), the rows of misses left out; a history that records none
+// (every row NaN: built by hand from positions) is fitted through its filtered x, y as before.
+std::vector<HistoryPoint> fit_points(const std::vector<HistoryPoint>& h) {
+  std::vector<HistoryPoint> pts;
+  for (const auto& p : h) {
+    if (std::isfinite(p.mx) && std::isfinite(p.my)) pts.push_back({p.time, p.mx, p.my});
+  }
+  bool any = false;
+  for (const auto& p : h) any = any || !std::isnan(p.mx) || !std::isnan(p.my);
+  return any ? pts : h;
+}
+
+// Least-squares straight line through (time, x, y) of fit_points(h); the position on it at `at` (NaN, or any value that
+// is not finite: at the time of the last row of `history`, the last ping). With fewer than three points, or no time between them (max - min, as
+// numpy.ptp), no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
+// Kalman state's velocity (classify.py fit_velocity). `n_fit` receives the number of points fitted.
+Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, std::int64_t& n_fit) {
+  const std::vector<HistoryPoint> h = fit_points(history);
   const std::size_t n = h.size();
-  Fit f{h.back().x, h.back().y, 0.0, 0.0, 0.0, std::numeric_limits<double>::infinity()};
-  double t_min = h.front().time, t_max = h.front().time;
+  n_fit = static_cast<std::int64_t>(n);
+  Fit f{history.back().x, history.back().y, 0.0, 0.0, 0.0, std::numeric_limits<double>::infinity()};
+  double t_min = std::numeric_limits<double>::infinity(), t_max = -std::numeric_limits<double>::infinity();
   for (const auto& p : h) {
     t_min = std::min(t_min, p.time);
     t_max = std::max(t_max, p.time);
   }
   if (n < 3 || t_max - t_min <= 0.0) {
     if (std::isfinite(at) && std::isfinite(vx) && std::isfinite(vy)) {
-      f.x += (at - h.back().time) * vx;
-      f.y += (at - h.back().time) * vy;
+      f.x += (at - history.back().time) * vx;
+      f.y += (at - history.back().time) * vy;
     }
     return f;
   }
@@ -63,7 +80,8 @@ Fit fit_velocity(const std::vector<HistoryPoint>& h, double at, double vx, doubl
     const double rx = p.x - (xm + tc * f.vx), ry = p.y - (ym + tc * f.vy);
     ss += rx * rx + ry * ry;
   }
-  const double tc_last = (std::isfinite(at) ? at : h.back().time) - tm;
+  // No time given: the last history row's (the last ping), also when the measured rows end earlier (classify.py).
+  const double tc_last = (std::isfinite(at) ? at : history.back().time) - tm;
   f.x = xm + tc_last * f.vx;
   f.y = ym + tc_last * f.vy;
   f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(n) - 4, 1)));
@@ -95,7 +113,8 @@ const char* kind_name(Kind kind) {
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o) {
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
-    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3]);
+    std::int64_t n_fit = 0;
+    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3], n_fit);
     TrackClass c;
     c.id = tr->id;
     c.x = f.x;
@@ -110,7 +129,8 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     double snr = 0.0;
     for (double s : tr->snr) snr += s;
     c.mean_snr_db = tr->snr.empty() ? std::numeric_limits<double>::quiet_NaN() : snr / static_cast<double>(tr->snr.size());
-    const double need = o.significance * t_ratio(std::max<std::int64_t>(2 * n - 4, 1));
+    // The fit's degrees of freedom count the points fitted (the measured rows, D-157); min_points and seen the pings.
+    const double need = o.significance * t_ratio(std::max<std::int64_t>(2 * n_fit - 4, 1));
     const bool steady = o.max_fit_rms < 0.0 || f.rms <= o.max_fit_rms;
     if (n < o.min_points || !steady) {
       c.kind = Kind::Uncertain;

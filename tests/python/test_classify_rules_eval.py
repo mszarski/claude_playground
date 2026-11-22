@@ -5,6 +5,7 @@ glint that the tracker joined into a straight line far from every moving object 
 rules off the boat is a mover and the anchored boat static: both correct, one false mover. min_mover_cells 3 to 6
 removes the glint and keeps the boat; 8 also makes the boat uncertain, which is a target lost."""
 import importlib.util
+import json
 import pathlib
 
 import numpy as np
@@ -109,6 +110,15 @@ def test_tracks_round_trip_through_json():
     back = cre.track_from_json(cre.track_to_json(tr))
     assert back.id == 7 and back.hits == 3 and back.cells == [4] and back.snr == [15.5]
     assert back.history == [(0.0, 1.0, 2.0)] and np.array_equal(back.state, tr.state)
+    # D-157: the measured rows go along, NaN (a miss) as null; a capture without them reads back with none.
+    tr.history.append((1.0, 1.5, 2.5))
+    tr.measured = [(1.0, 2.0), (float("nan"), float("nan"))]
+    j = cre.track_to_json(tr)
+    assert j["measured"] == [[1.0, 2.0], [None, None]]
+    back = cre.track_from_json(json.loads(json.dumps(j)))
+    assert back.measured[0] == (1.0, 2.0) and np.isnan(back.measured[1]).all()
+    j.pop("measured")
+    assert cre.track_from_json(j).measured == []
 
 
 def test_compact_keeps_the_scores():
@@ -156,3 +166,93 @@ def test_an_established_track_is_scored_before_a_nearer_uncertain_one():
     classes = classify.classify_tracks(tr, **kw)
     assert cre.score(classes, tr, truth, float(T[-1]), 15.0)["targets"]["boat"]["tracked"] is False
     assert gallery.classify_and_score(tr, truth, float(T[-1]), 15.0, **kw)[1]["targets"] == {}
+
+
+# --- D-157: an extended object is scored from its outline --------------------------------------------------------
+
+SHIP = {"position": [800.0, 12000.0, 4.0], "velocity": [-6.0, 0.0, 0.0],
+        "footprint": [[740.0, 12000.0], [860.0, 12000.0]]}           # popoto_12km's five points, 120 m along x
+
+
+def _ship_track(i, dx, dy, vx=-6.0, n=6, dt=19.9):
+    """A track of the ship moving with it, `dx` along and `dy` across its course from its centre (world x, y)."""
+    t = np.arange(n) * dt
+    xs, ys = 800.0 + dx + vx * t, 12000.0 + dy + 0.0 * t
+    hist = [[float(a), float(y), float(x)] for a, x, y in zip(t, xs, ys)]
+    return {"id": i, "state": [float(ys[-1]), float(xs[-1]), 0.0, vx], "hits": n, "history": hist,
+            "snr": [20.0] * n, "cells": [6] * n}
+
+
+def test_an_extended_object_is_scored_from_its_outline():
+    """D-157: a track on the ship's bow, 55 m ahead of its centre and 5 m off its line, is 5 m from the ship (its
+    outline, the segment through its five points), not 55 m; the centre's error is kept as centroid_error_m. Before,
+    error_m was 55 m from the centre."""
+    cap = {"tracks": [_ship_track(1, 55.0, 5.0)], "truth": {"ship": SHIP}, "t_last": 99.5, "gate": 200.0,
+           "classify_kw": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": 60.0}, "seed": 1}
+    s = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]["ship"]
+    assert s["kind"] == "mover" and s["correct"]
+    assert s["state_error_m"] == pytest.approx(5.0, abs=1e-6) and s["report_error_m"] == pytest.approx(5.0, abs=1e-6)
+    assert s["state_centroid_error_m"] == pytest.approx(np.hypot(55.0, 5.0), abs=1e-6)
+    # Without a footprint (a capture saved before D-157) the ship is its centre, as before.
+    old = dict(cap, truth={"ship": {k: v for k, v in SHIP.items() if k != "footprint"}})
+    s = cre.evaluate_capture(old)["cells=off,row=off"]["targets"]["ship"]
+    assert s["state_error_m"] == pytest.approx(np.hypot(55.0, 5.0), abs=1e-6) == s["state_centroid_error_m"]
+
+
+def test_range_and_cross_range_are_split_from_the_outlines_nearest_point():
+    """With the ownship: the hull error split along and across the line of sight to the ship's centre, from the
+    outline's nearest point; the centre's split kept as centroid_*."""
+    from gpusonar import classify
+    truth = cre.truth_from_json({"ship": SHIP})
+    tr = [cre.track_from_json(_ship_track(1, 30.0, 40.0))]                   # 40 m beyond the line, on the hull's span
+    classes = classify.classify_tracks(tr, time=99.5)
+    s = cre.score(classes, tr, truth, 99.5, 200.0, origin=(0.0, 0.0))["targets"]["ship"]
+    assert s["state_error_m"] == pytest.approx(40.0, abs=1e-6)
+    assert s["state_range_error_m"] == pytest.approx(40.0 * np.cos(np.arctan2(800.0 - 6.0 * 99.5, 12000.0)), abs=0.1)
+    assert s["state_centroid_error_m"] == pytest.approx(50.0, abs=1e-6)
+
+
+def test_the_gate_and_false_movers_use_the_outline():
+    """The gate is measured from the outline too: a mover 250 m ahead of the ship's centre is 190 m from its bow, within
+    the 200 m gate (tracked; before, not), and a mover on the ship's stern 50 m from its centre is on a moving object,
+    not a false mover, at the FLS scenes' 15 m gate (before: a false mover). A point object is unchanged."""
+    import sys
+    from gpusonar import classify
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gallery
+    truth = cre.truth_from_json({"ship": SHIP})
+    tr = [cre.track_from_json(_ship_track(1, 250.0, 0.0))]
+    classes = classify.classify_tracks(tr, time=99.5)
+    s = cre.score(classes, tr, truth, 99.5, 200.0)
+    assert s["targets"]["ship"]["tracked"] and s["targets"]["ship"]["state_error_m"] == pytest.approx(190.0, abs=1e-6)
+    got = gallery.score_tracks(tr, truth, 99.5, 200.0)["ship"]
+    assert got["tracked"] and got["position_error_m"] == pytest.approx(190.0, abs=1e-6) and got["centroid_error_m"] == pytest.approx(250.0, abs=1e-6)
+    point = cre.truth_from_json({"ship": {k: v for k, v in SHIP.items() if k != "footprint"}})
+    assert not cre.score(classes, tr, point, 99.5, 200.0)["targets"]["ship"]["tracked"]
+    stern = [cre.track_from_json(_ship_track(2, -50.0, 3.0))]
+    classes = classify.classify_tracks(stern, time=99.5)
+    assert classes[0].kind == "mover"
+    assert cre.score(classes, stern, truth, 99.5, 15.0)["false_movers"] == 0
+    assert cre.score(classes, stern, point, 99.5, 15.0)["false_movers"] == 1
+    assert gallery.classify_and_score(stern, truth, 99.5, 15.0)[1]["movers_not_on_a_moving_object"] == 0
+
+
+def test_footprints_of_the_scene_items():
+    """gallery.item_footprint: the convex hull of several points (popoto_12km's ship: the segment from 740 to 860 m),
+    the plan of a hull or boat (length along the heading, the beam across), the rectangle of a small box; a sphere and
+    a single point have none. The footprints go through the capture's JSON."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gallery
+    from gpusonar.config import load_scenario_config
+    ship = gallery.scene_truth(load_scenario_config("popoto_12km"))["ship"]
+    assert np.allclose(ship.footprint, [[740.0, 12000.0], [860.0, 12000.0]]) and np.allclose(ship[0], [800.0, 12000.0, 4.0])
+    hull = gallery.item_footprint({"type": "hull", "origin": [230.0, 60.0, 0.0], "length": 12.0, "beam": 3.5, "heading_deg": -90.0})
+    assert np.ptp(hull[:, 1]) == pytest.approx(12.0) and np.ptp(hull[:, 0]) == pytest.approx(3.5, abs=1e-3)
+    assert gallery.outline_distance((230.0, 60.0), hull)[0] == 0.0 and gallery.outline_distance((240.0, 60.0), hull)[0] == pytest.approx(8.25, abs=1e-3)
+    box = gallery.item_footprint({"type": "rocks", "x_range": [245.0, 255.0], "y_range": [-40.0, -30.0]})
+    assert gallery.outline_distance((250.0, -20.0), box)[0] == pytest.approx(10.0)
+    assert gallery.item_footprint({"type": "sphere", "centre": [1.0, 2.0, 3.0], "radius": 0.6}) is None
+    assert gallery.item_footprint({"type": "points", "positions": [[1.0, 2.0, 0.0]]}) is None
+    back = cre.truth_from_json(json.loads(json.dumps(cre.truth_to_json({"ship": ship}))))
+    assert np.allclose(back["ship"].footprint, ship.footprint) and np.allclose(back["ship"][1], ship[1])

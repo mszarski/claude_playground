@@ -488,3 +488,63 @@ def test_beam_samples_are_what_the_map_is_the_power_of(sonar):
     assert 10.0 * np.log10(np.abs(z[peak]) ** 2 / background) == pytest.approx(d["snr_db"], abs=1.0)
     same = flank.backprojection_map(rec, window, np.array([bearing]), window="hann", interp="linear", backend=core.Backend.Host).image.ravel()
     assert np.allclose(z, same, rtol=1e-4, atol=1e-6 * np.abs(same).max())
+
+
+# --- D-157: the leading edge as a detection's range (cfar.range_estimate: first) -----------------------------------
+
+def _late_arrivals_ping(sonar, r0=1300.0, bearing_deg=5.0, seed=21):
+    """A weak first arrival at `r0` and five arrivals 6 dB stronger 10 to 50 m behind it on the same bearing (a target
+    in a channel: the direct path first, the surface and bottom paths after it), close enough to be one detection."""
+    points = [at(r0 + dr, bearing_deg) for dr in (0.0, 10.0, 20.0, 30.0, 40.0, 50.0)]
+    return ping(sonar, points, [0.0, 6.0, 6.0, 6.0, 6.0, 6.0], seed)
+
+
+def test_the_leading_edge_is_the_first_arrival_and_the_centroid_lies_behind_it(sonar):
+    """D-157: with cfar.range_estimate first the detection's range is its first sample above the single-sample threshold:
+    the weak first arrival, within one range cell; the default (centroid) is the energy-weighted mean, about 25 m behind
+    it. Both engines give the same; the default given explicitly is the default bit for bit; the report's
+    first_range_m (the nearest cell's centre) is coarser than the leading edge and within a cell of it."""
+    r0 = 1300.0
+    rec = _late_arrivals_ping(sonar, r0)
+    got = {}
+    for estimate in (None, "centroid", "first"):
+        for engine in ("cpp", "python"):
+            cfg = {"cell_statistic": "multiscale", "backend": "host", "engine": engine}
+            if estimate is not None:
+                cfg["cfar"] = {"range_estimate": estimate}
+            with LiveChain(cfg) as chain:
+                got[estimate, engine] = chain.process(rec.copy())
+                cell = chain.detector["cell_m"]
+            assert len(got[estimate, engine]["detections"]) == 1, (estimate, engine, got[estimate, engine]["detections"])
+    slant = float(np.hypot(*at(r0, 5.0)[:2]))
+    for engine in ("cpp", "python"):
+        first = got["first", engine]["detections"][0]
+        centroid = got[None, engine]["detections"][0]
+        assert got["centroid", engine] ["detections"] == got[None, engine]["detections"]
+        assert abs(first["range_m"] - slant) < cell, (engine, first)
+        assert 15.0 < centroid["range_m"] - slant < 35.0, (engine, centroid)
+        assert abs(first["first_range_m"] - first["range_m"]) <= cell
+        # The same group either way: only its range differs.
+        assert {k: v for k, v in first.items() if k != "range_m"} == {k: v for k, v in centroid.items() if k != "range_m"}
+    assert got["first", "python"]["detections"][0]["range_m"] == pytest.approx(got["first", "cpp"]["detections"][0]["range_m"], abs=1e-6)
+
+
+def test_the_range_estimate_is_checked_and_reaches_the_program():
+    """D-145: a word that is not centroid or first is refused by both engines, and first outside cell_statistic
+    multiscale too; the key goes through program_options to the program's options."""
+    with pytest.raises(ValueError, match="range_estimate"):
+        live.cpp_chain_options({"cell_statistic": "multiscale", "cfar": {"range_estimate": "peak"}})
+    with pytest.raises(ValueError, match="range_estimate"):
+        live.cpp_chain_options({"cell_statistic": "mean", "cfar": {"range_estimate": "first"}})
+    with pytest.raises(ValueError, match="range_estimate"):
+        LiveChain({"cell_statistic": "peak", "cfar": {"range_estimate": "first"}, "backend": "host"})
+    with pytest.raises(ValueError, match="range_estimate"):
+        core.live_options_from_text("cfar_range_estimate=leading\n")
+    with pytest.raises(ValueError, match="range_estimate"):
+        core.LiveChainCpp({"cfar_range_estimate": "first", "cell_multiscale": False})
+    flat = live.program_options({"cell_statistic": "multiscale", "cfar": {"range_estimate": "first"}})
+    assert flat["cfar_range_estimate"] == "first"
+    text = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
+    assert text["cfar_range_estimate"] == "first"
+    assert json.loads(core.live_options_from_text(""))["cfar_range_estimate"] == "centroid"
+    assert live.program_options({"cell_statistic": "multiscale"})["cfar_range_estimate"] == "centroid"

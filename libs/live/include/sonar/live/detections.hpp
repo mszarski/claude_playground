@@ -49,7 +49,11 @@ std::vector<Detection> cluster(const unsigned char* detections, const float* pow
                                const std::vector<double>& bearings);
 
 struct HistoryPoint {
-  double time, x, y;  ///< s; across and forward, m
+  double time, x, y;  ///< s; across and forward, m: the filtered position (the track's state) at that time
+  /// The position of the detection the track took on this ping, in the same frame (detect.py Track.measured); NaN on a
+  /// ping it missed. classify_tracks fits these (D-157). A history whose rows all lack one (built by hand from
+  /// positions) is fitted through x, y as before.
+  double mx = std::numeric_limits<double>::quiet_NaN(), my = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct Track {
@@ -118,7 +122,7 @@ const char* kind_name(Kind kind);
 struct TrackClass {
   std::int64_t id = 0;
   Kind kind = Kind::Uncertain;
-  double x = 0.0, y = 0.0;    ///< fitted position (across, forward) at ClassifyOptions::time, else at the track's last point
+  double x = 0.0, y = 0.0;    ///< fitted position (across, forward) at ClassifyOptions::time, else at the track's last history point
   double vx = 0.0, vy = 0.0;  ///< fitted velocity
   double speed = 0.0, speed_sigma = 0.0, fit_rms = 0.0, seen = 0.0, mean_snr_db = 0.0;
   std::int64_t parent = -1;   ///< for multipath: the track it echoes
@@ -140,6 +144,8 @@ struct ClassifyOptions {
   /// s, the tracker's clock: every position is the fitted line's at this time (the report's: the ping's transmit time;
   /// D-156). NaN (or any value that is not finite): at each track's last history point (classify.py `time`). A track
   /// too short for a fit (fewer than three points) is moved from its last point to this time by its state's velocity.
+  /// The line goes through the measured positions (HistoryPoint::mx, my; D-157), the rows of misses left out; fewer
+  /// than three measured rows: a short track, from its last filtered point. No row measured: through x, y as before.
   double time = std::numeric_limits<double>::quiet_NaN();
 };
 

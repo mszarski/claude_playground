@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -107,6 +108,9 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     cache[ti].emplace_back(to, predict(tracks_[ti], to, opt_));
     return cache[ti].back().second;
   };
+  // The position of the detection each track took this ping (NaN: none), for its history row (D-157).
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::vector<V2> took(tracks_.size(), V2(nan, nan));
   // The Kalman update of one track, predicted to the detection's time, with that detection.
   auto take = [&](Track& t, const Detection& d, const Prior& prior, double at) {
     Eigen::Map<V4> x(t.state);
@@ -117,8 +121,10 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     t.time = at;
     const M2 s = h * p * h.transpose() + measurement_cov(d, opt_);
     const Eigen::Matrix<double, 4, 2> k = p * h.transpose() * s.inverse();
-    x = x + k * (xy(d) - h * x);
+    const V2 z = xy(d);
+    x = x + k * (z - h * x);
     p = (M4::Identity() - k * h) * p;
+    took[static_cast<std::size_t>(&t - tracks_.data())] = z;
     ++t.hits;
     t.snr.push_back(d.snr_db);
     t.cells.push_back(d.cells);
@@ -214,7 +220,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       t.depth_var = pr.depth_var;
       t.time = time;
     }
-    t.history.push_back({t.time, t.state[0], t.state[1]});
+    t.history.push_back({t.time, t.state[0], t.state[1], took[ti][0], took[ti][1]});
   }
   tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [this](const Track& t) { return t.misses > opt_.max_misses; }),
                 tracks_.end());
@@ -230,7 +236,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p.setZero();
     p.topLeftCorner<2, 2>() = measurement_cov(d, opt_);
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
-    tr.history.push_back({when[j], p0[0], p0[1]});
+    tr.history.push_back({when[j], p0[0], p0[1], p0[0], p0[1]});
     tr.snr.push_back(d.snr_db);
     tr.cells.push_back(d.cells);
     take_depth(tr, d);
