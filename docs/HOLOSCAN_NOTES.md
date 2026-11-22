@@ -631,23 +631,26 @@ Limits and gaps:
   614,528 bytes, a multiple of 128.
 - `PingAssembler`: continuous blocks in, ping records out, using the receive window of the
   sonar config. Blocks are placed by their sample counter, so a block that arrives late while
-  its ping is still open fills its place (`late_blocks`) and the ping is kept. Several pings
-  may be open at once; records come out in transmit order, a complete ping waiting only while
-  an earlier one is undecided (at most `reorder_blocks` = 2 blocks; in order, never). Samples
+  its ping is still open fills its place (`late_blocks`) and the ping is kept. An earlier ping
+  stays open beside a later one only for the reorder grace (`reorder_blocks` = 2 blocks), at
+  most 2 at once; a ping transmitted before the previous window has closed gives that one up
+  at once, as before, so in order the records and counts are those of the assembler before
+  2026-11, overlapping pings included. Records come out in transmit order, a complete ping
+  waiting only while an earlier one is undecided (at most 2 blocks; in order, never). Samples
   never received are counted (`lost_samples`) and discard the ping they cut (`dropped_pings`)
   once given up: 2 blocks after the hole, or 2 blocks after the window's end for a hole in an
-  open window (the part of a hole running on into the next ping's window stays open). A repeat
-  is ignored (`repeated_blocks`), a block in a hole already given up is too late
-  (`too_late_blocks`, not placed). A ping all of whose blocks are lost is counted from the
-  jump of the header's ping index (modulo 2^32) when the transmits are that many ping
-  intervals apart (median of the last 5; nothing counted before an interval is known). A block
-  that does not fit the stream is held; a contiguous run of them restarts the stream
-  (`restarts`: two blocks of another capture start, 3 of the same one), otherwise each is
-  counted as a repeat. Joining a stream mid-window skips that
-  ping; pings before the first one heard are not counted. `finish()` gives up what is still
-  awaited at the end of a stream. With decimation, rows held behind a hole are bounded
-  (`max_held_bytes`, 64 MiB; a whole raw window of the default flank_32 config is 116 MB).
-  The C++ `PingAssembler` (libs/live) follows the same rules.
+  open window. A repeat is ignored (`repeated_blocks`), a block in a hole already given up is
+  too late (`too_late_blocks`, not placed). A ping all of whose blocks are lost is counted from
+  the jump of the header's ping index when the transmits are that many ping intervals apart
+  (DEPLOYMENT.md states the rule and how it fails). A block that does not fit the stream is
+  held: two contiguous ones of another capture start restart it (`restarts`), of the same one
+  only if they lie before the first sample heard, or 8 held in a row consistent with each
+  other; a capture left is never returned to; unconfirmed held blocks count as repeats. A
+  block naming a transmit beyond its own end is refused. `finish()` gives up what is still
+  awaited at the end of a stream. Memory: at most 2 raw windows (116 MB each with the default
+  flank_32 config; before 2026-11, 1); with decimation the rows held behind holes, all pings
+  together, at most `max_held_bytes` (64 MiB). The C++ `PingAssembler` (libs/live) follows the
+  same rules.
 - `FlankUdpSource` (`type: flank_udp`): blocks as UDP datagrams, drained by a receiver
   thread. This is a stand-in for `LinuxReceiverOp`, which delivers the same opaque bytes;
   behind the Sensor Bridge receiver the assembler is fed from the receiver's output tensor
