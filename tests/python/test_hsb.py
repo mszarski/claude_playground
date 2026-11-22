@@ -270,6 +270,11 @@ def test_tool_arguments(tmp_path, pings):
     plan = tool.receive_plan(a)
     assert plan["sonar"] == "popoto_long_range" and plan["chain"]["min_snr_db"] == 11.0 and plan["chain"]["engine"] == "cpp"
     assert plan["chain"]["bearings_deg"] == [-60.0, 60.0, 0.5] and plan["report"] == "r.jsonl" and plan["nav"] == {"port": 5702}
+    assert tool.parse(["receive", "--sonar", "flank_32"]).chain_omp_threads is None      # off by default: OpenMP as it is
+    assert tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", "4"]).chain_omp_threads == 4
+    for bad in ("0", "-2", "x"):
+        with pytest.raises(SystemExit):
+            tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", bad])
     a = tool.parse(["receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES), "--chain", json.dumps(CHAIN),
                     "--recording", str(tmp_path / "rec.h5")])
     plan = tool.receive_plan(a)
@@ -284,6 +289,37 @@ def test_tool_arguments(tmp_path, pings):
     w.close()
     records, interval = tool.serve_records(tool.parse(["serve", "--replay", str(tmp_path / "pings.h5")]))
     assert len(records) == 2 and interval is None and hsb.FrameStream(records, FRAME).tx[1] == int(INTERVAL * 64000)
+
+
+OMP_CHILD = r"""
+import ctypes, json, sys, threading
+import gpusonar  # noqa: F401  (loads the OpenMP runtime the library is built with)
+from gpusonar.sources import hsb
+libs = sorted({l.split()[-1] for l in open("/proc/self/maps") if ("libgomp" in l or "libomp" in l) and l.split()[-1].startswith("/")})
+omp = ctypes.CDLL(libs[0]) if libs else None
+before = omp.omp_get_max_threads() if omp else None
+got = {}
+def chain_thread():                     # as the chain's operator thread: applied there, before its first parallel region
+    got["applied"] = hsb.set_chain_omp_threads(int(sys.argv[1]))
+    got["after"] = omp.omp_get_max_threads() if omp else None
+t = threading.Thread(target=chain_thread)
+t.start(); t.join()
+print(json.dumps({"runtime": libs, "before": before, "main_after": omp.omp_get_max_threads() if omp else None, **got}))
+"""
+
+
+def test_chain_omp_threads_sets_openmps_thread_count_for_the_chains_thread():
+    """receive --chain-omp-threads N (sonar-ihd): OpenMP's thread count for parallel regions the chain's thread
+    starts is N once applied; other threads keep theirs. In a child process with OMP_NUM_THREADS unset."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("OMP_")}
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")])
+    out = subprocess.run([sys.executable, "-c", OMP_CHILD, "3"], capture_output=True, text=True, env=env, timeout=120)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    if not got["runtime"]:
+        pytest.skip("the library is built without OpenMP")
+    assert got["applied"] == 3 and got["after"] == 3
+    assert got["main_after"] == got["before"]            # the setting is the calling thread's, not the process's
 
 
 class FakeEmulation:

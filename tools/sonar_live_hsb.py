@@ -27,6 +27,13 @@ from gpusonar.sources import hsb, make_source  # noqa: E402
 from sonar_live import ping_line  # noqa: E402
 
 
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"{text}: at least 1")
+    return value
+
+
 def parse(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="role", required=True)
@@ -58,7 +65,13 @@ def parse(argv=None):
     r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
     r.add_argument("--quiet", action="store_true")
     r.add_argument("--receiver-core", type=int, help="core for Sensor Bridge's receiver thread (its default is core 2)")
-    r.add_argument("--socket-buffer", type=int, help="receive buffer of the data socket in bytes (to measure; up to rmem_max)")
+    r.add_argument("--chain-omp-threads", type=positive_int, metavar="N",
+                   help="OpenMP threads for the chain's parallel stages (default: left as OpenMP has it, one per core "
+                        "unless OMP_NUM_THREADS says otherwise). Applied with omp_set_num_threads on the thread that runs "
+                        "the chain, before its first ping, so before the chain's first parallel region; it sets the count "
+                        "for parallel regions that thread starts, other threads are not changed. Below the core count it "
+                        "leaves cores to Sensor Bridge's receiver thread (DEPLOYMENT.md)")
+    r.add_argument("--socket-buffer", type=int, help="receive buffer of the data socket in bytes; the kernel doubles it, up to twice rmem_max (DEPLOYMENT.md advises at least rmem_max)")
     r.add_argument("--arrival-log", help="JSON file of every frame's arrival (frame number, receive time, packets, bytes)")
     for p in (s, r):
         p.add_argument("--frame-samples", type=int, default=hsb.FRAME_SAMPLES, help="samples per frame, the same on both sides")
@@ -119,6 +132,7 @@ def main(argv=None):
                                     frame_samples=args.frame_samples, n_pings=args.pings, sound_speed=plan["sound_speed"],
                                     idle_timeout=args.idle, queue_frames=args.queue, receiver_affinity=args.receiver_core,
                                     socket_buffer=args.socket_buffer, log_arrivals=bool(args.arrival_log),
+                                    chain_omp_threads=args.chain_omp_threads,
                                     on_report=None if args.quiet else (lambda r: print(ping_line(r), flush=True)))
     arrivals, chain_ns = stats.pop("arrivals", None), stats.pop("chain_wall_ns", None)
     if args.arrival_log:
