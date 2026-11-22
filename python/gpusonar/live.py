@@ -56,7 +56,11 @@ DEFAULTS = {
              # search_factor None: the independent tests follow the threshold and the rows, with measured constants
              # (libs/live detector.hpp, kSearchSample; tools/detector_search_factor.py). A number: that many tests per
              # range resolution and beamwidth whatever the threshold and the rows (2.5: the detector as it was).
-             "search_factor": None, "merge_m": None},
+             "search_factor": None, "merge_m": None,
+             # range_estimate: a detection's range, "centroid" (the energy-weighted mean of its samples) or "first" (its
+             # leading edge: the nearest sample over the single-sample threshold; libs/live detector.hpp RangeEstimate,
+             # D-157). It places the detection and gives its time, transmit + range / c. cell_statistic multiscale only.
+             "range_estimate": "centroid"},
     "min_snr_db": 9.0,
     "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
@@ -389,6 +393,12 @@ def check_choices(cfg: dict) -> None:
     for key, allowed in CHOICES.items():
         if cfg.get(key) not in allowed:
             raise ValueError(f"chain.{key}: {cfg.get(key)!r} ({', '.join(allowed[:-1])} or {allowed[-1]})")
+    estimate = (cfg.get("cfar") or {}).get("range_estimate", "centroid")
+    if estimate not in RANGE_ESTIMATES:
+        raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
+    if estimate != "centroid" and cfg.get("cell_statistic") != "multiscale":
+        raise ValueError(f"chain.cfar.range_estimate: {estimate!r} is a setting of cell_statistic multiscale, not "
+                         f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
 
 
 def live_detection_rules(detections: dict | None) -> dict:
@@ -513,7 +523,14 @@ def detector_options(cfg: dict) -> dict:
         o["integrate_cells"] = [int(v) for v in f["integrate_cells"]]
     if f.get("merge_m") is not None:
         o["merge_m"] = float(f["merge_m"])
+    estimate = f.get("range_estimate", "centroid")
+    if estimate not in RANGE_ESTIMATES:
+        raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
+    o["range_estimate"] = estimate
     return o
+
+
+RANGE_ESTIMATES = ("centroid", "first")        # libs/live detector.hpp parse_range_estimate refuses anything else
 
 
 def sync_reference(cfg: dict) -> dict | None:

@@ -223,6 +223,10 @@ LiveChain::LiveChain(const ChainOptions& options)
   // classify.py `detections` rules: the row rule acts only in the corridor test, which the chain never runs.
   if (!(opt_.classify.row_snr_db < 0.0)) throw std::invalid_argument("LiveChain: classify row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
   if (std::isnan(opt_.classify.min_mover_cells)) throw std::invalid_argument("LiveChain: classify min_mover_cells is NaN");
+  // A setting of the multiscale detector only (live.py check_choices refuses it the same way).
+  if (opt_.detector.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
+    throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(opt_.detector.range_estimate) + " is a setting of cell_statistic multiscale");
+  }
   if (opt_.coverage.enabled && !coverage_site_missing(opt_.coverage).empty()) throw std::invalid_argument("LiveChain: " + coverage_site_missing(opt_.coverage));
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");

@@ -579,6 +579,7 @@ void bind_live(py::module_& m) {
         number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
         number(kw, "sidelobe_floor_db", o.sidelobe_floor_db);
         number(kw, "search_factor", o.search_factor);
+        if (kw.contains("range_estimate") && !kw["range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["range_estimate"].cast<std::string>());
         if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
         double tolerance = live::kDerive;
         number(kw, "row_tolerance_m", tolerance);
@@ -621,6 +622,7 @@ void bind_live(py::module_& m) {
         out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
         out["u_step"] = p.u_step;
         out["source_ratio"] = p.source_ratio;
+        out["range_estimate"] = live::range_estimate_name(p.range_estimate);
         out["json"] = p.json();
         return out;
       },
@@ -681,6 +683,7 @@ void bind_live(py::module_& m) {
         p.bearing_envelope = plan["bearing_envelope"].cast<std::vector<double>>();
         p.u_step = plan["u_step"].cast<double>();
         p.source_ratio = plan["source_ratio"].cast<double>();
+        if (plan.contains("range_estimate")) p.range_estimate = live::parse_range_estimate(plan["range_estimate"].cast<std::string>());
         const std::int64_t n_b = cell_mean.shape(0), n_cells = cell_mean.shape(1), stride = fine.shape(1);
         if (fine_offset < 0 || fine_offset + n_cells * p.samples_per_cell > stride) throw std::invalid_argument("fine holds fewer samples than the cells need");
         live::DetectorCells cells;
@@ -852,6 +855,7 @@ void bind_live(py::module_& m) {
         get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
         get("cfar_search_factor", o.detector.search_factor);
         get("cfar_merge_m", o.detector.merge_m);
+        if (kw.contains("cfar_range_estimate")) o.detector.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) {

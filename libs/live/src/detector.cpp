@@ -56,6 +56,14 @@ double DetectorPlan::threshold(std::size_t s, double count) const {
   return sc.factor * detect::training_correction(sc.pfa, count * train_looks_per_cell);
 }
 
+RangeEstimate parse_range_estimate(const std::string& name) {
+  if (name == "centroid") return RangeEstimate::Centroid;
+  if (name == "first") return RangeEstimate::First;
+  throw std::invalid_argument("cfar range_estimate '" + name + "': one of centroid, first");
+}
+
+const char* range_estimate_name(RangeEstimate r) { return r == RangeEstimate::First ? "first" : "centroid"; }
+
 std::string DetectorPlan::json() const {
   std::ostringstream s;
   s << std::setprecision(6);
@@ -68,7 +76,10 @@ std::string DetectorPlan::json() const {
       << ", \"search\": " << c.search
       << ", \"pfa\": " << c.pfa << ", \"threshold_db\": " << 10.0 * std::log10(c.factor) << "}";
   }
-  s << "]}";
+  s << "]";
+  // Said only when not the default, so that the default plan's line is the one it was.
+  if (range_estimate != RangeEstimate::Centroid) s << ", \"range_estimate\": \"" << range_estimate_name(range_estimate) << "\"";
+  s << "}";
   return s.str();
 }
 
@@ -83,6 +94,7 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
   const Waveform& w = record.transmit.waveform;
   const double c = facts.sound_speed;
   DetectorPlan p;
+  p.range_estimate = options.range_estimate;
   p.rows = rows;
   p.samples_per_cell = samples_per_cell;
   p.step_m = step;
@@ -593,6 +605,17 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
     if (peaks.size() > 8) peaks.resize(8);
     std::sort(peaks.begin(), peaks.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
     for (const auto& q : peaks) d.arrivals.push_back({fine_ranges[static_cast<std::size_t>(fine_offset + q.second)], 10.0 * std::log10(q.first)});
+    if (plan.range_estimate == RangeEstimate::First) {
+      // The leading edge (RangeEstimate::First): the nearest sample above the single-sample threshold, else the nearest
+      // cell's centre. Its placement and its time (transmit + range / c) follow from it in the chain.
+      d.range = nearest;
+      for (const auto& q : line) {
+        if (q.second > plan.scales[0].factor) {
+          d.range = fine_ranges[static_cast<std::size_t>(fine_offset + q.first)];
+          break;
+        }
+      }
+    }
     out.push_back(d);
   }
   return out;

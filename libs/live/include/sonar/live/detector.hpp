@@ -49,6 +49,19 @@
 
 namespace sonar::live {
 
+/// What a detection's range is (DetectorOptions::range_estimate).
+///   Centroid  the energy-weighted mean range of the group's samples (the default; the detector as it was).
+///   First     the leading edge: the nearest sample of the group whose power over the background of its cell exceeds
+///             the single-sample threshold (scales[0].factor, the test its `arrivals` are held to), on the strongest
+///             of the group's bearings at each sample; the nearest cell's centre when no sample does (a group flagged
+///             by a longer integration only). In a channel the direct arrival comes first and the surface and bottom
+///             arrivals after it, so the centroid of the group lies behind the target (popoto_12km: +49.5 m, the
+///             leading edge -0.8 m; sonar-2hz). Ours (D-157), opt-in.
+enum class RangeEstimate { Centroid, First };
+/// "centroid" or "first"; throws std::invalid_argument for anything else.
+RangeEstimate parse_range_estimate(const std::string& name);
+const char* range_estimate_name(RangeEstimate r);
+
 struct DetectorOptions {
   /// Expected false detections per ping in Gaussian noise, all integration lengths and the whole map together.
   double false_alarms_per_ping = 1e-3;
@@ -68,6 +81,9 @@ struct DetectorOptions {
   /// of kSearchSample / kSearchMean below. A number: every test counts that many per range resolution (or cell) and
   /// beamwidth, whatever the threshold and the rows (2.5 is the detector as it was before the table).
   double search_factor = kDerive;
+  /// A detection's range: the centroid of its samples (default) or its leading edge (RangeEstimate). It places the
+  /// detection and gives its time, transmit + range / c (D-156).
+  RangeEstimate range_estimate = RangeEstimate::Centroid;
 };
 
 /// How many separate false detections a map of noise gives: the measured part.
@@ -122,6 +138,8 @@ struct DetectorPlan {
   double u_step = 0.0;
   /// The source ratio (strongest sample over background) below which a cell's sidelobes cannot reach the threshold.
   double source_ratio = 0.0;
+  /// DetectorOptions::range_estimate: how a detection's range is taken.
+  RangeEstimate range_estimate = RangeEstimate::Centroid;
   std::string json() const;
   /// The threshold of scale `s` over the background estimated from `count` training cells.
   double threshold(std::size_t s, double count) const;

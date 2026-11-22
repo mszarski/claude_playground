@@ -266,7 +266,13 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             top = np.flatnonzero(is_peak)
             top = np.sort(top[np.argsort(-line[top], kind="stable")][:8])
             arrivals = [(float(fine_ranges[idx[q]]), float(10 * np.log10(line[q]))) for q in top]
-            out.append(Detection(float((w * r).sum() / w.sum()), float((soft * bearings[rows_]).sum() / soft.sum()),
+            rng = float((w * r).sum() / w.sum())
+            if plan.get("range_estimate", "centroid") == "first":
+                # The leading edge (libs/live detector.hpp RangeEstimate::First, D-157): the nearest sample above the
+                # single-sample threshold, else the nearest cell's centre.
+                over_ = np.flatnonzero(line > scales[0]["factor"])
+                rng = float(fine_ranges[idx[over_[0]]]) if len(over_) else near
+            out.append(Detection(rng, float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
                                  extent=far - near + float(plan["cell_m"]), arrivals=arrivals))
     return out, background_map

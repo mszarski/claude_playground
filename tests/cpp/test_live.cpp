@@ -621,4 +621,26 @@ TEST(Classify, FitsTheMeasuredPositionsOfANoiseFree12kmCrossing) {
   }
 }
 
+TEST(Options, RangeEstimateIsCentroidUnlessFirstIsAsked) {
+  // D-157: cfar_range_estimate, centroid (default) or first; any other word refused (D-145), first outside the
+  // multiscale detector refused by the chain; echoed by options_json.
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(a.detector.range_estimate, RangeEstimate::Centroid);
+  EXPECT_NE(options_json(a).find("\"cfar_range_estimate\": \"centroid\""), std::string::npos) << options_json(a);
+  std::istringstream in("cfar_range_estimate=first\n");
+  read_options(a, pa, in);
+  EXPECT_EQ(a.detector.range_estimate, RangeEstimate::First);
+  EXPECT_NE(options_json(a).find("\"cfar_range_estimate\": \"first\""), std::string::npos) << options_json(a);
+  for (const char* bad : {"cfar_range_estimate=leading\n", "cfar_range_estimate=First\n", "cfar_range_estimate=\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+  a.cell_multiscale = false;
+  EXPECT_THROW(LiveChain{a}, std::invalid_argument);
+  a.cell_multiscale = true;
+  EXPECT_NO_THROW(LiveChain{a});
+}
+
 }  // namespace
