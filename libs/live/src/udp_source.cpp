@@ -362,6 +362,15 @@ bool Navigation::push(const std::string& json) {
   return true;
 }
 
+bool NavCounts::apply(Navigation& nav, PingRecord& record) {
+  if (!nav.apply(record)) {
+    ++without_nav;
+    return false;
+  }
+  if (nav.velocity_given()) return false;
+  return ++without_velocity == 1;
+}
+
 bool Navigation::apply(PingRecord& record) {
   if (fixes_.empty()) return false;
   const std::int64_t t = record.transmit.time_ns;

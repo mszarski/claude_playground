@@ -417,8 +417,42 @@ def test_the_chain_reports_pings_whose_navigation_had_no_velocity(engine):
     # The fixes at 0 and 2 s send no velocity: the ping at 0 s is held from the first, the one at 2 s is interpolated
     # between them; the ping at 4 s lies between the fixes at 3 and 4 s, which send it.
     assert [r.get("pings_without_velocity") for r in bad] == [1, 2, 2]
+    for r in bad:                                    # where Report::json puts it, on either engine: after pings_without_nav
+        keys = list(r)
+        assert keys.index("pings_without_velocity") == keys.index("pings_without_nav") + 1, keys
     assert [r["pings_without_nav"] for r in bad] == [0, 0, 0]
     # The poses are the same (zero velocity either way): so is everything else on the lines.
     for g, b in zip(good, bad):
         assert {k: v for k, v in b.items() if k not in ("pings_without_velocity", "processing_seconds")} == \
             {k: v for k, v in g.items() if k != "processing_seconds"}
+
+
+def test_the_pose_and_its_velocity_flag_come_from_one_snapshot_of_the_fixes():
+    """A fix that arrives between reading the pose and reading its velocity flag must not make them disagree: the
+    chain takes both from one snapshot (NavListener.at_with_velocity). Here a fix without velocity arrives (from the
+    listener's thread, in life) right after the first snapshot is taken; the ping's pose was held from the last full
+    fix before it, so it had a velocity and is not counted (read again afterwards, the new fix would have made it
+    interpolated towards one without)."""
+    class Late(NavListener):
+        def __init__(self):
+            super().__init__()
+            self.late = None
+
+        def _around(self, time_ns):
+            got = super()._around(time_ns)
+            if self.late is not None:
+                fix, self.late = self.late, None
+                self.push(fix)
+            return got
+
+    sonar = SonarModel.load("flank_32", {"receive": {"window": {"range": [100.0, 300.0]}}})
+    rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), Scene().add_points([[0.0, 200.0, 0.0]], target_strength_db=10.0),
+                        environment={"sound_speed": 1500.0}, sequence=0, time_ns=int(3e9), noise_rms=1e-5, rng=np.random.default_rng(0))
+    nav = Late()
+    for t in (0.0, 2.0):
+        nav.push({"time_ns": int(t * 1e9), "x": 0.0, "vx": 0.5, "vy": 0.0, "vz": 0.0})
+    nav.late = {"time_ns": int(4e9), "x": 0.0}                                        # no velocity, after the ping
+    with LiveChain({"bearings_deg": [-40.0, 40.0, 1.0], "range_cell_m": 1.0, "backend": "host"}, nav=nav) as chain:
+        report = chain.process(rec)
+    assert chain.pings_without_velocity == 0 and "pings_without_velocity" not in report
+    assert rec.geometry.rx_pose.velocity[0] == pytest.approx(0.5)

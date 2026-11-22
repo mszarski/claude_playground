@@ -83,7 +83,8 @@ class UdpSourceOp : public holoscan::Operator {
   std::deque<PingRecord> done_;
   std::atomic<bool> stop_{false};
   std::thread receiver_, nav_thread_;
-  std::int64_t emitted_ = 0, without_nav_ = 0;
+  std::int64_t emitted_ = 0;
+  live::NavCounts nav_counts_;   ///< pings without a fix, and without a velocity from navigation (stop() reports both)
 };
 
 /// Writes every ping to a container file as it arrives and passes it on unchanged.

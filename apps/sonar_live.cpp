@@ -179,7 +179,8 @@ int main(int argc, char** argv) {
     const live::StreamOptions& stream_options = chain_options.stream;
     if (!report_host.empty()) out_socket = std::make_unique<live::UdpSocket>("0.0.0.0", 0);
     live::Navigation nav(chain_options.nav);
-    std::int64_t done = 0, without_nav = 0, without_velocity = 0, split_reports = 0;
+    live::NavCounts nav_counts;                 // pings without a fix, and without a velocity from navigation
+    std::int64_t done = 0, split_reports = 0;
     // A report too long for one datagram goes out as several complete lines ("part": [k, n]); never cut.
     auto send_report = [&](const std::vector<std::string>& datagrams) {
       if (!out_socket) return;
@@ -187,23 +188,15 @@ int main(int argc, char** argv) {
       for (const std::string& d : datagrams) out_socket->send_to(report_host, report_port, d);
     };
     const auto report_bytes = static_cast<std::size_t>(std::max<std::int64_t>(stream_options.report_max_bytes, 1));
-    auto handle = [&](PingRecord& rec, bool use_nav) {
-      if (use_nav) {
-        if (!nav.apply(rec)) {
-          ++without_nav;
-        } else if (!nav.velocity_given()) {
-          // Navigation sent no velocity over ground: the backprojection takes the array at rest over the round trip.
-          if (without_velocity == 0) std::fprintf(stderr, "sonar_live: navigation sends no velocity (vx, vy, vz); counted in pings_without_velocity\n");
-          ++without_velocity;
-        }
-      }
+    // Navigation is applied by the caller (the UDP path, under its lock) before a ping is handled.
+    auto handle = [&](PingRecord& rec) {
       if (recorder) {
         recorder->write(rec);        // raw samples, with the pose, before anything else touches them
         recorder->flush();
       }
       live::Report rep = chain.process(rec);
-      rep.pings_without_nav = without_nav;     // as the Python chain reports it: pings so far without a fix, this one included
-      rep.pings_without_velocity = without_velocity;
+      rep.pings_without_nav = nav_counts.without_nav;     // as the Python chain reports it: pings so far without a fix, this one included
+      rep.pings_without_velocity = nav_counts.without_velocity;   // pings so far whose fix had no velocity (sonar-8is)
       report << rep.json() << "\n" << std::flush;
       if (out_socket) send_report(rep.datagrams(report_bytes));
       if (done == 0) {
@@ -218,7 +211,7 @@ int main(int argc, char** argv) {
       io::RecordReader reader(replay);
       for (std::int64_t i = 0; i < reader.size() && (max_pings < 0 || done < max_pings); ++i) {
         PingRecord rec = reader.read(i);
-        handle(rec, false);
+        handle(rec);
       }
     } else if (udp_port >= 0) {
       if (template_path.empty()) throw std::invalid_argument("--udp needs --template");
@@ -337,13 +330,16 @@ int main(int argc, char** argv) {
         }
         assembler.feed(block.data(), block.size(), ready);
         for (PingRecord& rec : ready) {
-          bool have_nav = true;
           if (nav_socket) {
-            const std::lock_guard<std::mutex> lock(mutex);
-            have_nav = nav.apply(rec);
+            bool first_without_velocity = false;
+            {
+              const std::lock_guard<std::mutex> lock(mutex);
+              first_without_velocity = nav_counts.apply(nav, rec);     // the fix and its velocity flag under one lock
+            }
+            // Navigation sent no velocity over ground: the backprojection takes the array at rest over the round trip.
+            if (first_without_velocity) std::fprintf(stderr, "sonar_live: navigation sends no velocity (vx, vy, vz); counted in pings_without_velocity\n");
           }
-          if (!have_nav) ++without_nav;
-          handle(rec, false);
+          handle(rec);
         }
       }
       stop = true;
@@ -358,10 +354,10 @@ int main(int argc, char** argv) {
         return 0;
       }
       std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld pings without navigation, "
-                           "%lld blocks dropped at the full queue, %lld reports split, %lld report datagrams refused\n",
+                           "%lld pings without velocity, %lld blocks dropped at the full queue, %lld reports split, %lld report datagrams refused\n",
                    static_cast<long long>(done), static_cast<long long>(assembler.dropped_pings),
                    static_cast<long long>(assembler.lost_samples), static_cast<long long>(assembler.bad_blocks),
-                   static_cast<long long>(without_nav), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
+                   static_cast<long long>(nav_counts.without_nav), static_cast<long long>(nav_counts.without_velocity), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
                    static_cast<long long>(out_socket ? out_socket->refused : 0));
     } else {
       throw std::invalid_argument("give --replay FILE, --udp PORT --template FILE, or --passive FILE");

@@ -510,6 +510,61 @@ def test_program_takes_blocks_over_udp_with_navigation(pings, tmp_path):
     assert len(raw) == N and not np.iscomplexobj(raw[0].samples.array)   # recorded before conditioning
 
 
+@needs_exe
+def test_program_counts_pings_whose_navigation_has_no_velocity_like_the_python_chain(pings, tmp_path):
+    """sonar-8is: the program applies navigation in its UDP path; a ping whose fix had no velocity over ground is counted
+    in pings_without_velocity on its lines and in its summary, as the Python LiveChain counts it on the same navigation
+    stream (the first two fixes without velocity, the rest with it)."""
+    import socket
+    import time
+    from gpusonar.live import NavListener
+    template = pings[0].copy()
+    w = gs.RecordWriter(str(tmp_path / "template.h5"))
+    w.write(template)
+    w.close()
+    fixes = []
+    for i in range(N + 1):
+        t = i * INTERVAL
+        fix = {"time_ns": int(t * 1e9), "x": 1.5 * t, "y": 0.0, "z": 0.0, "yaw": 0.0}
+        fixes.append(fix if i < 2 else dict(fix, vx=1.5, vy=0.0, vz=0.0))
+    nav = NavListener()
+    for f in fixes:
+        nav.push(f)
+    stripped = copies(pings)
+    from gpusonar.live import apply_pose
+    for r in stripped:
+        apply_pose(r, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+    with pytest.warns(RuntimeWarning, match="pings_without_velocity"):
+        with LiveChain(CHAIN, nav=nav) as chain:
+            want = [r.get("pings_without_velocity", 0) for r in chain.run(stripped)]
+    # The pings at 0, 2 and 4 s take a fix without velocity (held from the first; interpolated with one of the first two).
+    assert want == [1, 2, 3] + [3] * (N - 3)
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    nav_port = port + 1
+    proc = subprocess.Popen([str(EXE), "--udp", str(port), "--template", str(tmp_path / "template.h5"), "--nav-port", str(nav_port),
+                             "--report", str(tmp_path / "rep.jsonl"), "--pings", str(N), *EXE_OPTIONS], stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(1.0)
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for f in fixes:
+            tx.sendto(json.dumps(f).encode(), ("127.0.0.1", nav_port))
+        time.sleep(0.2)
+        sender = FlankBoardEmulator(pings, INTERVAL, block_samples=128).send(port, pace=0.25)
+        sender.join(timeout=120.0)
+        _, err = proc.communicate(timeout=120.0)
+    finally:
+        proc.kill()
+    assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"
+    reports = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
+    if "0 dropped, 0 samples lost" not in err or len(reports) < N:
+        pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")
+    assert [r.get("pings_without_velocity", 0) for r in reports] == want
+    assert "navigation sends no velocity" in err and f"0 pings without navigation, {want[-1]} pings without velocity" in err
+
+
 def test_cpp_sync_matches_python_and_focuses_the_four_board_array():
     from gpusonar import sync
     from test_calibration_sync import four_board_ping

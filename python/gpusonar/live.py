@@ -787,25 +787,14 @@ class NavListener:
         times = np.array([f[0] for f in fixes], dtype=np.int64)
         return fixes, int(np.searchsorted(times, time_ns))
 
-    def velocity_given(self, time_ns: int) -> bool:
-        """Whether the pose `at(time_ns)` has a velocity over ground from navigation: every fix it comes from (the two
-        around the time, or the one it is held from) sent vx, vy and vz as finite numbers. Without it the velocity is
-        zero there and the backprojection does not follow the array's own motion over the round trip (-24 m at
-        12 km; sonar-2hz, sonar-8is). False before any fix. The C++ counterpart: libs/live Navigation::velocity_given."""
-        got = self._around(time_ns)
-        if got is None:
-            return False
-        fixes, i = got
+    @staticmethod
+    def _given(fixes, i) -> bool:
         if i == 0 or i == len(fixes) or len(fixes) == 1:
             return bool(fixes[min(i, len(fixes) - 1)][1][_VELOCITY])
         return bool(fixes[i - 1][1][_VELOCITY] and fixes[i][1][_VELOCITY])
 
-    def at(self, time_ns: int):
-        """(position [3], rpy [3], velocity [3]) at `time_ns`, or None before any fix has arrived."""
-        got = self._around(time_ns)
-        if got is None:
-            return None
-        fixes, i = got
+    @staticmethod
+    def _pose(fixes, i, time_ns: int):
         if i == 0 or i == len(fixes) or len(fixes) == 1:
             row = fixes[min(i, len(fixes) - 1)][1]
         else:
@@ -815,6 +804,25 @@ class NavListener:
             # Angles go the short way round.
             row[3:6] = fixes[i - 1][1][3:6] + w * np.angle(np.exp(1j * (fixes[i][1][3:6] - fixes[i - 1][1][3:6])))
         return row[0:3], row[3:6], row[6:9]
+
+    def velocity_given(self, time_ns: int) -> bool:
+        """Whether the pose `at(time_ns)` has a velocity over ground from navigation: every fix it comes from (the two
+        around the time, or the one it is held from) sent vx, vy and vz as finite numbers. Without it the velocity is
+        zero there and the backprojection does not follow the array's own motion over the round trip (-24 m at
+        12 km; sonar-2hz, sonar-8is). False before any fix. The C++ counterpart: libs/live Navigation::velocity_given."""
+        got = self._around(time_ns)
+        return False if got is None else self._given(*got)
+
+    def at(self, time_ns: int):
+        """(position [3], rpy [3], velocity [3]) at `time_ns`, or None before any fix has arrived."""
+        got = self._around(time_ns)
+        return None if got is None else self._pose(*got, time_ns)
+
+    def at_with_velocity(self, time_ns: int):
+        """(`at(time_ns)`, `velocity_given(time_ns)`) from one snapshot of the fixes (a fix arriving between two calls
+        cannot make them disagree), or None before any fix has arrived."""
+        got = self._around(time_ns)
+        return None if got is None else (self._pose(*got, time_ns), self._given(*got))
 
     def _nearest(self, time_ns: int):
         with self._lock:
@@ -1076,11 +1084,12 @@ class LiveChain:
         if self._tap_cfg.get("dir") and index < int(self._tap_cfg.get("pings", 1)):
             tap = TapWriter(f"{self._tap_cfg['dir']}/ping{index:04d}")
         if self.nav is not None:
-            fix = self.nav.at(record.transmit.time_ns)
-            if fix is None:
+            got = self.nav.at_with_velocity(record.transmit.time_ns)    # the pose and its velocity flag, one snapshot
+            if got is None:
                 self.pings_without_nav += 1    # processed where the record says it is; counted and reported
             else:
-                if not self.nav.velocity_given(record.transmit.time_ns):
+                fix, velocity_given = got
+                if not velocity_given:
                     # Processed with the array at rest over the round trip: counted and reported (sonar-8is).
                     if self.pings_without_velocity == 0:
                         warnings.warn("navigation sends no velocity (vx, vy, vz); counted in pings_without_velocity", RuntimeWarning, stacklevel=2)
@@ -1118,7 +1127,13 @@ class LiveChain:
             report.update(ping=index, pings_without_nav=self.pings_without_nav,
                           processing_seconds=time.perf_counter() - t_wall)
             if self.pings_without_velocity:            # only when some ping had none: every other line is the one it was
-                report["pings_without_velocity"] = self.pings_without_velocity
+                # right after pings_without_nav, where Report::json and the Python engine put it
+                ordered = {}
+                for key, value in report.items():
+                    ordered[key] = value
+                    if key == "pings_without_nav":
+                        ordered["pings_without_velocity"] = self.pings_without_velocity
+                report = ordered
             if report.get("sync") and not report["sync"]["ok"]:
                 self.boards_out_of_sync += 1
             power, ranges, _ = self._cpp.last_map()

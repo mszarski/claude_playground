@@ -113,8 +113,8 @@ void UdpSourceOp::stop() {
   if (nav_thread_.joinable()) nav_thread_.join();
   std::cerr << "UdpSourceOp: " << emitted_ << " emitted, "
             << (pings_ ? pings_->dropped_pings : stream_ ? stream_->dropped_chunks : 0) << " dropped, "
-            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, " << without_nav_
-            << " without navigation, " << queue_dropped_ << " blocks dropped at the full queue\n";
+            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, " << nav_counts_.without_nav
+            << " without navigation, " << nav_counts_.without_velocity << " without velocity, " << queue_dropped_ << " blocks dropped at the full queue\n";
 }
 
 void UdpSourceOp::compute(holoscan::InputContext&, holoscan::OutputContext& out, holoscan::ExecutionContext&) {
@@ -143,8 +143,12 @@ void UdpSourceOp::compute(holoscan::InputContext&, holoscan::OutputContext& out,
     }
     for (PingRecord& rec : ready) {
       if (nav_socket_ && !stream_) {
-        const std::lock_guard<std::mutex> lock(mutex_);
-        if (!nav_.apply(rec)) ++without_nav_;
+        bool first_without_velocity = false;
+        {
+          const std::lock_guard<std::mutex> lock(mutex_);
+          first_without_velocity = nav_counts_.apply(nav_, rec);   // the fix and its velocity flag under one lock (sonar-8is)
+        }
+        if (first_without_velocity) std::cerr << "UdpSourceOp: navigation sends no velocity (vx, vy, vz); counted as pings without velocity\n";
       }
       done_.push_back(std::move(rec));
     }

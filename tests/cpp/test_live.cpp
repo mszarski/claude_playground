@@ -589,6 +589,26 @@ TEST(Navigation, MarksAPoseWithoutVelocityAndTakesAMissingOrNonFiniteComponentAs
   EXPECT_TRUE(at(1000));                   // at a fix's own time: it and the one before
 }
 
+TEST(Navigation, CountsWhatTheProgramReportsAndSaysOnceWhenVelocityFirstGoesMissing) {
+  // sonar-8is: apps/sonar_live and holoscan_ops UdpSourceOp count with NavCounts after each apply.
+  live::Navigation nav;
+  live::NavCounts counts;
+  PingRecord rec;
+  rec.transmit.time_ns = 500;
+  EXPECT_FALSE(counts.apply(nav, rec));                                     // no fix yet
+  EXPECT_EQ(counts.without_nav, 1);
+  EXPECT_EQ(counts.without_velocity, 0);
+  ASSERT_TRUE(nav.push("{\"time_ns\": 0, \"x\": 0.0}"));
+  ASSERT_TRUE(nav.push("{\"time_ns\": 1000, \"x\": 1.0, \"vx\": 1.0, \"vy\": 0.0, \"vz\": 0.0}"));
+  ASSERT_TRUE(nav.push("{\"time_ns\": 2000, \"x\": 2.0, \"vx\": 1.0, \"vy\": 0.0, \"vz\": 0.0}"));
+  EXPECT_TRUE(counts.apply(nav, rec));                                      // first without velocity: warn
+  EXPECT_FALSE(counts.apply(nav, rec));                                     // second: counted, no warning
+  rec.transmit.time_ns = 1500;
+  EXPECT_FALSE(counts.apply(nav, rec));                                     // with velocity: not counted
+  EXPECT_EQ(counts.without_nav, 1);
+  EXPECT_EQ(counts.without_velocity, 2);
+}
+
 TEST(Report, WritesNonFiniteNumbersAsNull) {
   // The Python engine writes the same (live.finite_or_null; tests/python/test_hardcoded.py).
   Report r;
