@@ -179,12 +179,16 @@ class FrameReceiver:
       one seen are not counted.
     * `frames_late`: frames that arrived behind a later one. Those in time are used, their ping
       kept; those whose place was already given up (`frames_too_late`, a part of `frames_late`, each
-      frame counted once) are not used, and stay in `frames_lost` and `lost_samples`.
+      frame counted once) are not used, and stay in `frames_lost` and `lost_samples`. With frame numbers a
+      frame is too late only if its number was counted lost (so frames_lost >= frames_too_late), however
+      late it comes; without them, only within the assembler's reach (later, it counts as a repeat).
     * `frames_repeated`: duplicates - samples already received - ignored; also a frame that did not
       fit the stream and was not confirmed as a restart (it cannot be told from a stale copy), and a
       damaged frame whose number was already received (its metadata is not taken).
+    * `pings_discarded_at_stop`: complete pings `finish(keep=False)` returned to a caller that had stopped
+      (`run_receiver`). Pings emitted (`pings`) + `dropped_pings` + these = pings heard.
     * `frames`: frames used. Arrivals = frames + frames_repeated + frames_too_late + frames held
-      (at most 4, waiting to be confirmed as a restart; none after `finish()`), not counting damaged
+      (at most 8, waiting to be confirmed as a restart; none after `finish()`), not counting damaged
       and bad frames.
     * `trouble_frames`: the first 16 frame numbers at which a loss or a damaged frame was noticed:
       for a loss, the number of the frame that arrived after the gap, entered when a frame of the
@@ -218,8 +222,10 @@ class FrameReceiver:
         self._awaited = []              # [lo, hi, first sample of lo, samples per frame, noticed at]: numbers skipped
         self._anchor = None             # (number, first sample, samples) of the last frame used
         self._gaps_reported = set()
+        self._lost_numbers = []         # [lo, hi]: numbers counted in frames_lost, the latest 256 ranges
         self._seen = self._counts()
         self.pings = 0
+        self.pings_discarded_at_stop = 0   # complete pings finish() returned to a caller that had stopped
 
     def _counts(self) -> tuple:
         a = self.assembler
@@ -238,6 +244,7 @@ class FrameReceiver:
 
     def _lose(self, lo: int, hi: int, noticed: int) -> None:
         self.frames_lost += hi - lo
+        self._lost_numbers = (self._lost_numbers + [[lo, hi]])[-256:]
         if len(self.trouble_frames) < 16 and noticed not in self._gaps_reported:
             self._gaps_reported.add(noticed)
             self.trouble_frames.append(noticed)
@@ -291,6 +298,14 @@ class FrameReceiver:
                 a_number, a_first, a_n = self._anchor
                 self._awaited.append([lo, number, a_first + (lo - a_number) * a_n, a_n, number])
         elif number <= last:
+            if self.first_frame_number is not None and number < self.first_frame_number and verdict == "late":
+                # Placed before the first frame seen (it was late): the numbers between are awaited too.
+                a = self.assembler
+                if number + 1 < self.first_frame_number:
+                    self._awaited.insert(0, [number + 1, self.first_frame_number, a.last_first + a.last_samples,
+                                             a.last_samples, self.first_frame_number])
+                self.first_frame_number = number
+                return
             if self._arrived(number) or verdict not in ("in_order", "gap"):
                 return
             self._awaited = []                            # the samples go on, the numbers went back: renumbered
@@ -300,6 +315,13 @@ class FrameReceiver:
         get = metadata.get if metadata is not None else (lambda key, default=None: default)
         number = get("frame_number", None)
         number = int(number) if number is not None else None
+        if number is not None:
+            for i, (lo, hi) in enumerate(self._lost_numbers):
+                if lo <= number < hi:                     # counted lost, here after all: too late, once
+                    self._lost_numbers[i:i + 1] = [r for r in ([lo, number], [number + 1, hi]) if r[0] < r[1]]
+                    self.frames_late += 1
+                    self.frames_too_late += 1
+                    return []
         # A number at or below the last one and not awaited: a repeat, unless the samples say the sender restarted.
         # Its metadata is not taken, and a damaged one is a repeat outright (it cannot restart anything).
         old = (number is not None and self._last_frame_number is not None and number <= self._last_frame_number and
@@ -326,6 +348,12 @@ class FrameReceiver:
             except BlockError:
                 self.bad_frames += 1
             self._account()
+            if number is not None and verdict == "too_late":
+                # A numbered frame not counted lost (a resend of a damaged one, say): a repeat, so that every
+                # frame too late is one counted lost.
+                self.frames_late -= 1
+                self.frames_too_late -= 1
+                self.frames_repeated += 1
         if number is not None:
             self._number(number, verdict)
             if verdict in ("in_order", "gap", "late", "restart"):
@@ -337,12 +365,16 @@ class FrameReceiver:
         self.pings += len(records)
         return records
 
-    def finish(self) -> list:
-        """The stream has ended: what is still awaited is lost; the pings that were waiting are returned."""
+    def finish(self, keep: bool = True) -> list:
+        """The stream has ended: what is still awaited is lost; the pings that were waiting are returned. With
+        `keep` False the caller has stopped and will not use them: they are counted in `pings_discarded_at_stop`."""
         records = self.assembler.finish()
         self._account()
         self._settle(everything=True)
-        self.pings += len(records)
+        if keep:
+            self.pings += len(records)
+        else:
+            self.pings_discarded_at_stop += len(records)
         return records
 
     def stats(self) -> dict:
@@ -350,7 +382,8 @@ class FrameReceiver:
         return {"frames": self.frames, "frames_lost": self.frames_lost, "frames_damaged": self.frames_damaged,
                 "frames_repeated": self.frames_repeated, "frames_late": self.frames_late, "frames_too_late": self.frames_too_late,
                 "bad_frames": self.bad_frames, "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number,
-                "trouble_frames": list(self.trouble_frames), "pings": self.pings, "dropped_pings": a.dropped_pings,
+                "trouble_frames": list(self.trouble_frames), "pings": self.pings,
+                "pings_discarded_at_stop": self.pings_discarded_at_stop, "dropped_pings": a.dropped_pings,
                 "lost_samples": a.lost_samples}
 
 
@@ -908,7 +941,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
             board.stop()
     finally:
         cuda.release()
-    receiver.finish()            # the end of the stream: what is still awaited is counted (pings waiting are not reported)
+    receiver.finish(keep=False)  # the end of the stream: what is still awaited is counted, waiting pings in pings_discarded_at_stop
     stats = receiver.stats()
     udp1, cpu1 = udp_counters(), cpu_throttling()
     stats["socket"] = app.socket_watch.stats()

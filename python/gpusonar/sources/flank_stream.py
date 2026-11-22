@@ -74,6 +74,10 @@ REORDER_BLOCKS = 2
 # Raw rows a ping may hold behind holes on the decimating path before it is given up (ours: 64 MiB bounds the memory of
 # a stalled ping; a whole raw window of the default flank_32 config is larger, see PingAssembler). libs/live kMaxHeldBytes.
 MAX_HELD_BYTES = 64 << 20
+# Pings open at once: the reorder grace keeps an earlier ping open while a later one fills (ours; libs/live kMaxOpenPings).
+MAX_OPEN_PINGS = 2
+# Blocks held as a possible restart; also how many in a row, consistent, confirm one (ours; libs/live kMaxHeldBlocks).
+MAX_HELD_BLOCKS = 8
 # Sample indices and transmit samples at or above this are refused, in both engines (they would overflow int64 sums in C++).
 MAX_SAMPLE_INDEX = 1 << 62
 
@@ -154,7 +158,9 @@ class PingAssembler:
 
     * Order. A block is placed by its `sample_index`, not by when it arrives. A jump forward leaves a
       hole; a block arriving later inside a hole fills it (`late_blocks`) and its samples go to the ping
-      whose window they fall in. Several pings may be open at once; records come out in transmit order.
+      whose window they fall in. An earlier ping stays open beside a later one only for the reorder grace
+      below, and at most MAX_OPEN_PINGS (2) are open at once (a third gives up the oldest, counted); records
+      come out in transmit order.
       A ping is emitted the moment its window is complete unless an earlier ping is still open or may
       still be named (an index jump before it with a hole still open there): then it waits for that
       decision, at most `reorder_blocks` blocks. In order, nothing waits.
@@ -163,7 +169,8 @@ class PingAssembler:
       given up (`dropped_pings`) once the stream is `reorder_blocks` blocks past its window's end; then the
       holes up to its window's end are given up, cut at the block boundary after it (blocks assumed of the
       current block's length): a hole running on into the next ping's window keeps the rest. A later ping
-      being named does not give up an open one.
+      being named does not give up an open one, unless it was transmitted before that one's window closed
+      (overlapping pings): then the earlier one is given up at once, as it always was.
     * Repeats and late blocks. A block behind the furthest one seen that fills no hole is a repeat
       (`repeated_blocks`, ignored) or, if it falls in a hole given up, too late (`too_late_blocks`, also in
       `late_blocks`; not placed; its samples stay in `lost_samples`; a copy of it later is a repeat).
@@ -171,8 +178,11 @@ class PingAssembler:
       whose blocks are lost shows only as a jump of the ping index between two pings in transmit order.
       The jump d (modulo 2^32: a wrap continues) counts d - 1 dropped pings when the transmits are d ping
       intervals apart, the interval being the median of the last 5 transmit gaps between consecutive indices
-      and "d apart" meaning within half an interval of d intervals; otherwise it is a renumbering and counts
-      nothing. Before an interval is known (fewer than two consecutive pings heard) a jump counts nothing:
+      and "d apart" meaning within half an interval of d intervals and longer than d - 1 of the longest of
+      those 5 by more than half an interval; otherwise it is a renumbering and counts nothing. Failure modes:
+      a sender that skips indices across a gap that, with jitter, happens to be near d intervals is counted as
+      d - 1 lost (an index skip over 1.6 intervals counts 1); a real loss with jitter beyond half an interval
+      is not counted. Before an interval is known (fewer than two consecutive pings heard) a jump counts nothing:
       losses are then under-counted, never invented. Pings before the first one heard are not counted.
     * A ping named late (a block behind the stream naming a transmit between two heard ones, its index in
       between) is placed in order. A block naming a transmit before the last ping already emitted or dropped
@@ -181,22 +191,31 @@ class PingAssembler:
       window before that block is still in an open hole.
     * Restart. A block that does not fit the stream - another capture start (`start_ns`), behind the stream
       by more than a receive window and `reorder_blocks` + 1 blocks, or naming a transmit this stream cannot
-      have named there - is held (`last_block` "held", at most 4 or `reorder_blocks` + 2). It starts the stream afresh (`restarts`)
-      only when held blocks of one capture make a contiguous run: two with another capture start, or
-      `reorder_blocks` + 1 with the same one (a board without a clock; fewer could be stale copies reordered);
-      then the old stream is closed (its open pings dropped, its holes lost, its complete pings emitted) and the
-      held blocks of the new stream are taken in sample order. A held block not confirmed within
-      `reorder_blocks` + 2 blocks is stale and counted as a repeat (a block too old to place cannot be told from
-      one). A block up to `reorder_blocks` blocks before the first one heard, fitting it, is a late block.
-    * Malformed: a sample index or transmit sample at or above 2^62, or a transmit sample below -1, is refused
-      (BlockError; the C++ engine counts it in bad_blocks).
+      have named there - is held (`last_block` "held", at most MAX_HELD_BLOCKS = 8). It starts the stream
+      afresh (`restarts`) when (a) held blocks of one capture make a contiguous run of two, either of another
+      capture start, or of this one (a board without a clock) and ending before the first sample this stream
+      heard by more than the restart span (a window and `reorder_blocks` + 1 blocks) - samples this stream
+      never had, so no copy of its own blocks, and too far back to be blocks from before the join arriving
+      late - or (b) 8 blocks are held in a row, no block fitting the stream in between, of one capture start
+      and consistent with each other (distinct samples, transmits not going back): the old stream has gone
+      quiet. A stale copy of this stream's blocks meets (a) never and (b) only in a burst of 8 with the live
+      stream silent. A restart without a clock whose counter lands where this stream already was is caught
+      only by (b), 8 blocks late (the held blocks are then taken, not lost). The old stream is closed (its
+      open pings dropped, its holes lost, its complete pings emitted), the run taken in sample order, and the
+      old capture start is never returned to: its blocks are repeats. A held block not confirmed once
+      `reorder_blocks` + 2 blocks have fitted the stream after it is stale, counted as a repeat. A block up to
+      `reorder_blocks` blocks before the first one heard, fitting it, is a late block.
+    * Malformed: a sample index or transmit sample at or above 2^62, a transmit sample below -1, or one at or
+      beyond the block's own end (a block names a transmit at or before its samples), is refused (BlockError;
+      the C++ engine counts it in bad_blocks).
     * `finish()` ends the stream: holes not yet given up are counted, pings with a hole are dropped, complete
       pings waiting for an earlier one are returned; a ping cut short by the end alone is not counted.
-    * With `decimate`, rows behind a hole are held raw; a ping holding more than `max_held_bytes` of them is
-      given up (counted). The decimator takes one ping at a time, in order: a ping named late in front of the
+    * Memory. Raw path: one window buffer per open ping, so at most 2 (base: 1). Decimating path: rows behind
+      holes are held raw; when all pings together hold more than `max_held_bytes` (64 MiB), the earliest open
+      ping is given up (counted) until under it. In order nothing is held, so it never fires on a clean stream. The decimator takes one ping at a time, in order: a ping named late in front of the
       one it is on is too late; a ping is not started while an earlier one may still be named.
-    * Windows that overlap (a transmit before the previous window has closed; FrameStream and the emulator
-      refuse such streams) are both assembled; until 2026-11 the earlier ping was dropped.
+    * In order, overlapping streams included, the records and counts are those of the assembler before
+      2026-11 (b6816a4).
 
     `last_block` says what the last block was: "in_order", "gap", "late", "too_late", "repeated", "held" or
     "restart"; `last_first`, `last_samples` are its first sample and length; `used_blocks` counts blocks whose
@@ -230,6 +249,7 @@ class PingAssembler:
         self.restarts = 0
         self.used_blocks = 0
         self.held_peak_bytes = 0          # most raw bytes held behind holes at once (decimating path)
+        self.open_peak = 0                # most pings open at once
         self.last_block = None
         self.last_first = self.last_samples = None
         self._decimator = None
@@ -237,8 +257,10 @@ class PingAssembler:
             from ..live import decimate_options
             self._decimator = core.PingDecimator(template, decimate_options(decimate) or {}, reference)
             self.decimation = self._decimator.plan()
-        self._suspects = []               # (feed number, block) held: maybe a restart
-        self._feeds = 0
+        self._suspects = []               # (fitting blocks seen when held, block): maybe a restart
+        self._fitting = 0                 # blocks that fitted the stream
+        self._held_run = 0                # blocks held one after the other, none fitting in between
+        self._left = []                   # capture starts (start_ns) left by a restart: never returned to
         self._reset()
 
     def _reset(self) -> None:
@@ -335,8 +357,9 @@ class PingAssembler:
             if tx < 0:
                 return self._max_named is None
             return self._max_named is None or tx > self._max_named[0] or (tx, index) == self._max_named
-        if first < self._frontier - self._span(n) or first < self._origin - self.reorder_blocks * n:
-            return False
+        in_hole = any(min(first + n, h1) > max(first, h0) for h0, h1 in self._holes)
+        if (first < self._frontier - self._span(n) and not in_hole) or first < self._origin - self.reorder_blocks * n:
+            return False                                  # (a block in a hole still open always may come)
         if tx < 0:
             return self._first_tx is None or first < self._first_tx
         if self._known(tx, index):
@@ -377,6 +400,16 @@ class PingAssembler:
         while at and self._pings[at - 1]["tx"] > tx:
             at -= 1
         self._pings.insert(at, p)
+        # Transmitted before the previous window closed: the previous ping is given up, as it always was (until
+        # 2026-11 every ping open when a later one was named was). Likewise this one, if the next was transmitted
+        # inside its window.
+        if at and self._pings[at - 1]["state"] == "open" and tx < self._pings[at - 1]["w0"] + self.window_length:
+            self._drop(self._pings[at - 1])
+        if at + 1 < len(self._pings) and p["state"] == "open" and self._pings[at + 1]["tx"] < w0 + self.window_length:
+            self._drop(p)
+        opened = [q for q in self._pings if q["state"] == "open" and q["covered"] < self.window_length]
+        for q in opened[:max(len(opened) - MAX_OPEN_PINGS, 0)]:
+            self._drop(q)                                 # more open than the reorder grace allows: the oldest goes
 
     def _drop(self, p: dict) -> None:
         p["state"], p["buffer"], p["pending"], p["held"] = "dropped", None, {}, 0
@@ -427,6 +460,7 @@ class PingAssembler:
                 break
             p["record"], p["state"], self._owner = self._record(p), "complete", None
         self.held_peak_bytes = max(self.held_peak_bytes, sum(p["held"] for p in self._pings))
+        self.open_peak = max(self.open_peak, sum(1 for p in self._pings if p["state"] == "open"))
 
     def _gap_open(self, p: dict) -> bool:
         """Whether a ping not yet heard may still be named before `p`."""
@@ -452,7 +486,9 @@ class PingAssembler:
                     self._deltas = (self._deltas + [gap])[-5:]
                 elif d >= 2 and self._deltas:
                     interval = sorted(self._deltas)[len(self._deltas) // 2]
-                    if abs(gap - d * interval) * 2 < interval:
+                    # d intervals within half an interval, and longer than d - 1 of the longest recent intervals
+                    # by half an interval (with jitter seen, a skip of the index needs a longer gap to count)
+                    if abs(gap - d * interval) * 2 < interval and (gap - (d - 1) * max(self._deltas)) * 2 > interval:
                         self.dropped_pings += d - 1               # pings none of whose blocks arrived
             self._released = (self._released + [(p["tx"], p["index"])])[-8:]
             if p["state"] == "complete":
@@ -478,7 +514,7 @@ class PingAssembler:
         """The stream has ended: give up what is still awaited (counted) and return the pings that were waiting."""
         out = []
         self.repeated_blocks += len(self._suspects)
-        self._suspects = []
+        self._suspects, self._held_run = [], 0
         if self._started:
             self._close(out, drop_open=False)
             self._reset()
@@ -493,50 +529,82 @@ class PingAssembler:
             raise BlockError(f"block has {block['n_channels']} channels, the sonar config {self.n_channels}")
         if not 0 <= block["sample_index"] < MAX_SAMPLE_INDEX or not -1 <= block["tx_sample"] < MAX_SAMPLE_INDEX:
             raise BlockError("sample index or transmit sample out of range (at most 2^62)")
-        self._feeds += 1
+        if block["tx_sample"] >= block["sample_index"] + block["n_samples"]:
+            raise BlockError("transmit sample beyond the block's own end")
         self.last_first, self.last_samples = block["sample_index"], block["n_samples"]
         out = []
-        stale = [s for s in self._suspects if self._feeds - s[0] > self.reorder_blocks + 2]
-        if stale:
-            self.repeated_blocks += len(stale)
-            self._suspects = [s for s in self._suspects if s not in stale]
         if not self._started or self._fits(block):
+            self._fitting += 1
+            self._held_run = 0
+            stale = [h for h in self._suspects if self._fitting - h[0] > self.reorder_blocks + 2]
+            if stale:
+                self.repeated_blocks += len(stale)
+                self._suspects = [h for h in self._suspects if all(h is not x for x in stale)]
             self.last_block = self._take(block, out)
             return out
-        first = block["sample_index"]
-        # Contiguous held blocks of one capture, this one among them. Another capture start needs two; the same one
-        # (a board without a clock) more than a reordering can bring: reorder_blocks + 1.
-        chain, grown = [block], True
-        while grown:
-            grown = False
-            for _, s in self._suspects:
-                if s["start_ns"] == block["start_ns"] and all(s is not c for c in chain) and any(
-                        s["sample_index"] + s["n_samples"] == c["sample_index"] or c["sample_index"] + c["n_samples"] == s["sample_index"]
-                        for c in chain):
-                    chain.append(s)
-                    grown = True
-        need = 2 if block["start_ns"] != self._stream_ns else max(2, self.reorder_blocks + 1)
-        if len(chain) < need:
-            self._suspects.append((self._feeds, block))
-            if len(self._suspects) > max(4, self.reorder_blocks + 2):
+        if block["start_ns"] in self._left:               # a capture already left: stale
+            self.repeated_blocks += 1
+            self.last_block = "repeated"
+            return out
+        self._held_run += 1
+        run = self._restart_run(block)
+        if run is None:
+            self._suspects.append((self._fitting, block))
+            if len(self._suspects) > MAX_HELD_BLOCKS:
                 self._suspects.pop(0)
                 self.repeated_blocks += 1
             self.last_block = "held"
             return out
         self.restarts += 1                                # a restart: the old stream ends here
         self._close(out, drop_open=True)
+        if self._stream_ns != block["start_ns"]:
+            self._left = (self._left + [self._stream_ns])[-8:]
         self._reset()
-        span = self._span(block["n_samples"])
-        new = [s for _, s in self._suspects if s["start_ns"] == block["start_ns"] and abs(s["sample_index"] - first) <= span]
-        self.repeated_blocks += len(self._suspects) - len(new)
-        self._suspects = []
-        for b in sorted(new + [block], key=lambda b: b["sample_index"]):
+        self.repeated_blocks += sum(1 for _, h in self._suspects if all(h is not x for x in run))
+        self._suspects, self._held_run = [], 0
+        for b in sorted(run, key=lambda b: b["sample_index"]):
             if not self._started or self._fits(b):
                 self._take(b, out)
             else:
                 self.repeated_blocks += 1
         self.last_block = "restart"
         return out
+
+    def _restart_run(self, block: dict):
+        """The held blocks, this one among them, that confirm a restart, or None.
+
+        (a) A contiguous run of one capture: two blocks of another capture start, or, of this stream's capture
+            start (a board without a clock, its sample counter gone back), two that end before the first sample
+            this stream heard (by more than the late-block allowance): samples this stream never had, so not a
+            stale copy of its own blocks. A restart from a counter that lands where this stream already was is
+            not caught by (a).
+        (b) MAX_HELD_BLOCKS blocks held one after the other, no block fitting the stream in between, of one
+            capture start and consistent with each other (distinct samples, transmits not going back): the old
+            stream has gone quiet and these make a stream of their own. Stale copies would need that many in a
+            row with the live stream silent."""
+        ns = block["start_ns"]
+        held = [h for _, h in self._suspects if h["start_ns"] == ns] + [block]
+        chain, grown = [block], True
+        while grown:
+            grown = False
+            for h in held:
+                if all(h is not c for c in chain) and any(
+                        h["sample_index"] + h["n_samples"] == c["sample_index"] or c["sample_index"] + c["n_samples"] == h["sample_index"]
+                        for c in chain):
+                    chain.append(h)
+                    grown = True
+        if len(chain) >= 2:
+            if ns != self._stream_ns:
+                return chain
+            n = block["n_samples"]
+            if all(c["sample_index"] + c["n_samples"] <= self._origin - self._span(n) for c in chain):
+                return chain
+        if self._held_run >= MAX_HELD_BLOCKS and len(held) >= MAX_HELD_BLOCKS:
+            run = sorted(held, key=lambda h: h["sample_index"])
+            if all(x["sample_index"] + x["n_samples"] <= y["sample_index"] and x["tx_sample"] <= y["tx_sample"]
+                   for x, y in zip(run, run[1:])):
+                return run
+        return None
 
     def _take(self, block: dict, out: list) -> str:
         """A block that fits the stream: place it; return what it was."""
@@ -583,11 +651,15 @@ class PingAssembler:
         self._settle_pings()
         horizon = self.reorder_blocks * n
         for p in self._pings:
-            if p["state"] == "open" and (self._frontier >= p["w0"] + self.window_length + horizon or
-                                         (self._decimator and p["held"] > self.max_held_bytes)):
+            if p["state"] == "open" and self._frontier >= p["w0"] + self.window_length + horizon:
                 self._drop(p)                             # given up: its holes with it
                 self._give_up_to(p["w0"] + self.window_length, n)
         self._settle_pings()
+        while sum(p["held"] for p in self._pings) > self.max_held_bytes:
+            first_open = next(p for p in self._pings if p["state"] == "open")
+            self._drop(first_open)                        # rows held behind holes, all pings together, past the bound
+            self._give_up_to(first_open["w0"] + self.window_length, n)
+            self._settle_pings()
         self._give_up(self._frontier - horizon)
         self._release(out)
         low = self._frontier - self._span(n)
@@ -682,6 +754,7 @@ class FlankUdpSource(Source):
         self.timeout = float(timeout) if timeout else None
         self.bad_blocks = 0
         self.overrun_pings = 0
+        self.pings_discarded_at_stop = 0   # complete pings the assembler still held at close()
         self.dropped_blocks = 0
         self._queue_limit = int(queue_mb * 1024 * 1024)
         self._queued_bytes = 0
@@ -747,7 +820,8 @@ class FlankUdpSource(Source):
         for thread in self._threads:
             thread.join(timeout=2.0)
         if not any(thread.is_alive() for thread in self._threads):
-            self.assembler.finish()      # the end of the stream: what is still awaited is counted (waiting pings dropped unseen)
+            # The end of the stream: what is still awaited is counted; complete pings still waiting are not used.
+            self.pings_discarded_at_stop += len(self.assembler.finish())
 
 
 class FlankBoardEmulator:

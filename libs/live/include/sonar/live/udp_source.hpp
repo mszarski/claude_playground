@@ -29,20 +29,27 @@ constexpr int kReorderBlocks = 2;
 /// Raw bytes a ping may hold behind holes on the decimating path before it is given up (ours; flank_stream.py
 /// MAX_HELD_BYTES is the same).
 constexpr std::int64_t kMaxHeldBytes = std::int64_t{64} << 20;
+/// Pings open at once (the reorder grace keeps an earlier one open while a later one fills); flank_stream.py the same.
+constexpr std::size_t kMaxOpenPings = 2;
+/// Blocks held as a possible restart; also how many in a row, consistent, confirm one. flank_stream.py the same.
+constexpr std::int64_t kMaxHeldBlocks = 8;
 /// Sample indices and transmit samples at or above this are refused (bad_blocks), as in flank_stream.py.
 constexpr std::int64_t kMaxSampleIndex = std::int64_t{1} << 62;
 
 /// The rules are those of python/gpusonar/sources/flank_stream.py PingAssembler; its docstring states them and
 /// the engine-parity tests (tests/python/test_hsb_receive.py) hold both to the same counters and decisions. In short:
-/// blocks are placed by their sample counter, several pings may be open at once and records come out in transmit
-/// order; a hole is given up (lost_samples) `reorder_blocks` blocks after it unless it reaches into an open window;
-/// an open ping is given up (dropped_pings) `reorder_blocks` blocks after its window's end, with the holes up to the
-/// block boundary after that end; a repeat is ignored (repeated_blocks), a block in a hole already given up is too late
+/// blocks are placed by their sample counter; an earlier ping stays open beside a later one only for the reorder
+/// grace (at most kMaxOpenPings, and never when the later one was transmitted inside its window: then it is given up,
+/// as before 2026-11); records come out in transmit order; a hole is given up (lost_samples) `reorder_blocks` blocks
+/// after it unless it reaches into an open window; an open ping is given up (dropped_pings) `reorder_blocks` blocks
+/// after its window's end; a repeat is ignored (repeated_blocks), a block in a hole already given up is too late
 /// (too_late_blocks, in late_blocks too); a jump of d in the ping index counts d - 1 dropped pings when the transmits
-/// are d ping intervals apart (median of the last 5, within half an interval), nothing before an interval is known;
-/// a block that does not fit the stream is held, and a contiguous run of held blocks of one capture restarts it
-/// (restarts): two with another capture start, reorder_blocks + 1 with the same one; held blocks not confirmed are
-/// counted as repeats. finish() gives up what is still awaited at the end of a stream.
+/// are d ping intervals apart (median of the last 5, within half an interval, and beyond d - 1 of the longest by
+/// half an interval), nothing before an interval is known; a block that does not fit is held, and a restart
+/// (restarts) needs two contiguous held blocks of another capture start, or of this one before the first sample
+/// heard, or kMaxHeldBlocks held in a row consistent with each other; a capture left is never returned to.
+/// finish() gives up what is still awaited at the end of a stream. Raw memory: at most kMaxOpenPings windows;
+/// decimating: rows held behind holes at most max_held_bytes in all.
 class PingAssembler {
  public:
   /// With `decimate` (enabled) every ping is band-selected and decimated to complex baseband as
@@ -60,7 +67,7 @@ class PingAssembler {
   /// Whether samples [a, b) may still arrive in time (not yet reached, or in a hole not given up).
   bool holds(std::int64_t a, std::int64_t b) const;
   std::int64_t dropped_pings = 0, lost_samples = 0, overflow_blocks = 0, bad_blocks = 0;
-  std::int64_t late_blocks = 0, too_late_blocks = 0, repeated_blocks = 0, restarts = 0, used_blocks = 0, held_peak_bytes = 0;
+  std::int64_t late_blocks = 0, too_late_blocks = 0, repeated_blocks = 0, restarts = 0, used_blocks = 0, held_peak_bytes = 0, open_peak = 0;
   /// Set before the first block (0 or more).
   int reorder_blocks = kReorderBlocks;
   std::int64_t max_held_bytes = kMaxHeldBytes;
@@ -93,6 +100,7 @@ class PingAssembler {
   void drain(Ping& p);
   void settle_pings();
   bool gap_open(const Ping& p) const;
+  std::vector<const Header*> restart_run(const Header& h) const;
   void release(std::vector<PingRecord>& out, bool wait);
   void close(std::vector<PingRecord>& out, bool drop_open);
   void drop(Ping& p);
@@ -108,7 +116,8 @@ class PingAssembler {
   std::int64_t window_start_ = 0, window_length_ = 0, n_channels_ = 0, sample_bytes_ = 3;
   double volts_per_count_ = 1.0;
   bool started_ = false, have_first_tx_ = false, have_max_ = false;
-  std::int64_t frontier_ = 0, origin_ = 0, stream_ns_ = 0, first_tx_ = 0, feeds_ = 0;
+  std::int64_t frontier_ = 0, origin_ = 0, stream_ns_ = 0, first_tx_ = 0, fitting_ = 0, held_run_ = 0;
+  std::vector<std::int64_t> left_;                            ///< capture starts left by a restart: never returned to
   std::pair<std::int64_t, std::int64_t> max_named_{0, 0};
   std::vector<Hole> holes_, expired_;
   std::list<Ping> pings_;                                     ///< open or undecided, in transmit order

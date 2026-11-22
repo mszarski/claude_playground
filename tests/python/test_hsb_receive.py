@@ -117,10 +117,11 @@ def test_lost_frames_cost_their_samples_and_exactly_the_pings_they_cut(run, case
     kept = [i for i in range(N) if i not in dropped]
     assert [r.metadata.sequence for r in records] == kept
     same_as_clean(records, run["clean"])
-    # fixed: the stats name frames_late and frames_too_late (0 here: nothing arrives out of order).
+    # fixed: the stats name frames_late, frames_too_late (0 here: nothing arrives out of order) and
+    # pings_discarded_at_stop (0: finish() is not called).
     assert s == {"frames": len(run["frames"]) - len(skip), "frames_lost": len(skip), "frames_damaged": 0,
                  "frames_repeated": 0, "frames_late": 0, "frames_too_late": 0, "bad_frames": 0, "packets_dropped": 0, "first_frame_number": 0,
-                 "trouble_frames": runs_of(skip), "pings": len(kept), "dropped_pings": len(dropped),
+                 "trouble_frames": runs_of(skip), "pings": len(kept), "pings_discarded_at_stop": 0, "dropped_pings": len(dropped),
                  "lost_samples": FRAME * len(skip)}
 
 
@@ -201,11 +202,11 @@ def test_damaged_frames_and_frames_not_of_this_stream_are_told_apart(run):
     records, s = receive(items)
     assert [r.metadata.sequence for r in records] == [0, 1, 2, 5]
     same_as_clean(records, run["clean"])
-    # fixed: the stats name frames_late and frames_too_late (0 here).
+    # fixed: the stats name frames_late, frames_too_late and pings_discarded_at_stop (0 here).
     assert s == {"frames": len(frames) - 5, "frames_lost": 0, "frames_damaged": 2, "frames_repeated": 0, "frames_late": 0,
                  "frames_too_late": 0, "bad_frames": 3,
                  "packets_dropped": 4, "first_frame_number": 0, "trouble_frames": [quiet_damaged, window_damaged],
-                 "pings": 4, "dropped_pings": 2, "lost_samples": 5 * FRAME}
+                 "pings": 4, "pings_discarded_at_stop": 0, "dropped_pings": 2, "lost_samples": 5 * FRAME}
 
 
 def test_a_stream_numbered_from_elsewhere_and_joined_late(run):
@@ -564,3 +565,163 @@ def test_frame_numbers_restarting_or_repeating_are_told_apart(run):
         assert (s["frames_too_late"], s["frames_late"], s["frames_repeated"]) == (1, 1, 1)
         assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == len(order)          # every arrival once
         assert s["frames_lost"] >= s["frames_too_late"] if numbered_ else s["frames_lost"] == 0
+
+
+# -- added with the second review of fix-hsb ------------------------------------------------------------------------------
+
+def no_ping_twice(sequences, a, sent):
+    """Without a restart: no ping out twice, and out + dropped (+ discarded) never more than the pings sent."""
+    assert len(set(sequences)) == len(sequences)
+    assert a.restarts or len(sequences) + a.dropped_pings <= sent
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+@pytest.mark.parametrize("decimate", [None, {}])
+@pytest.mark.parametrize("interval", [320, 500, 640])
+def test_overlapping_pings_in_order_are_as_before(engine, decimate, interval):
+    """A transmit before the previous window has closed gives the previous ping up at once, as the assembler before
+    2026-11 (b6816a4) did: in order only the pings whose successor came after their window are emitted. Was (fix-hsb
+    7ca680a): all kept on the raw path with a window buffer per ping open, every other one dropped when decimating."""
+    n = 8
+    txs = [64 + i * interval for i in range(n)]
+    by, order = small_stream(txs, 64, txs[-1] + 640 + 64)
+    a = small(engine, **({} if decimate is None else {"decimate": decimate}))
+    got = feed_all(a, [by[f] for f in order], finish=True)
+    kept = [i for i in range(n) if i == n - 1 or txs[i + 1] >= txs[i] + 640]           # 640: window start + length
+    assert got == kept and a.dropped_pings == n - len(kept)
+    assert counters(a) == dict(dropped_pings=n - len(kept), lost_samples=0, late_blocks=0, too_late_blocks=0,
+                               repeated_blocks=0, restarts=0)
+    assert a.open_peak == 1 and a.held_peak_bytes == 0
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_open_pings_are_bounded_under_reordering(engine):
+    """Small pings (one block each), blocks shuffled within 4: never more than 2 open at once."""
+    one, order = small_stream([i * P for i in range(12)], P, 12 * P)
+    rng = np.random.default_rng(3)
+    for _ in range(6):
+        i = int(rng.integers(0, len(order) - 4))
+        order.insert(i + int(rng.integers(1, 4)), order.pop(i))
+    a = small(engine)
+    got = feed_all(a, [one[f] for f in order], finish=True)
+    assert a.open_peak <= 2 and got == sorted(got)
+    no_ping_twice(got, a, 12)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_a_transmit_beyond_the_block_is_refused(engine):
+    """Was: one block naming a transmit past its own end restarted the stream and counted pings twice."""
+    from gpusonar.sources.flank_stream import BlockError
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    k = TXS[2] + 256 + 128
+    bad = by[k][:20] + int(10**9).to_bytes(8, "little", signed=True) + (77).to_bytes(4, "little") + by[k][32:]
+    blocks = [bad if f == k else by[f] for f in order]
+    a = small(engine)
+    got = []
+    for b in blocks:
+        try:
+            got += [int(r.metadata.sequence) for r in a.feed(b)]
+        except BlockError:
+            assert engine == "python"
+    assert got == [0, 1, 3, 4] and (a.restarts, a.dropped_pings, a.lost_samples) == (0, 1, 64)
+    assert engine == "python" or a.bad_blocks == 1
+    no_ping_twice(got, a, 5)
+
+
+def capture(start_ns, index, seed, n=8):
+    txs = [64 + i * (P + 256) for i in range(n)]
+    by, order = small_stream(txs, 64, txs[-1] + P + 256, index=index, start_ns=start_ns, seed=seed)
+    return [by[f] for f in order]
+
+
+def restart_case(name):
+    old, same, other = capture(1000, list(range(8)), 1), capture(1000, list(range(100, 108)), 2), capture(5000, list(range(100, 108)), 2)
+    k = 4 * 14 + 6                                      # a block in the middle of ping 4's window (14 blocks a ping)
+    if name == "three_stale_copies":                    # was: restarts 1, pings dropped
+        return old[:k] + old[5:8] + old[k:], list(range(8)), dict(restarts=0, repeated_blocks=3, dropped_pings=0)
+    if name == "three_stale_copies_interleaved":
+        return old[:k] + [old[5], old[k], old[6], old[k + 1], old[7]] + old[k + 2:], list(range(8)), \
+            dict(restarts=0, repeated_blocks=3, dropped_pings=0)
+    if name == "same_start_restart_under_loss":         # was: never confirmed, the new capture discarded
+        return old[:40] + [b for i, b in enumerate(same) if i % 3 != 2], [0, 1, 2], dict(restarts=1, repeated_blocks=0)
+    if name == "back_to_a_capture_left":                # was: restarts 3, back and forth
+        return old[:38] + other[:2] + old[38:40] + other[2:], [0, 1] + list(range(100, 108)), \
+            dict(restarts=1, repeated_blocks=2, dropped_pings=1)
+    raise KeyError(name)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+@pytest.mark.parametrize("name", ["three_stale_copies", "three_stale_copies_interleaved", "same_start_restart_under_loss",
+                                  "back_to_a_capture_left"])
+def test_restarts_are_told_from_stale_copies(engine, name):
+    blocks, sequences, want = restart_case(name)
+    a = small(engine)
+    got = feed_all(a, blocks, finish=True)
+    assert got == sequences
+    assert {k: getattr(a, k) for k in want} == want
+    if not a.restarts:
+        no_ping_twice(got, a, 8)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_an_index_skip_with_jitter_seen_is_not_a_loss(engine):
+    """Intervals of I and 1.4 I heard, then the index skips 3 -> 5 over 1.6 I: within half an interval of 2 I, but not
+    longer than the longest interval by half an interval, so not counted. (With no jitter heard it would be: the
+    documented failure mode.)"""
+    gaps = [P, int(1.4 * P), P, int(1.6 * P), P]
+    txs = [64]
+    for g in gaps:
+        txs.append(txs[-1] + g)
+    by, order = small_stream(txs, 64, txs[-1] + P, index=[0, 1, 2, 3, 5, 6])
+    a = small(engine)
+    assert feed_all(a, [by[f] for f in order], finish=True) == [0, 1, 2, 3, 5, 6] and a.dropped_pings == 0
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_finish_counts_what_is_discarded(engine):
+    """emitted + dropped + discarded = pings heard; FrameReceiver.finish(keep=False) counts what it returns."""
+    one, one_order = small_stream([i * P for i in range(6)], P, 6 * P)
+    a = small(engine)
+    got = feed_all(a, [one[f] for f in one_order[:3] if f != P])
+    discarded = len(a.finish())
+    assert (got, discarded, a.dropped_pings) == ([0], 1, 0)          # ping 1 lost whole, not counted (no interval yet)
+
+
+def test_frame_receiver_counts_a_very_late_frame_once():
+    """A numbered frame counted lost that arrives beyond the assembler's reach is too late, not a repeat (was both
+    frames_lost and frames_repeated)."""
+    from gpusonar.sonar import SonarModel
+    son = SonarModel.load("flank_32", SMALL)
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    k = order.index(TXS[2] + 256 + 64)
+    o = order[:k] + order[k + 1:]
+    o.insert(o.index(TXS[3] + 576) + 1, order[k])           # far behind by then: beyond the assembler's reach
+    rx = hsb.FrameReceiver(son, frame_samples=64)
+    for f in o:
+        rx.take(by[f], {"frame_number": f // 64, "frame_bytes_received": len(by[f]), "packets_dropped": 0})
+    kept = rx.finish(keep=False)
+    s = rx.stats()
+    assert (s["frames_lost"], s["frames_too_late"], s["frames_late"], s["frames_repeated"]) == (1, 1, 1, 0)
+    assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == len(o)
+    assert s["pings"] + s["dropped_pings"] + s["pings_discarded_at_stop"] == len(TXS) and kept == []
+
+
+@pytest.mark.parametrize("numbered_", [True, False])
+def test_frames_from_before_the_join_or_deep_in_a_hole_are_not_restarts(numbered_):
+    """Frames from before the first one seen arriving late, and a frame late by more than the restart span but inside a
+    hole still open (a long window), are not taken for a restart (found by the reviewer's rx2 fuzz, seeds 1108, 1598)."""
+    from gpusonar.sonar import SonarModel
+    son = SonarModel.load("flank_32", SMALL)
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    k = [f // 64 for f in order]
+    o = k[4:7] + [1] + k[7:9] + [0] + k[9:]                       # joined at frame 4; 1 and 0 come late, 2 and 3 never
+    w = (TXS[2] + 256) // 64                                      # ping 2's first window frame, 6 frames late
+    o.remove(w)
+    o.insert(o.index(w + 6) + 1, w)
+    rx = hsb.FrameReceiver(son, frame_samples=64)
+    got = [int(r.metadata.sequence) for x in o for r in rx.take(by[x * 64], {"frame_number": x, "frame_bytes_received": len(by[x * 64]),
+                                                                             "packets_dropped": 0} if numbered_ else None)]
+    got += [int(r.metadata.sequence) for r in rx.finish()]
+    s = rx.stats()
+    assert rx.assembler.restarts == 0 and got == [0, 1, 2, 3, 4] and s["dropped_pings"] == 0
+    assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == len(o)

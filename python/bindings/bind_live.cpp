@@ -1029,6 +1029,7 @@ void bind_live(py::module_& m) {
       .def("holds", &live::PingAssembler::holds)
       .def_readonly("used_blocks", &live::PingAssembler::used_blocks)
       .def_readonly("held_peak_bytes", &live::PingAssembler::held_peak_bytes)
+      .def_readonly("open_peak", &live::PingAssembler::open_peak)
       .def_readonly("max_held_bytes", &live::PingAssembler::max_held_bytes)
       .def_readonly("dropped_pings", &live::PingAssembler::dropped_pings)
       .def_readonly("lost_samples", &live::PingAssembler::lost_samples)

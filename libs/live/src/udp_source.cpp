@@ -135,7 +135,9 @@ bool PingAssembler::fits(const Header& h) const {
     if (h.tx < 0) return !have_max_;
     return !have_max_ || h.tx > max_named_.first || std::make_pair(h.tx, h.index) == max_named_;
   }
-  if (h.first < frontier_ - span(h.n) || h.first < origin_ - reorder_blocks * h.n) return false;
+  bool in_hole = false;                                  // a block in a hole still open always may come
+  for (const Hole& o : holes_) in_hole = in_hole || std::min(h.first + h.n, o.b) > std::max(h.first, o.a);
+  if ((h.first < frontier_ - span(h.n) && !in_hole) || h.first < origin_ - reorder_blocks * h.n) return false;
   if (h.tx < 0) return !have_first_tx_ || h.first < first_tx_;
   if (known(h.tx, h.index)) return true;
   if (h.tx > h.first + h.n || !have_max_ || h.tx > max_named_.first) return false;
@@ -193,7 +195,19 @@ void PingAssembler::name(const Header& h) {
   p.record = template_;
   auto at = pings_.end();
   while (at != pings_.begin() && std::prev(at)->tx > h.tx) --at;
-  pings_.insert(at, std::move(p));
+  const auto it = pings_.insert(at, std::move(p));
+  // Transmitted before the previous window closed: the previous ping is given up, as it always was. Likewise this
+  // one, if the next was transmitted inside its window.
+  if (it != pings_.begin()) {
+    Ping& before = *std::prev(it);
+    if (before.state == State::kOpen && h.tx < before.w0 + window_length_) drop(before);
+  }
+  if (std::next(it) != pings_.end() && it->state == State::kOpen && std::next(it)->tx < it->w0 + window_length_) drop(*it);
+  std::vector<Ping*> opened;
+  for (Ping& q : pings_) {
+    if (q.state == State::kOpen && q.covered < window_length_) opened.push_back(&q);
+  }
+  for (std::size_t k = 0; k + kMaxOpenPings < opened.size(); ++k) drop(*opened[k]);   // more open than the grace allows
 }
 
 void PingAssembler::drop(Ping& p) {
@@ -289,9 +303,13 @@ void PingAssembler::settle_pings() {
     p.state = State::kComplete;
     owner_ = nullptr;
   }
-  std::int64_t held = 0;
-  for (const Ping& p : pings_) held += p.held;
+  std::int64_t held = 0, open = 0;
+  for (const Ping& p : pings_) {
+    held += p.held;
+    open += p.state == State::kOpen ? 1 : 0;
+  }
   held_peak_bytes = std::max(held_peak_bytes, held);
+  open_peak = std::max(open_peak, open);
 }
 
 void PingAssembler::release(std::vector<PingRecord>& out, bool wait) {
@@ -311,7 +329,9 @@ void PingAssembler::release(std::vector<PingRecord>& out, bool wait) {
         // |gap - d interval| < interval / 2; d beyond gap / interval + 1 cannot be (and d * interval could overflow).
         if (interval > 0 && gap >= 0 && d <= gap / interval + 1) {
           const std::int64_t off = gap - d * interval;
-          if ((off < 0 ? -off : off) * 2 < interval) dropped_pings += d - 1;   // pings none of whose blocks arrived
+          // ... and longer than d - 1 of the longest recent intervals by half an interval
+          const std::int64_t longest = *std::max_element(deltas_.begin(), deltas_.end());
+          if ((off < 0 ? -off : off) * 2 < interval && (gap - (d - 1) * longest) * 2 > interval) dropped_pings += d - 1;
         }
       }
     }
@@ -341,6 +361,7 @@ void PingAssembler::close(std::vector<PingRecord>& out, bool drop_open) {
 void PingAssembler::finish(std::vector<PingRecord>& out) {
   repeated_blocks += static_cast<std::int64_t>(suspects_.size());
   suspects_.clear();
+  held_run_ = 0;
   if (started_) {
     close(out, false);
     reset();
@@ -407,12 +428,24 @@ PingAssembler::Block PingAssembler::take(const Header& h, std::vector<PingRecord
   settle_pings();
   const std::int64_t horizon = reorder_blocks * n;
   for (Ping& p : pings_) {
-    if (p.state == State::kOpen && (frontier_ >= p.w0 + window_length_ + horizon || (decimator_ && p.held > max_held_bytes))) {
+    if (p.state == State::kOpen && frontier_ >= p.w0 + window_length_ + horizon) {
       drop(p);                                           // given up: its holes with it
       give_up_to(p.w0 + window_length_, n);
     }
   }
   settle_pings();
+  for (;;) {                                             // rows held behind holes, all pings together, past the bound
+    std::int64_t held = 0;
+    Ping* first_open = nullptr;
+    for (Ping& p : pings_) {
+      held += p.held;
+      if (first_open == nullptr && p.state == State::kOpen) first_open = &p;
+    }
+    if (held <= max_held_bytes || first_open == nullptr) break;
+    drop(*first_open);
+    give_up_to(first_open->w0 + window_length_, n);
+    settle_pings();
+  }
   give_up(frontier_ - horizon);
   release(out, true);
   const std::int64_t low = frontier_ - span(n);
@@ -431,7 +464,8 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   const auto first = get<std::uint64_t>(data + 12);
   const auto tx = get<std::int64_t>(data + 20);
   if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * sample_bytes_) ||
-      first >= static_cast<std::uint64_t>(kMaxSampleIndex) || tx < -1 || tx >= kMaxSampleIndex) {
+      first >= static_cast<std::uint64_t>(kMaxSampleIndex) || tx < -1 || tx >= kMaxSampleIndex ||
+      tx >= static_cast<std::int64_t>(first) + n) {      // a transmit beyond the block's own end is refused too
     ++bad_blocks;
     return false;
   }
@@ -444,38 +478,26 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   h.flags = get<std::uint16_t>(data + 34);
   h.start_ns = static_cast<std::int64_t>(get<std::uint64_t>(data + 36));
   h.bytes.assign(data, data + size);
-  ++feeds_;
-  const std::int64_t stale_after = reorder_blocks + 2;
-  const std::int64_t feeds = feeds_;
-  const auto stale = [&](const std::pair<std::int64_t, Header>& s) { return feeds - s.first > stale_after; };
-  const auto n_stale = std::count_if(suspects_.begin(), suspects_.end(), stale);
-  if (n_stale > 0) {
-    repeated_blocks += n_stale;
-    suspects_.erase(std::remove_if(suspects_.begin(), suspects_.end(), stale), suspects_.end());
-  }
   if (!started_ || fits(h)) {
+    ++fitting_;
+    held_run_ = 0;
+    const std::int64_t fitting = fitting_, stale_after = reorder_blocks + 2;
+    const auto stale = [&](const std::pair<std::int64_t, Header>& s) { return fitting - s.first > stale_after; };
+    repeated_blocks += std::count_if(suspects_.begin(), suspects_.end(), stale);
+    suspects_.erase(std::remove_if(suspects_.begin(), suspects_.end(), stale), suspects_.end());
     last_block = take(h, out);
     return true;
   }
-  // Contiguous held blocks of one capture, this one among them. Another capture start needs two; the same one (a
-  // board without a clock) more than a reordering can bring: reorder_blocks + 1.
-  std::vector<const Header*> chain{&h};
-  for (bool grown = true; grown;) {
-    grown = false;
-    for (const auto& s : suspects_) {
-      if (s.second.start_ns != h.start_ns || std::find(chain.begin(), chain.end(), &s.second) != chain.end()) continue;
-      bool next = false;
-      for (const Header* c : chain) next = next || s.second.first + s.second.n == c->first || c->first + c->n == s.second.first;
-      if (next) {
-        chain.push_back(&s.second);
-        grown = true;
-      }
-    }
+  if (std::find(left_.begin(), left_.end(), h.start_ns) != left_.end()) {   // a capture already left: stale
+    ++repeated_blocks;
+    last_block = Block::kRepeated;
+    return true;
   }
-  const std::size_t need = h.start_ns != stream_ns_ ? 2 : static_cast<std::size_t>(std::max(2, reorder_blocks + 1));
-  if (chain.size() < need) {
-    suspects_.emplace_back(feeds_, std::move(h));
-    if (suspects_.size() > static_cast<std::size_t>(std::max(4, reorder_blocks + 2))) {
+  ++held_run_;
+  std::vector<const Header*> run = restart_run(h);
+  if (run.empty()) {
+    suspects_.emplace_back(fitting_, std::move(h));
+    if (suspects_.size() > static_cast<std::size_t>(kMaxHeldBlocks)) {
       suspects_.pop_front();
       ++repeated_blocks;
     }
@@ -484,15 +506,18 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   }
   ++restarts;                                            // a restart: the old stream ends here
   close(out, true);
+  if (stream_ns_ != h.start_ns) {
+    left_.push_back(stream_ns_);
+    if (left_.size() > 8) left_.erase(left_.begin());
+  }
   reset();
-  const std::int64_t reach = span(h.n);
   std::vector<Header> fresh;
-  for (auto& s : suspects_) {
-    if (s.second.start_ns == h.start_ns && std::llabs(s.second.first - h.first) <= reach) fresh.push_back(std::move(s.second));
-    else ++repeated_blocks;
+  for (const Header* r : run) fresh.push_back(r == &h ? h : *r);
+  for (const auto& s : suspects_) {
+    if (std::find(run.begin(), run.end(), &s.second) == run.end()) ++repeated_blocks;
   }
   suspects_.clear();
-  fresh.push_back(std::move(h));
+  held_run_ = 0;
   std::stable_sort(fresh.begin(), fresh.end(), [](const Header& x, const Header& y) { return x.first < y.first; });
   for (const Header& b : fresh) {
     if (!started_ || fits(b)) take(b, out);
@@ -500,6 +525,46 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   }
   last_block = Block::kRestart;
   return true;
+}
+
+std::vector<const PingAssembler::Header*> PingAssembler::restart_run(const Header& h) const {
+  // (a) a contiguous run of one capture: two of another capture start, or, of this one (a board without a clock),
+  // two that end before the first sample this stream heard by more than the restart span; (b) kMaxHeldBlocks
+  // held in a row, none fitting in between, of one capture start and consistent with each other. As in flank_stream.py.
+  std::vector<const Header*> held;
+  for (const auto& s : suspects_) {
+    if (s.second.start_ns == h.start_ns) held.push_back(&s.second);
+  }
+  held.push_back(&h);
+  std::vector<const Header*> chain{&h};
+  for (bool grown = true; grown;) {
+    grown = false;
+    for (const Header* c : held) {
+      if (std::find(chain.begin(), chain.end(), c) != chain.end()) continue;
+      bool next = false;
+      for (const Header* x : chain) next = next || c->first + c->n == x->first || x->first + x->n == c->first;
+      if (next) {
+        chain.push_back(c);
+        grown = true;
+      }
+    }
+  }
+  if (chain.size() >= 2) {
+    if (h.start_ns != stream_ns_) return chain;
+    bool before = true;
+    for (const Header* c : chain) before = before && c->first + c->n <= origin_ - span(h.n);
+    if (before) return chain;
+  }
+  if (held_run_ >= kMaxHeldBlocks && held.size() >= static_cast<std::size_t>(kMaxHeldBlocks)) {
+    std::vector<const Header*> run = held;
+    std::stable_sort(run.begin(), run.end(), [](const Header* x, const Header* y) { return x->first < y->first; });
+    bool consistent = true;
+    for (std::size_t k = 1; k < run.size(); ++k) {
+      consistent = consistent && run[k - 1]->first + run[k - 1]->n <= run[k]->first && run[k - 1]->tx <= run[k]->tx;
+    }
+    if (consistent) return run;
+  }
+  return {};
 }
 
 StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate,
