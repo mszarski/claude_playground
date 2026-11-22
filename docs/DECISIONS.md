@@ -2583,7 +2583,8 @@ edge -0.8 m). All three changes are ours.
   sample of the detection's group above the single-sample threshold, else the nearest cell's
   centre. Default `centroid`, byte-identical (seed 51 detections of both engines against b5d75b8).
   The threshold is the first scale's; with `integrate_cells` not starting at 1 it is not the
-  single-sample test (as the existing arrival code; sonar-d99).
+  single-sample test (as the existing arrival code; sonar-d99). Corrected in D-158: the first
+  scale is always the single sample.
 - **C (tools):** `tools/gallery.py` and `tools/classify_rules_eval.py` score an extended true
   object (several points, a hull plan, a box) by the distance to the convex hull of its footprint
   (Andrew's monotone chain), and gate tracked/untracked and false movers by that distance;
@@ -2604,3 +2605,26 @@ edge -0.8 m). All three changes are ours.
   2.98 -> 3.01 m/s (true 3.0), one false mover (seed 4) where there were none.
 - The committed gallery predates D-157 and was not regenerated; whether `first` becomes the
   deployment default is open (sonar-1p2).
+
+### D-158 The detector's first scale is checked to be the single sample; pings whose navigation sent no velocity are counted (issues sonar-d99, sonar-8is)
+
+- **d99 (a check, outputs unchanged, both engines):** the leading edge (`cfar.range_estimate:
+  first`), the arrivals and the flag test read the plan's first scale as the single-sample test.
+  `plan_detector` always puts that test first (cells 0), whatever `cfar.integrate_cells` holds:
+  `[2, 4]` leaves out the cell mean, not the sample. The D-157 B sentence that said otherwise was
+  wrong; no shipped or derived plan was affected (no file in `configs/` sets `integrate_cells`).
+  A plan built by hand with a mean first, or a second sample scale, is now refused
+  (`check_plan`, `DetectorPlan::sample_factor`; `detect.check_plan`).
+- **8is (a counter, both engines):** the backprojection follows the array's motion over the round
+  trip by the pose's velocity (sonar-2hz diagnosis: -24 m at 12 km without it). A navigation fix
+  that sent no `vx, vy, vz`, or a non-finite one, was taken as 0 silently (a NaN went into the
+  pose). Now its missing or non-finite components are 0 and the fix is marked; a ping whose pose
+  came from a marked fix (either of the two interpolated between, or the one held) is counted in
+  `pings_without_velocity`. It is cumulative like `pings_without_nav`, on a report line only once
+  above 0, with one warning. The count is kept where each program applies navigation
+  (`live::NavCounts`: `LiveChain`, `apps/sonar_live` on its UDP path, the Holoscan `UdpSourceOp`),
+  and the pose and its flag come from one snapshot of the fixes. A counter, not a refusal: a
+  refused ping loses detections that a stale velocity would only bias. No record schema change.
+  A static pose is at rest unless it says otherwise. Lines with velocity are unchanged.
+- **Validated:** CPU tests of both packages; GPU suite on 42d4539, HF job 6b026f2defaf5e14f4b79e70,
+  1686 passed, 92 skipped, Holoscan operators compiled (they cannot be built in the CPU container).
