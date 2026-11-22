@@ -61,7 +61,87 @@ def _given(at) -> bool:
     return at is not None and bool(np.isfinite(at))
 
 
-def fit_velocity(history, at: float | None = None, velocity=None, measured=None) -> tuple[np.ndarray, np.ndarray, float, float]:
+OUTLIER_ALPHA = 0.01   # the default false-alarm probability of the outlier test, per track (sonar-ljh; ours)
+
+
+def _outlier(t: np.ndarray, xy: np.ndarray, alpha: float) -> int | None:
+    """The one point of a line fit through (t, xy) that is an outlier, or None (sonar-ljh; the test is ours, built from
+    the standard deleted-residual results of least squares).
+
+    For each point i the line is fitted without it; its residual from that line is d_i = r_i / (1 - h_i), r_i its residual
+    from the fit through all points, h_i = 1/n + (t_i - mean t)^2 / sum (t - mean t)^2 its leverage, and the other points'
+    squared residuals sum to SS - |r_i|^2 / (1 - h_i). With independent Gaussian errors of one variance in both coordinates,
+    F_i = (|r_i|^2 / (1 - h_i) / 2) / ((SS - |r_i|^2 / (1 - h_i)) / nu), nu = 2 (n - 1) - 4, is F(2, nu) distributed (point i
+    is independent of the line through the others). The point of largest F_i (ties: the earliest) is an outlier when F_i
+    exceeds the F(2, nu) quantile at 1 - alpha / n (Bonferroni over the n points): (nu / 2) ((alpha / n)^(-2 / nu) - 1), in
+    closed form since P(F > x) = (1 + 2 x / nu)^(-nu / 2) for two numerator degrees of freedom. Needs four points (nu >= 2).
+    A point whose removal leaves no time between the others (1 - h_i <= 1e-12) is not a candidate. Residuals at rounding
+    level (RMS at most 1e-9 of the largest coordinate, or 1e-9 m) are a line without scatter: no test. alpha <= 0: off."""
+    n = len(t)
+    if not alpha > 0.0 or n < 4:
+        return None
+    tm = t.mean()
+    tc = t - tm
+    stt = float((tc**2).sum())
+    v = (tc[:, None] * xy).sum(axis=0) / stt
+    r = xy - (xy.mean(axis=0) + tc[:, None] * v)
+    r2 = (r**2).sum(axis=1)
+    ss = float(r2.sum())
+    if not np.sqrt(ss / n) > 1e-9 * max(1.0, float(np.abs(xy).max())):
+        return None
+    nu = 2 * (n - 1) - 4
+    one_minus_h = 1.0 - (1.0 / n + tc**2 / stt)
+    best, best_f = None, -np.inf
+    for i in range(n):
+        if not one_minus_h[i] > 1e-12:
+            continue
+        d2 = r2[i] / one_minus_h[i]
+        rest = ss - d2
+        f = (0.5 * d2) / (rest / nu) if rest > 0.0 else (np.inf if d2 > 0.0 else 0.0)
+        if f > best_f:
+            best, best_f = i, f
+    crit = 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0)
+    return best if best is not None and best_f > crit else None
+
+
+def _fit(history, at, velocity, measured, outlier_alpha):
+    """fit_velocity's line, and the number of points it went through."""
+    h = np.asarray(history, dtype=float)
+    t, xy = h[:, 0], h[:, 1:3]
+    last_t, last = t[-1], xy[-1]
+    from_measured = False
+    if measured is not None and len(measured):
+        m = np.asarray(measured, dtype=float).reshape(-1, 2)
+        if len(m) != len(t):
+            raise ValueError(f"fit_velocity: {len(m)} measured rows for {len(t)} history rows")
+        if not np.isnan(m).all():                # all NaN: none recorded, as an empty list (classify.cpp the same)
+            ok = np.all(np.isfinite(m), axis=1)
+            t, xy = t[ok], m[ok]
+            from_measured = True
+    if len(t) < 3 or np.ptp(t) <= 0.0:
+        pos = last
+        if _given(at) and velocity is not None and np.all(np.isfinite(velocity)):
+            pos = pos + (float(at) - last_t) * np.asarray(velocity, dtype=float)
+        return pos, np.zeros(2), 0.0, np.inf, len(t)
+    if from_measured:
+        out = _outlier(t, xy, outlier_alpha)
+        if out is not None:
+            keep = np.arange(len(t)) != out
+            t, xy = t[keep], xy[keep]
+    tc = t - t.mean()
+    v = (tc[:, None] * xy).sum(axis=0) / (tc**2).sum()
+    fit = xy.mean(axis=0) + tc[:, None] * v
+    res = xy - fit
+    # Two coordinates, two fitted parameters each.
+    rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
+    # No time given: the last history row's (the track's last ping), also when the measured rows end earlier (a track
+    # that missed its last pings), as the short-track rule above.
+    pos = xy.mean(axis=0) + ((float(at) if _given(at) else last_t) - t.mean()) * v
+    return pos, v, rms, float(rms / np.sqrt((tc**2).sum())), len(t)
+
+
+def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
+                 outlier_alpha: float = OUTLIER_ALPHA) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
     Returns the position on the line at `at` (s; None or NaN: at the time of the last row of `history`), velocity, RMS residual and the
     velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
@@ -72,49 +152,27 @@ def fit_velocity(history, at: float | None = None, velocity=None, measured=None)
     positions of a track born at zero speed lag behind a mover, +39 m along track at 12 km with the live chain's
     tracker; the measurements do not). With fewer than three measured rows (or no time between them) the short-track rule above, from the last row of
     `history` (the filtered position, where the state's `velocity` holds). None, empty or all NaN (none recorded): fit
-    `history` itself."""
-    h = np.asarray(history, dtype=float)
-    t, xy = h[:, 0], h[:, 1:3]
-    last_t, last = t[-1], xy[-1]
-    if measured is not None and len(measured):
-        m = np.asarray(measured, dtype=float).reshape(-1, 2)
-        if len(m) != len(t):
-            raise ValueError(f"fit_velocity: {len(m)} measured rows for {len(t)} history rows")
-        if not np.isnan(m).all():                # all NaN: none recorded, as an empty list (classify.cpp the same)
-            ok = np.all(np.isfinite(m), axis=1)
-            t, xy = t[ok], m[ok]
-    if len(t) < 3 or np.ptp(t) <= 0.0:
-        pos = last
-        if _given(at) and velocity is not None and np.all(np.isfinite(velocity)):
-            pos = pos + (float(at) - last_t) * np.asarray(velocity, dtype=float)
-        return pos, np.zeros(2), 0.0, np.inf
-    tc = t - t.mean()
-    v = (tc[:, None] * xy).sum(axis=0) / (tc**2).sum()
-    fit = xy.mean(axis=0) + tc[:, None] * v
-    res = xy - fit
-    # Two coordinates, two fitted parameters each.
-    rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
-    # No time given: the last history row's (the track's last ping), also when the measured rows end earlier (a track
-    # that missed its last pings), as the short-track rule above.
-    pos = xy.mean(axis=0) + ((float(at) if _given(at) else last_t) - t.mean()) * v
-    return pos, v, rms, float(rms / np.sqrt((tc**2).sum()))
+    `history` itself.
+
+    `outlier_alpha` (sonar-ljh): through measured positions, at most one point is left out of the line, the one the
+    deleted-residual test (`_outlier`) finds an outlier at this false-alarm probability per track; 0 leaves every
+    point in. A glinting echo (popoto_12km: the ship side-on at the last ping, 23 to 66 m ahead of its centre along
+    track) otherwise pulls the line by its leverage at the end of the track. Filtered history is never tested: its
+    points are not independent."""
+    return _fit(history, at, velocity, measured, outlier_alpha)[:4]
 
 
-def fitted_points(track) -> int:
-    """How many points `fit_velocity` fits for a track: its measured rows (`Track.measured`, D-157), or its history rows
-    when it records none."""
-    measured = getattr(track, "measured", None)
-    if measured is not None and len(measured):
-        m = np.asarray(measured, dtype=float).reshape(-1, 2)
-        if not np.isnan(m).all():
-            return int(np.all(np.isfinite(m), axis=1).sum())
-    return len(track.history)
+def fitted_points(track, outlier_alpha: float = OUTLIER_ALPHA) -> int:
+    """How many points `fit_velocity` fits for a track: its measured rows (`Track.measured`, D-157), less a point the
+    outlier test leaves out (`outlier_alpha`), or its history rows when it records none."""
+    return int(_fit(track.history, None, None, getattr(track, "measured", None), outlier_alpha)[4])
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
-                    linear: dict | None = None, detections: dict | None = None, time: float | None = None) -> list[TrackClass]:
+                    linear: dict | None = None, detections: dict | None = None, time: float | None = None,
+                    outlier_alpha: float = OUTLIER_ALPHA) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -138,20 +196,24 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     track MEASURED (`Track.measured`: the detections it took, at their times), not its filtered history (D-157); a
     track with fewer than three measured rows is a short track as above, from its last filtered point. A track that
     records no measurements (built by hand, a capture saved before D-157) is fitted through its history as before.
+    `outlier_alpha` (sonar-ljh): at most one measured point that the deleted-residual test finds an outlier at this
+    false-alarm probability per track is left out of the line (`fit_velocity`); 0: every point in.
     """
     det = check_detection_rules(detections)
+    if not (0.0 <= outlier_alpha < 1.0):
+        raise ValueError(f"classify outlier_alpha = {outlier_alpha}: from 0 (off) to below 1")
     out = []
     from scipy import stats
     for tr in tracks:
         state = getattr(tr, "state", None)
-        pos, v, rms, sigma = fit_velocity(tr.history, time, None if state is None or len(state) < 4 else state[2:4],
-                                          getattr(tr, "measured", None))
+        pos, v, rms, sigma, n_fit = _fit(tr.history, time, None if state is None or len(state) < 4 else state[2:4],
+                                         getattr(tr, "measured", None), outlier_alpha)
         speed = float(np.hypot(*v))
         n = len(tr.history)
         # The fit's scatter is itself estimated from few points (2m - 4 degrees of freedom, m the points fitted: the
-        # measured rows, D-157), so a short track needs a larger ratio for the same confidence: Student's t against the
-        # normal. `min_points` and `seen` still count the track's pings (its history rows).
-        dof = max(2 * fitted_points(tr) - 4, 1)
+        # measured rows, D-157, less an outlier left out), so a short track needs a larger ratio for the same confidence:
+        # Student's t against the normal. `min_points` and `seen` still count the track's pings (its history rows).
+        dof = max(2 * n_fit - 4, 1)
         need = significance * float(stats.t.ppf(0.9995, dof) / stats.norm.ppf(0.9995))
         seen = tr.hits / max(n, 1)
         snr = float(np.mean(tr.snr)) if getattr(tr, "snr", None) else float("nan")

@@ -22,6 +22,14 @@ struct Fit {
   double x, y, vx, vy, rms, sigma;
 };
 
+// Some row records a measured position (classify.py: `measured` not all NaN).
+bool any_measured(const std::vector<HistoryPoint>& h) {
+  for (const auto& p : h) {
+    if (!std::isnan(p.mx) || !std::isnan(p.my)) return true;
+  }
+  return false;
+}
+
 // The points the line is fitted through (classify.py fit_velocity, D-157): the measured positions of the rows that have
 // one (mx, my finite: the detection the track took there), the rows of misses left out; a history that records none
 // (every row NaN: built by hand from positions) is fitted through its filtered x, y as before.
@@ -30,17 +38,72 @@ std::vector<HistoryPoint> fit_points(const std::vector<HistoryPoint>& h) {
   for (const auto& p : h) {
     if (std::isfinite(p.mx) && std::isfinite(p.my)) pts.push_back({p.time, p.mx, p.my});
   }
-  bool any = false;
-  for (const auto& p : h) any = any || !std::isnan(p.mx) || !std::isnan(p.my);
-  return any ? pts : h;
+  return any_measured(h) ? pts : h;
+}
+
+// The one point of a line fit through h that is an outlier, or -1 (classify.py _outlier, sonar-ljh; ours, from the
+// deleted-residual results of least squares). F_i = (|r_i|^2 / (1 - h_i) / 2) / ((SS - |r_i|^2 / (1 - h_i)) / nu),
+// nu = 2 (n - 1) - 4, is F(2, nu) for independent Gaussian errors of one variance; the largest (ties: the earliest) is an
+// outlier above the F(2, nu) quantile at 1 - alpha / n, (nu / 2) ((alpha / n)^(-2 / nu) - 1). Four points at least; a point
+// whose removal leaves no time between the others (1 - h_i <= 1e-12) is no candidate; residuals at rounding level (RMS at
+// most 1e-9 of the largest coordinate, or 1e-9 m) mean no test; alpha <= 0 (or NaN): off.
+std::int64_t outlier(const std::vector<HistoryPoint>& h, double alpha) {
+  const std::size_t n = h.size();
+  if (!(alpha > 0.0) || n < 4) return -1;
+  const double dn = static_cast<double>(n);
+  double tm = 0.0, xm = 0.0, ym = 0.0, big = 0.0;
+  for (const auto& p : h) {
+    tm += p.time;
+    xm += p.x;
+    ym += p.y;
+    big = std::max({big, std::abs(p.x), std::abs(p.y)});
+  }
+  tm /= dn;
+  xm /= dn;
+  ym /= dn;
+  double stt = 0.0, stx = 0.0, sty = 0.0;
+  for (const auto& p : h) {
+    const double tc = p.time - tm;
+    stt += tc * tc;
+    stx += tc * p.x;
+    sty += tc * p.y;
+  }
+  const double vx = stx / stt, vy = sty / stt;
+  std::vector<double> r2(n);
+  double ss = 0.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double tc = h[i].time - tm;
+    const double rx = h[i].x - (xm + tc * vx), ry = h[i].y - (ym + tc * vy);
+    r2[i] = rx * rx + ry * ry;
+    ss += r2[i];
+  }
+  if (!(std::sqrt(ss / dn) > 1e-9 * std::max(1.0, big))) return -1;
+  const double nu = 2.0 * (dn - 1.0) - 4.0;
+  std::int64_t best = -1;
+  double best_f = -std::numeric_limits<double>::infinity();
+  for (std::size_t i = 0; i < n; ++i) {
+    const double tc = h[i].time - tm;
+    const double one_minus_h = 1.0 - (1.0 / dn + tc * tc / stt);
+    if (!(one_minus_h > 1e-12)) continue;
+    const double d2 = r2[i] / one_minus_h, rest = ss - d2;
+    const double f = rest > 0.0 ? (0.5 * d2) / (rest / nu) : (d2 > 0.0 ? std::numeric_limits<double>::infinity() : 0.0);
+    if (f > best_f) {
+      best = static_cast<std::int64_t>(i);
+      best_f = f;
+    }
+  }
+  const double crit = 0.5 * nu * (std::pow(alpha / dn, -2.0 / nu) - 1.0);
+  return best >= 0 && best_f > crit ? best : -1;
 }
 
 // Least-squares straight line through (time, x, y) of fit_points(h); the position on it at `at` (NaN, or any value that
 // is not finite: at the time of the last row of `history`, the last ping). With fewer than three points, or no time between them (max - min, as
 // numpy.ptp), no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
-// Kalman state's velocity (classify.py fit_velocity). `n_fit` receives the number of points fitted.
-Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, std::int64_t& n_fit) {
-  const std::vector<HistoryPoint> h = fit_points(history);
+// Kalman state's velocity (classify.py fit_velocity). Through measured positions, the one point `outlier` finds at
+// `outlier_alpha` is left out (sonar-ljh). `n_fit` receives the number of points fitted.
+Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, double outlier_alpha, std::int64_t& n_fit) {
+  std::vector<HistoryPoint> h = fit_points(history);
+  const bool from_measured = any_measured(history);
   const std::size_t n = h.size();
   n_fit = static_cast<std::int64_t>(n);
   Fit f{history.back().x, history.back().y, 0.0, 0.0, 0.0, std::numeric_limits<double>::infinity()};
@@ -56,15 +119,23 @@ Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx,
     }
     return f;
   }
+  if (from_measured) {
+    const std::int64_t out = outlier(h, outlier_alpha);
+    if (out >= 0) {
+      h.erase(h.begin() + out);
+      n_fit = static_cast<std::int64_t>(h.size());
+    }
+  }
+  const std::size_t m = h.size();
   double tm = 0.0, xm = 0.0, ym = 0.0;
   for (const auto& p : h) {
     tm += p.time;
     xm += p.x;
     ym += p.y;
   }
-  tm /= static_cast<double>(n);
-  xm /= static_cast<double>(n);
-  ym /= static_cast<double>(n);
+  tm /= static_cast<double>(m);
+  xm /= static_cast<double>(m);
+  ym /= static_cast<double>(m);
   double stt = 0.0, stx = 0.0, sty = 0.0;
   for (const auto& p : h) {
     const double tc = p.time - tm;
@@ -84,7 +155,7 @@ Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx,
   const double tc_last = (std::isfinite(at) ? at : history.back().time) - tm;
   f.x = xm + tc_last * f.vx;
   f.y = ym + tc_last * f.vy;
-  f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(n) - 4, 1)));
+  f.rms = std::sqrt(ss / static_cast<double>(std::max<std::int64_t>(2 * static_cast<std::int64_t>(m) - 4, 1)));
   f.sigma = f.rms / std::sqrt(stt);
   return f;
 }
@@ -114,7 +185,7 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
     std::int64_t n_fit = 0;
-    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3], n_fit);
+    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3], o.outlier_alpha, n_fit);
     TrackClass c;
     c.id = tr->id;
     c.x = f.x;

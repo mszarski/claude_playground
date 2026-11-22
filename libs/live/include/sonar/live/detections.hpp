@@ -147,6 +147,9 @@ struct ClassifyOptions {
   /// The line goes through the measured positions (HistoryPoint::mx, my; D-157), the rows of misses left out; fewer
   /// than three measured rows: a short track, from its last filtered point. No row measured: through x, y as before.
   double time = std::numeric_limits<double>::quiet_NaN();
+  /// Through measured positions, at most one point the deleted-residual test finds an outlier at this false-alarm
+  /// probability per track is left out of the line (classify.py `outlier_alpha`, OUTLIER_ALPHA; sonar-ljh). 0: off.
+  double outlier_alpha = 0.01;
 };
 
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).

@@ -77,6 +77,9 @@ DEFAULTS = {
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": None,
+                 # Through the measured positions at most one point the deleted-residual test finds an outlier at this
+                 # false-alarm probability per track is left out of the line (classify.py OUTLIER_ALPHA, sonar-ljh); 0: off.
+                 "outlier_alpha": 0.01,
                  "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5},
                  # Opt-in rules from the detections themselves (classify.py, ours): None is off.
                  # {"min_mover_cells": cells}. row_snr_db is refused here: the chain never runs the row test.
@@ -447,6 +450,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     if c.get("multipath"):
         m = c["multipath"]
         o.update(multipath_max_excess_range=m["max_excess_range"], multipath_velocity=m["velocity"])
+    o["classify_outlier_alpha"] = float(c["outlier_alpha"])      # always said: the C++ default is not assumed
     det = live_detection_rules(c.get("detections"))
     if det["min_mover_cells"] is not None:
         o["classify_min_mover_cells"] = det["min_mover_cells"]
@@ -971,6 +975,8 @@ class LiveChain:
                  report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
         self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
         live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
+        if not 0.0 <= float(self.cfg["classify"]["outlier_alpha"]) < 1.0:
+            raise ValueError(f"chain.classify.outlier_alpha = {self.cfg['classify']['outlier_alpha']}: from 0 (off) to below 1")
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
         self.report_udp_max_bytes = int(report_udp_max_bytes)
         self.reports_split = 0                 # reports that went out as several datagrams
@@ -1467,7 +1473,8 @@ class LiveChain:
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
         # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t)
+                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t,
+                                           outlier_alpha=c["outlier_alpha"])
         track_extra = {}
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}

@@ -254,6 +254,48 @@ def test_detection_rules_match_python():
             classify.classify_tracks(a, detections={"row_snr_db": bad})
 
 
+def test_both_engines_leave_the_same_glinting_measurement_out_of_the_line():
+    """sonar-ljh, both engines: the 12 km crossing (test_detect.long_range_mover, six pings) with its last detection moved
+    50 m ahead along track in bearing (a glint), through the live chain's 1 deg tracker. Both classifiers leave that
+    measurement out and agree to 1e-6 m; with outlier_alpha 0 both keep it, agree, and are pulled ahead."""
+    from test_classify import LIVE_TRACKER_12KM
+    from test_detect import long_range_mover
+    pings = long_range_mover(n=6)
+    py, cpp = detect.Tracker(**LIVE_TRACKER_12KM), core.LiveTracker(**LIVE_TRACKER_12KM)
+    for k, (tp, d, _, _) in enumerate(pings):
+        if k == len(pings) - 1:
+            d = detect.Detection(d.range, d.bearing + 50.0 / d.range, d.snr_db, d.cells, time=d.time)
+        a = py.update(tp, [d])
+        cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+    tp, _, at_transmit, _ = pings[-1]
+    ahead = {}
+    for alpha in (0.01, 0.0):
+        (want,) = classify.classify_tracks(a, time=tp, outlier_alpha=alpha)
+        (got,) = cpp.classify(time=tp, outlier_alpha=alpha)
+        assert got["kind"] == want.kind == "mover"
+        assert got["position"] == pytest.approx(want.position, abs=1e-6) and got["velocity"] == pytest.approx(want.velocity, abs=1e-6)
+        assert got["fit_rms"] == pytest.approx(want.fit_rms, abs=1e-6) and got["speed_sigma"] == pytest.approx(want.speed_sigma, rel=1e-6)
+        ahead[alpha] = want.position[0] - at_transmit[0]
+    assert classify.fitted_points(a[0]) == 5 and classify.fitted_points(a[0], outlier_alpha=0.0) == 6
+    assert abs(ahead[0.01]) < 3.0 and ahead[0.0] > 15.0
+    for bad in (-0.1, 1.0):
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            cpp.classify(outlier_alpha=bad)
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            core.LiveChainCpp(dict(CPP_CHAIN, classify_outlier_alpha=bad))
+
+
+def test_the_chain_says_its_outlier_alpha_to_the_cpp_engine():
+    """sonar-ljh: the configuration's classify.outlier_alpha (default 0.01) always goes to the C++ chain's options, and
+    a value out of [0, 1) is refused by the Python chain."""
+    from gpusonar.live import cpp_chain_options
+    assert cpp_chain_options(dict(CHAIN))["classify_outlier_alpha"] == 0.01
+    off = dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=0.0))
+    assert cpp_chain_options(off)["classify_outlier_alpha"] == 0.0
+    with pytest.raises(ValueError, match="outlier_alpha"):
+        LiveChain(dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=1.5)))
+
+
 def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
     """The live chain in both engines: without `classify.detections` the C++ chain's options carry no rule; with the
     extent rule on, the two engines' reports give the same classes. Each target here is 15 cells on every ping: at 16

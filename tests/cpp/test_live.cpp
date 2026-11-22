@@ -245,6 +245,53 @@ TEST(Classify, FitsTimeBetweenAllPointsAndMovesAShortTrackByItsState) {
   }
 }
 
+TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
+  // sonar-ljh (classify.py _outlier): six measured points of a 6 m/s crossing with a small scatter, the last 50 m
+  // ahead. By default the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
+  // and pulls the line. A track whose rows record no measurement (the filtered history) is never tested.
+  Track t;
+  t.id = 1;
+  t.hits = 6;
+  t.confirmed = true;
+  const double scatter[6] = {-3.0, 3.0, 2.0, -2.0, 1.0, 50.0};
+  for (int k = 0; k < 6; ++k) {
+    const double tk = 20.0 * k, x = 6.0 * tk;
+    t.history.push_back({tk, x, 12000.0, x + scatter[k], 12000.0 + (k % 2 ? 1.0 : -1.0)});
+  }
+  ClassifyOptions co;
+  EXPECT_EQ(co.outlier_alpha, 0.01);
+  co.time = 100.0;
+  auto out = classify_tracks({&t}, co);
+  EXPECT_NEAR(out[0].vx, 6.0, 0.1);
+  EXPECT_NEAR(out[0].x, 600.0, 3.0);
+  co.outlier_alpha = 0.0;
+  out = classify_tracks({&t}, co);
+  EXPECT_GT(out[0].vx, 6.3);
+  EXPECT_GT(out[0].x - 600.0, 15.0);
+  Track h = t;
+  for (auto& p : h.history) {
+    p.x = p.mx;
+    p.mx = p.my = std::numeric_limits<double>::quiet_NaN();
+  }
+  co.outlier_alpha = 0.01;
+  EXPECT_GT(classify_tracks({&h}, co)[0].vx, 6.3);
+}
+
+TEST(Options, ClassifyOutlierAlphaIsReadEchoedAndChecked) {
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(a.classify.outlier_alpha, 0.01);
+  std::istringstream in("classify_outlier_alpha=0\n");
+  read_options(a, pa, in);
+  EXPECT_EQ(a.classify.outlier_alpha, 0.0);
+  EXPECT_NE(options_json(a).find("\"classify_outlier_alpha\": 0"), std::string::npos) << options_json(a);
+  for (const char* bad : {"classify_outlier_alpha=-0.1\n", "classify_outlier_alpha=1\n", "classify_outlier_alpha=nan\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+}
+
 TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName) {
   // D-141: the default and the names; the two rules themselves are held to the Python tracker's in
   // tests/python/test_live_cpp.py, and the case that separates them in tests/python/test_detect.py.

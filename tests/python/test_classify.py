@@ -334,3 +334,77 @@ def test_without_a_time_a_track_that_missed_its_last_ping_is_reported_at_that_pi
     for at in (None, float("nan")):
         (c,) = classify.classify_tracks([tr], time=at)
         assert np.hypot(*(np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5))) < 1e-6
+
+
+# --- sonar-ljh: one glinting measurement is left out of the line --------------------------------------------------
+
+def glinting_12km_track(glint=-50.0):
+    """The noise-free popoto_12km crossing through the live chain's tracker, its measured positions given a small fixed
+    scatter (+-3 m along track, +-1 m in range) and the last one moved `glint` m along track (negative: ahead of the
+    ship, which runs toward -forward). The live chain measured the last ping 23 to 66 m ahead on popoto_12km seeds 51-60
+    (the ship side-on, a coherent sum of its five points; D-157, sonar-ljh)."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free():
+        tracks = tracker.update(t, [d])
+    (tr,) = tracks
+    scatter = np.array([(1.0, -3.0), (-1.0, 3.0), (0.5, 2.0), (-0.5, -2.0), (1.0, 1.0), (0.0, glint)])
+    tr.measured = [tuple(np.asarray(m) + s) for m, s in zip(tr.measured, scatter)]
+    return tr
+
+
+def test_a_glinting_last_measurement_is_left_out_of_the_line():
+    """sonar-ljh: a last measurement 50 m ahead along track pulls the least-squares line through six points by its
+    leverage at the end of the track (23 m ahead, 6.35 m/s for 6.0 with every point in); the deleted-residual test leaves
+    it out at the default false-alarm probability, and the line through the other five is within 3 m and 0.1 m/s."""
+    tr = glinting_12km_track()
+    truth = np.array((12000.0, 800.0 - 6.0 * 99.5))
+    (c,) = classify.classify_tracks([tr], time=99.5)
+    assert classify.fitted_points(tr) == 5
+    assert np.hypot(*(np.asarray(c.position) - truth)) < 3.0 and c.speed == pytest.approx(6.0, abs=0.1)
+    assert c.kind == "mover"
+    (every,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.0)
+    assert classify.fitted_points(tr, outlier_alpha=0.0) == 6
+    assert truth[1] - every.position[1] > 15.0 and every.speed > 6.3          # pulled ahead and faster
+    # The filtered history is not tested (its points are not independent): the measurements left out, nothing changes.
+    hist = classify.fit_velocity(tr.history, 99.5)
+    assert np.array_equal(hist[0], classify.fit_velocity(tr.history, 99.5, outlier_alpha=0.0)[0])
+
+
+def test_the_outlier_test_leaves_gaussian_scatter_and_exact_lines_alone():
+    """sonar-ljh: on straight tracks with Gaussian scatter of one variance in both coordinates the test leaves a point out
+    of about alpha of them (Bonferroni over the points: at most alpha); on an exact line, and the noise-free 12 km
+    crossing, of none."""
+    rng = np.random.default_rng(7)
+    t = np.arange(8) * 2.0
+    hist = [(float(a), 0.0, 0.0) for a in t]
+    for alpha, most in ((0.01, 0.02), (0.1, 0.12)):
+        out = 0
+        for _ in range(3000):
+            xy = np.array([100.0, 2000.0]) + t[:, None] * [3.0, -1.0] + 5.0 * rng.standard_normal((8, 2))
+            out += classify._fit(hist, None, None, xy, alpha)[4] == 7
+        assert 0.3 * alpha < out / 3000 < most
+    exact = [(float(a), 100.0 + 3.0 * a, 2000.0 - a) for a in t]
+    assert classify._fit(exact, None, None, [p[1:] for p in exact], 0.5)[4] == 8
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for at, d in popoto_12km_noise_free():
+        tracks = tracker.update(at, [d])
+    assert classify.fitted_points(tracks[0]) == 6
+
+
+def test_the_outlier_threshold_is_the_f_quantile_with_bonferroni():
+    """The closed form of classify._outlier, (nu / 2) ((alpha / n)^(-2 / nu) - 1), nu = 2 (n - 1) - 4, is scipy's F(2, nu)
+    quantile at 1 - alpha / n."""
+    from scipy import stats
+    for n in (4, 6, 9):
+        nu = 2 * (n - 1) - 4
+        alpha = 0.01
+        assert 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0) == pytest.approx(stats.f.ppf(1 - alpha / n, 2, nu), rel=1e-9)
+
+
+def test_outlier_alpha_is_checked():
+    tr = glinting_12km_track()
+    for bad in (-0.1, 1.0, float("nan")):
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            classify.classify_tracks([tr], outlier_alpha=bad)
