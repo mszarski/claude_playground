@@ -70,10 +70,12 @@ def main() -> None:
     from datasets import Dataset, DatasetDict, load_dataset
 
     src = load_dataset(args.src)
-    cols = ["prompt", "completion", "before", "after", "relax", "kind", "instruction", "alts"]
+    cols = list(src["train"].features)  # match the source schema so the copied splits fit in one DatasetDict
 
     def ds(rows):
-        return Dataset.from_list([{c: r.get(c, "[]" if c in ("relax", "alts") else "") for c in cols} for r in rows])
+        return Dataset.from_list([{c: r.get(c, "[]" if c in ("relax", "alts", "refs") else r.get("instruction", "")
+                                    if c == "orig_instruction" else "") for c in cols} for r in rows],
+                                 features=src["train"].features)
 
     for name, rows in (("clean", clean), ("broad", broad), ("broad-think", think)):
         out = {"train": ds(rows).shuffle(seed=0)}
