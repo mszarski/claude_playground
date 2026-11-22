@@ -277,6 +277,32 @@ def test_detections_without_their_own_time_track_exactly_as_before(association, 
         _close_to_golden([c.velocity for c in classes], [w["velocity"] for w in want["classes"]])
 
 
+
+def classes_d157():
+    import json
+    import pathlib
+    return json.loads((pathlib.Path(__file__).parent / "data" / "classes_d157.json").read_text())
+
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_the_default_classes_of_the_tracker_scenario_are_held(association):
+    """D-157 review: the default classifier (the line through the measured positions) on the tracker scenario, held at
+    1e-12 against tests/python/data/classes_d157.json (made by both engines with data/make_classes_d157.py, run with the repository root; the golden of
+    tracker_before_d156.json holds the fit through the filtered history). The kinds are those of that golden."""
+    from gpusonar import classify
+    want = classes_d157()[association]
+    tracker = detect.Tracker(**SCENARIO_TRACKER, association=association)
+    for t, dets in tracker_scenario():
+        got = tracker.update(t, [detect.Detection(*d) for d in dets])
+    assert [(c["id"], c["kind"]) for c in want["last_ping"]["python"]] == [(w["id"], w["kind"]) for w in before_d156()[association]["classes"]]
+    for name, at in (("none", None), ("last_ping", t)):
+        w = want[name]["python"]
+        classes = classify.classify_tracks(got, min_speed=0.5, max_fit_rms=2.5, time=at)
+        assert [(c.id, c.kind) for c in classes] == [(c["id"], c["kind"]) for c in w]
+        _close_to_golden([c.position for c in classes], [c["position"] for c in w])
+        _close_to_golden([c.velocity for c in classes], [c["velocity"] for c in w])
+        _close_to_golden([c.fit_rms for c in classes], [c["fit_rms"] for c in w])
+
 def long_range_mover(n=10, interval=20.0, c=1500.0, start=(-60.0, 12000.0), velocity=(6.0, 0.0), drop=(), seed=4):
     """A ship at 12 km crossing at 6 m/s, seen by a monostatic sonar standing at the origin every `interval` s
     (more than the 16 s round trip): per ping (transmit time, the detection, where the ship is at the transmit time,

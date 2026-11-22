@@ -122,6 +122,25 @@ def test_cpp_detections_without_their_own_time_track_exactly_as_before(associati
         _close_to_golden([c["velocity"] for c in got], [w["velocity"] for w in want["cpp_classes"]])
 
 
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_cpp_default_classes_of_the_tracker_scenario_are_held(association):
+    """D-157 review: core.LiveTracker's default classes (the line through the measured positions) on the tracker
+    scenario, held at 1e-12 against tests/python/data/classes_d157.json, and the Python engine's within 1e-6."""
+    from test_detect import SCENARIO_TRACKER, classes_d157, tracker_scenario
+    want = classes_d157()[association]
+    cpp = core.LiveTracker(**SCENARIO_TRACKER, association=association)
+    for t, dets in tracker_scenario():
+        cpp.update(t, [d[:4] for d in dets], None)
+    for name, at in (("none", None), ("last_ping", t)):
+        w = want[name]["cpp"]
+        got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=at)
+        assert [(c["id"], c["kind"]) for c in got] == [(c["id"], c["kind"]) for c in w] == [(c["id"], c["kind"]) for c in want[name]["python"]]
+        _close_to_golden([c["position"] for c in got], [c["position"] for c in w])
+        _close_to_golden([c["velocity"] for c in got], [c["velocity"] for c in w])
+        _close_to_golden([c["fit_rms"] for c in got], [c["fit_rms"] for c in w])
+        np.testing.assert_allclose([c["position"] for c in w], [c["position"] for c in want[name]["python"]], atol=1e-6)
+
 def test_both_trackers_place_a_long_range_mover_where_its_echoes_show_it():
     """D-156, both engines on the same detections of a ship at 12 km crossing at 6 m/s (test_detect.long_range_mover),
     each stamped transmit + R/c: the same tracks, and the position at the ping's time within 3 m of the ship there."""
