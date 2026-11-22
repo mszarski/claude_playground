@@ -2670,3 +2670,5 @@ the cross-range mean stays -23.3 m with `first`, a glint spread over several pin
   every entry of both engines and by `sonar_live`. The 688271f live-chain outputs need
   `max_fit_rms_bearing_deg: 0`.
 
+- **Validated:** CPU tests of the affected files on the merged tree (246 passed); GPU suite on
+  ff0769a's tree, HF job 6b029f6a4fdc5ab3c55fd2fc, 1705 passed, 92 skipped, Holoscan operators compiled.
