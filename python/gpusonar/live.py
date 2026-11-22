@@ -62,8 +62,9 @@ DEFAULTS = {
              # leading edge: the nearest sample over the single-sample threshold; libs/live detector.hpp RangeEstimate,
              # D-157). It places the detection and gives its time, transmit + range / c. None (not given): "first" with
              # cell_statistic multiscale, else "centroid" (D-158, chain_range_estimate); "first" given with mean or peak is
-             # refused. libs/live ChainOptions::range_estimate is the same rule. The elevation stage searches about the
-             # detection's centroid either way (Detection.centroid_range).
+             # refused. libs/live ChainOptions::range_estimate is the same rule. The elevation search, SBL's gates,
+             # blanking and the burst filter go by the centroid either way (Detection.centroid_range); with "first" a
+             # detection the elevation places reports and is timed at the elevation's own range.
              "range_estimate": None},
     "min_snr_db": 9.0,
     "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
@@ -1322,7 +1323,12 @@ class LiveChain:
         else:
             hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
             hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
-        hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] and (self._blank_range is None or h.range >= self._blank_range)]
+        # Blanking and the reference-burst filter judge a detection by its centroid, whichever range it reports (D-158;
+        # libs/live chain.cpp the same): their limits were set for it (with the leading edge the far limit would pass an
+        # echo up to its spread later than before).
+        def _at(h):
+            return h.centroid_range if np.isfinite(h.centroid_range) else h.range
+        hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] and (self._blank_range is None or _at(h) >= self._blank_range)]
         if self._reference is not None and not self._reference.get("dedicated"):
             # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
             # after the window opens and one just before it closes: no detections are taken there.
@@ -1332,7 +1338,7 @@ class LiveChain:
             pulse, burst = record.transmit.waveform.duration, float(self._reference["duration"])
             lo = 0.5 * c * (t_open + float(self._reference["lead"]) + burst)
             hi = 0.5 * c * (t_close - float(self._reference["tail"]) - pulse - burst)
-            hits = [h for h in hits if lo < h.range < hi]
+            hits = [h for h in hits if lo < _at(h) < hi]
         if tap:
             tap.arrays("beamform", power=power.astype(np.float32), ranges=ranges, bearings=self.bearings)
 
@@ -1476,6 +1482,10 @@ class LiveChain:
         c_range = float(record.environment.sound_speed)
         local = []
         extra = [None] * len(hits)             # what elevation adds to each detection's report
+        # The range each detection reports and is timed by: the detector's, or with the leading edge (D-158) the
+        # elevation's own where the elevation places it (below), so that its position, range_m and time are one range.
+        out_range = [h.range for h in hits]
+        placed_by_elevation = chain_range_estimate(cfg) == "first"
         for i, h in enumerate(hits):
             p = origin[:2] - self._origin[:2] + h.range * (np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside)
             depth = depth_sigma = float("nan")
@@ -1491,6 +1501,11 @@ class LiveChain:
                 if el_cfg["correct_bearing"] and not e.ambiguous:
                     # The line array gave the cone angle; with the elevation the horizontal bearing follows.
                     p = origin[:2] - self._origin[:2] + e.range * u[:2]
+                    if placed_by_elevation:
+                        # D-158: placed at the elevation's range (the earliest arrival of the window searched about the
+                        # centroid, elevation.arrival first; else its strongest): its range_m and time are that range too.
+                        # With centroid given, as before D-158: placed there, reported and timed at the centroid.
+                        out_range[i] = float(e.range)
                     extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
                                     bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
                 elif el_cfg["correct_bearing"]:
@@ -1529,7 +1544,7 @@ class LiveChain:
                         alternatives = [float(origin[2] + e.range * w[2]) for w in e.alternatives]
             # The tracker's measurement is (range, bearing) about the frame origin, across then forward.
             local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
-                                          depth_alternatives=alternatives, time=t + float(h.range) / c_range))
+                                          depth_alternatives=alternatives, time=t + float(out_range[i]) / c_range))
         tracks = self.tracker.update(t, local)
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
@@ -1574,10 +1589,10 @@ class LiveChain:
             # only when some ping had no velocity from navigation (sonar-8is): every other line is the one it was
             **({"pings_without_velocity": self.pings_without_velocity} if self.pings_without_velocity else {}),
             "sync": sync_facts,
-            "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
+            "detections": [dict({"range_m": out_range[i_], "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
                                 **({"extent_m": h.extent, "first_range_m": h.first_range} if np.isfinite(h.extent) else {}),
                                 **({"arrivals": [list(a) for a in h.arrivals]} if h.arrivals and len(h.arrivals) > 1 else {}), **(x or {}))
-                           for h, x in zip(hits, extra)],
+                           for i_, (h, x) in enumerate(zip(hits, extra))],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.
                         "x": float(c_.position[1] + self._origin[0]), "y": float(c_.position[0] + self._origin[1]),

@@ -89,7 +89,9 @@ struct ChainOptions {
   /// cfar_range_estimate, when given (the parser sets it; RangeEstimate in detector.hpp). Unset: the leading edge
   /// (`first`) with cell_multiscale, else the centroid (chain_range_estimate). Given: `first` is refused without
   /// cell_multiscale; `centroid` is always accepted. Ours (D-158, the owner's choice after sonar-1p2). The elevation
-  /// stage searches about the detection's centroid whichever is reported (Detection::centroid_range).
+  /// search, SBL's gates, multipath_depth, blanking and the burst filter go by the centroid whichever is reported
+  /// (Detection::centroid_range). With `first`, a detection the elevation places (correct_bearing, not ambiguous)
+  /// reports and is timed at the elevation's own range, the one it is placed at.
   std::optional<RangeEstimate> range_estimate;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.

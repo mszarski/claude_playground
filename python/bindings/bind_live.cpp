@@ -713,6 +713,7 @@ void bind_live(py::module_& m) {
           e["cells"] = d.cells;
           e["first_range_m"] = d.first_range;
           e["extent_m"] = d.extent;
+          e["centroid_range_m"] = d.centroid_range;   // the energy-weighted mean range, whichever range_m reports (D-158)
           py::list arr;
           for (const live::Arrival& a : d.arrivals) arr.append(py::make_tuple(a.range, a.snr_db));
           e["arrivals"] = arr;

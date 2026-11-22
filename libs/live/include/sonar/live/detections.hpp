@@ -31,7 +31,8 @@ struct Detection {
   std::vector<double> depth_alternatives{};
   double extent = std::numeric_limits<double>::quiet_NaN();       ///< m in range the cluster spans (the multiscale detector); NaN: not reported
   /// m, the energy-weighted mean range of the cluster's samples (the multiscale detector), whichever `range` reports
-  /// (RangeEstimate): the elevation of stacked rows is searched about it (D-158). NaN: `range` is the centroid.
+  /// (RangeEstimate). The elevation search, SBL's range gates, multipath_depth, blanking and the reference-burst filter
+  /// go by it (D-158). NaN: `range` is the centroid.
   double centroid_range = std::numeric_limits<double>::quiet_NaN();
   /// The detection's arrivals, nearest first (the multiscale detector): the local peaks along range of the strongest
   /// sample over its bearings, each above the single-sample threshold; at most 8, the strongest. One detection is one

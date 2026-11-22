@@ -80,8 +80,8 @@ class Detection:
                                         # time + range / c (D-156). None (or NaN, any value that is not finite): the
                                         # ping's time given to Tracker.update (as before)
     centroid_range: float = float("nan")  # m, the energy-weighted mean range of its samples (the multiscale detector),
-                                          # whichever `range` reports: the elevation is searched about it (D-158). NaN:
-                                          # `range` is the centroid (libs/live detections.hpp)
+                                          # whichever `range` reports: the elevation search, blanking and the burst
+                                          # filter go by it (D-158). NaN: `range` is the centroid (libs/live detections.hpp)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
