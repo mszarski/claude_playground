@@ -2671,3 +2671,44 @@ the cross-range mean stays -23.3 m with `first`, a glint spread over several pin
   `max_fit_rms_bearing_deg: 0`.
 - **Validated:** CPU tests of the affected files on the merged tree (246 passed); GPU suite on
   ff0769a's tree, HF job 6b029f6a4fdc5ab3c55fd2fc, 1705 passed, 92 skipped, Holoscan operators compiled.
+
+### D-160 The leading edge is the live chain's default range, made consistent (owner's choice, issue sonar-1p2)
+
+- **Default:** `cfar.range_estimate: first` with `cell_statistic: multiscale`, in both engines
+  (live.py `chain_range_estimate`; `ChainOptions::range_estimate`, an optional the parser sets).
+  Not given with `mean` or `peak` the range stays the centroid; `first` given with them is
+  refused; `centroid` is always accepted. The detector's own default stays `centroid`, so direct
+  detector calls and the gallery tools (`detect.cfar` + `detect.cluster`) are unchanged.
+- **Stages kept on the centroid** whichever range is reported: the elevation search, SBL's range
+  gates (grouping and centre), `multipath_depth`, blanking and the reference-burst filter. Each
+  multiscale detection carries `Detection.centroid_range` (both engines, also through SBL;
+  `live_multiscale_detect` returns it). Without this the elevation search, which runs from the
+  detection's range to 1.5 cells beyond, stopped before the echo's peak: on popoto_static_free a
+  10 m target read at 209 m, and with `doa: sbl` five detections came out of three targets.
+- **One range per placed detection:** with `first`, a detection the elevation places (stacked
+  rows, `correct_bearing`, not ambiguous) is placed, reported and timed (D-156) at the elevation's
+  own range. Moving its position to the leading edge put tracks 1.9-3.7 m short; keeping the
+  centroid for stacked rows lost the 12 km gain. With `centroid` given the output is that before
+  D-160, byte for byte where checked (`tests/python/data/centroid_d158.json`, from 42d4539),
+  within 1e-6 m across machines.
+- **Owner's evidence (live chain, centroid -> first):** popoto_12km (chain `popoto_vehicle`) ship
+  range +49.5 -> +0.9 m; flank_patrol submarine +36.8 -> -4.2 m, wreck +33.4 -> +0.6 m; FLS boats
+  1.5-1.8 m nearer, to their near face; FLS false movers 461 -> 411; no class changes.
+  Three stacked rows at 12 km (seeds 51-60, both engines alike): ship track +37.3 -> +2.7 m, its
+  last detection +43.5 -> +0.6 m. popoto_static_free range_m: 0.00 / +0.01 / +0.01 m (centroid
+  +0.05 / +0.03 / -0.02 m).
+- **Worse:** a detection no elevation places (one row, or an ambiguous elevation) reads short for
+  a strong point echo: -1.0 m at 0 dB, -2.0 m 30 dB up, -1.9 to -3.6 m at 0.4-0.5 km, -2.1 m at 1 km (the centroid
+  within 0.05 m). The ship's depth at 12 km with three rows is 8-35 m (true 4 m) with either
+  estimate (ambiguous elevation). The blanking and burst-filter change is untested (at most one
+  cell).
+- **Sensor Bridge loopback:** the real-time loopback test lost one frame in 4 of 25 runs on
+  leading-edge trees against 0 of 28 on centroid trees (one-sided p about 0.04). In the study jobs
+  6b03468b8d268c0fbd228881 and 6b03468c130a00b5aa80fa64 a halved socket buffer lost frames alike
+  with either estimate (9 and 13 frames in 4 runs each), every loss 12-18 frames after a ping
+  completed, and keeping the chain off the receiver's core did not help (24 against 22 frames). The
+  test sits at the edge of the 212,992-byte buffer whatever the estimate; the receiver's stall
+  during ping processing is investigated separately. The core-reservation option was not adopted.
+- **Validated:** merged tree 02593ef: local tests of the touched files 307 passed; GPU suite, HF job
+  6b02c630efaf5e14f4b86a50, 1713 passed, 92 skipped, 1 failed (the loopback above).
+
