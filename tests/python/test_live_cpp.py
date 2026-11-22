@@ -296,6 +296,44 @@ def test_the_chain_says_its_outlier_alpha_to_the_cpp_engine():
         LiveChain(dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=1.5)))
 
 
+def test_both_engines_grow_the_fit_limit_with_range_alike():
+    """sonar-4jm, both engines: the 12 km crossing (ten pings) with its bearings alternately 0.45 deg either side (94 m
+    across, fit RMS about 74 m). Under a fixed 60 m limit both classify it uncertain; with the limit grown by the
+    Popoto array's derived 0.63 deg x range (132 m at 12 km) both a mover; positions and fit agree to 1e-6."""
+    from test_classify import LIVE_TRACKER_12KM, POPOTO_FIT_RMS_BEARING
+    from test_detect import long_range_mover
+    py, cpp = detect.Tracker(**LIVE_TRACKER_12KM), core.LiveTracker(**LIVE_TRACKER_12KM)
+    for k, (tp, d, _, _) in enumerate(long_range_mover(n=10)):
+        d = detect.Detection(d.range, d.bearing + np.radians(0.45) * (-1) ** k, d.snr_db, d.cells, time=d.time)
+        a = py.update(tp, [d])
+        cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+    kinds = []
+    for grow in (0.0, POPOTO_FIT_RMS_BEARING):
+        (want,) = classify.classify_tracks(a, time=tp, max_fit_rms=60.0, max_fit_rms_bearing=grow, origin=(0.0, 0.0))
+        (got,) = cpp.classify(time=tp, max_fit_rms=60.0, max_fit_rms_bearing=grow)
+        assert got["kind"] == want.kind and got["fit_rms"] == pytest.approx(want.fit_rms, abs=1e-6)
+        assert got["position"] == pytest.approx(want.position, abs=1e-6)
+        kinds.append(want.kind)
+        assert 60.0 < want.fit_rms < 132.0
+    assert kinds == ["uncertain", "mover"]
+
+
+def test_the_chain_derives_the_fit_limits_growth_from_the_beam(pings):
+    """sonar-4jm: both engines resolve classify.max_fit_rms_bearing_deg from the record (four times a sixteenth of the
+    beamwidth over sqrt 2), and a value in the configuration wins."""
+    with LiveChain(dict(CHAIN, engine="python")) as chain:
+        chain.run(copies(pings[:1]))
+        r = chain.resolved
+    beam = r["sonar"]["beamwidth_deg"]
+    assert r["classify_max_fit_rms_bearing_deg"] == pytest.approx(4.0 * beam / 16.0 / np.sqrt(2.0), rel=1e-9)
+    assert chain._fit_rms_bearing == pytest.approx(np.radians(r["classify_max_fit_rms_bearing_deg"]), rel=1e-9)
+    given = dict(CHAIN, classify=dict(CHAIN["classify"], max_fit_rms_bearing_deg=0.0))
+    with LiveChain(given) as chain:
+        chain.run(copies(pings[:1]))
+        assert chain.resolved["classify_max_fit_rms_bearing_deg"] == 0.0 and chain._fit_rms_bearing == 0.0
+        assert "classify.max_fit_rms_bearing_deg" in chain.resolved["given"]
+
+
 def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
     """The live chain in both engines: without `classify.detections` the C++ chain's options carry no rule; with the
     extent rule on, the two engines' reports give the same classes. Each target here is 15 cells on every ping: at 16

@@ -202,7 +202,10 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     c.mean_snr_db = tr->snr.empty() ? std::numeric_limits<double>::quiet_NaN() : snr / static_cast<double>(tr->snr.size());
     // The fit's degrees of freedom count the points fitted (the measured rows, D-157); min_points and seen the pings.
     const double need = o.significance * t_ratio(std::max<std::int64_t>(2 * n_fit - 4, 1));
-    const bool steady = o.max_fit_rms < 0.0 || f.rms <= o.max_fit_rms;
+    // The fit limit, at least max_fit_rms_bearing x the track's range from the sonar (sonar-4jm).
+    const double limit = o.max_fit_rms_bearing > 0.0 ? std::max(o.max_fit_rms, o.max_fit_rms_bearing * std::hypot(f.x - o.origin_x, f.y - o.origin_y))
+                                                     : o.max_fit_rms;
+    const bool steady = o.max_fit_rms < 0.0 || f.rms <= limit;
     if (n < o.min_points || !steady) {
       c.kind = Kind::Uncertain;
     } else if (c.speed >= o.min_speed && c.speed >= need * f.sigma && c.seen >= o.min_seen) {

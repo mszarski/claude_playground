@@ -408,3 +408,63 @@ def test_outlier_alpha_is_checked():
     for bad in (-0.1, 1.0, float("nan")):
         with pytest.raises(ValueError, match="outlier_alpha"):
             classify.classify_tracks([tr], outlier_alpha=bad)
+
+
+# --- sonar-4jm: the fit limit grows with range where asked ---------------------------------------------------------
+
+POPOTO_FIT_RMS_BEARING = 4.0 * (0.2993648934 / 4.8 / 16.0) / np.sqrt(2.0)   # rad: libs/live derives it for popoto_long_range
+
+
+def crossing(rng, bearing_sigma, rng_m=20000.0, n=6):
+    """A ship crossing at 6 m/s at `rng_m`, n pings 19.9 s apart, measured with Gaussian bearing error (rad) and 1 m of
+    range error; (across, forward) frame, the sonar at the origin."""
+    t = 19.9 * np.arange(n)
+    fwd = 800.0 - 6.0 * t
+    b = np.arctan2(fwd, rng_m) + bearing_sigma * rng.standard_normal(n)
+    r = np.hypot(fwd, rng_m) + rng.standard_normal(n)
+    m = np.c_[r * np.cos(b), r * np.sin(b)]
+    tr = Track(1, np.array([m[-1, 0], m[-1, 1], 0.0, -6.0]), np.eye(4), hits=n, confirmed=True)
+    tr.history = [(float(a), float(p[0]), float(p[1])) for a, p in zip(t, m)]
+    tr.measured = [tuple(map(float, p)) for p in m]
+    tr.snr = [20.0] * n
+    return tr
+
+
+def test_the_fit_limit_grows_with_range_where_asked():
+    """sonar-4jm: the measured positions scatter across the line of sight by R x the bearing error, which a fit limit
+    from range resolution alone (60 m for the Popoto array) does not follow. At 20 km with 0.2 deg of bearing error
+    (70 m across) the fixed limit makes uncertain 6 % of ships that are movers without any limit; with the limit grown
+    by libs/live's derived 0.63 deg per metre of range (132 m at 12 km, 221 m at 20 km) it binds on none of them. At
+    12 km and 0.05 to 0.2 deg (the scatter measured: 0.03-0.05 deg for a point, 0.1-0.3 deg for the ship side-on) the fixed
+    limit binds on at most 1 % (seeded draws, 400 ships each)."""
+    kw = dict(min_speed=1.0, static_speed=1.0)
+    def movers(deg, rng_m, **more):
+        rng = np.random.default_rng(1)
+        return sum(classify.classify_tracks([crossing(rng, np.radians(deg), rng_m)], **kw, **more)[0].kind == "mover"
+                   for _ in range(400))
+    fixed, grown, none = (movers(0.2, 20000.0, max_fit_rms=60.0), movers(0.2, 20000.0, max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING),
+                          movers(0.2, 20000.0, max_fit_rms=None))
+    assert grown == none and none - fixed >= 16
+    for deg in (0.05, 0.1, 0.2):
+        assert movers(deg, 12000.0, max_fit_rms=None) - movers(deg, 12000.0, max_fit_rms=60.0) <= 4
+
+
+def test_a_grown_fit_limit_still_refuses_positions_that_jump_about():
+    """sonar-4jm: the grown limit is R x 0.63 deg (221 m at 20 km); ten pings whose positions jump 400 m in range about
+    the line (RMS 316 m) are still uncertain, while 80 m jumps (RMS 63 m), uncertain under the fixed 60 m, are a mover
+    under the grown limit. classify_tracks's default (0) leaves the limit as max_fit_rms gives it."""
+    jump = np.array([(400.0, 0.0), (-400.0, 0.0)] * 5)
+    def jumping(scale):
+        tr = crossing(np.random.default_rng(3), 0.0, n=10)
+        tr.measured = [tuple(np.asarray(m) + scale * j) for m, j in zip(tr.measured, jump)]
+        return tr
+    (c,) = classify.classify_tracks([jumping(1.0)], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING)
+    assert c.fit_rms > 300.0 and c.kind == "uncertain"
+    near = jumping(0.2)
+    (fixed,) = classify.classify_tracks([near], max_fit_rms=60.0)
+    assert 60.0 < fixed.fit_rms < 70.0 and fixed.kind == "uncertain"
+    assert [c.kind for c in classify.classify_tracks([near], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING,
+                                                      origin=(0.0, 0.0))] == ["mover"]
+    # The range is from `origin`: the sonar 19 km nearer the ship, the limit is 60 m again.
+    assert [c.kind for c in classify.classify_tracks([near], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING,
+                                                      origin=(19000.0, 0.0))] == ["uncertain"]

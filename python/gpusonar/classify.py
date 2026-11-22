@@ -172,7 +172,8 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
                     linear: dict | None = None, detections: dict | None = None, time: float | None = None,
-                    outlier_alpha: float = OUTLIER_ALPHA) -> list[TrackClass]:
+                    outlier_alpha: float = OUTLIER_ALPHA, max_fit_rms_bearing: float = 0.0,
+                    origin=None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -198,11 +199,15 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     records no measurements (built by hand, a capture saved before D-157) is fitted through its history as before.
     `outlier_alpha` (sonar-ljh): at most one measured point that the deleted-residual test finds an outlier at this
     false-alarm probability per track is left out of the line (`fit_velocity`); 0: every point in.
+    `max_fit_rms_bearing` (rad, sonar-4jm): where `max_fit_rms` is given, a track's limit is at least this times its
+    fitted position's range from `origin` ((x, y); None: the multipath origin, else (0, 0)): the measured positions
+    scatter across the line of sight by the range times the bearing error. 0: off (libs/live derives it from the beam).
     """
     det = check_detection_rules(detections)
     if not (0.0 <= outlier_alpha < 1.0):
         raise ValueError(f"classify outlier_alpha = {outlier_alpha}: from 0 (off) to below 1")
     out = []
+    here = np.asarray(origin if origin is not None else (multipath or {}).get("origin", (0.0, 0.0)), dtype=float)
     from scipy import stats
     for tr in tracks:
         state = getattr(tr, "state", None)
@@ -217,7 +222,10 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         need = significance * float(stats.t.ppf(0.9995, dof) / stats.norm.ppf(0.9995))
         seen = tr.hits / max(n, 1)
         snr = float(np.mean(tr.snr)) if getattr(tr, "snr", None) else float("nan")
-        steady = max_fit_rms is None or rms <= max_fit_rms
+        limit = max_fit_rms
+        if max_fit_rms is not None and max_fit_rms_bearing > 0.0:
+            limit = max(max_fit_rms, max_fit_rms_bearing * float(np.hypot(*(np.asarray(pos, dtype=float) - here))))
+        steady = max_fit_rms is None or rms <= limit
         if n < min_points or not steady:
             kind = "uncertain"
         elif speed >= min_speed and speed >= need * sigma and seen >= min_seen:

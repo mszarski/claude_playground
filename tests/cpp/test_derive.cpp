@@ -96,6 +96,8 @@ TEST(Derive, StandingValuesToTheLastBitForTheArraysShippedToday) {
     EXPECT_EQ(o.tracker.bearing_sigma, 0.017453292519943295);
     EXPECT_EQ(o.classify.multipath_bearing, 0.05235987755982988);
     EXPECT_EQ(o.classify.max_fit_rms, 60.0);
+    // sonar-4jm: the fit limit grows with range by four of the pooled cross-range floors (beam / 16 / sqrt 2).
+    EXPECT_DOUBLE_EQ(o.classify.max_fit_rms_bearing, 4.0 * (d.facts.beamwidth / 16.0) / std::sqrt(2.0));
     EXPECT_EQ(o.elevation.row_tolerance_m, 0.02 < 0.25 * k.c / k.f_high ? 0.02 : 0.25 * k.c / k.f_high);
     EXPECT_TRUE(d.given.empty());
     EXPECT_EQ(d.facts.row_elements, k.n);
@@ -119,6 +121,7 @@ TEST(Derive, ANarrowBandAndAWideBeamScaleTheSettings) {
   EXPECT_DOUBLE_EQ(o.classify.max_fit_rms, 4.0 * resolution);
   EXPECT_DOUBLE_EQ(o.tracker.bearing_sigma, beam / 16.0);        // 1.32 deg, not 1
   EXPECT_DOUBLE_EQ(o.classify.multipath_bearing, 3.0 * beam / 16.0);
+  EXPECT_DOUBLE_EQ(o.classify.max_fit_rms_bearing, 4.0 * (beam / 16.0) / std::sqrt(2.0));
   EXPECT_NEAR(o.tracker.bearing_sigma / kDeg, 1.325, 0.01);
   EXPECT_EQ(d.scaled.size(), 7U);
   // Twice the band: half the floors, down to the standing values.

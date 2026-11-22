@@ -67,6 +67,8 @@ constexpr double kTrainPerGuard = 3.0;           ///< CFAR training >= this many
 constexpr double kBeamwidthsPerSigma = 16.0;
 constexpr double kMultipathSigmas = 3.0;         ///< multipath bearing gate >= this many bearing-sigma floors
 constexpr double kFitRmsSigmas = 4.0;            ///< classifier's fit limit >= this many range-sigma floors
+/// ... and >= this many of the pooled scatter across the line of sight at the track's range, R x bearing floor / sqrt(2)
+/// (the fit's RMS pools two coordinates; sonar-4jm): classify.max_fit_rms_bearing = kFitRmsSigmas x floor / sqrt(2).
 constexpr double kRowToleranceWavelengths = 0.25;  ///< row tolerance <= this many wavelengths at the top of the band
 constexpr double kPassiveTransits = 2.0;         ///< passive block >= this many array transit times
 constexpr double kStreamBufferSeconds = 0.5;     ///< socket buffer >= this much of the board stream
@@ -99,6 +101,7 @@ struct ChainDefaults {
   double range_cell_m = 0.0, cfar_guard_m = 0.0, cfar_train_m = 0.0;
   double tracker_range_sigma = 0.0, tracker_bearing_sigma = 0.0;
   double multipath_bearing = 0.0, classify_max_fit_rms = 0.0, row_tolerance_m = 0.0;
+  double classify_max_fit_rms_bearing = 0.0;   ///< rad: the fit limit per metre of range (sonar-4jm)
   std::vector<std::string> given;      ///< settings the configuration gave
   std::vector<std::string> scaled;     ///< settings the sonar's floor decided, not the standing value
   std::vector<std::string> warnings;   ///< what a new sonar's owner should look at

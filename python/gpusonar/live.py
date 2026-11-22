@@ -80,6 +80,9 @@ DEFAULTS = {
                  # Through the measured positions at most one point the deleted-residual test finds an outlier at this
                  # false-alarm probability per track is left out of the line (classify.py OUTLIER_ALPHA, sonar-ljh); 0: off.
                  "outlier_alpha": 0.01,
+                 # degrees: a track's fit limit is at least this times its range (rad x m) from the sonar; None: derived,
+                 # four times a sixteenth of the beamwidth over sqrt(2) (libs/live derive.hpp, sonar-4jm)
+                 "max_fit_rms_bearing_deg": None,
                  "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5},
                  # Opt-in rules from the detections themselves (classify.py, ours): None is off.
                  # {"min_mover_cells": cells}. row_snr_db is refused here: the chain never runs the row test.
@@ -89,6 +92,7 @@ DEFAULTS = {
 DERIVED = ((("range_cell_m",), "range_cell_m", 1.0), (("cfar", "guard_m"), "cfar_guard_m", 1.0), (("cfar", "train_m"), "cfar_train_m", 1.0),
            (("tracker", "range_sigma"), "tracker_range_sigma", 1.0), (("tracker", "bearing_sigma_deg"), "tracker_bearing_sigma", np.pi / 180.0),
            (("classify", "max_fit_rms"), "classify_max_fit_rms", 1.0),
+           (("classify", "max_fit_rms_bearing_deg"), "classify_max_fit_rms_bearing", np.pi / 180.0),
            (("classify", "multipath", "bearing_deg"), "multipath_bearing", np.pi / 180.0))
 REPORT_UDP_MAX_BYTES = 65000        # a report line longer than this goes out as several datagrams (split_report)
 
@@ -620,6 +624,8 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
         out["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
     if "multipath_bearing" in o:
         out["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
+    if "classify_max_fit_rms_bearing" in o:
+        out["classify_max_fit_rms_bearing_deg"] = float(np.degrees(o.pop("classify_max_fit_rms_bearing")))
     # How a range cell is tested, always said: the program's own default is not assumed.
     multiscale = o.pop("cell_multiscale", False)
     out["cell_statistic"] = "peak" if o.pop("cell_peak", False) else ("multiscale" if multiscale else "mean")
@@ -1188,6 +1194,7 @@ class LiveChain:
         self._row_tolerance = float(d["row_tolerance_m"])
         self._bearing_sigma = float(d["tracker_bearing_sigma"])      # rad, as derived: no trip through degrees
         self._multipath_bearing = float(d["multipath_bearing"])
+        self._fit_rms_bearing = float(d["classify_max_fit_rms_bearing"])      # rad, as derived
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=self._bearing_sigma,
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
@@ -1474,7 +1481,8 @@ class LiveChain:
         # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t,
-                                           outlier_alpha=c["outlier_alpha"])
+                                           outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
+                                           origin=(own[1], own[0]))
         track_extra = {}
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}
