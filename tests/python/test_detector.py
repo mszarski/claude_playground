@@ -548,3 +548,50 @@ def test_the_range_estimate_is_checked_and_reaches_the_program():
     assert text["cfar_range_estimate"] == "first"
     assert json.loads(core.live_options_from_text(""))["cfar_range_estimate"] == "centroid"
     assert live.program_options({"cell_statistic": "multiscale"})["cfar_range_estimate"] == "centroid"
+
+
+# --- sonar-d99: the leading edge and the arrivals are held to the single-sample test, whatever integrate_cells holds ---
+
+def test_the_single_sample_test_is_always_the_first_scale_and_the_leading_edge_holds_to_it(sonar, template):
+    """sonar-d99: the leading edge (range_estimate first) and the arrivals take the threshold of scale 0. The plan puts
+    the single-sample test there whatever `integrate_cells` holds ([2, 4] leaves out the cell mean, not the sample):
+    so with [2, 4] the leading edge is still the first arrival, the arrivals all stand above the single-sample threshold,
+    and both engines give the same detection."""
+    for cells in ([2, 4], [4], [1, 4, 16], None):
+        plan = live.detector_plan(template, {"cfar": {"integrate_cells": cells}})
+        assert plan["scales"][0]["cells"] == 0 and [s["cells"] for s in plan["scales"][1:]] == (cells or [1]), cells
+    r0 = 1300.0
+    rec = _late_arrivals_ping(sonar, r0)
+    slant = float(np.hypot(*at(r0, 5.0)[:2]))
+    got = {}
+    for engine in ("cpp", "python"):
+        cfg = {"cell_statistic": "multiscale", "backend": "host", "engine": engine, "cfar": {"range_estimate": "first", "integrate_cells": [2, 4]}}
+        with LiveChain(cfg) as chain:
+            got[engine] = chain.process(rec.copy())["detections"]
+            plan, cell = chain.detector, chain.detector["cell_m"]
+        assert [s["cells"] for s in plan["scales"]] == [0, 2, 4]
+        assert len(got[engine]) == 1, (engine, got[engine])
+        d = got[engine][0]
+        assert abs(d["range_m"] - slant) < cell, (engine, d)
+        assert len(d["arrivals"]) >= 2 and all(a[1] > plan["scales"][0]["threshold_db"] - 1e-4 for a in d["arrivals"]), (engine, d)
+    p, c = got["python"][0], got["cpp"][0]
+    assert p["range_m"] == pytest.approx(c["range_m"], abs=1e-6)
+    assert np.allclose(p["arrivals"], c["arrivals"], atol=1e-4)
+
+
+def test_a_plan_whose_first_scale_is_not_the_single_sample_is_refused_by_both_engines(template):
+    """sonar-d99: a plan built by hand whose first scale is a mean (the single sample left out) would have the flag test,
+    the arrivals and the leading edge take a mean's threshold for the sample's: both detectors refuse it."""
+    plan = live.detector_plan(template, {"cfar": {"integrate_cells": [2, 4]}})
+    n_b, n_c, k = 3, 30, int(plan["samples_per_cell"])
+    rng = np.random.default_rng(0)
+    fine = rng.exponential(size=(n_b, n_c * k)).astype(np.float32)
+    mean = fine.reshape(n_b, n_c, k).mean(axis=2).astype(np.float32)
+    fr, cr, b = [float(v) for v in np.arange(n_c * k)], [float(v) for v in np.arange(n_c) * k + 3.5], [0.0, 0.01, 0.02]
+    detect.multiscale(fine, mean, fr, cr, b, 2, 4, plan)                              # as planned: accepted
+    core.live_multiscale_detect(fine, mean, fr, cr, b, 2, 4, plan, backend=core.Backend.Host)
+    for bad in (dict(plan, scales=plan["scales"][1:]), dict(plan, scales=[plan["scales"][0], dict(plan["scales"][1], cells=0)])):
+        with pytest.raises(ValueError, match="detector plan"):
+            detect.multiscale(fine, mean, fr, cr, b, 2, 4, bad)
+        with pytest.raises(ValueError, match="detector plan"):
+            core.live_multiscale_detect(fine, mean, fr, cr, b, 2, 4, bad, backend=core.Backend.Host)

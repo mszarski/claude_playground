@@ -216,6 +216,38 @@ TEST(Detector, PlanFollowsTheBudgetTheRowsAndTheLength) {
   EXPECT_GT(with_gap, 2e-2);
 }
 
+TEST(Detector, TheSingleSampleTestIsTheFirstScaleWhateverTheLengthsAndAnotherPlanIsRefused) {
+  // sonar-d99: the flag test, the arrivals and the leading edge read scale 0 as the single sample. integrate_cells
+  // without 1 leaves out the cell mean, never the sample.
+  DetectorOptions o;
+  o.integrate_cells = {2, 4};
+  o.range_estimate = RangeEstimate::First;
+  Map m(3, 1, o);
+  ASSERT_EQ(m.plan.scales.size(), 3U);
+  EXPECT_EQ(m.plan.scales[0].cells, 0);
+  EXPECT_EQ(m.plan.scales[1].cells, 2);
+  EXPECT_EQ(m.plan.scales[2].cells, 4);
+  EXPECT_EQ(m.plan.sample_factor(), m.plan.scales[0].factor);
+  // A weak first arrival 4 cells before a stronger one: the leading edge is the first, its arrivals above the sample's threshold.
+  m.add(60, 300 * 8 + 3, 40.0F);
+  m.add(60, 304 * 8 + 3, 160.0F);
+  const auto hits = m.detect();
+  ASSERT_EQ(hits.size(), 1U);
+  EXPECT_NEAR(hits[0].range, 1000.0 + 0.25 * (300 * 8 + 3), 1e-9);
+  ASSERT_EQ(hits[0].arrivals.size(), 2U);
+  for (const Arrival& a : hits[0].arrivals) EXPECT_GT(a.snr_db, 10.0 * std::log10(m.plan.scales[0].factor));
+  // A plan whose first scale is a mean (built by hand) is refused, not read as the sample's.
+  Map bad(3, 1, o);
+  bad.plan.scales.erase(bad.plan.scales.begin());
+  EXPECT_THROW(bad.detect(), std::invalid_argument);
+  EXPECT_THROW(check_plan(bad.plan), std::invalid_argument);
+  EXPECT_THROW((void)bad.plan.sample_factor(), std::invalid_argument);
+  Map twice(3, 1, o);
+  twice.plan.scales[1].cells = 0;
+  EXPECT_THROW(twice.detect(), std::invalid_argument);
+  EXPECT_NO_THROW(check_plan(m.plan));
+}
+
 TEST(Detector, NoiseAloneGivesNothingAndAPointEchoIsOneDetectionAtItsSampleRatio) {
   Map m(7);
   EXPECT_TRUE(m.detect().empty());
