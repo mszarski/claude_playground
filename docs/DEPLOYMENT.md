@@ -760,6 +760,20 @@ and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan applic
 Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
 (`python/gpusonar/sources/hsb.py`), and the chain. On a real board only `receive` runs.
 
+What `receive` counts (`FrameReceiver.stats()`, printed as `hsb: {...}`), by the sender's
+frame number when the receiver gives one, else from the blocks' sample counter:
+`frames_lost` are frames never received by the time their place was given up (their ping
+emitted or dropped, or, between pings, 2 frames later: `reorder_blocks`); a frame still
+awaited is in no counter. `frames_late` are frames that arrived after a later-numbered one;
+those in time are used and their ping kept, those after their place was given up are also
+`frames_too_late`, not used, and stay in `frames_lost`. `frames_repeated` are duplicates
+only. `trouble_frames` lists the first 16 frame numbers at which a loss (entered when it is
+given up; a gap filled by late frames is not listed) or a damaged frame was noticed.
+`dropped_pings` includes pings none of whose frames arrived (counted from the jump of the
+ping index in the frame header). Until 2026-11 a frame was lost the moment a later number
+arrived, a late frame was counted as a repeat and its ping dropped, and without frame
+numbers a repeated frame dropped a complete ping.
+
 State (`RESULTS.md`, "Sensor Bridge loopback"): Sensor Bridge 2.7.0 builds natively
 against Holoscan 4.6.0, and our operators, run inside Holoscan behind a stand-in that emits
 what the receiver emits, give the direct chain's reports exactly; a withheld frame drops

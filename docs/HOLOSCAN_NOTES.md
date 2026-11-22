@@ -630,8 +630,19 @@ Limits and gaps:
   overflow flag and the capture start time, then 24-bit samples. A 6400-sample block is
   614,528 bytes, a multiple of 128.
 - `PingAssembler`: continuous blocks in, ping records out, using the receive window of the
-  sonar config. A gap in the sample counter discards only the ping it cuts through and is
-  counted; joining a stream mid-window skips that ping.
+  sonar config. Blocks are placed by their sample counter: one that arrives late while its
+  ping is still open fills its place (`late_blocks`) and the ping is kept, with no added
+  output latency (a ping is emitted when its window is complete). Samples never received
+  discard only the ping they cut through and are counted (`lost_samples`, `dropped_pings`),
+  but only once given up: `reorder_blocks` (2) blocks after the hole, or, inside a window,
+  when that ping is given up (a later ping named, or the stream 2 blocks past the window's
+  end); so a dropped ping is counted up to 2 blocks after its window, not at the gap. A
+  block of samples already received is a repeat (`repeated_blocks`, ignored), one inside a
+  hole already given up too late (`too_late_blocks`, not placed). A ping all of whose blocks
+  are lost is counted from the jump of the header's ping index (modulo 2^32). Another
+  capture start, a block far behind, or one naming a transmit not heard recently is a
+  restart (`restarts`). Joining a stream mid-window skips that ping; pings before the first
+  one heard are not counted. The C++ `PingAssembler` (libs/live) follows the same rules.
 - `FlankUdpSource` (`type: flank_udp`): blocks as UDP datagrams, drained by a receiver
   thread. This is a stand-in for `LinuxReceiverOp`, which delivers the same opaque bytes;
   behind the Sensor Bridge receiver the assembler is fed from the receiver's output tensor
