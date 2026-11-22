@@ -349,6 +349,10 @@ int main(int argc, char** argv) {
       stop = true;
       receiver.join();
       nav_thread.join();
+      if (!listen) {
+        ready.clear();
+        assembler.finish(ready);        // the end of the stream: holes still awaited are counted (pings waiting are not processed)
+      }
       if (listen) {
         std::fprintf(stderr, "sonar_live: %lld frames, %lld dropped, %lld samples lost, %lld bad blocks, %lld blocks dropped at the full queue, "
                              "%lld reports split, %lld report datagrams refused\n", static_cast<long long>(done),

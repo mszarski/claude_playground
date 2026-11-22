@@ -600,14 +600,14 @@ TEST(PingAssembler, CutsTheStreamIntoPingsAndDropsOneThatLosesABlock) {
   EXPECT_EQ(assembler.bad_blocks, 1);
 }
 
-// Transmits at samples 10, 110 and 210 (pings 0, 1, 2), windows 30..69, 130..169, 230..269; blocks of 16 from 0 to 319,
-// each naming the latest transmit it reaches. `order` lists the blocks (by first sample) in the order they arrive.
-std::vector<PingRecord> feed_stream(PingAssembler& assembler, const std::vector<std::int64_t>& order) {
+// Transmits at samples 10, 110, 210 (and 310) (pings 0, 1, 2, 3), windows 30..69, 130..169, 230..269 (330..369); blocks
+// of 16 from 0, each naming the latest transmit it reaches. `order` lists the blocks (by first sample) in arrival order.
+std::vector<PingRecord> feed_stream(PingAssembler& assembler, const std::vector<std::int64_t>& order, std::uint32_t pings = 3) {
   std::vector<PingRecord> out;
   for (const std::int64_t first : order) {
     std::int64_t tx = -1;
     std::uint32_t ping = 0;
-    for (std::uint32_t k = 0; k < 3; ++k) {
+    for (std::uint32_t k = 0; k < pings; ++k) {
       if (first + 16 > 10 + 100 * static_cast<std::int64_t>(k)) {
         tx = 10 + 100 * static_cast<std::int64_t>(k);
         ping = k;
@@ -619,9 +619,9 @@ std::vector<PingRecord> feed_stream(PingAssembler& assembler, const std::vector<
   return out;
 }
 
-std::vector<std::int64_t> stream_order() {
+std::vector<std::int64_t> stream_order(std::int64_t end = 320) {
   std::vector<std::int64_t> order;
-  for (std::int64_t first = 0; first < 320; first += 16) order.push_back(first);
+  for (std::int64_t first = 0; first < end; first += 16) order.push_back(first);
   return order;
 }
 
@@ -632,16 +632,17 @@ std::vector<std::int64_t> sequences(const std::vector<PingRecord>& out) {
 }
 
 TEST(PingAssembler, CountsAPingNoneOfWhoseBlocksArrived) {
-  // Every block naming ping 1 lost (96..207): no header names it; the jump of the ping index from 0 to 2 counts it.
+  // Every block naming ping 2 lost (208..303): no header names it; the jump of the ping index from 1 to 3, two ping
+  // intervals (100 samples, from pings 0 and 1) apart, counts it.
   PingAssembler assembler(stream_template());
   std::vector<std::int64_t> order;
-  for (const std::int64_t first : stream_order()) {
-    if (first < 96 || first >= 208) order.push_back(first);
+  for (const std::int64_t first : stream_order(400)) {
+    if (first < 208 || first >= 304) order.push_back(first);
   }
-  const auto out = feed_stream(assembler, order);
-  EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0, 2}));
+  const auto out = feed_stream(assembler, order, 4);
+  EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0, 1, 3}));
   EXPECT_EQ(assembler.dropped_pings, 1);
-  EXPECT_EQ(assembler.lost_samples, 7 * 16);
+  EXPECT_EQ(assembler.lost_samples, 6 * 16);
   EXPECT_EQ(assembler.late_blocks + assembler.repeated_blocks + assembler.restarts, 0);
 }
 
@@ -688,13 +689,37 @@ TEST(PingAssembler, AnotherCaptureStartIsARestart) {
   for (std::int64_t first = 0; first < 160; first += 16) order.push_back(first);    // into ping 1's window
   auto out = feed_stream(assembler, order);
   ASSERT_EQ(out.size(), 1U);
+  // One block of another capture is held, not yet a restart; the next one, contiguous with it, confirms it.
   auto b = block(0, 16, 2, 10, 0U);
   const std::uint64_t start_ns = 2000;
   std::memcpy(b.data() + 36, &start_ns, 8);
   EXPECT_TRUE(assembler.feed(b.data(), b.size(), out));
+  EXPECT_EQ(assembler.last_block, PingAssembler::Block::kHeld);
+  EXPECT_EQ(assembler.restarts, 0);
+  auto c = block(16, 16, 2, 10, 0U);
+  std::memcpy(c.data() + 36, &start_ns, 8);
+  EXPECT_TRUE(assembler.feed(c.data(), c.size(), out));
   EXPECT_EQ(assembler.restarts, 1);
   EXPECT_EQ(assembler.dropped_pings, 1);                 // ping 1, open at the restart
   EXPECT_EQ(assembler.last_block, PingAssembler::Block::kRestart);
+}
+
+TEST(PingAssembler, FinishCountsWhatIsStillAwaited) {
+  // Block 144 (in ping 1's window) lost and the stream ends at 176: not yet given up, until finish().
+  PingAssembler assembler(stream_template());
+  std::vector<std::int64_t> order;
+  for (std::int64_t first = 0; first < 176; first += 16) {
+    if (first != 144) order.push_back(first);
+  }
+  auto out = feed_stream(assembler, order);
+  EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0}));
+  EXPECT_EQ(assembler.dropped_pings, 0);
+  EXPECT_EQ(assembler.lost_samples, 0);
+  std::vector<PingRecord> rest;
+  assembler.finish(rest);
+  EXPECT_TRUE(rest.empty());
+  EXPECT_EQ(assembler.dropped_pings, 1);
+  EXPECT_EQ(assembler.lost_samples, 16);
 }
 
 TEST(StreamAssembler, CutsAnUntriggeredStreamIntoChunksAndRestartsAfterAGap) {

@@ -996,7 +996,8 @@ void bind_live(py::module_& m) {
       });
 
   py::class_<live::PingAssembler>(m, "PingAssemblerCpp")
-      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes, int reorder_blocks) {
+      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes, int reorder_blocks,
+                            std::int64_t max_held_bytes) {
              if (reorder_blocks < 0) throw py::value_error("reorder_blocks must be 0 or more");
              auto make = [&]() {
                if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
@@ -1007,10 +1008,11 @@ void bind_live(py::module_& m) {
              };
              live::PingAssembler a = make();
              a.reorder_blocks = reorder_blocks;
+             a.max_held_bytes = max_held_bytes;
              return a;
            }),
            py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none(), py::arg("sample_bytes") = 3,
-           py::arg("reorder_blocks") = live::kReorderBlocks)
+           py::arg("reorder_blocks") = live::kReorderBlocks, py::arg("max_held_bytes") = live::kMaxHeldBytes)
       .def("feed",
            [](live::PingAssembler& a, const py::bytes& block) {
              const std::string data = block;
@@ -1018,6 +1020,16 @@ void bind_live(py::module_& m) {
              a.feed(reinterpret_cast<const unsigned char*>(data.data()), data.size(), out);
              return out;
            })
+      .def("finish",
+           [](live::PingAssembler& a) {
+             std::vector<PingRecord> out;
+             a.finish(out);
+             return out;
+           })
+      .def("holds", &live::PingAssembler::holds)
+      .def_readonly("used_blocks", &live::PingAssembler::used_blocks)
+      .def_readonly("held_peak_bytes", &live::PingAssembler::held_peak_bytes)
+      .def_readonly("max_held_bytes", &live::PingAssembler::max_held_bytes)
       .def_readonly("dropped_pings", &live::PingAssembler::dropped_pings)
       .def_readonly("lost_samples", &live::PingAssembler::lost_samples)
       .def_readonly("overflow_blocks", &live::PingAssembler::overflow_blocks)
@@ -1035,6 +1047,7 @@ void bind_live(py::module_& m) {
                                  case B::kLate: return py::str("late");
                                  case B::kTooLate: return py::str("too_late");
                                  case B::kRepeated: return py::str("repeated");
+                                 case B::kHeld: return py::str("held");
                                  case B::kRestart: return py::str("restart");
                                  default: return py::none();
                                }

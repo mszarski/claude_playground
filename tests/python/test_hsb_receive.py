@@ -379,3 +379,188 @@ def test_reordering_adds_no_output_latency(run, engine):
     asm = assembler_for(engine)
     emitted = [k[i] for i in range(len(k)) for _ in asm.feed(frames[k[i]])]
     assert emitted == E and asm.late_blocks == 1
+
+
+# -- added with the review of fix-hsb: a reduced geometry (window start 256, length 384: W = 640; blocks of 64) -----------
+
+SMALL = {"receive": {"window": {"range": [3.0, 6.0]}}, "transmit": {"waveform": {"duration": 0.002}}}
+
+
+def small(engine, **options):
+    from gpusonar import _gpusonar as core
+    from gpusonar.sonar import SonarModel
+    from gpusonar.sources.flank_stream import PingAssembler
+    sonar = SonarModel.load("flank_32", SMALL)
+    if engine == "python":
+        return PingAssembler(sonar, **options)
+    return core.PingAssemblerCpp(sonar.make_record(core.Pose()), **options)
+
+
+def small_stream(txs, block, total, index=None, start_ns=1000, seed=0):
+    """{first sample: block bytes} of a stream with transmits `txs`, each block naming the latest transmit at or before
+    its first sample, and the blocks' first samples in order."""
+    index = list(range(len(txs))) if index is None else index
+    data = np.random.default_rng(seed).integers(-1000, 1000, size=(total, 32)).astype(np.int32)
+    out = {}
+    for first in range(0, total, block):
+        last = max((i for i, t in enumerate(txs) if t <= first), default=-1)
+        out[first] = encode_block(data[first:first + block], first, txs[last] if last >= 0 else -1,
+                                  index[last] if last >= 0 else 0, 0, 0, start_ns)
+    return out, list(out)
+
+
+def counters(a):
+    return {k: int(getattr(a, k)) for k in ("dropped_pings", "lost_samples", "late_blocks", "too_late_blocks",
+                                             "repeated_blocks", "restarts")}
+
+
+def feed_all(a, blocks, finish=False):
+    out = [int(r.metadata.sequence) for b in blocks for r in a.feed(b)]
+    return out + ([int(r.metadata.sequence) for r in a.finish()] if finish else [])
+
+
+P = 640
+TXS = [64 + i * P for i in range(5)]                  # back to back: each window ends at the next transmit
+
+
+def review_case(name):
+    """(blocks, expected sequences, expected counters) of the reviewer's cases, as fixed."""
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    t = TXS[2]
+    zero = dict(dropped_pings=0, lost_samples=0, late_blocks=0, too_late_blocks=0, repeated_blocks=0, restarts=0)
+    if name == "swap_at_ping_boundary":       # was [0, 2, 3, 4], dropped 1, lost 64, too late 1
+        i = order.index(t - 64)
+        order[i], order[i + 1] = order[i + 1], order[i]
+        return [by[f] for f in order], [0, 1, 2, 3, 4], dict(zero, late_blocks=1)
+    if name == "hole_across_two_pings":       # was [0, 3, 4], dropped 2, lost 384, too late 5
+        late = [f for f in order if t <= f < t + 320]
+        o = [f for f in order if f not in late and f != t - 64]
+        i = o.index(t + 384)
+        o = o[:i + 1] + late + o[i + 1:]
+        return [by[f] for f in o], [0, 2, 3, 4], dict(zero, dropped_pings=1, lost_samples=64, late_blocks=5)
+    if name == "stale_duplicate":             # was [0, 1, 2, 4], dropped 4, restarts 1
+        order.insert(order.index(TXS[3] + 320), TXS[1] + 320)
+        return [by[f] for f in order], [0, 1, 2, 3, 4], dict(zero, repeated_blocks=1)
+    if name == "two_stale_adjacent":          # two contiguous old blocks of the same capture: not yet a restart
+        i = order.index(TXS[4] + 320)
+        order[i:i] = [TXS[1] + 320, TXS[1] + 384]
+        return [by[f] for f in order], [0, 1, 2, 3, 4], dict(zero, repeated_blocks=2)
+    if name == "first_two_swapped":           # was restarts 1, dropped 1, lost 64
+        order[0], order[1] = order[1], order[0]
+        return [by[f] for f in order], [0, 1, 2, 3, 4], dict(zero, late_blocks=1)
+    if name == "restart_with_straggler":      # was restarts 3, dropped 2
+        new, new_order = small_stream(TXS, 64, TXS[-1] + P, start_ns=99999)
+        old = [by[f] for f in order]
+        fresh = [new[f] for f in new_order]
+        return old[:30] + [fresh[0], old[30], fresh[1]] + fresh[2:], [0, 1, 2, 0, 1, 2, 3, 4], dict(zero, restarts=1)
+    one, one_order = small_stream([i * P for i in range(6)], P, 6 * P)
+    if name == "one_block_pings_swapped":     # was emitted [0, 2, 1, 3, 4, 5], dropped 2, restarts 1
+        one_order[1], one_order[2] = one_order[2], one_order[1]
+        return [one[f] for f in one_order], list(range(6)), dict(zero, late_blocks=1)
+    two, two_order = small_stream([i * P for i in range(6)], P // 2, 6 * P)
+    if name == "two_block_ping_named_late":   # was [0, 1, 3, 4, 5], dropped 3, restarts 1
+        two_order = two_order[:2] + [two_order[4], two_order[2], two_order[3]] + two_order[5:]
+        return [two[f] for f in two_order], list(range(6)), dict(zero, late_blocks=2)
+    long_txs = [64 + i * 4 * P for i in range(4)]
+    renumbered, r_order = small_stream(long_txs, 64, long_txs[-1] + P, index=[0, 1, 4, 5])
+    if name == "long_interval_renumbered":    # was dropped 2: the jump 1 -> 4 one interval apart counted
+        return [renumbered[f] for f in r_order], [0, 1, 4, 5], zero
+    lost, l_order = small_stream(long_txs, 64, long_txs[-1] + P)
+    if name == "long_interval_ping_lost":     # ping 2 lost whole, one interval of 4 W: counted from the interval
+        return [lost[f] for f in l_order if not long_txs[2] <= f < long_txs[3]], [0, 1, 3], \
+            dict(zero, dropped_pings=1, lost_samples=long_txs[3] - long_txs[2])
+    if name == "jump_before_an_interval_is_known":   # ping 1 lost whole after ping 0: no interval yet, not counted
+        return [lost[f] for f in l_order if not long_txs[1] <= f < long_txs[2]], [0, 2, 3], \
+            dict(zero, lost_samples=long_txs[2] - long_txs[1])
+    raise KeyError(name)
+
+
+REVIEW = ["swap_at_ping_boundary", "hole_across_two_pings", "stale_duplicate", "two_stale_adjacent", "first_two_swapped", "restart_with_straggler",
+          "one_block_pings_swapped", "two_block_ping_named_late", "long_interval_renumbered", "long_interval_ping_lost",
+          "jump_before_an_interval_is_known"]
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+@pytest.mark.parametrize("name", REVIEW)
+def test_review_cases_in_both_assemblers(engine, name):
+    blocks, sequences, want = review_case(name)
+    a = small(engine)
+    assert feed_all(a, blocks) == sequences
+    assert counters(a) == want
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_finish_counts_what_is_still_awaited_and_nothing_else(engine):
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    # The stream ends 2 blocks into ping 4's window, one of them lost: not yet given up, then counted by finish().
+    end = order.index(TXS[4] + 256 + 128)
+    blocks = [by[f] for f in order[:end] if f != TXS[4] + 256]
+    a = small(engine)
+    assert feed_all(a, blocks) == [0, 1, 2, 3] and (a.dropped_pings, a.lost_samples) == (0, 0)
+    assert a.finish() == [] and (a.dropped_pings, a.lost_samples) == (1, 64)
+    # Cut short with nothing missing: not a drop.
+    a = small(engine)
+    assert feed_all(a, [by[f] for f in order[:end]], finish=True) == [0, 1, 2, 3] and counters(a)["dropped_pings"] == 0
+    # A complete ping waiting for an earlier one that may still be named comes out of finish(): one block per ping,
+    # ping 1's block lost; ping 2 is complete but waits while the hole where ping 1 would be is open.
+    one, one_order = small_stream([i * P for i in range(6)], P, 6 * P)
+    a = small(engine)
+    assert feed_all(a, [one[f] for f in one_order[:3] if f != P]) == [0]
+    assert [int(r.metadata.sequence) for r in a.finish()] == [2] and (a.dropped_pings, a.lost_samples) == (0, P)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_sample_indices_out_of_range_are_refused_alike(engine):
+    from gpusonar.sources.flank_stream import BlockError
+    a = small(engine)
+    zeros = np.zeros((64, 32), dtype=np.int32)
+    for block in (encode_block(zeros, 1 << 62, -1, 0), encode_block(zeros, (1 << 64) - 64, -1, 0),
+                  encode_block(zeros, 0, 1 << 62, 0), encode_block(zeros, 0, -2, 0)):
+        if engine == "python":
+            with pytest.raises(BlockError, match="out of range"):
+                a.feed(block)
+        else:
+            assert a.feed(block) == []
+    assert engine == "python" or a.bad_blocks == 4
+    assert a.feed(encode_block(zeros, (1 << 62) - 64, (1 << 62) - 64, 7)) == [] and a.last_block == "in_order"
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_rows_held_behind_a_hole_are_bounded(engine):
+    """Decimating, a ping whose first block is late holds the rest raw; past `max_held_bytes` it is given up (counted)."""
+    by, order = small_stream(TXS, 64, TXS[-1] + P)
+    o = list(order)
+    w = TXS[1] + 256                                                   # ping 1's first window block, 5 blocks late
+    o.remove(w)
+    o.insert(o.index(w + 320) + 1, w)
+    blocks = [by[f] for f in o]
+    roomy, clean, tight = small(engine, decimate={}), small(engine, decimate={}), small(engine, decimate={}, max_held_bytes=3 * 64 * 32 * 4)
+    got = [r for b in blocks for r in roomy.feed(b)]
+    want = [r for f in order for r in clean.feed(by[f])]
+    assert [int(r.metadata.sequence) for r in got] == [0, 1, 2, 3, 4] and roomy.dropped_pings == 0
+    assert all(np.array_equal(np.asarray(g.samples.array), np.asarray(w_.samples.array)) for g, w_ in zip(got, want))
+    assert roomy.held_peak_bytes == 5 * 64 * 32 * 4 and clean.held_peak_bytes == 0     # measured: 5 blocks of rows
+    assert feed_all(tight, blocks) == [0, 2, 3, 4] and tight.dropped_pings == 1 and tight.lost_samples == 64
+
+
+def test_frame_numbers_restarting_or_repeating_are_told_apart(run):
+    frames = run["frames"]
+    # The sender restarts: samples and frame numbers from 0 again (was: the whole second run ignored as repeats).
+    items = [(f, {"frame_number": k % len(frames), "frame_bytes_received": len(f), "packets_dropped": 0})
+             for k, f in enumerate(frames + frames)]
+    records, s = receive(items)
+    assert [r.metadata.sequence for r in records] == list(range(N)) * 2
+    assert (s["frames"], s["frames_repeated"], s["frames_lost"], s["dropped_pings"]) == (2 * len(frames), 0, 0, 0)
+    # A frame lost, then arriving too late, then again: counted once too late, then a repeat (was: too late twice).
+    W, E = run["W"], run["E"]
+    k = W[2] + 5
+    order = [x for x in range(len(frames)) if x != k]
+    i = order.index(E[2] + 3) + 1
+    order[i:i] = [k, k]
+    for numbered_ in (True, False):
+        items = [(frames[x], {"frame_number": x, "frame_bytes_received": len(frames[x]), "packets_dropped": 0} if numbered_ else None)
+                 for x in order]
+        records, s = receive(items)
+        assert (s["frames_too_late"], s["frames_late"], s["frames_repeated"]) == (1, 1, 1)
+        assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == len(order)          # every arrival once
+        assert s["frames_lost"] >= s["frames_too_late"] if numbered_ else s["frames_lost"] == 0

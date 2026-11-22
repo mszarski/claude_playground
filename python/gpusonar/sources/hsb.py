@@ -166,27 +166,36 @@ class FrameReceiver:
     arrived short (`frame_bytes_received` below its size: packets missing, their bytes left
     at 0xFF) is not used; the gap it leaves, like the gap of a frame that never arrived,
     makes the assembler discard the ping it cuts through and count it, exactly as a lost
-    block does on the UDP path.
+    block does on the UDP path. `finish()` ends the stream (what is still awaited is counted).
 
-    Counters (`stats()`). With frame numbers (the sender's `frame_number`) they are counted by
-    number; without them, from what the assembler makes of the frame's sample counter
-    (flank_stream.PingAssembler, whose rules apply in both cases):
+    Every frame used is placed by its sample counter (flank_stream.PingAssembler, whose rules
+    decide what a frame is); the sender's `frame_number`, when the metadata has it, is used only
+    to count frames lost. Counters (`stats()`):
 
-    * `frames_lost`: frames never received by the time their place was given up - when their ping
-      was emitted or dropped, or, between pings, once the stream has moved `reorder_blocks` frames
-      past them. A frame skipped and still awaited is in no counter yet. Frames before the first
-      one seen are not counted. (Until 2026-11 a frame was counted lost the moment a later number
-      arrived, and stayed lost if it came after all.)
-    * `frames_late`: frames that arrived after a later-numbered one (out of order). Those that
-      arrived in time are used: they fill their place and their ping is kept. Those that arrived
-      after their place was given up (`frames_too_late`, a part of `frames_late`) are not used and
-      stay counted in `frames_lost`, as their samples stay in `lost_samples`.
-    * `frames_repeated`: true duplicates - a number already received (or, without numbers, samples
-      already received); ignored, nothing dropped. A number older than every one still awaited or
-      recently given up counts here too.
+    * `frames_lost` (only with frame numbers; without them it stays 0 and `lost_samples` says what
+      was lost): frame numbers skipped and never received by the time their place was given up -
+      their ping emitted or dropped, or, between pings, the stream `reorder_blocks` frames past them.
+      A frame still awaited is in no counter until then (or `finish()`). Frames before the first
+      one seen are not counted.
+    * `frames_late`: frames that arrived behind a later one. Those in time are used, their ping
+      kept; those whose place was already given up (`frames_too_late`, a part of `frames_late`, each
+      frame counted once) are not used, and stay in `frames_lost` and `lost_samples`.
+    * `frames_repeated`: duplicates - samples already received - ignored; also a frame that did not
+      fit the stream and was not confirmed as a restart (it cannot be told from a stale copy), and a
+      damaged frame whose number was already received (its metadata is not taken).
+    * `frames`: frames used. Arrivals = frames + frames_repeated + frames_too_late + frames held
+      (at most 4, waiting to be confirmed as a restart; none after `finish()`), not counting damaged
+      and bad frames.
     * `trouble_frames`: the first 16 frame numbers at which a loss or a damaged frame was noticed:
       for a loss, the number of the frame that arrived after the gap, entered when a frame of the
       gap is given up as lost (a gap filled by late frames is not trouble).
+
+    Frame numbers are taken as the receiver's extended counter (Sensor Bridge extends the 16-bit
+    wire counter on the host, HOLOSCAN_NOTES.md section 8; the metadata does not say its width, so
+    that is an assumption for LinuxReceiverOp): they are not expected to wrap. A number that goes
+    back is judged by the samples: a restart the assembler confirms (another capture start, or the
+    samples starting again) restarts the numbering; a frame the assembler takes as continuing the
+    stream renumbers it (a wrap or a sender's reset), counting nothing lost by number.
     """
 
     def __init__(self, sonar: str | SonarModel = "flank_32", sonar_overrides: dict | None = None, pose=None,
@@ -196,26 +205,39 @@ class FrameReceiver:
         self.frame_samples = frame_samples
         self.frame_bytes = frame_bytes(self.assembler.n_channels, frame_samples) if frame_samples else None
         self.frames = 0                 # frames used
-        self.frames_lost = 0            # never received by the time their place was given up (above)
+        self.frames_lost = 0            # never received by the time their place was given up (frame numbers only)
         self.frames_damaged = 0         # arrived with packets missing
-        self.frames_repeated = 0        # duplicates
+        self.frames_repeated = 0        # duplicates (or unconfirmed restarts)
         self.frames_late = 0            # arrived out of order
         self.frames_too_late = 0        # ... after their place was given up (also in frames_late and frames_lost)
-        self.bad_frames = 0             # not a block of this stream (wrong size, magic, channel count)
+        self.bad_frames = 0             # not a block of this stream (wrong size, magic, channel count, range)
         self.packets_dropped = 0        # the receiver's cumulative count
         self.first_frame_number = None
         self.trouble_frames = []        # frame numbers at which a loss or a damaged frame was noticed (the first 16)
         self._last_frame_number = None
         self._awaited = []              # [lo, hi, first sample of lo, samples per frame, noticed at]: numbers skipped
-        self._given_up = []             # [lo, hi]: numbers given up as lost, the recent ones
         self._anchor = None             # (number, first sample, samples) of the last frame used
         self._gaps_reported = set()
-        self._restarts = 0
+        self._seen = self._counts()
         self.pings = 0
+
+    def _counts(self) -> tuple:
+        a = self.assembler
+        return a.used_blocks, a.repeated_blocks, a.late_blocks, a.too_late_blocks, a.restarts
+
+    def _account(self) -> bool:
+        """Take the assembler's counts since the last call; whether it restarted."""
+        now = self._counts()
+        used, repeated, late, too_late, restarts = (x - y for x, y in zip(now, self._seen))
+        self._seen = now
+        self.frames += used
+        self.frames_repeated += repeated
+        self.frames_late += late
+        self.frames_too_late += too_late
+        return restarts > 0
 
     def _lose(self, lo: int, hi: int, noticed: int) -> None:
         self.frames_lost += hi - lo
-        self._given_up = (self._given_up + [[lo, hi]])[-64:]
         if len(self.trouble_frames) < 16 and noticed not in self._gaps_reported:
             self._gaps_reported.add(noticed)
             self.trouble_frames.append(noticed)
@@ -245,72 +267,81 @@ class FrameReceiver:
                 return True
         return False
 
+    def _number(self, number: int, verdict: str) -> None:
+        """Frame-number bookkeeping once the assembler has judged the frame (`verdict`: its last_block, or
+        "unused" for a frame not given to it)."""
+        if verdict == "held":
+            return
+        if verdict == "restart":                          # the old run's awaited numbers can no longer come
+            self._settle(everything=True)
+            self._last_frame_number = number
+            return
+        last = self._last_frame_number
+        if last is None:
+            self.first_frame_number = number
+        elif number > last + 1:
+            lo = last + 1
+            if self._anchor is None:                      # nowhere to place them: lost at once
+                self._lose(lo, number, number)
+                lo = number
+            elif number - lo > MAX_AWAITED:               # far more than a window behind: lost at once
+                self._lose(lo, number - MAX_AWAITED, number)
+                lo = number - MAX_AWAITED
+            if lo < number:
+                a_number, a_first, a_n = self._anchor
+                self._awaited.append([lo, number, a_first + (lo - a_number) * a_n, a_n, number])
+        elif number <= last:
+            if self._arrived(number) or verdict not in ("in_order", "gap"):
+                return
+            self._awaited = []                            # the samples go on, the numbers went back: renumbered
+        self._last_frame_number = number
+
     def take(self, frame, metadata=None) -> list:
         get = metadata.get if metadata is not None else (lambda key, default=None: default)
         number = get("frame_number", None)
-        if number is not None:
-            number = int(number)
-            if self._last_frame_number is not None and number <= self._last_frame_number:
-                if self._arrived(number):
-                    self.frames_late += 1
-                elif any(lo <= number < hi for lo, hi in self._given_up):
-                    self.frames_late += 1
-                    self.frames_too_late += 1
-                    return []
-                else:
-                    self.frames_repeated += 1
-                    return []
-            else:
-                if self._last_frame_number is None:
-                    self.first_frame_number = number
-                elif number - self._last_frame_number > 1:
-                    lo = self._last_frame_number + 1
-                    if self._anchor is None:                  # nowhere to place them: lost at once
-                        self._lose(lo, number, number)
-                        lo = number
-                    elif number - lo > MAX_AWAITED:           # far more than a window behind: lost at once
-                        self._lose(lo, number - MAX_AWAITED, number)
-                        lo = number - MAX_AWAITED
-                    if lo < number:
-                        a_number, a_first, a_n = self._anchor
-                        self._awaited.append([lo, number, a_first + (lo - a_number) * a_n, a_n, number])
-                self._last_frame_number = number
-        self.packets_dropped = max(self.packets_dropped, int(get("packets_dropped", 0) or 0))
+        number = int(number) if number is not None else None
+        # A number at or below the last one and not awaited: a repeat, unless the samples say the sender restarted.
+        # Its metadata is not taken, and a damaged one is a repeat outright (it cannot restart anything).
+        old = (number is not None and self._last_frame_number is not None and number <= self._last_frame_number and
+               not any(lo <= number < hi for lo, hi, *_ in self._awaited))
+        if not old:
+            self.packets_dropped = max(self.packets_dropped, int(get("packets_dropped", 0) or 0))
         size = len(frame)
         received = get("frame_bytes_received", None)
+        records, verdict = [], "unused"
+        if old and received is not None and int(received) < size:
+            self.frames_repeated += 1
+            return []
         if received is not None and int(received) < size:
             self.frames_damaged += 1
             if number is not None and len(self.trouble_frames) < 16:
                 self.trouble_frames.append(number)
-            self._settle()
-            return []
-        if self.frame_bytes is not None and size != self.frame_bytes:
+        elif self.frame_bytes is not None and size != self.frame_bytes:
             self.bad_frames += 1
-            self._settle()
-            return []
-        a = self.assembler
-        try:
-            records = a.feed(frame)
-        except BlockError:
-            self.bad_frames += 1
-            self._settle()
-            return []
-        if a.restarts != self._restarts:                      # the samples start afresh: nothing awaited can be placed
-            self._restarts = a.restarts
-            self._settle(everything=True)
-        if a.last_block in ("repeated", "too_late"):
-            if number is None:
-                self.frames_repeated += a.last_block == "repeated"
-                self.frames_late += a.last_block == "too_late"
-                self.frames_too_late += a.last_block == "too_late"
-            self._settle()
-            return records
-        if number is None and a.last_block == "late":
-            self.frames_late += 1
+        else:
+            a = self.assembler
+            try:
+                records = a.feed(frame)
+                verdict = a.last_block
+            except BlockError:
+                self.bad_frames += 1
+            self._account()
         if number is not None:
-            self._anchor = (number, a.last_first, a.last_samples)
+            self._number(number, verdict)
+            if verdict in ("in_order", "gap", "late", "restart"):
+                a = self.assembler
+                self._anchor = (number, a.last_first, a.last_samples)
+        elif verdict == "restart":
+            self._awaited = []
         self._settle()
-        self.frames += 1
+        self.pings += len(records)
+        return records
+
+    def finish(self) -> list:
+        """The stream has ended: what is still awaited is lost; the pings that were waiting are returned."""
+        records = self.assembler.finish()
+        self._account()
+        self._settle(everything=True)
         self.pings += len(records)
         return records
 
@@ -327,7 +358,7 @@ def records_from_frames(frames: Iterable, sonar: str | SonarModel = "flank_32", 
                         **options) -> list:
     """The ping records a run of frames holds (the host side without any transport)."""
     receiver = FrameReceiver(sonar, sonar_overrides, **options)
-    return [record for frame in frames for record in receiver.take(frame)]
+    return [record for frame in frames for record in receiver.take(frame)] + receiver.finish()
 
 
 def raw_sockets_permitted() -> bool:
@@ -877,6 +908,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
             board.stop()
     finally:
         cuda.release()
+    receiver.finish()            # the end of the stream: what is still awaited is counted (pings waiting are not reported)
     stats = receiver.stats()
     udp1, cpu1 = udp_counters(), cpu_throttling()
     stats["socket"] = app.socket_watch.stats()

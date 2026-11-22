@@ -111,6 +111,10 @@ void UdpSourceOp::stop() {
   stop_ = true;
   if (receiver_.joinable()) receiver_.join();
   if (nav_thread_.joinable()) nav_thread_.join();
+  if (pings_) {
+    std::vector<PingRecord> rest;
+    pings_->finish(rest);              // the end of the stream: holes still awaited are counted (pings waiting are not emitted)
+  }
   std::cerr << "UdpSourceOp: " << emitted_ << " emitted, "
             << (pings_ ? pings_->dropped_pings : stream_ ? stream_->dropped_chunks : 0) << " dropped, "
             << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, "

@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <list>
 #include <map>
 #include <utility>
 #include <string>
@@ -25,57 +26,96 @@ namespace sonar::live {
 /// Blocks the stream may move past a hole before it is given up: 2 lets the last block of a window and the one
 /// after it swap places (ours; flank_stream.py REORDER_BLOCKS is the same).
 constexpr int kReorderBlocks = 2;
+/// Raw bytes a ping may hold behind holes on the decimating path before it is given up (ours; flank_stream.py
+/// MAX_HELD_BYTES is the same).
+constexpr std::int64_t kMaxHeldBytes = std::int64_t{64} << 20;
+/// Sample indices and transmit samples at or above this are refused (bad_blocks), as in flank_stream.py.
+constexpr std::int64_t kMaxSampleIndex = std::int64_t{1} << 62;
 
-/// The rules are those of python/gpusonar/sources/flank_stream.py PingAssembler (its docstring states them; the
-/// engine-parity tests hold both to the same counters and decisions). In short: blocks are placed by their sample
-/// counter, so a block that arrives late but while its ping is still open fills its place (late_blocks) and the
-/// ping is kept; a hole is given up whole (lost_samples) once the stream is `reorder_blocks` blocks past its end, or,
-/// if it reaches into the open ping's window, when that ping is given up (dropped_pings: a later ping named, the stream `reorder_blocks` blocks
-/// past the window's end, or a restart); a ping is emitted as soon as its window is complete, so nothing waits;
-/// a block of samples already received is a repeat (repeated_blocks), one inside a hole already given up is too
-/// late (too_late_blocks, also in late_blocks); a jump of d in the header's ping index (modulo 2^32) counts d - 1
-/// pings none of whose blocks arrived, when the transmits are d windows apart or more; another capture start, a
-/// block far behind or one naming a transmit not named recently is a restart (restarts).
+/// The rules are those of python/gpusonar/sources/flank_stream.py PingAssembler; its docstring states them and
+/// the engine-parity tests (tests/python/test_hsb_receive.py) hold both to the same counters and decisions. In short:
+/// blocks are placed by their sample counter, several pings may be open at once and records come out in transmit
+/// order; a hole is given up (lost_samples) `reorder_blocks` blocks after it unless it reaches into an open window;
+/// an open ping is given up (dropped_pings) `reorder_blocks` blocks after its window's end, with the holes up to the
+/// block boundary after that end; a repeat is ignored (repeated_blocks), a block in a hole already given up is too late
+/// (too_late_blocks, in late_blocks too); a jump of d in the ping index counts d - 1 dropped pings when the transmits
+/// are d ping intervals apart (median of the last 5, within half an interval), nothing before an interval is known;
+/// a block that does not fit the stream is held, and a contiguous run of held blocks of one capture restarts it
+/// (restarts): two with another capture start, reorder_blocks + 1 with the same one; held blocks not confirmed are
+/// counted as repeats. finish() gives up what is still awaited at the end of a stream.
 class PingAssembler {
  public:
   /// With `decimate` (enabled) every ping is band-selected and decimated to complex baseband as
   /// its blocks arrive (decimate.hpp) and, with `reference`, its boards synchronised: the records
-  /// that come out are complex, and the full-rate ping is never held (but for blocks waiting behind a hole).
+  /// that come out are complex, and the full-rate ping is never held (but for rows waiting behind a hole).
   /// `sample_bytes`: the size of one sample in a block (2, 3 or 4: a signed little-endian integer whose
   /// full scale is 2^(8 bytes - 1) counts). The block header does not carry it; the sender is configured alike.
   explicit PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate = nullptr, const Reference* reference = nullptr,
                          int sample_bytes = 3);
-  /// Take one block; append the ping records it completes (none or one).
+  /// Take one block; append the ping records it releases (usually none or one).
   /// Returns false, and counts it, if the block is malformed.
   bool feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out);
+  /// The stream has ended: give up what is still awaited (counted) and append the pings that were waiting.
+  void finish(std::vector<PingRecord>& out);
+  /// Whether samples [a, b) may still arrive in time (not yet reached, or in a hole not given up).
+  bool holds(std::int64_t a, std::int64_t b) const;
   std::int64_t dropped_pings = 0, lost_samples = 0, overflow_blocks = 0, bad_blocks = 0;
-  std::int64_t late_blocks = 0, too_late_blocks = 0, repeated_blocks = 0, restarts = 0;
+  std::int64_t late_blocks = 0, too_late_blocks = 0, repeated_blocks = 0, restarts = 0, used_blocks = 0, held_peak_bytes = 0;
   /// Set before the first block (0 or more).
   int reorder_blocks = kReorderBlocks;
-  enum class Block { kNone, kInOrder, kGap, kLate, kTooLate, kRepeated, kRestart };
+  std::int64_t max_held_bytes = kMaxHeldBytes;
+  enum class Block { kNone, kInOrder, kGap, kLate, kTooLate, kRepeated, kHeld, kRestart };
   Block last_block = Block::kNone;   ///< what the last well-formed block was
 
  private:
   struct Hole {
     std::int64_t a, b;
   };
+  struct Header {
+    std::int64_t first = 0, n = 0, tx = -1, index = 0, start_ns = 0;
+    std::uint16_t flags = 0;
+    std::vector<unsigned char> bytes;   ///< the whole block
+  };
+  enum class State { kOpen, kComplete, kDropped };
+  struct Ping {
+    std::int64_t tx = 0, index = 0, w0 = 0, covered = 0, fed = 0, held = 0, start_ns = 0;
+    State state = State::kOpen;
+    std::vector<std::int32_t> buffer;                      ///< [window_length][n_channels]
+    std::map<std::int64_t, std::vector<float>> pending;    ///< decimated path: rows waiting, by offset in the window
+    PingRecord record;
+  };
   void reset();
-  void give_up(std::int64_t limit, const Hole* window = nullptr);
-  void abandon(std::int64_t n);
-  void name(std::int64_t first, std::int64_t n, std::int64_t tx, std::int64_t index, std::int64_t start_ns);
+  bool fits(const Header& h) const;
+  bool known(std::int64_t tx, std::int64_t index) const;
+  Block take(const Header& h, std::vector<PingRecord>& out);
+  void name(const Header& h);
+  void place(Ping& p, const Header& h, std::int64_t a, std::int64_t b);
+  void drain(Ping& p);
+  void settle_pings();
+  bool gap_open(const Ping& p) const;
+  void release(std::vector<PingRecord>& out, bool wait);
+  void close(std::vector<PingRecord>& out, bool drop_open);
+  void drop(Ping& p);
+  void lose(std::int64_t a, std::int64_t b);
+  void give_up(std::int64_t limit);
+  void give_up_to(std::int64_t end, std::int64_t n);
   bool in_holes(std::int64_t a, std::int64_t b) const;
+  bool take_expired(std::int64_t a, std::int64_t b);
+  PingRecord make_record(Ping& p);
   std::int64_t span(std::int64_t n) const { return window_start_ + window_length_ + (reorder_blocks + 1) * n; }
 
   PingRecord template_;
   std::int64_t window_start_ = 0, window_length_ = 0, n_channels_ = 0, sample_bytes_ = 3;
   double volts_per_count_ = 1.0;
-  bool started_ = false, open_ = false, have_first_tx_ = false;
-  std::int64_t frontier_ = 0, origin_ = 0, stream_ns_ = 0, first_tx_ = 0;
+  bool started_ = false, have_first_tx_ = false, have_max_ = false;
+  std::int64_t frontier_ = 0, origin_ = 0, stream_ns_ = 0, first_tx_ = 0, feeds_ = 0;
+  std::pair<std::int64_t, std::int64_t> max_named_{0, 0};
   std::vector<Hole> holes_, expired_;
-  std::deque<std::pair<std::int64_t, std::int64_t>> named_;   ///< (tx_sample, ping_index), the latest 4
-  std::int64_t tx_ = 0, index_ = 0, w0_ = 0, covered_ = 0, fed_ = 0, start_ns_ = 0;
-  std::vector<std::int32_t> buffer_;  ///< [window_length][n_channels]
-  std::map<std::int64_t, std::vector<float>> pending_;   ///< decimated path: rows behind a hole, by offset in the window
+  std::list<Ping> pings_;                                     ///< open or undecided, in transmit order
+  Ping* owner_ = nullptr;                                     ///< the ping the decimator is open for
+  std::vector<std::pair<std::int64_t, std::int64_t>> released_;   ///< (tx, index) emitted or dropped, the latest 8
+  std::vector<std::int64_t> deltas_;                          ///< transmit gaps between consecutive indices, the latest 5
+  std::deque<std::pair<std::int64_t, Header>> suspects_;      ///< held blocks that do not fit: maybe a restart
   std::shared_ptr<PingDecimator> decimator_;
   std::vector<float> rows_;
 };
