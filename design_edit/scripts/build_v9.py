@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from pathlib import Path
 from collections import defaultdict
 
 
@@ -68,6 +69,7 @@ def main() -> None:
         return
 
     from datasets import Dataset, DatasetDict, load_dataset
+    from huggingface_hub import HfApi
 
     src = load_dataset(args.src)
     cols = list(src["train"].features)  # match the source schema so the copied splits fit in one DatasetDict
@@ -81,6 +83,10 @@ def main() -> None:
         out = {"train": ds(rows).shuffle(seed=0)}
         out.update({k: v for k, v in src.items() if k != "train"})
         DatasetDict(out).push_to_hub(f"{args.dst}-{name}", private=True)
+        root = Path(__file__).resolve().parents[1]  # jobs import design_edit from the dataset's code/ folder
+        for d in ("design_edit", "scripts"):
+            HfApi().upload_folder(repo_id=f"{args.dst}-{name}", repo_type="dataset", folder_path=str(root / d),
+                                  path_in_repo=f"code/{d}", ignore_patterns=["__pycache__/*", "*.pyc"])
         print("pushed", f"{args.dst}-{name}", len(rows))
 
 
