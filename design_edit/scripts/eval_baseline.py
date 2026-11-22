@@ -24,6 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from design_edit.evaluate import evaluate, format_report  # noqa: E402
 
 
+REASONING_TOKENS: list[int] = []
+
+
 def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens: int = 8192,
          temperature: float = 0.0, extra: dict | None = None) -> str:
     body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens,
@@ -33,7 +36,11 @@ def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens
             "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
-                return json.load(resp)["choices"][0]["message"]["content"] or ""
+                d = json.load(resp)
+            # Some providers ignore enable_thinking=False and reason anyway, hiding it from `content`: count it.
+            REASONING_TOKENS.append(((d.get("usage") or {}).get("completion_tokens_details") or {})
+                                    .get("reasoning_tokens") or 0)
+            return d["choices"][0]["message"]["content"] or ""
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:  # incl. resets, bad JSON
             if attempt == 3:
                 return f"// request failed: {e}"
@@ -65,6 +72,11 @@ def main() -> None:
     result = evaluate(rows, generate, batch_size=args.workers * 4)
     print(f"model: {args.model}  (n={len(rows)})")
     print(format_report(result))
+    hidden = sum(REASONING_TOKENS) / max(len(REASONING_TOKENS), 1)
+    print(f"mean reasoning tokens per request: {hidden:.0f}")
+    if args.no_think and hidden > 0:
+        print("WARNING: --no-think was requested but the provider reasoned anyway; these are NOT no-think numbers")
+    result["mean_reasoning_tokens"] = hidden
     if args.out:
         Path(args.out).write_text(json.dumps(result, indent=1))
 

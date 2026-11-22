@@ -766,6 +766,40 @@ match:
 
 Results (private dataset): `mszarski/design-edit-screens`, under `thinkingmachines__Inkling-2-Mini/`.
 
+## Correction: "plain Qwen, no-think" via the router was reasoning all along
+
+The HF router's Qwen3.8-27B provider ignores `chat_template_kwargs: {"enable_thinking": false}`. It still reasons
+(649 reasoning tokens on a sample goal request) and returns only the answer in `content`. Every router number labelled
+"Qwen no-think zero-shot" in this README (0.853 `test_novel`, 0.983 rubric, and the 0.868 / 0.962 used as the bar in
+rounds 7 and 8) is really **Qwen with reasoning**. Gemma-4-31B and Qwen3-235B-Instruct really don't reason
+(0 reasoning tokens), so the screen of non-Chinese models is unaffected. `eval_baseline.py` now records reasoning
+tokens and warns when `--no-think` was ignored.
+
+Re-run with the GPU eval harness the tuned models use (vLLM, `enable_thinking=False` in the template,
+greedy), on the current v8 test sets. Exact match:
+
+| | seen (500) | paraphrased (490) | goals (450) | unseen v2 (1,050) |
+|---|---|---|---|---|
+| Qwen3.8-27B, **really** no-think | 0.830 | 0.763 | 0.818 | 0.752 |
+| Qwen3.8-27B with reasoning (router) | 0.852 | 0.782 | 0.953 | 0.850 |
+| Qwen 27B SFT (v6 data) | 0.976 | 0.935 | 0.829 | 0.764 |
+| Qwen 27B RL, step 150 (v6 data) | 0.978 | 0.926 | 0.938 | 0.811 |
+| Qwen 27B RL, full fixed reward | 0.974 | 0.918 | 0.969 | 0.731 |
+| Gemma RL, step 150 (v6 data) | 0.978 | 0.924 | 0.902 | 0.822 |
+| Gemma SFT v8, 3-seed mean | 0.945 | 0.888 | 0.916 | 0.810 |
+
+- **Fine-tuning does help on unseen types**, contrary to what rounds 7 and 8 concluded: in the same fast no-think mode,
+  Gemma SFT v8 is +8 points over plain Qwen on unseen types and +10 on goals (paired CIs exclude 0), and Qwen RL step
+  150 is +6 and +12. Qwen SFT alone is +1 on both (not significant); RL supplies its gain.
+- **Reasoning is worth about 10 points on unseen types (0.752 to 0.850) and 14 on goals** for plain Qwen. That is
+  the real ceiling to aim at in fast mode.
+- **Qwen vs Gemma as a base:** trained on the same data with the same RL recipe (step 150), the two are tied within
+  run-to-run noise (unseen 0.811 vs 0.822, goals 0.938 vs 0.902). Gemma stays the default.
+- Caveat: the tuned models' training data contains rows whose effect matches held-out types (next section), so their
+  unseen-type numbers are inflated by an unknown amount. The clean baseline in round 9 measures it.
+
+Results (private dataset): `mszarski/design-edit-screens`, under `Qwen__Qwen3.8-27B/` and `mszarski__design-edit-*`.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
