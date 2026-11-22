@@ -108,7 +108,7 @@ def main() -> None:
 
         llm = LLM(model=model_path, dtype="bfloat16", max_model_len=4096, gpu_memory_utilization=0.9,
                   limit_mm_per_prompt={"image": 0})
-        params = SamplingParams(temperature=0.0, max_tokens=320)
+        params = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens)
 
         def generate(prompts):
             outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
