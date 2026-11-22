@@ -357,10 +357,13 @@ int main(int argc, char** argv) {
                      static_cast<long long>(out_socket ? out_socket->refused : 0));
         return 0;
       }
-      std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld pings without navigation, "
+      std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld blocks late (%lld too late), "
+                           "%lld blocks repeated, %lld restarts, %lld pings without navigation, "
                            "%lld pings without velocity, %lld blocks dropped at the full queue, %lld reports split, %lld report datagrams refused\n",
                    static_cast<long long>(done), static_cast<long long>(assembler.dropped_pings),
                    static_cast<long long>(assembler.lost_samples), static_cast<long long>(assembler.bad_blocks),
+                   static_cast<long long>(assembler.late_blocks), static_cast<long long>(assembler.too_late_blocks),
+                   static_cast<long long>(assembler.repeated_blocks), static_cast<long long>(assembler.restarts),
                    static_cast<long long>(nav_counts.without_nav), static_cast<long long>(nav_counts.without_velocity), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
                    static_cast<long long>(out_socket ? out_socket->refused : 0));
     } else {

@@ -113,7 +113,9 @@ void UdpSourceOp::stop() {
   if (nav_thread_.joinable()) nav_thread_.join();
   std::cerr << "UdpSourceOp: " << emitted_ << " emitted, "
             << (pings_ ? pings_->dropped_pings : stream_ ? stream_->dropped_chunks : 0) << " dropped, "
-            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, " << nav_counts_.without_nav
+            << (pings_ ? pings_->lost_samples : stream_ ? stream_->lost_samples : 0) << " samples lost, "
+            << (pings_ ? pings_->late_blocks : 0) << " blocks late, " << (pings_ ? pings_->repeated_blocks : 0) << " blocks repeated, "
+            << nav_counts_.without_nav
             << " without navigation, " << nav_counts_.without_velocity << " without velocity, " << queue_dropped_ << " blocks dropped at the full queue\n";
 }
 

@@ -10,6 +10,7 @@
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -597,6 +598,103 @@ TEST(PingAssembler, CutsTheStreamIntoPingsAndDropsOneThatLosesABlock) {
   const unsigned char junk[4] = {1, 2, 3, 4};
   EXPECT_FALSE(assembler.feed(junk, 4, out));
   EXPECT_EQ(assembler.bad_blocks, 1);
+}
+
+// Transmits at samples 10, 110 and 210 (pings 0, 1, 2), windows 30..69, 130..169, 230..269; blocks of 16 from 0 to 319,
+// each naming the latest transmit it reaches. `order` lists the blocks (by first sample) in the order they arrive.
+std::vector<PingRecord> feed_stream(PingAssembler& assembler, const std::vector<std::int64_t>& order) {
+  std::vector<PingRecord> out;
+  for (const std::int64_t first : order) {
+    std::int64_t tx = -1;
+    std::uint32_t ping = 0;
+    for (std::uint32_t k = 0; k < 3; ++k) {
+      if (first + 16 > 10 + 100 * static_cast<std::int64_t>(k)) {
+        tx = 10 + 100 * static_cast<std::int64_t>(k);
+        ping = k;
+      }
+    }
+    const auto b = block(first, 16, 2, tx, ping);
+    EXPECT_TRUE(assembler.feed(b.data(), b.size(), out));
+  }
+  return out;
+}
+
+std::vector<std::int64_t> stream_order() {
+  std::vector<std::int64_t> order;
+  for (std::int64_t first = 0; first < 320; first += 16) order.push_back(first);
+  return order;
+}
+
+std::vector<std::int64_t> sequences(const std::vector<PingRecord>& out) {
+  std::vector<std::int64_t> s;
+  for (const PingRecord& r : out) s.push_back(r.metadata.sequence);
+  return s;
+}
+
+TEST(PingAssembler, CountsAPingNoneOfWhoseBlocksArrived) {
+  // Every block naming ping 1 lost (96..207): no header names it; the jump of the ping index from 0 to 2 counts it.
+  PingAssembler assembler(stream_template());
+  std::vector<std::int64_t> order;
+  for (const std::int64_t first : stream_order()) {
+    if (first < 96 || first >= 208) order.push_back(first);
+  }
+  const auto out = feed_stream(assembler, order);
+  EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0, 2}));
+  EXPECT_EQ(assembler.dropped_pings, 1);
+  EXPECT_EQ(assembler.lost_samples, 7 * 16);
+  EXPECT_EQ(assembler.late_blocks + assembler.repeated_blocks + assembler.restarts, 0);
+}
+
+TEST(PingAssembler, PlacesBlocksThatArriveOutOfOrderAndIgnoresRepeats) {
+  {  // 144 and 160 (both in ping 1's window) swapped: ping 1 kept whole.
+    PingAssembler assembler(stream_template());
+    auto order = stream_order();
+    std::swap(order[9], order[10]);
+    const auto out = feed_stream(assembler, order);
+    ASSERT_EQ(sequences(out), (std::vector<std::int64_t>{0, 1, 2}));
+    EXPECT_FLOAT_EQ(out[1].samples.channel(0)[0], 130.0F * 10.0F - 300.0F);
+    EXPECT_FLOAT_EQ(out[1].samples.channel(1)[39], 169.0F * 10.0F + 1.0F - 300.0F);
+    EXPECT_EQ(assembler.late_blocks, 1);
+    EXPECT_EQ(assembler.lost_samples + assembler.dropped_pings + assembler.repeated_blocks + assembler.too_late_blocks, 0);
+  }
+  {  // 144 twice: a repeat (same capture start, same transmit, samples already in), not a restart.
+    PingAssembler assembler(stream_template());
+    auto order = stream_order();
+    order.insert(order.begin() + 10, 144);
+    const auto out = feed_stream(assembler, order);
+    EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0, 1, 2}));
+    EXPECT_EQ(assembler.repeated_blocks, 1);
+    EXPECT_EQ(assembler.last_block, PingAssembler::Block::kInOrder);
+    EXPECT_EQ(assembler.lost_samples + assembler.dropped_pings + assembler.late_blocks + assembler.restarts, 0);
+  }
+  {  // 144 after 208: ping 1 was given up when the stream reached 2 blocks past its window (block 192); 144 is too late.
+    PingAssembler assembler(stream_template());
+    auto order = stream_order();
+    order.erase(order.begin() + 9);
+    order.insert(order.begin() + 13, 144);
+    const auto out = feed_stream(assembler, order);
+    EXPECT_EQ(sequences(out), (std::vector<std::int64_t>{0, 2}));
+    EXPECT_EQ(assembler.dropped_pings, 1);
+    EXPECT_EQ(assembler.lost_samples, 16);
+    EXPECT_EQ(assembler.late_blocks, 1);
+    EXPECT_EQ(assembler.too_late_blocks, 1);
+    EXPECT_EQ(assembler.repeated_blocks, 0);
+  }
+}
+
+TEST(PingAssembler, AnotherCaptureStartIsARestart) {
+  PingAssembler assembler(stream_template());
+  std::vector<std::int64_t> order;
+  for (std::int64_t first = 0; first < 160; first += 16) order.push_back(first);    // into ping 1's window
+  auto out = feed_stream(assembler, order);
+  ASSERT_EQ(out.size(), 1U);
+  auto b = block(0, 16, 2, 10, 0U);
+  const std::uint64_t start_ns = 2000;
+  std::memcpy(b.data() + 36, &start_ns, 8);
+  EXPECT_TRUE(assembler.feed(b.data(), b.size(), out));
+  EXPECT_EQ(assembler.restarts, 1);
+  EXPECT_EQ(assembler.dropped_pings, 1);                 // ping 1, open at the restart
+  EXPECT_EQ(assembler.last_block, PingAssembler::Block::kRestart);
 }
 
 TEST(StreamAssembler, CutsAnUntriggeredStreamIntoChunksAndRestartsAfterAGap) {

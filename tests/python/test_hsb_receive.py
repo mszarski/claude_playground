@@ -2,16 +2,21 @@
 and the PingAssembler behind it (sources/flank_stream.py) count when frames go missing, repeat, arrive out of
 order, damaged or not of this stream.
 
-Every expected number is derived from the rules the code documents:
-  * frame numbers (the receiver operator's `frame_number` metadata): a number above the last one seen counts the
-    numbers skipped in `frames_lost` and puts the arriving frame's number in `trouble_frames` (the first 16); a
-    number at or below the last one is `frames_repeated` and the frame is ignored entirely (no reordering).
+Every expected number is derived from the rules the code documents (FrameReceiver's and PingAssembler's docstrings):
+  * frame numbers (the receiver operator's `frame_number` metadata): numbers skipped are awaited. One that arrives
+    while its place is still open is `frames_late` and used (its ping kept); one that never arrives is `frames_lost`
+    once its place is given up (its ping emitted or dropped, or, between pings, the stream `reorder_blocks` = 2 frames
+    past it), and the number of the frame that arrived after the gap goes in `trouble_frames` (the first 16); one
+    arriving after that is `frames_too_late` (and `frames_late`), not used. A number already received is
+    `frames_repeated`, ignored. Without numbers the same is told from the blocks' sample counter.
   * `frame_bytes_received` below the frame's size: `frames_damaged`, the frame's number in `trouble_frames`, the
     frame not used. Not a block of this stream (size, magic, version, channel count): `bad_frames`, not used, not
     in `trouble_frames`.
-  * The assembler sees only the frames used: a jump in `sample_index` adds the samples skipped to `lost_samples`
-    and discards the ping whose window it cuts through (never zero-filled); a ping first named by a header after
-    its window has opened is discarded too ("joined too late"). Both count in `dropped_pings`.
+  * The assembler sees only the frames used: samples never received are `lost_samples` once given up, and the ping
+    whose window they cut is discarded (never zero-filled); a ping first named by a header after its window has
+    opened, with what came before already received or given up, is discarded too ("joined too late"); a jump of the
+    header's ping index counts the pings none of whose frames arrived. All count in `dropped_pings`.
+(Changed from inv-hsb ea25f52 by the fixes of the three faults it exposed: see the comments marked "fixed:".)
 What the tests cannot reach without Sensor Bridge: the metadata values themselves (`frame_number`,
 `frame_bytes_received`, cumulative `packets_dropped` come from LinuxReceiverOp), the receiver's queue dropping
 its oldest frames, the data socket's drop count and the one-ping-per-frame emission of HsbFramesToPingsOp.
@@ -112,21 +117,20 @@ def test_lost_frames_cost_their_samples_and_exactly_the_pings_they_cut(run, case
     kept = [i for i in range(N) if i not in dropped]
     assert [r.metadata.sequence for r in records] == kept
     same_as_clean(records, run["clean"])
+    # fixed: the stats name frames_late and frames_too_late (0 here: nothing arrives out of order).
     assert s == {"frames": len(run["frames"]) - len(skip), "frames_lost": len(skip), "frames_damaged": 0,
-                 "frames_repeated": 0, "bad_frames": 0, "packets_dropped": 0, "first_frame_number": 0,
+                 "frames_repeated": 0, "frames_late": 0, "frames_too_late": 0, "bad_frames": 0, "packets_dropped": 0, "first_frame_number": 0,
                  "trouble_frames": runs_of(skip), "pings": len(kept), "dropped_pings": len(dropped),
                  "lost_samples": FRAME * len(skip)}
 
 
-@pytest.mark.xfail(strict=True, reason="BUG (reported, not fixed): a ping none of whose frames arrives - every frame "
-                   "from its transmit to the next one lost - is never named by a header, so dropped_pings does not "
-                   "count it; only frames_lost and lost_samples show the loss")
 def test_a_ping_lost_whole_is_counted_as_dropped(run):
+    # fixed: was a strict xfail (dropped_pings 0). Counted from the jump of the header's ping index, 1 to 3.
     skip = range(run["T"][2], run["T"][3])               # every frame whose header names ping 2
     records, s = receive(numbered(run["frames"], skip))
     assert [r.metadata.sequence for r in records] == [0, 1, 3, 4, 5]
     assert (s["frames_lost"], s["lost_samples"]) == (len(skip), FRAME * len(skip))
-    assert s["dropped_pings"] == 1                       # 0 today: the ping vanishes from the count
+    assert s["dropped_pings"] == 1
 
 
 def test_repeated_and_out_of_order_frames(run):
@@ -145,29 +149,32 @@ def test_repeated_and_out_of_order_frames(run):
     same_as_clean(records, run["clean"])
     assert (s["frames_repeated"], s["frames_damaged"], s["packets_dropped"], s["frames"], s["frames_lost"],
             s["lost_samples"], s["trouble_frames"]) == (2, 0, 0, len(frames), 0, 0, [])
-    # Two frames swapped: there is no reordering. The later one arrives first and opens a gap of one frame (lost,
-    # the ping it cuts dropped); the earlier one then has a lower number and is ignored as a repeat.
+    # Two frames swapped. fixed: was ([0, 1, 3, 4, 5]; frames_lost 1, frames_repeated 1, trouble [b], lost_samples FRAME,
+    # dropped_pings 1, frames len - 1): the earlier frame now fills its place, nothing is lost, ping 2 is kept.
     items = [item(k) for k in range(len(frames))]
     items[a], items[b] = items[b], items[a]
     records, s = receive(items)
-    assert [r.metadata.sequence for r in records] == [0, 1, 3, 4, 5]
-    assert (s["frames_lost"], s["frames_repeated"], s["trouble_frames"], s["lost_samples"], s["dropped_pings"],
-            s["frames"]) == (1, 1, [b], FRAME, 1, len(frames) - 1)
-    # The same swap with no metadata (no frame numbers): both frames are used. The assembler counts the jump to b
-    # (one frame) and the jump from b back to b+1 when the stream continues (one more); the step back costs nothing.
+    assert [r.metadata.sequence for r in records] == list(range(N))
+    same_as_clean(records, run["clean"])
+    assert (s["frames_lost"], s["frames_repeated"], s["frames_late"], s["frames_too_late"], s["trouble_frames"],
+            s["lost_samples"], s["dropped_pings"], s["frames"]) == (0, 0, 1, 0, [], 0, 0, len(frames))
+    # The same swap with no metadata (no frame numbers): the sample counter places it. fixed: was ([0, 1, 3, 4, 5];
+    # lost_samples 2 FRAME - the jump to b and the jump back counted - and dropped_pings 1).
     order = list(range(len(frames)))
     order[a], order[b] = order[b], order[a]
     records, s = receive([(frames[k], None) for k in order])
-    assert [r.metadata.sequence for r in records] == [0, 1, 3, 4, 5]
-    assert (s["frames"], s["frames_lost"], s["frames_repeated"], s["lost_samples"], s["dropped_pings"]) == \
-        (len(frames), 0, 0, 2 * FRAME, 1)
-    # A repeat with no frame number is not recognised: the step back is a restart to the assembler, which discards the
-    # ping it falls in although no sample is missing (the numbered repeat above cost nothing).
+    assert [r.metadata.sequence for r in records] == list(range(N))
+    same_as_clean(records, run["clean"])
+    assert (s["frames"], s["frames_lost"], s["frames_repeated"], s["frames_late"], s["lost_samples"], s["dropped_pings"]) == \
+        (len(frames), 0, 0, 1, 0, 0)
+    # A repeat with no frame number: its header (same capture start, same transmit, samples already received) tells it
+    # from a restart. fixed: was ([0, 1, 3, 4, 5]; frames len + 1, frames_repeated 0, dropped_pings 1).
     order = list(range(len(frames)))
     order.insert(a + 1, a)
     records, s = receive([(frames[k], None) for k in order])
-    assert [r.metadata.sequence for r in records] == [0, 1, 3, 4, 5]
-    assert (s["frames"], s["frames_repeated"], s["lost_samples"], s["dropped_pings"]) == (len(frames) + 1, 0, 0, 1)
+    assert [r.metadata.sequence for r in records] == list(range(N))
+    same_as_clean(records, run["clean"])
+    assert (s["frames"], s["frames_repeated"], s["frames_late"], s["lost_samples"], s["dropped_pings"]) == (len(frames), 1, 0, 0, 0)
 
 
 def test_damaged_frames_and_frames_not_of_this_stream_are_told_apart(run):
@@ -194,7 +201,9 @@ def test_damaged_frames_and_frames_not_of_this_stream_are_told_apart(run):
     records, s = receive(items)
     assert [r.metadata.sequence for r in records] == [0, 1, 2, 5]
     same_as_clean(records, run["clean"])
-    assert s == {"frames": len(frames) - 5, "frames_lost": 0, "frames_damaged": 2, "frames_repeated": 0, "bad_frames": 3,
+    # fixed: the stats name frames_late and frames_too_late (0 here).
+    assert s == {"frames": len(frames) - 5, "frames_lost": 0, "frames_damaged": 2, "frames_repeated": 0, "frames_late": 0,
+                 "frames_too_late": 0, "bad_frames": 3,
                  "packets_dropped": 4, "first_frame_number": 0, "trouble_frames": [quiet_damaged, window_damaged],
                  "pings": 4, "dropped_pings": 2, "lost_samples": 5 * FRAME}
 
@@ -230,3 +239,143 @@ def test_trouble_frames_keep_the_first_sixteen(run):
     assert len(records) == N and s["dropped_pings"] == 0
     assert (s["frames_lost"], s["lost_samples"], s["trouble_frames"]) == (20, 20 * FRAME, [k + 1 for k in skip[:16]])
 
+
+
+# -- added with the fixes: reordering, repeats and whole pings, numbered, unnumbered and in both assemblers -------------
+
+def test_frames_out_of_order_keep_their_ping_and_late_ones_are_counted(run):
+    frames, W, E = run["frames"], run["W"], run["E"]
+
+    def items(order):
+        return [(frames[k], {"frame_number": k, "frame_bytes_received": len(frames[k]), "packets_dropped": 0}) for k in order]
+
+    # The first frame of ping 2's window ten frames late, and the last one swapped with the frame after the window
+    # (reorder_blocks = 2 holds the window that long): every ping kept, nothing lost.
+    order = [k for k in range(len(frames)) if k != W[2]]
+    order.insert(order.index(W[2] + 10) + 1, W[2])
+    i, j = order.index(E[2]), order.index(E[2] + 1)
+    order[i], order[j] = order[j], order[i]
+    records, s = receive(items(order))
+    assert [r.metadata.sequence for r in records] == list(range(N))
+    same_as_clean(records, run["clean"])
+    assert (s["frames"], s["frames_late"], s["frames_too_late"], s["frames_lost"], s["frames_repeated"], s["trouble_frames"],
+            s["lost_samples"], s["dropped_pings"]) == (len(frames), 2, 0, 0, 0, [], 0, 0)
+    # A frame of ping 2's window that comes after the stream is 3 frames past the window: ping 2 was given up when the
+    # stream got 2 frames past it, the frame counted lost then; on arrival it is counted too late and not used.
+    k = W[2] + 5
+    order = [x for x in range(len(frames)) if x != k]
+    order.insert(order.index(E[2] + 3) + 1, k)
+    for numbered_ in (True, False):
+        records, s = receive(items(order) if numbered_ else [(frames[x], None) for x in order])
+        assert [r.metadata.sequence for r in records] == [0, 1, 3, 4, 5]
+        same_as_clean(records, run["clean"])
+        assert (s["frames"], s["frames_late"], s["frames_too_late"], s["frames_repeated"], s["lost_samples"], s["dropped_pings"]) == \
+            (len(frames) - 1, 1, 1, 0, FRAME, 1)
+        assert (s["frames_lost"], s["trouble_frames"]) == ((1, [k + 1]) if numbered_ else (0, []))   # frames_lost needs numbers
+
+
+def assembler_for(engine, **options):
+    from gpusonar import _gpusonar as core
+    from gpusonar.sonar import SonarModel
+    from gpusonar.sources.flank_stream import PingAssembler
+    sonar = SonarModel.load("flank_32", OVERRIDES)
+    if engine == "python":
+        return PingAssembler(sonar, **options)
+    return core.PingAssemblerCpp(sonar.make_record(core.Pose()), **options)
+
+
+def with_ping_index(frame, index):
+    """The frame with its header's ping index replaced."""
+    return frame[:28] + int(index & 0xFFFFFFFF).to_bytes(4, "little") + frame[32:]
+
+
+def ping_of(frame):
+    return int.from_bytes(frame[28:32], "little")
+
+
+def scenario(run, name):
+    """(frames in arrival order, expected sequences, expected counters) for one case."""
+    frames, T, W, E = run["frames"], run["T"], run["W"], run["E"]
+    k = list(range(len(frames)))
+    a = W[2] + 50
+    if name == "ping_lost_whole":
+        return [frames[x] for x in k if not T[2] <= x < T[3]], [0, 1, 3, 4, 5], \
+            dict(dropped_pings=1, lost_samples=FRAME * (T[3] - T[2]), late_blocks=0, too_late_blocks=0, repeated_blocks=0, restarts=0)
+    if name == "swapped":
+        k[a], k[a + 1] = k[a + 1], k[a]
+        return [frames[x] for x in k], list(range(N)), \
+            dict(dropped_pings=0, lost_samples=0, late_blocks=1, too_late_blocks=0, repeated_blocks=0, restarts=0)
+    if name == "repeated":
+        k.insert(a + 1, a)
+        return [frames[x] for x in k], list(range(N)), \
+            dict(dropped_pings=0, lost_samples=0, late_blocks=0, too_late_blocks=0, repeated_blocks=1, restarts=0)
+    if name == "too_late":
+        k.remove(W[2] + 5)
+        k.insert(k.index(E[2] + 3) + 1, W[2] + 5)
+        return [frames[x] for x in k], [0, 1, 3, 4, 5], \
+            dict(dropped_pings=1, lost_samples=FRAME, late_blocks=1, too_late_blocks=1, repeated_blocks=0, restarts=0)
+    if name == "index_wraps":
+        # Ping indices 2^32 - 3 .. 2: ping 2 (index 2^32 - 1) lost whole is counted across the wrap.
+        out = [with_ping_index(frames[x], ping_of(frames[x]) - 3) for x in k if not T[2] <= x < T[3]]
+        return out, [2**32 - 3, 2**32 - 2, 0, 1, 2], \
+            dict(dropped_pings=1, lost_samples=FRAME * (T[3] - T[2]), late_blocks=0, too_late_blocks=0, repeated_blocks=0, restarts=0)
+    if name == "index_renumbered":
+        # From ping 3 on the board numbers from 1003: a jump of 1001 one ping interval after the last is a renumbering.
+        out = [with_ping_index(f, ping_of(f) + 1000) if x >= T[3] else f for x, f in enumerate(frames)]
+        return out, [0, 1, 2, 1003, 1004, 1005], \
+            dict(dropped_pings=0, lost_samples=0, late_blocks=0, too_late_blocks=0, repeated_blocks=0, restarts=0)
+    if name == "restarted":
+        # The capture starts again from sample 0 (same capture start time: a board without a clock).
+        return frames + frames, list(range(N)) * 2, \
+            dict(dropped_pings=0, lost_samples=0, late_blocks=0, too_late_blocks=0, repeated_blocks=0, restarts=1)
+    raise KeyError(name)
+
+
+SCENARIOS = ["ping_lost_whole", "swapped", "repeated", "too_late", "index_wraps", "index_renumbered", "restarted"]
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+@pytest.mark.parametrize("name", SCENARIOS)
+def test_both_assemblers_make_the_same_decisions(run, engine, name):
+    frames, sequences, counters = scenario(run, name)
+    asm = assembler_for(engine)
+    records = [r for f in frames for r in asm.feed(f)]
+    assert [r.metadata.sequence for r in records] == sequences
+    assert {key: getattr(asm, key) for key in counters} == counters
+    kept = {"ping_lost_whole": [0, 1, 3, 4, 5], "too_late": [0, 1, 3, 4, 5], "index_wraps": [0, 1, 3, 4, 5],
+            "restarted": list(range(N)) * 2}.get(name, list(range(N)))                # which clean ping each record is
+    for r, i in zip(records, kept, strict=True):
+        assert np.array_equal(r.samples.array, run["clean"][i].samples.array)
+        assert r.transmit.time_ns == run["clean"][i].transmit.time_ns
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_both_assemblers_reorder_before_decimating(run, engine):
+    """With decimation the samples behind a hole wait for it: swapped frames give the clean stream's records exactly."""
+    frames, W = run["frames"], run["W"]
+    k = list(range(len(frames)))
+    for a in (W[1] + 3, W[3] + 20):
+        k[a], k[a + 1] = k[a + 1], k[a]
+    k.remove(W[2])
+    k.insert(k.index(W[2] + 30), W[2])                    # the first frame of a window 30 frames late
+    asm, clean_asm = assembler_for(engine, decimate={}), assembler_for(engine, decimate={})
+    got = [r for x in k for r in asm.feed(frames[x])]
+    want = [r for f in frames for r in clean_asm.feed(f)]
+    assert len(got) == len(want) == N and asm.dropped_pings == 0 and asm.late_blocks == 3
+    for g, w in zip(got, want):
+        assert g.samples.is_complex() and np.array_equal(np.asarray(g.samples.array), np.asarray(w.samples.array))
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_reordering_adds_no_output_latency(run, engine):
+    """Each ping comes out of the frame holding its window's last sample, in order or not (a late frame that completes
+    a window releases it at once)."""
+    frames, W, E = run["frames"], run["W"], run["E"]
+    asm = assembler_for(engine)
+    emitted = [k for k, f in enumerate(frames) for _ in asm.feed(f)]
+    assert emitted == E
+    k = list(range(len(frames)))
+    k[E[2]], k[E[2] + 1] = k[E[2] + 1], k[E[2]]          # ping 2's last frame one frame late: out when it arrives
+    asm = assembler_for(engine)
+    emitted = [k[i] for i in range(len(k)) for _ in asm.feed(frames[k[i]])]
+    assert emitted == E and asm.late_blocks == 1

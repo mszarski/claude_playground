@@ -996,14 +996,21 @@ void bind_live(py::module_& m) {
       });
 
   py::class_<live::PingAssembler>(m, "PingAssemblerCpp")
-      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes) {
-             if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
-             const live::DecimateOptions o = decimate_options(decimate.cast<py::dict>());
-             if (reference.is_none()) return live::PingAssembler(t, &o, nullptr, sample_bytes);
-             const live::Reference ref = reference_options(reference.cast<py::dict>());
-             return live::PingAssembler(t, &o, &ref, sample_bytes);
+      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes, int reorder_blocks) {
+             if (reorder_blocks < 0) throw py::value_error("reorder_blocks must be 0 or more");
+             auto make = [&]() {
+               if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
+               const live::DecimateOptions o = decimate_options(decimate.cast<py::dict>());
+               if (reference.is_none()) return live::PingAssembler(t, &o, nullptr, sample_bytes);
+               const live::Reference ref = reference_options(reference.cast<py::dict>());
+               return live::PingAssembler(t, &o, &ref, sample_bytes);
+             };
+             live::PingAssembler a = make();
+             a.reorder_blocks = reorder_blocks;
+             return a;
            }),
-           py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none(), py::arg("sample_bytes") = 3)
+           py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none(), py::arg("sample_bytes") = 3,
+           py::arg("reorder_blocks") = live::kReorderBlocks)
       .def("feed",
            [](live::PingAssembler& a, const py::bytes& block) {
              const std::string data = block;
@@ -1013,5 +1020,24 @@ void bind_live(py::module_& m) {
            })
       .def_readonly("dropped_pings", &live::PingAssembler::dropped_pings)
       .def_readonly("lost_samples", &live::PingAssembler::lost_samples)
+      .def_readonly("overflow_blocks", &live::PingAssembler::overflow_blocks)
+      .def_readonly("late_blocks", &live::PingAssembler::late_blocks)
+      .def_readonly("too_late_blocks", &live::PingAssembler::too_late_blocks)
+      .def_readonly("repeated_blocks", &live::PingAssembler::repeated_blocks)
+      .def_readonly("restarts", &live::PingAssembler::restarts)
+      .def_readonly("reorder_blocks", &live::PingAssembler::reorder_blocks)
+      .def_property_readonly("last_block",
+                             [](const live::PingAssembler& a) -> py::object {
+                               using B = live::PingAssembler::Block;
+                               switch (a.last_block) {
+                                 case B::kInOrder: return py::str("in_order");
+                                 case B::kGap: return py::str("gap");
+                                 case B::kLate: return py::str("late");
+                                 case B::kTooLate: return py::str("too_late");
+                                 case B::kRepeated: return py::str("repeated");
+                                 case B::kRestart: return py::str("restart");
+                                 default: return py::none();
+                               }
+                             })
       .def_readonly("bad_blocks", &live::PingAssembler::bad_blocks);
 }

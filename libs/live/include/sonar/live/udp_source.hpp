@@ -9,6 +9,8 @@
 
 #include <cstdint>
 #include <deque>
+#include <map>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -20,28 +22,60 @@
 
 namespace sonar::live {
 
+/// Blocks the stream may move past a hole before it is given up: 2 lets the last block of a window and the one
+/// after it swap places (ours; flank_stream.py REORDER_BLOCKS is the same).
+constexpr int kReorderBlocks = 2;
+
+/// The rules are those of python/gpusonar/sources/flank_stream.py PingAssembler (its docstring states them; the
+/// engine-parity tests hold both to the same counters and decisions). In short: blocks are placed by their sample
+/// counter, so a block that arrives late but while its ping is still open fills its place (late_blocks) and the
+/// ping is kept; a hole is given up whole (lost_samples) once the stream is `reorder_blocks` blocks past its end, or,
+/// if it reaches into the open ping's window, when that ping is given up (dropped_pings: a later ping named, the stream `reorder_blocks` blocks
+/// past the window's end, or a restart); a ping is emitted as soon as its window is complete, so nothing waits;
+/// a block of samples already received is a repeat (repeated_blocks), one inside a hole already given up is too
+/// late (too_late_blocks, also in late_blocks); a jump of d in the header's ping index (modulo 2^32) counts d - 1
+/// pings none of whose blocks arrived, when the transmits are d windows apart or more; another capture start, a
+/// block far behind or one naming a transmit not named recently is a restart (restarts).
 class PingAssembler {
  public:
   /// With `decimate` (enabled) every ping is band-selected and decimated to complex baseband as
   /// its blocks arrive (decimate.hpp) and, with `reference`, its boards synchronised: the records
-  /// that come out are complex, and the full-rate ping is never held.
+  /// that come out are complex, and the full-rate ping is never held (but for blocks waiting behind a hole).
   /// `sample_bytes`: the size of one sample in a block (2, 3 or 4: a signed little-endian integer whose
   /// full scale is 2^(8 bytes - 1) counts). The block header does not carry it; the sender is configured alike.
   explicit PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate = nullptr, const Reference* reference = nullptr,
                          int sample_bytes = 3);
-  /// Take one block; append the ping records it completes (usually none or one).
+  /// Take one block; append the ping records it completes (none or one).
   /// Returns false, and counts it, if the block is malformed.
   bool feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out);
   std::int64_t dropped_pings = 0, lost_samples = 0, overflow_blocks = 0, bad_blocks = 0;
+  std::int64_t late_blocks = 0, too_late_blocks = 0, repeated_blocks = 0, restarts = 0;
+  /// Set before the first block (0 or more).
+  int reorder_blocks = kReorderBlocks;
+  enum class Block { kNone, kInOrder, kGap, kLate, kTooLate, kRepeated, kRestart };
+  Block last_block = Block::kNone;   ///< what the last well-formed block was
 
  private:
+  struct Hole {
+    std::int64_t a, b;
+  };
+  void reset();
+  void give_up(std::int64_t limit, const Hole* window = nullptr);
+  void abandon(std::int64_t n);
+  void name(std::int64_t first, std::int64_t n, std::int64_t tx, std::int64_t index, std::int64_t start_ns);
+  bool in_holes(std::int64_t a, std::int64_t b) const;
+  std::int64_t span(std::int64_t n) const { return window_start_ + window_length_ + (reorder_blocks + 1) * n; }
+
   PingRecord template_;
   std::int64_t window_start_ = 0, window_length_ = 0, n_channels_ = 0, sample_bytes_ = 3;
   double volts_per_count_ = 1.0;
-  bool have_next_ = false, open_ = false, have_done_ = false;
-  std::int64_t next_sample_ = 0, done_ping_ = 0;
-  std::int64_t tx_ = 0, index_ = 0, filled_ = 0, start_ns_ = 0;
+  bool started_ = false, open_ = false, have_first_tx_ = false;
+  std::int64_t frontier_ = 0, origin_ = 0, stream_ns_ = 0, first_tx_ = 0;
+  std::vector<Hole> holes_, expired_;
+  std::deque<std::pair<std::int64_t, std::int64_t>> named_;   ///< (tx_sample, ping_index), the latest 4
+  std::int64_t tx_ = 0, index_ = 0, w0_ = 0, covered_ = 0, fed_ = 0, start_ns_ = 0;
   std::vector<std::int32_t> buffer_;  ///< [window_length][n_channels]
+  std::map<std::int64_t, std::vector<float>> pending_;   ///< decimated path: rows behind a hole, by offset in the window
   std::shared_ptr<PingDecimator> decimator_;
   std::vector<float> rows_;
 };

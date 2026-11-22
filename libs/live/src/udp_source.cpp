@@ -45,6 +45,74 @@ PingAssembler::PingAssembler(const PingRecord& template_record, const DecimateOp
   if (decimate != nullptr && decimate->enabled) decimator_ = std::make_shared<PingDecimator>(template_, *decimate, reference);
 }
 
+void PingAssembler::reset() {
+  started_ = open_ = have_first_tx_ = false;
+  frontier_ = origin_ = stream_ns_ = first_tx_ = 0;
+  holes_.clear();
+  expired_.clear();
+  named_.clear();
+  pending_.clear();
+}
+
+void PingAssembler::give_up(std::int64_t limit, const Hole* window) {
+  std::vector<Hole> keep;
+  for (const Hole& h : holes_) {
+    const bool held = open_ && h.a < w0_ + window_length_ && h.b > w0_;
+    if ((window != nullptr && h.a < window->b && h.b > window->a) || (h.b <= limit && !held)) {
+      lost_samples += h.b - h.a;
+      expired_.push_back(h);
+    } else {
+      keep.push_back(h);
+    }
+  }
+  holes_.swap(keep);
+}
+
+void PingAssembler::abandon(std::int64_t n) {
+  open_ = false;
+  pending_.clear();
+  ++dropped_pings;
+  const Hole window{w0_, w0_ + window_length_};
+  give_up(frontier_ - reorder_blocks * n, &window);
+}
+
+bool PingAssembler::in_holes(std::int64_t a, std::int64_t b) const {
+  for (const Hole& h : holes_) {
+    if (h.a <= a && a < h.b) {
+      a = h.b;
+      if (a >= b) return true;
+    }
+  }
+  return a >= b;
+}
+
+void PingAssembler::name(std::int64_t first, std::int64_t n, std::int64_t tx, std::int64_t index, std::int64_t start_ns) {
+  if (!named_.empty()) {
+    const std::int64_t d = (index - named_.back().second) & 0xFFFFFFFFLL;
+    if (d >= 2 && d * (window_start_ + window_length_) <= tx - named_.back().first) dropped_pings += d - 1;   // pings never heard of
+  } else {
+    first_tx_ = tx;
+    have_first_tx_ = true;
+  }
+  named_.emplace_back(tx, index);
+  if (named_.size() > 4) named_.pop_front();
+  if (open_) abandon(n);                                   // the previous window never completed
+  const std::int64_t w0 = tx + window_start_;
+  if (first > w0 && !in_holes(w0, first)) {                // joined too late for this ping
+    ++dropped_pings;
+    return;
+  }
+  open_ = true;
+  tx_ = tx;
+  index_ = index;
+  start_ns_ = start_ns;
+  w0_ = w0;
+  covered_ = fed_ = 0;
+  pending_.clear();
+  if (decimator_) decimator_->open();
+  else buffer_.assign(static_cast<std::size_t>(window_length_ * n_channels_), 0);
+}
+
 bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out) {
   if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1) {
     ++bad_blocks;
@@ -61,87 +129,124 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
     ++bad_blocks;
     return false;
   }
-  if (have_next_ && first != next_sample_) {
-    // A gap (or a restart). Whatever ping it cuts through is lost.
-    lost_samples += std::max<std::int64_t>(first - next_sample_, 0);
-    if (open_) {
-      const std::int64_t w0 = tx_ + window_start_;
-      if (first > w0 + filled_ || first < next_sample_) {
-        ++dropped_pings;
-        done_ping_ = index_;
-        have_done_ = true;
-        open_ = false;
-      }
-    }
-  }
-  have_next_ = true;
-  next_sample_ = first + n;
-  if (flags & 1) ++overflow_blocks;
-  if (tx >= 0 && !(have_done_ && ping_index == done_ping_) && (!open_ || index_ != ping_index)) {
-    if (open_) ++dropped_pings;                    // the previous window never completed
-    if (first > tx + window_start_) {              // joined too late for this ping
-      ++dropped_pings;
-      done_ping_ = ping_index;
-      have_done_ = true;
-      open_ = false;
+  if (reorder_blocks < 0) throw std::invalid_argument("PingAssembler: reorder_blocks must be 0 or more");
+  const std::int64_t end = first + n;
+  Block kind = Block::kNone;
+  if (started_) {
+    bool consistent = true;    // a block behind the stream whose header names what this stream named there
+    if (tx < 0) {
+      consistent = !have_first_tx_ || first < first_tx_;
     } else {
-      open_ = true;
-      tx_ = tx;
-      index_ = ping_index;
-      start_ns_ = start_ns;
-      filled_ = 0;
-      if (decimator_) decimator_->open();
-      else buffer_.assign(static_cast<std::size_t>(window_length_ * n_channels_), 0);
+      consistent = std::find(named_.begin(), named_.end(), std::make_pair(tx, ping_index)) != named_.end();
+    }
+    if (start_ns != stream_ns_ || (first < frontier_ && (first < std::max(origin_, frontier_ - span(n)) || !consistent))) {
+      ++restarts;                                          // a restart: whatever was open is lost
+      if (open_) ++dropped_pings;
+      for (const Hole& h : holes_) lost_samples += h.b - h.a;
+      reset();
+      kind = Block::kRestart;
     }
   }
-  if (!open_) return true;
-  const std::int64_t w0 = tx_ + window_start_;
-  const std::int64_t a = std::max(first, w0 + filled_), b = std::min(first + n, w0 + window_length_);
-  if (b > a) {
-    if (a != w0 + filled_) {
-      ++dropped_pings;
-      done_ping_ = index_;
-      have_done_ = true;
-      open_ = false;
-      return true;
+  if (!started_) {
+    started_ = true;
+    frontier_ = origin_ = first;
+    stream_ns_ = start_ns;
+  }
+  const std::int64_t frontier = frontier_;
+  std::vector<Hole> fresh;                                 // received for the first time
+  if (first < frontier) {                                  // the parts of the block in open holes, taken out of them
+    const std::int64_t b = std::min(end, frontier);
+    std::vector<Hole> keep;
+    for (const Hole& h : holes_) {
+      const std::int64_t x = std::max(first, h.a), y = std::min(b, h.b);
+      if (y <= x) {
+        keep.push_back(h);
+        continue;
+      }
+      fresh.push_back({x, y});
+      if (h.a < x) keep.push_back({h.a, x});
+      if (y < h.b) keep.push_back({y, h.b});
     }
+    holes_.swap(keep);
+  }
+  if (end > frontier) {
+    if (first > frontier) {
+      holes_.push_back({frontier, first});
+      if (kind == Block::kNone) kind = Block::kGap;
+    }
+    fresh.push_back({std::max(first, frontier), end});
+  }
+  if (fresh.empty()) {
+    bool too_late = false;
+    for (const Hole& h : expired_) too_late = too_late || std::min(end, h.b) > std::max(first, h.a);
+    if (too_late) {
+      ++late_blocks;
+      ++too_late_blocks;
+      last_block = Block::kTooLate;
+    } else {
+      ++repeated_blocks;
+      last_block = Block::kRepeated;
+    }
+    return true;
+  }
+  if (first < frontier && fresh.front().a < frontier) {
+    ++late_blocks;
+    if (kind == Block::kNone) kind = Block::kLate;
+  }
+  last_block = kind == Block::kNone ? Block::kInOrder : kind;
+  frontier_ = std::max(frontier, end);
+  if (flags & 1) ++overflow_blocks;
+  if (first >= frontier && tx >= 0 && (named_.empty() || tx > named_.back().first)) name(first, n, tx, ping_index, start_ns);
+  if (open_) {
     const unsigned char* payload = data + kHeader;
-    if (decimator_) rows_.resize(static_cast<std::size_t>((b - a) * ch));
-    for (std::int64_t i = a; i < b; ++i) {
-      for (std::int64_t c = 0; c < ch; ++c) {
-        const std::int32_t v = block_sample(payload + ((i - first) * ch + c) * sample_bytes_, sample_bytes_);
-        if (decimator_) rows_[static_cast<std::size_t>((i - a) * ch + c)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
-        else buffer_[static_cast<std::size_t>((i - w0) * ch + c)] = v;
+    for (const Hole& f : fresh) {
+      const std::int64_t a = std::max(f.a, w0_), b = std::min(f.b, w0_ + window_length_);
+      if (b <= a) continue;
+      if (decimator_) rows_.resize(static_cast<std::size_t>((b - a) * ch));
+      for (std::int64_t i = a; i < b; ++i) {
+        for (std::int64_t c = 0; c < ch; ++c) {
+          const std::int32_t v = block_sample(payload + ((i - first) * ch + c) * sample_bytes_, sample_bytes_);
+          if (decimator_) rows_[static_cast<std::size_t>((i - a) * ch + c)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
+          else buffer_[static_cast<std::size_t>((i - w0_) * ch + c)] = v;
+        }
       }
+      if (decimator_) {          // filtered and decimated as it arrives, in order: rows behind a hole wait for it
+        pending_[a - w0_] = rows_;
+        for (auto it = pending_.find(fed_); it != pending_.end(); it = pending_.find(fed_)) {
+          const auto rows = static_cast<std::int64_t>(it->second.size()) / ch;
+          decimator_->feed(it->second.data(), rows);
+          fed_ += rows;
+          pending_.erase(it);
+        }
+      }
+      covered_ += b - a;
     }
-    if (decimator_) decimator_->feed(rows_.data(), b - a);    // filtered and decimated as it arrives: the raw ping is never held
-    filled_ = b - w0;
-  }
-  if (filled_ == window_length_) {
-    PingRecord rec = template_;
-    rec.metadata.sequence = index_;
-    rec.transmit.time_ns = start_ns_ + static_cast<std::int64_t>(std::llround(static_cast<double>(tx_) / rec.samples.sample_rate * 1e9));
-    if (decimator_) {
-      decimator_->finish(rec);
+    if (covered_ == window_length_) {
+      PingRecord rec = template_;
+      rec.metadata.sequence = index_;
+      rec.transmit.time_ns = start_ns_ + static_cast<std::int64_t>(std::llround(static_cast<double>(tx_) / rec.samples.sample_rate * 1e9));
+      if (decimator_) {
+        decimator_->finish(rec);
+      } else {
+        rec.samples.resize(n_channels_, window_length_, SampleKind::RealPassband);
+        rec.samples.start_time = static_cast<double>(window_start_) / rec.samples.sample_rate;
+        for (std::int64_t c = 0; c < n_channels_; ++c) {
+          float* dst = rec.samples.channel(c);
+          for (std::int64_t i = 0; i < window_length_; ++i) {
+            dst[i] = static_cast<float>(static_cast<double>(buffer_[static_cast<std::size_t>(i * n_channels_ + c)]) * volts_per_count_);
+          }
+        }
+      }
       out.push_back(std::move(rec));
-      done_ping_ = index_;
-      have_done_ = true;
       open_ = false;
-      return true;
     }
-    rec.samples.resize(n_channels_, window_length_, SampleKind::RealPassband);
-    rec.samples.start_time = static_cast<double>(window_start_) / rec.samples.sample_rate;
-    for (std::int64_t c = 0; c < n_channels_; ++c) {
-      float* dst = rec.samples.channel(c);
-      for (std::int64_t i = 0; i < window_length_; ++i) {
-        dst[i] = static_cast<float>(static_cast<double>(buffer_[static_cast<std::size_t>(i * n_channels_ + c)]) * volts_per_count_);
-      }
-    }
-    out.push_back(std::move(rec));
-    done_ping_ = index_;
-    have_done_ = true;
-    open_ = false;
   }
+  const std::int64_t horizon = reorder_blocks * n;
+  if (open_ && frontier_ >= w0_ + window_length_ + horizon) abandon(n);
+  give_up(frontier_ - horizon);
+  const std::int64_t low = frontier_ - span(n);
+  expired_.erase(std::remove_if(expired_.begin(), expired_.end(), [low](const Hole& h) { return h.b <= low; }), expired_.end());
+  if (expired_.size() > 64) expired_.erase(expired_.begin(), expired_.end() - 64);
   return true;
 }
 

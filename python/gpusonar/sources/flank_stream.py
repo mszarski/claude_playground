@@ -34,8 +34,9 @@ Sensor Bridge data plane requires. The plain-UDP source here needs blocks that f
 
 `PingAssembler` cuts the continuous stream into ping records: each transmit opens the
 receive window of the sonar config, and a ping is emitted when its window is complete.
-A gap in the sample counter (a lost block) discards the ping it falls in and is counted;
-the stream recovers at the next transmit.
+Blocks are placed by their sample counter, so blocks that arrive out of order still make
+their ping; a block that never arrives discards the ping it falls in and is counted, and
+the stream recovers at the next transmit. The rules are in `PingAssembler`'s docstring.
 """
 
 from __future__ import annotations
@@ -67,6 +68,9 @@ STREAM_PAYLOAD_BYTES = 128 * 32 * 3
 MAX_DATAGRAM = 65507
 STREAM_BUFFER_BYTES = 8 << 20          # the least receive buffer asked for
 STREAM_BUFFER_SECONDS = 0.5            # ... or this much of the board stream, when that is more
+# Blocks the stream may move past a hole before it is given up (PingAssembler): 2 lets the last block of a window
+# and the one after it swap places (ours; libs/live udp_source.hpp kReorderBlocks is the same).
+REORDER_BLOCKS = 2
 
 
 def full_scale_counts(sample_bytes: int = SAMPLE_BYTES) -> float:
@@ -138,12 +142,49 @@ class PingAssembler:
     each ping is band-selected and decimated to complex baseband as its blocks arrive, and with
     `reference` (the shared reference signal of the sonar's boards) synchronised at its end from
     the raw stretches kept around the two reference bursts: the records that come out are complex
-    baseband, and the full-rate ping is never held."""
+    baseband, and the full-rate ping is never held (but for blocks waiting behind a gap, below).
+
+    The rules (the C++ PingAssembler in libs/live udp_source.cpp follows the same ones, held by the
+    engine-parity tests):
+
+    * Order. A block is placed by its `sample_index`, not by when it arrives. A jump forward leaves a
+      hole; a block that later arrives inside a hole fills it (`late_blocks`) and its samples go into the
+      ping being assembled. A ping is emitted the moment its window is complete, so reordering adds no
+      output latency. With `decimate`, samples behind a hole wait (raw) until the hole is filled.
+    * Giving up. A hole is given up whole (its samples counted in `lost_samples`) once the stream has moved
+      `reorder_blocks` blocks past its end; a hole reaching into the open ping's window is held as long as the
+      ping is open, and given up with it. The open ping is given up (`dropped_pings`) when a later ping is named, when the stream has
+      moved `reorder_blocks` blocks past the window's end, or at a restart. So a dropped ping is counted up to
+      `reorder_blocks` blocks after its window ends, not at the gap; complete pings are never delayed.
+    * A block arriving behind the furthest one seen that fills no hole is a repeat (`repeated_blocks`,
+      ignored) or, when it falls in a hole already given up, too late (`too_late_blocks`, also in
+      `late_blocks`; not placed, its samples stay in `lost_samples`).
+    * Restart: a block with another capture start (`start_ns`), or behind the stream by more than
+      a receive window and `reorder_blocks` + 1 blocks, or before the first block heard, or naming a transmit
+      this stream has not named recently (the header's `tx_sample`, `ping_index`), starts the stream afresh
+      (`restarts`): the open ping is dropped, open holes are counted lost, and pings before the first one
+      named afterwards are not counted (as when joining). A board without a clock (`start_ns` constant) that
+      restarts within that span of its own start cannot be told from a repeat: its blocks count as repeats
+      until one names a transmit not heard before.
+    * Pings never named. Every block names the latest transmit, so a ping all of whose blocks are lost
+      shows only as a jump of the header's `ping_index`: a jump of d (modulo 2^32, so a wrap counts as
+      continuing) counts d - 1 dropped pings, if the transmits are far enough apart for d windows (d x
+      (window_start + window_length) samples); otherwise the numbering restarted and nothing is counted.
+      Pings before the first one named (joining late, or after a restart) are not counted.
+    * A ping first named after its window has opened is dropped ("joined too late") unless every sample of
+      the window before that block is still in an open hole (its blocks may yet arrive).
+
+    `last_block` says what the last block was: "in_order", "gap" (it opened a hole), "late", "too_late",
+    "repeated" or "restart"; `last_first`, `last_samples` are its first sample and length. `holds(a, b)` says
+    whether samples a..b-1 may still arrive in time (FrameReceiver maps frame numbers onto it)."""
 
     def __init__(self, sonar: SonarModel, pose=None, sound_speed: float | None = None, decimate: dict | None = None,
-                 reference: dict | None = None, sample_bytes: int = SAMPLE_BYTES):
+                 reference: dict | None = None, sample_bytes: int = SAMPLE_BYTES, reorder_blocks: int = REORDER_BLOCKS):
         self.sonar = sonar
         self.sample_bytes = int(sample_bytes)
+        if int(reorder_blocks) < 0:
+            raise ValueError("reorder_blocks must be 0 or more")
+        self.reorder_blocks = int(reorder_blocks)
         self.pose = pose if pose is not None else core.Pose()
         self.sound_speed = float(sound_speed or sonar.nominal_sound_speed)
         template = sonar.make_record(self.pose, environment={"sound_speed": self.sound_speed})
@@ -157,73 +198,199 @@ class PingAssembler:
         self.dropped_pings = 0
         self.lost_samples = 0
         self.overflow_blocks = 0
+        self.late_blocks = 0              # arrived behind a later block (placed, or too late)
+        self.too_late_blocks = 0          # ... after their hole was given up: not placed
+        self.repeated_blocks = 0          # samples already received: ignored
+        self.restarts = 0
+        self.last_block = None
+        self.last_first = self.last_samples = None
         self._decimator = None
         if decimate is not None:
             from ..live import decimate_options
             self._decimator = core.PingDecimator(template, decimate_options(decimate) or {}, reference)
             self.decimation = self._decimator.plan()
-        self._next_sample = None          # the sample index the next block should start at
-        self._ping = None                 # the ping being filled: dict(tx, index, buffer, filled, ...)
-        self._done_ping = None            # ping index already emitted or discarded
+        self._reset()
 
-    def _open(self, block: dict) -> None:
-        self._ping = {"tx": block["tx_sample"], "index": block["ping_index"], "gain": block["gain_code"],
-                      "start_ns": block["start_ns"], "overflow": False, "filled": 0,
+    def _reset(self) -> None:
+        self._frontier = None             # end of the furthest block seen
+        self._origin = None               # first sample heard (since the start or the last restart)
+        self._stream_ns = None            # the stream's capture start
+        self._holes = []                  # [a, b): samples not received, not yet given up (sorted, disjoint)
+        self._expired = []                # [a, b): holes given up, the recent ones
+        self._named = []                  # (tx_sample, ping_index) of the latest transmits named
+        self._first_tx = None
+        self._ping = None                 # the ping being filled
+
+    # -- holes ---------------------------------------------------------------------------------------------
+
+    def _take_holes(self, a: int, b: int) -> list:
+        """The parts of [a, b) in open holes, removed from them."""
+        got, keep = [], []
+        for h0, h1 in self._holes:
+            x, y = max(a, h0), min(b, h1)
+            if y <= x:
+                keep.append([h0, h1])
+                continue
+            got.append((x, y))
+            if h0 < x:
+                keep.append([h0, x])
+            if y < h1:
+                keep.append([y, h1])
+        self._holes = keep
+        return got
+
+    def _in_holes(self, a: int, b: int) -> bool:
+        """Whether every sample of [a, b) is in an open hole."""
+        for h0, h1 in self._holes:
+            if h0 <= a < h1:
+                a = h1
+                if a >= b:
+                    return True
+        return a >= b
+
+    def _give_up(self, limit: int, window: tuple | None = None) -> None:
+        """Give up the holes that end at or before `limit`, but those reaching into the open ping's window, and
+        every hole reaching into `window` (a ping given up)."""
+        keep = []
+        for h0, h1 in self._holes:
+            held = self._ping is not None and h0 < self._ping["w0"] + self.window_length and h1 > self._ping["w0"]
+            if (window is not None and h0 < window[1] and h1 > window[0]) or (h1 <= limit and not held):
+                self.lost_samples += h1 - h0
+                self._expired.append([h0, h1])
+            else:
+                keep.append([h0, h1])
+        self._holes = keep
+
+    def holds(self, a: int, b: int) -> bool:
+        """Whether some of samples a..b-1 may still arrive in time: not yet reached, or in a hole not given up."""
+        if self._frontier is None or b > self._frontier:
+            return True
+        return any(min(b, h1) > max(a, h0) for h0, h1 in self._holes)
+
+    def _span(self, n: int) -> int:
+        """How far behind the furthest block a block may arrive and still be told apart from a restart."""
+        return self.window_start + self.window_length + (self.reorder_blocks + 1) * n
+
+    def _consistent(self, block: dict) -> bool:
+        """A block behind the stream whose header names what this stream named there."""
+        if block["tx_sample"] < 0:
+            return self._first_tx is None or block["sample_index"] < self._first_tx
+        return (block["tx_sample"], block["ping_index"]) in self._named
+
+    # -- pings ---------------------------------------------------------------------------------------------
+
+    def _abandon(self) -> None:
+        """The open ping cannot complete: count it, and give up the holes in its window."""
+        p = self._ping
+        self._ping = None
+        self.dropped_pings += 1
+        self._give_up(self._frontier - self.reorder_blocks * (self.last_samples or 0), (p["w0"], p["w0"] + self.window_length))
+
+    def _name(self, block: dict) -> None:
+        """A block names a transmit later than any named so far."""
+        tx, index, first = block["tx_sample"], block["ping_index"], block["sample_index"]
+        if self._named:
+            last_tx, last_index = self._named[-1]
+            d = (index - last_index) & 0xFFFFFFFF
+            if d >= 2 and d * (self.window_start + self.window_length) <= tx - last_tx:
+                self.dropped_pings += d - 1               # pings none of whose blocks arrived
+        else:
+            self._first_tx = tx
+        self._named = (self._named + [(tx, index)])[-4:]
+        if self._ping is not None:                       # the previous window never completed
+            self._abandon()
+        w0 = tx + self.window_start
+        if first > w0 and not self._in_holes(w0, first):
+            self.dropped_pings += 1                       # joined too late for this ping
+            return
+        self._ping = {"tx": tx, "index": index, "gain": block["gain_code"], "start_ns": block["start_ns"],
+                      "overflow": False, "w0": w0, "covered": 0, "fed": 0, "pending": {},
                       "buffer": None if self._decimator else np.zeros((self.window_length, self.n_channels), dtype=np.int32)}
         if self._decimator:
             self._decimator.open()
 
+    def _place(self, block: dict, a: int, b: int) -> None:
+        p = self._ping
+        w0 = p["w0"]
+        a, b = max(a, w0), min(b, w0 + self.window_length)
+        if b <= a:
+            return
+        rows = block["counts"][a - block["sample_index"]:b - block["sample_index"]]
+        if self._decimator:                    # filtered and decimated as it arrives, in order
+            p["pending"][a - w0] = (rows * self.volts_per_count).astype(np.float32)
+            while p["fed"] in p["pending"]:
+                piece = p["pending"].pop(p["fed"])
+                self._decimator.feed(piece)
+                p["fed"] += len(piece)
+        else:
+            p["buffer"][a - w0:b - w0] = rows
+        p["covered"] += b - a
+        p["overflow"] |= bool(block["flags"] & FLAG_OVERFLOW)
+
     def feed(self, data: bytes) -> list:
-        """Take one block; return the ping records it completes (usually none or one)."""
+        """Take one block; return the ping records it completes (none or one)."""
         block = decode_block(data, self.sample_bytes)
         if block["n_channels"] != self.n_channels:
             raise BlockError(f"block has {block['n_channels']} channels, the sonar config {self.n_channels}")
         first, n = block["sample_index"], block["n_samples"]
-        if self._next_sample is not None and first != self._next_sample:
-            # A gap (or a restart). Whatever ping it cuts through is lost.
-            self.lost_samples += max(first - self._next_sample, 0)
+        end = first + n
+        self.last_first, self.last_samples = first, n
+        kind = None
+        if self._frontier is not None and (
+                block["start_ns"] != self._stream_ns or
+                (first < self._frontier and (first < max(self._origin, self._frontier - self._span(n)) or
+                                             not self._consistent(block)))):
+            self.restarts += 1                            # a restart: whatever was open is lost
             if self._ping is not None:
-                w0 = self._ping["tx"] + self.window_start
-                if first > w0 + self._ping["filled"] or first < self._next_sample:
-                    self.dropped_pings += 1
-                    self._done_ping = self._ping["index"]
-                    self._ping = None
-        self._next_sample = first + n
+                self._ping = None
+                self.dropped_pings += 1
+            self.lost_samples += sum(h1 - h0 for h0, h1 in self._holes)
+            self._reset()
+            kind = "restart"
+        if self._frontier is None:
+            self._frontier = self._origin = first
+            self._stream_ns = block["start_ns"]
+        frontier = self._frontier
+        fresh = []                                        # [a, b) received for the first time
+        if first < frontier:
+            fresh = self._take_holes(first, min(end, frontier))
+        if end > frontier:
+            if first > frontier:
+                self._holes.append([frontier, first])
+                kind = kind or "gap"
+            fresh.append((max(first, frontier), end))
+        out = []
+        if not fresh:
+            if any(min(end, h1) > max(first, h0) for h0, h1 in self._expired):
+                self.late_blocks += 1
+                self.too_late_blocks += 1
+                self.last_block = "too_late"
+            else:
+                self.repeated_blocks += 1
+                self.last_block = "repeated"
+            return out
+        if first < frontier and fresh[0][0] < frontier:
+            self.late_blocks += 1
+            kind = kind or "late"
+        self.last_block = kind or "in_order"
+        self._frontier = max(frontier, end)
         if block["flags"] & FLAG_OVERFLOW:
             self.overflow_blocks += 1
-        out = []
-        tx = block["tx_sample"]
-        if tx >= 0 and block["ping_index"] != self._done_ping and (
-                self._ping is None or self._ping["index"] != block["ping_index"]):
-            if self._ping is not None:                       # the previous window never completed
-                self.dropped_pings += 1
-            if first > tx + self.window_start:               # joined too late for this ping
-                self.dropped_pings += 1
-                self._done_ping = block["ping_index"]
-                self._ping = None
-            else:
-                self._open(block)
-        if self._ping is not None:
-            p = self._ping
-            w0 = p["tx"] + self.window_start
-            a = max(first, w0 + p["filled"])
-            b = min(first + n, w0 + self.window_length)
-            if b > a:
-                if a != w0 + p["filled"]:
-                    self.dropped_pings += 1
-                    self._done_ping = p["index"]
-                    self._ping = None
-                    return out
-                if self._decimator:                # filtered and decimated as it arrives
-                    self._decimator.feed((block["counts"][a - first:b - first] * self.volts_per_count).astype(np.float32))
-                else:
-                    p["buffer"][a - w0:b - w0] = block["counts"][a - first:b - first]
-                p["filled"] = b - w0
-                p["overflow"] |= bool(block["flags"] & FLAG_OVERFLOW)
-            if p["filled"] == self.window_length:
+        if first >= frontier and block["tx_sample"] >= 0 and (not self._named or block["tx_sample"] > self._named[-1][0]):
+            self._name(block)
+        p = self._ping
+        if p is not None:
+            for a, b in fresh:
+                self._place(block, a, b)
+            if p["covered"] == self.window_length:
                 out.append(self._record(p))
-                self._done_ping = p["index"]
                 self._ping = None
+        horizon = self.reorder_blocks * n
+        if self._ping is not None and self._frontier >= self._ping["w0"] + self.window_length + horizon:
+            self._abandon()
+        self._give_up(self._frontier - horizon)
+        low = self._frontier - self._span(n)
+        self._expired = [h for h in self._expired if h[1] > low][-64:]
         return out
 
     def _record(self, p: dict) -> "core.PingRecord":
