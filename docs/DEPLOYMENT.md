@@ -115,7 +115,7 @@ the ping's transmit time + `range_m` / c (c the record's sound speed), not at th
 | `id` | integer from 1 | in order of birth; kept for the track's life |
 | `kind` | text | `mover`, `static`, `line`, `multipath` or `uncertain` |
 | `parent` | integer or `null` | for `kind: multipath`, the `id` of the track it echoes; otherwise `null` |
-| `x`, `y` | m, world: x north, y east | the fitted line's position at the report's `time_ns`, the ping's transmit time (absolute world coordinates, not relative to ownship); a track with fewer than three points: its last position moved to `time_ns` by its tracker velocity |
+| `x`, `y` | m, world: x north, y east | the fitted line's position at the report's `time_ns`, the ping's transmit time (absolute world coordinates, not relative to ownship), the line through the positions the track measured (D-157); a track with fewer than three measured points: its last position moved to `time_ns` by its tracker velocity |
 | `vx`, `vy` | m/s, north and east | the fitted line's velocity over ground |
 | `speed_m_s` | m/s | `hypot(vx, vy)` |
 | `range_m` | m, horizontal | from `ownship_xyz` to (`x`, `y`) |

@@ -1720,6 +1720,22 @@ and `sonar_live` within 5e-6 m of each other): range error +49.7 -> +49.5 m, cro
 (seeds 17-26, host): submarine cross-range +5.6 -> -0.3 m, report error 29.3 -> 29.5 m (a +29 m
 range bias, sonar-a98), wreck 7.6 m in both, small vehicle never tracked.
 
+D-157 (the classifier fits the measured positions; `cfar.range_estimate: first` opt-in; extended
+objects scored from their outline). Live chain at 12 km, seeds 51-60, mean (Python and C++ within
+5e-6 m):
+
+| run | range (m) | cross-range (m) | to the hull (m) | to the centre (m) | speed (m/s, true 6.0) |
+| --- | --- | --- | --- | --- | --- |
+| before (b5d75b8) | +49.5 | +26.0 | 49.4 | 56.1 | 6.1 |
+| measured-position fit (default) | +50.6 | -23.2 | 50.7 | 56.0 | 6.4 |
+| and `range_estimate: first` | +0.9 | -23.3 | 1.0 | 23.3 | 6.3 |
+
+Gallery pipeline, ten seeds of twelve scenes (`docs/benchmarks/classify_rules_eval_afe0806.json`;
+L4, job 6b02383cefaf5e14f4b6fe35): targets in their class 195 -> 194, false movers with the rules
+off 152 -> 94; the loss is `fls_120k_cluttered_seabed` seed 69, `boat_under_way` a line (a mover
+with `row_snr_db 6`). `popoto_12km` median report error from the centre 35.4 -> 52.7 m, from the
+hull 8.2 m. `flank_patrol` (seeds 17-26): submarine 29.5 -> 28.0 m, one false mover (seed 4).
+
 ## Simulator calibration against a log with hidden settings
 
 Source: `tests/python/test_simcal.py`; see `SIM_CALIBRATION.md`.

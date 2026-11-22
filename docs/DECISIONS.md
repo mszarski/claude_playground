@@ -2555,3 +2555,52 @@ track ran about 47 m ahead along its course on every seed (the sonar-960 diagnos
   history point is at t + R/c in both engines); the old -48 m error had been hiding a +26 m
   cross-range bias. Kept because a correct clock is needed to find that bias (sonar-2hz).
 - The committed gallery predates D-156 and was not regenerated.
+
+### D-157 Fit the measured positions; leading-edge range opt-in; score extended objects from their outline (owner's choice, issue sonar-2hz)
+
+The sonar-2hz diagnosis split the live chain's 12 km error (+26 m cross-range, +50 m range) into
+three parts. A lag: the report's line went through the tracker's filtered history, and a track is
+born at zero velocity with a 1 deg bearing sigma (210 m at 12 km), so a noise-free crossing came
+out 38.7 m behind the ship. A glint: coherent echoes of the 5-point ship side-on at the last ping
+(-46 m, about +41 m along track in the measured position of seed 51). And a range bias: the
+energy-weighted centroid of an echo spread over about 120 m by multipath (+49.5 m; its leading
+edge -0.8 m). All three changes are ours.
+- **A (default, both engines):** each history row also carries the measured position of the
+  detection the track took there (`Track.measured`, `HistoryPoint::mx, my`; NaN on a miss), and
+  `classify_tracks` fits its line through those, the rows of misses left out. Under three measured
+  rows: the short-track rule, from the last filtered point moved by the Kalman velocity. A track
+  that records no measurements (built by hand, a capture from before) is fitted through its history
+  as before. Student's t degrees of freedom count the fitted points; `min_points` and `seen` still
+  count pings. With no time given, the position is the line's at the last history row (the last
+  ping), also when the track missed it (review fix). Noise-free 12 km: 38.7 -> 0.0 m.
+  Thresholds kept: FLS target fit_rms at most 1.3 m against 2.5 m; Popoto targets at most 53 m
+  against 60 m (a 7 m margin; the derived limit is from range resolution alone, while the
+  measured scatter includes cross-range R·sigma_bearing: sonar-4jm). Golden: the tracker
+  scenario's default classes in `tests/python/data/classes_d157.json` (both engines);
+  `tracker_before_d156.json` keeps holding the history fit (`fit_measured=False`, measured left out).
+- **B (opt-in):** `cfar.range_estimate: centroid | first` (`multiscale` only; anything else, or
+  `first` with another cell statistic, is refused in both engines). `first` takes the nearest
+  sample of the detection's group above the single-sample threshold, else the nearest cell's
+  centre. Default `centroid`, byte-identical (seed 51 detections of both engines against b5d75b8).
+  The threshold is the first scale's; with `integrate_cells` not starting at 1 it is not the
+  single-sample test (as the existing arrival code; sonar-d99).
+- **C (tools):** `tools/gallery.py` and `tools/classify_rules_eval.py` score an extended true
+  object (several points, a hull plan, a box) by the distance to the convex hull of its footprint
+  (Andrew's monotone chain), and gate tracked/untracked and false movers by that distance;
+  `centroid_error_m` is kept. On these captures C changed no gate decision.
+- **Measured, live chain at 12 km** (`popoto_vehicle`, seeds 51-60, host, mean; Python and C++
+  within 5e-6 m): range +49.5 -> +50.6 (A) -> +0.9 m (A + B `first`); cross-range +26.0 -> -23.2 ->
+  -23.3 m; distance to the hull 49.4 -> 50.7 -> 1.0 m; speed 6.1 -> 6.4 -> 6.3 m/s (true 6.0).
+  Worse with A: the line now follows the glinting last measurement, so the error moves from 26 m
+  behind the ship to 23 m ahead (a robust fit: sonar-ljh).
+- **Measured, gallery pipeline** (`docs/benchmarks/classify_rules_eval_afe0806.json`, ten seeds of
+  twelve scenes, L4, job 6b02383cefaf5e14f4b6fe35; the same simulations as c148f56): targets in
+  their class 195 -> 194, false movers with the rules off 152 -> 94 (rough_surface 118 -> 78,
+  cluttered 7 -> 2, traffic 10 -> 4, winter_sand 3 -> 0), all from A. Lost: `fls_120k_cluttered_seabed`
+  seed 69, `boat_under_way` mover -> line with the rules off (a mover with `row_snr_db 6`).
+  Scored from the centre the Popoto scenes move 15-20 m ahead (popoto_12km median 35.4 -> 52.7 m;
+  seeds 56 and 57, -119 and -103 m cross-range, are the track hopping of sonar-960); from the hull
+  the popoto_12km median is 8.2 m. `flank_patrol` (seeds 17-26): submarine 29.5 -> 28.0 m, speed
+  2.98 -> 3.01 m/s (true 3.0), one false mover (seed 4) where there were none.
+- The committed gallery predates D-157 and was not regenerated; whether `first` becomes the
+  deployment default is open (sonar-1p2).

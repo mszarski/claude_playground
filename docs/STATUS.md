@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-156); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-157); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -257,7 +257,9 @@ Grouped; within a group the most consequential first.
     repository now is the next (item 45).
     - `popoto_12km`: fixed by D-155 (one mover on 10 of 10 seeds; the regenerated gallery: 6.05
       m/s, 68 m off; D-156 timing: median report cross-range error -54.6 -> -32.0 m over ten seeds,
-      track hopping open in sonar-960, the live chain's +26 m / +50 m bias in sonar-2hz). As it was then: **the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
+      track hopping open in sonar-960; the live chain's +26 m / +50 m bias diagnosed in sonar-2hz: D-157's
+      measured-position fit and opt-in leading-edge range give +0.9 m range, -23 m along track, the
+      rest a glint on the last ping). As it was then: **the ship's own track is classified `multipath`** (5.1 ± 0.2 m/s,
       true 6.0; it was `uncertain`, and `mover` before that). 12 confirmed tracks (8): 4
       movers, 7 multipath, 1 uncertain; 7 to 15 detections per ping (3 to 13).
     - **`fls_170k_traffic`: the crossing boat is classified `line` at 15.4 m/s** (it was
