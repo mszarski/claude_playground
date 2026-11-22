@@ -15,6 +15,7 @@
 
 #include <complex>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -82,7 +83,16 @@ struct ChainOptions {
   /// `detector.false_alarms_per_ping`; `cfar_pfa` is then not used. false with cell_peak false: "mean", the detector
   /// until then, line for line. cell_peak with this set is refused.
   bool cell_multiscale = true;
+  /// The multiscale detector's settings, except its range estimate, which is `range_estimate` below: the chain
+  /// refuses a `detector.range_estimate` other than the detector's own default (centroid) set here.
   DetectorOptions detector;
+  /// cfar_range_estimate, when given (the parser sets it; RangeEstimate in detector.hpp). Unset: the leading edge
+  /// (`first`) with cell_multiscale, else the centroid (chain_range_estimate). Given: `first` is refused without
+  /// cell_multiscale; `centroid` is always accepted. Ours (D-158, the owner's choice after sonar-1p2). The elevation
+  /// search, SBL's gates, multipath_depth, blanking and the burst filter go by the centroid whichever is reported
+  /// (Detection::centroid_range). With `first`, a detection the elevation places (correct_bearing, not ambiguous)
+  /// reports and is timed at the elevation's own range, the one it is placed at.
+  std::optional<RangeEstimate> range_estimate;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -116,6 +126,10 @@ struct ChainOptions {
   Backend backend = Backend::Host;
   int device = 0;
 };
+
+/// The range estimate a chain with these options uses: `range_estimate` when given, else `first` for
+/// cell_multiscale and `centroid` for mean and peak (D-158). live.py chain_range_estimate is the same rule.
+RangeEstimate chain_range_estimate(const ChainOptions& c);
 
 struct ReportDetection {
   double range_m, bearing_deg, snr_db;

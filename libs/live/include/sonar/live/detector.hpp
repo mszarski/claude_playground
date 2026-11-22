@@ -56,7 +56,8 @@ namespace sonar::live {
 ///             of the group's bearings at each sample; the nearest cell's centre when no sample does (a group flagged
 ///             by a longer integration only). In a channel the direct arrival comes first and the surface and bottom
 ///             arrivals after it, so the centroid of the group lies behind the target (popoto_12km: +49.5 m, the
-///             leading edge -0.8 m; sonar-2hz). Ours (D-157), opt-in.
+///             leading edge -0.8 m; sonar-2hz). Ours (D-157). The live chain's default
+///             with cell_multiscale (ChainOptions::range_estimate, D-158); the detector's own default stays Centroid.
 enum class RangeEstimate { Centroid, First };
 /// "centroid" or "first"; throws std::invalid_argument for anything else.
 RangeEstimate parse_range_estimate(const std::string& name);

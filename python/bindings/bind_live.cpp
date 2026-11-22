@@ -723,6 +723,7 @@ void bind_live(py::module_& m) {
           e["cells"] = d.cells;
           e["first_range_m"] = d.first_range;
           e["extent_m"] = d.extent;
+          e["centroid_range_m"] = d.centroid_range;   // the energy-weighted mean range, whichever range_m reports (D-158)
           py::list arr;
           for (const live::Arrival& a : d.arrivals) arr.append(py::make_tuple(a.range, a.snr_db));
           e["arrivals"] = arr;
@@ -874,7 +875,7 @@ void bind_live(py::module_& m) {
         get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
         get("cfar_search_factor", o.detector.search_factor);
         get("cfar_merge_m", o.detector.merge_m);
-        if (kw.contains("cfar_range_estimate")) o.detector.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
+        if (kw.contains("cfar_range_estimate") && !kw["cfar_range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) {

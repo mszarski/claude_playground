@@ -303,6 +303,8 @@ def test_both_engines_report_the_same_depth_sigma_and_rung_as_the_profile_grows(
     assert all(d["depth_m"] == pytest.approx(target[2], abs=1.5) for d in best)     # the water is isovelocity and the profile says so
     # On the local rung the refraction sigma is the prior's; with the built profile it is what the profile leaves open,
     # which is less for a target at a depth the dive has sampled.
+    # The prior at the range the depth is read at. With the default (D-158) a detection the elevation places reports that
+    # range, the elevation's own; before D-158 range_m was the centroid, within the 2e-3 below of it.
     prior = elevation.refraction_sigma(best[0]["range_m"], 1500.0, 0.05)
     assert best[0]["depth_refraction_sigma_m"] == pytest.approx(prior, rel=2e-3)
     assert best[-1]["depth_refraction_sigma_m"] < 0.8 * prior
