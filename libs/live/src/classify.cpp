@@ -41,13 +41,40 @@ std::vector<HistoryPoint> fit_points(const std::vector<HistoryPoint>& h) {
   return any_measured(h) ? pts : h;
 }
 
-// The one point of a line fit through h that is an outlier, or -1 (classify.py _outlier, sonar-ljh; ours, from the
-// deleted-residual results of least squares). F_i = (|r_i|^2 / (1 - h_i) / 2) / ((SS - |r_i|^2 / (1 - h_i)) / nu),
-// nu = 2 (n - 1) - 4, is F(2, nu) for independent Gaussian errors of one variance; the largest (ties: the earliest) is an
-// outlier above the F(2, nu) quantile at 1 - alpha / n, (nu / 2) ((alpha / n)^(-2 / nu) - 1). Four points at least; a point
-// whose removal leaves no time between the others (1 - h_i <= 1e-12) is no candidate; residuals at rounding level (RMS at
-// most 1e-9 of the largest coordinate, or 1e-9 m) mean no test; alpha <= 0 (or NaN): off.
-std::int64_t outlier(const std::vector<HistoryPoint>& h, double alpha) {
+// P(|T| > t) for Student's t with an integer nu >= 1 degrees of freedom (classify.py t_two_sided): the finite sums of
+// Abramowitz and Stegun 26.7.3 (nu odd) and 26.7.4 (nu even) with theta = atan(t / sqrt(nu)).
+double t_two_sided(double t, std::int64_t nu) {
+  if (!std::isfinite(t)) return 0.0;
+  const double th = std::atan(std::abs(t) / std::sqrt(static_cast<double>(nu)));
+  const double c = std::cos(th), sn = std::sin(th), c2 = c * c;
+  double a = 0.0;
+  if (nu % 2) {
+    double total = 0.0, term = c;
+    for (std::int64_t j = 1; j <= (nu - 1) / 2; ++j) {   // powers 1, 3, ..., nu - 2
+      total += term;
+      term *= c2 * (2.0 * static_cast<double>(j)) / (2.0 * static_cast<double>(j) + 1.0);
+    }
+    a = (2.0 / 3.14159265358979323846) * (th + sn * total);
+  } else {
+    double total = 0.0, term = 1.0;
+    for (std::int64_t j = 0; j < nu / 2; ++j) {          // powers 0, 2, ..., nu - 2
+      total += term;
+      term *= c2 * (2.0 * static_cast<double>(j) + 1.0) / (2.0 * static_cast<double>(j) + 2.0);
+    }
+    a = sn * total;
+  }
+  return std::max(0.0, 1.0 - a);
+}
+
+// The one point of a line fit through h that is an outlier, or -1 (classify.py _outlier, sonar-ljh after review; ours,
+// from the deleted-residual results of least squares). The residuals in range and cross-range: one rotation onto u, from
+// (ox, oy) (the sonar) to the points' mean, and its normal; at the mean itself the frame's axes. Per axis a and point i
+// t_ai = r_ai / sqrt(s2_ai (1 - h_i)), s2_ai = (SS_a - r_ai^2 / (1 - h_i)) / (n - 3), Student's t with n - 3 degrees of
+// freedom. The largest |t_ai| (ties: the earliest point, range first) is an outlier when P(|T| > |t_ai|) < alpha / m,
+// m = n x the axes tested. An axis is tested when its RMS is above 1e-9 of the largest coordinate (or 1e-9 m) and the
+// other axis's scatter times the largest sine of the turn of a point's line of sight from u is at most half its own
+// (scatter sqrt(SS / (n - 2))). Four points at least; no candidate where 1 - h_i <= 1e-12; alpha <= 0 or NaN: off.
+std::int64_t outlier(const std::vector<HistoryPoint>& h, double alpha, double ox, double oy) {
   const std::size_t n = h.size();
   if (!(alpha > 0.0) || n < 4) return -1;
   const double dn = static_cast<double>(n);
@@ -69,39 +96,58 @@ std::int64_t outlier(const std::vector<HistoryPoint>& h, double alpha) {
     sty += tc * p.y;
   }
   const double vx = stx / stt, vy = sty / stt;
-  std::vector<double> r2(n);
-  double ss = 0.0;
+  const double dx = xm - ox, dy = ym - oy, dist = std::hypot(dx, dy);
+  const bool aimed = dist > 0.0 && std::isfinite(dist);
+  const double ux = aimed ? dx / dist : 1.0, uy = aimed ? dy / dist : 0.0;
+  std::vector<double> ra[2] = {std::vector<double>(n), std::vector<double>(n)};
+  double ss[2] = {0.0, 0.0}, turn = 0.0;
   for (std::size_t i = 0; i < n; ++i) {
     const double tc = h[i].time - tm;
     const double rx = h[i].x - (xm + tc * vx), ry = h[i].y - (ym + tc * vy);
-    r2[i] = rx * rx + ry * ry;
-    ss += r2[i];
+    ra[0][i] = rx * ux + ry * uy;   // range
+    ra[1][i] = rx * uy - ry * ux;   // cross-range
+    ss[0] += ra[0][i] * ra[0][i];
+    ss[1] += ra[1][i] * ra[1][i];
+    const double px = h[i].x - ox, py = h[i].y - oy, pd = std::hypot(px, py);
+    if (aimed && pd > 0.0) turn = std::max(turn, std::abs(px * uy - py * ux) / pd);
   }
-  if (!(std::sqrt(ss / dn) > 1e-9 * std::max(1.0, big))) return -1;
-  const double nu = 2.0 * (dn - 1.0) - 4.0;
+  const double tol = 1e-9 * std::max(1.0, big);
+  const double sd[2] = {std::sqrt(ss[0] / (dn - 2.0)), std::sqrt(ss[1] / (dn - 2.0))};
+  bool live[2];
+  int tested = 0;
+  for (int k = 0; k < 2; ++k) {
+    live[k] = std::sqrt(ss[k] / dn) > tol && sd[1 - k] * turn <= 0.5 * sd[k];
+    tested += live[k] ? 1 : 0;
+  }
+  if (tested == 0) return -1;
+  const double nu = dn - 3.0;
   std::int64_t best = -1;
-  double best_f = -std::numeric_limits<double>::infinity();
+  double best_t2 = -1.0;
   for (std::size_t i = 0; i < n; ++i) {
     const double tc = h[i].time - tm;
     const double one_minus_h = 1.0 - (1.0 / dn + tc * tc / stt);
     if (!(one_minus_h > 1e-12)) continue;
-    const double d2 = r2[i] / one_minus_h, rest = ss - d2;
-    const double f = rest > 0.0 ? (0.5 * d2) / (rest / nu) : (d2 > 0.0 ? std::numeric_limits<double>::infinity() : 0.0);
-    if (f > best_f) {
-      best = static_cast<std::int64_t>(i);
-      best_f = f;
+    for (int k = 0; k < 2; ++k) {
+      if (!live[k]) continue;
+      const double d2 = ra[k][i] * ra[k][i] / one_minus_h, rest = (ss[k] - d2) / nu;
+      const double t2 = rest > 0.0 ? d2 / rest : (d2 > 0.0 ? std::numeric_limits<double>::infinity() : 0.0);
+      if (t2 > best_t2) {
+        best = static_cast<std::int64_t>(i);
+        best_t2 = t2;
+      }
     }
   }
-  const double crit = 0.5 * nu * (std::pow(alpha / dn, -2.0 / nu) - 1.0);
-  return best >= 0 && best_f > crit ? best : -1;
+  if (best < 0) return -1;
+  return t_two_sided(std::sqrt(best_t2), static_cast<std::int64_t>(n) - 3) < alpha / (dn * static_cast<double>(tested)) ? best : -1;
 }
 
 // Least-squares straight line through (time, x, y) of fit_points(h); the position on it at `at` (NaN, or any value that
 // is not finite: at the time of the last row of `history`, the last ping). With fewer than three points, or no time between them (max - min, as
 // numpy.ptp), no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
 // Kalman state's velocity (classify.py fit_velocity). Through measured positions, the one point `outlier` finds at
-// `outlier_alpha` is left out (sonar-ljh). `n_fit` receives the number of points fitted.
-Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, double outlier_alpha, std::int64_t& n_fit) {
+// `outlier_alpha` about the sonar at (ox, oy) is left out (sonar-ljh). `n_fit` receives the number of points fitted.
+Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, double outlier_alpha, double ox, double oy,
+                 std::int64_t& n_fit) {
   std::vector<HistoryPoint> h = fit_points(history);
   const bool from_measured = any_measured(history);
   const std::size_t n = h.size();
@@ -120,7 +166,7 @@ Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx,
     return f;
   }
   if (from_measured) {
-    const std::int64_t out = outlier(h, outlier_alpha);
+    const std::int64_t out = outlier(h, outlier_alpha, ox, oy);
     if (out >= 0) {
       h.erase(h.begin() + out);
       n_fit = static_cast<std::int64_t>(h.size());
@@ -185,7 +231,7 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
     std::int64_t n_fit = 0;
-    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3], o.outlier_alpha, n_fit);
+    const Fit f = fit_velocity(tr->history, o.time, tr->state[2], tr->state[3], o.outlier_alpha, o.origin_x, o.origin_y, n_fit);
     TrackClass c;
     c.id = tr->id;
     c.x = f.x;

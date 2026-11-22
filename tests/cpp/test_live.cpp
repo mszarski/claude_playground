@@ -247,13 +247,14 @@ TEST(Classify, FitsTimeBetweenAllPointsAndMovesAShortTrackByItsState) {
 
 TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
   // sonar-ljh (classify.py _outlier): six measured points of a 6 m/s crossing with a small scatter, the last 50 m
-  // ahead. By default the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
+  // ahead (80 m: six points give the per-axis test 3 degrees of freedom, so it needs |t| > 13.7, and 50 m over this
+  // scatter is |t| 11.9). By default the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
   // and pulls the line. A track whose rows record no measurement (the filtered history) is never tested.
   Track t;
   t.id = 1;
   t.hits = 6;
   t.confirmed = true;
-  const double scatter[6] = {-3.0, 3.0, 2.0, -2.0, 1.0, 50.0};
+  const double scatter[6] = {-3.0, 3.0, 2.0, -2.0, 1.0, 80.0};
   for (int k = 0; k < 6; ++k) {
     const double tk = 20.0 * k, x = 6.0 * tk;
     t.history.push_back({tk, x, 12000.0, x + scatter[k], 12000.0 + (k % 2 ? 1.0 : -1.0)});
@@ -289,6 +290,29 @@ TEST(Options, ClassifyOutlierAlphaIsReadEchoedAndChecked) {
     ChainOptions b;
     std::istringstream t(bad);
     EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+}
+
+TEST(Options, ClassifyFitRmsBearingIsReadEchoedAndChecked) {
+  // sonar-4jm review: left out it is derived (NaN until the first record); given, a finite angle, 0 (off) or more, in the
+  // reader and in the chain itself.
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_TRUE(std::isnan(a.classify.max_fit_rms_bearing));
+  std::istringstream in("classify_max_fit_rms_bearing_deg=0.5\n");
+  read_options(a, pa, in);
+  EXPECT_DOUBLE_EQ(a.classify.max_fit_rms_bearing, 0.5 * kDeg);
+  EXPECT_NE(options_json(a).find("\"classify_max_fit_rms_bearing_deg\": 0.5"), std::string::npos) << options_json(a);
+  for (const char* bad : {"classify_max_fit_rms_bearing_deg=-1\n", "classify_max_fit_rms_bearing_deg=inf\n",
+                          "classify_max_fit_rms_bearing_deg=nan\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+  for (double bad : {-1.0, std::numeric_limits<double>::infinity()}) {
+    ChainOptions c;
+    c.classify.max_fit_rms_bearing = bad;
+    EXPECT_THROW(LiveChain{c}, std::invalid_argument) << bad;
   }
 }
 

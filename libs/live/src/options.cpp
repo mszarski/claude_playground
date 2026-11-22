@@ -297,7 +297,11 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "classify_min_speed") c.classify.min_speed = c.classify.static_speed = v();
   else if (key == "classify_static_speed") c.classify.static_speed = v();   // after classify_min_speed, which sets both
   else if (key == "classify_max_fit_rms") c.classify.max_fit_rms = v();
-  else if (key == "classify_max_fit_rms_bearing_deg") c.classify.max_fit_rms_bearing = v() * kDeg;
+  else if (key == "classify_max_fit_rms_bearing_deg") {
+    const double b = v();
+    if (!(std::isfinite(b) && b >= 0.0)) throw std::invalid_argument("classify_max_fit_rms_bearing_deg: a finite angle, 0 (off) or more, got '" + value + "' (leave the key out to derive it)");
+    c.classify.max_fit_rms_bearing = b * kDeg;
+  }
   else if (key == "classify_outlier_alpha") {
     const double a = v();
     if (!(a >= 0.0 && a < 1.0)) throw std::invalid_argument("classify_outlier_alpha: from 0 (off) to below 1, got '" + value + "'");

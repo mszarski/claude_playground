@@ -408,6 +408,17 @@ def check_choices(cfg: dict) -> None:
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
 
 
+def check_classify_fit(c: dict) -> None:
+    """chain.classify's fit settings, refused as libs/live refuses them: outlier_alpha from 0 (off) to below 1;
+    max_fit_rms_bearing_deg None (derived) or a finite angle, 0 (off) or more."""
+    a = float(c["outlier_alpha"])
+    if not 0.0 <= a < 1.0:
+        raise ValueError(f"chain.classify.outlier_alpha = {c['outlier_alpha']}: from 0 (off) to below 1")
+    b = c.get("max_fit_rms_bearing_deg")
+    if b is not None and not (np.isfinite(float(b)) and float(b) >= 0.0):
+        raise ValueError(f"chain.classify.max_fit_rms_bearing_deg = {b}: a finite angle, 0 (off) or more (None: derived)")
+
+
 def live_detection_rules(detections: dict | None) -> dict:
     """classify.detections for the live chain: classify.check_detection_rules, and `row_snr_db` refused, because the
     chain (either engine) never runs the row test it acts in; it stays usable through classify_tracks(linear=...)."""
@@ -454,6 +465,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     if c.get("multipath"):
         m = c["multipath"]
         o.update(multipath_max_excess_range=m["max_excess_range"], multipath_velocity=m["velocity"])
+    check_classify_fit(c)
     o["classify_outlier_alpha"] = float(c["outlier_alpha"])      # always said: the C++ default is not assumed
     det = live_detection_rules(c.get("detections"))
     if det["min_mover_cells"] is not None:
@@ -981,8 +993,7 @@ class LiveChain:
                  report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
         self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
         live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
-        if not 0.0 <= float(self.cfg["classify"]["outlier_alpha"]) < 1.0:
-            raise ValueError(f"chain.classify.outlier_alpha = {self.cfg['classify']['outlier_alpha']}: from 0 (off) to below 1")
+        check_classify_fit(self.cfg["classify"])
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
         self.report_udp_max_bytes = int(report_udp_max_bytes)
         self.reports_split = 0                 # reports that went out as several datagrams

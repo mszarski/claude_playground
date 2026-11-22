@@ -64,19 +64,56 @@ def _given(at) -> bool:
 OUTLIER_ALPHA = 0.01   # the default false-alarm probability of the outlier test, per track (sonar-ljh; ours)
 
 
-def _outlier(t: np.ndarray, xy: np.ndarray, alpha: float) -> int | None:
-    """The one point of a line fit through (t, xy) that is an outlier, or None (sonar-ljh; the test is ours, built from
-    the standard deleted-residual results of least squares).
+def t_two_sided(t: float, nu: int) -> float:
+    """P(|T| > t) for Student's t with an integer nu >= 1 degrees of freedom, by the finite sums of Abramowitz and
+    Stegun 26.7.3 (nu odd) and 26.7.4 (nu even), theta = atan(t / sqrt(nu)): A(t|nu) = P(|T| <= t) =
+    (2/pi)(theta + sin theta (cos theta + 2/3 cos^3 theta + ... + (2.4...(nu-3))/(1.3...(nu-2)) cos^(nu-2) theta)) for odd
+    nu (the sum absent for nu = 1), sin theta (1 + 1/2 cos^2 theta + ... + (1.3...(nu-3))/(2.4...(nu-2)) cos^(nu-2) theta)
+    for even nu. Written out so that libs/live classify.cpp computes the same sums (held to scipy in test_classify)."""
+    if not np.isfinite(t):
+        return 0.0
+    th = float(np.arctan(abs(t) / np.sqrt(nu)))
+    c, sn = float(np.cos(th)), float(np.sin(th))
+    c2 = c * c
+    if nu % 2:
+        total, term = 0.0, c
+        for j in range(1, (nu - 1) // 2 + 1):        # powers 1, 3, ..., nu - 2
+            total += term
+            term *= c2 * (2.0 * j) / (2.0 * j + 1.0)
+        a = (2.0 / np.pi) * (th + sn * total)
+    else:
+        total, term = 0.0, 1.0
+        for j in range(nu // 2):                     # powers 0, 2, ..., nu - 2
+            total += term
+            term *= c2 * (2.0 * j + 1.0) / (2.0 * j + 2.0)
+        a = sn * total
+    return max(0.0, 1.0 - a)
 
-    For each point i the line is fitted without it; its residual from that line is d_i = r_i / (1 - h_i), r_i its residual
-    from the fit through all points, h_i = 1/n + (t_i - mean t)^2 / sum (t - mean t)^2 its leverage, and the other points'
-    squared residuals sum to SS - |r_i|^2 / (1 - h_i). With independent Gaussian errors of one variance in both coordinates,
-    F_i = (|r_i|^2 / (1 - h_i) / 2) / ((SS - |r_i|^2 / (1 - h_i)) / nu), nu = 2 (n - 1) - 4, is F(2, nu) distributed (point i
-    is independent of the line through the others). The point of largest F_i (ties: the earliest) is an outlier when F_i
-    exceeds the F(2, nu) quantile at 1 - alpha / n (Bonferroni over the n points): (nu / 2) ((alpha / n)^(-2 / nu) - 1), in
-    closed form since P(F > x) = (1 + 2 x / nu)^(-nu / 2) for two numerator degrees of freedom. Needs four points (nu >= 2).
-    A point whose removal leaves no time between the others (1 - h_i <= 1e-12) is not a candidate. Residuals at rounding
-    level (RMS at most 1e-9 of the largest coordinate, or 1e-9 m) are a line without scatter: no test. alpha <= 0: off."""
+
+def _outlier(t: np.ndarray, xy: np.ndarray, alpha: float, origin=(0.0, 0.0)) -> int | None:
+    """The one point of a line fit through (t, xy) that is an outlier, or None (sonar-ljh, per-axis form after review;
+    the test is ours, built from the standard deleted-residual results of least squares).
+
+    A measured position's error is not one variance in both coordinates: in range it is the range error (about 1 m), across
+    the line of sight range x bearing error (tens of metres at 12 km). So the residuals are taken in range and cross-range:
+    rotated onto u, the unit vector from `origin` (the sonar, in the track's frame) to the points' mean, and its normal. One
+    rotation for the track, so that each axis's residuals are those of that axis's own straight-line fit (rotating each
+    residual by its own point's line of sight breaks that: at four to six points it dropped 4 to 96 % of clean tracks).
+    Origin at the points' mean: the frame's own axes. Where the line of sight turns along the track, by up to angle d from
+    u, the other axis's error leaks into an axis by sin d and makes its variance grow toward the track's ends; so an axis is
+    tested only while the other's scatter times max sin d is at most half its own (its variance at most 1.25 times larger
+    at the ends; scatter sqrt(SS / (n - 2))). Without that rule the test dropped 2.4 to 8 % of clean ten- and twenty-point
+    tracks with cross-range error 50 times the range error; with it every case measured is within Monte Carlo error of
+    alpha (test_classify).
+    For axis a and point i the externally studentized residual t_ai = r_ai / sqrt(s2_ai (1 - h_i)), with r_ai the residual of
+    the fit through all points, h_i = 1/n + (t_i - mean t)^2 / sum (t - mean t)^2 its leverage and
+    s2_ai = (SS_a - r_ai^2 / (1 - h_i)) / (n - 3) the variance of the line through the other points, is Student's t with
+    n - 3 degrees of freedom for independent Gaussian errors of each axis's own variance (point i is independent of the line
+    through the others). The point of largest |t_ai| over both axes (ties: the earliest point, range before cross-range) is
+    an outlier when its two-sided P(|T| > |t_ai|) is below alpha / m, m = n x the axes tested (Bonferroni). An axis whose
+    residuals are at rounding level (RMS at most 1e-9 of the largest coordinate, or 1e-9 m: a line without scatter in it)
+    is not tested. Needs four points; a point whose removal leaves no time between the others (1 - h_i <= 1e-12) is no
+    candidate; alpha <= 0 (or NaN): off."""
     n = len(t)
     if not alpha > 0.0 or n < 4:
         return None
@@ -84,27 +121,50 @@ def _outlier(t: np.ndarray, xy: np.ndarray, alpha: float) -> int | None:
     tc = t - tm
     stt = float((tc**2).sum())
     v = (tc[:, None] * xy).sum(axis=0) / stt
-    r = xy - (xy.mean(axis=0) + tc[:, None] * v)
-    r2 = (r**2).sum(axis=1)
-    ss = float(r2.sum())
-    if not np.sqrt(ss / n) > 1e-9 * max(1.0, float(np.abs(xy).max())):
-        return None
-    nu = 2 * (n - 1) - 4
+    mean = xy.mean(axis=0)
+    r = xy - (mean + tc[:, None] * v)
+    # One rotation for the track: range along u, from the origin to the points' mean, cross-range along its normal.
+    d = mean - np.asarray(origin, dtype=float)
+    dist = float(np.hypot(d[0], d[1]))
+    ux, uy = (float(d[0] / dist), float(d[1] / dist)) if dist > 0.0 and np.isfinite(dist) else (1.0, 0.0)
+    axes = (r[:, 0] * ux + r[:, 1] * uy, r[:, 0] * uy - r[:, 1] * ux)      # range, cross-range
+    # How far each point's own line of sight turns from u: the other axis's error leaks into an axis by its sine.
+    p = xy - np.asarray(origin, dtype=float)
+    pd = np.hypot(p[:, 0], p[:, 1])
+    turn = 0.0
+    if dist > 0.0 and np.isfinite(dist):
+        for i in range(n):
+            if pd[i] > 0.0:
+                turn = max(turn, abs(float(p[i, 0] * uy - p[i, 1] * ux)) / float(pd[i]))
+    tol = 1e-9 * max(1.0, float(np.abs(xy).max()))
     one_minus_h = 1.0 - (1.0 / n + tc**2 / stt)
-    best, best_f = None, -np.inf
+    nu = n - 3
+    best, best_t2 = None, -1.0
+    ss = [float((ra**2).sum()) for ra in axes]
+    # An axis is tested when its residuals are above rounding level and the other axis's error, leaking in by the turn of
+    # the line of sight, is at most half its own scatter (variance at most 1.25 times larger at the track's ends).
+    sd = [np.sqrt(q / (n - 2)) for q in ss]
+    live = [np.sqrt(ss[k] / n) > tol and sd[1 - k] * turn <= 0.5 * sd[k] for k in (0, 1)]
+    tested = sum(live)
+    if tested == 0:
+        return None
     for i in range(n):
         if not one_minus_h[i] > 1e-12:
             continue
-        d2 = r2[i] / one_minus_h[i]
-        rest = ss - d2
-        f = (0.5 * d2) / (rest / nu) if rest > 0.0 else (np.inf if d2 > 0.0 else 0.0)
-        if f > best_f:
-            best, best_f = i, f
-    crit = 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0)
-    return best if best is not None and best_f > crit else None
+        for k, ra in enumerate(axes):
+            if not live[k]:
+                continue
+            d2 = float(ra[i]) ** 2 / one_minus_h[i]
+            rest = (ss[k] - d2) / nu
+            t2 = d2 / rest if rest > 0.0 else (np.inf if d2 > 0.0 else 0.0)
+            if t2 > best_t2:
+                best, best_t2 = i, t2
+    if best is None:
+        return None
+    return best if t_two_sided(float(np.sqrt(best_t2)), nu) < alpha / (n * tested) else None
 
 
-def _fit(history, at, velocity, measured, outlier_alpha):
+def _fit(history, at, velocity, measured, outlier_alpha, origin=(0.0, 0.0)):
     """fit_velocity's line, and the number of points it went through."""
     h = np.asarray(history, dtype=float)
     t, xy = h[:, 0], h[:, 1:3]
@@ -124,7 +184,7 @@ def _fit(history, at, velocity, measured, outlier_alpha):
             pos = pos + (float(at) - last_t) * np.asarray(velocity, dtype=float)
         return pos, np.zeros(2), 0.0, np.inf, len(t)
     if from_measured:
-        out = _outlier(t, xy, outlier_alpha)
+        out = _outlier(t, xy, outlier_alpha, origin)
         if out is not None:
             keep = np.arange(len(t)) != out
             t, xy = t[keep], xy[keep]
@@ -141,7 +201,7 @@ def _fit(history, at, velocity, measured, outlier_alpha):
 
 
 def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
-                 outlier_alpha: float = OUTLIER_ALPHA) -> tuple[np.ndarray, np.ndarray, float, float]:
+                 outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0)) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
     Returns the position on the line at `at` (s; None or NaN: at the time of the last row of `history`), velocity, RMS residual and the
     velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
@@ -158,14 +218,16 @@ def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
     deleted-residual test (`_outlier`) finds an outlier at this false-alarm probability per track; 0 leaves every
     point in. A glinting echo (popoto_12km: the ship side-on at the last ping, 23 to 66 m ahead of its centre along
     track) otherwise pulls the line by its leverage at the end of the track. Filtered history is never tested: its
-    points are not independent."""
-    return _fit(history, at, velocity, measured, outlier_alpha)[:4]
+    points are not independent. `origin` ((x, y) in the track's frame): where the sonar is, which sets the range and
+    cross-range axes the test takes the residuals in (`_outlier`); (0, 0), the frame's origin, by default."""
+    return _fit(history, at, velocity, measured, outlier_alpha, (0.0, 0.0) if origin is None else origin)[:4]
 
 
-def fitted_points(track, outlier_alpha: float = OUTLIER_ALPHA) -> int:
+def fitted_points(track, outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0)) -> int:
     """How many points `fit_velocity` fits for a track: its measured rows (`Track.measured`, D-157), less a point the
-    outlier test leaves out (`outlier_alpha`), or its history rows when it records none."""
-    return int(_fit(track.history, None, None, getattr(track, "measured", None), outlier_alpha)[4])
+    outlier test leaves out (`outlier_alpha`, about `origin`), or its history rows when it records none."""
+    return int(_fit(track.history, None, None, getattr(track, "measured", None), outlier_alpha,
+                    (0.0, 0.0) if origin is None else origin)[4])
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
@@ -198,7 +260,13 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     track with fewer than three measured rows is a short track as above, from its last filtered point. A track that
     records no measurements (built by hand, a capture saved before D-157) is fitted through its history as before.
     `outlier_alpha` (sonar-ljh): at most one measured point that the deleted-residual test finds an outlier at this
-    false-alarm probability per track is left out of the line (`fit_velocity`); 0: every point in.
+    false-alarm probability per track is left out of the line (`fit_velocity`); 0: every point in. The test takes the
+    residuals in range and cross-range about `origin` (below), each axis with its own variance. With no origin given and
+    no multipath origin it is the frame's origin (0, 0), as libs/live ClassifyOptions::origin_x, origin_y default: the
+    sonar's place in a frame that starts at the sonar. Chosen over the residuals' own principal axes, which are fitted to
+    the noise and so make the test too ready to drop a point, and over one pooled variance, which drops about 10 % of
+    clean tracks when the cross-range error is ten times the range error (review of sonar-ljh). A caller whose sonar is
+    elsewhere passes `origin`.
     `max_fit_rms_bearing` (rad, sonar-4jm): where `max_fit_rms` is given, a track's limit is at least this times its
     fitted position's range from `origin` ((x, y); None: the multipath origin, else (0, 0)): the measured positions
     scatter across the line of sight by the range times the bearing error. 0: off (libs/live derives it from the beam).
@@ -206,13 +274,15 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     det = check_detection_rules(detections)
     if not (0.0 <= outlier_alpha < 1.0):
         raise ValueError(f"classify outlier_alpha = {outlier_alpha}: from 0 (off) to below 1")
+    if not (np.isfinite(max_fit_rms_bearing) and max_fit_rms_bearing >= 0.0):
+        raise ValueError(f"classify max_fit_rms_bearing = {max_fit_rms_bearing}: a finite angle, zero (off) or more")
     out = []
     here = np.asarray(origin if origin is not None else (multipath or {}).get("origin", (0.0, 0.0)), dtype=float)
     from scipy import stats
     for tr in tracks:
         state = getattr(tr, "state", None)
         pos, v, rms, sigma, n_fit = _fit(tr.history, time, None if state is None or len(state) < 4 else state[2:4],
-                                         getattr(tr, "measured", None), outlier_alpha)
+                                         getattr(tr, "measured", None), outlier_alpha, here)
         speed = float(np.hypot(*v))
         n = len(tr.history)
         # The fit's scatter is itself estimated from few points (2m - 4 degrees of freedom, m the points fitted: the

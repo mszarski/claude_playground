@@ -107,7 +107,8 @@ Each detection:
 
 Each track (classified by `classify.py` / `classify_tracks`, which fits a straight line through the
 track's detections in time, at most one of them left out when a test finds it an outlier: `classify.outlier_alpha`,
-sonar-ljh). Each detection is given to the tracker at the time it shows its target,
+sonar-ljh; the fit limit also grows with range, `classify.max_fit_rms_bearing_deg`, sonar-4jm: the live chain's
+outputs from before both, 688271f, need `outlier_alpha: 0` and `max_fit_rms_bearing_deg: 0`). Each detection is given to the tracker at the time it shows its target,
 the ping's transmit time + `range_m` / c (c the record's sound speed), not at the transmit time
 (D-156); the report's `x`, `y` are the fitted line's position at the report's `time_ns`:
 

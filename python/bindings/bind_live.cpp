@@ -2,6 +2,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cmath>
 #include <cstring>
 #include <optional>
 #include <sstream>
@@ -393,6 +394,9 @@ void bind_live(py::module_& m) {
                if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
              }
              if (!(outlier_alpha >= 0.0 && outlier_alpha < 1.0)) throw py::value_error("outlier_alpha: from 0 (off) to below 1");
+             if (!(std::isfinite(max_fit_rms_bearing) && max_fit_rms_bearing >= 0.0)) {
+               throw py::value_error("max_fit_rms_bearing: a finite angle, 0 (off) or more");
+             }
              std::vector<const live::Track*> confirmed;
              // fit_measured false: copies of the tracks without their measured positions, which classify_tracks fits
              // through their filtered history (the rule before D-157; for the tests holding it to its golden).
@@ -837,7 +841,11 @@ void bind_live(py::module_& m) {
         get("classify_static_speed", o.classify.static_speed);
         get("classify_max_fit_rms", o.classify.max_fit_rms);
         get("classify_outlier_alpha", o.classify.outlier_alpha);
-        get("classify_max_fit_rms_bearing", o.classify.max_fit_rms_bearing);
+        if (kw.contains("classify_max_fit_rms_bearing")) {     // left out: derived; given, a finite angle, 0 (off) or more
+          const double b = kw["classify_max_fit_rms_bearing"].cast<double>();
+          if (!(std::isfinite(b) && b >= 0.0)) throw py::value_error("classify_max_fit_rms_bearing: a finite angle, 0 (off) or more (leave the key out to derive it)");
+          o.classify.max_fit_rms_bearing = b;
+        }
         if (kw.contains("classify_min_mover_cells")) {        // off unless given; given, zero or more cells
           const double m = kw["classify_min_mover_cells"].cast<double>();
           if (!(m >= 0.0)) throw py::value_error("classify_min_mover_cells: zero or more cells (leave the key out for off)");

@@ -518,7 +518,8 @@ def test_flagged_cells_are_grouped_by_the_detectors_rule_and_cluster_merges_only
 
 
 def test_the_12km_report_does_not_depend_on_the_trackers_bearing_sigma():
-    """sonar-ym1 (the derived tracker.bearing_sigma kept): the live chain derives 1 deg for the Popoto array (the standing
+    """A guard test, not a test of a change: it passes on the code before it too, and fails if the report comes to
+    depend on the tracker's bearing sigma again. sonar-ym1 (the derived tracker.bearing_sigma kept): the live chain derives 1 deg for the Popoto array (the standing
     value; its floor, a sixteenth of a 3.57 deg beam, is 0.22 deg), while a point target's bearing at 12 km scatters by
     0.03 to 0.05 deg in simulation (sonar-2hz). Since D-157 the report's line goes through the detections a track took,
     not its filtered positions, so a smaller sigma no longer moves the report: the popoto_12km crossing with its last

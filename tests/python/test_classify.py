@@ -354,18 +354,22 @@ def glinting_12km_track(glint=-50.0):
 
 
 def test_a_glinting_last_measurement_is_left_out_of_the_line():
-    """sonar-ljh: a last measurement 50 m ahead along track pulls the least-squares line through six points by its
-    leverage at the end of the track (23 m ahead, 6.35 m/s for 6.0 with every point in); the deleted-residual test leaves
-    it out at the default false-alarm probability, and the line through the other five is within 3 m and 0.1 m/s."""
-    tr = glinting_12km_track()
+    """sonar-ljh: a last measurement 80 m ahead along track (cross-range at 12 km) pulls the least-squares line through
+    six points by its leverage at the end of the track (more than 15 m ahead, more than 6.4 m/s for 6.0 with every point
+    in); the per-axis deleted-residual test leaves it out at the default false-alarm probability, and the line through the
+    other five is within 3 m and 0.1 m/s. Changed in review: with each axis's own variance the six-point test has 3
+    degrees of freedom and needs |t| > 13.7, so the 50 m glint this test used before (|t| = 11.9 over +-3 m of scatter)
+    is now kept, and that is asserted too."""
     truth = np.array((12000.0, 800.0 - 6.0 * 99.5))
+    tr = glinting_12km_track(glint=-80.0)
     (c,) = classify.classify_tracks([tr], time=99.5)
     assert classify.fitted_points(tr) == 5
     assert np.hypot(*(np.asarray(c.position) - truth)) < 3.0 and c.speed == pytest.approx(6.0, abs=0.1)
     assert c.kind == "mover"
     (every,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.0)
     assert classify.fitted_points(tr, outlier_alpha=0.0) == 6
-    assert truth[1] - every.position[1] > 15.0 and every.speed > 6.3          # pulled ahead and faster
+    assert truth[1] - every.position[1] > 15.0 and every.speed > 6.4          # pulled ahead and faster
+    assert classify.fitted_points(glinting_12km_track(glint=-50.0)) == 6     # too little evidence in six points
     # The filtered history is not tested (its points are not independent): the measurements left out, nothing changes.
     hist = classify.fit_velocity(tr.history, 99.5)
     assert np.array_equal(hist[0], classify.fit_velocity(tr.history, 99.5, outlier_alpha=0.0)[0])
@@ -393,21 +397,66 @@ def test_the_outlier_test_leaves_gaussian_scatter_and_exact_lines_alone():
     assert classify.fitted_points(tracks[0]) == 6
 
 
-def test_the_outlier_threshold_is_the_f_quantile_with_bonferroni():
-    """The closed form of classify._outlier, (nu / 2) ((alpha / n)^(-2 / nu) - 1), nu = 2 (n - 1) - 4, is scipy's F(2, nu)
-    quantile at 1 - alpha / n."""
+def test_the_t_tail_is_scipys():
+    """classify.t_two_sided (the finite sums libs/live classify.cpp computes too) against scipy's Student's t, wherever
+    the probability is above 1e-12 (the test compares it with alpha / m, 1e-2 to 1e-6)."""
     from scipy import stats
-    for n in (4, 6, 9):
-        nu = 2 * (n - 1) - 4
-        alpha = 0.01
-        assert 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0) == pytest.approx(stats.f.ppf(1 - alpha / n, 2, nu), rel=1e-9)
+    for nu in range(1, 120):
+        for t in (0.0, 0.3, 1.0, 2.5, 5.0, 13.7, 40.0, 300.0):
+            want = 2.0 * stats.t.sf(t, nu)
+            if want > 1e-12:
+                assert classify.t_two_sided(t, nu) == pytest.approx(want, rel=1e-9, abs=1e-15), (nu, t)
+    assert classify.t_two_sided(float("inf"), 5) == 0.0
 
 
-def test_outlier_alpha_is_checked():
+def _false_drops(n, range_sigma, cross_sigma, alpha, trials, rng, pooled=False):
+    """The fraction of clean straight 12 km crossings (n pings 19.9 s apart, the sonar at the origin, errors drawn in range
+    and bearing) from which the outlier test drops a point. `pooled`: the test before review (one variance for both
+    coordinates: F(2, 2(n-1)-4), Bonferroni over n), written out here to show what it did."""
+    t = np.arange(n) * 19.9
+    out = 0
+    for _ in range(trials):
+        p = np.c_[-60.0 + 6.0 * t, np.full(n, 12000.0)]
+        r = np.hypot(p[:, 0], p[:, 1]) + range_sigma * rng.standard_normal(n)
+        b = np.arctan2(p[:, 0], p[:, 1]) + (cross_sigma / 12000.0) * rng.standard_normal(n)
+        xy = np.c_[r * np.sin(b), r * np.cos(b)]
+        if pooled:
+            tc = t - t.mean()
+            res = xy - (xy.mean(axis=0) + tc[:, None] * ((tc[:, None] * xy).sum(axis=0) / (tc**2).sum()))
+            r2 = (res**2).sum(axis=1)
+            d2 = r2 / (1.0 - (1.0 / n + tc**2 / (tc**2).sum()))
+            nu = 2 * (n - 1) - 4
+            f = (0.5 * d2) / ((r2.sum() - d2) / nu)
+            out += f.max() > 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0)
+        else:
+            out += classify._outlier(t, xy, alpha, (0.0, 0.0)) is not None
+    return out / trials
+
+
+@pytest.mark.parametrize("n", [4, 6, 10, 20])
+def test_the_outlier_test_drops_about_alpha_of_clean_tracks_whatever_the_error_shape(n):
+    """Review of sonar-ljh: measured positions have their own error in range (about 1 m) and across the line of sight
+    (R x bearing error, tens of metres at 12 km). On clean straight tracks the per-axis test drops a point from at most
+    about alpha of them for errors of one size (1:1), cross-range 10 and 50 times the range error, range 10 times the
+    cross-range error, and no cross-range error at all, within 4 Monte Carlo sigmas (2000 tracks each, alpha 0.05). The
+    pooled test it replaced drops 18 to 31 % at 10:1 and 1:10 (asserted for 1:10)."""
+    rng = np.random.default_rng(100 + n)
+    alpha, trials = 0.05, 2000
+    tol = 4.0 * np.sqrt(alpha * (1 - alpha) / trials)
+    for sr, sc in ((1.0, 1.0), (1.0, 10.0), (1.0, 50.0), (10.0, 1.0), (1.0, 0.0)):
+        rate = _false_drops(n, sr, sc, alpha, trials, rng)
+        assert rate < alpha + tol and rate > 0.5 * alpha, (sr, sc, rate)
+    assert _false_drops(n, 1.0, 10.0, alpha, trials, rng, pooled=True) > alpha + tol
+
+
+def test_outlier_alpha_and_the_fit_limits_growth_are_checked():
     tr = glinting_12km_track()
     for bad in (-0.1, 1.0, float("nan")):
         with pytest.raises(ValueError, match="outlier_alpha"):
             classify.classify_tracks([tr], outlier_alpha=bad)
+    for bad in (-1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="max_fit_rms_bearing"):
+            classify.classify_tracks([tr], max_fit_rms=60.0, max_fit_rms_bearing=bad)
 
 
 # --- sonar-4jm: the fit limit grows with range where asked ---------------------------------------------------------
