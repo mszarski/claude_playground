@@ -31,6 +31,9 @@ py::dict track_dict(const live::Track& t) {
   py::list h;
   for (const auto& p : t.history) h.append(py::make_tuple(p.time, p.x, p.y));
   d["history"] = h;
+  py::list m;   // the measured position of each history row, NaN on a miss (detect.py Track.measured; D-157)
+  for (const auto& p : t.history) m.append(py::make_tuple(p.mx, p.my));
+  d["measured"] = m;
   d["snr"] = t.snr;
   d["cells"] = t.cells;
   d["time"] = t.time;
@@ -383,15 +386,25 @@ void bind_live(py::module_& m) {
            [](const live::Tracker& t, double min_speed, double static_speed, double significance, double min_seen,
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
               double max_excess_range, double multipath_bearing, double multipath_velocity, double origin_x, double origin_y,
-              std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time) {
+              std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time, bool fit_measured) {
              // None: the rule is off. Given: zero or more (as classify.py refuses a negative or NaN value).
              for (const auto& [name, val] : {std::pair{"min_mover_cells", min_mover_cells}, std::pair{"row_snr_db", row_snr_db}}) {
                if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
              }
              std::vector<const live::Track*> confirmed;
+             // fit_measured false: copies of the tracks without their measured positions, which classify_tracks fits
+             // through their filtered history (the rule before D-157; for the tests holding it to its golden).
+             std::vector<live::Track> stripped;
              for (const auto& tr : t.tracks()) {
-               if (tr.confirmed) confirmed.push_back(&tr);
+               if (!tr.confirmed) continue;
+               if (fit_measured) {
+                 confirmed.push_back(&tr);
+                 continue;
+               }
+               stripped.push_back(tr);
+               for (auto& p : stripped.back().history) p.mx = p.my = std::numeric_limits<double>::quiet_NaN();
              }
+             for (const auto& tr : stripped) confirmed.push_back(&tr);
              const live::ClassifyOptions o{min_speed, static_speed, significance, min_seen, min_points, max_fit_rms, linear,
                                            linear_length, linear_width, multipath, max_excess_range, multipath_bearing,
                                            multipath_velocity, origin_x, origin_y,
@@ -420,7 +433,9 @@ void bind_live(py::module_& m) {
            py::arg("linear_width") = 2.0, py::arg("multipath") = false, py::arg("max_excess_range") = 800.0,
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
            py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none(),
-           py::arg("time") = py::none());
+           py::arg("time") = py::none(), py::arg("fit_measured") = true,
+           "classify_tracks on the confirmed tracks. fit_measured false: through their filtered history instead of the "
+           "measured positions (the rule before D-157), for the tests that hold the classifier to its golden.");
 
   m.def("element_offsets", &live::element_offsets, "Receive element positions along the array axis, m about the centre.");
   m.def(

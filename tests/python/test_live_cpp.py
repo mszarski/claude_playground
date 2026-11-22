@@ -71,6 +71,8 @@ def test_tracker_and_classifier_match_python(association, timed):
         for tr, cr in zip(a, b):
             assert np.allclose(tr.state, cr["state"], atol=1e-8) and tr.hits == cr["hits"] and tr.misses == cr["misses"]
             assert np.allclose(np.array(tr.history), np.array(cr["history"]), atol=1e-8) and np.allclose(tr.snr, cr["snr"])
+            # D-157: the measured position of each row, NaN on the same rows (the misses).
+            assert np.allclose(np.array(tr.measured), np.array(cr["measured"]), atol=1e-8, equal_nan=True)
             assert tr.time == cr["time"] == tr.history[-1][0]
         if timed is True and a:                             # the detections' times reach the tracks
             assert any(tr.time > t for tr in a)
@@ -111,8 +113,10 @@ def test_cpp_detections_without_their_own_time_track_exactly_as_before(associati
             _close_to_golden(tr["state"], w["state"])
             _close_to_golden(np.array(tr["history"][-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
             assert (tr["hits"], tr["misses"]) == (w["hits"], w["misses"])
+    # The golden's classes are the fit through the filtered history (before D-157): fit_measured=False. The default
+    # (the measured positions) is held by the parity tests in this file.
     for at in (None, t):
-        got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=at)
+        got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=at, fit_measured=False)
         assert [(c["id"], c["kind"]) for c in got] == [(w["id"], w["kind"]) for w in want["cpp_classes"]]
         _close_to_golden([c["position"] for c in got], [w["position"] for w in want["cpp_classes"]])
         _close_to_golden([c["velocity"] for c in got], [w["velocity"] for w in want["cpp_classes"]])
@@ -388,9 +392,10 @@ def test_both_chains_report_track_positions_at_the_ping_time(pings):
         r = float(np.hypot(*tr.history[-1][1:]))
         if tr.misses == 0:                                # took a detection on this ping: at its own time
             assert tr.history[-1][0] == pytest.approx(t + r / 1500.0, abs=0.01)
-        pos = classify.fit_velocity(tr.history, at=t)[0]
+        # The fitted line is through the track's measured positions (D-157), as classify_tracks fits it.
+        pos = classify.fit_velocity(tr.history, t, tr.state[2:4], tr.measured)[0]
         assert (rt["x"], rt["y"]) == pytest.approx((pos[1] + origin[0], pos[0] + origin[1]), abs=1e-6)
-        last = classify.fit_velocity(tr.history)[0]
+        last = classify.fit_velocity(tr.history, None, tr.state[2:4], tr.measured)[0]
         if rt["kind"] == "mover":
             moved += 1
             assert np.hypot(*(pos - last)) == pytest.approx(rt["speed_m_s"] * (tr.history[-1][0] - t), rel=1e-6)
@@ -865,3 +870,24 @@ def test_backend_cuda_without_a_device_is_an_error_and_auto_falls_back(engine):
     assert LiveChain({"engine": engine, "backend": "auto"}).backend == gs.core.Backend.Host
     with pytest.raises(RuntimeError, match="no CUDA device is usable"):
         pipeline.run({"backend": "cuda", "steps": []})
+
+
+@pytest.mark.parametrize("drop", [(), (3,)])
+def test_both_engines_fit_the_measured_positions_of_a_noise_free_12km_crossing(drop):
+    """D-157 in both engines (test_classify.test_a_noise_free_12km_crossing_is_reported_where_the_ship_is): the same
+    measured rows (NaN on the missed ping), the same class, position and velocity, within 2 m of the ship at the last
+    ping's transmit time (the fit through the filtered history, before D-157: 38.7 m behind)."""
+    from test_classify import LIVE_TRACKER_12KM, popoto_12km_noise_free
+    py, cpp = detect.Tracker(**LIVE_TRACKER_12KM), core.LiveTracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free(drop=drop):
+        dets = [] if d is None else [d]
+        a = py.update(t, dets)
+        b = cpp.update(t, [(q.range, q.bearing, q.snr_db, q.cells) for q in dets], [q.time for q in dets])
+    (tr,), (cr,) = a, b
+    assert np.allclose(np.array(tr.measured), np.array(cr["measured"]), atol=1e-6, equal_nan=True)
+    assert [bool(np.isnan(m[0])) for m in cr["measured"]] == [i in drop for i in range(6)]
+    (want,) = classify.classify_tracks(a, time=99.5)
+    (got,) = cpp.classify(time=99.5)
+    assert want.kind == got["kind"]
+    assert np.allclose(want.position, got["position"], atol=1e-6) and np.allclose(want.velocity, got["velocity"], atol=1e-8)
+    assert np.hypot(*(np.asarray(got["position"]) - (12000.0, 800.0 - 6.0 * 99.5))) < 2.0

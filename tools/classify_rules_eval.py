@@ -72,16 +72,27 @@ def grid():
 
 # --- tracks to and from JSON -------------------------------------------------------------------
 
+def _num(v):
+    """A float for JSON: NaN as null (a measured row of a miss)."""
+    return float(v) if np.isfinite(v) else None
+
+
 def track_to_json(tr) -> dict:
-    return {"id": int(tr.id), "state": [float(v) for v in tr.state], "hits": int(tr.hits),
-            "history": [[float(a) for a in h] for h in tr.history], "snr": [float(s) for s in tr.snr],
-            "cells": [int(c) for c in tr.cells]}
+    out = {"id": int(tr.id), "state": [float(v) for v in tr.state], "hits": int(tr.hits),
+           "history": [[float(a) for a in h] for h in tr.history], "snr": [float(s) for s in tr.snr],
+           "cells": [int(c) for c in tr.cells]}
+    if getattr(tr, "measured", None):
+        out["measured"] = [[_num(a) for a in m] for m in tr.measured]     # D-157: what classify_tracks fits
+    return out
 
 
 def track_from_json(d: dict):
-    """What classify_tracks and the scoring read of a track."""
+    """What classify_tracks and the scoring read of a track. A capture saved before D-157 has no `measured`: its
+    tracks are fitted through their history, as they were."""
+    measured = [tuple(np.nan if a is None else float(a) for a in m) for m in d.get("measured", [])]
     return SimpleNamespace(id=d["id"], state=np.asarray(d["state"], dtype=float), hits=d["hits"],
-                           history=[tuple(h) for h in d["history"]], snr=list(d["snr"]), cells=list(d["cells"]))
+                           history=[tuple(h) for h in d["history"]], measured=measured, snr=list(d["snr"]),
+                           cells=list(d["cells"]))
 
 
 def truth_to_json(truth: dict) -> dict:

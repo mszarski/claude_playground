@@ -5,6 +5,7 @@ glint that the tracker joined into a straight line far from every moving object 
 rules off the boat is a mover and the anchored boat static: both correct, one false mover. min_mover_cells 3 to 6
 removes the glint and keeps the boat; 8 also makes the boat uncertain, which is a target lost."""
 import importlib.util
+import json
 import pathlib
 
 import numpy as np
@@ -109,6 +110,15 @@ def test_tracks_round_trip_through_json():
     back = cre.track_from_json(cre.track_to_json(tr))
     assert back.id == 7 and back.hits == 3 and back.cells == [4] and back.snr == [15.5]
     assert back.history == [(0.0, 1.0, 2.0)] and np.array_equal(back.state, tr.state)
+    # D-157: the measured rows go along, NaN (a miss) as null; a capture without them reads back with none.
+    tr.history.append((1.0, 1.5, 2.5))
+    tr.measured = [(1.0, 2.0), (float("nan"), float("nan"))]
+    j = cre.track_to_json(tr)
+    assert j["measured"] == [[1.0, 2.0], [None, None]]
+    back = cre.track_from_json(json.loads(json.dumps(j)))
+    assert back.measured[0] == (1.0, 2.0) and np.isnan(back.measured[1]).all()
+    j.pop("measured")
+    assert cre.track_from_json(j).measured == []
 
 
 def test_compact_keeps_the_scores():

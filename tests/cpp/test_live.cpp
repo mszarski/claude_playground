@@ -577,4 +577,48 @@ TEST(Report, IsOneJsonLineWithTheFieldsTheVehicleReads) {
   }
 }
 
+TEST(Classify, FitsTheMeasuredPositionsOfANoiseFree12kmCrossing) {
+  // D-157 (tests/python/test_classify.py, popoto_12km_noise_free): exact detections of a ship crossing at 6 m/s 12 km
+  // away, six pings 19.9 s apart from an ownship making 1.5 m/s, each at transmit + R/c, through the tracker the live
+  // chain derives for that array (15 m, 1 deg). Classified at the last ping's transmit time the position is within 2 m
+  // of the ship. The fit through the filtered history (before D-157) was 38.7 m behind along track.
+  const double c = 1496.82;
+  TrackerOptions o;
+  o.range_sigma = 15.0;
+  o.bearing_sigma = 1.0 * kDeg;
+  o.confirm_hits = 3;
+  o.max_misses = 2;
+  o.initial_speed_sigma = 8.0;
+  o.process_noise = 0.05;
+  for (const int drop : {-1, 3}) {
+    Tracker tracker(o);
+    std::vector<const Track*> got;
+    for (int i = 0; i < 6; ++i) {
+      const double t = 19.9 * i, own = 1.5 * t;
+      double tau = std::hypot(800.0 - 6.0 * t - own, 12000.0) / c;
+      for (int k = 0; k < 4; ++k) tau = std::hypot(800.0 - 6.0 * (t + tau) - own, 12000.0) / c;
+      const double px = 800.0 - 6.0 * (t + tau), py = 12000.0;    // world (x forward, y across)
+      Detection d{std::hypot(px, py), std::atan2(py, px), 20.0, 1};
+      d.time = t + std::hypot(px - own, py) / c;
+      got = tracker.update(t, i == drop ? std::vector<Detection>{} : std::vector<Detection>{d});
+    }
+    ASSERT_EQ(got.size(), 1U);
+    const Track& tr = *got[0];
+    ASSERT_EQ(tr.history.size(), 6U);
+    for (int i = 0; i < 6; ++i) EXPECT_EQ(std::isnan(tr.history[static_cast<std::size_t>(i)].mx), i == drop);
+    ClassifyOptions co;
+    co.time = 99.5;
+    const auto out = classify_tracks(got, co);
+    EXPECT_NEAR(out[0].x, 12000.0, 2.0);
+    EXPECT_NEAR(out[0].y, 800.0 - 6.0 * 99.5, 2.0);
+    EXPECT_NEAR(out[0].speed, 6.0, 0.01);
+    EXPECT_LT(out[0].fit_rms, 1e-6);
+    // The same rows without their measurements: the fit through the filtered positions lags.
+    Track plain = tr;
+    for (auto& p : plain.history) p.mx = p.my = std::numeric_limits<double>::quiet_NaN();
+    const auto lag = classify_tracks({&plain}, co);
+    EXPECT_GT(lag[0].y - (800.0 - 6.0 * 99.5), 30.0);
+  }
+}
+
 }  // namespace

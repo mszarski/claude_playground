@@ -265,8 +265,13 @@ def test_detections_without_their_own_time_track_exactly_as_before(association, 
             _close_to_golden(np.array(tr.history[-len(w["history"]):]), np.array(w["history"]))   # full on the last ping
             assert (tr.hits, tr.misses) == (w["hits"], w["misses"])
             _close_to_golden([tr.depth, tr.depth_var], [w["depth"], w["depth_var"]])
+    # The classes of the golden are the fit through the filtered history (before D-157): the same tracks with their
+    # measured positions left out, which classify_tracks then fits as it did. The default (the measured positions) is
+    # held by test_classify and test_live_cpp.
+    import dataclasses
+    filtered = [dataclasses.replace(tr, measured=[]) for tr in got]
     for at in (None, t):
-        classes = classify.classify_tracks(got, min_speed=0.5, max_fit_rms=2.5, time=at)
+        classes = classify.classify_tracks(filtered, min_speed=0.5, max_fit_rms=2.5, time=at)
         assert [(c.id, c.kind) for c in classes] == [(w["id"], w["kind"]) for w in want["classes"]]
         _close_to_golden([c.position for c in classes], [w["position"] for w in want["classes"]])
         _close_to_golden([c.velocity for c in classes], [w["velocity"] for w in want["classes"]])

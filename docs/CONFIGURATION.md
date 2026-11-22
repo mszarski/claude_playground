@@ -628,7 +628,7 @@ brackets) is refused. Switches are `1` or `0`. "Derived" means: left out, the ch
 | `elevation.depth_process_noise` | `elevation_depth_process_noise` | m/√s: a track's depth variance grows by σ² dt | 0.5 |
 | `classify.min_speed` | `classify_min_speed` | m/s: a mover is at least this fast. **Also sets `static_speed`** to the same value; give `classify_static_speed` after it to differ (the export does) | 1.0 |
 | `classify.static_speed` | `classify_static_speed` | m/s: below this, seen on most pings, a track is static | 1.0 |
-| `classify.max_fit_rms` | `classify_max_fit_rms` | m: a track whose positions lie further than this (RMS) from their fitted line is `uncertain` | derived (60 m) |
+| `classify.max_fit_rms` | `classify_max_fit_rms` | m: a track whose positions lie further than this (RMS) from their fitted line is `uncertain`. The line goes through the positions the track measured (its detections, at their times), not its filtered positions (D-157), so the RMS is the measurement scatter | derived (60 m) |
 | `classify.multipath` (`null` switches it off) | `multipath` | 1 or 0 | 1 |
 | `classify.multipath.max_excess_range` | `multipath_max_excess_range` | m: the longest extra path a bounce can have; echo grouping links tracks this far apart in range, on either side, transitively (D-155) | 800 |
 | `classify.multipath.bearing_deg` | `multipath_bearing_deg` | degrees: bearing gate between a track and its echo (any member of its group, D-155) | derived (3°) |

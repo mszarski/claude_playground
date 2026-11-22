@@ -61,17 +61,32 @@ def _given(at) -> bool:
     return at is not None and bool(np.isfinite(at))
 
 
-def fit_velocity(history, at: float | None = None, velocity=None) -> tuple[np.ndarray, np.ndarray, float, float]:
+def fit_velocity(history, at: float | None = None, velocity=None, measured=None) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
     Returns the position on the line at `at` (s; None or NaN: at the last point's time), velocity, RMS residual and the
     velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
-    last point, moved to `at` by `velocity` ((vx, vy), the track's Kalman state's) when both are given."""
+    last point, moved to `at` by `velocity` ((vx, vy), the track's Kalman state's) when both are given.
+
+    `measured` (a track's `Track.measured`: (x, y) per row of `history`, NaN on a row of a miss): the line goes through
+    the measured positions at their rows' times, the rows without one (not finite) left out (D-157: the filtered
+    positions of a track born at zero speed lag behind a mover, +39 m along track at 12 km with the live chain's
+    tracker; the measurements do not). With fewer than three measured rows (or no time between them) the short-track rule above, from the last row of
+    `history` (the filtered position, where the state's `velocity` holds). None, empty or all NaN (none recorded): fit
+    `history` itself."""
     h = np.asarray(history, dtype=float)
     t, xy = h[:, 0], h[:, 1:3]
+    last_t, last = t[-1], xy[-1]
+    if measured is not None and len(measured):
+        m = np.asarray(measured, dtype=float).reshape(-1, 2)
+        if len(m) != len(t):
+            raise ValueError(f"fit_velocity: {len(m)} measured rows for {len(t)} history rows")
+        if not np.isnan(m).all():                # all NaN: none recorded, as an empty list (classify.cpp the same)
+            ok = np.all(np.isfinite(m), axis=1)
+            t, xy = t[ok], m[ok]
     if len(t) < 3 or np.ptp(t) <= 0.0:
-        pos = xy[-1]
+        pos = last
         if _given(at) and velocity is not None and np.all(np.isfinite(velocity)):
-            pos = pos + (float(at) - t[-1]) * np.asarray(velocity, dtype=float)
+            pos = pos + (float(at) - last_t) * np.asarray(velocity, dtype=float)
         return pos, np.zeros(2), 0.0, np.inf
     tc = t - t.mean()
     v = (tc[:, None] * xy).sum(axis=0) / (tc**2).sum()
@@ -81,6 +96,17 @@ def fit_velocity(history, at: float | None = None, velocity=None) -> tuple[np.nd
     rms = float(np.sqrt((res**2).sum() / max(2 * len(t) - 4, 1)))
     pos = xy.mean(axis=0) + (float(at) - t.mean()) * v if _given(at) else fit[-1]
     return pos, v, rms, float(rms / np.sqrt((tc**2).sum()))
+
+
+def fitted_points(track) -> int:
+    """How many points `fit_velocity` fits for a track: its measured rows (`Track.measured`, D-157), or its history rows
+    when it records none."""
+    measured = getattr(track, "measured", None)
+    if measured is not None and len(measured):
+        m = np.asarray(measured, dtype=float).reshape(-1, 2)
+        if not np.isnan(m).all():
+            return int(np.all(np.isfinite(m), axis=1).sum())
+    return len(track.history)
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
@@ -105,18 +131,25 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     rules that compare positions (row, echo grouping) then compare them at one time. A track too short for a fit (fewer
     than three points) is moved from its last point to `time` by its Kalman state's velocity (`state[2:4]`), when it
     carries one.
+
+    The fitted line, and so every position, velocity, fit_rms and speed_sigma here, goes through the positions the
+    track MEASURED (`Track.measured`: the detections it took, at their times), not its filtered history (D-157); a
+    track with fewer than three measured rows is a short track as above, from its last filtered point. A track that
+    records no measurements (built by hand, a capture saved before D-157) is fitted through its history as before.
     """
     det = check_detection_rules(detections)
     out = []
     from scipy import stats
     for tr in tracks:
         state = getattr(tr, "state", None)
-        pos, v, rms, sigma = fit_velocity(tr.history, time, None if state is None or len(state) < 4 else state[2:4])
+        pos, v, rms, sigma = fit_velocity(tr.history, time, None if state is None or len(state) < 4 else state[2:4],
+                                          getattr(tr, "measured", None))
         speed = float(np.hypot(*v))
         n = len(tr.history)
-        # The fit's scatter is itself estimated from few points (2n - 4 degrees of freedom), so a
-        # short track needs a larger ratio for the same confidence: Student's t against the normal.
-        dof = max(2 * n - 4, 1)
+        # The fit's scatter is itself estimated from few points (2m - 4 degrees of freedom, m the points fitted: the
+        # measured rows, D-157), so a short track needs a larger ratio for the same confidence: Student's t against the
+        # normal. `min_points` and `seen` still count the track's pings (its history rows).
+        dof = max(2 * fitted_points(tr) - 4, 1)
         need = significance * float(stats.t.ppf(0.9995, dof) / stats.norm.ppf(0.9995))
         seen = tr.hits / max(n, 1)
         snr = float(np.mean(tr.snr)) if getattr(tr, "snr", None) else float("nan")

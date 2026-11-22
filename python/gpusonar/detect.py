@@ -282,7 +282,11 @@ class Track:
     hits: int = 1
     misses: int = 0
     confirmed: bool = False
-    history: list = field(default_factory=list)   # (time, x, y)
+    history: list = field(default_factory=list)   # (time, x, y): the filtered position (the state) at each ping
+    measured: list = field(default_factory=list)  # (x, y) per history row: the position of the detection the track took
+                                                  # there, in the same frame; (NaN, NaN) on a row of a miss. Empty: none
+                                                  # recorded (a track built from positions alone; classify then fits
+                                                  # `history`, as before)
     snr: list = field(default_factory=list)       # SNR (dB) of each detection it took
     cells: list = field(default_factory=list)     # flagged map cells of each detection it took (Detection.cells)
     depth: float = float("nan")                   # m, from the detections that carried one
@@ -325,6 +329,7 @@ class Tracker:
         self.initial_speed_sigma = initial_speed_sigma
         self.tracks: list[Track] = []
         self._next_id = 1
+        self._took: dict = {}
 
     def _measurement_cov(self, d: Detection) -> np.ndarray:
         # Polar measurement noise rotated into Cartesian.
@@ -386,6 +391,7 @@ class Tracker:
                 cache[key] = self._predict(self.tracks[ti], when)
             return cache[key]
 
+        self._took = {}                              # track id -> the position of the detection it took this ping
         if self.association == "likelihood":
             unused = self._associate_by_likelihood(detections, whens, h, predicted)
         else:
@@ -395,6 +401,8 @@ class Tracker:
                 t.state, t.cov, t.depth_var = predicted(ti, time)
                 t.time = time
             t.history.append((t.time, float(t.state[0]), float(t.state[1])))
+            z = self._took.get(t.id)
+            t.measured.append((float(z[0]), float(z[1])) if z is not None else (float("nan"), float("nan")))
         self.tracks = [t for t in self.tracks if t.misses <= self.max_misses]
         for j in unused:
             d = detections[j]
@@ -404,6 +412,7 @@ class Tracker:
             xy = d.xy()
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov, time=whens[j])
             tr.history.append((whens[j], float(xy[0]), float(xy[1])))
+            tr.measured.append((float(xy[0]), float(xy[1])))
             tr.snr.append(d.snr_db)
             tr.cells.append(int(d.cells))
             self._take_depth(tr, d)
@@ -418,8 +427,10 @@ class Tracker:
         t.time = when
         s = h @ t.cov @ h.T + self._measurement_cov(d)
         k = t.cov @ h.T @ np.linalg.inv(s)
-        t.state = t.state + k @ (d.xy() - h @ t.state)
+        z = d.xy()
+        t.state = t.state + k @ (z - h @ t.state)
         t.cov = (np.eye(4) - k @ h) @ t.cov
+        self._took[t.id] = z
         t.hits += 1
         t.snr.append(d.snr_db)
         t.cells.append(int(d.cells))
