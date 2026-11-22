@@ -2628,3 +2628,45 @@ edge -0.8 m). All three changes are ours.
   A static pose is at rest unless it says otherwise. Lines with velocity are unchanged.
 - **Validated:** CPU tests of both packages; GPU suite on 42d4539, HF job 6b026f2defaf5e14f4b79e70,
   1686 passed, 92 skipped, Holoscan operators compiled (they cannot be built in the CPU container).
+
+### D-159 Bearing sigma kept; an opt-in outlier test per axis of the line of sight; the fit limit grows with range (issues sonar-ym1, sonar-ljh, sonar-4jm; owner's choices)
+
+With the defaults the gallery and the live chain give the outputs of 688271f: the gallery re-score
+of the saved captures reproduces `classify_rules_eval_afe0806.json` (194 targets in their class,
+94 false movers), and the live chain's popoto_12km report (seeds 51-60, both engines, both range
+estimates) is unchanged. The along-track error the issues named is not reduced: on those seeds
+the cross-range mean stays -23.3 m with `first`, a glint spread over several pings.
+- **ym1 (kept):** the derived `tracker.bearing_sigma` stays max(1 deg, beam/16) (Popoto: 1 deg,
+  floor 0.22 deg), although a point target's bearing scatters 0.03-0.05 deg at 12 km in
+  simulation. Since D-157 the report's line goes through the detections, not the filtered state:
+  1, 0.25 and 0.05 deg give one report to 1e-6 m (a guard test,
+  `test_the_12km_report_does_not_depend_on_the_trackers_bearing_sigma`). A ship's own detections
+  scatter 0.1-0.3 deg side-on, and the sigma still sets the gate (D-99).
+- **ljh (opt-in, both engines, ours):** `classify.outlier_alpha`, default 0 (off). When above 0,
+  through the measured positions at most one point is left out of a track's line. The residuals
+  are rotated once onto range and cross-range about the sonar (the ownship in the live chain;
+  `classify_tracks(origin=)`, else the multipath origin, else the frame's origin), each axis with
+  its own variance. The externally studentized residual, Student's t with n - 3 degrees of
+  freedom, is tested two-sided at alpha / (n x axes tested); an axis is skipped while the other's
+  scatter times the line of sight's turn exceeds half its own; four points at least; never on
+  filtered history. The t tail is Abramowitz and Stegun 26.7.3/26.7.4, the same finite sums in
+  both engines (against scipy within 1e-9 relative or 1e-15 absolute). Clean tracks lose a point
+  at alpha within Monte Carlo error for range : cross-range 1:1 to 1:50 and 10:1, n = 4-20.
+  The first version (one pooled variance, F(2, 2n - 6)) dropped 4-13 % at 0.01 under the
+  sonar's unequal errors (review); its live-chain gain (-23.3 -> -13.4 m) came from that.
+  Measured on at 0.01, worst first: no point left out on popoto_12km seeds 51-60 in the live chain
+  (six points give 3 degrees of freedom: a glint needs |t| > 13.7); gallery
+  (`classify_rules_eval_e0d9665.json`, HF job 6b0289c7efaf5e14f4b7e3f7) false movers 94 -> 95
+  (popoto_env_deep_silt_1000m seed 55, through the echo-grouping velocity gate), popoto_12km mean
+  speed error 0.773 -> 0.863 m/s; targets 194 unchanged, all-mover speed error 0.209 -> 0.181
+  m/s, distance to the hull 8.06 -> 7.78 m. Parity: no decision differs in 1600 fuzzed tracks.
+- **4jm (on in the live chain, derived, ours):** a track's fit limit is at least
+  `classify.max_fit_rms_bearing_deg` x its range from the sonar, derived as four bearing floors
+  over sqrt 2 (Popoto 0.63 deg: 132 m at 12 km, 221 m at 20 km; 0 when the beam is unknown).
+  No measured scene changes; on seeded six-ping crossings at 20 km with 0.2 deg of bearing error
+  it stops the fixed 60 m limit from making 6 % of ships uncertain. The gallery and
+  `classify_rules_eval` keep their typed limits. False movers under the grown limit are not
+  measured: no long-range clutter scene exists. A negative, infinite or NaN value is refused by
+  every entry of both engines and by `sonar_live`. The 688271f live-chain outputs need
+  `max_fit_rms_bearing_deg: 0`.
+
