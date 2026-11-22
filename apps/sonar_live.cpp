@@ -17,7 +17,11 @@
 //   the host; cuda without a usable device is an error)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
 //   tracker_association (likelihood | in_order)
-//   classify_min_speed classify_max_fit_rms multipath (0 | 1)
+//   classify_min_speed classify_static_speed classify_max_fit_rms classify_max_fit_rms_bearing_deg (the fit limit's
+//   growth with range, degrees: a track's limit is at least this times its range; 0: off) classify_outlier_alpha
+//   (opt-in: at most one measured point an outlier test finds at this probability is left out of a track's line; 0, the
+//   default: off)
+//   classify_min_mover_cells multipath (0 | 1)
 //   sync (0 | 1) sync_f_start sync_f_stop sync_duration sync_lead sync_tail sync_dedicated (0 | 1)
 //   passive: n_fft hop n_average passive_method (sbl | conventional)
 //   passive tonal analysis (Goertzel lines, DEMON): tonal=1 and tonal_... (docs/CONFIGURATION.md, gpusonar/tonal.py)
@@ -51,7 +55,7 @@
 //   report_udp_max_bytes (a longer report line goes out as several datagrams, each a complete line with "part": [k, n])
 //   sync_search_time sync_tolerance_us elevation_min_row_elements nav_history_margin_s
 // range_cell_m, cfar_guard_m, cfar_train_m, tracker_range_sigma, tracker_bearing_sigma_deg, multipath_bearing_deg,
-// classify_max_fit_rms, elevation_row_tolerance_m, n_fft and hop are derived from the sonar when not given
+// classify_max_fit_rms, classify_max_fit_rms_bearing_deg, elevation_row_tolerance_m, n_fft and hop are derived from the sonar when not given
 // (libs/live derive.hpp); what was resolved is printed once on stderr.
 //
 // --template: a container file holding one ping record of the sonar (geometry, waveform,

@@ -245,6 +245,78 @@ TEST(Classify, FitsTimeBetweenAllPointsAndMovesAShortTrackByItsState) {
   }
 }
 
+TEST(Classify, LeavesOneGlintingMeasurementOutOfTheLine) {
+  // sonar-ljh (classify.py _outlier): six measured points of a 6 m/s crossing with a small scatter, the last 50 m
+  // ahead (80 m: six points give the per-axis test 3 degrees of freedom, so it needs |t| > 13.7, and 50 m over this
+  // scatter is |t| 11.9). At 0.01 (opt-in, D-159) the deleted-residual test leaves it out and the line holds 6 m/s; at outlier_alpha 0 it is kept
+  // and pulls the line. A track whose rows record no measurement (the filtered history) is never tested.
+  Track t;
+  t.id = 1;
+  t.hits = 6;
+  t.confirmed = true;
+  const double scatter[6] = {-3.0, 3.0, 2.0, -2.0, 1.0, 80.0};
+  for (int k = 0; k < 6; ++k) {
+    const double tk = 20.0 * k, x = 6.0 * tk;
+    t.history.push_back({tk, x, 12000.0, x + scatter[k], 12000.0 + (k % 2 ? 1.0 : -1.0)});
+  }
+  ClassifyOptions co;
+  EXPECT_EQ(co.outlier_alpha, 0.0);   // off by default (D-159); the test itself at 0.01
+  co.outlier_alpha = 0.01;
+  co.time = 100.0;
+  auto out = classify_tracks({&t}, co);
+  EXPECT_NEAR(out[0].vx, 6.0, 0.1);
+  EXPECT_NEAR(out[0].x, 600.0, 3.0);
+  co.outlier_alpha = 0.0;
+  out = classify_tracks({&t}, co);
+  EXPECT_GT(out[0].vx, 6.3);
+  EXPECT_GT(out[0].x - 600.0, 15.0);
+  Track h = t;
+  for (auto& p : h.history) {
+    p.x = p.mx;
+    p.mx = p.my = std::numeric_limits<double>::quiet_NaN();
+  }
+  co.outlier_alpha = 0.01;
+  EXPECT_GT(classify_tracks({&h}, co)[0].vx, 6.3);
+}
+
+TEST(Options, ClassifyOutlierAlphaIsReadEchoedAndChecked) {
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(a.classify.outlier_alpha, 0.0);   // off by default (D-159)
+  std::istringstream in("classify_outlier_alpha=0.01\n");
+  read_options(a, pa, in);
+  EXPECT_EQ(a.classify.outlier_alpha, 0.01);
+  EXPECT_NE(options_json(a).find("\"classify_outlier_alpha\": 0.01"), std::string::npos) << options_json(a);
+  for (const char* bad : {"classify_outlier_alpha=-0.1\n", "classify_outlier_alpha=1\n", "classify_outlier_alpha=nan\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+}
+
+TEST(Options, ClassifyFitRmsBearingIsReadEchoedAndChecked) {
+  // sonar-4jm review: left out it is derived (NaN until the first record); given, a finite angle, 0 (off) or more, in the
+  // reader and in the chain itself.
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_TRUE(std::isnan(a.classify.max_fit_rms_bearing));
+  std::istringstream in("classify_max_fit_rms_bearing_deg=0.5\n");
+  read_options(a, pa, in);
+  EXPECT_DOUBLE_EQ(a.classify.max_fit_rms_bearing, 0.5 * kDeg);
+  EXPECT_NE(options_json(a).find("\"classify_max_fit_rms_bearing_deg\": 0.5"), std::string::npos) << options_json(a);
+  for (const char* bad : {"classify_max_fit_rms_bearing_deg=-1\n", "classify_max_fit_rms_bearing_deg=inf\n",
+                          "classify_max_fit_rms_bearing_deg=nan\n"}) {
+    ChainOptions b;
+    std::istringstream t(bad);
+    EXPECT_THROW(read_options(b, pa, t), std::invalid_argument) << bad;
+  }
+  for (double bad : {-1.0, std::numeric_limits<double>::infinity()}) {
+    ChainOptions c;
+    c.classify.max_fit_rms_bearing = bad;
+    EXPECT_THROW(LiveChain{c}, std::invalid_argument) << bad;
+  }
+}
+
 TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName) {
   // D-141: the default and the names; the two rules themselves are held to the Python tracker's in
   // tests/python/test_live_cpp.py, and the case that separates them in tests/python/test_detect.py.

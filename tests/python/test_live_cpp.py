@@ -254,6 +254,151 @@ def test_detection_rules_match_python():
             classify.classify_tracks(a, detections={"row_snr_db": bad})
 
 
+def test_both_engines_leave_the_same_glinting_measurement_out_of_the_line():
+    """sonar-ljh, both engines: the 12 km crossing (test_detect.long_range_mover, six pings) with its last detection moved
+    50 m ahead along track in bearing (a glint), through the live chain's 1 deg tracker. Both classifiers leave that
+    measurement out and agree to 1e-6 m; with outlier_alpha 0 both keep it, agree, and are pulled ahead."""
+    from test_classify import LIVE_TRACKER_12KM
+    from test_detect import long_range_mover
+    pings = long_range_mover(n=6)
+    py, cpp = detect.Tracker(**LIVE_TRACKER_12KM), core.LiveTracker(**LIVE_TRACKER_12KM)
+    for k, (tp, d, _, _) in enumerate(pings):
+        if k == len(pings) - 1:
+            d = detect.Detection(d.range, d.bearing + 50.0 / d.range, d.snr_db, d.cells, time=d.time)
+        a = py.update(tp, [d])
+        cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+    tp, _, at_transmit, _ = pings[-1]
+    ahead = {}
+    for alpha in (0.01, 0.0):
+        (want,) = classify.classify_tracks(a, time=tp, outlier_alpha=alpha)
+        (got,) = cpp.classify(time=tp, outlier_alpha=alpha)
+        assert got["kind"] == want.kind == "mover"
+        assert got["position"] == pytest.approx(want.position, abs=1e-6) and got["velocity"] == pytest.approx(want.velocity, abs=1e-6)
+        assert got["fit_rms"] == pytest.approx(want.fit_rms, abs=1e-6) and got["speed_sigma"] == pytest.approx(want.speed_sigma, rel=1e-6)
+        ahead[alpha] = want.position[0] - at_transmit[0]
+    assert classify.fitted_points(a[0], outlier_alpha=0.01) == 5 and classify.fitted_points(a[0]) == 6
+    # Off by default in both engines (owner, D-159).
+    (dflt,) = cpp.classify(time=tp)
+    assert dflt["position"] == pytest.approx(classify.classify_tracks(a, time=tp, outlier_alpha=0.0)[0].position, abs=1e-6)
+    assert dflt["position"] == pytest.approx(classify.classify_tracks(a, time=tp)[0].position, abs=1e-6)
+    assert abs(ahead[0.01]) < 3.0 and ahead[0.0] > 15.0
+    for bad in (-0.1, 1.0):
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            cpp.classify(outlier_alpha=bad)
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            core.LiveChainCpp(dict(CPP_CHAIN, classify_outlier_alpha=bad))
+
+
+def test_the_chain_says_its_outlier_alpha_to_the_cpp_engine():
+    """sonar-ljh: the configuration's classify.outlier_alpha (default 0: off, D-159) always goes to the C++ chain's options,
+    whose own default is 0 too, and a value out of [0, 1) is refused by the Python chain."""
+    from gpusonar.live import cpp_chain_options
+    assert cpp_chain_options(dict(CHAIN))["classify_outlier_alpha"] == 0.0
+    assert json.loads(core.LiveChainCpp(dict(CPP_CHAIN)).options())["classify_outlier_alpha"] == 0.0
+    on = dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=0.01))
+    assert cpp_chain_options(on)["classify_outlier_alpha"] == 0.01
+    with pytest.raises(ValueError, match="outlier_alpha"):
+        LiveChain(dict(CHAIN, classify=dict(CHAIN["classify"], outlier_alpha=1.5)))
+
+
+def test_both_engines_grow_the_fit_limit_with_range_alike():
+    """sonar-4jm, both engines: the 12 km crossing (ten pings) with its bearings alternately 0.45 deg either side (94 m
+    across, fit RMS about 74 m). Under a fixed 60 m limit both classify it uncertain; with the limit grown by the
+    Popoto array's derived 0.63 deg x range (132 m at 12 km) both a mover; positions and fit agree to 1e-6."""
+    from test_classify import LIVE_TRACKER_12KM, POPOTO_FIT_RMS_BEARING
+    from test_detect import long_range_mover
+    py, cpp = detect.Tracker(**LIVE_TRACKER_12KM), core.LiveTracker(**LIVE_TRACKER_12KM)
+    for k, (tp, d, _, _) in enumerate(long_range_mover(n=10)):
+        d = detect.Detection(d.range, d.bearing + np.radians(0.45) * (-1) ** k, d.snr_db, d.cells, time=d.time)
+        a = py.update(tp, [d])
+        cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells)], [d.time])
+    kinds = []
+    for grow in (0.0, POPOTO_FIT_RMS_BEARING):
+        (want,) = classify.classify_tracks(a, time=tp, max_fit_rms=60.0, max_fit_rms_bearing=grow, origin=(0.0, 0.0))
+        (got,) = cpp.classify(time=tp, max_fit_rms=60.0, max_fit_rms_bearing=grow)
+        assert got["kind"] == want.kind and got["fit_rms"] == pytest.approx(want.fit_rms, abs=1e-6)
+        assert got["position"] == pytest.approx(want.position, abs=1e-6)
+        kinds.append(want.kind)
+        assert 60.0 < want.fit_rms < 132.0
+    assert kinds == ["uncertain", "mover"]
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_the_chain_derives_the_fit_limits_growth_from_the_beam(pings, engine):
+    """sonar-4jm: each engine resolves classify.max_fit_rms_bearing_deg from the record (four times a sixteenth of the
+    beamwidth over sqrt 2), and a value in the configuration wins and is listed as given."""
+    with LiveChain(dict(CHAIN, engine=engine)) as chain:
+        chain.run(copies(pings[:1]))
+        r = chain.resolved
+    beam = r["sonar"]["beamwidth_deg"]
+    assert r["classify_max_fit_rms_bearing_deg"] == pytest.approx(4.0 * beam / 16.0 / np.sqrt(2.0), rel=1e-9)
+    given = dict(CHAIN, engine=engine, classify=dict(CHAIN["classify"], max_fit_rms_bearing_deg=0.0))
+    with LiveChain(given) as chain:
+        chain.run(copies(pings[:1]))
+        assert chain.resolved["classify_max_fit_rms_bearing_deg"] == 0.0
+        assert "classify.max_fit_rms_bearing_deg" in chain.resolved["given"]
+
+
+def _kinds(report):
+    return sorted(t["kind"] for t in report["tracks"])
+
+
+def test_the_fit_settings_given_to_the_cpp_chain_reach_its_classifier(pings):
+    """Review of sonar-4jm and sonar-ljh: a classify_max_fit_rms_bearing given to LiveChainCpp decides its classes. Under
+    a fit limit of 1 mm every track is uncertain; grown by 5 deg x range (about 22 m at these 250 m ranges) the two targets
+    are a mover and a static object again, as without the tiny limit. outlier_alpha given reaches the chain's options."""
+    def run(**kw):
+        cpp = core.LiveChainCpp(dict(CPP_CHAIN, classify_max_fit_rms=1e-3, **kw))
+        return [json.loads(cpp.process(r)) for r in copies(pings)], cpp
+    tiny, _ = run(classify_max_fit_rms_bearing=0.0)
+    grown, cpp = run(classify_max_fit_rms_bearing=float(np.radians(5.0)), classify_outlier_alpha=0.2)
+    assert set(_kinds(tiny[-1])) == {"uncertain"}
+    assert _kinds(grown[-1]) == ["mover", "static"]
+    opts = json.loads(cpp.options())
+    assert opts["classify_outlier_alpha"] == 0.2 and opts["classify_max_fit_rms_bearing_deg"] == pytest.approx(5.0)
+
+
+@pytest.mark.skipif(not EXE.exists(), reason="build/bin/sonar_live not built")
+def test_the_fit_settings_given_to_sonar_live_reach_its_classifier(pings, tmp_path):
+    """The same through build/bin/sonar_live's keys (degrees), and its refusal of an angle that is not finite and zero or
+    more, as LiveChainCpp's, LiveChain's, cpp_chain_options's and classify_tracks's."""
+    with LiveChain(CHAIN, recording=str(tmp_path / "rec.h5")) as chain:
+        chain.run(copies(pings))
+    def run(*extra):
+        rep = tmp_path / f"rep{len(list(tmp_path.glob('rep*')))}.jsonl"
+        out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), "--report", str(rep), *EXE_OPTIONS,
+                              "classify_min_speed=1", "classify_static_speed=0.6", "classify_max_fit_rms=0.001", *extra],
+                             capture_output=True, text=True, timeout=300)
+        return out, rep
+    out, rep = run("classify_max_fit_rms_bearing_deg=0")
+    assert out.returncode == 0, out.stderr
+    assert set(_kinds(json.loads(rep.read_text().splitlines()[-1]))) == {"uncertain"}
+    out, rep = run("classify_max_fit_rms_bearing_deg=5", "classify_outlier_alpha=0.2")
+    assert out.returncode == 0, out.stderr
+    assert _kinds(json.loads(rep.read_text().splitlines()[-1])) == ["mover", "static"]
+    for bad in ("-1", "inf", "nan"):
+        out, _ = run(f"classify_max_fit_rms_bearing_deg={bad}")
+        assert out.returncode != 0 and "classify_max_fit_rms_bearing_deg" in out.stderr
+
+
+def test_the_fit_limits_growth_is_refused_alike_out_of_range():
+    """Review of sonar-4jm: -1 (once silently off), infinity (once switched the steadiness test off) and NaN (once
+    silently 'derive') are refused by every entry: LiveChainCpp, tracker.classify, LiveChain and cpp_chain_options."""
+    from gpusonar.live import cpp_chain_options
+    from test_classify import LIVE_TRACKER_12KM
+    tr = core.LiveTracker(**LIVE_TRACKER_12KM)
+    for bad in (-1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="max_fit_rms_bearing"):
+            core.LiveChainCpp(dict(CPP_CHAIN, classify_max_fit_rms_bearing=bad))
+        with pytest.raises(ValueError, match="max_fit_rms_bearing"):
+            tr.classify(max_fit_rms_bearing=bad)
+        cfg = dict(CHAIN, classify=dict(CHAIN["classify"], max_fit_rms_bearing_deg=bad))
+        with pytest.raises(ValueError, match="max_fit_rms_bearing_deg"):
+            LiveChain(cfg)
+        with pytest.raises(ValueError, match="max_fit_rms_bearing_deg"):
+            cpp_chain_options(cfg)
+
+
 def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
     """The live chain in both engines: without `classify.detections` the C++ chain's options carry no rule; with the
     extent rule on, the two engines' reports give the same classes. Each target here is 15 cells on every ping: at 16
@@ -411,10 +556,12 @@ def test_both_chains_report_track_positions_at_the_ping_time(pings):
         r = float(np.hypot(*tr.history[-1][1:]))
         if tr.misses == 0:                                # took a detection on this ping: at its own time
             assert tr.history[-1][0] == pytest.approx(t + r / 1500.0, abs=0.01)
-        # The fitted line is through the track's measured positions (D-157), as classify_tracks fits it.
-        pos = classify.fit_velocity(tr.history, t, tr.state[2:4], tr.measured)[0]
+        # The fitted line is through the track's measured positions (D-157), as classify_tracks fits it: the outlier test
+        # about the sonar's place at the ping, in the tracker's (across, forward) frame, as the chain gives it.
+        own = np.asarray(want[-1]["ownship_xyz"][:2]) - origin[:2]
+        pos = classify.fit_velocity(tr.history, t, tr.state[2:4], tr.measured, origin=(own[1], own[0]))[0]
         assert (rt["x"], rt["y"]) == pytest.approx((pos[1] + origin[0], pos[0] + origin[1]), abs=1e-6)
-        last = classify.fit_velocity(tr.history, None, tr.state[2:4], tr.measured)[0]
+        last = classify.fit_velocity(tr.history, None, tr.state[2:4], tr.measured, origin=(own[1], own[0]))[0]
         if rt["kind"] == "mover":
             moved += 1
             assert np.hypot(*(pos - last)) == pytest.approx(rt["speed_m_s"] * (tr.history[-1][0] - t), rel=1e-6)

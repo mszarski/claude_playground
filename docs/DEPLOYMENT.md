@@ -107,7 +107,9 @@ Each detection:
 | `arrivals` | list of [range m, SNR dB] | multiscale detector, two or more arrivals along range only |
 
 Each track (classified by `classify.py` / `classify_tracks`, which fits a straight line through the
-track's detections in time). Each detection is given to the tracker at the time it shows its target,
+track's detections in time; opt-in, at most one of them left out when a test finds it an outlier: `classify.outlier_alpha`,
+sonar-ljh, off by default; the fit limit grows with range, `classify.max_fit_rms_bearing_deg`, sonar-4jm: the live
+chain's outputs from before it, 688271f, need `max_fit_rms_bearing_deg: 0`). Each detection is given to the tracker at the time it shows its target,
 the ping's transmit time + `range_m` / c (c the record's sound speed), not at the transmit time
 (D-156); the report's `x`, `y` are the fitted line's position at the report's `time_ns`:
 

@@ -297,6 +297,16 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "classify_min_speed") c.classify.min_speed = c.classify.static_speed = v();
   else if (key == "classify_static_speed") c.classify.static_speed = v();   // after classify_min_speed, which sets both
   else if (key == "classify_max_fit_rms") c.classify.max_fit_rms = v();
+  else if (key == "classify_max_fit_rms_bearing_deg") {
+    const double b = v();
+    if (!(std::isfinite(b) && b >= 0.0)) throw std::invalid_argument("classify_max_fit_rms_bearing_deg: a finite angle, 0 (off) or more, got '" + value + "' (leave the key out to derive it)");
+    c.classify.max_fit_rms_bearing = b * kDeg;
+  }
+  else if (key == "classify_outlier_alpha") {
+    const double a = v();
+    if (!(a >= 0.0 && a < 1.0)) throw std::invalid_argument("classify_outlier_alpha: from 0 (off) to below 1, got '" + value + "'");
+    c.classify.outlier_alpha = a;
+  }
   else if (key == "classify_min_mover_cells") {
     // Off unless given (the field's default is below 0); given, it must be a number of cells, zero or more.
     const double m = v();
@@ -433,7 +443,8 @@ std::string options_json(const ChainOptions& c) {
       .text("tracker_association", t.association == Association::InOrder ? "in_order" : "likelihood");
   const ClassifyOptions& k = c.classify;
   j.num("classify_min_speed", k.min_speed).num("classify_static_speed", k.static_speed).num("classify_max_fit_rms", k.max_fit_rms)
-      .num("classify_min_mover_cells", k.min_mover_cells)
+      .num("classify_min_mover_cells", k.min_mover_cells).num("classify_outlier_alpha", k.outlier_alpha)
+      .num("classify_max_fit_rms_bearing_deg", k.max_fit_rms_bearing / kDeg)
       .flag("multipath", k.multipath).num("multipath_max_excess_range", k.multipath_max_excess_range)
       .num("multipath_bearing_deg", k.multipath_bearing / kDeg).num("multipath_velocity", k.multipath_velocity);
   j.flag("sync", c.sync);

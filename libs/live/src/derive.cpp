@@ -120,6 +120,10 @@ ChainDefaults resolve(ChainOptions& o, const PingRecord& record) {
     o.classify.max_fit_rms = at_least(kStanding.classify_max_fit_rms, kFitRmsSigmas * kCellsPerResolution * f.range_resolution,
                                       "classify.max_fit_rms", d.scaled);
   }
+  if (!take(o.classify.max_fit_rms_bearing, "classify.max_fit_rms_bearing_deg")) {
+    // No standing value: 0 (off) until a sonar's beamwidth is known (sonar-4jm).
+    o.classify.max_fit_rms_bearing = kFitRmsSigmas * bearing_floor / std::sqrt(2.0);
+  }
   d.range_cell_m = o.range_cell_m;
   d.cfar_guard_m = o.cfar_guard_m;
   d.cfar_train_m = o.cfar_train_m;
@@ -127,6 +131,7 @@ ChainDefaults resolve(ChainOptions& o, const PingRecord& record) {
   d.tracker_bearing_sigma = o.tracker.bearing_sigma;
   d.multipath_bearing = o.classify.multipath_bearing;
   d.classify_max_fit_rms = o.classify.max_fit_rms;
+  d.classify_max_fit_rms_bearing = o.classify.max_fit_rms_bearing;
 
   // What a new sonar's owner should look at: said once, never acted on.
   const double usable = f.window_m - 0.5 * f.sound_speed * f.pulse;
@@ -185,6 +190,7 @@ std::string ChainDefaults::json() const {
   s << "{\"range_cell_m\": " << range_cell_m << ", \"cfar_guard_m\": " << cfar_guard_m << ", \"cfar_train_m\": " << cfar_train_m
     << ", \"tracker_range_sigma\": " << tracker_range_sigma << ", \"tracker_bearing_sigma_deg\": " << tracker_bearing_sigma * deg
     << ", \"multipath_bearing_deg\": " << multipath_bearing * deg << ", \"classify_max_fit_rms\": " << classify_max_fit_rms
+    << ", \"classify_max_fit_rms_bearing_deg\": " << classify_max_fit_rms_bearing * deg
     << ", \"row_tolerance_m\": " << row_tolerance_m;
   list(s, "given", given);
   list(s, "scaled", scaled);

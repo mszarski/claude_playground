@@ -334,3 +334,189 @@ def test_without_a_time_a_track_that_missed_its_last_ping_is_reported_at_that_pi
     for at in (None, float("nan")):
         (c,) = classify.classify_tracks([tr], time=at)
         assert np.hypot(*(np.asarray(c.position) - (12000.0, 800.0 - 6.0 * 99.5))) < 1e-6
+
+
+# --- sonar-ljh: one glinting measurement is left out of the line --------------------------------------------------
+
+def glinting_12km_track(glint=-50.0):
+    """The noise-free popoto_12km crossing through the live chain's tracker, its measured positions given a small fixed
+    scatter (+-3 m along track, +-1 m in range) and the last one moved `glint` m along track (negative: ahead of the
+    ship, which runs toward -forward). The live chain measured the last ping 23 to 66 m ahead on popoto_12km seeds 51-60
+    (the ship side-on, a coherent sum of its five points; D-157, sonar-ljh)."""
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for t, d in popoto_12km_noise_free():
+        tracks = tracker.update(t, [d])
+    (tr,) = tracks
+    scatter = np.array([(1.0, -3.0), (-1.0, 3.0), (0.5, 2.0), (-0.5, -2.0), (1.0, 1.0), (0.0, glint)])
+    tr.measured = [tuple(np.asarray(m) + s) for m, s in zip(tr.measured, scatter)]
+    return tr
+
+
+def test_a_glinting_last_measurement_is_left_out_of_the_line():
+    """sonar-ljh: a last measurement 80 m ahead along track (cross-range at 12 km) pulls the least-squares line through
+    six points by its leverage at the end of the track (more than 15 m ahead, more than 6.4 m/s for 6.0 with every point
+    in); the per-axis deleted-residual test (opt-in, at 0.01) leaves it out, and the line through the
+    other five is within 3 m and 0.1 m/s. Changed in review: with each axis's own variance the six-point test has 3
+    degrees of freedom and needs |t| > 13.7, so the 50 m glint this test used before (|t| = 11.9 over +-3 m of scatter)
+    is now kept, and that is asserted too."""
+    truth = np.array((12000.0, 800.0 - 6.0 * 99.5))
+    tr = glinting_12km_track(glint=-80.0)
+    (c,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.01)
+    assert classify.fitted_points(tr, outlier_alpha=0.01) == 5
+    assert np.hypot(*(np.asarray(c.position) - truth)) < 3.0 and c.speed == pytest.approx(6.0, abs=0.1)
+    assert c.kind == "mover"
+    (every,) = classify.classify_tracks([tr], time=99.5, outlier_alpha=0.0)
+    assert classify.fitted_points(tr, outlier_alpha=0.0) == 6
+    assert truth[1] - every.position[1] > 15.0 and every.speed > 6.4          # pulled ahead and faster
+    assert classify.fitted_points(glinting_12km_track(glint=-50.0), outlier_alpha=0.01) == 6     # too little evidence in six points
+    # Off by default (owner, D-159): every point in.
+    assert classify.OUTLIER_ALPHA == 0.0 and classify.fitted_points(tr) == 6
+    assert classify.classify_tracks([tr], time=99.5)[0].position == every.position
+    # The filtered history is not tested (its points are not independent): the measurements left out, nothing changes.
+    hist = classify.fit_velocity(tr.history, 99.5)
+    assert np.array_equal(hist[0], classify.fit_velocity(tr.history, 99.5, outlier_alpha=0.0)[0])
+
+
+def test_the_outlier_test_leaves_gaussian_scatter_and_exact_lines_alone():
+    """sonar-ljh: on straight tracks with Gaussian scatter of one variance in both coordinates the test leaves a point out
+    of about alpha of them (Bonferroni over the points: at most alpha); on an exact line, and the noise-free 12 km
+    crossing, of none."""
+    rng = np.random.default_rng(7)
+    t = np.arange(8) * 2.0
+    hist = [(float(a), 0.0, 0.0) for a in t]
+    for alpha, most in ((0.01, 0.02), (0.1, 0.12)):
+        out = 0
+        for _ in range(3000):
+            xy = np.array([100.0, 2000.0]) + t[:, None] * [3.0, -1.0] + 5.0 * rng.standard_normal((8, 2))
+            out += classify._fit(hist, None, None, xy, alpha)[4] == 7
+        assert 0.3 * alpha < out / 3000 < most
+    exact = [(float(a), 100.0 + 3.0 * a, 2000.0 - a) for a in t]
+    assert classify._fit(exact, None, None, [p[1:] for p in exact], 0.5)[4] == 8
+    from gpusonar import detect
+    tracker = detect.Tracker(**LIVE_TRACKER_12KM)
+    for at, d in popoto_12km_noise_free():
+        tracks = tracker.update(at, [d])
+    assert classify.fitted_points(tracks[0], outlier_alpha=0.01) == 6
+
+
+def test_the_t_tail_is_scipys():
+    """classify.t_two_sided (the finite sums libs/live classify.cpp computes too) against scipy's Student's t, wherever
+    the probability is above 1e-12 (the test compares it with alpha / m, 1e-2 to 1e-6)."""
+    from scipy import stats
+    for nu in range(1, 120):
+        for t in (0.0, 0.3, 1.0, 2.5, 5.0, 13.7, 40.0, 300.0):
+            want = 2.0 * stats.t.sf(t, nu)
+            if want > 1e-12:
+                assert classify.t_two_sided(t, nu) == pytest.approx(want, rel=1e-9, abs=1e-15), (nu, t)
+    assert classify.t_two_sided(float("inf"), 5) == 0.0
+
+
+def _false_drops(n, range_sigma, cross_sigma, alpha, trials, rng, pooled=False):
+    """The fraction of clean straight 12 km crossings (n pings 19.9 s apart, the sonar at the origin, errors drawn in range
+    and bearing) from which the outlier test drops a point. `pooled`: the test before review (one variance for both
+    coordinates: F(2, 2(n-1)-4), Bonferroni over n), written out here to show what it did."""
+    t = np.arange(n) * 19.9
+    out = 0
+    for _ in range(trials):
+        p = np.c_[-60.0 + 6.0 * t, np.full(n, 12000.0)]
+        r = np.hypot(p[:, 0], p[:, 1]) + range_sigma * rng.standard_normal(n)
+        b = np.arctan2(p[:, 0], p[:, 1]) + (cross_sigma / 12000.0) * rng.standard_normal(n)
+        xy = np.c_[r * np.sin(b), r * np.cos(b)]
+        if pooled:
+            tc = t - t.mean()
+            res = xy - (xy.mean(axis=0) + tc[:, None] * ((tc[:, None] * xy).sum(axis=0) / (tc**2).sum()))
+            r2 = (res**2).sum(axis=1)
+            d2 = r2 / (1.0 - (1.0 / n + tc**2 / (tc**2).sum()))
+            nu = 2 * (n - 1) - 4
+            f = (0.5 * d2) / ((r2.sum() - d2) / nu)
+            out += f.max() > 0.5 * nu * ((alpha / n) ** (-2.0 / nu) - 1.0)
+        else:
+            out += classify._outlier(t, xy, alpha, (0.0, 0.0)) is not None
+    return out / trials
+
+
+@pytest.mark.parametrize("n", [4, 6, 10, 20])
+def test_the_outlier_test_drops_about_alpha_of_clean_tracks_whatever_the_error_shape(n):
+    """Review of sonar-ljh: measured positions have their own error in range (about 1 m) and across the line of sight
+    (R x bearing error, tens of metres at 12 km). On clean straight tracks the per-axis test drops a point from at most
+    about alpha of them for errors of one size (1:1), cross-range 10 and 50 times the range error, range 10 times the
+    cross-range error, and no cross-range error at all, within 4 Monte Carlo sigmas (2000 tracks each, alpha 0.05). The
+    pooled test it replaced drops 18 to 31 % at 10:1 and 1:10 (asserted for 1:10)."""
+    rng = np.random.default_rng(100 + n)
+    alpha, trials = 0.05, 2000
+    tol = 4.0 * np.sqrt(alpha * (1 - alpha) / trials)
+    for sr, sc in ((1.0, 1.0), (1.0, 10.0), (1.0, 50.0), (10.0, 1.0), (1.0, 0.0)):
+        rate = _false_drops(n, sr, sc, alpha, trials, rng)
+        assert rate < alpha + tol and rate > 0.5 * alpha, (sr, sc, rate)
+    assert _false_drops(n, 1.0, 10.0, alpha, trials, rng, pooled=True) > alpha + tol
+
+
+def test_outlier_alpha_and_the_fit_limits_growth_are_checked():
+    tr = glinting_12km_track()
+    for bad in (-0.1, 1.0, float("nan")):
+        with pytest.raises(ValueError, match="outlier_alpha"):
+            classify.classify_tracks([tr], outlier_alpha=bad)
+    for bad in (-1.0, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="max_fit_rms_bearing"):
+            classify.classify_tracks([tr], max_fit_rms=60.0, max_fit_rms_bearing=bad)
+
+
+# --- sonar-4jm: the fit limit grows with range where asked ---------------------------------------------------------
+
+POPOTO_FIT_RMS_BEARING = 4.0 * (0.2993648934 / 4.8 / 16.0) / np.sqrt(2.0)   # rad: libs/live derives it for popoto_long_range
+
+
+def crossing(rng, bearing_sigma, rng_m=20000.0, n=6):
+    """A ship crossing at 6 m/s at `rng_m`, n pings 19.9 s apart, measured with Gaussian bearing error (rad) and 1 m of
+    range error; (across, forward) frame, the sonar at the origin."""
+    t = 19.9 * np.arange(n)
+    fwd = 800.0 - 6.0 * t
+    b = np.arctan2(fwd, rng_m) + bearing_sigma * rng.standard_normal(n)
+    r = np.hypot(fwd, rng_m) + rng.standard_normal(n)
+    m = np.c_[r * np.cos(b), r * np.sin(b)]
+    tr = Track(1, np.array([m[-1, 0], m[-1, 1], 0.0, -6.0]), np.eye(4), hits=n, confirmed=True)
+    tr.history = [(float(a), float(p[0]), float(p[1])) for a, p in zip(t, m)]
+    tr.measured = [tuple(map(float, p)) for p in m]
+    tr.snr = [20.0] * n
+    return tr
+
+
+def test_the_fit_limit_grows_with_range_where_asked():
+    """sonar-4jm: the measured positions scatter across the line of sight by R x the bearing error, which a fit limit
+    from range resolution alone (60 m for the Popoto array) does not follow. At 20 km with 0.2 deg of bearing error
+    (70 m across) the fixed limit makes uncertain 6 % of ships that are movers without any limit; with the limit grown
+    by libs/live's derived 0.63 deg per metre of range (132 m at 12 km, 221 m at 20 km) it binds on none of them. At
+    12 km and 0.05 to 0.2 deg (the scatter measured: 0.03-0.05 deg for a point, 0.1-0.3 deg for the ship side-on) the fixed
+    limit binds on at most 1 % (seeded draws, 400 ships each)."""
+    kw = dict(min_speed=1.0, static_speed=1.0)
+    def movers(deg, rng_m, **more):
+        rng = np.random.default_rng(1)
+        return sum(classify.classify_tracks([crossing(rng, np.radians(deg), rng_m)], **kw, **more)[0].kind == "mover"
+                   for _ in range(400))
+    fixed, grown, none = (movers(0.2, 20000.0, max_fit_rms=60.0), movers(0.2, 20000.0, max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING),
+                          movers(0.2, 20000.0, max_fit_rms=None))
+    assert grown == none and none - fixed >= 16
+    for deg in (0.05, 0.1, 0.2):
+        assert movers(deg, 12000.0, max_fit_rms=None) - movers(deg, 12000.0, max_fit_rms=60.0) <= 4
+
+
+def test_a_grown_fit_limit_still_refuses_positions_that_jump_about():
+    """sonar-4jm: the grown limit is R x 0.63 deg (221 m at 20 km); ten pings whose positions jump 400 m in range about
+    the line (RMS 316 m) are still uncertain, while 80 m jumps (RMS 63 m), uncertain under the fixed 60 m, are a mover
+    under the grown limit. classify_tracks's default (0) leaves the limit as max_fit_rms gives it."""
+    jump = np.array([(400.0, 0.0), (-400.0, 0.0)] * 5)
+    def jumping(scale):
+        tr = crossing(np.random.default_rng(3), 0.0, n=10)
+        tr.measured = [tuple(np.asarray(m) + scale * j) for m, j in zip(tr.measured, jump)]
+        return tr
+    (c,) = classify.classify_tracks([jumping(1.0)], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING)
+    assert c.fit_rms > 300.0 and c.kind == "uncertain"
+    near = jumping(0.2)
+    (fixed,) = classify.classify_tracks([near], max_fit_rms=60.0)
+    assert 60.0 < fixed.fit_rms < 70.0 and fixed.kind == "uncertain"
+    assert [c.kind for c in classify.classify_tracks([near], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING,
+                                                      origin=(0.0, 0.0))] == ["mover"]
+    # The range is from `origin`: the sonar 19 km nearer the ship, the limit is 60 m again.
+    assert [c.kind for c in classify.classify_tracks([near], max_fit_rms=60.0, max_fit_rms_bearing=POPOTO_FIT_RMS_BEARING,
+                                                      origin=(19000.0, 0.0))] == ["uncertain"]

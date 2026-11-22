@@ -59,10 +59,16 @@ constexpr double kTrainPerGuard = 3.0;           ///< CFAR training >= this many
 /// Tracker bearing sigma >= beamwidth / this. A centroid on a beam of width w at a signal-to-noise ratio s
 /// is good to about w / sqrt(2 s) (s as a power ratio): a sixteenth of a beam at 21 dB. Every array shipped
 /// today (beams of 1 to 14.5 degrees) stays under the standing 1 degree with it; a beam wider than 16 degrees
-/// does not.
+/// does not. Kept at the standing 1 degree for the Popoto array (floor 0.22 degrees) although a point target's bearing
+/// at 12 km scatters by 0.03 to 0.05 degrees in simulation (sonar-ym1): the report's line goes through the detections,
+/// not the filtered state (D-157), so the sigma no longer moves it (tests/python/test_detect.py
+/// test_the_12km_report_does_not_depend_on_the_trackers_bearing_sigma), and a ship's own detections scatter by more
+/// (23 to 66 m along track side-on at 12 km, 0.1 to 0.3 degrees). The sigma still sets the gate (D-99).
 constexpr double kBeamwidthsPerSigma = 16.0;
 constexpr double kMultipathSigmas = 3.0;         ///< multipath bearing gate >= this many bearing-sigma floors
 constexpr double kFitRmsSigmas = 4.0;            ///< classifier's fit limit >= this many range-sigma floors
+/// ... and >= this many of the pooled scatter across the line of sight at the track's range, R x bearing floor / sqrt(2)
+/// (the fit's RMS pools two coordinates; sonar-4jm): classify.max_fit_rms_bearing = kFitRmsSigmas x floor / sqrt(2).
 constexpr double kRowToleranceWavelengths = 0.25;  ///< row tolerance <= this many wavelengths at the top of the band
 constexpr double kPassiveTransits = 2.0;         ///< passive block >= this many array transit times
 constexpr double kStreamBufferSeconds = 0.5;     ///< socket buffer >= this much of the board stream
@@ -95,6 +101,7 @@ struct ChainDefaults {
   double range_cell_m = 0.0, cfar_guard_m = 0.0, cfar_train_m = 0.0;
   double tracker_range_sigma = 0.0, tracker_bearing_sigma = 0.0;
   double multipath_bearing = 0.0, classify_max_fit_rms = 0.0, row_tolerance_m = 0.0;
+  double classify_max_fit_rms_bearing = 0.0;   ///< rad: the fit limit per metre of range (sonar-4jm)
   std::vector<std::string> given;      ///< settings the configuration gave
   std::vector<std::string> scaled;     ///< settings the sonar's floor decided, not the standing value
   std::vector<std::string> warnings;   ///< what a new sonar's owner should look at

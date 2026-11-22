@@ -78,6 +78,13 @@ DEFAULTS = {
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": None,
+                 # Opt-in: through the measured positions at most one point the per-axis deleted-residual test finds an
+                 # outlier at this false-alarm probability per track is left out of the line (classify.py, sonar-ljh,
+                 # D-159; 0.01 measured); 0, the default: off.
+                 "outlier_alpha": 0.0,
+                 # degrees: a track's fit limit is at least this times its range (rad x m) from the sonar; None: derived,
+                 # four times a sixteenth of the beamwidth over sqrt(2) (libs/live derive.hpp, sonar-4jm)
+                 "max_fit_rms_bearing_deg": None,
                  "multipath": {"max_excess_range": 800.0, "bearing_deg": None, "velocity": 2.5},
                  # Opt-in rules from the detections themselves (classify.py, ours): None is off.
                  # {"min_mover_cells": cells}. row_snr_db is refused here: the chain never runs the row test.
@@ -87,6 +94,7 @@ DEFAULTS = {
 DERIVED = ((("range_cell_m",), "range_cell_m", 1.0), (("cfar", "guard_m"), "cfar_guard_m", 1.0), (("cfar", "train_m"), "cfar_train_m", 1.0),
            (("tracker", "range_sigma"), "tracker_range_sigma", 1.0), (("tracker", "bearing_sigma_deg"), "tracker_bearing_sigma", np.pi / 180.0),
            (("classify", "max_fit_rms"), "classify_max_fit_rms", 1.0),
+           (("classify", "max_fit_rms_bearing_deg"), "classify_max_fit_rms_bearing", np.pi / 180.0),
            (("classify", "multipath", "bearing_deg"), "multipath_bearing", np.pi / 180.0))
 REPORT_UDP_MAX_BYTES = 65000        # a report line longer than this goes out as several datagrams (split_report)
 
@@ -402,6 +410,17 @@ def check_choices(cfg: dict) -> None:
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
 
 
+def check_classify_fit(c: dict) -> None:
+    """chain.classify's fit settings, refused as libs/live refuses them: outlier_alpha from 0 (off) to below 1;
+    max_fit_rms_bearing_deg None (derived) or a finite angle, 0 (off) or more."""
+    a = float(c["outlier_alpha"])
+    if not 0.0 <= a < 1.0:
+        raise ValueError(f"chain.classify.outlier_alpha = {c['outlier_alpha']}: from 0 (off) to below 1")
+    b = c.get("max_fit_rms_bearing_deg")
+    if b is not None and not (np.isfinite(float(b)) and float(b) >= 0.0):
+        raise ValueError(f"chain.classify.max_fit_rms_bearing_deg = {b}: a finite angle, 0 (off) or more (None: derived)")
+
+
 def live_detection_rules(detections: dict | None) -> dict:
     """classify.detections for the live chain: classify.check_detection_rules, and `row_snr_db` refused, because the
     chain (either engine) never runs the row test it acts in; it stays usable through classify_tracks(linear=...)."""
@@ -448,6 +467,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     if c.get("multipath"):
         m = c["multipath"]
         o.update(multipath_max_excess_range=m["max_excess_range"], multipath_velocity=m["velocity"])
+    check_classify_fit(c)
+    o["classify_outlier_alpha"] = float(c["outlier_alpha"])      # always said: the C++ default is not assumed
     det = live_detection_rules(c.get("detections"))
     if det["min_mover_cells"] is not None:
         o["classify_min_mover_cells"] = det["min_mover_cells"]
@@ -617,6 +638,8 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
         out["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
     if "multipath_bearing" in o:
         out["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
+    if "classify_max_fit_rms_bearing" in o:
+        out["classify_max_fit_rms_bearing_deg"] = float(np.degrees(o.pop("classify_max_fit_rms_bearing")))
     # How a range cell is tested, always said: the program's own default is not assumed.
     multiscale = o.pop("cell_multiscale", False)
     out["cell_statistic"] = "peak" if o.pop("cell_peak", False) else ("multiscale" if multiscale else "mean")
@@ -1010,6 +1033,7 @@ class LiveChain:
                  report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
         self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
         live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
+        check_classify_fit(self.cfg["classify"])
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
         self.report_udp_max_bytes = int(report_udp_max_bytes)
         self.reports_split = 0                 # reports that went out as several datagrams
@@ -1236,6 +1260,7 @@ class LiveChain:
         self._row_tolerance = float(d["row_tolerance_m"])
         self._bearing_sigma = float(d["tracker_bearing_sigma"])      # rad, as derived: no trip through degrees
         self._multipath_bearing = float(d["multipath_bearing"])
+        self._fit_rms_bearing = float(d["classify_max_fit_rms_bearing"])      # rad, as derived
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=self._bearing_sigma,
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
@@ -1521,7 +1546,9 @@ class LiveChain:
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
         # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t)
+                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t,
+                                           outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
+                                           origin=(own[1], own[0]))
         track_extra = {}
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}
