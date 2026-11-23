@@ -2773,3 +2773,32 @@ for the chain and 7 threads did not help; Sensor Bridge 2.7.0 left its receiver 
 - Open: the receive tool still hangs to the test's timeout after heavy loss (quarter buffer, 5 of
   8 runs, job 6b0386c9130a00b5aa8190e2); filed separately.
 
+
+### D-163 Sensor Bridge receive always stops (owner's go-ahead, issue sonar-dkb)
+
+Since the first Sensor Bridge commit (4f080b1) `receive` hung, without statistics, when its stream
+ended before `--pings` pings were reported: heavy loss drops a whole ping, so only the idle watch
+could stop it, and its stop was never seen. Not introduced by D-161/D-162: the pre-session commit
+111b7c0 hung in 2 of 7 quarter-buffer runs (HF job 6b039cea130a00b5aa81c058), and the stop logic
+was unchanged from 111b7c0 to ec04d29. Cause: Sensor Bridge 2.7.0's receiver operator by default
+waits on an asynchronous condition that only a new frame sets, and Holoscan's greedy scheduler
+looks at it again only then, so a stop set once frames have stopped is never acted on (reproduced on
+the CPU with a stand-in source; py-spy on the hung GPU runs showed the scheduler waiting).
+- The receiver operator is built with `use_frame_ready_condition=False`; its compute waits at most
+  1 s for a frame. Sensor Bridge logs `Ingress frame timeout; ignoring.` once at the end of a stream.
+- `hsb.ReceiveStop`, applied by `HsbStopOp` on the scheduler's thread every 250 ms: stop once
+  reports plus dropped pings reach `--pings` ("pings"), or after `--idle` s with no frame ("idle"),
+  whatever was lost. The idle-watch thread is removed. Statistics gain `reports` and `stopped`.
+- Fewer pings reported than asked: a `receive: stopped short (...)` line with the loss counts on
+  stderr and exit status 3, so the loopback test fails with numbers instead of a timeout.
+- A second fault the hang had masked: an idle stop after the board has gone fails in Sensor Bridge's
+  `unconfigure()` (control-plane timeout) and its receiver thread cannot be joined. `receive` reports
+  it as `shutdown_error`, prints the statistics and ends with `os._exit`; a clean shutdown would need
+  a change inside Sensor Bridge. `serve --hold` keeps the emulated board up after its linger; the
+  loopback test passes `--hold 30`.
+- Measured on L4: quarter buffer 12 of 12 runs ended in 16 s; idle stops 4 of 4 at 53 s with
+  statistics; loopback test 9 of 9, worst receive delay 0.82-2.08 ms; full GPU suite 1814 passed,
+  92 skipped (6b03a7ae130a00b5aa81da2e).
+- Open: on the GPU the idle path ran only in runs set up for it (every lossy run stopped on
+  "pings"); `run_receiver` keeps each application object alive until the process ends (harmless for
+  the tool, grows if called repeatedly in one process).
