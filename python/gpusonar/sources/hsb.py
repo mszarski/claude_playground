@@ -686,6 +686,27 @@ def _proc_udp_sockets() -> dict:
     return out
 
 
+def set_chain_omp_threads(n: int) -> int | None:
+    """omp_set_num_threads(n) in the OpenMP runtime this process has loaded (libgomp or libomp): the thread
+    count of the parallel regions that the *calling* thread starts from now on (OpenMP's nthreads-var is per
+    thread; other threads keep theirs). `LiveChainOp` calls it from the thread that runs the chain, before
+    the chain's first ping, when `receive --chain-omp-threads` asks for it (sonar-ihd: with one OpenMP
+    thread per vCPU, flank.backprojection_map kept Sensor Bridge's receiver thread waiting 10-13 ms on an
+    8-vCPU L4 host and the socket overflowed). Returns n, or None when no OpenMP runtime is loaded."""
+    if int(n) < 1:
+        raise ValueError(f"OpenMP threads: {n} (at least 1)")
+    with open("/proc/self/maps") as f:
+        libs = {line.split()[-1] for line in f
+                if ("libgomp" in line or "libomp" in line or "libiomp" in line) and line.split()[-1].startswith("/")}
+    for path in sorted(libs):
+        try:
+            ctypes.CDLL(path).omp_set_num_threads(ctypes.c_int(int(n)))
+            return int(n)
+        except (OSError, AttributeError):
+            continue
+    return None
+
+
 def udp_counters() -> dict:
     """The namespace's UDP counters (/proc/net/snmp): RcvbufErrors counts datagrams a full receive
     buffer refused, SndbufErrors sends refused for want of buffer."""
@@ -826,8 +847,11 @@ if Operator is not None:
         engine), report file and report datagrams are the chain's. Keeps the reports, calls
         `on_report(report)` and `on_done()` after `n_pings`."""
 
-        def __init__(self, fragment, *args, chain=None, n_pings: int | None = None, on_report=None, on_done=None, **kwargs):
+        def __init__(self, fragment, *args, chain=None, n_pings: int | None = None, on_report=None, on_done=None,
+                     omp_threads: int | None = None, **kwargs):
             self.chain = chain
+            self._omp_threads = omp_threads    # opt-in: set_chain_omp_threads on this operator's thread before the first ping
+            self.omp_applied = None
             self.reports = []
             from collections import deque
             self.wall_ns = deque(maxlen=4096)  # (system-clock ns at the start, at the end) of the newest 4096 chain runs
@@ -842,6 +866,8 @@ if Operator is not None:
             message = op_input.receive("ping")
             if self._n is not None and len(self.reports) >= self._n:
                 return
+            if self._omp_threads is not None and self.omp_applied is None:
+                self.omp_applied = set_chain_omp_threads(self._omp_threads) or "no OpenMP runtime"
             t0 = time.time_ns()
             report = self.chain.process(message["record"])
             self.wall_ns.append((t0, time.time_ns()))
@@ -861,8 +887,10 @@ if Operator is not None:
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
                      n_pings: int | None = None, queue_frames: int = 256, idle_timeout: float | None = 15.0,
-                     on_report=None, receiver_affinity=None, socket_buffer: int | None = None, log_arrivals: bool = False):
+                     on_report=None, receiver_affinity=None, socket_buffer: int | None = None, log_arrivals: bool = False,
+                     chain_omp_threads: int | None = None):
             self.chain, self.receiver = chain, receiver
+            self._omp_threads = chain_omp_threads
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
             self._n, self._queue, self._idle = n_pings, int(queue_frames), idle_timeout
             self._on_report, self._affinity = on_report, receiver_affinity
@@ -909,7 +937,7 @@ if Operator is not None:
             self.frames_op = HsbFramesToPingsOp(self, receiver=self.receiver, cuda=self._cuda, socket_watch=self.socket_watch,
                                                 arrivals=self.arrivals, name="frames_to_pings")
             self.chain_op = LiveChainOp(self, chain=self.chain, n_pings=self._n, on_report=self._on_report,
-                                        on_done=self._finish, name="chain")
+                                        on_done=self._finish, omp_threads=self._omp_threads, name="chain")
             self.add_flow(rx, self.frames_op, {("output", "input")})
             self.add_flow(self.frames_op, self.chain_op, {("ping", "ping")})
             if self._idle:
@@ -949,6 +977,8 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
                              if k in udp1}
     stats["cpu"] = dict(cpu1, **{k + "_during": cpu1[k] - cpu0[k] for k in ("nr_throttled", "throttled_usec")
                                  if k in cpu1 and k in cpu0})
+    if app.chain_op.omp_applied is not None:
+        stats["chain_omp_threads"] = app.chain_op.omp_applied
     stats["chain_wall_ns"] = list(app.chain_op.wall_ns)
     if app.arrivals is not None:
         stats["arrivals"] = list(app.arrivals)

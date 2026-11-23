@@ -270,6 +270,11 @@ def test_tool_arguments(tmp_path, pings):
     plan = tool.receive_plan(a)
     assert plan["sonar"] == "popoto_long_range" and plan["chain"]["min_snr_db"] == 11.0 and plan["chain"]["engine"] == "cpp"
     assert plan["chain"]["bearings_deg"] == [-60.0, 60.0, 0.5] and plan["report"] == "r.jsonl" and plan["nav"] == {"port": 5702}
+    assert tool.parse(["receive", "--sonar", "flank_32"]).chain_omp_threads is None      # off by default: OpenMP as it is
+    assert tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", "4"]).chain_omp_threads == 4
+    for bad in ("0", "-2", "x"):
+        with pytest.raises(SystemExit):
+            tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", bad])
     a = tool.parse(["receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES), "--chain", json.dumps(CHAIN),
                     "--recording", str(tmp_path / "rec.h5")])
     plan = tool.receive_plan(a)
@@ -284,6 +289,37 @@ def test_tool_arguments(tmp_path, pings):
     w.close()
     records, interval = tool.serve_records(tool.parse(["serve", "--replay", str(tmp_path / "pings.h5")]))
     assert len(records) == 2 and interval is None and hsb.FrameStream(records, FRAME).tx[1] == int(INTERVAL * 64000)
+
+
+OMP_CHILD = r"""
+import ctypes, json, sys, threading
+import gpusonar  # noqa: F401  (loads the OpenMP runtime the library is built with)
+from gpusonar.sources import hsb
+libs = sorted({l.split()[-1] for l in open("/proc/self/maps") if ("libgomp" in l or "libomp" in l) and l.split()[-1].startswith("/")})
+omp = ctypes.CDLL(libs[0]) if libs else None
+before = omp.omp_get_max_threads() if omp else None
+got = {}
+def chain_thread():                     # as the chain's operator thread: applied there, before its first parallel region
+    got["applied"] = hsb.set_chain_omp_threads(int(sys.argv[1]))
+    got["after"] = omp.omp_get_max_threads() if omp else None
+t = threading.Thread(target=chain_thread)
+t.start(); t.join()
+print(json.dumps({"runtime": libs, "before": before, "main_after": omp.omp_get_max_threads() if omp else None, **got}))
+"""
+
+
+def test_chain_omp_threads_sets_openmps_thread_count_for_the_chains_thread():
+    """receive --chain-omp-threads N (sonar-ihd): OpenMP's thread count for parallel regions the chain's thread
+    starts is N once applied; other threads keep theirs. In a child process with OMP_NUM_THREADS unset."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("OMP_")}
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")])
+    out = subprocess.run([sys.executable, "-c", OMP_CHILD, "3"], capture_output=True, text=True, env=env, timeout=120)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    if not got["runtime"]:
+        pytest.skip("the library is built without OpenMP")
+    assert got["applied"] == 3 and got["after"] == 3
+    assert got["main_after"] == got["before"]            # the setting is the calling thread's, not the process's
 
 
 class FakeEmulation:
@@ -411,6 +447,25 @@ def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_pr
     return board, stats, receive, tmp_path / f"{tag}.jsonl"
 
 
+def receive_delays(tmp_path, tag):
+    """The receive delay in ms over the frames in both logs of a loopback: when
+    Sensor Bridge's receiver thread had a frame's last datagram (`received_ns`, its clock_gettime(CLOCK_REALTIME)
+    right after recv) minus when the board started sending that frame (`wall_ns` of the send log). Both
+    processes run on this host, so both are the same system clock: the sender takes its send times on
+    time.perf_counter() and maps them to CLOCK_REALTIME with one offset read at its first sent frame
+    (SendTiming.start), so there is no base to subtract; what the two clocks can drift apart over a run
+    (NTP slewing, at most 0.05 %, so up to 10 ms over a 20 s run in the worst case, usually microseconds) or
+    a step of the system clock would move the least and the median delay off the loopback's floor of a few
+    tenths of a millisecond (0.21-0.22 ms in 20 L4 runs), which the caller checks. Frames are matched by the
+    sender's frame number (the receiver's `frame_number` metadata); frame 0 is not in the send log.
+    Returns (worst, least, median, frames)."""
+    sent = {row[0]: row[1] for row in json.loads((tmp_path / f"{tag}_send.json").read_text())["rows"]}
+    got = json.loads((tmp_path / f"{tag}_arrivals.json").read_text())["rows"]
+    delays = [(row[1] - sent[row[0]]) / 1e6 for row in got if row[0] in sent]
+    assert len(delays) > 0.9 * len(got)
+    return max(delays), min(delays), float(np.median(delays)), len(delays)
+
+
 def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, tmp_path):
     reason = sensor_bridge_reason()
     if reason:
@@ -420,12 +475,23 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     # the chain ran on a ping when the board sent its owed frames back to back; with the board's spread
     # catch-up (the default) 20 real-time runs lost nothing, and a halved buffer still loses
     # (test_loopback_loss_study; DEPLOYMENT.md says what a deployed host should set).
+    # The chain's OpenMP runs on half the CPUs this process may use (sonar-ihd): with one OpenMP thread per vCPU,
+    # flank.backprojection_map kept Sensor Bridge's receiver thread waiting 10-13 ms on an 8-vCPU L4 host and the
+    # socket overflowed; with half, its worst delay was 1-3 ms in 16 runs. The socket buffer stays the default.
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
-    board, stats, receive, report = run_loopback(tmp_path, pings, pace, tag="hsb")
+    omp = max(1, len(os.sched_getaffinity(0)) // 2)
+    board, stats, receive, report = run_loopback(tmp_path, pings, pace, receive_args=("--chain-omp-threads", str(omp)), tag="hsb")
     print("sender:", board)
     print("transport:", stats)
+    assert stats.get("chain_omp_threads") in (omp, "no OpenMP runtime")
     assert stats["pings"] == N and stats["frames_lost"] == 0 and stats["frames_damaged"] == 0 and stats["dropped_pings"] == 0
     assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
+    # Headroom, so that a receiver stall the buffer still absorbed fails too: the worst receive delay.
+    worst, floor, median, n = receive_delays(tmp_path, "hsb")
+    print(f"receive delay over {n} frames: worst {worst:.2f} ms, median {median:.2f} ms, least {floor:.2f} ms "
+          f"(chain OpenMP threads {omp})")
+    assert -1.0 < floor and median < 2.0          # the two clocks agree (see receive_delays)
+    assert worst < 5.0
     # The same pings straight through the chain: framed and assembled here, no transport.
     direct_records = hsb.records_from_frames(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD), "flank_32", OVERRIDES)
     sent_samples = direct_records[0].samples.array.copy()            # the chain conditions records in place
