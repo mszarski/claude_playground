@@ -14,7 +14,7 @@ def merge_adapter(base: str, adapter: str, out_dir: str = "/tmp/merged_model") -
     from peft import PeftModel
     from trl.trainer.utils import create_model_from_path
 
-    merged = create_model_from_path(base, dtype=torch.bfloat16)
+    merged = create_model_from_path(base, dtype=torch.bfloat16, device_map="cpu")  # "auto" would spread it over the GPUs
     for spec in adapter.split(","):
         repo, sub = spec.strip().rsplit("/", 1)
         ckpt = os.path.join(snapshot_download(repo, allow_patterns=[f"{sub}/adapter_*"]), sub)
@@ -25,5 +25,10 @@ def merge_adapter(base: str, adapter: str, out_dir: str = "/tmp/merged_model") -
         if os.path.isfile(os.path.join(aux, f)) and not os.path.exists(os.path.join(out_dir, f)):
             shutil.copy(os.path.join(aux, f), out_dir)
     del merged
+    import gc
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()  # leave the GPUs free for vLLM / training
     print(f"merged {adapter} into {base} -> {out_dir}", flush=True)
     return out_dir
