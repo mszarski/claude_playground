@@ -906,6 +906,50 @@ Every candidate run through the HF router in fast (thinking-off) mode on the fir
 - **Inkling** (named in Figma's post) underperforms here even after the format fix, mostly on goal-level edits.
 - **Gemma-4-31B** is solid but weaker on unseen edit types; Granite struggles with the format.
 
+## Round 9: broad edit types, and brief reasoning (Gemma 4 31B, 3 seeds each)
+
+Training sets (4,418 rows each), built by `scripts/build_v9.py` from v8 with every row whose *effect* matches a
+held-out test type removed (`design_edit.leak`, 1,364 rows in v8):
+* **broad**: the teacher-written goal rows replaced by 2,097 rows over ~170 new edit types (`propose_types.py`,
+  `distill_heal.py --types`), a few dozen each.
+* **broad-think**: the same rows, each answer preceded by a <=35-word rationale in `<think>` tags (`add_rationales.py`).
+The planned *clean* arm was dropped to save cost. The first attempt of all runs was lost to the Hub storage quota
+(merged 62 GB checkpoints); training now pushes only the LoRA adapter (`--adapter-only`) and
+`eval_model.py --adapter` merges it at eval time.
+
+Exact match, mean of 3 seeds (± seed std):
+
+| Gemma 31B SFT | seen | paraphrased | goals | unseen v2 |
+|---|---|---|---|---|
+| v8 (trained on leaked rows) | 0.945 ± .007 | 0.888 ± .014 | **0.916** ± .025 | **0.810** ± .019 |
+| v9 broad | **0.955** ± .005 | 0.886 ± .009 | 0.827 ± .050 | 0.710 ± .007 |
+| v9 broad-think (scored as is) | 0.807 ± .107 | 0.763 ± .065 | 0.564 ± .277 | 0.657 ± .039 |
+| v9 broad-think (patch lines only) | 0.841 | 0.795 | 0.665 | 0.661 |
+
+Unseen and goal types, per kind (v8 / broad / broad-think as is):
+
+| kind | v8 | broad | broad-think |
+|---|---|---|---|
+| promote_button | 0.94 | 0.01 | 0.00 |
+| set_weight | 0.84 | 0.64 | 0.74 |
+| spread_out | 0.32 | **0.70** | 0.33 |
+| add_border | 0.70 | 0.77 | 0.74 |
+| duplicate_setting | 0.87 | 0.88 | 0.82 |
+| darken_text / set_width | 1.00 / 1.00 | 0.98 / 1.00 | 0.96 / 1.00 |
+| disable_button (goal) | 0.80 | 0.49 | 0.67 |
+| highlight_plan (goal) | 1.00 | 1.00 | 0.37 |
+| toggle_on (goal) | 0.94 | 0.99 | 0.66 |
+
+* **The v8 "generalization" was partly leakage.** The drops are concentrated in the kinds v8 had leaked teacher rows
+  for: promote_button 0.94 -> 0.01 (176 leaked rows), disable_button 0.80 -> 0.49 (54), set_weight 0.84 -> 0.64 (261).
+  Without promote_button, unseen is 0.80 (v8) vs 0.75 (broad).
+* **Breadth helps some genuinely unseen kinds** (spread_out +38, add_border +7) and keeps seen/paraphrased at v8 level,
+  but does not replace the leaked examples. Without a clean arm, breadth vs. no breadth is not separated.
+* **broad-think failed as a recipe.** The trained models never emit the `<think>` tags. Seeds 0 and 1 often write a
+  bare rationale and stop without a patch (14-40% of rows), and seed 2 ignores the rationale and answers directly.
+  The data and the chat-template rendering both contain the tags, so the cause is on the training or decoding side
+  and still needs a look before any reasoning-trained run is trusted.
+
 ## Does SFT hurt reasoning? Qwen SFT re-evaluated with thinking on
 
 The fine-tuned models were trained and tested with thinking off, so their unseen and goal scores were being
