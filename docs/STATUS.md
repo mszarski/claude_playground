@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-169); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-170); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -230,10 +230,11 @@ Grouped; within a group the most consequential first.
     2.5 dB (24.0 / 22.4 / 23.5 to 22.4 / 19.9 / 21.2 dB for one, two and three rows),
     `popoto_12km_2row` gives a depth on 2 pings of 6 (was 6 of 6), and those scenarios
     take 2.2 to 2.4 times as long to simulate.
-41. **The thinned `fls_120k_cluttered_seabed` test scene classes neither boat at
-    1496.8 m/s** (both `uncertain`; at 1500 m/s `static` and `line`). A 0.2 % change of
-    sound speed decides it. In the full-size scene (item 43) both boats keep their classes
-    (`mover` at 4.9 m/s, `static`).
+41. **Closed (D-170).** Since D-141 the thinned eight-ping `fls_120k_cluttered_seabed` classes
+    both boats at 1496.8 and 1500 m/s on seeds 61-67 (CPU; boat under way 4.7-5.5 m/s, true 5.0;
+    anchored boat static). The 0.2 % sound speed only re-drew each hull's interference; with
+    list-order association a wake track then took the hull's detections (sonar-9z8). Full size:
+    both boats right on 10 of 10 seeds.
 42. **Generated files regenerated after D-137 to D-143** (commit `e10b17f`, 2026-11-19 and
     20; RESULTS, "Generated files regenerated after D-137 to D-143", lists what moved in
     each). Every generated file named as stale here before is current: the 12 km study and
@@ -337,6 +338,17 @@ Grouped; within a group the most consequential first.
     - `flank_patrol`: the submarine's track 25.9 m from the truth (25.4).
     - `test_documented_full_size_classes` was changed for the cluttered scene's boat
       (`line`, at its speed) and no longer allows movers there that are not the boat.
+    - **Re-scored on 09583b6 (D-170; saved L4 captures, ten seeds, equal to
+      `classify_rules_eval_afe0806.json`).** Gone: the cluttered boat as `line` (a mover on
+      10/10 seeds with D-154's `row_snr_db 6`; 5/10 with the rules off) and the
+      `fls_170k_transit` anchored boat as `uncertain` (static on 10/10, D-155 scoring). Still
+      present: `fls_120k_rough_surface` movers off a moving object, 6 at the gallery's seed
+      (13 before D-157), 78 over ten seeds: specular points sliding on moving wave faces
+      52-118 m ahead, where the beam meets the surface; no track feature separates them from
+      the boat. Partly: `popoto_env_winter_sand_200m` ship 5.24 m/s at the gallery's seed
+      (true 6.0; 4.71 and 5.31 on two other seeds), from a stray detection taken at the
+      track's birth on ping 1; `classify.outlier_alpha: 0.01` (opt-in, D-159) gives 6.13 /
+      5.74 / 6.09 m/s.
 
 ### The 12 km design point
 

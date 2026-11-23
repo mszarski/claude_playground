@@ -2943,3 +2943,22 @@ detection 0.5 m astern of amidships against truth D-156 moved 0.74 m ahead along
   ownship's 2 m/s; fls_120k 0.06 s × v); the FLS slant-range placement, +h²/2R.
 - Test: `tests/python/test_lfm_range_doppler.py` holds the coupling at 2·f0·v·T/B within 5 % (ours,
   derived in its docstring). No default result moved; no HF job used.
+
+### D-170 FLS classes: what remains of sonar-9z8 and sonar-9ir (no change to the chain)
+
+Re-scored on 09583b6 from the 120 saved full-size L4 captures (simulated at e0d9665; nothing since
+touches the gallery's simulation, detector or tracker): identical to
+`classify_rules_eval_afe0806.json` in every grid cell. The planned GPU rerun did not run (L4
+capacity; job 6b049e57ca8b51043c3a4932 cancelled before it started).
+- sonar-9z8, gone since D-141: both boats of the thinned cluttered scene are right at 1496.8 and
+  1500 m/s (seeds 61-67, CPU). A 0.2 % sound speed changes two scatterers' relative two-way phase
+  by 2·f·d·Δ(1/c), one cycle at 3 m and 120 kHz, so each hull's interference is drawn afresh; with
+  list-order association a wake track then took the hull's detections (reproduced with
+  `association: in_order`). Guard: `test_realistic_scenes.py::test_cluttered_classes_do_not_turn_on_the_sound_speed`.
+- sonar-9ir: the cluttered boat as `line` is gone in the gallery since D-154 (live chain never runs
+  the corridor test); the `fls_170k_transit` anchored boat as `uncertain` is gone since D-155.
+  Kept as known limits, no classifier change: `fls_120k_rough_surface` glint movers (78 over ten
+  seeds, at the near edge of the surface footprint; fit RMS, extent, SNR, hits and speed/sigma
+  each separate at most 57 of 78 without losing a boat track, a threshold fitted to one scene),
+  and the winter-sand ship's speed (a stray detection 18-22 m beyond the hull at ping 1 on every
+  seed; the opt-in per-axis outlier test of D-159 removes it, its default stays the owner's call).
