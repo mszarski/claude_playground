@@ -906,6 +906,27 @@ Every candidate run through the HF router in fast (thinking-off) mode on the fir
 - **Inkling** (named in Figma's post) underperforms here even after the format fix, mostly on goal-level edits.
 - **Gemma-4-31B** is solid but weaker on unseen edit types; Granite struggles with the format.
 
+## Does SFT hurt reasoning? Qwen SFT re-evaluated with thinking on
+
+The fine-tuned models were trained and tested with thinking off, so their unseen and goal scores were being
+compared against plain Qwen *with* reasoning. `design-edit-sft27b` (trained no-think) re-evaluated with thinking on
+(`eval_model.py --vllm --max-new-tokens 4096 --max-model-len 8192 --tag think`; results in
+`design-edit-screens/mszarski__design-edit-sft27b/think/`). Exact match:
+
+| Qwen 27B | seen | paraphrased | goals | unseen v2 |
+|---|---|---|---|---|
+| Plain, no reasoning | 0.830 | 0.763 | 0.818 | 0.752 |
+| Plain, with reasoning (router) | 0.852 | 0.782 | **0.953** | **0.850** |
+| SFT, no reasoning | **0.976** | **0.935** | 0.829 | 0.764 |
+| SFT, with reasoning | 0.964 | 0.888 | 0.887 | 0.803 |
+
+* Turning reasoning on for the SFT model recovers part of the gain: +6 goals, +4 unseen, but −5 paraphrased.
+* It still trails plain Qwen with reasoning by 7 on goals and 5 on unseen. Its reasoning has collapsed to a
+  median of about 30 words (plain Qwen: ~650 tokens), often just "We need answer patch only."
+* So no-think SFT does cost some reasoning ability; nothing here gets the conventions *and* the reasoning gain.
+  Training on reasoning traces (round 9's broad-think arm) or RL with thinking on are the next things to try.
+* Caveat: the plain-with-reasoning row came from the router, not this harness.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
