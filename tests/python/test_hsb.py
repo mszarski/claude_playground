@@ -411,6 +411,8 @@ def test_tool_arguments(tmp_path, pings):
     plan = tool.receive_plan(a)
     assert plan["sonar"] == "popoto_long_range" and plan["chain"]["min_snr_db"] == 11.0 and plan["chain"]["engine"] == "cpp"
     assert plan["chain"]["bearings_deg"] == [-60.0, 60.0, 0.5] and plan["report"] == "r.jsonl" and plan["nav"] == {"port": 5702}
+    assert tool.parse(["serve", "--scenario", "flank_patrol"]).hold == 0.0                  # off by default
+    assert tool.parse(["serve", "--scenario", "flank_patrol", "--hold", "30"]).hold == 30.0
     assert tool.parse(["receive", "--sonar", "flank_32"]).chain_omp_threads is None      # off by default: OpenMP as it is
     assert tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", "4"]).chain_omp_threads == 4
     for bad in ("0", "-2", "x"):
@@ -511,6 +513,44 @@ def test_a_sender_that_falls_behind_bursts_unless_told_to_spread(pings, monkeypa
         print(catch_up, t)
 
 
+def test_the_emulated_board_stays_up_quiet_for_hold_seconds_after_its_linger(pings, monkeypatch):
+    """serve --hold (sonar-dkb): a board whose receiver is still connected after the linger stays up, sending
+    nothing, so a receiver that stops on its idle timeout can still switch the data channel off; a receiver
+    that disconnected during the linger ends it at once, as before."""
+    import types
+    monkeypatch.setenv("HSB_EMULATOR_UDP_SOCKET", "1")
+    package = types.ModuleType("hololink")
+    n_frames = hsb.FrameStream(copies(pings[:1]), FRAME, lead_seconds=0.05).n_frames
+    for hold, disconnect_at in ((0.0, None), (0.6, None), (0.6, 3)):
+        fake = FakeEmulation()
+        stopped = []
+        fake.HSBEmulator = type("HSBEmulator", (), {"start": lambda self: None, "stop": lambda self: stopped.append(time.perf_counter())})
+        if disconnect_at is not None:                   # the receiver disconnects a few frames into the linger
+            last = n_frames + disconnect_at
+
+            class Plane:
+                def __init__(self, *args):
+                    self.k = 0
+
+                def send(self, array):
+                    self.k += 1
+                    return 0 if self.k > last else array.size
+            fake.LinuxDataPlane = Plane
+        package.emulation = fake
+        monkeypatch.setitem(sys.modules, "hololink", package)
+        monkeypatch.setitem(sys.modules, "hololink.emulation", fake)
+        board = hsb.HsbBoardEmulator(copies(pings[:1]), FRAME, pace=1.0, lead_seconds=0.05, linger=0.05, hold=hold)
+        t0 = time.perf_counter()
+        out = board.run(connect_timeout=5.0)
+        t_end = stopped[-1] - t0
+        sending = board.stream.n_frames * board.stream.frame_seconds
+        print(hold, disconnect_at, round(t_end, 3), out["idle_frames_sent"])
+        if disconnect_at is None:
+            assert hold <= t_end - sending < hold + 0.4         # the linger (50 ms) and the hold, then the emulator stops
+        else:
+            assert t_end - sending < 0.3 and out["idle_frames_sent"] == disconnect_at   # disconnected in the linger: no hold
+
+
 def test_the_data_socket_watch_finds_the_receivers_socket_and_counts_its_drops():
     """DataSocketWatch picks the UDP socket with LinuxReceiver's 100 ms receive timeout and reads the
     kernel's drop count for it (/proc/net/udp); a datagram refused by a full buffer is counted."""
@@ -567,7 +607,7 @@ def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_pr
     w.close()
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
     serve = subprocess.Popen([*serve_prefix, sys.executable, str(TOOL), "serve", "--replay", str(tmp_path / "pings.h5"),
-                              "--frame-samples", str(FRAME), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20",
+                              "--frame-samples", str(FRAME), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20", "--hold", "30",
                               "--send-log", str(tmp_path / f"{tag}_send.json"), *serve_args],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     try:

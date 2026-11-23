@@ -14,6 +14,7 @@ the same --frame-samples. Sensor Bridge itself: tools/build_hsb.sh.
 """
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,9 @@ def parse(argv=None):
     s.add_argument("--pace", type=float, default=1.0, help="multiple of real time")
     s.add_argument("--lead", type=float, default=1.0, help="seconds of stream before the first transmit")
     s.add_argument("--linger", type=float, default=10.0, help="seconds to keep streaming after the last ping")
+    s.add_argument("--hold", type=float, default=0.0,
+                   help="seconds the board stays up, quiet, after the linger when the receiver is still connected "
+                        "(a real board that stops streaming stays on the network)")
     s.add_argument("--interval", type=float, help="seconds between transmits (default: the records' transmit times)")
     s.add_argument("--connect-timeout", type=float, default=120.0)
     s.add_argument("--catch-up", choices=hsb.CATCH_UP, default="spread",
@@ -121,7 +125,7 @@ def main(argv=None):
     if args.role == "serve":
         records, interval = serve_records(args)
         board = hsb.HsbBoardEmulator(records, args.frame_samples, ip=args.ip, pace=args.pace, lead_seconds=args.lead,
-                                     ping_interval=interval, linger=args.linger, catch_up=args.catch_up)
+                                     ping_interval=interval, linger=args.linger, catch_up=args.catch_up, hold=args.hold)
         print("hsb: " + json.dumps(board.run(connect_timeout=args.connect_timeout, log=lambda t: print(t, flush=True))))
         if args.send_log:
             board.timing.dump(args.send_log)
@@ -147,8 +151,13 @@ def main(argv=None):
     short = hsb.stopped_short(stats, args.pings)
     if short:                     # the statistics are out; say what was missing and fail (sonar-dkb)
         print(f"receive: {short}", file=sys.stderr, flush=True)
-        return STOPPED_SHORT
-    return 0
+    if stats.get("shutdown_error"):
+        # The board stopped answering while the receiver shut down: Sensor Bridge's receiver thread is
+        # still running and cannot be joined, so end the process here (the outputs are closed).
+        print(f"receive: the board did not answer at shutdown ({stats['shutdown_error']})", file=sys.stderr, flush=True)
+        sys.stdout.flush()
+        os._exit(STOPPED_SHORT if short else 0)
+    return STOPPED_SHORT if short else 0
 
 
 if __name__ == "__main__":

@@ -502,18 +502,21 @@ class HsbBoardEmulator:
     for a receiver to configure the data channel, then sends every frame paced to `pace` times
     real time, and keeps the stream going with idle frames until the receiver disconnects or
     `linger` seconds pass (a receiver still has to talk to the board to shut down cleanly).
+    With `hold`, a board whose receiver is still connected after the linger stays up, quiet, that
+    many seconds more, as a real board that stops streaming stays on the network: a receiver that
+    stops for want of frames (its idle timeout) can still switch the data channel off.
     The emulator's data socket is a raw IP socket, so the process needs CAP_NET_RAW (root).
     """
 
     def __init__(self, records, frame_samples: int = FRAME_SAMPLES, ip: str = "127.0.0.1", pace: float = 1.0,
                  lead_seconds: float = 1.0, ping_interval: float | None = None, linger: float = 10.0,
-                 catch_up: str = "spread", **stream_options):
+                 catch_up: str = "spread", hold: float = 0.0, **stream_options):
         if pace <= 0.0:
             raise ValueError("pace is a multiple of real time and must be positive")
         if catch_up not in CATCH_UP:
             raise ValueError(f"catch_up is one of {CATCH_UP}")
         self.stream = FrameStream(records, frame_samples, ping_interval=ping_interval, lead_seconds=lead_seconds, **stream_options)
-        self.ip, self.pace, self.linger, self.catch_up = ip, float(pace), float(linger), catch_up
+        self.ip, self.pace, self.linger, self.catch_up, self.hold = ip, float(pace), float(linger), catch_up, float(hold)
         self.sent = self.idle_sent = 0
         self.timing = SendTiming()
 
@@ -575,16 +578,21 @@ class HsbBoardEmulator:
                 self.sent += 1
             else:
                 k = self.stream.n_frames
+                connected = True
                 for frame in self.stream.idle():
                     if (k - self.stream.n_frames) * period > self.linger:
                         break
                     self._wait(t0, k, period)
                     t_send = time.perf_counter()
                     if data_plane.send(np.frombuffer(frame, dtype=np.uint8).copy()) <= 0:
+                        connected = False
                         break
                     self.timing.sent(k, t_send, time.perf_counter())
                     self.idle_sent += 1
                     k += 1
+                if connected and self.hold > 0:
+                    log(f"lingered {self.linger:.0f} s; the board stays up, quiet, {self.hold:.0f} s more")
+                    time.sleep(self.hold)
         finally:
             self.timing.stop()
             hsb.stop()
@@ -1013,6 +1021,9 @@ if Operator is not None:
                                         name="stop"))
 
 
+_KEEP = []
+
+
 def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = None, hololink_ip: str = "127.0.0.1",
                  frame_samples: int = FRAME_SAMPLES, n_pings: int | None = None, sound_speed: float | None = None,
                  find_timeout: float = 30.0, on_report=None, **app_options) -> tuple[list, dict]:
@@ -1025,6 +1036,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
     receiver = FrameReceiver(sonar, sonar_overrides, sound_speed=sound_speed, frame_samples=frame_samples)
     cuda = CudaDriver()
     udp0, cpu0 = udp_counters(), cpu_throttling()
+    shutdown_error = None
     try:
         metadata = hololink.Enumerator.find_channel(channel_ip=hololink_ip, timeout=hololink.Timeout(float(find_timeout)))
         channel = hololink.DataChannel(metadata)
@@ -1034,6 +1046,15 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
         try:
             board.reset()
             app.run()
+        except Exception as e:  # noqa: BLE001
+            # After the stop rule fired, an error from the operators' stop is the board no longer answering
+            # (Sensor Bridge's receiver switches the data channel off over the control plane, 2.7.0
+            # data_channel.cpp unconfigure): the run is over, so it is reported, not raised. Its receiver
+            # thread may then still be running; the caller should end the process without unwinding it
+            # (`receive` does, os._exit after its statistics).
+            if app.stop_reason is None:
+                raise
+            shutdown_error = f"{type(e).__name__}: {e}"
         finally:
             board.stop()
     finally:
@@ -1042,6 +1063,9 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
     stats = receiver.stats()
     stats["reports"] = len(app.chain_op.reports)
     stats["stopped"] = app.stop_reason or "ended"        # pings, idle, or the application ended by itself
+    if shutdown_error:
+        stats["shutdown_error"] = shutdown_error
+    _KEEP.append(app)     # not destroyed before the process ends: after a failed stop its receiver thread is still joinable
     udp1, cpu1 = udp_counters(), cpu_throttling()
     stats["socket"] = app.socket_watch.stats()
     stats["udp_counters"] = {k: udp1[k] - udp0.get(k, 0) for k in ("InDatagrams", "InErrors", "RcvbufErrors", "SndbufErrors")
