@@ -681,6 +681,44 @@ def receive_delays(tmp_path, tag):
     return max(delays), min(delays), float(np.median(delays)), len(delays)
 
 
+def usable_cpus(cgroup_root="/sys/fs/cgroup") -> int:
+    """CPUs this process may use: its affinity, capped by a cgroup CPU quota rounded up (cgroup v2 cpu.max, or v1
+    cpu.cfs_quota_us / cpu.cfs_period_us). A container's vCPUs are often a quota: a Hugging Face a10g-small job
+    (4 vCPUs) lists the host's 96 CPUs in its affinity (job 6b04b897c97b8ed4fcd689e1), sonar-8rj."""
+    import math
+    n = len(os.sched_getaffinity(0))
+    root = pathlib.Path(cgroup_root)
+    try:
+        quota, period = (root / "cpu.max").read_text().split()[:2]
+    except (OSError, ValueError):
+        try:
+            quota = (root / "cpu" / "cpu.cfs_quota_us").read_text().strip()
+            period = (root / "cpu" / "cpu.cfs_period_us").read_text().strip()
+        except OSError:
+            return n
+    if quota in ("max", "-1") or float(period) <= 0:
+        return n
+    return max(1, min(n, math.ceil(float(quota) / float(period))))
+
+
+def test_usable_cpus_honours_a_cgroup_quota(tmp_path):
+    n = len(os.sched_getaffinity(0))
+    assert usable_cpus(tmp_path / "none") == n                       # no cgroup files: the affinity
+    v2 = tmp_path / "v2"
+    v2.mkdir()
+    (v2 / "cpu.max").write_text("max 100000\n")
+    assert usable_cpus(v2) == n                                       # no quota
+    (v2 / "cpu.max").write_text("150000 100000\n")
+    assert usable_cpus(v2) == min(n, 2)                               # 1.5 CPUs of quota: 2, rounded up
+    v1 = tmp_path / "v1" / "cpu"
+    v1.mkdir(parents=True)
+    (v1 / "cpu.cfs_quota_us").write_text("100000\n")
+    (v1 / "cpu.cfs_period_us").write_text("100000\n")
+    assert usable_cpus(tmp_path / "v1") == 1
+    (v1 / "cpu.cfs_quota_us").write_text("-1\n")
+    assert usable_cpus(tmp_path / "v1") == n
+
+
 def loopback_against_direct(tmp_path, pings, engine, scenario=None, tag="hsb"):
     """A real-time loopback (`serve` replaying `pings`, or with `scenario` simulating them itself) received with
     the chain's `engine`, held to: nothing lost, the worst receive delay, and the reports of the same pings
@@ -693,8 +731,9 @@ def loopback_against_direct(tmp_path, pings, engine, scenario=None, tag="hsb"):
     # The chain's OpenMP runs on half the CPUs this process may use (sonar-ihd): with one OpenMP thread per vCPU,
     # flank.backprojection_map kept Sensor Bridge's receiver thread waiting 10-13 ms on an 8-vCPU L4 host and the
     # socket overflowed; with half, its worst delay was 1-3 ms in 16 runs. The socket buffer stays the default.
+    # Half of the CPUs the container is given (usable_cpus: a CPU quota caps the affinity; sonar-8rj).
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
-    omp = max(1, len(os.sched_getaffinity(0)) // 2)
+    omp = max(1, usable_cpus() // 2)
     receive_args = ("--chain-omp-threads", str(omp)) + (("--engine", engine) if engine != "python" else ())
     board, stats, receive, report = run_loopback(tmp_path, pings, pace, receive_args=receive_args, tag=tag, scenario=scenario)
     print("sender:", board)
