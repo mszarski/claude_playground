@@ -283,6 +283,27 @@ def test_clutter_tracks_are_mostly_not_called_movers():
     assert c["counts"]["static"] + c["counts"]["line"] >= 0.4 * m["confirmed_tracks"]
 
 
+def test_cluttered_classes_do_not_turn_on_the_sound_speed():
+    """Issue sonar-9z8: at 1500 m/s the same thinned eight-ping scene as above gives the same classes. Before D-141 the
+    0.2 % change of sound speed decided them: it re-draws every hull's interference (two scatterers 3 m apart in range
+    change their relative two-way phase by 2 f d (1/c1 - 1/c2) = 1.0 cycle at 120 kHz), and in list-order association a
+    track in the wake took the hull's detections (the scored track 20.9 m from the boat's centre at its first ping,
+    0.1 m at its seventh, 1.9 m/s, `uncertain`; at 1500 m/s the hull kept its own track, 8 of 8 hits). Measured since
+    (CPU, seeds 61-67): both boats right at both speeds on every seed, the boat under way 4.7 to 5.5 m/s (true 5.0)."""
+    cfg = load_scenario_config("fls_120k_cluttered_seabed",
+                               overrides={"environment": {"sound_speed_m_s": 1500.0,
+                                                          "overrides": {"sound_speed_m_s": "sonar-9z8: a 0.2 % change"}}})
+    assert cfg["environment"]["sound_speed"] == 1500.0
+    gallery.QUICK["fls_120k_cluttered_seabed"](cfg)
+    cfg["pings"]["count"] = 8
+    fig, m = gallery.RUNNERS["fls_120k_cluttered_seabed"]("fls_120k_cluttered_seabed", cfg, HOST, True)[:2]
+    gallery.plt.close(fig)
+    c = m["classification"]
+    assert c["targets"]["boat_at_anchor"]["kind"] == "static" and c["targets"]["boat_at_anchor"]["speed_m_s"] < 0.6
+    assert c["targets"]["boat_under_way"]["kind"] == "mover"
+    assert c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(5.0, rel=0.2)
+
+
 @pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
 def test_the_distant_ship_is_a_mover_and_nothing_else_far_from_it_is():
     c = quick("popoto_far_mover", pings=6)["classification"]
