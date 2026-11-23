@@ -274,7 +274,7 @@ def test_the_default_budget_count_on_a_second_map_at_cpu_scale():
     noise-only pings of the second map of one row (the flank array: 15 samples in a 2 m cell, a cell mean of 10.8 looks;
     D-134's constants were measured on 8 and 5.5), at a budget of 3 false detections a ping so that 12 pings can count
     them (36 expected, 17 % of statistical error): between 0.55 and 1.5 of the budget. At the default budget the count
-    takes a hundred thousand pings a map on a GPU (GPUSONAR_JOB=falsealarm; the numbers are in docs/RESULTS.md). Also
+    takes a hundred thousand pings a map on a GPU (GPUSONAR_JOB=falsealarm; its numbers are in the tool's docstring). Also
     the interval the tool states (exact Poisson), that ping i's noise does not depend on the threads drawing it, and
     that the replay of the counted pings on the host's Python chain counts the same and splits them between the tests."""
     tool = _search_factor_tool()

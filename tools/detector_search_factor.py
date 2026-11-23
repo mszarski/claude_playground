@@ -33,8 +33,16 @@ false detections per ping against the budget.
 
 The table in libs/live/include/sonar/live/detector.hpp was made with the default arguments, starting from a flat factor
 of 2.5 (`--search-factor 2.5`, growth laws applied to the thresholds used); run it again and compare before changing
-the map (bearing step, samples per cell, aperture window) or the grouping. Nothing is measured at the default budget of
-one false detection in a thousand pings: that would take a hundred thousand pings.
+the map (bearing step, samples per cell, aperture window) or the grouping.
+
+At the default budget (one false detection in a thousand pings) the count is `--at-default` below: measured on an L4 in
+2026-11 (issue sonar-ydi; HF jobs 6b03d2718d268c0fbd23ad8d, 6b03efcc130a00b5aa8290a6, 6b04188d7a38dcb7ff6e8e25), the whole
+detector gave 0.79, 0.90, 0.80 of the budget for one, two, three rows of the long-range array (100 000, 100 000, 89 594
+pings), 0.76 on the flank array (100 000), 1.01 and 0.73 on the static two- and three-row arrays (41 553, 40 000). The
+95 % intervals of the two one-row counts (0.63 to 0.98, 0.60 to 0.95) lie just under the budget, the others hold it; the
+constants were kept (under the budget is the safe side, and the threshold it costs is under 0.1 dB). Split between the
+tests (`--replay`), the single sample ran 0.64 to 0.70 of its share (pooled 0.67, 0.57 to 0.79) and the cell mean 0.90 to
+1.35 (two rows pooled 1.26, 1.01 to 1.55).
 
 `--at-default` is that count (issue sonar-ydi): the whole detector as shipped, through the C++ chain (engine cpp, the map
 and the detector's statistic on the GPU with --backend cuda), at the default budget, on a hundred thousand noise-only
