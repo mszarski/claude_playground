@@ -11,6 +11,9 @@ connects; it needs root (the emulator's data socket is a raw socket). `receive` 
 device. CONFIG is a deployment file like configs/deploy/popoto_vehicle.yaml: its source names the
 sonar, its chain, nav and output sections are used as by tools/sonar_live.py. Both sides must use
 the same --frame-samples. Sensor Bridge itself: tools/build_hsb.sh.
+`serve --scenario` simulates every ping before it announces the board; `receive` looks for the board
+for --find-timeout seconds (default 30), so start it after serve says it is waiting for a receiver,
+or give it longer.
 """
 import argparse
 import json
@@ -32,6 +35,13 @@ def positive_int(text: str) -> int:
     value = int(text)
     if value < 1:
         raise argparse.ArgumentTypeError(f"{text}: at least 1")
+    return value
+
+
+def positive_float(text: str) -> float:
+    value = float(text)
+    if not value > 0.0:
+        raise argparse.ArgumentTypeError(f"{text}: more than 0")
     return value
 
 
@@ -68,6 +78,9 @@ def parse(argv=None):
     r.add_argument("--pings", type=int, help="stop once this many pings are accounted for, reported or dropped (default: "
                    "when the stream goes quiet); fewer reported exits with status 3 after printing the statistics")
     r.add_argument("--idle", type=float, default=15.0, help="seconds without a frame before stopping, whatever was lost")
+    r.add_argument("--find-timeout", type=positive_float, default=30.0, metavar="S",
+                   help="seconds to look for the board before giving up (default 30). A board that comes up later, "
+                        "such as `serve --scenario` still simulating its pings, needs more")
     r.add_argument("--report", help="JSON lines file, one report per ping")
     r.add_argument("--recording", help="container file of the raw pings")
     r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
@@ -123,7 +136,10 @@ def receive_plan(args) -> dict:
 def main(argv=None):
     args = parse(argv)
     if args.role == "serve":
+        t0 = time.perf_counter()
         records, interval = serve_records(args)
+        if args.scenario:     # the board is announced only after this: a receive started with it may need --find-timeout
+            print(f"simulated {len(records)} pings of {args.scenario} in {time.perf_counter() - t0:.1f} s", flush=True)
         board = hsb.HsbBoardEmulator(records, args.frame_samples, ip=args.ip, pace=args.pace, lead_seconds=args.lead,
                                      ping_interval=interval, linger=args.linger, catch_up=args.catch_up, hold=args.hold)
         print("hsb: " + json.dumps(board.run(connect_timeout=args.connect_timeout, log=lambda t: print(t, flush=True))))
@@ -139,7 +155,8 @@ def main(argv=None):
                    report_udp=plan["report_udp"], taps=plan["taps"]) as chain:
         _, stats = hsb.run_receiver(chain, plan["sonar"], plan["sonar_overrides"], hololink_ip=args.hololink,
                                     frame_samples=args.frame_samples, n_pings=args.pings, sound_speed=plan["sound_speed"],
-                                    idle_timeout=args.idle, queue_frames=args.queue, receiver_affinity=args.receiver_core,
+                                    find_timeout=args.find_timeout, idle_timeout=args.idle, queue_frames=args.queue,
+                                    receiver_affinity=args.receiver_core,
                                     socket_buffer=args.socket_buffer, log_arrivals=bool(args.arrival_log),
                                     chain_omp_threads=args.chain_omp_threads,
                                     on_report=None if args.quiet else (lambda r: print(ping_line(r), flush=True)))
