@@ -240,6 +240,14 @@ recording, wire format, and two defaults not applied (16 and 18). Already decide
 owner: two rows recommended on the face; the FLS merge stays off; the deployment defaults
 were accepted; the tracker takes the most probable pairs first (D-141).
 
+Tasks waiting on owner input. Each file states first what is unknown, then the questions to
+ask before any code, the current state of the code, a plan and the rules:
+
+| Issue | Task file | Blocked on |
+| --- | --- | --- |
+| `sonar-o7m` | `docs/tasks/VEHICLE_ADAPTERS.md` | the Popoto boards' output format, timing and transmit signal; the SPRINT-Nav interface document; the clock between them |
+| `sonar-sul` | `docs/tasks/REAL_DATA.md` | real data: an FLS log or SAS image, a Popoto recording, with their instruments, levels, geometry and navigation |
+
 ## 10. Design numbers to keep straight
 
 - 12 km link-budget margins for one, two and three rows at 197 dB: −1.1 / +1.4 / +2.9 dB;
