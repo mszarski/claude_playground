@@ -2548,7 +2548,7 @@ track ran about 47 m ahead along its course on every seed (the sonar-960 diagnos
   cross-range error, median -54.6 -> -32.0 m, |range| 11.8 -> 4.4 m; nine seeds shift by +43 to
   +59 m (v·R/c), seed 56 is worse (+9 -> -91 m) by track hopping between arrivals (sonar-960, open).
   fls_170k_traffic `boat_closing` 3.2 -> 4.6 m: its detections sit about 4.6 m behind it in range,
-  which transmit stamping had hidden by 1.45 m (sonar-9r2). flank_patrol (seeds 17-26, host):
+  which transmit stamping had hidden by 1.45 m (sonar-9r2; D-169: they are on its propeller, not a lag). flank_patrol (seeds 17-26, host):
   submarine cross-range -0.3 m (was +5.6), report error 29.5 m (29.3) dominated by a +29 m range
   bias (sonar-a98); no class or count changes.
 - **The live chain at 12 km** (`popoto_vehicle` chain, seeds 51-60, host; Python, C++ and
@@ -2924,3 +2924,22 @@ second one (`flank_32` for one row: 15 samples a cell, 10.8 looks; the deployed 
   `GPUSONAR_JOB=falsealarm` in `tools/gpu_job.sh`. Test:
   `test_detector.py::test_the_default_budget_count_on_a_second_map_at_cpu_scale`. No default,
   figure or JSON changed. Full GPU suite 1855 passed, 92 skipped (HF job 6b0444b4a02d1cf5a7b80bb9).
+
+### D-169 fls_170k_traffic boat_closing's 4.6 m is its propeller, not a lag (issue sonar-9r2; no change to the chain)
+
+The boat's main detection on every ping is the propeller cluster under the stern (TS −5 dB at
+0.45 L astern, `scene.py`); the bow points at the sonar, so it lies 5.3 m beyond amidships in range.
+Measured with the gallery's FLS pipeline (seed 63, host): propeller alone +4.40 m, the same as the
+full scene (+4.34 m); hull alone puts the track on the bow (−0.33 m); a stationary point target at
+propeller depth +0.61 m. Breakdown of +4.34 m: propeller place +5.28 m, FLS slant range read as
+horizontal +0.47 m (h²/2R, h = 19.4 m at 400 m) plus cell quantisation +0.14 m, LFM range-Doppler
+coupling −1.49 m (up minus down chirp −2.62 m measured against 2·f0·v·T/B = 2.70 m expected),
+tracker +0.07 m. Timing (D-156) is correct. Since D-157 the score is the distance from the hull
+outline: 0.00 m on all ten seeds for every boat of fls_170k_traffic and for
+fls_120k_cluttered_seabed's boat_under_way (from the centre 4.63 and 0.64 m; the latter is its
+detection 0.5 m astern of amidships against truth D-156 moved 0.74 m ahead along the course).
+- Not compensated (follow-ups): the LFM coupling, a closing target with the up-chirp reads
+  f0·v·T/B nearer (fls_170k 0.17 s × v: 1.35 m at 8 m/s, 0.34 m on every static object ahead from
+  ownship's 2 m/s; fls_120k 0.06 s × v); the FLS slant-range placement, +h²/2R.
+- Test: `tests/python/test_lfm_range_doppler.py` holds the coupling at 2·f0·v·T/B within 5 % (ours,
+  derived in its docstring). No default result moved; no HF job used.

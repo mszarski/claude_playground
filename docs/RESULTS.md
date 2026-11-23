@@ -1715,7 +1715,7 @@ same scenes, gallery pipeline (`docs/benchmarks/classify_rules_eval_c148f56.json
 `classify_rules_eval_a479519.json`; L4, job 6b017453efaf5e14f4b4ecc2): no target class changes,
 false movers 158 -> 152, `popoto_12km` report error at the last ping (median over seeds) range
 |11.8| -> |4.4| m and cross-range -54.6 -> -32.0 m (seed 56: +9.0 -> -91.4 m, track hopping),
-`fls_170k_traffic` `boat_closing` 3.2 -> 4.6 m (a range offset of its detections, sonar-9r2).
+`fls_170k_traffic` `boat_closing` 3.2 -> 4.6 m from the boat's centre (its detections are on its propeller, 5.3 m astern of amidships; outline error 0.00 m; D-169).
 The live chain at 12 km (`configs/deploy/popoto_vehicle.yaml`, seeds 51-60, host; Python, C++
 and `sonar_live` within 5e-6 m of each other): range error +49.7 -> +49.5 m, cross-range -23.1 ->
 +26.1 m, total 55.1 -> 56.2 m, speed 6.1 m/s in both (true 6.0) (sonar-2hz). `flank_patrol`
