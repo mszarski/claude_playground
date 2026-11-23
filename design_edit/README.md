@@ -950,6 +950,26 @@ Unseen and goal types, per kind (v8 / broad / broad-think as is):
   The data and the chat-template rendering both contain the tags, so the cause is on the training or decoding side
   and still needs a look before any reasoning-trained run is trusted.
 
+**Follow-up: the broad-think format failure was a train/inference prompt mismatch.** With `enable_thinking=False`,
+Gemma 4's chat template ends the *generation* prompt with an empty thought block (`<|channel>thought\n<channel|>`)
+but renders the full conversation without it. TRL's prompt-completion path therefore trained every Gemma no-think
+SFT run (v7, v8, v9) on a prompt the model never sees at inference. `train_sft.py --match-inference-prompt`
+pre-renders the exact generation prompt (verified token-identical on 50/50 rows for Gemma and Qwen).
+
+One broad-think seed retrained with the fix (`design-edit-sft-gemma-v9-broad-think-fix-s0`): every output now has a
+closed `<think>` block (median 29 words) followed by the patch. Scores (exact; broad = 3-seed mean):
+
+| | seen | paraphrased | goals | unseen v2 |
+|---|---|---|---|---|
+| broad | 0.955 | 0.886 | 0.827 | 0.710 |
+| broad-think, fixed (1 seed) | 0.940 | 0.853 | 0.760 | 0.683 |
+
+Brief reasoning still does not help. Per kind it gains on set_weight (+9) and disable_button (+7) but loses on
+spread_out (0.70 -> 0.35) and highlight_plan (1.00 -> 0.72), and the failures show why: the rationale pulls the model
+back to its priors. It reasons in CSS ("change justify to `space-between`", which is not a value of this language;
+`justify=between` is also missing from SYSTEM_PROMPT) and over-edits ("also restyle the plan's button").
+Short rationales seem to cost conventions without buying the planning that long reasoning gives plain Qwen.
+
 ## Does SFT hurt reasoning? Qwen SFT re-evaluated with thinking on
 
 The fine-tuned models were trained and tested with thinking off, so their unseen and goal scores were being
