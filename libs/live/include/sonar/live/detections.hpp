@@ -58,6 +58,10 @@ struct HistoryPoint {
   /// ping it missed. classify_tracks fits these (D-157). A history whose rows all lack one (built by hand from
   /// positions) is fitted through x, y as before.
   double mx = std::numeric_limits<double>::quiet_NaN(), my = std::numeric_limits<double>::quiet_NaN();
+  /// s: the time of the ping this row was added on (the time given to Tracker::update, the transmit time), where `time`
+  /// is the detection's own, transmit + R/c (D-156; detect.py Track.pings). classify_tracks refuses a velocity from echo
+  /// delays alone with it (sonar-054). NaN: none recorded (a history built by hand), not tested.
+  double ping = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct Track {

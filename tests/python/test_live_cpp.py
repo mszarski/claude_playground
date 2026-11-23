@@ -189,6 +189,35 @@ def test_both_trackers_never_move_a_missed_track_back_in_time(association):
     assert held >= 2
 
 
+@pytest.mark.parametrize("interval", [0.0, 2.0])
+def test_both_classifiers_refuse_a_velocity_from_echo_delays_alone(interval):
+    """sonar-054, both engines: pings at one transmit time (interval 0, a source without timestamps), detections at
+    transmit + R/c. Each track records the ping time of each row (Track.pings, HistoryPoint::ping), and neither classifier
+    fits a velocity (0, sigma infinite) where the transmit times span no more than the echo delays; with pings 2 s apart
+    both fit, alike. (Before the fix both fitted about 1.5 km/s and more at interval 0: test_detect.)"""
+    from test_detect import SCENARIO_TRACKER, same_transmit_time_pings
+    py, cpp = detect.Tracker(**SCENARIO_TRACKER), core.LiveTracker(**SCENARIO_TRACKER)
+    for k, (t, dets) in enumerate(same_transmit_time_pings()):
+        tp = t + interval * k
+        dets = [detect.Detection(d.range, d.bearing, d.snr_db, d.cells, time=tp + (d.time - t)) for d in dets]
+        a = py.update(tp, dets)
+        b = cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells) for d in dets], [d.time for d in dets])
+        assert [tr.id for tr in a] == [cr["id"] for cr in b]
+        for tr, cr in zip(a, b):
+            assert tr.pings == cr["pings"] == [interval * j for j in range(len(tr.history))]
+    assert len(a) == 2
+    want = classify.classify_tracks(a, min_speed=0.5, max_fit_rms=2.5, time=tp)
+    got = cpp.classify(min_speed=0.5, max_fit_rms=2.5, time=tp)
+    assert [(c.id, c.kind) for c in want] == [(c["id"], c["kind"]) for c in got]
+    for w, g in zip(want, got):
+        assert np.allclose(w.position, g["position"], atol=1e-8) and np.allclose(w.velocity, g["velocity"], atol=1e-8)
+        assert w.speed_sigma == pytest.approx(g["speed_sigma"], rel=1e-8)
+        if interval == 0.0:
+            assert g["velocity"] == (0.0, 0.0) and g["speed_sigma"] == np.inf and g["kind"] != "mover"
+        else:
+            assert 0.0 < g["speed"] < 0.5
+
+
 def test_both_classifiers_move_a_short_track_to_the_time_asked():
     """A confirmed track with fewer than three points has no fitted line; with `time` given both engines report its last
     point moved to that time by its Kalman state's velocity, not the last point itself (D-156: that is the ship

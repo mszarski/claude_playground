@@ -36,9 +36,30 @@ bool any_measured(const std::vector<HistoryPoint>& h) {
 std::vector<HistoryPoint> fit_points(const std::vector<HistoryPoint>& h) {
   std::vector<HistoryPoint> pts;
   for (const auto& p : h) {
-    if (std::isfinite(p.mx) && std::isfinite(p.my)) pts.push_back({p.time, p.mx, p.my});
+    if (!(std::isfinite(p.mx) && std::isfinite(p.my))) continue;
+    HistoryPoint q{p.time, p.mx, p.my};
+    q.ping = p.ping;
+    pts.push_back(q);
   }
   return any_measured(h) ? pts : h;
+}
+
+// The fitted points' times differ by their echo delays as much as by their pings (sonar-054, ours; classify.py
+// _delays_only): each time is the ping's transmit time plus R/c (D-156), and the transmit times span no more than the
+// delays (time - ping) do. A line through such points measures range against R/c, a radial speed of the order of the
+// sound speed (pings without timestamps, all at one time, gave tens of km/s). A real target's delays span
+// ptp(R)/c <= (|dR/dt| / c) ptp(pings), less than ptp(pings) at any radial speed below c. A row without a ping time (NaN,
+// a history built by hand): not tested.
+bool delays_only(const std::vector<HistoryPoint>& h) {
+  double p_min = std::numeric_limits<double>::infinity(), p_max = -p_min, d_min = p_min, d_max = -p_min;
+  for (const auto& p : h) {
+    if (!std::isfinite(p.ping)) return false;
+    p_min = std::min(p_min, p.ping);
+    p_max = std::max(p_max, p.ping);
+    d_min = std::min(d_min, p.time - p.ping);
+    d_max = std::max(d_max, p.time - p.ping);
+  }
+  return !h.empty() && p_max - p_min <= d_max - d_min;
 }
 
 // P(|T| > t) for Student's t with an integer nu >= 1 degrees of freedom (classify.py t_two_sided): the finite sums of
@@ -143,7 +164,8 @@ std::int64_t outlier(const std::vector<HistoryPoint>& h, double alpha, double ox
 
 // Least-squares straight line through (time, x, y) of fit_points(h); the position on it at `at` (NaN, or any value that
 // is not finite: at the time of the last row of `history`, the last ping). With fewer than three points, or no time between them (max - min, as
-// numpy.ptp), no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
+// numpy.ptp), or transmit times (HistoryPoint::ping) that span no more than the echo delays (delays_only, sonar-054),
+// no fitted velocity and the last row of `h` (its filtered position), moved to `at` by (vx, vy), the track's
 // Kalman state's velocity (classify.py fit_velocity). Through measured positions, the one point `outlier` finds at
 // `outlier_alpha` about the sonar at (ox, oy) is left out (sonar-ljh). `n_fit` receives the number of points fitted.
 Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx, double vy, double outlier_alpha, double ox, double oy,
@@ -158,7 +180,7 @@ Fit fit_velocity(const std::vector<HistoryPoint>& history, double at, double vx,
     t_min = std::min(t_min, p.time);
     t_max = std::max(t_max, p.time);
   }
-  if (n < 3 || t_max - t_min <= 0.0) {
+  if (n < 3 || t_max - t_min <= 0.0 || delays_only(h)) {
     if (std::isfinite(at) && std::isfinite(vx) && std::isfinite(vy)) {
       f.x += (at - history.back().time) * vx;
       f.y += (at - history.back().time) * vy;

@@ -310,6 +310,10 @@ class Track:
                                                   # there, in the same frame; (NaN, NaN) on a row of a miss. Empty: none
                                                   # recorded (a track built from positions alone; classify then fits
                                                   # `history`, as before)
+    pings: list = field(default_factory=list)     # s, per history row: the time of the ping it was added on (the time given
+                                                  # to `Tracker.update`, the transmit time), where `history` holds the
+                                                  # detection's own, transmit + R/c (D-156). classify uses it to refuse a
+                                                  # velocity from echo delays alone (sonar-054). Empty: none recorded
     snr: list = field(default_factory=list)       # SNR (dB) of each detection it took
     cells: list = field(default_factory=list)     # flagged map cells of each detection it took (Detection.cells)
     depth: float = float("nan")                   # m, from the detections that carried one
@@ -424,6 +428,7 @@ class Tracker:
                 t.state, t.cov, t.depth_var = predicted(ti, time)
                 t.time = time
             t.history.append((t.time, float(t.state[0]), float(t.state[1])))
+            t.pings.append(float(time))
             z = self._took.get(t.id)
             t.measured.append((float(z[0]), float(z[1])) if z is not None else (float("nan"), float("nan")))
         self.tracks = [t for t in self.tracks if t.misses <= self.max_misses]
@@ -435,6 +440,7 @@ class Tracker:
             xy = d.xy()
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov, time=whens[j])
             tr.history.append((whens[j], float(xy[0]), float(xy[1])))
+            tr.pings.append(float(time))
             tr.measured.append((float(xy[0]), float(xy[1])))
             tr.snr.append(d.snr_db)
             tr.cells.append(int(d.cells))
