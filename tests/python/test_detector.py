@@ -45,12 +45,12 @@ def at(r, bearing_deg, z=0.0):
     return [r * np.sin(b), r * np.cos(b), z]
 
 
-def ping(sonar, points, ts_db, seed, noise=NOISE, sequence=0):
+def ping(sonar, points, ts_db, seed, noise=NOISE, sequence=0, interval_ns=PING_INTERVAL_NS):
     scene = Scene()
     for p, ts in zip(points, np.broadcast_to(ts_db, len(points))):
         scene.add_points([p], target_strength_db=float(ts))
     return simulate_ping(sonar, make_pose(**POSE), scene, noise_rms=noise, rng=np.random.default_rng(seed), sequence=sequence,
-                         time_ns=sequence * PING_INTERVAL_NS, **KW)
+                         time_ns=sequence * interval_ns, **KW)
 
 
 def budget_snr_db(sonar, r, bearing_deg, ts_db=0.0, noise=NOISE, seed=1):
@@ -382,6 +382,34 @@ def test_two_targets_thirty_metres_apart_are_two_tracks_and_a_strong_one_is_one(
                 # 2.0 m before the peak (D-158; the centroid is within 0.02 m).
                 assert d["range_m"] == pytest.approx(1298.0, abs=0.25), d
             assert len(reps[-1]["tracks"]) == 1
+
+
+def test_pings_without_timestamps_give_tracks_no_fitted_velocity(sonar):
+    """sonar-054: the two-target pings of the test above all at transmit time 0 (a source without timestamps). With D-156
+    each detection is at transmit + R/c, so a track's points differ in time only by dR/c; the line through them measured
+    range against R/c. With the centroid range (`cfar.range_estimate: centroid`; about 0.01 m of scatter) the C++ engine
+    gave 118 and 48 km/s and reported the tracks 103 and 43 km out (the issue saw 39 and 66 km/s before D-158). The
+    default leading edge falls on the same sample every ping here, so the times were equal and the old test (no time
+    between the points) already held. Both engines, both range estimates, now give the two tracks no fitted velocity
+    (vx = vy = speed 0, not a mover) at the targets' ranges."""
+    pair = [ping(sonar, [at(1300.0, 3.0), at(1330.0, 3.0)], [0.0, 0.0], 200 + i, sequence=i, interval_ns=0) for i in range(4)]
+    for estimate, want in (("centroid", [1300, 1330]), (None, [1299, 1329])):
+        reports = {}
+        for engine in ("cpp", "python"):
+            cfg = {"cell_statistic": "multiscale", "backend": "host", "engine": engine}
+            if estimate is not None:
+                cfg["cfar"] = {"range_estimate": estimate}
+            with LiveChain(cfg) as chain:
+                reps = chain.run([r.copy() for r in pair])
+            assert [len(r["detections"]) for r in reps] == [2, 2, 2, 2], engine
+            tracks = reps[-1]["tracks"]
+            assert len(tracks) == 2 and sorted(round(t["range_m"]) for t in tracks) == want, (engine, estimate, tracks)
+            for t in tracks:
+                assert t["vx"] == t["vy"] == t["speed_m_s"] == 0.0 and t["kind"] != "mover", (engine, estimate, t)
+            reports[engine] = reps
+        for a, b in zip(reports["cpp"], reports["python"]):
+            assert [(t["id"], t["kind"]) for t in a["tracks"]] == [(t["id"], t["kind"]) for t in b["tracks"]]
+            np.testing.assert_allclose([t["range_m"] for t in a["tracks"]], [t["range_m"] for t in b["tracks"]], atol=1e-3)
 
 
 # --- the detector as it was, and the engines ---------------------------------------------------------------------------

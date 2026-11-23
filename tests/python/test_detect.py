@@ -396,6 +396,75 @@ def test_a_detection_time_that_is_not_finite_is_the_pings(association):
         assert [(c.id, c.kind, c.position, c.velocity) for c in want] == [(c.id, c.kind, c.position, c.velocity) for c in nan]
 
 
+def same_transmit_time_pings(n=6, c=1500.0, seed=54):
+    """sonar-054: pings that all carry one transmit time (0 s: a source without timestamps), each with two standing
+    targets at 1300 and 1330 m, 0.3 m of position noise; each detection stamped transmit + R/c (D-156), so the points of a
+    track differ in time only by their echo delays, dR/c, about 1e-4 s. Per ping (transmit time, detections)."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for _ in range(n):
+        dets = []
+        for r0, b0 in ((1300.0, np.radians(3.0)), (1330.0, np.radians(3.0))):
+            x, y = r0 * np.cos(b0) + 0.3 * rng.standard_normal(), r0 * np.sin(b0) + 0.3 * rng.standard_normal()
+            r = float(np.hypot(x, y))
+            dets.append(detect.Detection(r, float(np.arctan2(y, x)), 20.0, 4, time=0.0 + r / c))
+        out.append((0.0, dets))
+    return out
+
+
+def test_pings_at_one_transmit_time_give_no_fitted_velocity():
+    """sonar-054. With D-156 a point's time is transmit + R/c; pings at one transmit time leave only the echo delays
+    between a track's points, and the line through them measured range against R/c: a radial speed of the order of c
+    (the issue: 39 and 66 km/s in the chain). Now the fit is refused when the transmit times span no more than the
+    delays do (classify._delays_only): no fitted velocity (0), not a mover, the last point as with a short track. The
+    same detections on pings 2 s apart are fitted (two static tracks, well under 0.5 m/s)."""
+    from gpusonar import classify
+    for interval, want_fit in ((0.0, False), (2.0, True)):
+        tracker = detect.Tracker(**SCENARIO_TRACKER)
+        for k, (t, dets) in enumerate(same_transmit_time_pings()):
+            tp = t + interval * k
+            tracks = tracker.update(tp, [detect.Detection(d.range, d.bearing, d.snr_db, d.cells, time=tp + (d.time - t)) for d in dets])
+        assert len(tracks) == 2 and all(tr.pings == [interval * k for k in range(6)] for tr in tracks)
+        classes = classify.classify_tracks(tracks, min_speed=0.5, max_fit_rms=2.5, time=tp)
+        if want_fit:
+            assert all(c.speed < 0.5 and np.isfinite(c.speed_sigma) for c in classes)
+            continue
+        for c, tr in zip(classes, tracks):
+            assert c.velocity == (0.0, 0.0) and c.speed == 0.0 and c.speed_sigma == np.inf and c.kind != "mover"
+            # Without the ping times (the rule before), the same track fitted at about the sound speed or more.
+            import dataclasses
+            (old,) = classify.classify_tracks([dataclasses.replace(tr, pings=[])], min_speed=0.5, time=tp)
+            assert old.speed > 1000.0
+
+
+def test_ping_times_change_no_fit_when_transmit_times_increase():
+    """sonar-054: on pings with increasing transmit times the delay test never refuses a fit, so the classes are those of
+    the same tracks without their ping times (the rule before), bit for bit: the tracker scenario with each detection
+    stamped transmit + R/c, the 12 km mover every 20 s and every 5 s (shorter than R/c), and the tracker scenario
+    without detection times."""
+    import dataclasses
+    from gpusonar import classify
+    for stamped in (True, False):
+        tracker = detect.Tracker(**SCENARIO_TRACKER)
+        for t, dets in tracker_scenario():
+            tracks = tracker.update(t, [detect.Detection(*d, time=t + d[0] / 1500.0 if stamped else None) for d in dets])
+        cases = [(tracks, t)]
+        for interval in (20.0, 5.0):
+            tr12 = detect.Tracker(**LONG_RANGE_TRACKER)
+            for tp, d, _, _ in long_range_mover(n=14, interval=interval, drop=(4,)):
+                got = tr12.update(tp, [] if d is None else [d])
+            cases.append((got, tp))
+        for got, at in cases:
+            assert got and all(len(tr.pings) == len(tr.history) for tr in got)
+            for when in (None, at):
+                for alpha in (0.0, 0.01):
+                    new = classify.classify_tracks(got, min_speed=0.5, max_fit_rms=2.5, time=when, outlier_alpha=alpha)
+                    old = classify.classify_tracks([dataclasses.replace(tr, pings=[]) for tr in got], min_speed=0.5,
+                                                   max_fit_rms=2.5, time=when, outlier_alpha=alpha)
+                    assert new == old
+                    assert any(c.speed > 0.0 for c in new)
+
+
 def test_a_missed_track_is_never_moved_back_and_its_depth_variance_stays_positive():
     """D-156 with a ping interval (5 s) shorter than R/c (8 s at 12 km): a track that took a detection at t_k + R/c and
     misses ping k+1 already holds later than t_{k+1}; it keeps its state, time and depth variance (it is not predicted

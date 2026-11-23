@@ -35,6 +35,9 @@ py::dict track_dict(const live::Track& t) {
   py::list m;   // the measured position of each history row, NaN on a miss (detect.py Track.measured; D-157)
   for (const auto& p : t.history) m.append(py::make_tuple(p.mx, p.my));
   d["measured"] = m;
+  py::list pings;   // the ping (transmit) time of each history row (detect.py Track.pings; sonar-054)
+  for (const auto& p : t.history) pings.append(p.ping);
+  d["pings"] = pings;
   d["snr"] = t.snr;
   d["cells"] = t.cells;
   d["time"] = t.time;

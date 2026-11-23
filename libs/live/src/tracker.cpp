@@ -220,7 +220,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       t.depth_var = pr.depth_var;
       t.time = time;
     }
-    t.history.push_back({t.time, t.state[0], t.state[1], took[ti][0], took[ti][1]});
+    t.history.push_back({t.time, t.state[0], t.state[1], took[ti][0], took[ti][1], time});
   }
   tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [this](const Track& t) { return t.misses > opt_.max_misses; }),
                 tracks_.end());
@@ -236,7 +236,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p.setZero();
     p.topLeftCorner<2, 2>() = measurement_cov(d, opt_);
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
-    tr.history.push_back({when[j], p0[0], p0[1], p0[0], p0[1]});
+    tr.history.push_back({when[j], p0[0], p0[1], p0[0], p0[1], time});
     tr.snr.push_back(d.snr_db);
     tr.cells.push_back(d.cells);
     take_depth(tr, d);

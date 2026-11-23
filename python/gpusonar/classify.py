@@ -164,11 +164,28 @@ def _outlier(t: np.ndarray, xy: np.ndarray, alpha: float, origin=(0.0, 0.0)) -> 
     return best if t_two_sided(float(np.sqrt(best_t2)), nu) < alpha / (n * tested) else None
 
 
-def _fit(history, at, velocity, measured, outlier_alpha, origin=(0.0, 0.0)):
+def _delays_only(t: np.ndarray, pings: np.ndarray | None) -> bool:
+    """The fitted points' times differ by their echo delays as much as by their pings (sonar-054, ours): each point's time is
+    its ping's transmit time plus its delay R/c (D-156), and the transmit times span no more than the delays do,
+    ptp(pings) <= ptp(t - pings). A line through such points measures range against R/c, a radial speed of the order of
+    the sound speed: pings that all carry one transmit time (a source without timestamps) gave tens of km/s. A real
+    target never trips it: its delays span ptp(R)/c <= (|dR/dt| / c) ptp(pings), less than ptp(pings) at any radial
+    speed below c. No ping times recorded (None, empty, or a row without one): not tested, as before."""
+    if pings is None or not len(pings) or not np.all(np.isfinite(pings)):
+        return False
+    return bool(np.ptp(pings) <= np.ptp(t - pings))
+
+
+def _fit(history, at, velocity, measured, outlier_alpha, origin=(0.0, 0.0), pings=None):
     """fit_velocity's line, and the number of points it went through."""
     h = np.asarray(history, dtype=float)
     t, xy = h[:, 0], h[:, 1:3]
     last_t, last = t[-1], xy[-1]
+    p = None
+    if pings is not None and len(pings):
+        p = np.asarray(pings, dtype=float).ravel()
+        if len(p) != len(t):
+            raise ValueError(f"fit_velocity: {len(p)} ping times for {len(t)} history rows")
     from_measured = False
     if measured is not None and len(measured):
         m = np.asarray(measured, dtype=float).reshape(-1, 2)
@@ -177,8 +194,9 @@ def _fit(history, at, velocity, measured, outlier_alpha, origin=(0.0, 0.0)):
         if not np.isnan(m).all():                # all NaN: none recorded, as an empty list (classify.cpp the same)
             ok = np.all(np.isfinite(m), axis=1)
             t, xy = t[ok], m[ok]
+            p = None if p is None else p[ok]
             from_measured = True
-    if len(t) < 3 or np.ptp(t) <= 0.0:
+    if len(t) < 3 or np.ptp(t) <= 0.0 or _delays_only(t, p):
         pos = last
         if _given(at) and velocity is not None and np.all(np.isfinite(velocity)):
             pos = pos + (float(at) - last_t) * np.asarray(velocity, dtype=float)
@@ -201,11 +219,15 @@ def _fit(history, at, velocity, measured, outlier_alpha, origin=(0.0, 0.0)):
 
 
 def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
-                 outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0)) -> tuple[np.ndarray, np.ndarray, float, float]:
+                 outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0), pings=None) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Least-squares straight line through (time, x, y) points.
     Returns the position on the line at `at` (s; None or NaN: at the time of the last row of `history`), velocity, RMS residual and the
     velocity's sigma. With fewer than three points, or no time between them (max - min), no fitted velocity and the
     last point, moved to `at` by `velocity` ((vx, vy), the track's Kalman state's) when both are given.
+
+    `pings` (a track's `Track.pings`: the transmit time of each row of `history`; sonar-054): also no fitted velocity
+    when the fitted points' transmit times span no more than their echo delays (row time less ping time) do
+    (`_delays_only`): pings that all carry one transmit time. None or empty: not tested.
 
     `measured` (a track's `Track.measured`: (x, y) per row of `history`, NaN on a row of a miss): the line goes through
     the measured positions at their rows' times, the rows without one (not finite) left out (D-157: the filtered
@@ -220,14 +242,14 @@ def fit_velocity(history, at: float | None = None, velocity=None, measured=None,
     track) otherwise pulls the line by its leverage at the end of the track. Filtered history is never tested: its
     points are not independent. `origin` ((x, y) in the track's frame): where the sonar is, which sets the range and
     cross-range axes the test takes the residuals in (`_outlier`); (0, 0), the frame's origin, by default."""
-    return _fit(history, at, velocity, measured, outlier_alpha, (0.0, 0.0) if origin is None else origin)[:4]
+    return _fit(history, at, velocity, measured, outlier_alpha, (0.0, 0.0) if origin is None else origin, pings)[:4]
 
 
 def fitted_points(track, outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0)) -> int:
     """How many points `fit_velocity` fits for a track: its measured rows (`Track.measured`, D-157), less a point the
     outlier test leaves out (`outlier_alpha`, about `origin`), or its history rows when it records none."""
     return int(_fit(track.history, None, None, getattr(track, "measured", None), outlier_alpha,
-                    (0.0, 0.0) if origin is None else origin)[4])
+                    (0.0, 0.0) if origin is None else origin, getattr(track, "pings", None))[4])
 
 
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
@@ -253,7 +275,9 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     point (its last ping, also when it missed it), which is the ping's time wherever detections carry no time of their own; NaN as None (the C++ engine's NaN). The
     rules that compare positions (row, echo grouping) then compare them at one time. A track too short for a fit (fewer
     than three points) is moved from its last point to `time` by its Kalman state's velocity (`state[2:4]`), when it
-    carries one.
+    carries one. So is a track whose points' transmit times (`Track.pings`) span no more than their echo delays
+    (sonar-054, `fit_velocity`): pings without timestamps (all at one time) give it no fitted velocity (speed 0), and it
+    is never a mover.
 
     The fitted line, and so every position, velocity, fit_rms and speed_sigma here, goes through the positions the
     track MEASURED (`Track.measured`: the detections it took, at their times), not its filtered history (D-157); a
@@ -283,7 +307,7 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     for tr in tracks:
         state = getattr(tr, "state", None)
         pos, v, rms, sigma, n_fit = _fit(tr.history, time, None if state is None or len(state) < 4 else state[2:4],
-                                         getattr(tr, "measured", None), outlier_alpha, here)
+                                         getattr(tr, "measured", None), outlier_alpha, here, getattr(tr, "pings", None))
         speed = float(np.hypot(*v))
         n = len(tr.history)
         # The fit's scatter is itself estimated from few points (2m - 4 degrees of freedom, m the points fitted: the
