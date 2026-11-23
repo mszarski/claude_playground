@@ -785,6 +785,28 @@ that, with ping-interval jitter not yet seen, happens to be near d intervals is 
 d - 1 pings lost (an index skip over 1.6 intervals with steady intervals before it counts one);
 a real loss with jitter beyond half an interval is not counted.
 
+How `receive` stops (issue sonar-dkb). It stops once `--pings` pings are accounted for,
+whether reported by the chain or counted as dropped. It also stops when no frame has arrived for
+`--idle` seconds (default 15), whatever was lost. A stream that never starts stops the same way.
+Then it gives up what is still awaited (`finish()`), prints its statistics with
+`"stopped": "pings"` or `"idle"` and `"reports"`, and exits.
+If it reported fewer than `--pings` pings, it also writes
+`receive: stopped short (<reason>): <n> of <N> pings reported; dropped ..., discarded at
+stop ..., frames lost ...` to standard error and exits with status 3. A test or a supervisor
+then fails on the loss, with its numbers.
+
+Before this, a stream that ended before all its pings were reported left `receive` running
+for ever, without statistics. In the loopback test that happened at a quarter of the socket
+buffer: 5 of 8 runs on L4 (job `6b0386c9130a00b5aa8190e2`). The cause:
+by default Sensor Bridge's receiver operator waits on an asynchronous condition that only a new
+frame sets, and Holoscan's greedy scheduler looks at that operator again only then. So once
+frames stopped, switching the receiver off from the idle watch's thread was never seen.
+`receive` now builds the receiver operator with `use_frame_ready_condition=False`. Its
+compute then waits at most 1 s for a frame and returns, and Sensor Bridge logs
+`Ingress frame timeout; ignoring.` once when the stream ends. The stop rule
+(`hsb.ReceiveStop`) runs on the scheduler's own thread, four times a second
+(`HsbStopOp`, a periodic condition).
+
 Pings come out in transmit order; one waits only while an earlier one is undecided, at most
 2 frames, and at most 2 pings are open at once. A ping transmitted before the previous
 window has closed (overlapping pings) gives the previous ping up at once, as before. Until
