@@ -13,6 +13,13 @@ source:
 nav:                             # the vehicle's navigation: JSON datagrams (gpusonar/live.py, NavListener)
   port: 5702                     # {"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}, NED metres, radians
   # static: {x: 0.0, y: 0.0, z: 10.0, yaw: 0.0}     # instead, for a bench or a moored array
+  # The navigation unit to the array (docs/CONFIGURATION.md, nav.lever_arm_m): UNCONFIRMED, not surveyed yet, so
+  # left at the default, zero: the array is taken to sit at the unit's reference point, in the unit's axes.
+  # Uncomment and fill in from the survey:
+  # lever_arm_m: [0.0, 0.0, 0.0]     # unconfirmed: the array's reference point from the unit's, in the unit's body axes
+  #                                  # (x forward, y starboard, z down), m
+  # mount_rpy_deg: [0.0, 0.0, 0.0]   # unconfirmed: roll, pitch, yaw of the array's axes against the unit's, degrees,
+  #                                  # yaw, then pitch, then roll (ASASIN Eq. 2 order, as the datagram's attitude)
 
 chain:                           # gpusonar/live.py; anything left out keeps its default
   bearings_deg: [-60.0, 60.0, 0.5]
