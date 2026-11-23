@@ -942,9 +942,9 @@ Unseen and goal types, per kind (v8 / broad / broad-think as is):
 
 * **The v8 "generalization" was partly leakage.** The drops are concentrated in the kinds v8 had leaked teacher rows
   for: promote_button 0.94 -> 0.01 (176 leaked rows), disable_button 0.80 -> 0.49 (54), set_weight 0.84 -> 0.64 (261).
-  Without promote_button, unseen is 0.80 (v8) vs 0.75 (broad).
-* **Breadth helps some genuinely unseen kinds** (spread_out +38, add_border +7) and keeps seen/paraphrased at v8 level,
-  but does not replace the leaked examples. Without a clean arm, breadth vs. no breadth is not separated.
+  Leaving out promote_button, broad is *ahead* on unseen: 0.827 vs 0.789 for v8.
+* **Breadth helps genuinely unseen kinds** (spread_out +38, add_border +7) and keeps seen/paraphrased at v8 level;
+  it cannot teach a convention that only the leaked rows showed (promote_button: drop the outline *and* fill). Without a clean arm, breadth vs. no breadth is not separated.
 * **broad-think failed as a recipe.** The trained models never emit the `<think>` tags. Seeds 0 and 1 often write a
   bare rationale and stop without a patch (14-40% of rows), and seed 2 ignores the rationale and answers directly.
   The data and the chat-template rendering both contain the tags, so the cause is on the training or decoding side
