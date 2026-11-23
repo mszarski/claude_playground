@@ -127,18 +127,55 @@ def test_two_ships_at_different_bearings_keep_their_own_groups():
 
 
 def test_a_group_grows_through_any_member_not_only_the_anchor():
-    """A chain: the anchor A (strongest) and B within the gates of each other, A and C not (1200 m apart in range, the
-    gate 800), B and C within. The group grows from A through B to C: one object. Measured to the anchor alone, C was
-    left a second mover (popoto_12km seeds 3 and 9)."""
-    tracks = [arrival(1, 6000.0, 4.0, 22.0), arrival(2, 6600.0, 4.0, 14.0), arrival(3, 7200.0, 4.0, 13.0)]
+    """A chain within one gate of the object: the anchor (strongest, 6750 m) and the object (6000 m) within the gates of
+    each other, and a short track at 5900 m, uncertain, within the gates of the object but 850 m from the anchor (the
+    gate 800). The group grows from the anchor through the object to it: one object. Measured to the anchor alone, such
+    a track was left out (popoto_12km seeds 3 and 9)."""
+    tracks = [arrival(1, 6750.0, 4.0, 22.0), arrival(2, 6000.0, 4.0, 14.0), arrival(3, 5900.0, 4.0, 13.0, n=3)]
     out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
-    assert out[1].kind == "mover" and out[1].parent is None
-    assert (out[2].kind, out[2].parent) == ("multipath", 1) and (out[3].kind, out[3].parent) == ("multipath", 1)
+    assert out[2].kind == "mover" and out[2].parent is None
+    assert (out[1].kind, out[1].parent) == ("multipath", 2) and (out[3].kind, out[3].parent) == ("multipath", 2)
     # The same chain in velocity: C differs from A by 3 m/s (gate 2.5), from B by 1.5.
     tracks = [arrival(1, 6000.0, 4.0, 22.0), arrival(2, 6200.0, 4.0, 14.0, velocity=(0.0, -7.5)),
               arrival(3, 6400.0, 4.0, 13.0, velocity=(0.0, -9.0))]
     out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
     assert [(out[i].kind, out[i].parent) for i in (1, 2, 3)] == [("mover", None), ("multipath", 1), ("multipath", 1)]
+
+
+def test_a_chain_in_range_reaches_no_farther_than_one_gate_from_the_object():
+    """sonar-a5x. Arrivals 600 m apart in range, the gate 800: A (6000 m, the strongest) and B (6600 m) are one
+    object, C (7200 m) is 1200 m beyond A, more than one gate, and is an object of its own. Before, the group grew from A
+    through B to C and C was A's multipath."""
+    tracks = [arrival(1, 6000.0, 4.0, 22.0), arrival(2, 6600.0, 4.0, 14.0), arrival(3, 7200.0, 4.0, 13.0)]
+    out = {c.id: c for c in classify.classify_tracks(tracks, **SHIP_KW)}
+    assert [(out[i].kind, out[i].parent) for i in (1, 2, 3)] == [("mover", None), ("multipath", 1), ("mover", None)]
+
+
+def ship_pair(gap, strong_in_b):
+    """Two ships at one bearing and velocity, B `gap` m beyond A, each seen as three arrivals over 120 m (the spread of
+    the popoto_12km ship's arrivals at 12 km); A's last arrival is within one gate (800 m) of B's first when gap < 920."""
+    snr_a, snr_b = ((22.0, 14.0, 12.0), (15.0, 13.0, 12.0)) if not strong_in_b else ((15.0, 13.0, 12.0), (13.0, 25.0, 12.0))
+    a = [arrival(1 + i, 6000.0 + 60.0 * i, 4.0, s) for i, s in enumerate(snr_a)]
+    b = [arrival(11 + i, 6000.0 + gap + 60.0 * i, 4.0, s) for i, s in enumerate(snr_b)]
+    return a + b
+
+
+@pytest.mark.parametrize("strong_in_b", [False, True])
+def test_two_ships_at_one_bearing_and_velocity_farther_apart_than_one_gate_are_two_objects(strong_in_b):
+    """sonar-a5x. B 850 m beyond A: A's last arrival (6120 m) is within the gate of B's first (6850 m), so the group
+    grown transitively took both ships as one object, A's earliest arrival, with B's three arrivals its multipath
+    (measured the same on the ten popoto_12km captures with the ship's own tracks copied 800 to 900 m beyond: one object
+    on every seed). Now each is its own object with its own echoes, whichever ship holds the strongest arrival (when it
+    is B's, the anchor lies beyond A's object and groups again from what is left)."""
+    out = {c.id: c for c in classify.classify_tracks(ship_pair(850.0, strong_in_b), **SHIP_KW)}
+    assert (out[1].kind, out[1].parent) == ("mover", None) and (out[11].kind, out[11].parent) == ("mover", None)
+    assert all((out[i].kind, out[i].parent) == ("multipath", 1) for i in (2, 3))
+    assert all((out[i].kind, out[i].parent) == ("multipath", 11) for i in (12, 13))
+    # Within one gate (700 m) they are one object, as D-155 states, but no arrival of B beyond the gate is A's echo.
+    out = {c.id: c for c in classify.classify_tracks(ship_pair(700.0, strong_in_b), **SHIP_KW)}
+    assert (out[1].kind, out[1].parent) == ("mover", None)
+    assert all((out[i].kind, out[i].parent) == ("multipath", 1) for i in (2, 3, 11, 12))     # 700 and 760 m beyond A
+    assert out[13].parent != 1                                                                 # 820 m beyond A
 
 
 def test_an_anchor_without_a_range_is_left_alone():

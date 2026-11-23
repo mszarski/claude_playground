@@ -60,6 +60,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENES = ("fls_120k_cluttered_seabed", "fls_120k_rough_surface", "fls_170k_traffic", "fls_120k_transit",
           "fls_170k_transit", "fls_330k_transit", "popoto_12km", "popoto_far_mover", "popoto_env_winter_sand_200m",
           "popoto_env_gravel_30m", "popoto_env_summer_mud_60m", "popoto_env_deep_silt_1000m")
+# Study scenes, not in the gallery: name -> the gallery runner that runs them (--scenes names them).
+# popoto_12km_two_ships: two ships at one bearing and velocity 850 m apart, the echo grouping chain-merge test (sonar-a5x).
+STUDY_SCENES = {"popoto_12km_two_ships": "run_popoto_far"}
 MIN_MOVER_CELLS = (None, 3, 4, 5, 6, 8)
 ROW_SNR_DB = (None, 3, 6)
 
@@ -386,7 +389,7 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
             gallery.QUICK[name](cfg)
         t0 = time.perf_counter()
         be = core.Backend.Cuda if backend == "cuda" else core.Backend.Host
-        out = gallery.RUNNERS[name](name, cfg, be, quick)
+        out = (gallery.RUNNERS.get(name) or getattr(gallery, STUDY_SCENES[name]))(name, cfg, be, quick)
         plt.close(out[0])
         seconds = time.perf_counter() - t0
     finally:

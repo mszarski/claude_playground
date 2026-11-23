@@ -369,7 +369,13 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         # match a member but not the anchor as second movers: popoto_12km seeds 3 and 9). A track still uncertain is not
         # made the object (a four-point track's fit is poor), but it can be a member. The cost: two objects at one bearing
         # and velocity within max_excess_range in either direction are one object (before: only one farther out than a
-        # stronger one), and, the growth being transitive, a chain of tracks can link objects farther apart than one gate.
+        # stronger one).
+        # A group extends no farther than max_excess_range from its object in range (sonar-a5x): grown transitively, a
+        # chain of arrivals linked two objects farther apart than one gate (two copies of the popoto_12km ship's arrivals
+        # at one bearing and velocity were one object up to 900 m apart, the gate 800). A member farther than that from
+        # the object is left out of the group and free for a group of its own; when it is the anchor, the anchor groups
+        # again from what is left. Every measured echo group lies well inside (at most 193 m beyond its object over the
+        # 60 Popoto captures of tools/classify_rules_eval.py), so the growth through the bearing and velocity gates stays.
         origin = np.asarray(multipath.get("origin", (0.0, 0.0)), dtype=float)
         polar = {}
         for c in out:
@@ -387,23 +393,24 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         order = sorted(out, key=lambda c: -(c.mean_snr_db if np.isfinite(c.mean_snr_db) else -np.inf))
         taken = set()
         for anchor in order:
-            if anchor.id in taken or anchor.kind not in established:
-                continue
-            if not linked(anchor, anchor):
+            if anchor.kind not in established or not linked(anchor, anchor):
                 continue                         # NaN range, bearing or velocity: nothing to group by; left as it is
-            group, grew = [anchor], True
-            while grew:
-                grew = False
-                for c in out:
-                    if c.id not in taken and all(c is not g for g in group) and any(linked(c, g) for g in group):
-                        group.append(c)
-                        grew = True
-            # The anchor is established, so an established member exists. Ties in range: the lowest id.
-            obj = min((c for c in group if c.kind in established), key=lambda c: (polar[c.id][0], c.id))
-            for c in group:
-                taken.add(c.id)
-                if c is not obj:
-                    c.kind, c.parent = "multipath", obj.id
+            while anchor.id not in taken:        # again when the anchor itself lay beyond its group's object
+                group, grew = [anchor], True
+                while grew:
+                    grew = False
+                    for c in out:
+                        if c.id not in taken and all(c is not g for g in group) and any(linked(c, g) for g in group):
+                            group.append(c)
+                            grew = True
+                # The anchor is established, so an established member exists. Ties in range: the lowest id.
+                obj = min((c for c in group if c.kind in established), key=lambda c: (polar[c.id][0], c.id))
+                for c in group:
+                    if abs(polar[c.id][0] - polar[obj.id][0]) > multipath["max_excess_range"]:
+                        continue                 # beyond one gate of the object: not its echo (sonar-a5x)
+                    taken.add(c.id)
+                    if c is not obj:
+                        c.kind, c.parent = "multipath", obj.id
     return out
 
 
