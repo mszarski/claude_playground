@@ -42,6 +42,8 @@
 //   navigation: nav_water_depth_from_altitude (0 | 1) nav_dvl_offset_m nav_altitude_sigma_m nav_depth_sigma_m
 //   nav_hold_s nav_hold_sigma_m_per_s nav_hold_sigma_m_per_m nav_max_altitude_m nav_keep_s nav_profile_step_m
 //   nav_surface_z (z of the sea surface in the navigation's frame: depth = z - nav_surface_z)
+//   nav_lever_arm_m (x,y,z: the array's reference point from the navigation unit's, m, the unit's body axes)
+//   nav_mount_rpy_deg (roll,pitch,yaw of the array's axes against the unit's, degrees, ASASIN Eq. 2 order)
 //   sound-speed ladder: elevation_profile (0 | 1) elevation_profile_ladder (comma-separated rungs)
 //   elevation_profile_bin_m elevation_profile_sample_sigma elevation_profile_age_sigma_per_hour
 //   elevation_profile_distance_sigma_per_km elevation_profile_max_age_s elevation_profile_max_distance_m

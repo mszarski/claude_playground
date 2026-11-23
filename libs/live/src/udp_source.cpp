@@ -736,6 +736,28 @@ bool UdpSocket::send_to(const std::string& host, int port, const std::string& te
   return true;
 }
 
+void nav_to_array(const NavOptions& options, double* v) {
+  const Vec3d& l = options.lever_arm;
+  const Vec3d& a = options.mount_rpy;
+  const bool lever = l.x != 0.0 || l.y != 0.0 || l.z != 0.0;
+  const bool mount = a.x != 0.0 || a.y != 0.0 || a.z != 0.0;
+  if (!lever && !mount) return;                 // the default: the fix as it came, bit for bit
+  const Mat3d r = rotation_ned(v[3], v[4], v[5]);
+  if (lever) {
+    const Vec3d d = r * l;                      // the lever arm in north-east-down
+    v[0] += d.x;
+    v[1] += d.y;
+    v[2] += d.z;
+  }
+  if (mount) {
+    // Array axes -> unit axes -> NED; its Eq. 2 angles (live.py and navadapter.py euler_zyx read them the same way).
+    const Mat3d m = r * rotation_ned(a.x, a.y, a.z);
+    v[3] = std::atan2(m.m[2][1], m.m[2][2]);
+    v[4] = -std::asin(std::clamp(m.m[2][0], -1.0, 1.0));
+    v[5] = std::atan2(m.m[1][0], m.m[0][0]);
+  }
+}
+
 bool Navigation::push(const std::string& json) {
   auto find = [&](const char* key, double& value) {
     const std::string k = std::string("\"") + key + "\"";
@@ -771,16 +793,18 @@ bool Navigation::push(const std::string& json) {
   if (json.find("\"bottom_lock\": true") != std::string::npos || json.find("\"bottom_lock\":true") != std::string::npos) fix.v[kLock] = 1.0;
   if (json.find("\"bottom_lock\": false") != std::string::npos || json.find("\"bottom_lock\":false") != std::string::npos) fix.v[kLock] = 0.0;
   const bool lock = std::isnan(fix.v[kLock]) ? true : fix.v[kLock] != 0.0;
+  // The water depth and the (depth, sound speed) samples from the unit's own position, as before the lever arm existed.
   fix.water = water_.update(fix.time_ns, fix.v[0], fix.v[1], fix.v[2] - opt_.surface_z, fix.v[kAltitude], lock, fix.v[kAltitudeSigma],
                             fix.v[kDepthSigma]);
-  fixes_.push_back(fix);
-  const auto keep_ns = static_cast<std::int64_t>(opt_.keep_s * 1e9);
-  while (fixes_.size() > 1 && (fixes_.front().time_ns < fix.time_ns - keep_ns || fixes_.size() > 200000)) fixes_.pop_front();
   if (std::isfinite(fix.v[kSoundSpeed]) && fix.v[kSoundSpeed] > 0.0 &&
       (samples_.empty() || std::abs(fix.v[2] - samples_.back().z) >= opt_.profile_step_m)) {
     samples_.push_back({fix.time_ns, fix.v[0], fix.v[1], fix.v[2], fix.v[kSoundSpeed]});
     if (samples_.size() > 2000) samples_.pop_front();
   }
+  nav_to_array(opt_, fix.v);                    // the pose kept is the array's (sonar-3rv)
+  fixes_.push_back(fix);
+  const auto keep_ns = static_cast<std::int64_t>(opt_.keep_s * 1e9);
+  while (fixes_.size() > 1 && (fixes_.front().time_ns < fix.time_ns - keep_ns || fixes_.size() > 200000)) fixes_.pop_front();
   return true;
 }
 

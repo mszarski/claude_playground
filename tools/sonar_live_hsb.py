@@ -133,7 +133,8 @@ def main(argv=None):
     from gpusonar.live import LiveChain, NavListener
     plan = receive_plan(args)
     n = plan["nav"]
-    nav = NavListener(port=n.get("port"), host=n.get("host", "0.0.0.0"), static=n.get("static")) if n else None
+    nav = NavListener(port=n.get("port"), host=n.get("host", "0.0.0.0"), static=n.get("static"), lever_arm_m=n.get("lever_arm_m"),
+                      mount_rpy_deg=n.get("mount_rpy_deg")) if n else None
     with LiveChain(plan["chain"], nav=nav, recording=plan["recording"], report_path=plan["report"],
                    report_udp=plan["report_udp"], taps=plan["taps"]) as chain:
         _, stats = hsb.run_receiver(chain, plan["sonar"], plan["sonar_overrides"], hololink_ip=args.hololink,

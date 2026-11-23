@@ -212,6 +212,10 @@ class UdpSocket {
 ///   "velocity_sigma" (m/s), "depth_sigma", "altitude_sigma", "water_depth_sigma" (m), "sound_speed_sigma" (m/s).
 /// apply() gives a record the pose at its transmit time, interpolated between the fixes around it,
 /// and everything else the chain reads from a record (so that a recording replays the same).
+/// With NavOptions::lever_arm or mount_rpy set, push() moves each fix's position and attitude from the
+/// navigation unit to the array (nav_to_array) before it is kept: the pose, the attitude history and the
+/// depth samples are then the array's. The water depth from altitude and the (depth, sound speed) samples
+/// are worked from the unit's own position, as before (nav_dvl_offset_m is measured from the unit).
 class Navigation {
  public:
   Navigation() = default;
@@ -253,6 +257,12 @@ class Navigation {
   std::deque<Sample> samples_;   ///< for the profile, since the last ping
   bool velocity_given_ = false;  ///< velocity_given()
 };
+
+/// The navigation unit's pose -> the array's, in place (sonar-3rv; live.py nav_to_array is the same):
+///   position <- position + R(rpy) lever_arm,   rpy <- the Eq. 2 angles of R(rpy) R(mount_rpy),
+/// R the body-to-NED rotation of ASASIN Eq. 2 (rotation_ned). v: north, east, down (m), roll, pitch, yaw (rad),
+/// then velocity (m/s), which is left as it is. Zero lever arm and mount: nothing is touched.
+void nav_to_array(const NavOptions& options, double* v);
 
 /// What a program that applies navigation to its pings counts (apps/sonar_live, holoscan_ops UdpSourceOp; the Python
 /// LiveChain counts the same): pings with no fix (Report::pings_without_nav) and pings whose fix had no velocity over
