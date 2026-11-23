@@ -275,7 +275,8 @@ def test_the_default_budget_count_on_a_second_map_at_cpu_scale():
     D-134's constants were measured on 8 and 5.5), at a budget of 3 false detections a ping so that 12 pings can count
     them (36 expected, 17 % of statistical error): between 0.55 and 1.5 of the budget. At the default budget the count
     takes a hundred thousand pings a map on a GPU (GPUSONAR_JOB=falsealarm; the numbers are in docs/RESULTS.md). Also
-    the interval the tool states (exact Poisson) and that ping i's noise does not depend on the threads drawing it."""
+    the interval the tool states (exact Poisson), that ping i's noise does not depend on the threads drawing it, and
+    that the replay of the counted pings on the host's Python chain counts the same and splits them between the tests."""
     tool = _search_factor_tool()
     lo, hi = tool.poisson_interval(0)
     assert lo == 0.0 and hi == pytest.approx(3.689, abs=1e-3)
@@ -289,7 +290,13 @@ def test_the_default_budget_count_on_a_second_map_at_cpu_scale():
     assert got["sonar"] == "flank_32" and got["samples_per_cell"] == 15 and got["looks"][1] == pytest.approx(10.85, abs=0.1)
     assert got["pings"] == 12 and 0.55 < got["ratio"] < 1.5, got["ratio"]
     assert got["ratio_95"][0] < got["ratio"] < got["ratio_95"][1]
-    assert got["sample_test"] + got["cell_mean_only"] == got["found"]
+    assert got["sample_test"] + got["cell_mean_only"] == got["found"] and got["reported"] <= got["found"]
+    # Each test alone, on the host's Python chain, on the pings that gave false detections: the same count with both
+    # tests, and each test alone no more than both.
+    again = tool.replay({"flank/1": got}, 31000, log=lambda *_: None)["flank/1"]
+    assert again["host_found"] == got["found"]
+    alone = again["tests"]
+    assert max(alone["sample"]["found"], alone["cell mean"]["found"]) <= got["found"] <= alone["sample"]["found"] + alone["cell mean"]["found"]
 
 
 # --- a point echo ----------------------------------------------------------------------------------------------------
