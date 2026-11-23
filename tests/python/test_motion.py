@@ -262,11 +262,12 @@ def test_solver_rejects_bad_input():
 # --- end to end on simulated data --------------------------------------------------------------
 
 def collect(sway_rms=0.01, heave_rms=0.004, n_pings=40, seed=1, with_target=True, attitude_rms=None,
-            tx_lever=None, array_origin=None, bathymetry=None):
+            tx_lever=None, array_origin=None, bathymetry=None, patch_y=(28.0, 52.0)):
     """The simulated scenario. Opt-in extras: `attitude_rms` (roll, pitch, yaw, rad: smooth
     random attitude about a non-zero mean of the same size, reported exactly by the INS),
-    lever arms (`tx_lever`, `array_origin`, body frame, m), and `bathymetry` z(x, y) for the
-    scatterers (the DVL then reports the altitude above it under the vehicle)."""
+    lever arms (`tx_lever`, `array_origin`, body frame, m), `bathymetry` z(x, y) for the
+    scatterers (the DVL then reports the altitude above it under the vehicle), and `patch_y`, the
+    seabed's cross-track extent (the default covers the whole receive window)."""
     rng = np.random.default_rng(seed)
     overrides = {
         "receive": {"kind": "baseband", "sample_rate": 100e3, "window": {"range": [36.0, 52.0]}},
@@ -278,7 +279,7 @@ def collect(sway_rms=0.01, heave_rms=0.004, n_pings=40, seed=1, with_target=True
         overrides["array"] = {"origin": list(array_origin)}
     sonar = SonarModel.load("sas_auv", overrides)
     track = 0.24 * n_pings
-    pts, amp = seafloor_patch((-4.0, track + 4.0), (28.0, 52.0), 25.0, rng=rng)
+    pts, amp = seafloor_patch((-4.0, track + 4.0), tuple(patch_y), 25.0, rng=rng)
     if bathymetry is not None:
         pts = np.array(pts, dtype=float)
         pts[:, 2] = bathymetry(pts[:, 0], pts[:, 1])
@@ -384,6 +385,47 @@ def test_focus_approaches_the_true_motion_image(run):
     loss_est_db = 20 * np.log10(est_peak / ideal_peak)
     assert loss_nav_db < -6.0            # uncorrected, the target is badly defocused
     assert loss_est_db > -1.0            # corrected, within 1 dB of the true-motion peak
+
+
+def test_windows_beyond_the_seabed_bias_the_track_and_the_energy_test_drops_them():
+    """sonar-7r7: a seabed that ends inside the receive window (here at 45 m ground range, slant
+    47.4 m; the window reaches 52 m) leaves range windows with no seabed at the broadside footprint
+    measure_delays assumes. Their echo (range sidelobes, seabed off the beam's main lobe) gives
+    coherent but biased delays; the solver absorbs the bias as a sway/heave tilt. `min_window_energy_db`
+    drops windows far below their ping pair's median energy, and those only."""
+    col, _ = collect(n_pings=40, with_target=False, seed=1, patch_y=(28.0, 45.0))
+    truth = col.true_positions[:len(col.records)]
+    rms = lambda e: float(np.sqrt(np.mean(e**2)))
+    plain = motion.estimate_motion(col.records)
+    gated_opts = motion.MotionOptions(min_window_energy_db=-20.0)
+    gated = motion.estimate_motion(col.records, gated_opts)
+    # Without the test the sway leaves the acceptance bound (0.54 mm against lambda / 20 = 0.375 mm).
+    assert rms(plain.y - truth[:, 1]) > WAVELENGTH / 20
+    # With it, both bounds hold (sway 0.17 mm, heave 0.29 mm).
+    assert rms(gated.y - truth[:, 1]) < WAVELENGTH / 20
+    assert rms(gated.z - truth[:, 2]) < WAVELENGTH / 4
+    assert any("below their ping pair's median echo energy" in line for line in gated.log)
+    # What it drops lies beyond the seabed's edge; everything nearer is kept.
+    stats = {}
+    kept, _ = motion.measure_delays(col.records, gated_opts, stats)
+    every, _ = motion.measure_delays(col.records, motion.MotionOptions())
+    assert stats["rejected_low_energy"] > 0
+    key = lambda f: (f["measurement"].ping, round(f["measurement"].t_ref, 9), f["measurement"].rx_lever_1)
+    dropped = {key(f) for f in every} - {key(f) for f in kept}
+    ground = {key(f): f["measurement"].footprint[1] for f in every}
+    assert dropped and min(ground[k] for k in dropped) > 45.0
+    assert {key(f) for f in kept} <= {key(f) for f in every}
+
+
+def test_energy_test_drops_nothing_where_the_seabed_fills_the_receive_window():
+    col, _ = collect(n_pings=12, with_target=False, seed=1)
+    stats = {}
+    motion.measure_delays(col.records, motion.MotionOptions(min_window_energy_db=-20.0), stats)
+    assert stats["rejected_low_energy"] == 0
+    plain = motion.estimate_motion(col.records)
+    gated = motion.estimate_motion(col.records, motion.MotionOptions(min_window_energy_db=-20.0))
+    np.testing.assert_array_equal(gated.y, plain.y)
+    np.testing.assert_array_equal(gated.z, plain.z)
 
 
 def test_flat_seafloor_assumption_can_be_replaced_by_known_bathymetry():

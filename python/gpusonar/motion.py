@@ -44,6 +44,13 @@ class MotionOptions:
     window_m: float | None = None    # the window as metres of range; replaces window_samples
     max_lag_m: float | None = None   # the largest change of range between pings, m; replaces max_lag_samples
     min_coherence: float = 0.5       # measurements below this are dropped
+    min_window_energy_db: float | None = None   # opt-in (sonar-7r7): drop a range window whose echo energy, over
+                                     # both pings' overlapping channels, is more than this many dB below the
+                                     # ping pair's median window (e.g. -20). Such a window holds no seabed at the
+                                     # footprint measure_delays assumes (broadside, on the seafloor at the
+                                     # window's slant range): what is left is range sidelobes and seabed off the
+                                     # beam's main lobe, whose delays the model misreads. Coherence does not catch
+                                     # it without receiver noise. None: no energy test.
     lambda_smooth: float = 1.0       # lambda1 in Eq. 8
     lambda_dvl: float = 1.0          # lambda2 in Eq. 8
     huber: bool = True               # Eq. 3; False = the squared loss of the Eq. 5 caption
@@ -177,12 +184,22 @@ def _delay_backend(options: MotionOptions):
     return core.Backend.Host
 
 
+def window_energy_db(xa: np.ndarray, xb: np.ndarray, shift: int, centres, half: int) -> np.ndarray:
+    """Echo energy of each range window, over the overlapping channels of both pings (channels
+    shift.. of the first, ..n - shift of the second), in dB re the median over the windows."""
+    n = xa.shape[0]
+    e = np.array([np.mean(np.abs(xa[shift:, c - half:c + half]) ** 2) +
+                  np.mean(np.abs(xb[:n - shift, c - half:c + half]) ** 2) for c in centres])
+    return 10.0 * np.log10((e + 1e-300) / (np.median(e) + 1e-300))
+
+
 def measure_delays(records, options: MotionOptions, stats: dict | None = None):
     """Delay measurements between every consecutive ping pair. Returns a list of dicts with
     the solver's DelayMeasurement (coarse delay filled in), the fine delay and coherence.
     `stats`, when given, receives the window and lag used (samples and metres) and the
-    number of windows dropped because the correlation peaked at the edge of the lag span."""
-    out, rejected, at_edge = [], 0, 0
+    number of windows dropped because the correlation peaked at the edge of the lag span, and
+    those dropped by the energy test (`min_window_energy_db`)."""
+    out, rejected, at_edge, low_energy = [], 0, 0, 0
     backend = _delay_backend(options)
     floor_z = resolve_seafloor_z(records, options)
     window, max_lag = window_sizes(records[0], options) if len(records) else (0, 0)
@@ -205,6 +222,9 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
         look_h = np.array([look[0], look[1], 0.0])
         look_h /= np.linalg.norm(look_h)
         tx_lever = np.asarray(ra.geometry.tx.lever_arm)
+        quiet = np.zeros(len(centres), dtype=bool)
+        if options.min_window_energy_db is not None:
+            quiet = window_energy_db(xa, xb, shift, centres, half) < float(options.min_window_energy_db)
         batch = None
         if backend is not None:
             # Every (channel pair, centre) of this ping pair in one call, pair-major.
@@ -215,6 +235,10 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
             lever_b = np.asarray(rb.geometry.rx[k].lever_arm)
             pc = np.asarray(pose.position) + rot @ (0.5 * (tx_lever + lever_a))
             for w, centre in enumerate(centres):
+                if quiet[w]:
+                    rejected += 1
+                    low_energy += 1
+                    continue
                 if batch is None:
                     est = correlate_window(xa[k + shift], xb[k], int(centre), half,
                                            max_lag, fs, fc)
@@ -254,6 +278,7 @@ def measure_delays(records, options: MotionOptions, stats: dict | None = None):
         per_m = 2.0 * records[0].samples.sample_rate / records[0].environment.sound_speed
         stats.update(window_samples=window, max_lag_samples=max_lag, window_m=window / per_m,
                      max_lag_m=max_lag / per_m, seafloor_z=floor_z, rejected_at_lag_edge=at_edge,
+                     rejected_low_energy=low_energy,
                      delay_backend=options.delay_backend)
     return out, rejected
 
@@ -334,6 +359,9 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     log = [f"pass 1 (coarse): {coarse.report}", f"pass 2 (fine): {fine.report}",
            f"windows: {used['window_samples']} samples ({used['window_m']:.3f} m), lag +/-{used['max_lag_samples']} "
            f"samples ({used['max_lag_m'] * 1e3:.1f} mm of range), seafloor z {used['seafloor_z']:.3f} m"]
+    if used.get("rejected_low_energy"):
+        log.append(f"{used['rejected_low_energy']} of {len(found) + rejected} windows were more than "
+                   f"{-options.min_window_energy_db:g} dB below their ping pair's median echo energy and were dropped")
     if used["rejected_at_lag_edge"]:
         log.append(f"{used['rejected_at_lag_edge']} of {len(found) + rejected} windows peaked at the edge of the lag "
                    "span and were dropped: if this is most of the rejections, the motion between pings exceeds "
