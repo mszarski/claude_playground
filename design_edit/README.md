@@ -993,6 +993,36 @@ Two single-seed SFT runs on the round-9 *broad* data, both with `train_sft.py --
   Unseen overall is 0.770, the best Gemma SFT score without leaked training rows.
 * promote_button is still 0.00: no training row demonstrates its convention.
 
+### Round 10 RL: GRPO from the prompt-v2 SFT model (adapter-only)
+
+`train_grpo.py --sft-adapter mszarski/design-edit-sft-gemma-v9-broad-p2-s0/adapter --adapter-only`, 200 steps on
+`rl_v2`, visual reward v2 with Gemma-4-31B as judge, beta 0.02, lr 1e-5, h200x2 (~3 h). RL LoRA checkpoints:
+`design-edit-grpo-gemma-v10-ckpt/checkpoint-{50,100,150,200}`. Evaluate with
+`eval_model.py --adapter <sft>/adapter,<ckpt>/checkpoint-N`, which merges the adapters in order.
+
+| Gemma 31B | seen | paraphrased | goals | unseen v2 |
+|---|---|---|---|---|
+| SFT broad-p2 s0 | 0.956 | 0.904 | 0.864 | 0.770 |
+| RL step 50 | 0.954 | 0.900 | 0.871 | 0.774 |
+| RL step 100 | 0.956 | 0.902 | 0.869 | 0.776 |
+| RL step 150 | 0.956 | 0.904 | 0.851 | 0.779 |
+| RL step 200 | 0.954 | 0.896 | **0.882** | **0.790** |
+
+* **RL adds about 2 points on goals and unseen** by step 200 (add_border 0.92 -> 0.97, duplicate_setting 0.80 -> 0.85,
+  disable_button 0.61 -> 0.66, set_weight 0.67 -> 0.71), and seen and paraphrased are unchanged. That's one seed, so the
+  gain is suggestive, not established.
+* **Why so little:** the average training reward rises only from 0.83 (steps 1–50) to 0.98 (steps 151–200). In 52% of
+  groups all 8 completions scored the same, so those groups carry no gradient: the model is already right, or
+  consistently wrong, on most prompts.
+  Much bigger RL gains before (Qwen goals 0.83 -> 0.97) started from SFT models with far lower goal scores.
+* promote_button stays at 0.00. RL can't discover a convention that neither the data nor the judge rewards.
+* Pipeline notes:
+  * The SFT adapter is merged in a CPU-only subprocess. Loading it in-process grabbed both GPUs (vLLM OOM), and after
+    that fix the trainer/vLLM NCCL weight transfer still failed.
+  * The Trainer pushes each checkpoint to the repo root, overwriting the last one. The `checkpoint-N` folders were
+    rebuilt from the commit history.
+  * The final upload failed on a model-card metadata error, so checkpoint-200 *is* the final model.
+
 ## Does SFT hurt reasoning? Qwen SFT re-evaluated with thinking on
 
 The fine-tuned models were trained and tested with thinking off, so their unseen and goal scores were being
