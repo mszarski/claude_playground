@@ -970,6 +970,29 @@ back to its priors. It reasons in CSS ("change justify to `space-between`", whic
 `justify=between` is also missing from SYSTEM_PROMPT) and over-edits ("also restyle the plan's button").
 Short rationales seem to cost conventions without buying the planning that long reasoning gives plain Qwen.
 
+## Round 10: prompt-mismatch fix and system prompt v2 (Gemma 4 31B, broad data, seed 0)
+
+Two single-seed SFT runs on the round-9 *broad* data, both with `train_sft.py --match-inference-prompt`:
+* **broad-fix**: the same data and system prompt as round 9, so it measures the cost of the prompt mismatch.
+* **broad-p2**: system prompt v2 (`prompts.SYSTEM_PROMPT`; dataset `design-edits-v9-broad-p2`), which lists the
+  allowed values `align=start|end|center|stretch` and `justify=start|end|center|between`. v1 named the properties
+  but never their values. This documents the language; it doesn't say *when* to spread items out.
+
+| Gemma 31B SFT | seen | paraphrased | goals | unseen v2 |
+|---|---|---|---|---|
+| broad (round 9, 3 seeds) | 0.955 | 0.886 | 0.827 | 0.710 |
+| broad s0 (round 9) | 0.948 | 0.890 | 0.882 | 0.720 |
+| broad-fix s0 | 0.956 | 0.898 | 0.873 | 0.738 |
+| broad-p2 s0 | 0.956 | **0.904** | 0.864 | **0.770** |
+
+* **The mismatch cost about 1–2 points** (same seed: seen +0.8, paraphrased +0.8, unseen +1.8, goals −0.9). That's
+  small, and within single-seed noise per split, but it's in the same direction on three of four splits. Use
+  `--match-inference-prompt` from now on.
+* **Listing the values fixes spread_out completely: 0.68 -> 1.00.** add_border also rises from 0.81 to 0.92.
+  duplicate_setting drops from 0.92 to 0.80 and set_weight from 0.76 to 0.67, both within the range seen between seeds.
+  Unseen overall is 0.770, the best Gemma SFT score without leaked training rows.
+* promote_button is still 0.00: no training row demonstrates its convention.
+
 ## Does SFT hurt reasoning? Qwen SFT re-evaluated with thinking on
 
 The fine-tuned models were trained and tested with thinking off, so their unseen and goal scores were being
