@@ -807,6 +807,23 @@ compute then waits at most 1 s for a frame and returns, and Sensor Bridge logs
 (`hsb.ReceiveStop`) runs on the scheduler's own thread, four times a second
 (`HsbStopOp`, a periodic condition).
 
+When `receive` stops on its idle timeout because the board has gone, Sensor Bridge's receiver
+cannot switch the data channel off: that is done over the control plane, and nobody answers
+(`TimeoutError: read_uint32 ...`). `receive` then keeps that error in the statistics as
+`"shutdown_error"`, prints the statistics, and ends the process at once with status 3 or 0.
+It cannot wait for Sensor Bridge's receiver thread, because that thread can no longer be joined.
+`serve --hold S` keeps the emulated board up, quiet, for S seconds after its linger, as a real
+board that stops streaming stays on the network. `run_loopback` in the tests passes 30.
+
+Measured on L4 at a quarter of the socket buffer (`--socket-buffer 26624`, losses on purpose):
+- Before, at commit 111b7c0 (before this session's receive changes), 2 of 7 runs hung, having
+  reported 5 and 4 pings (job `6b039cea130a00b5aa81c058`).
+- With the fix, 12 of 12 runs ended in 16 s and printed their statistics (jobs
+  `6b039cea130a00b5aa81c058`, `6b03a7ae130a00b5aa81da2e`). The 8 that reported fewer than 6
+  pings exited with status 3; the rest exited 0.
+- With 7 pings asked of a 6-ping stream, 4 of 4 stopped on the idle timeout 53 s in, with status 3
+  and their statistics: cleanly with `--hold 30`, and with a `shutdown_error` without it.
+
 Pings come out in transmit order; one waits only while an earlier one is undecided, at most
 2 frames, and at most 2 pings are open at once. A ping transmitted before the previous
 window has closed (overlapping pings) gives the previous ping up at once, as before. Until
