@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-165); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-167); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -727,14 +727,17 @@ the arrival-time solve runs (4, 4) passes (D-83).
 3. Real data: a first Popoto recording through `tools/sonar_live.py`, a cast and one
    sounding of a pinger at the trial site, a first FLS log or SAS image through
    `tools/calibrate_sim.py`. Everything in those paths has only seen simulated input or
-   other people's measured channels.
+   other people's measured channels. Instructions for an agent and the questions for the owner:
+   `docs/tasks/REAL_DATA.md`.
 4. The two-row depth sigma for shallow targets at 1 km (too wide); a Bellhop check of
    its multipath term in refracting water; a stacked-row chain run on Bellhop pings.
 5. The detector's false alarms at the default budget and the three-row cell mean; its
    constants on a map other than the long-range one; the Taylor window; the owner's call
    on merging FLS detections before tracking.
 6. The vehicle adapters: board samples to UDP blocks or WAV with a sidecar; the vehicle's
-   navigation message.
+   navigation message; the surveyed lever arm and mounting rotation from the navigation unit to
+   the array (`nav.lever_arm_m`, `nav.mount_rpy_deg`, D-167, zero until surveyed). Instructions
+   for an agent and the questions for the owner: `docs/tasks/VEHICLE_ADAPTERS.md`.
 7. Milestone 11: a job in which the loopback test passes; the reference's SDK build and a
    rig run. Milestone 13: Spark and Jetson measurements.
 8. Milestone 8 leftovers (ref [9] surge); PICMUS experimental and in-vivo

@@ -2853,3 +2853,51 @@ reported two standing targets at 118 and 48 km/s, 103 and 43 km out; the default
   `test_ping_times_change_no_fit_when_transmit_times_increase`); smallest margin ptp(T)/ptp(d) on
   six gallery quick scenes 167 (fls_120k_cluttered_seabed). Full GPU suite 1827 passed, 92 skipped
   (HF job 6b03bf4d8d268c0fbd238053).
+
+### D-166 Both live-chain engines refuse an option key they do not read (issue sonar-6hf)
+
+`core.LiveChainCpp` read its dict with `contains()` for known keys only, so a misspelt key (e.g.
+`classify_min_mover_cell`) left its setting at the default without a word; only `multipath_depth`
+and `coverage` refused unknown keys. The Python engine (`LiveChain`, `cpp_chain_options`) merged
+the chain section over DEFAULTS and also kept extra keys in silence (`classify: {min_sped: 2}` ran
+with min_speed 1).
+- C++: the constructor accepts exactly the keys it reads (a `Keys` wrapper records each lookup),
+  at the top and in `elevation`, `elevation.profile`, `decimate`, `blanking` and `sync`; any other
+  key is a ValueError naming it and the nearest key it reads (edit distance within max(3, len/3),
+  ours). Python: `check_keys` refuses keys outside DEFAULTS (plus `multipath_depth`, `coverage`)
+  and outside each section, naming the nearest (difflib). The key=value path (options.cpp)
+  already refused unknown keys, without a suggestion.
+- What could get worse: a configuration outside the repo with a stale or misspelt key that ran on
+  the default now stops at construction. Every `configs/deploy` chain section and every
+  `configs/builds` chain_config passes both engines. No result moves.
+- Not covered: the other dict-taking bindings (PingAssemblerCpp, SoundSpeedLadder, Navigation,
+  WaterDepthTracker, live_resolve_defaults, live_detector_plan) still pass over unknown keys.
+- Tests: `test_live_cpp.py::test_cpp_chain_refuses_an_unknown_key_*`,
+  `::test_python_chain_refuses_an_unknown_key_by_name` (each fails on the old code). Full GPU suite
+  1854 passed, 92 skipped (HF job 6b03d92e130a00b5aa825684, with D-167).
+
+### D-167 The navigation unit is not the array: lever arm and mounting rotation (issue sonar-3rv)
+
+The live chain took the navigation pose as the array's body origin; nothing held the surveyed
+offset between them. Still open: the values (unconfirmed until surveyed, default zero), and the
+array's velocity is not corrected (the nav datagram carries no attitude rates; error ω·|L|, e.g.
+0.05 m/s at 3°/s and 1 m, about 0.8 m of array position over a 16 s round trip at 12 km).
+- Keys `nav.lever_arm_m` (m, from the unit's reference point to the array's, the unit's body axes
+  x forward, y starboard, z down) and `nav.mount_rpy_deg` (degrees, ASASIN Eq. 2 order, the array's
+  axes against the unit's); `nav_lever_arm_m`, `nav_mount_rpy_deg` for `sonar_live`. Three finite
+  numbers each or refused by name.
+- Both engines move each fix at intake (`NavListener.push` / `nav_to_array`; C++
+  `Navigation::push`): p_a = p_u + R_u·L, R_a = R_u·R_m, Euler angles read back from R_a (ours,
+  derived; the same relations are standard in navigation texts, not opened: unconfirmed). The
+  record's pose, attitude history and depth samples are then the array's, as RECORD_FORMAT's
+  body-pose definition requires: no schema change. Replay applies no navigation, so the offset is
+  applied once. Water depth from altitude and the sound-speed samples stay at the unit.
+- Zero offsets are bit-for-bit the previous behaviour (test). In `configs/deploy/popoto_vehicle.yaml`
+  the keys are present commented out (`test_hsb.py::test_tool_arguments` asserts that file's nav
+  section); the generated deploy files (`tools/build_from_spec.py`) do not carry them yet.
+- Tests: `tests/python/test_nav_lever_arm.py` (a hand-worked rolled case; roll 12°, pitch −7°, yaw
+  125° against independent rotation matrices, engines agree to 1e-12 m; a chain run on
+  `popoto_long_range_3row` fed the unit's fixes plus the offset reports the same detections as fed
+  the array's: without it ownship is about 2.5 m off and depth reads 28.5 m for 48.0 m),
+  `test_live_cpp.py::test_program_moves_navigation_to_the_array_by_the_lever_arm`. Full GPU suite
+  1854 passed, 92 skipped (HF job 6b03d92e130a00b5aa825684).
