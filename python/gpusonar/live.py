@@ -414,6 +414,49 @@ def check_choices(cfg: dict) -> None:
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
 
 
+# The chain's own keys: DEFAULTS' and the two opt-in hooks read with .get (multipath_depth.py, coverage.py).
+CHAIN_KEYS = (*DEFAULTS, "multipath_depth", "coverage")
+# The keys of the chain's sub-sections whose defaults are None above (their keys are read with .get and a default where
+# they are used: cpp_chain_options, sync_reference, elevation.py). The other sections are checked where they are read:
+# decimate (decimate_options), blanking (blanking_options), multipath_depth (multipath_depth.options), coverage
+# (coverage.cpp_options), classify.detections (classify.check_detection_rules), elevation.profile (elevation.profile_options).
+SECTION_KEYS = {"sync": ("sonar", "sonar_overrides", "reference", "min_quality", "search_time", "tolerance_us"),
+                "elevation.sector_from_depth": ("bounces", "margin_deg"),
+                "elevation.sector_from_rays": ("bounces", "margin_deg", "max_depth_m"),
+                "elevation.multipath_sigma": ("bounces", "max_depth_m")}
+
+
+def _refuse_unknown(given: dict, known, where: str) -> None:
+    """A key of `given` not in `known` is refused by name, with the nearest known key when one is near (difflib):
+    a misspelt key would otherwise leave its setting at the default without a word (sonar-6hf)."""
+    import difflib
+    for key in given:
+        if key not in known:
+            near = difflib.get_close_matches(str(key), [str(k) for k in known], n=1)
+            raise ValueError(f"{where}{key}: unknown key" + (f"; did you mean {near[0]!r}?" if near else f" (known: {', '.join(sorted(known))})"))
+
+
+def check_keys(cfg: dict) -> None:
+    """Refuse a key the chain configuration (merged over DEFAULTS or not) does not have, at the top and in each section:
+    `classify: {min_sped: 2}` would otherwise run with min_speed 1. libs/live's dictionary (core.LiveChainCpp) and its
+    key=value options (options.cpp) refuse an unknown key in the same way."""
+    from .elevation import DEFAULTS as EL
+    _refuse_unknown(cfg, CHAIN_KEYS, "chain.")
+    for name in ("cfar", "sbl", "tracker", "classify"):
+        if isinstance(cfg.get(name), dict):
+            _refuse_unknown(cfg[name], DEFAULTS[name], f"chain.{name}.")
+    if isinstance((cfg.get("classify") or {}).get("multipath"), dict):
+        _refuse_unknown(cfg["classify"]["multipath"], DEFAULTS["classify"]["multipath"], "chain.classify.multipath.")
+    if isinstance(cfg.get("sync"), dict):
+        _refuse_unknown(cfg["sync"], SECTION_KEYS["sync"], "chain.sync.")
+    e = cfg.get("elevation")
+    if isinstance(e, dict):
+        _refuse_unknown(e, EL, "chain.elevation.")
+        for name in ("sector_from_depth", "sector_from_rays", "multipath_sigma"):
+            if isinstance(e.get(name), dict):
+                _refuse_unknown(e[name], SECTION_KEYS["elevation." + name], f"chain.elevation.{name}.")
+
+
 def check_classify_fit(c: dict) -> None:
     """chain.classify's fit settings, refused as libs/live refuses them: outlier_alpha from 0 (off) to below 1;
     max_fit_rms_bearing_deg None (derived) or a finite angle, 0 (off) or more."""
@@ -441,6 +484,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     defaults first. `backend` is the configuration's word (auto, host or cuda); LiveChain replaces it with
     the backend it resolved."""
     cfg = _merge(DEFAULTS, cfg)
+    check_keys(cfg)
     check_choices(cfg)
     if cfg["cell_statistic"] not in CELL_STATISTICS:
         raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean, peak or multiscale)")
@@ -1045,6 +1089,7 @@ class LiveChain:
                  report_udp: tuple | None = None, taps: dict | None = None, nav: NavListener | None = None,
                  report_udp_max_bytes: int = REPORT_UDP_MAX_BYTES):
         self.cfg = copy.deepcopy(_merge(DEFAULTS, config))
+        check_keys(self.cfg)                   # refuses a misspelt key, which would otherwise leave its setting at the default
         live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
         check_classify_fit(self.cfg["classify"])
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)

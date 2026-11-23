@@ -2,12 +2,15 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
@@ -72,11 +75,64 @@ live::DoaOptions doa_options(int max_iterations, double tolerance, int max_sourc
 
 // --- stage 2: options from dicts (decimation, reference, water depth, sound-speed ladder) --------
 
-void number(const py::dict& d, const char* k, double& v) {
+// Edits (insert, delete, substitute) from a to b: for naming the nearest known key.
+std::size_t edit_distance(const std::string& a, const std::string& b) {
+  std::vector<std::size_t> row(b.size() + 1);
+  for (std::size_t j = 0; j <= b.size(); ++j) row[j] = j;
+  for (std::size_t i = 1; i <= a.size(); ++i) {
+    std::size_t diagonal = row[0];
+    row[0] = i;
+    for (std::size_t j = 1; j <= b.size(); ++j) {
+      const std::size_t above = row[j];
+      row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
+      diagonal = above;
+    }
+  }
+  return row[b.size()];
+}
+
+// An options dict that remembers every key looked up in it, so that a key nothing looked up (a misspelt one, which
+// would otherwise leave its setting at the default without a word) can be refused by name: the keys taken are
+// exactly the keys read (sonar-6hf). Made from a py::dict where one is passed, so the helpers below take either.
+class Keys {
+ public:
+  Keys(const py::dict& d) : d_(d) {}  // NOLINT(google-explicit-constructor): every helper is called with a plain dict too
+  bool contains(const char* k) const {
+    read_.emplace_back(k);
+    return d_.contains(k);
+  }
+  py::object operator[](const char* k) const {
+    read_.emplace_back(k);
+    return d_[k];
+  }
+  // Throws ValueError naming the first key of the dict nothing has looked up, and the nearest key that was.
+  void refuse_unread(const std::string& where) const {
+    for (const auto& item : d_) {
+      const std::string key = py::str(item.first).cast<std::string>();
+      if (std::find(read_.begin(), read_.end(), key) != read_.end()) continue;
+      std::string nearest;
+      std::size_t best = std::max<std::size_t>(3, key.size() / 3) + 1;   // this many edits or more: no suggestion
+      for (const std::string& k : read_) {
+        const std::size_t d = edit_distance(key, k);
+        if (d < best) {
+          best = d;
+          nearest = k;
+        }
+      }
+      throw py::value_error(where + key + ": unknown key" + (nearest.empty() ? std::string(" (the C++ chain reads no such option)") : "; did you mean '" + nearest + "'?"));
+    }
+  }
+
+ private:
+  py::dict d_;
+  mutable std::vector<std::string> read_;
+};
+
+void number(const Keys& d, const char* k, double& v) {
   if (d.contains(k) && !d[k].is_none()) v = d[k].cast<double>();
 }
 
-live::DecimateOptions decimate_options(const py::dict& d) {
+live::DecimateOptions decimate_options(const Keys& d) {
   live::DecimateOptions o;
   o.enabled = true;
   number(d, "f_low", o.f_low);
@@ -92,7 +148,7 @@ live::DecimateOptions decimate_options(const py::dict& d) {
   return o;
 }
 
-live::Reference reference_options(const py::dict& r) {
+live::Reference reference_options(const Keys& r) {
   live::Reference o;
   o.f_start = r["f_start"].cast<double>();
   o.f_stop = r["f_stop"].cast<double>();
@@ -130,7 +186,7 @@ live::NavOptions nav_options(const py::dict& d) {
   return o;
 }
 
-live::ProfileOptions profile_options(const py::dict& d) {
+live::ProfileOptions profile_options(const Keys& d) {
   live::ProfileOptions o;
   o.enabled = true;
   if (d.contains("ladder")) o.ladder = d["ladder"].cast<std::vector<std::string>>();
@@ -818,8 +874,12 @@ void bind_live(py::module_& m) {
                               "  elevation.attitude_rate_sigma (rad/s; file elevation.attitude_rate_sigma_deg_s).\n"
                               "Also radians: the grazing angles of the surface_loss_grazing lists in `coverage` and\n"
                               "`multipath_depth`. Keys ending in _deg (bearing_*_deg, sbl_grid_step_deg, elevation first_deg,\n"
-                              "last_deg, step_deg) are degrees.")
-      .def(py::init([](const py::dict& kw) {
+                              "last_deg, step_deg) are degrees.\n"
+                              "A key it does not read, at the top or in a section (elevation, elevation.profile, decimate,\n"
+                              "blanking, sync, multipath_depth, coverage), is refused: ValueError naming it and the nearest\n"
+                              "key it does read (sonar-6hf).")
+      .def(py::init([](const py::dict& given) {
+        const Keys kw(given);   // every key looked up is recorded; any other is refused below (sonar-6hf)
         live::ChainOptions o;
         auto get = [&](const char* k, double& v) {
           if (kw.contains(k)) v = kw[k].cast<double>();
@@ -888,7 +948,7 @@ void bind_live(py::module_& m) {
         get("sound_speed", o.sound_speed);
         if (kw.contains("dead_channels")) o.dead_channels = kw["dead_channels"].cast<std::vector<std::int64_t>>();
         if (kw.contains("elevation")) {
-          const py::dict e = kw["elevation"].cast<py::dict>();
+          const Keys e(kw["elevation"].cast<py::dict>());
           live::ElevationOptions& eo = o.elevation;
           eo.enabled = true;
           auto num = [&](const char* k, double& v) {
@@ -940,15 +1000,25 @@ void bind_live(py::module_& m) {
           if (e.contains("ssp_depth")) eo.ssp_depth = e["ssp_depth"].cast<std::vector<double>>();
           if (e.contains("ssp_speed")) eo.ssp_speed = e["ssp_speed"].cast<std::vector<double>>();
           if (eo.ssp_depth.size() != eo.ssp_speed.size()) throw std::invalid_argument("elevation.ssp: depth and speed must be as long as each other");
-          if (e.contains("profile") && !e["profile"].is_none()) eo.profile = profile_options(e["profile"].cast<py::dict>());
+          if (e.contains("profile") && !e["profile"].is_none()) {
+            const Keys p(e["profile"].cast<py::dict>());
+            eo.profile = profile_options(p);
+            p.refuse_unread("LiveChainCpp: elevation.profile.");
+          }
+          e.refuse_unread("LiveChainCpp: elevation.");
         }
-        if (kw.contains("decimate") && !kw["decimate"].is_none()) o.decimate = decimate_options(kw["decimate"].cast<py::dict>());
+        if (kw.contains("decimate") && !kw["decimate"].is_none()) {
+          const Keys d(kw["decimate"].cast<py::dict>());
+          o.decimate = decimate_options(d);
+          d.refuse_unread("LiveChainCpp: decimate.");
+        }
         if (kw.contains("blanking") && !kw["blanking"].is_none()) {
-          const py::dict b = kw["blanking"].cast<py::dict>();
+          const Keys b(kw["blanking"].cast<py::dict>());
           o.blanking.enabled = true;
           number(b, "recovery_s", o.blanking.recovery_s);
           number(b, "taper_s", o.blanking.taper_s);
           if (b.contains("mode")) o.blanking.zero = b["mode"].cast<std::string>() != "ignore";
+          b.refuse_unread("LiveChainCpp: blanking.");
         }
         if (kw.contains("multipath_depth") && !kw["multipath_depth"].is_none()) {   // hook: flat {member: number}, as key=value
           o.multipath_depth.enabled = true;
@@ -965,10 +1035,12 @@ void bind_live(py::module_& m) {
           }
         }
         if (kw.contains("sync")) {
-          const py::dict r = kw["sync"].cast<py::dict>();
+          const Keys r(kw["sync"].cast<py::dict>());
           o.sync = true;
           o.reference = reference_options(r);
+          r.refuse_unread("LiveChainCpp: sync.");
         }
+        kw.refuse_unread("LiveChainCpp: ");
         return live::LiveChain(o);
       }))
       .def("process",

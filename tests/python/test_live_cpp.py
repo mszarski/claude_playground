@@ -455,6 +455,57 @@ def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
             core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=bad))
 
 
+@pytest.mark.parametrize("key, value, where, nearest", [
+    ("classify_min_mover_cell", 16.0, "", "classify_min_mover_cells"),       # the misspelling sonar-6hf names
+    ("tracker_confirm_hit", 4, "", "tracker_confirm_hits"),
+    ("min_snr", 12.0, "", "min_snr_db"),
+    ("no_such_setting_at_all", 1.0, "", None),
+    ("elevation", {"first_deg": -20.0, "max_detection": 5}, "elevation.", "max_detections"),
+    ("blanking", {"recovery_s": 0.002, "taper": 0.001}, "blanking.", "taper_s"),
+    ("decimate", {"output_rate": 2.0e4, "tap": 101}, "decimate.", "taps"),
+])
+def test_cpp_chain_refuses_an_unknown_key_by_name(key, value, where, nearest):
+    """sonar-6hf: LiveChainCpp read its dictionary key by key and passed over any other, so a misspelt key left its
+    setting at the default without a word (classify_min_mover_cell: the extent rule off). It now refuses a key it
+    does not read, at the top and in each section it reads, by name and with the nearest key it does read."""
+    bad = list(value)[-1] if where else key                  # in a section: its last key is the misspelt one
+    match = f"LiveChainCpp: {where}{bad}: unknown key" + (f"; did you mean '{nearest}'" if nearest else "")
+    with pytest.raises(ValueError, match=match.replace(".", r"\.")):
+        core.LiveChainCpp(dict(CPP_CHAIN, **{key: value}))
+
+
+def test_cpp_chain_refuses_an_unknown_key_in_sync_and_profile():
+    """The sync section and elevation.profile: the same rule (sonar-6hf)."""
+    sync = {"f_start": 38e3, "f_stop": 48e3, "duration": 4e-3, "lead": 5e-3, "tail": 10e-3}
+    core.LiveChainCpp(dict(CPP_CHAIN, sync=sync))
+    with pytest.raises(ValueError, match=r"LiveChainCpp: sync\.tolerance: unknown key; did you mean 'tolerance_us'"):
+        core.LiveChainCpp(dict(CPP_CHAIN, sync=dict(sync, tolerance=2.0)))
+    with pytest.raises(ValueError, match=r"LiveChainCpp: elevation\.profile\.bin: unknown key; did you mean 'bin_m'"):
+        core.LiveChainCpp(dict(CPP_CHAIN, elevation={"profile": {"ladder": ["prior"], "bin": 2.0}}))
+
+
+@pytest.mark.parametrize("section, nearest", [
+    ({"min_snr": 12.0}, "min_snr_db"),
+    ({"classify": {"min_sped": 2.0}}, "min_speed"),
+    ({"tracker": {"confirm_hit": 4}}, "confirm_hits"),
+    ({"cfar": {"false_alarm_per_ping": 1e-2}}, "false_alarms_per_ping"),
+    ({"sbl": {"max_source": 3}}, "max_sources"),
+    ({"classify": {"multipath": {"velocit": 2.0}}}, "velocity"),
+    ({"sync": {"reference": {}, "tolerance": 2.0}}, "tolerance_us"),
+    ({"elevation": {"max_detection": 5}}, "max_detections"),
+    ({"elevation": {"sector_from_rays": {"max_depth": 300.0}}}, "max_depth_m"),
+])
+def test_python_chain_refuses_an_unknown_key_by_name(section, nearest):
+    """sonar-6hf, the Python side: LiveChain (either engine) and cpp_chain_options merged the configuration over the
+    defaults and passed over a key the defaults do not have, so `classify: {min_sped: 2}` ran with min_speed 1. Both
+    refuse it now, by name and with the nearest key, as LiveChainCpp does."""
+    from gpusonar.live import cpp_chain_options
+    cfg = dict(CHAIN, **{k: (dict(CHAIN.get(k) or {}, **v) if isinstance(v, dict) and k != "sync" else v) for k, v in section.items()})
+    for make in (lambda: LiveChain(cfg), lambda: LiveChain(dict(cfg, engine="cpp", backend="host")), lambda: cpp_chain_options(cfg)):
+        with pytest.raises(ValueError, match=f"unknown key; did you mean '{nearest}'"):
+            make()
+
+
 def test_echo_grouping_matches_python_and_takes_the_earliest_established_arrival():
     """Echo grouping in both engines on the same tracks (D-155): a ship whose strongest arrival is the later one (1040 m)
     and a weaker one beyond it (1080 m); a short track before it (980 m, three pings: uncertain); a second ship at another
