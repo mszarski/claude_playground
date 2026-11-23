@@ -49,6 +49,20 @@ def bootstrap(dataset_repo: str) -> None:
     sys.path.insert(0, str(Path(path) / "code"))
 
 
+def render_as_inference(tok, prompt: list, completion: list, template_kwargs: dict) -> dict:
+    """String prompt/completion whose prompt is the exact generation prompt used at inference.
+
+    The completion is the assistant text plus whatever the template puts after an assistant turn (end of turn)."""
+    text = completion[0]["content"]
+    gen = tok.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True, **template_kwargs)
+    full = tok.apply_chat_template(prompt + completion, tokenize=False, **template_kwargs)
+    end = full[full.rindex(text) + len(text):]
+    adds_bos = tok.bos_token_id is not None and tok(text="a")["input_ids"][:1] == [tok.bos_token_id]
+    if adds_bos and gen.startswith(tok.bos_token):
+        gen = gen[len(tok.bos_token):]  # TRL tokenizes a plain string with the tokenizer, which adds BOS itself
+    return {"prompt": gen, "completion": text + end}
+
+
 def copy_processor_files(base: str, output: str) -> None:
     """Multimodal bases (e.g. Qwen3.8) need their processor configs next to the weights for vLLM to load them."""
     from huggingface_hub import HfApi, hf_hub_download
@@ -81,6 +95,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0, help="data order and LoRA init (0 = the setting all earlier runs used)")
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
+    ap.add_argument("--match-inference-prompt", action="store_true",
+                    help="train on the exact generation prompt (pre-rendered), not the chat template's full-conversation rendering")
     ap.add_argument("--adapter-only", action="store_true",
                     help="push only the LoRA adapter (to <output>/adapter) and skip merging and the in-script eval")
     ap.add_argument("--no-think", action="store_true",
@@ -109,7 +125,12 @@ def main() -> None:
     template_kwargs = {"enable_thinking": False} if args.no_think else {}
     if args.template_kwargs:
         template_kwargs.update(json.loads(args.template_kwargs))
-    if template_kwargs:
+    if args.match_inference_prompt:
+        # Pre-render each prompt exactly as generation sees it. Rendering prompt+completion as one conversation can
+        # differ: Gemma 4 with enable_thinking=False appends an empty thought block to the generation prompt only.
+        tok0 = AutoTokenizer.from_pretrained(args.model)
+        train = train.map(lambda r: render_as_inference(tok0, r["prompt"], r["completion"], template_kwargs))
+    elif template_kwargs:
         train = train.add_column("chat_template_kwargs", [template_kwargs] * len(train))
 
     config = SFTConfig(
