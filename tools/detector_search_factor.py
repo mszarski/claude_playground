@@ -4,6 +4,9 @@
     tools/detector_search_factor.py [--pings 400] [--rows 1,2,3] [--budgets 3,1,0.3,0.1] [--seed 4000] [--json FILE]
     tools/detector_search_factor.py --verify [--pings 200] [--budgets 3,1] [--seed 9000] [--json FILE]
     tools/detector_search_factor.py --search-factor 2.5 ...       the detector as it was: one flat factor for every test
+    tools/detector_search_factor.py --at-default [--maps long_range,flank,static] [--rows 1,2,3] [--pings 100000]
+                                    [--backend auto] [--workers 4] [--max-seconds S] [--seed 20000] [--json FILE]
+    tools/detector_search_factor.py --replay AT_DEFAULT.json [--seed 20000] [--json FILE]
 
 The detector (libs/live detector.hpp) turns a budget of false detections per ping into a threshold for each of its
 tests by counting the independent tests its map holds. The map is sampled finer than a range resolution and a
@@ -30,8 +33,21 @@ false detections per ping against the budget.
 
 The table in libs/live/include/sonar/live/detector.hpp was made with the default arguments, starting from a flat factor
 of 2.5 (`--search-factor 2.5`, growth laws applied to the thresholds used); run it again and compare before changing
-the map (bearing step, samples per cell, aperture window) or the grouping. Nothing is measured at the default budget of
-one false detection in a thousand pings: that would take a hundred thousand pings.
+the map (bearing step, samples per cell, aperture window) or the grouping.
+
+At the default budget (one false detection in a thousand pings) the count is `--at-default` below: measured on an L4 in
+2026-11 (issue sonar-ydi; HF jobs 6b03d2718d268c0fbd23ad8d, 6b03efcc130a00b5aa8290a6, 6b04188d7a38dcb7ff6e8e25), the whole
+detector gave 0.79, 0.90, 0.80 of the budget for one, two, three rows of the long-range array (100 000, 100 000, 89 594
+pings), 0.76 on the flank array (100 000), 1.01 and 0.73 on the static two- and three-row arrays (41 553, 40 000). The
+95 % intervals of the two one-row counts (0.63 to 0.98, 0.60 to 0.95) lie just under the budget, the others hold it; the
+constants were kept (under the budget is the safe side, and the threshold it costs is under 0.1 dB). Split between the
+tests (`--replay`), the single sample ran 0.64 to 0.70 of its share (pooled 0.67, 0.57 to 0.79) and the cell mean 0.90 to
+1.35 (two rows pooled 1.26, 1.01 to 1.55).
+
+`--at-default` is that count (issue sonar-ydi): the whole detector as shipped, through the C++ chain (engine cpp, the map
+and the detector's statistic on the GPU with --backend cuda), at the default budget, on a hundred thousand noise-only
+pings of each map and row count (DEFAULT_MAPS: D-134's map and a second one), with an exact 95 % Poisson interval for
+false detections a ping over the budget. tools/gpu_job.sh runs it on a GPU (GPUSONAR_JOB=falsealarm).
 """
 import argparse
 import json
@@ -185,6 +201,196 @@ def verify(rows_list, pings: int, budgets, seed: int, search_factor=None, log=sa
     return out
 
 
+# --- the default budget, counted directly (issue sonar-ydi) -----------------------------------------------------------
+
+# The maps the default budget is counted on: D-134's (the long-range array, 0.8 km of window) and a second one per row
+# count. One row: the flank array (configs/sonars/flank_32: another sonar, a 6-10 kHz band, so 15 samples in a 2 m cell
+# where D-134's map had 8, and a cell mean of 10.8 looks, not 5.5), at baseband with the band a quarter of the sample
+# rate as in D-134's map, over the same 0.8 km. Two and three rows: no other sonar has stacked rows, so the static
+# arrays (popoto_static_2row, _3row) over their whole deployed window, 75 m to 3 km: 3.7 times the cells of D-134's map
+# (thresholds 0.2 dB higher) and its near end at 75 m. Bearings -60 to 60 degrees every 0.5, as deployed for all.
+DEFAULT_MAPS = {
+    "long_range": {r: (SONARS[r], WINDOW) for r in (1, 2, 3)},
+    "flank": {1: ("flank_32", {"receive": {"kind": "baseband", "sample_rate": 16000.0, "window": {"range": [900.0, 1700.0]}}})},
+    "static": {r: (f"popoto_static_{r}row", {"receive": {"kind": "baseband", "sample_rate": 8000.0}}) for r in (2, 3)},
+}
+DEFAULT_BUDGET = 1e-3          # cfar.false_alarms_per_ping as shipped (live.DEFAULTS, detector.hpp)
+MIN_SNR_DB = float(live.DEFAULTS["min_snr_db"])      # the chain's floor on what it reports (9 dB)
+
+
+def poisson_interval(n: int, level: float = 0.95) -> tuple[float, float]:
+    """Exact (Garwood) two-sided interval for the mean of a Poisson count n."""
+    from scipy.stats import chi2
+    a = 1.0 - level
+    lo = 0.0 if n == 0 else 0.5 * chi2.ppf(0.5 * a, 2 * n)
+    return float(lo), float(0.5 * chi2.ppf(1.0 - 0.5 * a, 2 * n + 2))
+
+
+def noise_pings(shape, complex_samples: bool, pings: int, seed: int, workers: int, streams=None):
+    """White Gaussian noise for `pings` records of `shape`, as receiver.add_noise draws it (NOISE_RMS per real component),
+    drawn on `workers` threads (NumPy lets go of the interpreter while it draws), in order. Ping i always gets the stream
+    SeedSequence(seed).spawn(pings)[i], whatever the number of workers (`streams`: those streams given instead)."""
+    from concurrent.futures import ThreadPoolExecutor
+    if streams is None:
+        streams = np.random.SeedSequence(seed).spawn(pings)
+
+    def draw(i):
+        rng = np.random.Generator(np.random.PCG64(streams[i]))
+        if complex_samples:
+            x = rng.standard_normal(tuple(shape) + (2,), dtype=np.float32)
+            x *= np.float32(NOISE_RMS)
+            return x.view(np.complex64)[..., 0]
+        x = rng.standard_normal(tuple(shape), dtype=np.float32)
+        x *= np.float32(NOISE_RMS)
+        return x
+
+    with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:
+        ahead = 2 * max(workers, 1)
+        futures = [pool.submit(draw, i) for i in range(min(ahead, pings))]
+        for i in range(pings):
+            x = futures[i].result()
+            futures[i] = None
+            if i + ahead < pings:
+                futures.append(pool.submit(draw, i + ahead))
+            yield x
+
+
+def at_default(maps, rows_list, pings: int, seed: int, backend: str = "auto", budget: float = DEFAULT_BUDGET, workers: int = 4,
+               max_seconds: float | None = None, log=say, store: Path | None = None) -> dict:
+    """The detector as shipped (both tests, the constants in the code) at `budget` false detections a ping, through the
+    C++ chain (engine cpp: the map and the detector's statistic on `backend`), on noise-only pings of each map: the
+    false detections counted against the budget, with an exact 95 % Poisson interval. The chain's floor on what it
+    reports (`min_snr_db`, 9 dB) is set to 0 here, so that the count is the detector's own (what the budget and the
+    constants are about); what the chain as shipped reports, the detections above the floor, is counted beside it. Each
+    detection is put down to the single-sample test when its strongest sample over the background reaches that test's
+    threshold (with the training correction of a full window), else to the cell mean (`replay` splits them exactly).
+    `max_seconds`: stop a map and row count early (said)."""
+    out = {}
+    for name in maps:
+        for rows in rows_list:
+            if rows not in DEFAULT_MAPS[name]:
+                continue
+            sonar_name, overrides = DEFAULT_MAPS[name][rows]
+            sonar = SonarModel.load(sonar_name, overrides)
+            tpl = sonar.make_record(core.Pose(), environment={"sound_speed": 1500.0})
+            cfg = dict(CHAIN, engine="cpp", backend=backend, min_snr_db=0.0)     # the detector's own count (the floor below)
+            if rows > 1:
+                cfg["elevation"] = {}
+            if budget != DEFAULT_BUDGET:
+                cfg["cfar"] = {"false_alarms_per_ping": budget}
+            plan = live.detector_plan(tpl, cfg, rows)
+            s0 = plan["scales"][0]
+            sample_db = float(10.0 * np.log10(s0["factor"] * core.training_correction(s0["pfa"], plan["train_cells"] * plan["train_looks_per_cell"])))
+            arr = tpl.samples.array
+            t0 = time.time()
+            found, done, per_ping, detections = 0, 0, {}, []
+            with LiveChain(cfg) as chain:
+                key = f"{name}/{rows}"
+                for i, x in enumerate(noise_pings(arr.shape, np.iscomplexobj(arr), pings, default_seed(seed, name, rows), workers)):
+                    rec = tpl.copy()
+                    rec.samples.array = x
+                    rec.transmit.time_ns = int(i) * 20_000_000_000            # a ping every 20 s
+                    dets = chain.process(rec)["detections"]
+                    done += 1
+                    found += len(dets)
+                    per_ping[len(dets)] = per_ping.get(len(dets), 0) + 1
+                    for d in dets:
+                        detections.append({"ping": i, "range_m": d.get("range_m"), "bearing_deg": d.get("bearing_deg"), "snr_db": d.get("snr_db"),
+                                           "extent_m": d.get("extent_m")})
+                    if done % 10000 == 0:
+                        log(f"{key}: {done} pings, {found} false detections, {(time.time() - t0) / done * 1e3:.1f} ms a ping")
+                    if max_seconds is not None and time.time() - t0 > max_seconds:
+                        log(f"{key}: stopped after {max_seconds:g} s at {done} pings")
+                        break
+                used = chain.backend.name if hasattr(chain.backend, "name") else str(chain.backend)
+                thresholds = [s["threshold_db"] for s in chain.detector["scales"]]
+            lo, hi = poisson_interval(found)
+            reported = sum(1 for d in detections if d["snr_db"] is not None and d["snr_db"] > MIN_SNR_DB)
+            r_lo, r_hi = poisson_interval(reported)
+            by_sample = sum(1 for d in detections if d["snr_db"] is not None and d["snr_db"] >= sample_db)
+            res = {"map": name, "sonar": sonar_name, "rows": rows, "pings": done, "asked": pings, "budget": budget, "backend": used,
+                   "seconds": round(time.time() - t0, 1), "found": found, "per_ping": found / done, "ratio": found / (budget * done),
+                   "ratio_95": [lo / (budget * done), hi / (budget * done)], "pings_by_count": {str(k): v for k, v in sorted(per_ping.items())},
+                   "reported": reported, "reported_ratio": reported / (budget * done), "reported_ratio_95": [r_lo / (budget * done), r_hi / (budget * done)],
+                   "min_snr_db": MIN_SNR_DB, "sample_test": by_sample, "cell_mean_only": found - by_sample, "sample_threshold_db": sample_db, "thresholds_db": thresholds,
+                   "beams": plan["beams"], "cell_m": plan["cell_m"], "samples_per_cell": plan["samples_per_cell"], "resolution_m": plan["resolution_m"],
+                   "looks": [s["looks"] for s in plan["scales"]], "tests": [s["tests"] for s in plan["scales"]], "search": [s["search"] for s in plan["scales"]],
+                   "samples_shape": list(arr.shape), "detections": detections}
+            out[f"{name}/{rows}"] = res
+            log(f"{name} ({sonar_name}) rows {rows} on {used}: {found} false detections in {done} pings = {found / done:.2e} a ping, "
+                f"{res['ratio']:.2f} of the budget (95 %: {res['ratio_95'][0]:.2f} to {res['ratio_95'][1]:.2f}); "
+                f"single sample {by_sample}, cell mean only {found - by_sample}; above the chain's {MIN_SNR_DB:g} dB floor {reported} "
+                f"= {res['reported_ratio']:.2f} ({res['reported_ratio_95'][0]:.2f} to {res['reported_ratio_95'][1]:.2f}); thresholds {', '.join(f'{t:.2f}' for t in thresholds)} dB; {res['seconds']} s")
+            if store is not None:
+                store.write_text(json.dumps(out, indent=1, default=float) + "\n")
+    return out
+
+
+def default_seed(seed: int, name: str, rows: int) -> int:
+    """The seed of the noise streams of one map and row count in `at_default`."""
+    return seed + 1000 * rows + 100000 * list(DEFAULT_MAPS).index(name)
+
+
+def replay(counted: dict, seed: int, log=say) -> dict:
+    """Each test alone, exactly, on the pings where `at_default` counted false detections: those pings' noise is drawn
+    again (ping i's stream does not depend on anything else), put through the Python chain on the host, and its map
+    handed to the NumPy detector with the plan the chain made (both tests: the count to compare with the GPU's) and with
+    one test at a time at its share of the budget. A test alone flags a subset of what both flag, so a ping where the
+    GPU counted nothing gives nothing to either test alone (the map's last bits aside). The tests' counts then give
+    each constant at the default budget: the table's value times found over asked (as `measure` does)."""
+    out = {}
+    plain = detect.multiscale
+    for key, res in counted.items():
+        name, rows = res["map"], int(res["rows"])
+        sonar_name, overrides = DEFAULT_MAPS[name][rows]
+        sonar = SonarModel.load(sonar_name, overrides)
+        tpl = sonar.make_record(core.Pose(), environment={"sound_speed": 1500.0})
+        cfg = dict(CHAIN, engine="python", backend="host", min_snr_db=0.0)
+        if rows > 1:
+            cfg["elevation"] = {}
+        if float(res["budget"]) != DEFAULT_BUDGET:
+            cfg["cfar"] = {"false_alarms_per_ping": float(res["budget"])}
+        pings = sorted({int(d["ping"]) for d in res["detections"]})
+        streams = np.random.SeedSequence(default_seed(seed, name, rows)).spawn(int(res["pings"]))
+        arr = tpl.samples.array
+        both, alone = 0, [0, 0]
+        seen = []
+
+        def spy(*args):
+            seen.append(args)
+            return plain(*args)
+
+        detect.multiscale = spy
+        try:
+            with LiveChain(cfg) as chain:
+                for i in pings:
+                    x = next(noise_pings(arr.shape, np.iscomplexobj(arr), 1, 0, 1, streams=[streams[i]]))
+                    rec = tpl.copy()
+                    rec.samples.array = x
+                    rec.transmit.time_ns = int(i) * 20_000_000_000
+                    chain.process(rec)
+                    args = seen.pop()
+                    plan = args[-1]
+                    both += len(plain(*args[:-1], plan)[0])
+                    for which in (0, 1):
+                        alone[which] += len(plain(*args[:-1], one_test(plan, which))[0])
+        finally:
+            detect.multiscale = plain
+        share = float(res["budget"]) / 2.0 * int(res["pings"])
+        tests = {}
+        for which, test in TESTS:
+            n = alone[which]
+            lo, hi = poisson_interval(n)
+            search = float(res["search"][which])
+            tests[test] = {"found": n, "asked": share, "ratio": n / share, "ratio_95": [lo / share, hi / share], "search": search,
+                           "constant": search * n / share, "constant_95": [search * lo / share, search * hi / share]}
+        out[key] = {"gpu_found": res["found"], "replayed_pings": len(pings), "host_found": both, "tests": tests}
+        log(f"{key}: {len(pings)} pings replayed on the host: {both} false detections (GPU {res['found']}); " + "; ".join(
+            f"{t} alone {v['found']} = {v['ratio']:.2f} of its share (95 %: {v['ratio_95'][0]:.2f} to {v['ratio_95'][1]:.2f}), "
+            f"constant {v['constant']:.3f} ({v['constant_95'][0]:.3f} to {v['constant_95'][1]:.3f}; table {v['search']:.3f})" for t, v in tests.items()))
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pings", type=int, default=None)
@@ -194,10 +400,24 @@ def main(argv=None) -> int:
     ap.add_argument("--search-factor", type=float, default=None, help="a flat factor for the thresholds used (2.5: the detector as it was)")
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--json", default=None)
+    ap.add_argument("--at-default", action="store_true", help="the shipped detector at the default budget through the C++ chain")
+    ap.add_argument("--maps", default=",".join(DEFAULT_MAPS), help="--at-default: maps (long_range, flank, static)")
+    ap.add_argument("--backend", default="auto", help="--at-default: auto, host or cuda")
+    ap.add_argument("--budget", type=float, default=DEFAULT_BUDGET, help="--at-default: false detections a ping (default: as shipped)")
+    ap.add_argument("--workers", type=int, default=4, help="--at-default: threads drawing the noise")
+    ap.add_argument("--max-seconds", type=float, default=None, help="--at-default: stop each map and row count after this long")
+    ap.add_argument("--replay", default=None, help="the JSON of an --at-default run (same --seed): each test alone on its pings, on the host")
     args = ap.parse_args(argv)
     rows = [int(r) for r in args.rows.split(",") if r]
     store = Path(args.json) if args.json else None
-    if args.verify:
+    if args.replay:
+        got = replay(json.loads(Path(args.replay).read_text()), 20000 if args.seed is None else args.seed)
+        if store is not None:
+            store.write_text(json.dumps(got, indent=1, default=float) + "\n")
+    elif args.at_default:
+        at_default([m for m in args.maps.split(",") if m], rows, args.pings or 100000, 20000 if args.seed is None else args.seed, args.backend,
+                   args.budget, args.workers, args.max_seconds, store=store)
+    elif args.verify:
         budgets = [float(b) for b in (args.budgets or "3,1").split(",") if b]
         verify(rows, args.pings or 200, budgets, 9000 if args.seed is None else args.seed, args.search_factor, store=store)
     else:

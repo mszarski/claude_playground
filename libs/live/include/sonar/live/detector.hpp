@@ -106,6 +106,12 @@ struct DetectorOptions {
 /// 0.211 over all twelve entries), and the rows are in u: a flat factor of 2.5 read 0.86, 1.16 and 1.24 of the budget
 /// for one, two and three rows at these budgets, and more as the budget tightens. More than three rows: the three-row
 /// value (not measured). Another map (bearing step, samples per cell, window) needs the tool run again.
+/// At the default budget (1e-3 a ping) the whole detector was counted directly on 40 000 to 100 000 noise-only pings per
+/// map and row count on a GPU (tools/detector_search_factor.py --at-default; issue sonar-ydi): 0.73 to 1.01 of the budget
+/// on the long-range, flank and static arrays; one row runs just under it (95 %: 0.63 to 0.98 and 0.60 to 0.95), the
+/// others hold it. Kept as they are: under the budget is the safe side, and it costs under 0.1 dB of threshold. There
+/// the single sample alone runs at about 0.67 of its share (the growth in u counts too many tests that high; why is not found) and the
+/// two-row cell mean at about 1.26; the two make up for each other in the whole detector.
 inline constexpr double kSearchSample[3] = {0.191, 0.208, 0.192};
 inline constexpr double kSearchMean[3] = {0.515, 0.532, 0.598};
 

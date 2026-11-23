@@ -259,6 +259,46 @@ def test_one_row_and_three_rows_keep_the_same_false_alarm_budget():
     assert three["found"] < 1.25 * one["found"]
 
 
+def _search_factor_tool():
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "detector_search_factor.py"
+    spec = importlib.util.spec_from_file_location("detector_search_factor", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    return tool
+
+
+def test_the_default_budget_count_on_a_second_map_at_cpu_scale():
+    """tools/detector_search_factor.py --at-default, short: the shipped detector through the C++ chain (host) on
+    noise-only pings of the second map of one row (the flank array: 15 samples in a 2 m cell, a cell mean of 10.8 looks;
+    D-134's constants were measured on 8 and 5.5), at a budget of 3 false detections a ping so that 12 pings can count
+    them (36 expected, 17 % of statistical error): between 0.55 and 1.5 of the budget. At the default budget the count
+    takes a hundred thousand pings a map on a GPU (GPUSONAR_JOB=falsealarm; its numbers are in the tool's docstring). Also
+    the interval the tool states (exact Poisson), that ping i's noise does not depend on the threads drawing it, and
+    that the replay of the counted pings on the host's Python chain counts the same and splits them between the tests."""
+    tool = _search_factor_tool()
+    lo, hi = tool.poisson_interval(0)
+    assert lo == 0.0 and hi == pytest.approx(3.689, abs=1e-3)
+    lo, hi = tool.poisson_interval(100)
+    assert (lo, hi) == (pytest.approx(81.36, abs=0.01), pytest.approx(121.63, abs=0.01))
+    one = list(tool.noise_pings((4, 64), True, 5, 7, 1))
+    four = list(tool.noise_pings((4, 64), True, 5, 7, 4))
+    assert all(np.array_equal(a, b) for a, b in zip(one, four)) and one[0].dtype == np.complex64
+    assert np.std(np.concatenate([x.ravel() for x in one]).real) == pytest.approx(tool.NOISE_RMS, rel=0.1)
+    got = tool.at_default(["flank"], [1], 12, 31000, backend="host", budget=3.0, workers=2, log=lambda *_: None)["flank/1"]
+    assert got["sonar"] == "flank_32" and got["samples_per_cell"] == 15 and got["looks"][1] == pytest.approx(10.85, abs=0.1)
+    assert got["pings"] == 12 and 0.55 < got["ratio"] < 1.5, got["ratio"]
+    assert got["ratio_95"][0] < got["ratio"] < got["ratio_95"][1]
+    assert got["sample_test"] + got["cell_mean_only"] == got["found"] and got["reported"] <= got["found"]
+    # Each test alone, on the host's Python chain, on the pings that gave false detections: the same count with both
+    # tests, and each test alone no more than both.
+    again = tool.replay({"flank/1": got}, 31000, log=lambda *_: None)["flank/1"]
+    assert again["host_found"] == got["found"]
+    alone = again["tests"]
+    assert max(alone["sample"]["found"], alone["cell mean"]["found"]) <= got["found"] <= alone["sample"]["found"] + alone["cell mean"]["found"]
+
+
 # --- a point echo ----------------------------------------------------------------------------------------------------
 
 def test_a_point_echo_reads_its_budget_snr_less_window_and_straddling_on_both_engines(sonar, template):
