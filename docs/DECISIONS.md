@@ -2753,3 +2753,23 @@ follow the same rules, all ours:
   merged tree, HF job 6b036ba48d268c0fbd22d9fe, 1808 passed, 92 skipped, Holoscan operators
   compiled.
 
+### D-162 Sensor Bridge receive: the chain's OpenMP below the core count (owner's choice, issue sonar-ihd)
+
+With one OpenMP thread per vCPU, `flank.backprojection_map` kept Sensor Bridge's receiver thread
+runnable but waiting 5-13 ms for a CPU on an 8-vCPU L4 host (4 cores x 2), and the 212,992-byte
+socket buffer (about 20 ms of stream) overflowed: the occasional frame lost by the real-time
+loopback test (D-160). Ruled out by measurement: the GIL (a probe thread took it without delay),
+the engine (the C++ engine loses alike), hypervisor steal (0). Pinning the receiver alone, nice 10
+for the chain and 7 threads did not help; Sensor Bridge 2.7.0 left its receiver thread unpinned.
+- `receive --chain-omp-threads N` (opt-in; default unchanged) sets OpenMP's thread count on the
+  thread that runs the chain, before its first ping; the receive application uses Holoscan's default
+  single-thread scheduler, so that is every chain call. Reported as `chain_omp_threads`.
+- The loopback test runs it at half the available CPUs, keeps the default buffer and every
+  zero-loss assertion (no retries), and asserts the worst receive delay (same-host CLOCK_REALTIME,
+  receive after the frame's last datagram minus its send) under 5 ms, with clock checks.
+- Measured on L4: halved buffer loss in 9 of 15 runs -> 0 of 10, normal buffer 0 of 6; worst delay
+  10-13 -> 1-2 ms; about +10 % chain time. Loopback alone 8 of 8 passed, worst 0.8-2.3 ms (HF job
+  6b037e168d268c0fbd23006c); full GPU suite 1809 passed, 92 skipped (6b037e1b130a00b5aa817f04).
+- Open: the receive tool still hangs to the test's timeout after heavy loss (quarter buffer, 5 of
+  8 runs, job 6b0386c9130a00b5aa8190e2); filed separately.
+
