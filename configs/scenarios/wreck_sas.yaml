@@ -4,7 +4,10 @@
 # The advance per ping is 0.24 m, less than half the 0.64 m array, so consecutive pings
 # share phase centres (what displaced-phase-centre micronavigation needs). The receive
 # chain is taken as already at baseband to keep synthesis affordable: about 9000
-# scatterers and 80 pings take about four minutes to synthesise on four CPU cores.
+# scatterers and 80 pings take about four minutes to synthesise on four CPU cores (before the seabed
+# was widened; now about 13,600 scatterers). The seabed spans y 34-53 m, past the receive window's ground
+# extent (35.0-51.5 m at 15 m altitude), so every motion-estimation range window looks at seabed
+# (sonar-7r7: it ended at 48 m before, and the last window, with no seabed, tilted the estimated heave).
 name: wreck_sas
 sonar: sas_auv
 fidelity: free_field
@@ -18,7 +21,7 @@ platform:
   motion: {sway_rms: 0.01, heave_rms: 0.004, correlation_pings: 8.0, nav_knows_disturbance: false, dvl_altitude_noise: 0.001}
 pings: {count: 80, interval: 0.2}
 scene:
-  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [36.0, 48.0], density: 25.0, lambert_mu_db: -27.0}
+  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [34.0, 53.0], density: 25.0, lambert_mu_db: -27.0}
   - {type: box, label: wreck, min: [8.0, 41.0, -1.0], max: [11.0, 42.0, 0.0], density: 120.0, mu_db: -15.0}
 receiver: {noise_rms: 0.0, adc: false}
 seed: 5

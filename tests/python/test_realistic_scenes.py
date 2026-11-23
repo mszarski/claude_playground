@@ -90,8 +90,13 @@ def test_sas_scenes_with_unknown_motion(name):
     m = quick(name)
     assert m["sway_error_rms_wavelengths"] < 0.2 and m["heave_error_rms_wavelengths"] < 0.25
     s = m["sharpness"]
-    assert s["Estimated motion"] > 0.8 * s["True motion"]
-    assert s["Estimated motion"] > 2.0 * s["Navigation only"]
+    est, nav, true = s["Estimated motion"], s["Navigation only"], s["True motion"]
+    assert est > 0.8 * true
+    # Navigation alone loses focus, and the estimate wins back most of it. (Until sonar-7r7 this read
+    # est > 2 nav; with the seabed widened, minefield_sas draws a motion whose true-motion image is
+    # itself only 1.91 times the navigation-only one, 241.7 against 126.6, so no estimate can pass it.)
+    assert nav < 0.6 * true
+    assert est - nav > 0.8 * (true - nav)
 
 
 def test_buried_objects_volume():
