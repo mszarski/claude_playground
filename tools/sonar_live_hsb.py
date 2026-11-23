@@ -34,6 +34,9 @@ def positive_int(text: str) -> int:
     return value
 
 
+STOPPED_SHORT = 3   # receive's exit status when it stopped before reporting --pings pings (the statistics are printed)
+
+
 def parse(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="role", required=True)
@@ -58,8 +61,9 @@ def parse(argv=None):
     r.add_argument("--sonar-overrides", help="JSON")
     r.add_argument("--chain", help="chain settings, JSON or a YAML file; merged over the file's chain section")
     r.add_argument("--engine", choices=["python", "cpp"], help="override chain.engine")
-    r.add_argument("--pings", type=int, help="stop after this many (default: when the stream goes quiet)")
-    r.add_argument("--idle", type=float, default=15.0, help="seconds without a frame before stopping")
+    r.add_argument("--pings", type=int, help="stop once this many pings are accounted for, reported or dropped (default: "
+                   "when the stream goes quiet); fewer reported exits with status 3 after printing the statistics")
+    r.add_argument("--idle", type=float, default=15.0, help="seconds without a frame before stopping, whatever was lost")
     r.add_argument("--report", help="JSON lines file, one report per ping")
     r.add_argument("--recording", help="container file of the raw pings")
     r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
@@ -140,6 +144,10 @@ def main(argv=None):
             json.dump({"columns": ["frame", "received_ns", "packets", "bytes"], "rows": arrivals or [],
                        "chain_wall_ns": chain_ns or []}, f)
     print("hsb: " + json.dumps(stats), flush=True)
+    short = hsb.stopped_short(stats, args.pings)
+    if short:                     # the statistics are out; say what was missing and fail (sonar-dkb)
+        print(f"receive: {short}", file=sys.stderr, flush=True)
+        return STOPPED_SHORT
     return 0
 
 

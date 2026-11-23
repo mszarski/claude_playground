@@ -793,6 +793,47 @@ class DataSocketWatch:
     def stats(self) -> dict:
         return {"found": self.inode is not None, "rcvbuf": self.rcvbuf, "drops": self.drops, "max_rx_queue": self.max_rx_queue}
 
+class ReceiveStop:
+    """When `HsbLiveApp` stops (issue sonar-dkb). `check` is called about four times a second on the
+    scheduler's thread with what has happened so far and returns why to stop, or None:
+
+    * "pings": `n_pings` pings are accounted for, reported by the chain or counted as dropped by the
+      receiver (`FrameReceiver.dropped_pings`, pings lost whole). A ping that is still waiting when the
+      receive stops is counted by `FrameReceiver.finish` in `pings_discarded_at_stop`.
+    * "idle": no frame (good, damaged or not of this stream) for `idle_timeout` seconds, whatever was
+      lost; the timer starts with the first check, so a stream that never starts stops too.
+
+    Without `n_pings` only the idle rule stops; without `idle_timeout` only the count does."""
+
+    def __init__(self, n_pings: int | None = None, idle_timeout: float | None = 15.0, clock=time.monotonic):
+        self.n_pings, self.idle_timeout, self._clock = n_pings, idle_timeout, clock
+        self.reason = None
+        self._seen = self._t_seen = None
+
+    def check(self, reported: int, dropped: int, frames_heard: int) -> str | None:
+        if self.reason is not None:
+            return self.reason
+        now = self._clock()
+        if self._seen is None or frames_heard != self._seen:
+            self._seen, self._t_seen = frames_heard, now
+        if self.n_pings is not None and reported + dropped >= self.n_pings:
+            self.reason = "pings"
+        elif self.idle_timeout is not None and now - self._t_seen > self.idle_timeout:
+            self.reason = "idle"
+        return self.reason
+
+
+def stopped_short(stats: dict, n_pings: int | None) -> str | None:
+    """What a receive that ended before reporting `n_pings` pings tells the caller, or None when it did not."""
+    reported = stats.get("reports", 0)
+    if n_pings is None or reported >= n_pings:
+        return None
+    return (f"stopped short ({stats.get('stopped')}): {reported} of {n_pings} pings reported; "
+            f"dropped {stats.get('dropped_pings')}, discarded at stop {stats.get('pings_discarded_at_stop')}, "
+            f"frames lost {stats.get('frames_lost')}, damaged {stats.get('frames_damaged')}, "
+            f"samples lost {stats.get('lost_samples')}, frames heard {stats.get('frames')}")
+
+
 try:
     from holoscan.core import Application, Operator
 except Exception:  # noqa: BLE001  (the SDK needs a CUDA runtime even to import)
@@ -877,12 +918,36 @@ if Operator is not None:
             if self._n is not None and len(self.reports) >= self._n and self._on_done:
                 self._on_done()
 
+    class HsbStopOp(Operator):
+        """Applies `ReceiveStop` on the scheduler's thread, ticked by a periodic condition (sonar-dkb), and
+        switches the receiver's boolean condition and its own off when it says stop."""
+
+        def __init__(self, fragment, *args, rule: ReceiveStop, receiver: FrameReceiver, chain_op, conditions=(),
+                     on_stop=None, **kwargs):
+            self.rule, self.receiver, self.chain_op = rule, receiver, chain_op
+            self._conditions, self._on_stop = tuple(conditions), on_stop
+            super().__init__(fragment, *args, **kwargs)
+
+        def setup(self, spec):
+            pass
+
+        def compute(self, op_input, op_output, context):
+            r = self.receiver
+            reason = self.rule.check(len(self.chain_op.reports), r.assembler.dropped_pings,
+                                     r.frames + r.frames_damaged + r.bad_frames)
+            if reason is not None:
+                if self._on_stop:
+                    self._on_stop()
+                for c in self._conditions:
+                    c.disable_tick()
+
     class HsbLiveApp(Application):
         """LinuxReceiverOp -> HsbFramesToPingsOp -> LiveChainOp.
 
         The receiver keeps up to `queue_frames` frames while the chain works on a ping (it
         drops the oldest beyond that, which `FrameReceiver` counts as lost frames). Ends
-        after `n_pings` reports, or when no frame has arrived for `idle_timeout` seconds.
+        after `n_pings` pings are accounted for (reported, or dropped by the receiver), or when
+        no frame has arrived for `idle_timeout` seconds (`ReceiveStop`; `stop_reason` says which).
         """
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
@@ -899,49 +964,53 @@ if Operator is not None:
             self.arrivals = deque(maxlen=LOG_FRAMES) if log_arrivals else None   # the newest LOG_FRAMES frames
             self.frames_op = self.chain_op = None
             self._running = None
+            self.rule = ReceiveStop(n_pings, idle_timeout or None)
             super().__init__()
 
+        @property
+        def stop_reason(self) -> str | None:
+            return self.rule.reason
+
         def _finish(self):
+            """The chain has reported `n_pings` pings (on the scheduler's thread)."""
+            if self.rule.reason is None:
+                self.rule.reason = "pings"
             self.socket_watch.sample()
             self._running.disable_tick()
-
-        def _watch(self):
-            """Stop the application when the stream has gone quiet."""
-            seen, t_seen = -1, time.perf_counter()
-            while self._running.check_tick_enabled():
-                time.sleep(0.25)
-                count = self.receiver.frames + self.receiver.frames_damaged + self.receiver.bad_frames
-                if count != seen:
-                    seen, t_seen = count, time.perf_counter()
-                elif time.perf_counter() - t_seen > self._idle:
-                    self.socket_watch.sample()
-                    self._running.disable_tick()
-                    try:
-                        self.stop_execution()               # wakes a scheduler that is waiting for a frame
-                    except AttributeError:                  # an SDK without it: the receiver's next tick ends the run
-                        pass
-                    return
+            self._stop_running.disable_tick()
 
         def compose(self):
-            import threading
+            import datetime
 
             import hololink
-            from holoscan.conditions import BooleanCondition
+            from holoscan.conditions import BooleanCondition, PeriodicCondition
             self._running = BooleanCondition(self, name="running", enable_tick=True)
+            self._stop_running = BooleanCondition(self, name="stop_running", enable_tick=True)   # one per operator
             # Sensor Bridge pins its receiver thread to core 2 (HOLOLINK_AFFINITY names another); its Python
             # binding takes one core number here, not a set (a set fails to convert in 2.7.0).
             options = {} if self._affinity is None else {"receiver_affinity": int(self._affinity)}
+            # use_frame_ready_condition=False (sonar-dkb): with Sensor Bridge's default the receiver operator
+            # waits on an asynchronous condition that only a new frame sets, and the greedy scheduler looks at
+            # it again only then; once frames stop, switching its boolean condition off is never seen and the
+            # application never ends. Without it, the receiver's compute waits for a frame for at most 1 s and
+            # returns, so the scheduler sees the switch within a second.
             rx = hololink.operators.LinuxReceiverOp(
                 self, self._running, name="receiver", frame_size=self._frame_size, frame_context=self._cuda.context,
-                hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue, **options)
+                hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue,
+                use_frame_ready_condition=False, **options)
             self.frames_op = HsbFramesToPingsOp(self, receiver=self.receiver, cuda=self._cuda, socket_watch=self.socket_watch,
                                                 arrivals=self.arrivals, name="frames_to_pings")
             self.chain_op = LiveChainOp(self, chain=self.chain, n_pings=self._n, on_report=self._on_report,
                                         on_done=self._finish, omp_threads=self._omp_threads, name="chain")
             self.add_flow(rx, self.frames_op, {("output", "input")})
             self.add_flow(self.frames_op, self.chain_op, {("ping", "ping")})
-            if self._idle:
-                threading.Thread(target=self._watch, daemon=True).start()
+            # The stop rule, ticked four times a second on the scheduler's thread; it switches off the
+            # receiver's boolean condition and its own (a condition object serves one operator).
+            self.add_operator(HsbStopOp(self, self._stop_running,
+                                        PeriodicCondition(self, recess_period=datetime.timedelta(milliseconds=250), name="stop_tick"),
+                                        rule=self.rule, receiver=self.receiver, chain_op=self.chain_op,
+                                        conditions=(self._running, self._stop_running), on_stop=self.socket_watch.sample,
+                                        name="stop"))
 
 
 def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = None, hololink_ip: str = "127.0.0.1",
@@ -971,6 +1040,8 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
         cuda.release()
     receiver.finish(keep=False)  # the end of the stream: what is still awaited is counted, waiting pings in pings_discarded_at_stop
     stats = receiver.stats()
+    stats["reports"] = len(app.chain_op.reports)
+    stats["stopped"] = app.stop_reason or "ended"        # pings, idle, or the application ended by itself
     udp1, cpu1 = udp_counters(), cpu_throttling()
     stats["socket"] = app.socket_watch.stats()
     stats["udp_counters"] = {k: udp1[k] - udp0.get(k, 0) for k in ("InDatagrams", "InErrors", "RcvbufErrors", "SndbufErrors")

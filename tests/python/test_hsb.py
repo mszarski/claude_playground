@@ -118,6 +118,147 @@ def test_a_dropped_frame_drops_exactly_the_ping_it_cuts(pings):
     assert receiver.stats()["bad_frames"] == 2
 
 
+def test_receive_stops_when_its_pings_are_accounted_for_or_the_stream_is_quiet():
+    """ReceiveStop (sonar-dkb): the stop rule of the receive application, with a stand-in clock."""
+    now = [0.0]
+    clock = lambda: now[0]                                                   # noqa: E731
+    rule = hsb.ReceiveStop(n_pings=6, idle_timeout=15.0, clock=clock)
+    assert rule.check(0, 0, 0) is None
+    now[0] = 14.0
+    assert rule.check(0, 0, 0) is None                                       # quiet, but not for 15 s yet
+    now[0] = 15.5
+    assert rule.check(0, 0, 0) == "idle"                                     # a stream that never started
+    # All six reported: stop at once.
+    rule = hsb.ReceiveStop(6, 15.0, clock=clock)
+    assert rule.check(5, 0, 100) is None and rule.check(6, 0, 101) == "pings" and rule.reason == "pings"
+    # One ping lost whole, the other five reported: accounted for, stop without waiting for the idle timeout.
+    rule = hsb.ReceiveStop(6, 15.0, clock=clock)
+    assert rule.check(5, 1, 102) == "pings"
+    # The last ping lost (so never counted as dropped) and the stream stopped early: the idle timeout stops it,
+    # counted from the last frame heard, not from the start.
+    now[0] = 100.0
+    rule = hsb.ReceiveStop(6, 15.0, clock=clock)
+    for k in range(50):
+        now[0] += 0.25
+        assert rule.check(min(5, k // 8), 0, 10 * k) is None                # frames keep coming
+    t_last = now[0]
+    while rule.check(5, 0, 490) is None:
+        now[0] += 0.25
+    assert rule.reason == "idle" and 15.0 < now[0] - t_last <= 15.25
+    # Without a count only the idle rule stops; without an idle timeout only the count does.
+    rule = hsb.ReceiveStop(None, 15.0, clock=clock)
+    assert rule.check(10**6, 0, 1) is None
+    rule = hsb.ReceiveStop(6, None, clock=clock)
+    now[0] += 10**6
+    assert rule.check(0, 0, 1) is None and rule.check(6, 0, 1) == "pings"
+    # What the tool says when it stopped short (and exits with status 3); nothing when it did not.
+    stats = {"reports": 5, "stopped": "idle", "dropped_pings": 0, "pings_discarded_at_stop": 0, "frames_lost": 16,
+             "frames_damaged": 0, "lost_samples": 6400, "frames": 1980}
+    assert hsb.stopped_short(dict(stats, reports=6), 6) is None and hsb.stopped_short(stats, None) is None
+    said = hsb.stopped_short(stats, 6)
+    assert said.startswith("stopped short (idle): 5 of 6 pings reported") and "frames lost 16" in said
+
+
+STAND_IN_RECEIVER = r"""
+# A HsbLiveApp with Sensor Bridge's receiver operator replaced by a stand-in that behaves as LinuxReceiverOp
+# does in its two modes (use_frame_ready_condition, Sensor Bridge 2.7.0 base_receiver_op.cpp): an asynchronous
+# condition set by a feeding thread per frame, or a compute that waits for a frame for at most 1 s.
+import json, queue, sys, threading, time, types
+import numpy as np
+import holoscan
+from holoscan.conditions import AsynchronousCondition, AsynchronousEventState
+sys.path.insert(0, sys.argv[1])
+from test_hsb import CHAIN, FRAME, LEAD, OVERRIDES, copies
+from test_live import pings
+from gpusonar.live import LiveChain
+from gpusonar.sources import hsb
+
+records = pings.__wrapped__()
+stream = hsb.FrameStream(copies(records), FRAME, lead_seconds=LEAD)
+frames = list(stream)
+last = int(sys.argv[2])                    # frames from this one on are never sent: the stream stops early
+period = 0.0005
+
+class StandInReceiverOp(hsb.Operator):
+    def __init__(self, fragment, *args, ready=None, **kwargs):
+        self.ready, self.q, self.k = ready, queue.Queue(), 0
+        super().__init__(fragment, *args, **kwargs)
+
+    def setup(self, spec):
+        spec.output("output")
+
+    def start(self):
+        def feed():
+            for k in range(min(last, len(frames))):
+                time.sleep(period)
+                self.q.put(k)
+                if self.ready is not None:
+                    self.ready.event_state = AsynchronousEventState.EVENT_DONE
+        threading.Thread(target=feed, daemon=True).start()
+
+    def compute(self, op_input, op_output, context):
+        try:
+            k = self.q.get(timeout=0 if self.ready is not None else 1.0)
+        except queue.Empty:
+            return
+        if self.ready is not None:
+            self.ready.event_state = AsynchronousEventState.EVENT_WAITING
+            if not self.q.empty():
+                self.ready.event_state = AsynchronousEventState.EVENT_DONE
+        self.metadata["frame_number"] = k
+        self.metadata["frame_bytes_received"] = len(frames[k])
+        self.metadata["packets_dropped"] = 0
+        op_output.emit({"": holoscan.as_tensor(np.frombuffer(frames[k], dtype=np.uint8).copy())}, "output")
+
+def linux_receiver_op(fragment, *conditions, name, use_frame_ready_condition=True, **kwargs):
+    ready = AsynchronousCondition(fragment, name="frame_ready") if use_frame_ready_condition else None
+    return StandInReceiverOp(fragment, *conditions, *([ready] if ready is not None else []), ready=ready, name=name)
+
+sys.modules["hololink"] = types.SimpleNamespace(operators=types.SimpleNamespace(LinuxReceiverOp=linux_receiver_op))
+receiver = hsb.FrameReceiver("flank_32", OVERRIDES, frame_samples=FRAME)
+t0 = time.monotonic()
+with LiveChain(CHAIN) as chain:
+    app = hsb.HsbLiveApp(chain, receiver, None, types.SimpleNamespace(context=0), receiver.frame_bytes, n_pings=len(records),
+                         idle_timeout=1.0)
+    app.run()
+receiver.finish(keep=False)
+stats = dict(receiver.stats(), reports=len(app.chain_op.reports), stopped=app.stop_reason or "ended")
+print("RESULT " + json.dumps({"seconds": time.monotonic() - t0, "stats": stats,
+                              "short": hsb.stopped_short(stats, len(records)), "tx": [int(t) for t in stream.tx]}))
+"""
+
+
+@pytest.mark.parametrize("cut_ping", [None, 5, 3])
+def test_receive_application_stops_when_the_stream_ends_early(pings, cut_ping):
+    """sonar-dkb: the receive application ends, and says what it lost, when fewer than n_pings pings arrive.
+    Holoscan's runtime and our operators behind a stand-in for Sensor Bridge's receiver operator (no
+    Sensor Bridge, no GPU); the stream stops before ping `cut_ping`'s window (None: nothing is cut). Before
+    the fix the application waited for ever once frames stopped: the receiver operator's asynchronous
+    condition is looked at again only when a frame sets it."""
+    if hsb.Operator is None:
+        pytest.skip("Holoscan SDK not usable here")
+    stream = hsb.FrameStream(copies(pings), FRAME, lead_seconds=LEAD)
+    n_frames = len(list(stream))
+    last = n_frames if cut_ping is None else (stream.tx[cut_ping] + stream.window_start) // FRAME
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
+    try:
+        out = subprocess.run([sys.executable, "-c", STAND_IN_RECEIVER, str(ROOT / "tests" / "python"), str(last)],
+                             capture_output=True, text=True, env=env, timeout=240)
+    except subprocess.TimeoutExpired:
+        pytest.fail("the receive application did not end within 240 s after its stream stopped")
+    assert out.returncode == 0, out.stderr[-3000:]
+    got = json.loads([ln for ln in out.stdout.splitlines() if ln.startswith("RESULT ")][-1][7:])
+    stats = got["stats"]
+    print("stand-in receive:", got)
+    if cut_ping is None:
+        assert stats["stopped"] == "pings" and stats["reports"] == N and got["short"] is None
+    else:
+        assert stats["stopped"] == "idle" and stats["reports"] == cut_ping
+        # The pings never heard are not counted anywhere (nothing after them names them); what was heard is.
+        assert stats["pings"] + stats["dropped_pings"] + stats["pings_discarded_at_stop"] == cut_ping
+        assert got["short"].startswith(f"stopped short (idle): {cut_ping} of {N} pings reported")
+
+
 class FakeTensor:
     """What a host-memory tensor looks like to numpy."""
 
