@@ -131,9 +131,17 @@ Solution solve(const std::vector<PingNav>& pings, const std::vector<DelayMeasure
 
   ceres::Problem problem;
   for (std::size_t i = 0; i <= n; ++i) problem.AddParameterBlock(&nodes[2 * i], 2);
-  // The first ping anchors the frame: sway is zero by definition, and the origin lies on
-  // the seafloor below it, so its height is the DVL altitude (D-15).
-  problem.SetParameterBlockConstant(&nodes[0]);
+  // The first ping anchors the frame: its sway is the navigated one (DPC sees only relative
+  // sway). Its height starts at minus its DVL altitude (D-15). Held there, one DVL sample's
+  // noise offsets every height and, through the line of sight, the sway (sonar-jh8); so unless
+  // fix_first_height, the height is free and its own Eq. 7 term below ties it to that sample.
+  const bool first_height_free = !opt.fix_first_height && opt.lambda_dvl > 0.0 &&
+                                 std::isfinite(pings[0].dvl_altitude);
+  if (first_height_free) {
+    problem.SetManifold(&nodes[0], new ceres::SubsetManifold(2, {0}));
+  } else {
+    problem.SetParameterBlockConstant(&nodes[0]);
+  }
 
   for (const DelayMeasurement& m : measurements) {
     if (m.ping < 0 || static_cast<std::size_t>(m.ping) + 1 >= n) {
@@ -161,7 +169,7 @@ Solution solve(const std::vector<PingNav>& pings, const std::vector<DelayMeasure
     }
   }
   if (opt.lambda_dvl > 0.0) {
-    for (std::size_t i = 1; i < n; ++i) {
+    for (std::size_t i = first_height_free ? 0 : 1; i < n; ++i) {
       if (std::isnan(pings[i].dvl_altitude)) continue;
       auto* f = new DvlResidual{pings[i].dvl_altitude, opt.dvl_scale};
       problem.AddResidualBlock(new ceres::AutoDiffCostFunction<DvlResidual, 1, 2>(f),

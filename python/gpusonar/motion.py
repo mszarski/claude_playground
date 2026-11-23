@@ -51,6 +51,10 @@ class MotionOptions:
     residual_scale_periods: float = 1.0 / 16.0   # residual scale as a fraction of a carrier period
     smooth_scale: float = 2e-3       # m/s
     dvl_scale: float = 5e-3          # m
+    fix_first_height: bool = False   # True: hold ping 0's height at minus its DVL altitude (D-15 as first
+                                     # written; one sample's noise then offsets all heights and, through the
+                                     # line of sight, the sway: sonar-jh8). False: an unknown tied to its DVL
+                                     # altitude by Eq. 7 like every other ping. Ping 0's sway is held either way.
     seafloor_z: float | str = 0.0    # flat seafloor (the paper's default: origin on the seabed), or
                                      # "auto": from the records (DVL altitude, else water depth)
     bathymetry: object = None        # optional callable z(x, y) for a known seafloor: sets p_s,z (Eq. 5) and the
@@ -283,7 +287,8 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     # default flat seabed at z = 0 this is the altitude unchanged).
     altitude = [nav.dvl_altitude for nav in pings]
     _refer_dvl(pings, altitude, floor_z, options.bathymetry, [nav.y for nav in pings])
-    # Origin on the seafloor below the first ping: its height is its DVL altitude.
+    # Origin on the seafloor below the first ping: its height starts at its DVL altitude (held
+    # there only with fix_first_height; otherwise Eq. 7 weighs that sample like the others).
     if np.isfinite(pings[0].dvl_altitude):
         pings[0].z = -pings[0].dvl_altitude
     used: dict = {}
@@ -302,6 +307,7 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     so.residual_scale = options.residual_scale_periods / fc
     so.smooth_scale, so.dvl_scale = options.smooth_scale, options.dvl_scale
     so.use_weights = options.weight_by_coherence
+    so.fix_first_height = bool(options.fix_first_height)
 
     # Pass 1: coarse delays only.
     measurements = [f["measurement"] for f in found]

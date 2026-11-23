@@ -111,10 +111,37 @@ def test_smoothness_term_reduces_noise_and_dvl_term_holds_altitude():
     assert rms(smooth) < rms(rough)
     # Without the DVL term heave is free to drift with the noise; with it, it is pinned.
     free = core.solve_motion(pings, meas, options(lambda_dvl=0.0, lambda_smooth=0.0))
-    held = core.solve_motion(pings, meas, options(lambda_dvl=10.0, lambda_smooth=0.0))
+    held = core.solve_motion(pings, meas, options(lambda_dvl=10.0, lambda_smooth=0.0, fix_first_height=True))
     drift_free = np.abs(np.array(free.z)[:-1] - z_true[:-1]).max()
     drift_held = np.abs(np.array(held.z)[:-1] - z_true[:-1]).max()
-    assert drift_held < drift_free and drift_held < 2e-3
+    assert drift_held < drift_free and drift_held < 2e-3      # 1.999 mm: ping 0 held on its (here exact) DVL sample
+    # The default frees ping 0's height (sonar-jh8). With these exact DVL samples holding it was
+    # an advantage; freed, the largest error is 2.115 mm, still a sixteenth of the free drift.
+    default = core.solve_motion(pings, meas, options(lambda_dvl=10.0, lambda_smooth=0.0))
+    drift_default = np.abs(np.array(default.z)[:-1] - z_true[:-1]).max()
+    assert drift_default < drift_free / 10 and drift_default < 2.5e-3
+
+
+def test_one_noisy_dvl_sample_on_the_first_ping_does_not_offset_the_track():
+    """sonar-jh8. Exact delays; only the first ping's DVL altitude is wrong (3 mm, a 3-sigma draw of
+    the simulated 1 mm DVL noise). Held as the anchor (fix_first_height, D-15 as first written) that
+    error offsets every height and, through the line of sight at 17-27 degrees of depression, the
+    sway by about tan(depression) times as much. Freed, ping 0's height is weighed against its
+    DVL sample like every other ping, and the delays carry the rest."""
+    pings, meas, y_true, z_true = synthetic_problem()
+    pings[0].dvl_altitude += 3e-3
+    pings[0].z = -pings[0].dvl_altitude                           # where estimate_motion starts it
+    def rms(sol, truth, key): return np.sqrt(np.mean((np.array(getattr(sol, key))[:-1] - truth[:-1]) ** 2))
+    held = core.solve_motion(pings, meas, options(lambda_smooth=0.0, fix_first_height=True))
+    free = core.solve_motion(pings, meas, options(lambda_smooth=0.0))
+    assert not core.MotionSolveOptions().fix_first_height          # the default frees it
+    assert free.converged
+    # Seen: held 1.10 mm heave and 0.91 mm sway RMS; freed 0.14 mm and 0.12 mm.
+    assert rms(held, z_true, "z") > 0.75e-3 and rms(held, y_true, "y") > WAVELENGTH / 20
+    assert rms(free, z_true, "z") < 0.3e-3 and rms(free, y_true, "y") < 0.2e-3
+    # Without a DVL term there is nothing to tie the height to: it stays held.
+    nodvl = core.solve_motion(pings, meas, options(lambda_smooth=0.0, lambda_dvl=0.0))
+    assert nodvl.z[0] == pytest.approx(pings[0].z)
 
 
 def test_correlation_weighting_downweights_bad_measurements():
@@ -295,14 +322,23 @@ def test_overlapping_phase_centres_are_found(run):
     assert motion.phase_centre_shift(col.records[0], col.records[1]) == 12
 
 
-def test_sway_and_heave_errors_are_a_small_fraction_of_a_wavelength(run):
-    col, _, result = run
+# Seeds of the acceptance scenario (scene, disturbances, DVL and receiver noise). One seed hid
+# sonar-jh8: seed 1's first DVL sample is close to the truth, seed 2's is 2.5 mm off.
+ACCEPTANCE_SEEDS = (1, 2, 3, 4, 5, 6, 7, 8)
+
+
+@pytest.mark.parametrize("seed", ACCEPTANCE_SEEDS)
+def test_sway_and_heave_errors_are_a_small_fraction_of_a_wavelength(seed):
+    col, _ = collect(seed=seed)
+    result = motion.estimate_motion(col.records)
     truth = col.true_positions[:len(col.records)]
     sway_err = result.y - truth[:, 1]
     heave_err = result.z - truth[:, 2]
     # What navigation alone had: the full disturbance, more than a wavelength of sway.
     assert np.abs(truth[:, 1]).max() > WAVELENGTH
-    # Stated bounds: sway within lambda / 20 RMS, heave within lambda / 4 RMS.
+    # Stated bounds, on every seed: sway within lambda / 20 RMS, heave within lambda / 4 RMS.
+    # Both are ours (milestone 8); ASASIN (arXiv:2101.05888v2, Sec. II-D) reports no sway or heave
+    # accuracy and no lambda1, lambda2, so there is no paper figure to hold them to.
     assert np.sqrt(np.mean(sway_err**2)) < WAVELENGTH / 20, np.sqrt(np.mean(sway_err**2))
     assert np.sqrt(np.mean(heave_err**2)) < WAVELENGTH / 4, np.sqrt(np.mean(heave_err**2))
     assert result.fine.converged and result.coarse.converged
