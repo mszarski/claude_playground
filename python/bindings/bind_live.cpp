@@ -124,6 +124,15 @@ live::NavOptions nav_options(const py::dict& d) {
   number(d, "surface_z", o.surface_z);
   number(d, "profile_step_m", o.profile_step_m);
   number(d, "history_margin_s", o.history_margin_s);
+  // The array from the navigation unit (sonar-3rv): lever_arm_m (m, the unit's body axes), mount_rpy_deg (degrees).
+  for (const char* key : {"lever_arm_m", "mount_rpy_deg"}) {
+    if (!d.contains(key) || d[key].is_none()) continue;
+    const auto q = d[key].cast<std::vector<double>>();
+    if (q.size() != 3 || !std::isfinite(q[0]) || !std::isfinite(q[1]) || !std::isfinite(q[2]))
+      throw std::invalid_argument(std::string("nav.") + key + ": three finite numbers");
+    const double f = std::string(key) == "lever_arm_m" ? 1.0 : 3.14159265358979323846 / 180.0;
+    (std::string(key) == "lever_arm_m" ? o.lever_arm : o.mount_rpy) = Vec3d{q[0] * f, q[1] * f, q[2] * f};
+  }
   return o;
 }
 

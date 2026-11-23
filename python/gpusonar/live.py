@@ -700,7 +700,7 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
     if water.get("source") == "altitude":
         out["nav_water_depth_from_altitude"] = 1
         out.update({f"nav_{k}": v for k, v in dict(WATER_DEPTH_DEFAULTS, **water).items() if k != "source"})
-    for key in ("keep_s", "surface_z", "profile_step_m", "history_margin_s"):
+    for key in ("keep_s", "surface_z", "profile_step_m", "history_margin_s", "lever_arm_m", "mount_rpy_deg"):
         if nav.get(key) is not None:
             out[f"nav_{key}"] = nav[key]
     return {k: _option_text(k, v) for k, v in out.items()}
@@ -724,6 +724,36 @@ WATER_DEPTH_DEFAULTS = {            # nav.water_depth in a deployment file
 }
 
 
+def nav_to_array(row, lever_arm=(0.0, 0.0, 0.0), mount=None) -> None:
+    """The navigation unit's pose -> the array's, in place (sonar-3rv; libs/live udp_source.hpp nav_to_array is the same):
+        position <- position + R(rpy) lever_arm,   rpy <- the Eq. 2 angles of R(rpy) R_mount,
+    R the body-to-NED rotation of ASASIN Eq. 2 (core.rotation_ned). `row`: north, east, down (m), roll, pitch, yaw (rad),
+    velocity (left as it is), ...; `lever_arm`: the array's reference point from the unit's, in the unit's body axes (m);
+    `mount`: R_mount (3 x 3, the array's axes into the unit's) or None. Zero lever arm and no mount: nothing is touched."""
+    lever = any(float(q) != 0.0 for q in lever_arm)
+    if not lever and mount is None:
+        return
+    r = np.asarray(core.rotation_ned(float(row[3]), float(row[4]), float(row[5])))
+    if lever:
+        for i in range(3):                     # summed in the C++ order (Mat3 * Vec3)
+            row[i] += r[i, 0] * lever_arm[0] + r[i, 1] * lever_arm[1] + r[i, 2] * lever_arm[2]
+    if mount is not None:
+        m = [[r[i, 0] * mount[0][j] + r[i, 1] * mount[1][j] + r[i, 2] * mount[2][j] for j in range(3)] for i in range(3)]
+        row[3] = np.arctan2(m[2][1], m[2][2])
+        row[4] = -np.arcsin(min(max(m[2][0], -1.0), 1.0))
+        row[5] = np.arctan2(m[1][0], m[0][0])
+
+
+def _three(key: str, v) -> tuple:
+    try:
+        q = tuple(float(x) for x in v)
+    except (TypeError, ValueError):
+        raise ValueError(f"nav.{key}: three numbers, got {v!r}") from None
+    if len(q) != 3 or not all(np.isfinite(q)):
+        raise ValueError(f"nav.{key}: three finite numbers, got {v!r}")
+    return q
+
+
 class NavListener:
     """The vehicle's navigation, received as JSON datagrams on a UDP port, one fix each:
         {"time_ns": ..., "x": north m, "y": east m, "z": down m, "roll": rad, "pitch": rad, "yaw": rad,
@@ -741,11 +771,19 @@ class NavListener:
     plus the log's altitude, with its uncertainty, held with a growing uncertainty when bottom lock is
     lost. Fixes are kept for `keep_s` seconds: a ping is processed after its receive window has closed,
     and the attitude history of that window must still be there. The C++ counterpart is libs/live
-    `Navigation`."""
+    `Navigation`.
+
+    `lever_arm_m` (m, the unit's body axes: forward, starboard, down) and `mount_rpy_deg` (roll, pitch, yaw in
+    degrees, ASASIN Eq. 2 order, of the array's axes against the unit's): the surveyed offset from the navigation
+    unit to the array's reference point (the sonar file's body origin). Each fix, `static` included, is moved to the
+    array as it arrives (`nav_to_array`), so the pose, the attitude history and the depth samples a record gets are
+    the array's; the water depth from altitude and the (depth, sound speed) samples are worked from the unit's own
+    position, as before. The velocity is not moved: a fix carries no attitude rates (sonar-3rv). Zero, the
+    default, leaves every fix as it came."""
 
     def __init__(self, port: int | None = None, host: str = "0.0.0.0", static: dict | None = None, keep: int | None = None,
                  water_depth: dict | None = None, keep_s: float = 120.0, surface_z: float = 0.0, profile_step_m: float = 0.5,
-                 history_margin_s: float = 2.0):
+                 history_margin_s: float = 2.0, lever_arm_m=None, mount_rpy_deg=None):
         import collections
         import threading
         self._fixes = collections.deque(maxlen=keep or 200000)
@@ -757,6 +795,12 @@ class NavListener:
         self.surface_z = float(surface_z)
         self.profile_step_m = float(profile_step_m)
         self.history_margin_ns = int(history_margin_s * 1e9)   # a ping's attitude history reaches this far either side of its window
+        self.lever_arm = _three("lever_arm_m", lever_arm_m) if lever_arm_m is not None else (0.0, 0.0, 0.0)
+        mount = _three("mount_rpy_deg", mount_rpy_deg) if mount_rpy_deg is not None else (0.0, 0.0, 0.0)
+        # The mount as C++ builds it (degrees to radians by the same factor, then rotation_ned); None when it is zero.
+        deg = 3.14159265358979323846 / 180.0
+        self.mount = (np.asarray(core.rotation_ned(mount[0] * deg, mount[1] * deg, mount[2] * deg))
+                      if any(q != 0.0 for q in mount) else None)
         self._water = None
         if water_depth and water_depth.get("source", "datagram") == "altitude":
             unknown = set(water_depth) - set(WATER_DEPTH_DEFAULTS)
@@ -780,7 +824,8 @@ class NavListener:
     @classmethod
     def from_config(cls, nav: dict) -> "NavListener":
         """From the `nav` section of a deployment file."""
-        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m", "history_margin_s")
+        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m", "history_margin_s", "lever_arm_m",
+                "mount_rpy_deg")
         return cls(**{k: nav[k] for k in keys if nav.get(k) is not None})
 
     def _listen(self) -> None:
@@ -806,13 +851,15 @@ class NavListener:
             lock = True if np.isnan(row[_F["bottom_lock"]]) else bool(row[_F["bottom_lock"]])
             row[_WATER] = self._water.update(time_ns, row[0], row[1], row[2] - self.surface_z, row[_F["altitude"]], lock,
                                                        row[_F["altitude_sigma"]], row[_F["depth_sigma"]])
+        unit = (float(row[0]), float(row[1]), float(row[2]))   # the unit's own position: the (depth, sound speed) samples
+        nav_to_array(row, self.lever_arm, self.mount)            # the pose kept is the array's (sonar-3rv)
         with self._lock:
             self._fixes.append((time_ns, row))
             while len(self._fixes) > 1 and self._fixes[0][0] < time_ns - self.keep_ns:
                 self._fixes.popleft()
             c = row[_F["sound_speed"]]
-            if np.isfinite(c) and c > 0.0 and (not self._samples or abs(row[2] - self._samples[-1][3]) >= self.profile_step_m):
-                self._samples.append((time_ns, row[0], row[1], row[2], c))
+            if np.isfinite(c) and c > 0.0 and (not self._samples or abs(unit[2] - self._samples[-1][3]) >= self.profile_step_m):
+                self._samples.append((time_ns, *unit, c))
 
     def _around(self, time_ns: int):
         """(the fixes, the index of the first at or after `time_ns`), or None before any fix has arrived."""

@@ -217,6 +217,16 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_min_row_elements") c.elevation.min_row_elements = p.elevation.min_row_elements = i();
   else if (key == "nav_surface_z") c.nav.surface_z = v();   // z of the sea surface in the navigation's frame: depth = z - surface_z
   else if (key == "nav_history_margin_s") c.nav.history_margin_s = v();
+  else if (key == "nav_lever_arm_m" || key == "nav_mount_rpy_deg") {
+    // Three numbers: the array from the navigation unit (sonar-3rv; NavOptions).
+    const std::vector<double> q = option_numbers(key, value);
+    if (q.size() != 3) refuse(key, value, "three comma-separated numbers");
+    for (double x : q) {
+      if (!std::isfinite(x)) refuse(key, value, "three finite numbers");
+    }
+    const double f = key == "nav_lever_arm_m" ? 1.0 : kDeg;
+    (key == "nav_lever_arm_m" ? c.nav.lever_arm : c.nav.mount_rpy) = Vec3d{q[0] * f, q[1] * f, q[2] * f};
+  }
   // The program around the chain: the board stream, its socket and queue, the report datagrams.
   else if (key == "stream_sample_bytes") c.stream.sample_bytes = static_cast<int>(i());
   else if (key == "stream_buffer_bytes") c.stream.buffer_bytes = i();
@@ -496,7 +506,9 @@ std::string options_json(const ChainOptions& c) {
       .num("nav_altitude_sigma_m", n.water_depth.altitude_sigma_m).num("nav_depth_sigma_m", n.water_depth.depth_sigma_m)
       .num("nav_hold_s", n.water_depth.hold_s).num("nav_hold_sigma_m_per_s", n.water_depth.hold_sigma_m_per_s)
       .num("nav_hold_sigma_m_per_m", n.water_depth.hold_sigma_m_per_m).num("nav_max_altitude_m", n.water_depth.max_altitude_m)
-      .num("nav_keep_s", n.keep_s).num("nav_surface_z", n.surface_z).num("nav_profile_step_m", n.profile_step_m).num("nav_history_margin_s", n.history_margin_s);
+      .num("nav_keep_s", n.keep_s).num("nav_surface_z", n.surface_z).num("nav_profile_step_m", n.profile_step_m).num("nav_history_margin_s", n.history_margin_s)
+      .list("nav_lever_arm_m", std::vector<double>{n.lever_arm.x, n.lever_arm.y, n.lever_arm.z})
+      .list("nav_mount_rpy_deg", std::vector<double>{n.mount_rpy.x / kDeg, n.mount_rpy.y / kDeg, n.mount_rpy.z / kDeg});
   const StreamOptions& st = c.stream;
   j.integer("stream_sample_bytes", st.sample_bytes).integer("stream_buffer_bytes", st.buffer_bytes).num("stream_queue_mb", st.queue_mb)
       .num("idle_seconds", st.idle_seconds).text("bind", st.bind).integer("report_udp_max_bytes", st.report_max_bytes);

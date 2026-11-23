@@ -658,6 +658,51 @@ def test_program_takes_blocks_over_udp_with_navigation(pings, tmp_path):
 
 
 @needs_exe
+def test_program_moves_navigation_to_the_array_by_the_lever_arm(pings, tmp_path):
+    """sonar-3rv: the program's navigation (nav_lever_arm_m, nav_mount_rpy_deg) puts the array where the Python
+    NavListener puts it: here 5 m ahead of the navigation unit on a vehicle heading north, so the array's reference
+    point is 5 m further north than in test_program_takes_blocks_over_udp_with_navigation, and the recording holds
+    the array's pose (a replay applies no navigation, so the offset is applied once)."""
+    import socket
+    import time
+    w = gs.RecordWriter(str(tmp_path / "template.h5"))
+    w.write(pings[0].copy())
+    w.close()
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    nav_port = port + 1
+    fixes = [{"time_ns": int(i * INTERVAL * 1e9), "x": 1.5 * i * INTERVAL, "y": 0.0, "z": 0.0, "yaw": 0.0, "vx": 1.5} for i in range(N + 1)]
+    proc = subprocess.Popen([str(EXE), "--udp", str(port), "--template", str(tmp_path / "template.h5"), "--nav-port", str(nav_port),
+                             "--recording", str(tmp_path / "rec.h5"), "--report", str(tmp_path / "rep.jsonl"), "--pings", str(N),
+                             *EXE_OPTIONS, "nav_lever_arm_m=5,0,0"], stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(1.0)
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for f in fixes:
+            tx.sendto(json.dumps(f).encode(), ("127.0.0.1", nav_port))
+        sender = FlankBoardEmulator(pings, INTERVAL, block_samples=128).send(port, pace=0.25)
+        sender.join(timeout=120.0)
+        _, err = proc.communicate(timeout=120.0)
+    finally:
+        proc.kill()
+    assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"
+    reports = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
+    if "0 dropped, 0 samples lost" not in err or len(reports) < N:
+        pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")
+    assert reports[-1]["ownship_xyz"][0] == pytest.approx(1.5 * (N - 1) * INTERVAL + 5.0, abs=0.6)
+    from gpusonar.live import NavListener
+    raw = list(make_source({"type": "container", "path": str(tmp_path / "rec.h5")}))
+    nav = NavListener(lever_arm_m=[5.0, 0.0, 0.0])
+    for f in fixes:
+        nav.push(f)
+    for rec in raw:
+        pos, rpy, _ = nav.at(rec.transmit.time_ns)
+        assert np.allclose(rec.geometry.rx_pose.position, pos, atol=1e-9) and np.allclose(rec.geometry.rx_pose.rpy, rpy, atol=1e-12)
+
+
+@needs_exe
 def test_program_counts_pings_whose_navigation_has_no_velocity_like_the_python_chain(pings, tmp_path):
     """sonar-8is: the program applies navigation in its UDP path; a ping whose fix had no velocity over ground is counted
     in pings_without_velocity on its lines and in its summary, as the Python LiveChain counts it on the same navigation
