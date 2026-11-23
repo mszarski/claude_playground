@@ -50,7 +50,8 @@ void bind_motion(py::module_& m) {
       .def_readwrite("smooth_scale", &SolveOptions::smooth_scale)
       .def_readwrite("dvl_scale", &SolveOptions::dvl_scale)
       .def_readwrite("use_weights", &SolveOptions::use_weights)
-      .def_readwrite("max_iterations", &SolveOptions::max_iterations);
+      .def_readwrite("max_iterations", &SolveOptions::max_iterations)
+      .def_readwrite("fix_first_height", &SolveOptions::fix_first_height);
 
   py::class_<Solution>(m, "MotionSolution")
       .def_readonly("y", &Solution::y)

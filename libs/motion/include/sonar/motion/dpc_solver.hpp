@@ -60,6 +60,12 @@ struct SolveOptions {
   double dvl_scale = kNaN;       ///< m; altitude residuals are divided by this; required
   bool use_weights = true;
   int max_iterations = 100;
+  /// true: the first ping's height is held at minus its DVL altitude (D-15 as first written), so
+  /// that one sample's noise offsets every height and, through the line of sight, the sway.
+  /// false (default): its height is an unknown tied to its own DVL altitude by Eq. 7 like every
+  /// other ping. Its sway stays held at its navigated value either way. Without a DVL term
+  /// (lambda_dvl 0, or no altitude for the first ping) the height is held whatever this says.
+  bool fix_first_height = false;
 };
 
 struct Solution {
