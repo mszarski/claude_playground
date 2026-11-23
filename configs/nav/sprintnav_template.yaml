@@ -7,6 +7,8 @@
 # If the unit's output is binary or not one record per line, a small reader that yields one
 # dict of fields per record (and calls Mapping.convert) replaces the csv / json line parser.
 # What the adapter has to deliver, and what to read from the datasheet: docs/DEPLOYMENT.md.
+# The datagrams stay the unit's own pose: the surveyed offset from the unit to the array is applied by the chain
+# (deployment file nav.lever_arm_m, nav.mount_rpy_deg; docs/CONFIGURATION.md), not here.
 name: sprintnav_template
 format: csv                                  # unconfirmed: the unit's output format
 csv: {delimiter: ",", header: false, columns: [FILL_IN]}

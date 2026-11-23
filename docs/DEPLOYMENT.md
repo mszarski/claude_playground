@@ -72,6 +72,7 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
 | Ping timing | the sidecar's `pings.times`, or the block headers | The transmit trigger's timing relative to the boards' clocks is unconfirmed. |
 | Board synchronisation | a reference signal wired to every board (`configs/sonars/popoto_4x7.yaml`: a dedicated input per board, the plan's scheme; `popoto_4x8`: summed into a hydrophone input) | Tested in simulation with 300 µs offsets and 25 ppm drifts. The reference generator and its wiring are hardware to build. |
 | Navigation | UDP JSON: `{"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}`, north-east-down metres and radians, any rate; optionally `sound_speed`, `altitude`, `bottom_lock`, `water_depth` and one-sigma fields (Stage 2 below); interpolated to each ping's transmit time | `tools/nav_adapter.py` converts a vendor stream by a mapping in YAML (a generic CSV / JSON example is shipped). The mapping for the vehicle's own unit is **a template only**: its interface document and datasheet have not been seen. Without navigation, pings are processed where the record says they are and counted in `pings_without_nav`. A fix without `vx`, `vy` and `vz` (or with one not finite) is taken at rest in what it lacks and its pings are counted in `pings_without_velocity`: the velocity is not optional for a moving vehicle. |
+| Navigation unit to array | the surveyed lever arm (m, the unit's body axes) and mounting rotation (degrees, roll, pitch, yaw) from the navigation unit to the array's reference point: `nav.lever_arm_m`, `nav.mount_rpy_deg` (`nav_lever_arm_m`, `nav_mount_rpy_deg` for `build/bin/sonar_live`) | **Not surveyed: left at zero (commented out, marked unconfirmed) in `configs/deploy/popoto_vehicle.yaml`.** Both engines move every fix to the array as it arrives (position and attitude; not the velocity, which needs attitude rates the datagram does not carry). With zero the array is taken to sit at the unit, in its axes: an error of the whole lever arm in the array's position and of the whole misalignment in every bearing and elevation. |
 | Clock | transmit times and navigation times on one clock | Assumed. A difference shows up as tracks that move with ownship. |
 | Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Fields, units and frames: "The report line" below. A report too long for one datagram goes out as several complete lines, each with `"part": [k, n]` (an open wire-format question for the owner, `STATUS.md`). |
 | Compute | any Linux computer with Python 3 and the built library; a GPU is optional | Not measured on a Jetson. At the boards' full 102.4 kHz real sampling the conditioning step is heavier than in the simulated runs, which start at baseband. |
@@ -331,6 +332,17 @@ accuracies, and every such figure is a field marked unconfirmed.
   base; message format; velocity, altitude and depth accuracy and the altitude range;
   whether and how well it gives sound speed; and the alignment between the unit and the
   array, which has to be surveyed, not read.
+- **The unit is not the array.** A fix is the pose of the unit's reference point in the
+  unit's axes; the record's pose is the array's (the sonar file's body origin and axes).
+  `nav: {lever_arm_m: [x, y, z], mount_rpy_deg: [roll, pitch, yaw]}` (`CONFIGURATION.md`) moves
+  each fix as it arrives, in both engines: position + R(attitude) · lever arm, attitude
+  composed with the mounting rotation (ASASIN Eq. 2 order). Both are zero and **unconfirmed**
+  until surveyed. What is not corrected: the velocity (v_array = v_unit + ω × R · lever arm
+  needs the attitude rate ω, which the datagram does not carry), wrong by ω |lever arm|:
+  0.05 m/s for a 3 °/s turn and 1 m of lever arm, which over the 16 s round trip at 12 km
+  moves the backprojected array by 0.8 m (against the -24 m without any velocity, sonar-2hz).
+  A recording holds the array's pose, and a replay applies no navigation, so the offset is
+  applied once.
 - **Attitude rate.** `attitude_time: arrival` interpolates linearly between attitude samples:
   a roll of amplitude A at frequency f sampled every dt is wrong by at most A (2 pi f dt)^2 / 8.
   For a roll of +-5 degrees with an 8 s period that is 0.39 degrees at 1 Hz, 0.015 at 5 Hz and
@@ -1173,6 +1185,9 @@ reports a single line that is too long, where `build/bin/sonar_live` splits it.
   mode answers `window`). `STATUS.md`, "Open and known wrong", has the list.
 - The board forwarder. The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the
   vehicle's own unit is a template: its interface document has not been seen.
+- The surveyed lever arm and mounting rotation between the navigation unit and the array: the keys exist
+  (`nav.lever_arm_m`, `nav.mount_rpy_deg`), the values are zero and unconfirmed. The array's velocity is not
+  corrected for the lever arm (no attitude rates in the datagram).
 - A service wrapper beyond the example unit `configs/deploy/sonar_live.service` (paths and
   user are placeholders; the vehicle's operating system is not known).
 - Range correction for paths that arrive by the bottom (in deep water the simulated ship

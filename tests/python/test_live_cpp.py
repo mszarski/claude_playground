@@ -455,6 +455,57 @@ def test_cpp_chain_detection_rules_off_by_default_and_equal_when_on(pings):
             core.LiveChainCpp(dict(CPP_CHAIN, classify_min_mover_cells=bad))
 
 
+@pytest.mark.parametrize("key, value, where, nearest", [
+    ("classify_min_mover_cell", 16.0, "", "classify_min_mover_cells"),       # the misspelling sonar-6hf names
+    ("tracker_confirm_hit", 4, "", "tracker_confirm_hits"),
+    ("min_snr", 12.0, "", "min_snr_db"),
+    ("no_such_setting_at_all", 1.0, "", None),
+    ("elevation", {"first_deg": -20.0, "max_detection": 5}, "elevation.", "max_detections"),
+    ("blanking", {"recovery_s": 0.002, "taper": 0.001}, "blanking.", "taper_s"),
+    ("decimate", {"output_rate": 2.0e4, "tap": 101}, "decimate.", "taps"),
+])
+def test_cpp_chain_refuses_an_unknown_key_by_name(key, value, where, nearest):
+    """sonar-6hf: LiveChainCpp read its dictionary key by key and passed over any other, so a misspelt key left its
+    setting at the default without a word (classify_min_mover_cell: the extent rule off). It now refuses a key it
+    does not read, at the top and in each section it reads, by name and with the nearest key it does read."""
+    bad = list(value)[-1] if where else key                  # in a section: its last key is the misspelt one
+    match = f"LiveChainCpp: {where}{bad}: unknown key" + (f"; did you mean '{nearest}'" if nearest else "")
+    with pytest.raises(ValueError, match=match.replace(".", r"\.")):
+        core.LiveChainCpp(dict(CPP_CHAIN, **{key: value}))
+
+
+def test_cpp_chain_refuses_an_unknown_key_in_sync_and_profile():
+    """The sync section and elevation.profile: the same rule (sonar-6hf)."""
+    sync = {"f_start": 38e3, "f_stop": 48e3, "duration": 4e-3, "lead": 5e-3, "tail": 10e-3}
+    core.LiveChainCpp(dict(CPP_CHAIN, sync=sync))
+    with pytest.raises(ValueError, match=r"LiveChainCpp: sync\.tolerance: unknown key; did you mean 'tolerance_us'"):
+        core.LiveChainCpp(dict(CPP_CHAIN, sync=dict(sync, tolerance=2.0)))
+    with pytest.raises(ValueError, match=r"LiveChainCpp: elevation\.profile\.bin: unknown key; did you mean 'bin_m'"):
+        core.LiveChainCpp(dict(CPP_CHAIN, elevation={"profile": {"ladder": ["prior"], "bin": 2.0}}))
+
+
+@pytest.mark.parametrize("section, nearest", [
+    ({"min_snr": 12.0}, "min_snr_db"),
+    ({"classify": {"min_sped": 2.0}}, "min_speed"),
+    ({"tracker": {"confirm_hit": 4}}, "confirm_hits"),
+    ({"cfar": {"false_alarm_per_ping": 1e-2}}, "false_alarms_per_ping"),
+    ({"sbl": {"max_source": 3}}, "max_sources"),
+    ({"classify": {"multipath": {"velocit": 2.0}}}, "velocity"),
+    ({"sync": {"reference": {}, "tolerance": 2.0}}, "tolerance_us"),
+    ({"elevation": {"max_detection": 5}}, "max_detections"),
+    ({"elevation": {"sector_from_rays": {"max_depth": 300.0}}}, "max_depth_m"),
+])
+def test_python_chain_refuses_an_unknown_key_by_name(section, nearest):
+    """sonar-6hf, the Python side: LiveChain (either engine) and cpp_chain_options merged the configuration over the
+    defaults and passed over a key the defaults do not have, so `classify: {min_sped: 2}` ran with min_speed 1. Both
+    refuse it now, by name and with the nearest key, as LiveChainCpp does."""
+    from gpusonar.live import cpp_chain_options
+    cfg = dict(CHAIN, **{k: (dict(CHAIN.get(k) or {}, **v) if isinstance(v, dict) and k != "sync" else v) for k, v in section.items()})
+    for make in (lambda: LiveChain(cfg), lambda: LiveChain(dict(cfg, engine="cpp", backend="host")), lambda: cpp_chain_options(cfg)):
+        with pytest.raises(ValueError, match=f"unknown key; did you mean '{nearest}'"):
+            make()
+
+
 def test_echo_grouping_matches_python_and_takes_the_earliest_established_arrival():
     """Echo grouping in both engines on the same tracks (D-155): a ship whose strongest arrival is the later one (1040 m)
     and a weaker one beyond it (1080 m); a short track before it (980 m, three pings: uncertain); a second ship at another
@@ -684,6 +735,51 @@ def test_program_takes_blocks_over_udp_with_navigation(pings, tmp_path):
     assert "mover" in kinds and "static" in kinds
     raw = list(make_source({"type": "container", "path": str(tmp_path / "rec.h5")}))
     assert len(raw) == N and not np.iscomplexobj(raw[0].samples.array)   # recorded before conditioning
+
+
+@needs_exe
+def test_program_moves_navigation_to_the_array_by_the_lever_arm(pings, tmp_path):
+    """sonar-3rv: the program's navigation (nav_lever_arm_m, nav_mount_rpy_deg) puts the array where the Python
+    NavListener puts it: here 5 m ahead of the navigation unit on a vehicle heading north, so the array's reference
+    point is 5 m further north than in test_program_takes_blocks_over_udp_with_navigation, and the recording holds
+    the array's pose (a replay applies no navigation, so the offset is applied once)."""
+    import socket
+    import time
+    w = gs.RecordWriter(str(tmp_path / "template.h5"))
+    w.write(pings[0].copy())
+    w.close()
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    nav_port = port + 1
+    fixes = [{"time_ns": int(i * INTERVAL * 1e9), "x": 1.5 * i * INTERVAL, "y": 0.0, "z": 0.0, "yaw": 0.0, "vx": 1.5} for i in range(N + 1)]
+    proc = subprocess.Popen([str(EXE), "--udp", str(port), "--template", str(tmp_path / "template.h5"), "--nav-port", str(nav_port),
+                             "--recording", str(tmp_path / "rec.h5"), "--report", str(tmp_path / "rep.jsonl"), "--pings", str(N),
+                             *EXE_OPTIONS, "nav_lever_arm_m=5,0,0"], stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(1.0)
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for f in fixes:
+            tx.sendto(json.dumps(f).encode(), ("127.0.0.1", nav_port))
+        sender = FlankBoardEmulator(pings, INTERVAL, block_samples=128).send(port, pace=0.25)
+        sender.join(timeout=120.0)
+        _, err = proc.communicate(timeout=120.0)
+    finally:
+        proc.kill()
+    assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"
+    reports = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
+    if "0 dropped, 0 samples lost" not in err or len(reports) < N:
+        pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")
+    assert reports[-1]["ownship_xyz"][0] == pytest.approx(1.5 * (N - 1) * INTERVAL + 5.0, abs=0.6)
+    from gpusonar.live import NavListener
+    raw = list(make_source({"type": "container", "path": str(tmp_path / "rec.h5")}))
+    nav = NavListener(lever_arm_m=[5.0, 0.0, 0.0])
+    for f in fixes:
+        nav.push(f)
+    for rec in raw:
+        pos, rpy, _ = nav.at(rec.transmit.time_ns)
+        assert np.allclose(rec.geometry.rx_pose.position, pos, atol=1e-9) and np.allclose(rec.geometry.rx_pose.rpy, rpy, atol=1e-12)
 
 
 @needs_exe

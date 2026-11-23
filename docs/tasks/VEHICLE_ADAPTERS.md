@@ -142,11 +142,17 @@ host, port: 5700, timeout}`).
 - Binary or non-line output: the module's docstring and the template say a small reader
   that yields one dict of fields per record, then calls `Mapping.convert`, replaces the
   line parser; the mapping stays.
-- **Not found in the code**: a key for the offset (lever arm and rotation) between the
-  navigation unit's reference point and the array's body origin. The records' pose is
-  taken as the body origin of the element lever arms. I searched `configs/`,
-  `navadapter.py` and `live.py` for it and found none; check again before relying on this,
-  and ask the owner before adding one (it touches both engines).
+- **The offset between the navigation unit and the array** (lever arm and rotation) is a
+  pair of keys since sonar-3rv: `nav.lever_arm_m` (m, the unit's body axes: forward,
+  starboard, down) and `nav.mount_rpy_deg` (roll, pitch, yaw of the array's axes against the
+  unit's, degrees, ASASIN Eq. 2 order); `nav_lever_arm_m`, `nav_mount_rpy_deg` for
+  `build/bin/sonar_live`. Both engines move every fix to the array as it arrives
+  (`live.py` `nav_to_array`, `udp_source.hpp` `nav_to_array`), so the record's pose is the
+  array's (the body origin of the element lever arms). The values are zero (the keys commented out) and unconfirmed
+  in `configs/deploy/popoto_vehicle.yaml`. The adapter (`navadapter.py`) does not apply it:
+  its datagrams stay the unit's pose. The velocity is not moved (no attitude rates in the
+  datagram). Tests: `tests/python/test_nav_lever_arm.py`,
+  `tests/python/test_live_cpp.py::test_program_moves_navigation_to_the_array_by_the_lever_arm`.
 - `tools/sonar_live.py` ignores `nav` for `--replay`, `--scenario` and `--emulate`
   (recordings carry their pose already).
 
@@ -218,9 +224,14 @@ of them. Where an answer is "not known yet", that item stays in config and `unco
     quaternion, velocity frame (body or world, over ground or through water).
 13. Does it (or a separate sensor) report sound speed? Altitude and bottom-lock state?
     Its own accuracy estimates?
-14. The surveyed offset and rotation between the navigation unit and the array (no key for
-    it exists; see 2.2). Should the adapter apply it before the datagram, or should both
-    engines take a new key?
+14. The surveyed offset and rotation between the navigation unit and the array (the keys
+    `nav.lever_arm_m` and `nav.mount_rpy_deg` exist, both zero and unconfirmed; see 2.2):
+    the lever arm from the unit's reference point to the array's reference point (the sonar
+    file's body origin) in the unit's body axes, and the array's roll, pitch and yaw against
+    the unit's axes, with how and when they were surveyed and to what accuracy. Does the
+    unit already apply a lever arm of its own (an output reference point set in the unit),
+    so that its fixes are of some other point than its own reference? Does it output attitude
+    rates (needed to correct the array's velocity by ω × lever arm)?
 15. The test AUV's navigation unit (`popoto_testauv_1row`): the same unit or another?
 
 **Data and privacy**

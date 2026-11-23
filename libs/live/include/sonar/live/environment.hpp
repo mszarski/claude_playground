@@ -92,6 +92,14 @@ struct NavOptions {
   double surface_z = 0.0;         ///< z of the sea surface in the navigation's frame: depth = z - surface_z
   double profile_step_m = 0.5;    ///< a (depth, sound speed) sample is kept for the profile every time the depth has changed by this
   double history_margin_s = 2.0;  ///< a ping's attitude history is the fixes from this long before its transmit to this long after its window
+  /// The navigation unit to the array (sonar-3rv): every fix is moved from the unit's reference point and axes to the
+  /// array's (the sonar file's body origin and body axes) as it arrives, so the record's pose is the array's.
+  /// lever_arm: the array's reference point from the unit's, in the unit's body axes (x forward, y starboard, z down), m.
+  /// mount_rpy: roll, pitch, yaw (rad) of the array's axes against the unit's, ASASIN Eq. 2 order: R_mount =
+  /// Rz(yaw) Ry(pitch) Rx(roll) takes a vector in the array's axes into the unit's. Both surveyed; zero (the
+  /// default) leaves every fix untouched, bit for bit. Velocity is not moved (no attitude rates in a fix).
+  Vec3d lever_arm{};
+  Vec3d mount_rpy{};
 };
 
 // --- the sound-speed ladder ----------------------------------------------------------------------
