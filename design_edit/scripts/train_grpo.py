@@ -115,9 +115,15 @@ def main() -> None:
     bootstrap(args.dataset)
     base_model = args.model
     if args.sft_adapter:
-        from design_edit.lora import merge_adapter
+        # Merge in a separate CPU-only process: loading a model here would initialize CUDA with both GPUs visible,
+        # before the GPU split below (vLLM server on GPU 1, trainer on GPU 0) can take effect.
+        import subprocess as _sp
 
-        args.model = merge_adapter(args.model, args.sft_adapter, "/tmp/sft_merged")
+        code = ("import sys; from design_edit.lora import merge_adapter; "
+                "merge_adapter(sys.argv[1], sys.argv[2], '/tmp/sft_merged')")
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES="", PYTHONPATH=os.pathsep.join(p for p in sys.path if p))
+        _sp.run([sys.executable, "-c", code, args.model, args.sft_adapter], env=env, check=True)
+        args.model = "/tmp/sft_merged"
 
     import subprocess
     import time
