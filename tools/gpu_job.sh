@@ -38,10 +38,14 @@
 #                                               rules over several seeds; set GPUSONAR_ORACLES=1 for the Popoto scenes;
 #                                               GPUSONAR_CLSEVAL_ARGS appended, e.g. "--seeds 10 --commit abc1234"); uploads
 #                                               the JSON, the table and the captures to GPUSONAR_UPLOAD_PATH, default clseval
+#        GPUSONAR_JOB=falsealarm tools/gpu_job.sh  run tools/detector_search_factor.py --at-default --backend cuda: the
+#                                               detector's false detections at the default budget on noise-only pings
+#                                               (issue sonar-ydi; GPUSONAR_FA_ARGS appended, e.g. "--maps long_range");
+#                                               uploads at_default.json to GPUSONAR_UPLOAD_PATH, default falsealarm
 #        GPUSONAR_JOB=motion tools/gpu_job.sh  (with GPUSONAR_CERES=1) the motion-estimation tests
 #                                               (tests/python/test_motion*.py), then tools/motion_study.py timing
 #                                               (delay estimation: NumPy, C++ host, CUDA); log only, nothing uploaded
-# Uploads (gallery, elevbench, liveablate, benchall, clseval) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
+# Uploads (gallery, elevbench, liveablate, benchall, clseval, falsealarm) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
 case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
@@ -172,6 +176,18 @@ if [ "${GPUSONAR_JOB:-tests}" = "clseval" ]; then
       --json /work/clseval/classify_rules_eval.json --table /work/clseval/classify_rules_eval.md ${GPUSONAR_CLSEVAL_ARGS:-} || status=$?
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/clseval "${GPUSONAR_UPLOAD_PATH:-clseval}" --type dataset > /dev/null
+  fi
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "falsealarm" ]; then
+  # The multiscale detector's false detections at the default budget on noise-only pings through the C++ chain on the
+  # device (tools/detector_search_factor.py --at-default, issue sonar-ydi; GPUSONAR_FA_ARGS appended, e.g.
+  # "--maps long_range --pings 100000"); the JSON is uploaded to GPUSONAR_UPLOAD_PATH, default falsealarm, when a repo is set.
+  mkdir -p /work/falsealarm
+  status=0
+  PYTHONPATH=python python3 tools/detector_search_factor.py --at-default --backend cuda --json /work/falsealarm/at_default.json ${GPUSONAR_FA_ARGS:-} || status=$?
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/falsealarm/at_default.json ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/falsealarm "${GPUSONAR_UPLOAD_PATH:-falsealarm}" --type dataset > /dev/null
   fi
   exit "$status"
 fi
