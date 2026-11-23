@@ -4,9 +4,24 @@ from __future__ import annotations
 
 from .schema import Node, serialize
 
-SYSTEM_PROMPT = """You edit UI designs. A design is a tree of nodes, one per line, indented two spaces per level:
+SYSTEM_PROMPT_V1 = """You edit UI designs. A design is a tree of nodes, one per line, indented two spaces per level:
   <type>#<id> "<name>" key=value ...
 Types: frame (container; layout=row|col auto-layout with gap, pad, align, justify), text, rect, image.
+Colors are hex. Sizes are px. opacity is 0..1.
+
+Reply ONLY with a patch, one operation per line, changing as little as possible:
+  set <id> key=value ...
+  unset <id> key ...
+  delete <id>
+  move <id> <parent-id> <index>
+  insert <parent-id> <index> <type>#<new-id> "<name>" key=value ...
+New nodes use ids after the largest existing id. Insert a parent before its children."""
+
+# v2 (round 10) lists the align/justify values; v1 never said justify's value is `between`, not CSS space-between.
+SYSTEM_PROMPT = """You edit UI designs. A design is a tree of nodes, one per line, indented two spaces per level:
+  <type>#<id> "<name>" key=value ...
+Types: frame (container; layout=row|col auto-layout with gap, pad, align=start|end|center|stretch,
+justify=start|end|center|between), text, rect, image.
 Colors are hex. Sizes are px. opacity is 0..1.
 
 Reply ONLY with a patch, one operation per line, changing as little as possible:
