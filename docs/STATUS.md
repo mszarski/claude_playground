@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-163); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-165); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -737,7 +737,7 @@ the arrival-time solve runs (4, 4) passes (D-83).
    navigation message.
 7. Milestone 11: a job in which the loopback test passes; the reference's SDK build and a
    rig run. Milestone 13: Spark and Jetson measurements.
-8. Milestone 8 leftovers (seed 2's sway bound, ref [9] surge); PICMUS experimental and in-vivo
+8. Milestone 8 leftovers (ref [9] surge); PICMUS experimental and in-vivo
    sets; classification beyond the track: opt-in rules from detection extent and SNR exist in both
    engines (`classify.detections`, D-152, no defaults) and fix none of sonar-ic5, 9ir, 9z8, ofa at
    one setting.
@@ -936,12 +936,13 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - **Surge by along-track estimation (ASASIN ref. [9]: Brown, Gerg and Blanford, IEEE J. Oceanic
   Eng. 2019) is not implemented**: the paper is paywalled and no open copy could be opened. Surge
   comes from the DVL sample in each record.
-- **The acceptance test's sway bound holds on its own seed only.** At the default
-  lambda1 = lambda2 = 1 the bound (lambda/20 RMS) holds on seeds 1 and 3 but not on seed 2:
-  0.87 mm against 0.375 mm (`tools/motion_study.py sweep`). No cell of the sweep grid
-  {0, 0.01, 0.1, 1, 10, 100}^2 holds it on all three seeds (best worst-seed ratio 1.10 at
-  lambda1 0, lambda2 0.01, against 2.32 at the defaults); three seeds are too few to retune on.
-  Defaults unchanged.
+- **Motion acceptance on eight seeds (D-164).** The bounds (lambda/20 sway, lambda/4 heave RMS;
+  ours, milestone 8, ASASIN reports no motion accuracy) hold on seeds 1-8 at the default
+  lambda1 = lambda2 = 1. Seed 2's miss (0.87 mm against 0.375 mm) came from holding ping 0's height
+  on one noisy DVL sample; that height is now an unknown with its own Eq. 7 term (worst sway 0.24 mm).
+  `minefield_sas` sway rose 0.081 -> 0.139 lambda RMS with the fix, mostly a common offset (sharpness
+  319.8 -> 323.1); its delays carry a heave tilt the old anchor masked, not yet explained. The
+  committed `wreck_sas` and `minefield_sas` gallery figures and JSON predate D-164.
 - Delay estimation has a C++ port (host and CUDA, `MotionOptions.delay_backend`), bit-close to
   NumPy, which stays the default and the reference. On an L4 the CUDA path is slower than the
   host path (22.6 against 5.2 ms for 1248 windows; per-pair uploads and double sums). The fine

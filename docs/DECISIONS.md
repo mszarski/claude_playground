@@ -184,6 +184,8 @@ squared, which reduces to the above for uniform pings.
 Altitude of ping `i` is `−p_z,i`. Positions integrate as `p_z,i = p_z,1 + Σ_{n=1..i−1} v_z[n] Δ_n`.
 The residual is `(−p_z,i) − altitude_DVL[i]`. `p_z,1` is `−altitude_DVL[1]`, which also fixes the
 origin on the seafloor below the first ping.
+Amended in D-164: `p_z,1` starts at `−altitude_DVL[1]` and is held there only with
+`fix_first_height`; by default it is an unknown with its own Eq. 7 residual.
 
 ### D-16 λ1, λ2
 Config values `lambda_smooth`, `lambda_dvl` in `MotionOptions`, both 1 by default with the
@@ -2802,3 +2804,52 @@ the CPU with a stand-in source; py-spy on the hung GPU runs showed the scheduler
 - Open: on the GPU the idle path ran only in runs set up for it (every lossy run stopped on
   "pings"); `run_receiver` keeps each application object alive until the process ends (harmless for
   the tool, grows if called repeatedly in one process).
+
+### D-164 Motion estimation: ping 0's height is an unknown tied to its DVL sample (owner's choice, issue sonar-jh8)
+
+Holding ping 0's height at minus its single DVL altitude (D-15, D-31) turned one sample's noise
+into a common heave offset, and about 0.3-0.4 times that offset went into sway through the 17-27°
+line of sight. On seed 2 of the acceptance scenario a −2.54 mm first DVL sample gave 0.87 mm sway
+RMS against the λ/20 = 0.375 mm bound; over ten seeds the old sway RMS correlates 0.98 with that
+sample's error. Not the scene (no window rejected), not the lambdas, not the reference truth (the
+simulator starts sway and heave at zero).
+- Ping 0's sway stays held at its navigated value (DPC sees only relative sway); its height is now
+  free and enters Eq. 7 like every other ping (`ceres::SubsetManifold`). The paper lists only
+  velocities as unknowns and does not say how p_z,1(0) is fixed: the choice is ours.
+  `MotionOptions.fix_first_height` (C++ `SolveOptions::fix_first_height`) keeps the old anchor;
+  without a DVL term the height is held as before. Lambdas unchanged (D-16).
+- What got worse: `minefield_sas` sway 0.081 -> 0.139 λ RMS (0.61 -> 1.05 mm), mostly a common
+  offset (mean −0.50 -> −0.97 mm, spread 0.34 -> 0.39 mm; sharpness 319.8 -> 323.1, true motion
+  318.0), heave 0.087 -> 0.101 λ; freed, its ping-0 height settles 1.76 mm off against a 0.34 mm
+  DVL error, a heave tilt in its delays not yet explained. Acceptance seed 3 sway 0.059 -> 0.104
+  mm, seed 10 heave 0.215 -> 0.383 mm, `seafloor_z=5` sway 0.071 -> 0.226 mm, all inside the
+  bounds. `test_smoothness_term_reduces_noise_and_dvl_term_holds_altitude` keeps its 2 mm check
+  with `fix_first_height` (1.999 mm) and checks the default against 2.5 mm (2.115 mm).
+- Better: acceptance worst sway over seeds 1-10 0.87 -> 0.24 mm; `wreck_sas` sway 0.089 -> 0.045 λ
+  (sharpness 274.4 -> 276.8, true 280.6); undulating seabed 0.342 -> 0.188 mm.
+- The acceptance test runs seeds 1-8 with the same bounds; those bounds are ours (milestone 8):
+  ASASIN Sec. II-D reports no sway or heave accuracy and no λ1, λ2 (arXiv:2101.05888v2, opened).
+  Sweep after the fix, seeds 1-5: every seed inside both bounds at the defaults (worst 0.64 of the
+  bound). Gallery figures and JSON for `wreck_sas` and `minefield_sas` were not regenerated.
+- Validation: full GPU suite 1827 passed, 92 skipped (HF job 6b03bf4d8d268c0fbd238053, with D-165).
+
+### D-165 No fitted velocity from echo delays alone (issue sonar-054)
+
+With D-156 a point's time is transmit + R/c. Pings that carry one transmit time (a source without
+timestamps) left only dR/c between a track's points, and the line through them measured range
+against R/c: a radial speed of the order of c. With `cfar.range_estimate: centroid` the C++ chain
+reported two standing targets at 118 and 48 km/s, 103 and 43 km out; the default leading edge
+(D-160) hides the fault, since its range falls on the same sample every ping.
+- Rule (ours, derived, both engines): each history row records its ping's time (`Track.pings`,
+  `HistoryPoint::ping`); `classify_tracks` fits no velocity when the fitted points' transmit
+  times span no more than their echo delays, ptp(T) <= ptp(t − T). The track is then treated as a
+  short track: speed 0, never a mover. A real target's delays span ptp(R)/c <= (|dR/dt|/c)·ptp(T),
+  below ptp(T) at any radial speed under c, so no threshold is needed. Rows without a ping time
+  (hand-built tracks, `classify_rules_eval` captures) are not tested.
+- Not chosen: refusing non-increasing transmit times; a timestamp-less source would give nothing.
+- A timestamp-less source now gives tracks at the right ranges with speed 0, never a mover, no
+  warning. Open: its Kalman tracker has no clock (dt ≈ 0), so a real mover may fall out of its gate.
+- Measured: with increasing transmit times no class, position or velocity changes (bit for bit,
+  `test_ping_times_change_no_fit_when_transmit_times_increase`); smallest margin ptp(T)/ptp(d) on
+  six gallery quick scenes 167 (fls_120k_cluttered_seabed). Full GPU suite 1827 passed, 92 skipped
+  (HF job 6b03bf4d8d268c0fbd238053).

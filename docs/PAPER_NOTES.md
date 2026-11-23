@@ -284,7 +284,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Surge from DVL | `python/gpusonar/motion.py` (`_ping_nav`) | end-to-end tests use it | done |
 | Surge from along-track estimation | | | **not implemented** |
 | Attitude and lever arms (Ω) | enters Eq. 4 through `PingNav::rpy` and the measurements' lever arms | `::test_eq4_attitude_and_lever_arms_match_an_independent_model`, `::test_solver_recovers_sway_and_heave_under_attitude_and_lever_arms`, `::test_attitude_and_lever_arms_leave_sway_and_heave_unbiased` (2/1/1° RMS roll/pitch/yaw) | done |
-| Known bathymetry option | `MotionOptions.bathymetry` (footprint `p_s,z`, and the seabed the DVL altitude is referred to) | `::test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor` (slope, undulating), `::test_flat_seafloor_assumption_can_be_replaced_by_known_bathymetry` | done; undulating case 0.342 mm sway RMS against a 0.375 mm bound |
+| Known bathymetry option | `MotionOptions.bathymetry` (footprint `p_s,z`, and the seabed the DVL altitude is referred to) | `::test_known_bathymetry_keeps_the_flat_seafloor_bounds_on_a_non_flat_seafloor` (slope, undulating), `::test_flat_seafloor_assumption_can_be_replaced_by_known_bathymetry` | done; undulating case 0.188 mm sway RMS (0.342 before D-164) against a 0.375 mm bound |
 | Delay estimation in C++ (host, CUDA) | `libs/motion/src/delay_estimation.cpp`, `delay_cuda.cu`; `MotionOptions.delay_backend` | `tests/python/test_motion_delays.py` | done; NumPy stays the default and the reference; the fine delay is the phase at the integer peak (ours), not at the interpolated point |
 
 ### Pre- and post-processing (Sec. II-E, Eq. 9–12)

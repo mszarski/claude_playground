@@ -557,12 +557,14 @@ and heave of 4 mm RMS. Navigation reports a straight level line; the DVL altitud
 
 | Quantity | Result | Stated bound |
 | --- | --- | --- |
-| Sway error, RMS | 0.109 mm = λ/69 | λ/20 |
-| Heave error, RMS | 0.328 mm = λ/23 | λ/4 |
+| Sway error, RMS | 0.099 mm = λ/76 (0.109 before D-164) | λ/20 |
+| Heave error, RMS | 0.324 mm = λ/23 (0.328 before D-164) | λ/4 |
 | Sway error after the coarse pass only | 0.295 mm | — |
 | Point-response peak, navigation only, against the true-motion image | −10.01 dB | — |
 | Point-response peak, after motion estimation | +0.03 dB | within 1 dB |
 
+- Sway and heave rows re-measured after D-164 (ping 0's height free); the other rows are from before D-164.
+- Seeds 1-8 all inside both bounds after D-164; worst sway 0.24 mm (seed 2, from 0.87).
 - Both Ceres passes converged (8 and 7 iterations).
 - Heave is the weaker estimate, as expected: grazing angles here span only 17° to 27°, so
   the delays say much more about sway than heave, and the DVL term carries the altitude.
