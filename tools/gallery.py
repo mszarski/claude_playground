@@ -488,6 +488,26 @@ def echo_delay(record, rng):
     return float(rng) / float(record.environment.sound_speed)
 
 
+def echo_position(origin, velocity, rng, bearing, c):
+    """World (x, y) of a monostatic echo at two-way range `rng` (m, c tau / 2) and far-field bearing `bearing` (rad,
+    from +y towards +x, the array along x) from an array at `origin` at transmit, moving at `velocity` (world, m/s, the
+    record's rx pose velocity), with sound speed `c`.
+
+    The simulator receives with the array where it is when the echo arrives (its elements carry the pose's velocity),
+    so the bearing is the direction u from there, p_rx = origin + d, d = v 2 rng / c, to the target q, and the two-way
+    path is |q - origin| + |q - p_rx| = 2 rng. To first order in |d| / rng, |q - origin| = |q - p_rx| + u . d, so
+    q = p_rx + (rng - u . d / 2) u (ours; the live chain follows the same motion in its backprojection, sonar-8is).
+    Placed from `origin` instead, as before sonar-960, the echo lies d behind: 24 m along the track at 12 km and 1.5 m/s
+    (popoto_12km). Left out: the order |d|^2 / rng (0.05 m there), and the array's motion during a long pulse, which
+    moves the bearing further by up to the distance it travels in half the pulse (a 1 s pulse at 1.5 m/s: 0.75 m;
+    measured with the simulator at 25 m/s and 300 m: 0.2 m left for a 10 ms pulse, 1.5 m for 0.1 s, 4 m for 1 s). An
+    array at rest (stop and go) gives the old placement exactly."""
+    d = np.asarray(velocity, dtype=float)[:2] * (2.0 * float(rng) / float(c))
+    u = np.array([np.sin(bearing), np.cos(bearing)])
+    p = np.asarray(origin, dtype=float)[:2] + d + (float(rng) - 0.5 * float(u @ d)) * u
+    return float(p[0]), float(p[1])
+
+
 def state_time(tr):
     """When a track's state holds: the time of its last history point (its last detection, or the last ping after a
     miss; a capture saved before D-156 holds at the last ping)."""
@@ -989,9 +1009,11 @@ def run_popoto_far(name, cfg, backend, quick):
         ranges = bm.ranges[:n].reshape(-1, k).mean(axis=1)
         hits = detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150)
         hits = [h for h in hits if h.snr_db > 9.0]
-        # Bearing is from broadside (+y) towards +x, the array's own axis.
-        per_ping.append([(origin[0] + h.range * np.sin(h.bearing), origin[1] + h.range * np.cos(h.bearing), h.snr_db,
-                          echo_delay(rec, h.range)) for h in hits])
+        # Bearing is from broadside (+y) towards +x, the array's own axis; placed from where the array is when the echo
+        # arrives (echo_position; sonar-960: from the array at transmit the ship's echoes lay 24 m behind it).
+        v_rx, c = rec.geometry.rx_pose.velocity, rec.environment.sound_speed
+        per_ping.append([(*echo_position(origin, v_rx, h.range, h.bearing, c), h.snr_db, echo_delay(rec, h.range))
+                         for h in hits])
         if first is None:
             first = (ranges, power)
         maps.append(shrink(np.clip(db(power, np.median(power)), 0, 30)))
