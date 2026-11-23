@@ -66,32 +66,18 @@ def main() -> None:
     ap.add_argument("--max-model-len", type=int, default=4096, help="vLLM context (raise for reasoning runs)")
     ap.add_argument("--tag", default="", help="subfolder for the result files, e.g. 'think' (keeps runs apart)")
     ap.add_argument("--adapter", default=None,
-                    help="LoRA checkpoint to merge into --model first, as <repo>/<subfolder> (e.g. user/run-ckpt/checkpoint-50)")
+                    help="LoRA adapter(s) to merge into --model first, as <repo>/<subfolder>, comma-separated to stack (SFT,RL)")
     args = ap.parse_args()
     bootstrap(args.dataset)
 
     out_repo, out_prefix, model_path = args.model, (args.tag + "/" if args.tag else ""), args.model
     if args.adapter:
         # Merge on CPU and save locally, so the GPU is free for vLLM afterwards.
-        import torch as _torch
-        from huggingface_hub import snapshot_download
-        from peft import PeftModel
-        from trl.trainer.utils import create_model_from_path
+        from design_edit.lora import merge_adapter
 
-        repo, sub = args.adapter.rsplit("/", 1)
-        ckpt = os.path.join(snapshot_download(repo, allow_patterns=[f"{sub}/adapter_*"]), sub)
-        base = create_model_from_path(args.model, dtype=_torch.bfloat16)  # same loader the trainer used
-        merged = PeftModel.from_pretrained(base, ckpt).merge_and_unload()
-        model_path = "/tmp/merged_model"
-        merged.save_pretrained(model_path)
-        aux = snapshot_download(args.model, ignore_patterns=["*.safetensors", "eval_*", "sample_*"])
-        import shutil
-        for f in os.listdir(aux):
-            if os.path.isfile(os.path.join(aux, f)) and not os.path.exists(os.path.join(model_path, f)):
-                shutil.copy(os.path.join(aux, f), model_path)
-        del merged, base
+        model_path = merge_adapter(args.model, args.adapter, "/tmp/merged_model")
+        repo, sub = args.adapter.split(",")[-1].strip().rsplit("/", 1)  # results go next to the last adapter
         out_repo, out_prefix = repo, sub + "/" + out_prefix
-        print(f"merged {args.adapter} into {args.model} -> {model_path}", flush=True)
 
     import torch
     from datasets import load_dataset

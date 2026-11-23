@@ -95,6 +95,10 @@ def main() -> None:
     ap.add_argument("--vllm-server", action="store_true",
                     help="2-GPU mode: vLLM server on GPU 1, training on GPU 0 (for models too big to colocate)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
+    ap.add_argument("--sft-adapter", default=None,
+                    help="start from --model with this LoRA adapter merged in, as <repo>/<subfolder> (e.g. user/sft/adapter)")
+    ap.add_argument("--adapter-only", action="store_true",
+                    help="push only the RL LoRA adapter (to <output>/adapter), not a merged checkpoint")
     ap.add_argument("--template-kwargs", default=None, help="JSON chat-template kwargs")
     ap.add_argument("--batch-prompts", type=int, default=0, help="unused; kept for CLI compatibility")
     ap.add_argument("--kinds", default="", help="comma-separated edit kinds to train on (default all)")
@@ -109,6 +113,11 @@ def main() -> None:
     ap.add_argument("--eval-batch", type=int, default=4)
     args = ap.parse_args()
     bootstrap(args.dataset)
+    base_model = args.model
+    if args.sft_adapter:
+        from design_edit.lora import merge_adapter
+
+        args.model = merge_adapter(args.model, args.sft_adapter, "/tmp/sft_merged")
 
     import subprocess
     import time
@@ -286,7 +295,7 @@ def main() -> None:
         vllm_max_model_length=3072,
         report_to=args.report_to,
         project="design-edit",
-        run_name=f"grpo-{args.model.split('/')[-1]}",
+        run_name=f"grpo-{args.output.split('/')[-1]}",
     )
     trainer = GRPOTrainer(
         model=args.model,
@@ -298,6 +307,20 @@ def main() -> None:
                                task_type="CAUSAL_LM"),
     )
     trainer.train()
+    if args.adapter_only:
+        trainer.model.save_pretrained("rl_adapter")
+        if os.path.isdir("/data"):  # job volume: keeps the adapter even if the Hub upload fails
+            import shutil
+            shutil.copytree("rl_adapter", f"/data/{args.output.replace('/', '__')}/adapter", dirs_exist_ok=True)
+        if not args.no_push:
+            from huggingface_hub import create_repo, upload_folder
+            create_repo(args.output, private=True, exist_ok=True)
+            upload_folder(repo_id=args.output, folder_path="rl_adapter", path_in_repo="adapter")
+            print(f"pushed RL adapter to https://huggingface.co/{args.output}/tree/main/adapter "
+                  f"(apply on top of {base_model} + {args.sft_adapter})")
+        if server is not None:
+            server.terminate()
+        os._exit(0)  # vLLM server / NCCL threads can keep the process alive
     model = trainer.model.merge_and_unload()
     if not args.no_push:
         model.push_to_hub(args.output, private=True)
