@@ -228,6 +228,10 @@ def strip_fences(text: str) -> str:
     final ``to=user`` message and drop any leftover channel tokens. Inkling-2's raw output (thinking, then
     ``<|content_text|>`` answer) keeps only the answer.
     """
+    if "<channel|>" in text:  # Gemma 4 thinking: <|channel>thought ... <channel|> answer
+        text = text.rsplit("<channel|>", 1)[1]
+    elif "<|channel>" in text:
+        return ""  # reasoning ran out of tokens before an answer
     if "</think>" in text:  # brief-reasoning students (and Qwen-style thinking): keep what follows the reasoning
         text = text.rsplit("</think>", 1)[1]
     elif "<think>" in text:

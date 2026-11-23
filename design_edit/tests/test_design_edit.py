@@ -224,3 +224,9 @@ def test_strip_fences_think_block():
 
     assert strip_fences("<think>\nThe other buttons have no stroke.\n</think>\nset n5 fill=#2563EB") == "set n5 fill=#2563EB"
     assert strip_fences("<think>\nstill going") == ""
+
+
+def test_strip_fences_gemma_thinking_channel():
+    from design_edit.schema import strip_fences
+    assert strip_fences("<|channel>thought\nThe button is n4.<channel|>set n4 fill=#2563EB") == "set n4 fill=#2563EB"
+    assert strip_fences("<|channel>thought\nstill thinking") == ""

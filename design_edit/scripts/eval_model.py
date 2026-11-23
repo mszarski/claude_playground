@@ -64,6 +64,8 @@ def main() -> None:
                     help="transformers path for models that only load as AutoModelForMultimodalLM + AutoProcessor")
     ap.add_argument("--max-new-tokens", type=int, default=320)
     ap.add_argument("--max-model-len", type=int, default=4096, help="vLLM context (raise for reasoning runs)")
+    ap.add_argument("--keep-special-tokens", action="store_true",
+                    help="decode special tokens (needed to split Gemma 4 thinking from the answer)")
     ap.add_argument("--tag", default="", help="subfolder for the result files, e.g. 'think' (keeps runs apart)")
     ap.add_argument("--adapter", default=None,
                     help="LoRA adapter(s) to merge into --model first, as <repo>/<subfolder>, comma-separated to stack (SFT,RL)")
@@ -96,7 +98,9 @@ def main() -> None:
 
         llm = LLM(model=model_path, dtype="bfloat16", max_model_len=args.max_model_len, gpu_memory_utilization=0.9,
                   limit_mm_per_prompt={"image": 0})
-        params = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens)
+        # Keep special tokens so channel-style reasoning (Gemma 4 thinking) stays separable from the answer.
+        params = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens,
+                                skip_special_tokens=not args.keep_special_tokens)
 
         def generate(prompts):
             outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
