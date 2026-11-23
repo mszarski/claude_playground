@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-167); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-168); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -731,8 +731,9 @@ the arrival-time solve runs (4, 4) passes (D-83).
    `docs/tasks/REAL_DATA.md`.
 4. The two-row depth sigma for shallow targets at 1 km (too wide); a Bellhop check of
    its multipath term in refracting water; a stacked-row chain run on Bellhop pings.
-5. The detector's false alarms at the default budget and the three-row cell mean; its
-   constants on a map other than the long-range one; the Taylor window; the owner's call
+5. The detector: false alarms at the default budget are counted (D-168, 0.82 of the budget
+   pooled; constants kept); open are the three-row static count (stopped at 40 000 pings), the
+   two-row cell mean running 1.26 times its share, the 9 dB report floor on stacked rows; the Taylor window; the owner's call
    on merging FLS detections before tracking.
 6. The vehicle adapters: board samples to UDP blocks or WAV with a sidecar; the vehicle's
    navigation message; the surveyed lever arm and mounting rotation from the navigation unit to

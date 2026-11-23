@@ -2901,3 +2901,26 @@ array's velocity is not corrected (the nav datagram carries no attitude rates; e
   the array's: without it ownship is about 2.5 m off and depth reads 28.5 m for 48.0 m),
   `test_live_cpp.py::test_program_moves_navigation_to_the_array_by_the_lever_arm`. Full GPU suite
   1854 passed, 92 skipped (HF job 6b03d92e130a00b5aa825684).
+
+### D-168 The detector's constants stand at the default budget, now measured (owner's choice, issue sonar-ydi; addendum to D-134)
+
+D-134's thresholds at one false alarm per thousand pings were extrapolated, on one map. Now
+counted on a GPU, 40 000 to 100 000 noise-only pings per map and row count, on D-134's map and a
+second one (`flank_32` for one row: 15 samples a cell, 10.8 looks; the deployed static arrays over
+75 m - 3 km for two and three rows): the whole detector gave 0.73 to 1.01 of its budget, pooled
+0.82 (0.74-0.91) (RESULTS, "False alarms at the default budget, counted").
+- What is off: the one-row intervals lie just under the budget (0.63-0.98, 0.60-0.95); the others
+  contain it. The three-row static count stopped at 40 000 pings (job timeout), not split by test.
+- Kept (owner's choice): under the budget means fewer false alarms; re-fitting the sample constant
+  at 1e-3 (about 0.13 against 0.19-0.21) would lower its threshold 0.07-0.085 dB, Pd at most +0.027
+  where it is 0.5; the constants depend on the budget, so a fit at 1e-3 would make budgets of 3 to
+  0.1 run about 1.4 times over.
+- Still open: the growth law in u counts too many single-sample tests at high thresholds, and the
+  two-row cell mean runs 1.26 times its share, neither explained. The chain's 9 dB `min_snr_db`
+  floor drops 33 % and 54 % of two- and three-row noise detections, so the shipped report runs well
+  under budget for stacked rows.
+- Tools: `detector_search_factor.py --at-default` (counts the shipped detector's output through the
+  C++ chain), `--replay` (splits counted pings between the tests on the host);
+  `GPUSONAR_JOB=falsealarm` in `tools/gpu_job.sh`. Test:
+  `test_detector.py::test_the_default_budget_count_on_a_second_map_at_cpu_scale`. No default,
+  figure or JSON changed. Full GPU suite 1855 passed, 92 skipped (HF job 6b0444b4a02d1cf5a7b80bb9).

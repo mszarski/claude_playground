@@ -2620,6 +2620,42 @@ thousand pings; about 100 000 pings would be needed). By its measured trend the 
 cell mean could run 1.5 times over its share there. The constants belong to one map
 (bearings every 0.5 degrees, 2 m cells of 8 samples, Hann window, 15 m merge).
 
+### False alarms at the default budget, counted (D-168, issue sonar-ydi)
+
+Source: `tools/detector_search_factor.py --at-default` and `--replay`; L4; HF jobs
+6b03d2718d268c0fbd23ad8d (long-range), 6b03efcc130a00b5aa8290a6 (flank, static two rows),
+6b04188d7a38dcb7ff6e8e25 (static three rows, timed out at about 43 000 pings: its count is from the
+last progress line, not split by test). The shipped detector (both tests, the constants in the
+code, 1e-3 a ping) through the C++ chain on CUDA, on noise-only pings. "Detector" is its own
+output (the chain's `min_snr_db` floor set to 0); "reported" is what the chain as shipped reports,
+above 9 dB. Intervals are exact Poisson 95 %.
+
+| Map, rows | Pings | Detector: found, / budget (95 %) | Reported > 9 dB / budget |
+| --- | --- | --- | --- |
+| long-range (D-134), 1 | 100 000 | 79, 0.79 (0.63–0.98) | 0.79 |
+| long-range, 2 | 100 000 | 90, 0.90 (0.72–1.11) | 0.60 (0.46–0.77) |
+| long-range, 3 | 89 594 | 72, 0.80 (0.63–1.01) | 0.37 (0.25–0.52) |
+| flank_32, 1 | 100 000 | 76, 0.76 (0.60–0.95) | 0.74 (0.58–0.93) |
+| static, 2 | 41 553 | 42, 1.01 (0.73–1.37) | 0.75 (0.51–1.06) |
+| static, 3 | 40 000 | 29, 0.73 (0.49–1.04) | not split (job timed out) |
+
+Pooled over all six: 0.82 of the budget (0.74–0.91). No ping held more than one false detection.
+The one-row intervals lie just under the budget; the constants are kept (owner's choice, D-168).
+
+Each test alone, replayed exactly on the host (the replay matched the GPU count on all five maps):
+
+| Map, rows | Single sample / its share (constant it implies; table) | Cell mean / its share (implied; table) |
+| --- | --- | --- |
+| long-range, 1 | 0.70 (0.49–0.97); 0.134; 0.191 | 0.94 (0.69–1.25); 0.484; 0.515 |
+| long-range, 2 | 0.66 (0.45–0.93); 0.137; 0.208 | 1.22 (0.93–1.57); 0.649; 0.532 |
+| long-range, 3 | 0.69 (0.47–0.98); 0.133; 0.192 | 0.94 (0.68–1.27); 0.561; 0.598 |
+| flank, 1 | 0.64 (0.44–0.90); 0.122; 0.191 | 0.90 (0.66–1.20); 0.464; 0.515 |
+| static, 2 | 0.67 (0.37–1.13); 0.140; 0.208 | 1.35 (0.90–1.95); 0.717; 0.532 |
+
+Pooled: the single-sample test runs 0.67 of its share (0.57–0.79); the two-row cell mean 1.26
+(1.01–1.55); the one-row and three-row cell means 0.92 and 0.94. D-134 expected the three-row cell
+mean to run about 1.5 times over at the default; it does not.
+
 ### Two stacked rows at 3 km: what they read, and the sigma they now state (D-133)
 
 Source: the `popoto_face_2x32` rehearsal scenario with the target moved through the
