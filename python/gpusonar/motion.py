@@ -44,13 +44,15 @@ class MotionOptions:
     window_m: float | None = None    # the window as metres of range; replaces window_samples
     max_lag_m: float | None = None   # the largest change of range between pings, m; replaces max_lag_samples
     min_coherence: float = 0.5       # measurements below this are dropped
-    min_window_energy_db: float | None = None   # opt-in (sonar-7r7): drop a range window whose echo energy, over
-                                     # both pings' overlapping channels, is more than this many dB below the
-                                     # ping pair's median window (e.g. -20). Such a window holds no seabed at the
+    min_window_energy_db: float | None = -20.0  # drop a range window whose echo energy, over both pings'
+                                     # overlapping channels, is more than this many dB below the ping pair's
+                                     # median window (sonar-7r7; ours). Such a window holds no seabed at the
                                      # footprint measure_delays assumes (broadside, on the seafloor at the
                                      # window's slant range): what is left is range sidelobes and seabed off the
-                                     # beam's main lobe, whose delays the model misreads. Coherence does not catch
-                                     # it without receiver noise. None: no energy test.
+                                     # beam's main lobe, whose delays the model misreads, and without receiver
+                                     # noise coherence does not catch it. -20: windows with seabed in the main
+                                     # lobe spanned -9.4 to +18.3 dB of the median in minefield_sas and wreck_sas,
+                                     # a window past their seabed's edge -34 to -52 dB. None: no energy test (the behaviour before sonar-7r7).
     lambda_smooth: float = 1.0       # lambda1 in Eq. 8
     lambda_dvl: float = 1.0          # lambda2 in Eq. 8
     huber: bool = True               # Eq. 3; False = the squared loss of the Eq. 5 caption

@@ -344,6 +344,7 @@ def test_sway_and_heave_errors_are_a_small_fraction_of_a_wavelength(seed):
     assert np.sqrt(np.mean(heave_err**2)) < WAVELENGTH / 4, np.sqrt(np.mean(heave_err**2))
     assert result.fine.converged and result.coarse.converged
     assert result.n_measurements > 500
+    assert result.windows["rejected_low_energy"] == 0     # the seabed fills the window: the energy test drops nothing
 
 
 def test_fine_pass_improves_on_the_coarse_pass(run):
@@ -392,23 +393,26 @@ def test_windows_beyond_the_seabed_bias_the_track_and_the_energy_test_drops_them
     47.4 m; the window reaches 52 m) leaves range windows with no seabed at the broadside footprint
     measure_delays assumes. Their echo (range sidelobes, seabed off the beam's main lobe) gives
     coherent but biased delays; the solver absorbs the bias as a sway/heave tilt. `min_window_energy_db`
-    drops windows far below their ping pair's median energy, and those only."""
+    (default -20 dB; None turns it off) drops windows far below their ping pair's median energy, and
+    those only."""
     col, _ = collect(n_pings=40, with_target=False, seed=1, patch_y=(28.0, 45.0))
     truth = col.true_positions[:len(col.records)]
     rms = lambda e: float(np.sqrt(np.mean(e**2)))
-    plain = motion.estimate_motion(col.records)
-    gated_opts = motion.MotionOptions(min_window_energy_db=-20.0)
+    off = motion.MotionOptions(min_window_energy_db=None)
+    plain = motion.estimate_motion(col.records, off)
+    gated_opts = motion.MotionOptions()
+    assert gated_opts.min_window_energy_db == -20.0                # the default
     gated = motion.estimate_motion(col.records, gated_opts)
     # Without the test the sway leaves the acceptance bound (0.54 mm against lambda / 20 = 0.375 mm).
     assert rms(plain.y - truth[:, 1]) > WAVELENGTH / 20
-    # With it, both bounds hold (sway 0.17 mm, heave 0.29 mm).
+    # With it (the default), both bounds hold (sway 0.17 mm, heave 0.29 mm).
     assert rms(gated.y - truth[:, 1]) < WAVELENGTH / 20
     assert rms(gated.z - truth[:, 2]) < WAVELENGTH / 4
     assert any("below their ping pair's median echo energy" in line for line in gated.log)
     # What it drops lies beyond the seabed's edge; everything nearer is kept.
     stats = {}
     kept, _ = motion.measure_delays(col.records, gated_opts, stats)
-    every, _ = motion.measure_delays(col.records, motion.MotionOptions())
+    every, _ = motion.measure_delays(col.records, off)
     assert stats["rejected_low_energy"] > 0
     key = lambda f: (f["measurement"].ping, round(f["measurement"].t_ref, 9), f["measurement"].rx_lever_1)
     dropped = {key(f) for f in every} - {key(f) for f in kept}
@@ -420,10 +424,10 @@ def test_windows_beyond_the_seabed_bias_the_track_and_the_energy_test_drops_them
 def test_energy_test_drops_nothing_where_the_seabed_fills_the_receive_window():
     col, _ = collect(n_pings=12, with_target=False, seed=1)
     stats = {}
-    motion.measure_delays(col.records, motion.MotionOptions(min_window_energy_db=-20.0), stats)
+    motion.measure_delays(col.records, motion.MotionOptions(), stats)
     assert stats["rejected_low_energy"] == 0
-    plain = motion.estimate_motion(col.records)
-    gated = motion.estimate_motion(col.records, motion.MotionOptions(min_window_energy_db=-20.0))
+    plain = motion.estimate_motion(col.records, motion.MotionOptions(min_window_energy_db=None))
+    gated = motion.estimate_motion(col.records)
     np.testing.assert_array_equal(gated.y, plain.y)
     np.testing.assert_array_equal(gated.z, plain.z)
 
