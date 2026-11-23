@@ -1,0 +1,45 @@
+# Two ships at one bearing and one velocity, 850 m apart in range: popoto_12km with a second ship beyond the first.
+# The test scene of echo grouping's chain-merge risk (issue sonar-a5x). Each ship is seen as a dozen arrivals spread over
+# up to about 120 m beyond its true range (popoto_12km, ten seed captures), so ship A's last arrivals lie within the
+# grouping gate (800 m in tools/gallery.py) of ship B's first while the ships are farther apart than one gate. Grouping
+# grown transitively made the two one object; since sonar-a5x a group reaches no farther than one gate from its object.
+# Otherwise popoto_12km: Popoto long-range array (32 hydrophones, 4-6 kHz, 197 dB) under way at 1.5 m/s; 100 m of
+# isovelocity water over sand; Bellhop multipath (needs GPUSONAR_BELLHOP), bottom and surface reverberation, ambient
+# noise; six pings. The receive window and the propagation reach out to the second ship.
+# Bottom parameters are typical textbook values for the sediment type, not measurements; the Lambert strength for it is
+# a placeholder.
+name: popoto_12km_two_ships
+sonar: popoto_long_range
+fidelity: eigenray
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [11300.0, 13550.0]}}
+environment: {base: shelf_100m_sand_12c, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  max_range: 14000.0
+  range_step: 40.0
+  depth_step: 2.0
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 19.9}
+scene:
+  - type: points
+    label: ship_a
+    positions: [[740.0, 12000.0, 4.0], [770.0, 12000.0, 4.0], [800.0, 12000.0, 4.0], [830.0, 12000.0, 4.0], [860.0, 12000.0, 4.0]]
+    target_strength_db: 18.0
+    velocity: [-6.0, 0.0, 0.0]
+  - type: points
+    label: ship_b
+    # Its centre 852 m beyond ship A's along the same line of sight from the sonar's start (bearing 3.8 deg); same
+    # length and velocity.
+    positions: [[796.7, 12850.0, 4.0], [826.7, 12850.0, 4.0], [856.7, 12850.0, 4.0], [886.7, 12850.0, 4.0], [916.7, 12850.0, 4.0]]
+    target_strength_db: 18.0
+    velocity: [-6.0, 0.0, 0.0]
+reverberation:
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 51
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as before, so that the record does not change"
