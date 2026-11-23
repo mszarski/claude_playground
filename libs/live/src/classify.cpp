@@ -322,7 +322,10 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     // Echo grouping (ours, D-155; classify.py has the reasons): from each established track, strongest first, a group
     // grown transitively from the tracks not yet grouped: a track joins when it is within multipath_max_excess_range in
     // range (either side), the bearing gate and the velocity gate of ANY member, until none joins. The group's object is
-    // its established member nearest in range (ties: the lowest id), every other member is multipath of it.
+    // its established member nearest in range (ties: the lowest id), every other member is multipath of it. A member
+    // farther than multipath_max_excess_range from the object in range is left out of the group and free for one of
+    // its own; when it is the anchor, the anchor groups again from what is left (sonar-a5x: grown transitively, a chain
+    // of arrivals linked two objects farther apart than one gate).
     std::vector<std::size_t> order(out.size());
     for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
     auto key = [&](std::size_t i) { return std::isfinite(out[i].mean_snr_db) ? out[i].mean_snr_db : -std::numeric_limits<double>::infinity(); };
@@ -341,35 +344,38 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     };
     std::vector<bool> taken(out.size(), false), member(out.size(), false);
     for (const std::size_t a : order) {
-      if (taken[a] || !established(a)) continue;
+      if (!established(a)) continue;
       if (!linked(a, a)) continue;   // NaN range, bearing or velocity: nothing to group by; left as it is
-      std::vector<std::size_t> group{a};
-      std::fill(member.begin(), member.end(), false);
-      member[a] = true;
-      for (bool grew = true; grew;) {
-        grew = false;
-        for (std::size_t i = 0; i < out.size(); ++i) {
-          if (taken[i] || member[i]) continue;
-          for (const std::size_t g : group) {
-            if (linked(i, g)) {
-              group.push_back(i);
-              member[i] = true;
-              grew = true;
-              break;
+      while (!taken[a]) {            // again when the anchor itself lay beyond its group's object
+        std::vector<std::size_t> group{a};
+        std::fill(member.begin(), member.end(), false);
+        member[a] = true;
+        for (bool grew = true; grew;) {
+          grew = false;
+          for (std::size_t i = 0; i < out.size(); ++i) {
+            if (taken[i] || member[i]) continue;
+            for (const std::size_t g : group) {
+              if (linked(i, g)) {
+                group.push_back(i);
+                member[i] = true;
+                grew = true;
+                break;
+              }
             }
           }
         }
-      }
-      // The anchor is established, so an established member exists.
-      std::size_t obj = a;
-      for (const std::size_t i : group) {
-        if (established(i) && (range[i] < range[obj] || (range[i] == range[obj] && out[i].id < out[obj].id))) obj = i;
-      }
-      for (const std::size_t i : group) {
-        taken[i] = true;
-        if (i != obj) {
-          out[i].kind = Kind::Multipath;
-          out[i].parent = out[obj].id;
+        // The anchor is established, so an established member exists.
+        std::size_t obj = a;
+        for (const std::size_t i : group) {
+          if (established(i) && (range[i] < range[obj] || (range[i] == range[obj] && out[i].id < out[obj].id))) obj = i;
+        }
+        for (const std::size_t i : group) {
+          if (std::abs(range[i] - range[obj]) > o.multipath_max_excess_range) continue;   // not its echo (sonar-a5x)
+          taken[i] = true;
+          if (i != obj) {
+            out[i].kind = Kind::Multipath;
+            out[i].parent = out[obj].id;
+          }
         }
       }
     }
