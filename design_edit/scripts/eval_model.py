@@ -63,12 +63,14 @@ def main() -> None:
     ap.add_argument("--multimodal", action="store_true",
                     help="transformers path for models that only load as AutoModelForMultimodalLM + AutoProcessor")
     ap.add_argument("--max-new-tokens", type=int, default=320)
+    ap.add_argument("--max-model-len", type=int, default=4096, help="vLLM context (raise for reasoning runs)")
+    ap.add_argument("--tag", default="", help="subfolder for the result files, e.g. 'think' (keeps runs apart)")
     ap.add_argument("--adapter", default=None,
                     help="LoRA checkpoint to merge into --model first, as <repo>/<subfolder> (e.g. user/run-ckpt/checkpoint-50)")
     args = ap.parse_args()
     bootstrap(args.dataset)
 
-    out_repo, out_prefix, model_path = args.model, "", args.model
+    out_repo, out_prefix, model_path = args.model, (args.tag + "/" if args.tag else ""), args.model
     if args.adapter:
         # Merge on CPU and save locally, so the GPU is free for vLLM afterwards.
         import torch as _torch
@@ -88,7 +90,7 @@ def main() -> None:
             if os.path.isfile(os.path.join(aux, f)) and not os.path.exists(os.path.join(model_path, f)):
                 shutil.copy(os.path.join(aux, f), model_path)
         del merged, base
-        out_repo, out_prefix = repo, sub + "/"
+        out_repo, out_prefix = repo, sub + "/" + out_prefix
         print(f"merged {args.adapter} into {args.model} -> {model_path}", flush=True)
 
     import torch
@@ -106,7 +108,7 @@ def main() -> None:
         os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")  # no nvcc on the Jobs image
         from vllm import LLM, SamplingParams
 
-        llm = LLM(model=model_path, dtype="bfloat16", max_model_len=4096, gpu_memory_utilization=0.9,
+        llm = LLM(model=model_path, dtype="bfloat16", max_model_len=args.max_model_len, gpu_memory_utilization=0.9,
                   limit_mm_per_prompt={"image": 0})
         params = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens)
 
