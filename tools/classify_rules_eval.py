@@ -333,15 +333,46 @@ def table(agg: dict) -> str:
 
 # --- capture (simulation) ------------------------------------------------------------------------
 
-def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
+PROFILE_HALF = 8          # bearing rows recorded either side of a hit's flagged rows (--profiles)
+
+
+def cluster_profiles(detections, power, ranges, bearings, hits, half: int = PROFILE_HALF) -> list[dict]:
+    """What `--profiles` records of one call of detect.cluster (no merge: groups of touching flagged cells, in the
+    order cluster reports them): per hit its range, bearing, snr_db and cells as cluster gave them, the bearing rows
+    it flagged, and two bearing profiles of the map `power` [bearing, range cell] in dB from row `lo` on: `sum`, the
+    power summed over the hit's range cells at each bearing (flagged or not), and `peak`, the column of its strongest
+    flagged cell. The rows run from `half` below its first flagged row to `half` above its last, clipped to the map.
+    For a study of the bearing estimate offline (sonar-4s2): the profiles hold the unflagged neighbours a sub-grid
+    interpolation reads, which the detections do not."""
+    from scipy import ndimage
+    labels, n = ndimage.label(np.asarray(detections), structure=np.ones((3, 3), dtype=int))
+    if n != len(hits):
+        raise RuntimeError(f"cluster_profiles: {n} groups for {len(hits)} hits")
+    power = np.asarray(power, dtype=float)
+    out = []
+    for k, h in enumerate(hits, start=1):
+        ib, ir = np.nonzero(labels == k)
+        j = int(np.argmax(power[ib, ir]))
+        lo, hi = max(int(ib.min()) - half, 0), min(int(ib.max()) + half, power.shape[0] - 1)
+        cols = np.unique(ir)
+        db_ = lambda v: [round(float(x), 3) for x in 10.0 * np.log10(np.maximum(v, 1e-300))]
+        out.append({"range": float(h.range), "bearing": float(h.bearing), "snr_db": float(h.snr_db), "cells": int(h.cells),
+                    "rows": sorted(int(b) for b in np.unique(ib)), "lo": lo, "peak_row": int(ib[j]),
+                    "sum": db_(power[lo:hi + 1][:, cols].sum(axis=1)), "peak": db_(power[lo:hi + 1, ir[j]])})
+    return out
+
+
+def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bool = False) -> dict:
     """Run one gallery scene with its seed moved by `seed_offset`; return its confirmed tracks (with real cell
-    counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them."""
+    counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them.
+    `profiles` (sonar-4s2 study): also per ping the ping's time, every hit of detect.cluster with its bearing profiles
+    (`cluster_profiles`) and, for the gallery's `echo_position`, the array's origin, velocity and sound speed."""
     sys.path.insert(0, str(ROOT / "tools"))
     import gallery
     import matplotlib.pyplot as plt
     from gpusonar import core, detect
 
-    calls, got = [], {}
+    calls, got, pings = [], {}, []
 
     class DetectProxy:                      # gallery calls detect.cluster through its module global
         def __getattr__(self, attr):
@@ -351,12 +382,30 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         def cluster(*a, **k):
             hits = detect.cluster(*a, **k)
             calls.append(hits)
+            if profiles:
+                if k.get("merge") is not None or len(a) > 6:
+                    raise RuntimeError(f"{name}: --profiles records cluster without merge only")
+                b = np.asarray(a[3], dtype=float)
+                pings.append({"bearings": [float(b[0]), float(b[1] - b[0]), len(b)],
+                              "hits": cluster_profiles(a[0], a[1], a[2], b, hits), "echo": None})
             return hits
+
+    orig_echo = gallery.echo_position
+
+    def echo_position(origin, velocity, rng, bearing, c):
+        if profiles and pings and pings[-1]["echo"] is None:
+            pings[-1]["echo"] = {"origin": [float(v) for v in np.asarray(origin, dtype=float)[:2]],
+                                 "velocity": [float(v) for v in np.asarray(velocity, dtype=float)[:2]], "c": float(c)}
+        return orig_echo(origin, velocity, rng, bearing, c)
 
     def world_tracks(per_ping, times, **kw):
         # The gallery's world_tracks, with each detection's cell count from the hit it came from.
         if len(calls) != len(per_ping):
             raise RuntimeError(f"{name}: {len(calls)} detector calls for {len(per_ping)} pings")
+        got["tracker_kw"] = kw
+        if profiles:
+            for p, t in zip(pings, times):
+                p["time"] = float(t)
         tracker, tracks = detect.Tracker(**kw), []
         for t, hits, raw in zip(times, per_ping, calls):
             dets, j = [], 0
@@ -379,8 +428,9 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         got.update(tracks=tracks, truth=truth, t_last=float(t_last), gate=float(gate), kw=kw)
         return orig_score(tracks, truth, t_last, gate, **kw)
 
-    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score
+    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position
     gallery.detect, gallery.world_tracks, gallery.classify_and_score = DetectProxy(), world_tracks, classify_and_score
+    gallery.echo_position = echo_position
     try:
         cfg = gallery.load_scenario_config(name)
         own_seed = int(cfg.get("seed", 0))
@@ -393,7 +443,7 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         plt.close(out[0])
         seconds = time.perf_counter() - t0
     finally:
-        gallery.detect, gallery.world_tracks, gallery.classify_and_score = saved
+        gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position = saved
     if not got:
         raise RuntimeError(f"{name}: the gallery runner did not classify")
     return {"scene": name, "scene_seed": own_seed, "seed": own_seed + int(seed_offset), "seed_offset": int(seed_offset),
@@ -404,7 +454,8 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
             "t_last": got["t_last"], "gate": got["gate"],
             "classify_kw": _jsonable({k: v for k, v in got["kw"].items() if k != "detections"}),
             "gallery_detections": _jsonable(got["kw"].get("detections")),
-            "gallery_classification": _jsonable(out[1].get("classification"))}
+            "gallery_classification": _jsonable(out[1].get("classification")),
+            **({"profiles": pings, "tracker_kw": _jsonable(got.get("tracker_kw"))} if profiles else {})}
 
 
 def _commit() -> str:
@@ -428,6 +479,8 @@ def main(argv=None):
     ap.add_argument("--quick", action="store_true", help="the gallery's thinned scenes (a CPU smoke run, not the evaluation)")
     ap.add_argument("--json", default=None, help="write the result JSON here")
     ap.add_argument("--table", default=None, help="write the readable table (Markdown) here")
+    ap.add_argument("--profiles", action="store_true", help="also record each hit's bearing profiles and each ping's "
+                    "array origin, velocity and sound speed in the captures (cluster_profiles; the sonar-4s2 study)")
     ap.add_argument("--commit", default=None, help="the tree's commit, recorded in the JSON (default: git, else $GPUSONAR_COMMIT)")
     args = ap.parse_args(argv)
     names = [n for n in args.scenes.split(",") if n]
@@ -446,7 +499,7 @@ def main(argv=None):
                 path = cap_dir / f"{name}_k{k * args.seed_step}{'_quick' if args.quick else ''}.json"
                 if path.exists() and not args.recapture:
                     continue
-                cap = capture(name, k * args.seed_step, backend, args.quick)
+                cap = capture(name, k * args.seed_step, backend, args.quick, args.profiles)
                 cap["commit"] = commit
                 path.write_text(json.dumps(cap))
                 print(f"[{name} seed {cap['seed']}] {len(cap['tracks'])} tracks, {cap['seconds']} s", flush=True)

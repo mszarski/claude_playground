@@ -256,3 +256,32 @@ def test_footprints_of_the_scene_items():
     assert gallery.item_footprint({"type": "points", "positions": [[1.0, 2.0, 0.0]]}) is None
     back = cre.truth_from_json(json.loads(json.dumps(cre.truth_to_json({"ship": ship}))))
     assert np.allclose(back["ship"].footprint, ship.footprint) and np.allclose(back["ship"][1], ship[1])
+
+
+def test_cluster_profiles_record_each_hits_bearing_profiles():
+    # --profiles (sonar-4s2): two separate blobs on a [bearing, range] map; each hit's rows, the window of rows about
+    # them, and the summed and peak-column profiles in dB, unflagged neighbours included.
+    from gpusonar import detect
+    b = np.radians(np.arange(-10.0, 10.01, 0.5))
+    r = np.arange(100.0, 200.0, 2.0)
+    power = np.ones((len(b), len(r)))
+    B, Rr = np.meshgrid(np.arange(len(b)), np.arange(len(r)), indexing="ij")
+    power += 1e3 * np.exp(-0.5 * ((B - 12.3) / 1.5) ** 2 - 0.5 * ((Rr - 10) / 0.8) ** 2)
+    power += 1e2 * np.exp(-0.5 * ((B - 30.0) / 1.5) ** 2 - 0.5 * ((Rr - 40) / 0.8) ** 2)
+    mask = power > 30.0
+    hits = detect.cluster(mask, power, r, b, guard=2, train=8)
+    prof = cre.cluster_profiles(mask, power, r, b, hits, half=4)
+    assert len(prof) == len(hits) == 2
+    for h, p in zip(hits, prof):
+        ib, ir = np.nonzero(mask & (np.abs(np.arange(len(b))[:, None] - (12 if p["peak_row"] < 20 else 30)) < 8))
+        assert p["rows"] == sorted(set(ib.tolist()))
+        assert p["lo"] == max(min(p["rows"]) - 4, 0)
+        assert len(p["sum"]) == min(max(p["rows"]) + 4, len(b) - 1) - p["lo"] + 1
+        cols = sorted(set(ir.tolist()))
+        want = 10 * np.log10(power[p["lo"]:p["lo"] + len(p["sum"])][:, cols].sum(axis=1))
+        np.testing.assert_allclose(p["sum"], want, atol=1e-3)
+        j = int(np.argmax(power[ib, ir]))
+        assert p["peak_row"] == ib[j]
+        np.testing.assert_allclose(p["peak"], 10 * np.log10(power[p["lo"]:p["lo"] + len(p["peak"]), ir[j]]), atol=1e-3)
+        assert p["bearing"] == h.bearing and p["cells"] == h.cells
+    assert prof[0]["peak_row"] == 12 and prof[1]["peak_row"] == 30
