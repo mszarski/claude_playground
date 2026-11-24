@@ -826,7 +826,7 @@ From the owner's brief (`docs/HANDOFF.md` section 2) and the working rules of th
 
 ## 10. Stale or contradictory statements found in existing documents
 
-**Fixed since.** Every row below except the last (`CLAUDE.md`, the owner's file) was corrected in
+**Fixed since.** Every row below was corrected in
 the same merge that added this document; the table is kept as a record of what was wrong.
 
 Not rewritten here; listed for whoever owns each file.
@@ -841,4 +841,4 @@ Not rewritten here; listed for whoever owns each file.
 | `docs/architecture/dataflow.png` | sources column | no Sensor Bridge source |
 | `docs/HANDOFF.md` | header, sections 5, 6 and 8 | written at `2160fe8`: "D-1 to D-140", "138 entries", the issue table and the suite time predate D-141 to D-181 (the refreshed file is the handoff agent's) |
 | `docs/STATUS.md` | open item 14, "Nothing is measured at the default budget" (about line 460) | superseded by D-168, which counted it; the same file's "What is next" item 5 (about line 757) says so, so the two passages disagree |
-| root `CLAUDE.md` | whole file | describes `trajectory_classifier`, not this suite |
+| root `CLAUDE.md` | whole file | described `trajectory_classifier` only; a section on this suite pointing to `docs/handoff/README.md` was added in the same merge |

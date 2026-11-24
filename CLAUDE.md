@@ -11,6 +11,23 @@ This is a Python trajectory classification package (`trajectory_classifier`) for
 - Computing trajectory similarity (DTW, Fréchet, Hausdorff distances)
 - Learning-based trajectory ranking and quality scoring
 
+## The GPU sonar suite (the main work in this repository)
+
+Beside `trajectory_classifier`, this repository holds a GPU sonar suite (forward-looking sonar, synthetic
+aperture sonar and a long-range flank array): `libs/` (C++20/CUDA), `python/gpusonar/`, `apps/`, `tools/`,
+`configs/`, `tests/cpp`, `tests/python`, `docs/`.
+
+- **Start at `docs/handoff/README.md`**: reading orders, current state, risks, what is waiting on the owner.
+  Then `docs/HANDOFF.md` (rules in force, how to build and test, GPU jobs, how to work here),
+  `docs/handoff/SOFTWARE.md`, `HARDWARE.md`, `SIMULATION.md`, `TESTS.md`, `EXAMPLES.md`, `OUTPUTS.md`.
+- `docs/STATUS.md` is the current list of what works and what is wrong; `docs/DECISIONS.md` says why
+  (later entries amend earlier ones).
+- Rules that bind every change are in `docs/HANDOFF.md` section 2: tests first; the two live-chain engines
+  (Python and C++) stay equal; ask the owner before a default result moves, before changing the record
+  schema or any FPGA code, and before adding a large or copyleft dependency; unconfirmed hardware facts
+  live in config.
+- Tests: `tools/test.sh` (CPU); the full GPU suite runs through `tools/gpu_job.sh` (see `docs/handoff/TESTS.md`).
+
 ## Build and Test Commands
 
 ```bash
