@@ -1028,3 +1028,49 @@ TEST(Options, RangeEstimateIsFirstWithMultiscaleAndCentroidOtherwiseUnlessGiven)
 }
 
 }  // namespace
+
+TEST(Options, RangeDopplerIsOffUnlessGivenAndRefusesOtherWords) {
+  // sonar-fyj: range_doppler off (default) | ownship | full; options_json prints it; any other word refused.
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(a.range_doppler, RangeDoppler::Off);
+  EXPECT_NE(options_json(a).find("\"range_doppler\": \"off\""), std::string::npos) << options_json(a);
+  for (const char* word : {"ownship", "full"}) {
+    ChainOptions m;
+    std::istringstream t(std::string("range_doppler=") + word + "\n");
+    read_options(m, pa, t);
+    EXPECT_EQ(range_doppler_name(m.range_doppler), std::string(word));
+  }
+  ChainOptions bad;
+  std::istringstream t("range_doppler=on\n");
+  EXPECT_THROW(read_options(bad, pa, t), std::invalid_argument);
+}
+
+TEST(RangeDoppler, FactorIsTheCentreFrequencyTimesThePulseOverTheSignedSweep) {
+  // f0 T / (f_stop - f_start) for an LFM (fls_170k: 0.17 s), negative for a down-chirp, 0 for anything else.
+  Waveform w;
+  w.type = WaveformType::Lfm;
+  w.f_start = 160e3;
+  w.f_stop = 180e3;
+  w.duration = 20e-3;
+  EXPECT_NEAR(lfm_range_doppler_factor(w), 0.17, 1e-12);
+  std::swap(w.f_start, w.f_stop);
+  EXPECT_NEAR(lfm_range_doppler_factor(w), -0.17, 1e-12);
+  w.type = WaveformType::Cw;
+  EXPECT_EQ(lfm_range_doppler_factor(w), 0.0);
+}
+
+TEST(RangeDoppler, TargetPartMovesThePositionAlongTheLineOfSightByItsClosingSpeed) {
+  // A track 100 m ahead (forward, y) closing at 8 m/s moves 8 x factor farther; a crossing one does not move; one at the
+  // origin is left; the velocity is kept.
+  std::vector<TrackClass> c(3);
+  c[0].x = 0.0, c[0].y = 100.0, c[0].vx = 0.0, c[0].vy = -8.0;
+  c[1].x = 0.0, c[1].y = 100.0, c[1].vx = 5.0, c[1].vy = 0.0;
+  c[2].x = 0.0, c[2].y = 0.0, c[2].vx = 1.0, c[2].vy = 1.0;
+  shift_for_target_doppler(c, 0.17, 0.0, 0.0);
+  EXPECT_NEAR(c[0].y, 100.0 + 8.0 * 0.17, 1e-12);
+  EXPECT_NEAR(c[0].x, 0.0, 1e-12);
+  EXPECT_EQ(c[0].vy, -8.0);
+  EXPECT_NEAR(c[1].y, 100.0, 1e-12);
+  EXPECT_EQ(c[2].y, 0.0);
+}

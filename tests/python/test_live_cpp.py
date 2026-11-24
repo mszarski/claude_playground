@@ -1183,7 +1183,7 @@ def _every_option_chain(tmp_path):
     chain = bs.chain_config(bs.load("popoto_face_1x32"))         # coverage (with the site), sync, decimate
     chain.update(
         look="port", window="rect", backend="host", beamformer="farfield", doa="sbl", cell_statistic="multiscale", min_snr_db=10.5,
-        range_cell_m=1.5, sound_speed=1490.0, dead_channels=[3, 7],
+        range_cell_m=1.5, sound_speed=1490.0, dead_channels=[3, 7], range_doppler="full",
         cfar={"pfa": 2e-6, "guard_m": 90.0, "train_m": 280.0, "false_alarms_per_ping": 2e-3, "integrate_cells": [1, 4, 16], "merge_m": 7.0,
               "search_factor": 2.5, "sidelobe_margin_db": 9.0, "sidelobe_floor_db": -35.0},
         sbl={"grid_step_deg": 0.5, "max_sources": 5, "min_snr_db": 7.0, "dynamic_range_db": 18.0, "max_gates": 20, "min_contrast_db": 7.0,
@@ -1267,6 +1267,7 @@ def test_every_chain_option_round_trips_through_binding_and_text(cell_statistic,
         assert via_text[key] is True and defaults[key] is False, key
     assert via_text["elevation_profile_ensemble_gradients"] == pytest.approx([0.0, 0.017, -0.05])
     assert via_text["backend"] == "host" and via_text["look"] == "port" and via_text["window"] == "rect"
+    assert via_text["range_doppler"] == "full" and defaults["range_doppler"] == "off"
     assert len(_same_options(via_text, defaults)) > 100
 
 
@@ -1387,3 +1388,82 @@ def test_both_engines_fit_the_measured_positions_of_a_noise_free_12km_crossing(d
     (got,) = cpp.classify()
     assert np.allclose(want.position, got["position"], atol=1e-6)
     assert np.hypot(*(np.asarray(got["position"]) - (12000.0, 800.0 - 6.0 * last))) < 2.0
+
+
+# --- sonar-fyj: the LFM range-Doppler coupling correction, opt-in, both engines --------------------------------------
+
+FLANK_32_FACTOR = 0.5 * (6.0e3 + 10.0e3) * 1.0 / (10.0e3 - 6.0e3)     # f0 T / B of flank_32's up-chirp: 2 s
+
+
+def _range_doppler_run(pings, engine, mode):
+    cfg = dict(CHAIN, engine=engine) if mode is None else dict(CHAIN, engine=engine, range_doppler=mode)
+    with LiveChain(cfg) as chain:
+        return chain.run(copies(pings))
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_range_doppler_is_off_by_default_and_said_only_when_on(pings, engine):
+    """Not given and `off` are the chain as before, byte for byte in the report (processing time aside)."""
+    from gpusonar import live
+    assert "range_doppler" not in live.cpp_chain_options(CHAIN) and live.cpp_chain_options(dict(CHAIN, range_doppler="full"))["range_doppler"] == "full"
+    a, b = _range_doppler_run(pings, engine, None), _range_doppler_run(pings, engine, "off")
+    strip = lambda r: {k: v for k, v in r.items() if k != "processing_seconds"}  # noqa: E731
+    assert [strip(r) for r in a] == [strip(r) for r in b]
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_range_doppler_ownship_adds_the_factor_times_the_ownships_closing_speed_to_each_range(pings, engine):
+    """`ownship`: each detection's range_m is the detector's plus f0 T / B times the ownship's speed along its line of
+    sight (1.5 m/s along the array, x; a bearing b from broadside looks along (sin b, cos b)): the fixture's crossing
+    target and static object, a few degrees either side of broadside, move by up to a metre, opposite ways."""
+    off, on = _range_doppler_run(pings, engine, "off"), _range_doppler_run(pings, engine, "ownship")
+    moved = []
+    for a, b in zip(off, on):
+        assert len(a["detections"]) == len(b["detections"])
+        for da, db in zip(a["detections"], b["detections"]):
+            assert db["bearing_deg"] == da["bearing_deg"]
+            shift = FLANK_32_FACTOR * 1.5 * np.sin(np.radians(da["bearing_deg"]))
+            assert db["range_m"] - da["range_m"] == pytest.approx(shift, abs=1e-6)
+            moved.append(shift)
+    assert max(moved) > 0.2 and min(moved) < -0.2
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_range_doppler_full_moves_each_track_by_its_own_closing_speed(pings, engine):
+    """`full` is `ownship` with each reported track moved along the line of sight from the ownship by f0 T / B times
+    its own closing speed, -v . u, from the fitted velocity; kinds, velocities and detections are those of `ownship`."""
+    on, full = _range_doppler_run(pings, engine, "ownship"), _range_doppler_run(pings, engine, "full")
+    shifts = []
+    for a, b in zip(on, full):
+        assert a["detections"] == b["detections"]
+        assert [(t["id"], t["kind"], t["parent"]) for t in a["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in b["tracks"]]
+        own = np.asarray(a["ownship_xyz"][:2])
+        for ta, tb in zip(a["tracks"], b["tracks"]):
+            d = np.array([ta["x"], ta["y"]]) - own
+            u = d / np.hypot(*d)
+            shift = FLANK_32_FACTOR * -float(np.array([ta["vx"], ta["vy"]]) @ u)
+            assert (tb["x"], tb["y"]) == pytest.approx(tuple(np.array([ta["x"], ta["y"]]) + shift * u), abs=1e-6)
+            assert (tb["vx"], tb["vy"]) == (ta["vx"], ta["vy"])
+            assert tb["range_m"] == pytest.approx(ta["range_m"] + shift, abs=1e-6)
+            shifts.append(shift)
+    assert max(abs(v) for v in shifts) > 0.2          # the crossing target closes at about 0.5 m/s: about 1 m
+
+
+def test_range_doppler_full_gives_the_same_report_in_both_engines(pings):
+    want, got = _range_doppler_run(pings, "python", "full"), _range_doppler_run(pings, "cpp", "full")
+    for w, g in zip(want, got):
+        for a, b in zip(w["detections"], g["detections"]):
+            assert a["range_m"] == pytest.approx(b["range_m"], abs=0.05) and a["bearing_deg"] == pytest.approx(b["bearing_deg"], abs=0.05)
+        assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
+        for a, b in zip(w["tracks"], g["tracks"]):
+            for key in ("x", "y", "vx", "vy", "range_m"):
+                assert a[key] == pytest.approx(b[key], abs=0.05), key
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_range_doppler_refuses_an_unknown_word(engine):
+    with pytest.raises(ValueError, match="range_doppler"):
+        if engine == "python":
+            LiveChain(dict(CHAIN, range_doppler="on"))
+        else:
+            core.LiveChainCpp(dict(CPP_CHAIN, range_doppler="on"))

@@ -176,4 +176,10 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
 /// none it is the grouping as before.
 void group_echoes(std::vector<TrackClass>& classes, const ClassifyOptions& options, const std::vector<std::int64_t>& bounces = {});
 
+/// The target's part of the LFM range-Doppler correction (sonar-fyj, ChainOptions::range_doppler Full), in place: each
+/// class's position moved along the line of sight from (origin_x, origin_y) (across, forward) by `factor`
+/// (lfm_range_doppler_factor, s) times the closing speed of its fitted velocity, -v . u. The velocity is not changed;
+/// a position at the origin or a velocity that is not finite is left. classify.py shift_for_target_doppler the same.
+void shift_for_target_doppler(std::vector<TrackClass>& classes, double factor, double origin_x, double origin_y);
+
 }  // namespace sonar::live

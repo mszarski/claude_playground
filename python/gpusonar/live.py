@@ -67,6 +67,13 @@ DEFAULTS = {
              # detection the elevation places reports and is timed at the elevation's own range.
              "range_estimate": None},
     "min_snr_db": 9.0,
+    # The LFM range-Doppler coupling (sonar-fyj, opt-in): an echo closing at v reads f0 v T / B nearer with an up-chirp
+    # (farther with a down-chirp; detect.lfm_range_doppler_factor). "off": not corrected, the default. "ownship": each
+    # detection's range gets factor x the ownship's closing speed along its line of sight (navigation's velocity); it
+    # is placed, reported and timed at that range. "full": that, and each track's reported position is moved along the
+    # line of sight by factor x its own closing speed from its fitted velocity (classify.shift_for_target_doppler).
+    # libs/live ChainOptions::range_doppler the same.
+    "range_doppler": "off",
     "cell_statistic": "multiscale",            # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
                                                # against the threshold of its own statistic; "mean": its mean power against the
@@ -411,6 +418,9 @@ def check_choices(cfg: dict) -> None:
     for key, allowed in CHOICES.items():
         if cfg.get(key) not in allowed:
             raise ValueError(f"chain.{key}: {cfg.get(key)!r} ({', '.join(allowed[:-1])} or {allowed[-1]})")
+    if cfg.get("range_doppler", "off") not in detect.RANGE_DOPPLER:
+        raise ValueError(f"chain.range_doppler: {cfg.get('range_doppler')!r} ({', '.join(detect.RANGE_DOPPLER[:-1])} or "
+                         f"{detect.RANGE_DOPPLER[-1]})")
     estimate = (cfg.get("cfar") or {}).get("range_estimate")
     if estimate is not None and estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
@@ -517,6 +527,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          **({"tracker_ping_interval_s": check_ping_interval(t["ping_interval_s"])} if t["ping_interval_s"] is not None else {}),
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath")), "backend": cfg["backend"]}
+    if cfg["range_doppler"] != "off":                  # opt-in (sonar-fyj): said only when on, so every other line is as before
+        o["range_doppler"] = cfg["range_doppler"]
     if cfg["cell_statistic"] == "peak":
         o["cell_peak"] = True
     o["cell_multiscale"] = cfg["cell_statistic"] == "multiscale"      # always said: the C++ default is not assumed
@@ -1646,8 +1658,17 @@ class LiveChain:
         # elevation's own where the elevation places it (below), so that its position, range_m and time are one range.
         out_range = [h.range for h in hits]
         placed_by_elevation = chain_range_estimate(cfg) == "first"
+        # sonar-fyj (opt-in): the LFM coupling of the ownship's own motion, factor x its closing speed along each line of
+        # sight (the mean of the transmit and receive poses' velocities, from navigation), added to the range.
+        # A velocity that is not finite is not known: no correction then (the factor 0), rather than a NaN range.
+        v_own = 0.5 * (np.asarray(record.geometry.tx_pose.velocity, dtype=float) + np.asarray(record.geometry.rx_pose.velocity, dtype=float))
+        lfm_factor = detect.lfm_range_doppler_factor(record.transmit.waveform) if cfg["range_doppler"] != "off" else 0.0
+        rd_factor = lfm_factor if np.all(np.isfinite(v_own)) else 0.0
         for i, h in enumerate(hits):
-            p = origin[:2] - self._origin[:2] + h.range * (np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside)
+            look = np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside
+            h_range = h.range + rd_factor * float(v_own[:2] @ look[:2]) if rd_factor else h.range
+            out_range[i] = h_range
+            p = origin[:2] - self._origin[:2] + h_range * look
             depth = depth_sigma = float("nan")
             alternatives = None
             e = els[i]
@@ -1660,12 +1681,13 @@ class LiveChain:
                             "elevation_quality": e.quality, "elevation_ambiguous": e.ambiguous}
                 if el_cfg["correct_bearing"] and not e.ambiguous:
                     # The line array gave the cone angle; with the elevation the horizontal bearing follows.
-                    p = origin[:2] - self._origin[:2] + e.range * u[:2]
+                    e_range = e.range + rd_factor * float(v_own @ u) if rd_factor else e.range    # sonar-fyj, along its own line
+                    p = origin[:2] - self._origin[:2] + e_range * u[:2]
                     if placed_by_elevation:
                         # D-158: placed at the elevation's range (the earliest arrival of the window searched about the
                         # centroid, elevation.arrival first; else its strongest): its range_m and time are that range too.
                         # With centroid given, as before D-158: placed there, reported and timed at the centroid.
-                        out_range[i] = float(e.range)
+                        out_range[i] = float(e_range)
                     extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
                                     bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
                 elif el_cfg["correct_bearing"]:
@@ -1715,6 +1737,9 @@ class LiveChain:
                                            max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
                                            outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
                                            origin=(own[1], own[0]))
+        if cfg["range_doppler"] == "full":
+            # sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
+            classify.shift_for_target_doppler(classes, lfm_factor, (own[1], own[0]))
         track_extra = {}
         bounces = []                           # tracks whose straight-line depth lies outside the water
         if el_cfg is not None and el_cfg["depth"]:

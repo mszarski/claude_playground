@@ -46,6 +46,20 @@ struct BlankingOptions {
   double until(const PingRecord& record) const { return record.transmit.waveform.duration + recovery_s; }
 };
 
+/// The LFM range-Doppler coupling correction (sonar-fyj; gpusonar.live `range_doppler`), opt-in. Off: not corrected (the
+/// default). Ownship: each detection's range gets lfm_range_doppler_factor x the ownship's closing speed along its line
+/// of sight (the mean of the transmit and receive poses' velocities, from navigation); it is placed, reported and timed
+/// there. Full: that, and each track's reported position moved by the factor x its own closing speed
+/// (shift_for_target_doppler, detections.hpp).
+enum class RangeDoppler { Off, Ownship, Full };
+RangeDoppler parse_range_doppler(const std::string& name);   ///< off | ownship | full
+const char* range_doppler_name(RangeDoppler r);
+
+/// s: f0 T / (f_stop - f_start) for a linear FM pulse, 0 for any other (CW, Gaussian, arbitrary) or no sweep. An echo
+/// closing at v (m/s) reads f0 v T / B nearer with an up-chirp, farther with a down-chirp: range + factor x v undoes it.
+/// Ours, from the LFM matched filter (gpusonar.detect.lfm_range_doppler_factor, its derivation and test).
+double lfm_range_doppler_factor(const Waveform& waveform);
+
 /// The program around the chain (apps/sonar_live, the Holoscan source): the board stream and the report datagrams.
 struct StreamOptions {
   /// Bytes of one sample in a block: a signed little-endian integer, full scale 2^(8 bytes - 1) counts.
@@ -93,6 +107,7 @@ struct ChainOptions {
   /// (Detection::centroid_range). With `first`, a detection the elevation places (correct_bearing, not ambiguous)
   /// reports and is timed at the elevation's own range, the one it is placed at.
   std::optional<RangeEstimate> range_estimate;
+  RangeDoppler range_doppler = RangeDoppler::Off;   ///< the LFM coupling correction (sonar-fyj), off by default
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.

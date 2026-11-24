@@ -88,6 +88,28 @@ class Detection:
         return self.range * np.array([np.sin(self.bearing), np.cos(self.bearing)])
 
 
+RANGE_DOPPLER = ("off", "ownship", "full")     # the live chain's `range_doppler` words (libs/live parse_range_doppler)
+
+
+def lfm_range_doppler_factor(waveform) -> float:
+    """s: what a closing speed (m/s) is multiplied by to undo the range-Doppler coupling of a linear FM pulse
+    (sonar-fyj): f0 T / (f_stop - f_start), f0 the centre frequency, T the duration. An echo closing at v reads
+    f0 v T / B nearer with an up-chirp and as much farther with a down-chirp, so range + factor x v is the range without
+    it; the sign of the sweep is in the factor. 0 for a pulse that is not a linear sweep (CW, Gaussian, arbitrary) or
+    has no sweep: their coupling is not modelled here.
+
+    Source: ours, from the matched filter of an LFM pulse (the derivation in tests/python/test_lfm_range_doppler.py,
+    which holds it against the simulator within 5 %): a closing echo is shifted up by f_d = 2 v f0 / c to first order in
+    v / c; against the nominal replica, sweep rate B / T, the same frequencies come f_d T / B earlier, a range of
+    c / 2 x f_d T / B = f0 v T / B. The range-Doppler coupling of the LFM ambiguity function is textbook material; no
+    textbook was opened for this (unconfirmed). libs/live lfm_range_doppler_factor is the same."""
+    from . import _gpusonar as core
+    sweep = float(waveform.f_stop) - float(waveform.f_start)
+    if waveform.type != core.WaveformType.Lfm or sweep == 0.0:
+        return 0.0
+    return 0.5 * (float(waveform.f_start) + float(waveform.f_stop)) * float(waveform.duration) / sweep
+
+
 def group_flagged(rows, cols, bearings, merge_cells: int, merge_u: float) -> np.ndarray:
     """Which flagged cells (bearing index `rows`, range-cell index `cols`) are one detection: the group number of each.
     Two cells belong together when they are no further apart than `merge_cells` + 1 cells in range and `merge_u` in

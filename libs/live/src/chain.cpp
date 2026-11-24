@@ -217,6 +217,23 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
 }
 }  // namespace
 
+RangeDoppler parse_range_doppler(const std::string& name) {
+  if (name == "off") return RangeDoppler::Off;
+  if (name == "ownship") return RangeDoppler::Ownship;
+  if (name == "full") return RangeDoppler::Full;
+  throw std::invalid_argument("range_doppler '" + name + "': one of off, ownship, full");
+}
+
+const char* range_doppler_name(RangeDoppler r) {
+  return r == RangeDoppler::Full ? "full" : r == RangeDoppler::Ownship ? "ownship" : "off";
+}
+
+double lfm_range_doppler_factor(const Waveform& w) {
+  const double sweep = w.f_stop - w.f_start;
+  if (w.type != WaveformType::Lfm || sweep == 0.0) return 0.0;
+  return 0.5 * (w.f_start + w.f_stop) * w.duration / sweep;
+}
+
 RangeEstimate chain_range_estimate(const ChainOptions& c) {
   if (c.range_estimate) return *c.range_estimate;
   return c.cell_multiscale ? RangeEstimate::First : RangeEstimate::Centroid;
@@ -676,19 +693,28 @@ Report LiveChain::process(PingRecord& record) {
   };
   std::vector<Detection> local;
   const bool placed_by_elevation = chain_range_estimate(opt_) == RangeEstimate::First;
+  // sonar-fyj (opt-in): the LFM coupling of the ownship's own motion, factor x its closing speed along each line of sight
+  // (the mean of the transmit and receive poses' velocities, from navigation), added to the range. live.py the same.
+  // A velocity that is not finite is not known: no correction then (the factor 0), rather than a NaN range.
+  const Vec3d v_own = (record.geometry.tx_pose.velocity + record.geometry.rx_pose.velocity) * 0.5;
+  const bool v_known = std::isfinite(v_own.x) && std::isfinite(v_own.y) && std::isfinite(v_own.z);
+  const double lfm_factor = opt_.range_doppler != RangeDoppler::Off ? lfm_range_doppler_factor(record.transmit.waveform) : 0.0;
+  const double rd_factor = v_known ? lfm_factor : 0.0;
   for (std::size_t i = 0; i < hits.size(); ++i) {
     const Detection& h = hits[i];
     const double sb = std::sin(h.bearing), cb = std::cos(h.bearing);
-    double px = f.origin.x - origin_.x + h.range * (sb * axis.x + cb * broadside.x);
-    double py = f.origin.y - origin_.y + h.range * (sb * axis.y + cb * broadside.y);
-    ReportDetection d{h.range, h.bearing / kDeg, h.snr_db};
+    const double lx = sb * axis.x + cb * broadside.x, ly = sb * axis.y + cb * broadside.y;
+    const double h_range = rd_factor != 0.0 ? h.range + rd_factor * (v_own.x * lx + v_own.y * ly) : h.range;
+    double px = f.origin.x - origin_.x + h_range * lx;
+    double py = f.origin.y - origin_.y + h_range * ly;
+    ReportDetection d{h_range, h.bearing / kDeg, h.snr_db};
     if (std::isfinite(h.extent)) {
       d.extent_m = h.extent;
       d.first_range_m = h.first_range;
       d.arrivals = h.arrivals;
     }
     Detection m{0.0, 0.0, h.snr_db, h.cells};
-    m.time = t + h.range / c_range;
+    m.time = t + h_range / c_range;
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
       const Vec3d& u = e.world;
@@ -704,14 +730,15 @@ Report LiveChain::process(PingRecord& record) {
       d.bearing_uncorrected = eo.correct_bearing && e.ambiguous;
       if (eo.correct_bearing && !e.ambiguous) {
         // The line array gave the cone angle; with the elevation the horizontal bearing follows.
-        px = f.origin.x - origin_.x + e.range * u.x;
-        py = f.origin.y - origin_.y + e.range * u.y;
+        const double e_range = rd_factor != 0.0 ? e.range + rd_factor * (v_own.x * u.x + v_own.y * u.y + v_own.z * u.z) : e.range;   // sonar-fyj
+        px = f.origin.x - origin_.x + e_range * u.x;
+        py = f.origin.y - origin_.y + e_range * u.y;
         if (placed_by_elevation) {
           // D-158: placed at the elevation's range (the earliest arrival of the window searched about the centroid,
           // elevation.arrival first; else its strongest): its range_m and time are that range too. With centroid given,
           // as before D-158: placed there, reported and timed at the centroid. live.py the same.
-          d.range_m = e.range;
-          m.time = t + e.range / c_range;
+          d.range_m = e_range;
+          m.time = t + e_range / c_range;
         }
         d.bearing_corrected = true;
         d.cone_bearing_deg = h.bearing / kDeg;
@@ -768,6 +795,8 @@ Report LiveChain::process(PingRecord& record) {
   const bool group = co2.multipath;
   co2.multipath = false;
   std::vector<TrackClass> classes = classify_tracks(confirmed, co2);
+  // sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
+  if (opt_.range_doppler == RangeDoppler::Full) shift_for_target_doppler(classes, lfm_factor, co2.origin_x, co2.origin_y);
   std::vector<std::int64_t> bounces;   // tracks whose straight-line depth lies outside the water
   for (const TrackClass& tc : classes) {
     ReportTrack rt{tc.id, tc.parent, kind_name(tc.kind), tc.y + origin_.x, tc.x + origin_.y, tc.vy, tc.vx, tc.speed,
