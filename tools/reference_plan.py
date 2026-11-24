@@ -443,6 +443,7 @@ def twelve_km() -> list:
              f"which at {b3:.2f}° of bearing accuracy ({r * np.radians(b3):.0f} m across) takes several pings more for a crossing target. "
              + ("Measured: the table above gives the ping at which the track on the ship was confirmed in each water and how the later (bounced) arrivals were classed.\n" if K else "Measured figures: pending (`popoto_12km.json`).\n"))
     # hardware
+    import parts_list
     cpu, gpu = T.get("cpu"), T.get("gpu")
     L.append("**Hardware for the 12 km point** (details and the plan's own words: *Parts list*).\n")
     L.append(f"- **Projector:** {d3['source_level_db']:g} dB re 1 µPa at 1 m over {f_lo / 1e3:g}–{f_hi / 1e3:g} kHz for {d3['pulse_s']:g} s every {d3['ping_interval_s']:.1f} s (duty {100 * d3['pulse_s'] / d3['ping_interval_s']:.1f}%); "
@@ -458,10 +459,10 @@ def twelve_km() -> list:
     if all(cpus):
         L.append("- **Compute: the plan** (the owner's decision on the stage-2 timings). Over the full window the decimate-first stage on a CPU takes " + " / ".join(f"{x['decimate_first']:.1f}" for x in cpus)
                  + f" s a ping for 1 / 2 / 3 rows against {d3['ping_interval_s']:.1f} s between pings: **one row may run on a CPU; two or three rows need a GPU** (`compute.option` defaults to `gpu` for stacked rows and the validator warns of a CPU "
-                 "option slower than the ping interval). **The full-window GPU figure is still unmeasured**: the L4 numbers below are for scenario-size decimated pings.")
+                 "option slower than the ping interval). Over the full window " + parts_list.gpu_full_rate_text(T) + "; the other L4 numbers below are for scenario-size decimated pings.")
     if cpu and gpu:
         L.append(f"- **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes {cpu['seconds']['1']:.2f} / {cpu['seconds']['2']:.2f} / {cpu['seconds']['3']:.2f} s a ping for 1 / 2 / 3 rows on {cpu['threads']} shared CPU threads, "
-                 f"and {gpu['seconds']['1']:.3f} / {gpu['seconds']['2']:.3f} / {gpu['seconds']['3']:.3f} s on an {gpu['header']['gpus'][0]} ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times its own host's {gpu['header']['host_threads']} threads for one row; the tree before the 1.5 m row heights). "
+                 f"and {gpu['seconds']['1']:.3f} / {gpu['seconds']['2']:.3f} / {gpu['seconds']['3']:.3f} s on an {gpu['header']['gpus'][0]} ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times its own host's {gpu['header']['host_threads']} threads for one row). "
                  + (f"A full-length raw ping at the boards' rate took {T['cpu_full_rate']['seconds']['1']:.0f} / {T['cpu_full_rate']['seconds']['2']:.0f} / {T['cpu_full_rate']['seconds']['3']:.0f} s on the CPU: not real time against {d3['ping_interval_s']:.1f} s without decimating first. " if T.get("cpu_full_rate") else "")
                  + ("Decimate-first timings: `docs/design/popoto_stage2.json`." if T.get("stage2") else "Timings with the decimate-first stage: **pending** (`popoto_stage2.json`). Raw full-rate pings have not been run on a GPU."))
     L.append("\n**What the earlier builds reach instead** (noise-limited, ship / small): " + "; ".join(

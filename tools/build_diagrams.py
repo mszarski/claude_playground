@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hardware and timing diagrams of a build, drawn from its config files.
 
-    tools/build_diagrams.py                      # the five stages of the Popoto plan -> docs/design/build_*.png
+    tools/build_diagrams.py                      # the six stages of the Popoto plan -> docs/design/build_*.png
     tools/build_diagrams.py SONAR [DEPLOY] --out DIR
 
 Both figures are functions of `gpusonar.buildspec.describe(...)`, i.e. of a sonar file (with its `platform` and
@@ -252,7 +252,7 @@ def draw_build(d: dict, out_dir, stem: str, title: str | None = None) -> list[Pa
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("sonar", nargs="?", help="a sonar file's name (default: the five stages of the Popoto plan)")
+    ap.add_argument("sonar", nargs="?", help="a sonar file's name (default: the six stages of the Popoto plan)")
     ap.add_argument("deploy", nargs="?", help="its deployment file's name")
     ap.add_argument("--out", default=str(ROOT / "docs" / "design"))
     args = ap.parse_args(argv)
