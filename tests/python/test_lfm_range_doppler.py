@@ -1,7 +1,9 @@
 """Range-Doppler coupling of the FLS LFM pulse, as the simulator makes it and the processing (pulse compression with
 the nominal replica, backprojection) reads it: a target closing at radial speed v is read nearer by f0 v T / B for an
-up-chirp and farther by the same for a down-chirp (issue sonar-9r2). Nothing in the chain compensates it; this test
-holds the size, which `fls_170k_traffic`'s closing boat (8 m/s relative, about 1.35 m) shows.
+up-chirp and farther by the same for a down-chirp (issue sonar-9r2). This test holds the size, which
+`fls_170k_traffic`'s closing boat (8 m/s relative, about 1.35 m) shows, the same for the array's own motion, and the
+correction the live chain's opt-in `range_doppler` applies (sonar-fyj; detect.lfm_range_doppler_factor). By default
+nothing compensates it.
 
 Source of the formula: ours. The echo of a closing target is the pulse compressed in time by eta = (1 + v/c)/(1 - v/c),
 so its frequency at each point of the sweep is up by f_d = 2 v f0 / c (to first order in v/c); against the nominal
