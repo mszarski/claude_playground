@@ -287,7 +287,21 @@ int main(int argc, char** argv) {
       std::size_t queued_bytes = 0;
       std::int64_t queue_dropped = 0;
       std::atomic<bool> stop{false};
-      std::thread receiver([&] {
+      // The two socket threads are stopped and joined however this block is left: an error from the chain (a board
+      // whose reference burst is not found, a file that cannot be written) must reach main's catch and be printed.
+      // Leaving with a thread still joinable is std::terminate, and the reason was lost.
+      std::thread receiver, nav_thread;
+      struct JoinOnExit {
+        std::atomic<bool>& stop;
+        std::thread& a;
+        std::thread& b;
+        ~JoinOnExit() {
+          stop = true;
+          if (a.joinable()) a.join();
+          if (b.joinable()) b.join();
+        }
+      } join_on_exit{stop, receiver, nav_thread};
+      receiver = std::thread([&] {
         std::vector<unsigned char> buffer;
         while (!stop) {
           if (blocks.receive(buffer) == 0) continue;
@@ -303,7 +317,7 @@ int main(int argc, char** argv) {
           ready_cv.notify_one();
         }
       });
-      std::thread nav_thread([&] {
+      nav_thread = std::thread([&] {
         std::vector<unsigned char> buffer;
         while (nav_socket && !stop) {
           if (nav_socket->receive(buffer) == 0) continue;

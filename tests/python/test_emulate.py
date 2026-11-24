@@ -223,6 +223,9 @@ def test_the_program_synchronises_a_trial_stream_with_the_template_of_its_sound_
     assert len(reports) == 4 and all(r["sync"]["ok"] and r["sync"]["worst_residual_us"] < 1.0 for r in reports)
     assert all(abs(nearest(r, 497.0)["range_m"] - 497.0) < 3.0 for r in reports)
     code, reports, err = outcome["nominal"]
-    # The default is unchanged: at 1500 m/s this stream's bursts are not where the window puts them. (The program then
-    # ends abnormally; its message is not pinned here.)
-    assert code != 0 or not reports or not all(r["sync"]["ok"] for r in reports), "the default window moved"
+    # The default is unchanged: at 1500 m/s this stream's bursts are not where the window puts them. The program says
+    # so and ends with its error status, its two socket threads stopped first (before: std::terminate from the threads
+    # still running, "terminate called without an active exception", SIGABRT, and the reason lost).
+    assert not reports, "the default window moved"
+    assert code == 1, f"ended with {code} (negative: a signal): {err.strip()[-300:]}"
+    assert "sonar_live: sync: reference burst not found on a board" in err and "terminate called" not in err
