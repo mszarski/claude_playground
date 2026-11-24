@@ -388,8 +388,8 @@ class Tracker:
 
     def _predict(self, t: Track, to: float) -> tuple[np.ndarray, np.ndarray, float]:
         """The track's state, covariance and depth variance moved by the constant-velocity model from `t.time` to `to`.
-        `to` may be earlier than `t.time` when a detection within a ping is (D-156: each detection at transmit + R/c, so a
-        nearer one is earlier). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
+        `to` may be earlier than `t.time` (`update` no longer asks for that since sonar-uc5: an earlier detection is
+        taken at the track's time). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
         positive semi-definite for either sign of dt, and the depth's random walk grows by q_d^2 |dt| (ours: a variance
         never shrinks by predicting; the same for dt >= 0 as before)."""
         dt = to - t.time
@@ -407,12 +407,16 @@ class Tracker:
         is born there; a time that is not finite (NaN) counts as none, as in the C++ tracker. Tracks that take none count a
         miss and are predicted to `time`, or stay where they are if they already hold at a later time (the last detection
         they took was at transmit + R/c after this ping's transmit: a ping interval shorter than R/c), so a track never
-        moves back in time. Returns the confirmed tracks."""
+        moves back in time. A detection timed before the time a track already holds (a nearer arrival on a ping sooner
+        than R/c after the last, or pings without timestamps whose echo delays wander) is compared with and taken by that
+        track at the track's own time (`_not_before`: held, dt = 0), so no history steps back in time (sonar-uc5).
+        Returns the confirmed tracks."""
         h = np.eye(2, 4)
         whens = [time if d.time is None or not np.isfinite(d.time) else float(d.time) for d in detections]
         cache: dict = {}
 
         def predicted(ti: int, when: float):
+            when = self._not_before(self.tracks[ti], when)
             key = (ti, when)
             if key not in cache:
                 cache[key] = self._predict(self.tracks[ti], when)
@@ -449,11 +453,21 @@ class Tracker:
             self._next_id += 1
         return [t for t in self.tracks if t.confirmed]
 
+    @staticmethod
+    def _not_before(t: Track, when: float) -> float:
+        """The time a track compares with and takes a detection at: the detection's, or the track's own when the
+        detection's is earlier (sonar-uc5, ours). Predicting back past a measurement the state already holds is an
+        out-of-sequence update; a single target cannot give it on pings whose transmit times increase by more than the
+        echo delays differ, so it comes from another arrival or from pings without timestamps, where taking it at the
+        track's time moves the measurement by the target's speed times that difference only. libs/live tracker.cpp the
+        same."""
+        return t.time if when < t.time else when
+
     def _take(self, t: Track, d: Detection, h: np.ndarray, prior, when: float) -> None:
         """The Kalman update of one track, predicted to the detection's time (`prior`: state, covariance, depth
-        variance there), with that detection."""
+        variance there), with that detection; `when` no earlier than the track's time (`_not_before`)."""
         t.state, t.cov, t.depth_var = prior
-        t.time = when
+        t.time = self._not_before(t, when)
         s = h @ t.cov @ h.T + self._measurement_cov(d)
         k = t.cov @ h.T @ np.linalg.inv(s)
         z = d.xy()

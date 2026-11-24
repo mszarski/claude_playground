@@ -177,9 +177,10 @@ TEST(Tracker, NeverMovesAMissedTrackBackAndKeepsItsDepthVariancePositive) {
   EXPECT_EQ(held, 2);
 }
 
-TEST(Tracker, APredictionToAnEarlierDetectionStillGrowsTheDepthVariance) {
-  // Within a ping a nearer detection is earlier (D-156): the track predicted back to it gains q_d^2 |dt| of depth
-  // variance (ours), so the update with the detection's depth weighs them as for a forward prediction.
+TEST(Tracker, AnEarlierDetectionIsTakenAtTheTracksTimeWithItsDepthVariance) {
+  // A detection earlier than the time the track holds (D-156: a nearer echo is earlier). Before sonar-uc5 the track was
+  // predicted back to it and gained q_d^2 |dt| of depth variance; now it takes it at its own time (dt = 0, no history
+  // step back), so the update weighs the track's own depth variance against the detection's and the time stays 10 s.
   TrackerOptions o;
   o.depth_process_noise = 0.5;
   Tracker tracker(o);
@@ -194,9 +195,11 @@ TEST(Tracker, APredictionToAnEarlierDetectionStillGrowsTheDepthVariance) {
   tracker.update(1.0, {second});
   ASSERT_EQ(tracker.tracks().size(), 1U);
   const Track& t = tracker.tracks()[0];
-  const double prior = 0.16 + 0.25 * 1.0, r = 0.16, k = prior / (prior + r);
+  const double prior = 0.16, r = 0.16, k = prior / (prior + r);
   EXPECT_NEAR(t.depth_var, prior * (1.0 - k), 1e-12);
   EXPECT_NEAR(t.depth, 20.0 + k * 1.0, 1e-12);
+  EXPECT_EQ(t.time, 10.0);
+  EXPECT_EQ(t.history.back().time, 10.0);
 }
 
 TEST(Tracker, ADetectionTimeThatIsNotFiniteIsThePings) {
@@ -475,6 +478,35 @@ TEST(Report, CarriesPingsWithoutVelocityOnlyWhenThereWereAny) {
   r.pings_without_velocity = 2;
   EXPECT_NE(r.json().find("\"pings_without_nav\": 0, \"pings_without_velocity\": 2, \"detections\""), std::string::npos) << r.json();
   for (const std::string& d : r.datagrams(10)) EXPECT_NE(d.find("\"pings_without_velocity\": 2"), std::string::npos);
+}
+
+TEST(Tracker, TakesAnEarlierDetectionAtItsOwnTime) {
+  // sonar-uc5: pings 10 ms apart, one standing target whose detection alternates between arrivals at 1500 and 1480 m,
+  // each at transmit + R/c: the nearer one is earlier than the time the track holds. It is taken there (dt = 0), so the
+  // history stays in time order (before: predicted back, 13 ms each time).
+  TrackerOptions o;
+  o.range_sigma = 5.0;
+  o.bearing_sigma = 0.5 * kDeg;
+  o.initial_speed_sigma = 2.0;
+  Tracker tracker(o);
+  int earlier = 0;
+  for (int k = 0; k < 10; ++k) {
+    const double tp = 0.01 * k, r = k % 2 ? 1480.0 : 1500.0;
+    Detection d{r, 0.05, 20.0, 4};
+    d.time = tp + r / 1500.0;
+    const double held = tracker.tracks().empty() ? -1.0 : tracker.tracks()[0].time;
+    tracker.update(tp, {d});
+    ASSERT_EQ(tracker.tracks().size(), 1u);
+    const Track& t = tracker.tracks()[0];
+    if (d.time < held) {
+      ++earlier;
+      EXPECT_EQ(t.time, held);
+      EXPECT_DOUBLE_EQ(t.history.back().mx, r * std::sin(0.05));
+    }
+    for (std::size_t i = 1; i < t.history.size(); ++i) EXPECT_LE(t.history[i - 1].time, t.history[i].time);
+  }
+  EXPECT_GE(earlier, 3);
+  EXPECT_EQ(tracker.tracks()[0].hits, 10);
 }
 
 TEST(Tracker, DropsATrackThatIsNoLongerSeen) {

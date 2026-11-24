@@ -189,6 +189,44 @@ def test_both_trackers_never_move_a_missed_track_back_in_time(association):
     assert held >= 2
 
 
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+@pytest.mark.parametrize("case", ["earlier_arrival", "one_transmit_time"])
+def test_both_trackers_take_an_earlier_detection_at_the_tracks_own_time(association, case):
+    """sonar-uc5 (a), both engines: a detection timed before the time a track holds is taken there (held, dt = 0), so
+    every history stays in time order; the engines agree in state, history and time (test_detect has the cases)."""
+    from test_detect import EARLIER_TRACKER, SCENARIO_TRACKER, earlier_arrival_pings, same_transmit_time_pings
+    pings, opts = (earlier_arrival_pings(), EARLIER_TRACKER) if case == "earlier_arrival" else (same_transmit_time_pings(), SCENARIO_TRACKER)
+    py, cpp = detect.Tracker(**opts, association=association), core.LiveTracker(**opts, association=association)
+    for tp, dets in pings:
+        a = py.update(tp, dets)
+        b = cpp.update(tp, [(d.range, d.bearing, d.snr_db, d.cells) for d in dets], [d.time for d in dets])
+        assert [tr.id for tr in a] == [cr["id"] for cr in b]
+        for tr, cr in zip(a, b):
+            times = [h[0] for h in tr.history]
+            assert times == sorted(times) and [h[0] for h in cr["history"]] == times
+            assert np.allclose(tr.state, cr["state"], atol=1e-6) and tr.time == cr["time"]
+    assert len(a) == (1 if case == "earlier_arrival" else 2)
+
+
+def test_both_classifiers_fit_a_held_missed_row_once():
+    """sonar-uc5 (b), both engines: the row a held missed track repeats (ping interval 5 s < R/c 8 s) records no
+    measurement, and the C++ classifier gives what the Python one gives for the track (test_detect: equal to the track
+    without that row)."""
+    from test_detect import LONG_RANGE_TRACKER, long_range_mover
+    pings = long_range_mover(n=14, interval=5.0, drop=(4,))
+    py, cpp = detect.Tracker(**LONG_RANGE_TRACKER), core.LiveTracker(**LONG_RANGE_TRACKER)
+    for tp, d, _, _ in pings:
+        dets = [] if d is None else [d]
+        a = py.update(tp, dets)
+        b = cpp.update(tp, [(q.range, q.bearing, q.snr_db, q.cells) for q in dets], [q.time for q in dets])
+    assert b[0]["history"][4] == b[0]["history"][3]
+    tp = pings[-1][0]
+    (want,) = classify.classify_tracks(a, time=tp, max_fit_rms=10.0)
+    (got,) = cpp.classify(time=tp, max_fit_rms=10.0)
+    assert np.allclose(want.position, got["position"], atol=1e-6) and np.allclose(want.velocity, got["velocity"], atol=1e-9)
+    assert want.fit_rms == pytest.approx(got["fit_rms"], rel=1e-9) and want.kind == got["kind"]
+
+
 @pytest.mark.parametrize("interval", [0.0, 2.0])
 def test_both_classifiers_refuse_a_velocity_from_echo_delays_alone(interval):
     """sonar-054, both engines: pings at one transmit time (interval 0, a source without timestamps), detections at

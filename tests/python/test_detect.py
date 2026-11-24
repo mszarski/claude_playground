@@ -431,10 +431,11 @@ def test_pings_at_one_transmit_time_give_no_fitted_velocity():
             continue
         for c, tr in zip(classes, tracks):
             assert c.velocity == (0.0, 0.0) and c.speed == 0.0 and c.speed_sigma == np.inf and c.kind != "mover"
-            # Without the ping times (the rule before), the same track fitted at about the sound speed or more.
+            # Without the ping times (the rule before), the same track fitted at a speed of the order of the sound speed
+            # (above 1000 m/s before sonar-uc5; 874 m/s for one track since, its earlier detections held at its time).
             import dataclasses
             (old,) = classify.classify_tracks([dataclasses.replace(tr, pings=[])], min_speed=0.5, time=tp)
-            assert old.speed > 1000.0
+            assert old.speed > 500.0
 
 
 def test_ping_times_change_no_fit_when_transmit_times_increase():
@@ -500,6 +501,75 @@ def test_prediction_to_an_earlier_time_still_grows_the_uncertainty():
         assert depth_var == pytest.approx(0.1 + 0.25 * 2.0)
         assert np.linalg.eigvalsh(cov).min() > 0.0
         np.testing.assert_allclose(x, [2.0 * (to - 10.0), 100.0 - (to - 10.0), 2.0, -1.0])
+
+
+def earlier_arrival_pings(n=10, interval=0.01, c=1500.0):
+    """sonar-uc5: pings `interval` s apart (shorter than the 13 ms that 20 m of range take at c) with one standing target
+    at 1500 m whose detection alternates between two arrivals, 1500 and 1480 m, each stamped transmit + R/c (D-156): the
+    nearer one, on the next ping, is EARLIER than the farther one the track took on the ping before. Per ping
+    (transmit time, [detection])."""
+    out = []
+    for k in range(n):
+        tp = interval * k
+        r = 1500.0 if k % 2 == 0 else 1480.0
+        out.append((tp, [detect.Detection(r, 0.05, 20.0, 4, time=tp + r / c)]))
+    return out
+
+
+EARLIER_TRACKER = dict(range_sigma=5.0, bearing_sigma=float(np.radians(0.5)), process_noise=0.05, initial_speed_sigma=2.0)
+
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+@pytest.mark.parametrize("case", ["earlier_arrival", "one_transmit_time"])
+def test_a_track_never_steps_back_in_time_when_it_takes_an_earlier_detection(association, case):
+    """sonar-uc5 (a). A track that takes a detection timed before the time it already holds (a nearer arrival on a ping
+    sooner than R/c after the last, or pings without timestamps whose echo delays wander) takes it at its own time
+    (held: no prediction back, dt = 0), so its history stays in time order; the measured position is the detection's.
+    Before: predicted back to the detection's time, the history stepped back (1500 m then 1480 m: 13 ms back each time)."""
+    if case == "earlier_arrival":
+        pings, opts = earlier_arrival_pings(), EARLIER_TRACKER
+    else:
+        pings, opts = same_transmit_time_pings(), SCENARIO_TRACKER
+    tracker = detect.Tracker(**opts, association=association)
+    earlier = 0
+    for tp, dets in pings:
+        before = {tr.id: tr.time for tr in tracker.tracks}
+        tracker.update(tp, dets)
+        for tr in tracker.tracks:
+            times = [h[0] for h in tr.history]
+            assert times == sorted(times)
+            if tr.id in before and tr.misses == 0:
+                took = min(dets, key=lambda d: np.hypot(*(d.xy() - np.asarray(tr.measured[-1]))))
+                if took.time < before[tr.id]:
+                    earlier += 1
+                    assert tr.time == before[tr.id] and tr.history[-1][0] == before[tr.id]
+                    np.testing.assert_allclose(tr.measured[-1], took.xy(), atol=1e-9)
+    assert earlier >= 3
+    want = 1 if case == "earlier_arrival" else 2
+    assert len(tracker.tracks) == want and all(tr.hits == len(pings) for tr in tracker.tracks)
+
+
+def test_a_held_missed_row_is_not_fitted_twice():
+    """sonar-uc5 (b). With a ping interval (5 s) shorter than R/c (8 s) a track that misses a ping holds where it is: its
+    history row repeats the previous row's time and position. That row records no measurement (NaN), so the line
+    (D-157) goes through each detection once: the classes of the track equal those of the same track with the held row
+    taken out, in position, velocity, fit_rms and speed_sigma (the row still counts as a ping in `seen`)."""
+    import dataclasses
+    from gpusonar import classify
+    pings = long_range_mover(n=14, interval=5.0, drop=(4,))
+    tracker = detect.Tracker(**LONG_RANGE_TRACKER)
+    for tp, d, _, _ in pings:
+        tracks = tracker.update(tp, [] if d is None else [d])
+    (tr,) = tracks
+    assert tr.history[4] == tr.history[3] and np.isnan(tr.measured[4]).all() and tr.pings[4] == pings[4][0]
+    keep = [i for i in range(len(tr.history)) if i != 4]
+    without = dataclasses.replace(tr, history=[tr.history[i] for i in keep], measured=[tr.measured[i] for i in keep],
+                                  pings=[tr.pings[i] for i in keep])
+    tp = pings[-1][0]
+    for at in (None, tp):
+        (a,) = classify.classify_tracks([tr], time=at, max_fit_rms=10.0)
+        (b,) = classify.classify_tracks([without], time=at, max_fit_rms=10.0)
+        assert (a.position, a.velocity, a.fit_rms, a.speed_sigma, a.kind) == (b.position, b.velocity, b.fit_rms, b.speed_sigma, b.kind)
 
 
 def test_tracker_drops_a_target_that_disappears():

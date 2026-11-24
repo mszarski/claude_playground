@@ -113,8 +113,9 @@ class Tracker {
   /// Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
   /// the detection's own time (Detection::time; the ping's when NaN or otherwise not finite; D-156), a track takes its
   /// detection at that time and a new track is born there; tracks that take none count a miss and are predicted to
-  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). Returns the
-  /// confirmed tracks.
+  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). A detection timed
+  /// before the time a track holds is compared with and taken by it at the track's time (dt = 0; sonar-uc5), so no
+  /// history steps back. Returns the confirmed tracks.
   std::vector<const Track*> update(double time, const std::vector<Detection>& detections);
   const std::vector<Track>& tracks() const { return tracks_; }
 
