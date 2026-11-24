@@ -1021,7 +1021,7 @@ if Operator is not None:
                                         name="stop"))
 
 
-_KEEP = []
+_KEEP = []       # applications whose stop failed (run_receiver), kept to the end of the process
 
 
 def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = None, hololink_ip: str = "127.0.0.1",
@@ -1065,7 +1065,9 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
     stats["stopped"] = app.stop_reason or "ended"        # pings, idle, or the application ended by itself
     if shutdown_error:
         stats["shutdown_error"] = shutdown_error
-    _KEEP.append(app)     # not destroyed before the process ends: after a failed stop its receiver thread is still joinable
+        # Not destroyed before the process ends: after a failed stop its receiver thread may still be running, and
+        # destroying the application would join it. Only those are kept (sonar-qnk): one that stopped cleanly goes.
+        _KEEP.append(app)
     udp1, cpu1 = udp_counters(), cpu_throttling()
     stats["socket"] = app.socket_watch.stats()
     stats["udp_counters"] = {k: udp1[k] - udp0.get(k, 0) for k in ("InDatagrams", "InErrors", "RcvbufErrors", "SndbufErrors")

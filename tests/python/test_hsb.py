@@ -481,6 +481,44 @@ print(json.dumps({"runtime": libs, "before": before, "main_after": omp.omp_get_m
 """
 
 
+def test_run_receiver_keeps_only_the_applications_whose_stop_failed(monkeypatch):
+    """sonar-qnk: run_receiver keeps an application alive to the end of the process only when its stop failed
+    (shutdown_error: its receiver thread may still be running); before, every call added its application to _KEEP.
+    Sensor Bridge, Holoscan and the CUDA driver are stand-ins (no GPU)."""
+    import types
+
+    class StandInApp:
+        made = []
+
+        def __init__(self, chain, receiver, channel, cuda, frame_size, n_pings=None, on_report=None, fail_stop=False):
+            self.stop_reason, self.fail_stop = None, fail_stop
+            self.chain_op = types.SimpleNamespace(reports=[], omp_applied=None, wall_ns=[])
+            self.socket_watch = types.SimpleNamespace(stats=lambda: {})
+            self.arrivals = None
+            StandInApp.made.append(self)
+
+        def run(self):
+            self.stop_reason = "idle"
+            if self.fail_stop:          # the board gone: Sensor Bridge's unconfigure() times out in the operators' stop
+                raise RuntimeError("control plane timeout")
+
+    board = types.SimpleNamespace(start=lambda: None, reset=lambda: None, stop=lambda: None)
+    hololink = types.SimpleNamespace(Enumerator=types.SimpleNamespace(find_channel=lambda **kw: None), Timeout=float,
+                                     DataChannel=lambda metadata: types.SimpleNamespace(hololink=lambda: board))
+    monkeypatch.setitem(sys.modules, "hololink", hololink)
+    monkeypatch.setattr(hsb, "Application", object)
+    monkeypatch.setattr(hsb, "HsbLiveApp", StandInApp, raising=False)     # absent without the Holoscan SDK
+    monkeypatch.setattr(hsb, "CudaDriver", lambda: types.SimpleNamespace(release=lambda: None))
+    monkeypatch.setattr(hsb, "_KEEP", [])
+    for _ in range(3):
+        stats = hsb.run_receiver(None, "flank_32", OVERRIDES, frame_samples=FRAME)[1]
+        assert stats["stopped"] == "idle" and "shutdown_error" not in stats
+    assert hsb._KEEP == []                                   # clean stops: nothing kept (before: all three)
+    stats = hsb.run_receiver(None, "flank_32", OVERRIDES, frame_samples=FRAME, fail_stop=True)[1]
+    assert stats["shutdown_error"] == "RuntimeError: control plane timeout"
+    assert hsb._KEEP == [StandInApp.made[-1]]                # the one whose stop failed is kept
+
+
 def test_chain_omp_threads_sets_openmps_thread_count_for_the_chains_thread():
     """receive --chain-omp-threads N (sonar-ihd): OpenMP's thread count for parallel regions the chain's thread
     starts is N once applied; other threads keep theirs. In a child process with OMP_NUM_THREADS unset."""
