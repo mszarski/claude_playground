@@ -889,9 +889,11 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   - At 330 kHz one cell of sea surface at 250 m is below the noise floor, and with strong
     surface reverberation at 10 m/s wind nothing was detected, the boat included. The
     rough-sea example was moved to 120 kHz, where the waves show.
-  - In the cluttered scene 64 tracks are classified 5 mover (one is the boat), 31 static,
-    16 line, 12 uncertain; under the rough sea 56 tracks are 8 mover (one is the boat),
-    39 uncertain. A buoy, a rock and a steady wave face still look alike.
+  - In the cluttered scene 65 tracks are classified 1 mover (the boat), 48 static, 3 line,
+    13 uncertain; under the rough sea 56 tracks are 8 mover (one is the boat), 1 static,
+    5 line, 42 uncertain (the gallery regenerated with D-164, D-171, D-172, L4 job
+    6b05051fc97b8ed4fcd725d4; at first 64 tracks: 5 mover, 31 static, 16 line, 12 uncertain,
+    and 8 mover, 39 uncertain). A buoy, a rock and a steady wave face still look alike.
   - In deep water the ship's echo arrives about 310 m late in range, consistent with a
     bottom path; ranges are not corrected for propagation.
   - At 330 kHz the anchored boat in `fls_330k_transit` was not tracked in the earlier
@@ -962,8 +964,10 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `minefield_sas` sway rose 0.081 -> 0.139 lambda RMS with that fix; explained in D-171: its last
   delay window held no seabed. The window energy gate (`min_window_energy_db`, -20 dB) is now the
   default and both SAS scenes' seabed covers the receive window: full-size `minefield_sas` sway
-  0.022 lambda, heave 0.044; `wreck_sas` sway 0.053, heave 0.044. The committed `wreck_sas` and
-  `minefield_sas` gallery figures and JSON predate D-164 and D-171.
+  0.022 lambda, heave 0.044; `wreck_sas` sway 0.053, heave 0.044 (host, D-171; the regenerated
+  gallery on an L4, job 6b05051fc97b8ed4fcd725d4, gives the same to the digits shown). The
+  `minefield_sas` echo-synthesis row of the GPU benchmark (14,870 scatterers) is of the old draw
+  and has not been rerun.
 - Delay estimation has a C++ port (host and CUDA, `MotionOptions.delay_backend`), bit-close to
   NumPy, which stays the default and the reference. On an L4 the CUDA path is slower than the
   host path (22.6 against 5.2 ms for 1248 windows; per-pair uploads and double sums). The fine

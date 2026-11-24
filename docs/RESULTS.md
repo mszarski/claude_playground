@@ -241,6 +241,35 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
   offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
   40.188 mm), so it is a property of the data, not of the kernel.
 
+## Gallery regenerated with D-164, D-171 and D-172
+
+Full-size gallery on an L4 (job 6b05051fc97b8ed4fcd725d4, tree `77f5b98`), `docs/figures/`, against
+the one before (the D-155 gallery, L4 job 6b01577eefaf5e14f4b49804). That one also predated D-156 and
+D-157, which move most of what changed. One run, one seed per scene.
+- What got worse: `wreck_sas` sharpness with estimated motion 274.4 -> 219.6 and true motion 280.6
+  -> 224.6, and its wreck over the median 29.3 -> 26.9 dB; `minefield_sas` sharpness 319.8 ->
+  275.4 (true 318.0 -> 277.9). Both are new scene draws (D-171: seabed y 34-53 m, scatterers 9,180
+  -> 13,555 and 14,870 -> 20,558), so before and after are not paired; the estimate is 0.978 and
+  0.991 of the true-motion sharpness (0.978, 1.006 before). `popoto_12km` ship 6.05 -> 5.68 m/s
+  (true 6.0; ± 0.50), the measured-position fit (D-157).
+- Unchanged: every detection count and confirmed-track count; the image-only scenes (`pool_*`,
+  `seafloor_objects_fls`, `harbour_fls_750k`, `sas_minsas_*`, `rail_objects`, `buried_objects`,
+  `popoto_trial_1000m`, `summer_mud`) to rounding (at most 2 grey levels, in at most 0.031 % of
+  pixels); every animation but the two re-drawn SAS scenes (at most 2 grey levels); in the FLS,
+  flank and Popoto figures only the track panels change; every named object's class.
+- Motion (D-164, D-171): sway error `wreck_sas` 0.089 -> 0.053 λ, `minefield_sas` 0.081 -> 0.022 λ;
+  heave 0.098 -> 0.044 and 0.087 -> 0.044 λ.
+- Classes (D-156, D-157): equal to the gallery seed of `classify_rules_eval_afe0806.json` in every
+  count and kind. `fls_120k_rough_surface` movers off a moving object 13 -> 6 (movers 15 -> 8);
+  `fls_170k_traffic` 1 -> 0 (line tracks 4 -> 1); `fls_120k_cluttered_seabed` line tracks 9 -> 3;
+  `popoto_env_winter_sand_200m` 1 -> 0, its ship 4.79 -> 5.24 m/s (true 6.0).
+- Positions (D-157 outline scoring, D-172 echo placement): extended objects are now scored from
+  their outline (`position_error_m`) with `centroid_error_m` kept. Popoto ship to the hull:
+  `popoto_12km` 67.9 -> 2.1 m (4.7 m from the centre), `popoto_far_mover` 42.2 -> 34.2 m,
+  `gravel_30m` 38.4 -> 33.7 m, `winter_sand_200m` 19.8 -> 2.7 m (29.1 m from the centre).
+  FLS boats 0.0 m from their outline (0.2 to 4.5 m from the centre; `boat_closing` 4.5 m,
+  D-169). `flank_patrol` submarine 25.9 -> 25.8 m (26.1 m from the centre).
+
 ## Gallery regenerated with the row-strength rule (D-154)
 
 Full-size gallery on an L4 (job 6b013d75efaf5e14f4b47980, tree `b394e81`), `docs/figures/`: the one
@@ -588,14 +617,17 @@ motion estimation, backprojection at 2.5 cm.
 
 | Quantity | Navigation only | Estimated motion | True motion |
 | --- | --- | --- | --- |
-| Sway error, RMS | 1.34 λ | 0.089 λ | — |
-| Heave error, RMS | — | 0.098 λ | — |
-| Image sharpness (Σ I² · N / (Σ I)²) | 69 | 272 | 279 |
+| Sway error, RMS | 1.34 λ | 0.053 λ | — |
+| Heave error, RMS | — | 0.044 λ | — |
+| Image sharpness (Σ I² · N / (Σ I)²) | 60 | 220 | 225 |
 | Seafloor over shadow behind the box | 13.7 dB | 14.7 dB | 14.8 dB |
 | Box face over seafloor | 20.4 dB | 20.3 dB | 20.2 dB |
 
+- Sway, heave and sharpness are from the regenerated gallery (`docs/figures/gallery.json`, L4,
+  job 6b05051fc97b8ed4fcd725d4; 13,555 scatterers since D-171); the other rows, the navigation-only
+  sway and the timings below are from the earlier CPU run of the 7500-scatterer scene.
 - With the estimated track the image is within 3% of the true-motion sharpness; with
-  navigation alone it is four times less sharp. The shadow contrast barely depends on
+  navigation alone it is 3.7 times less sharp. The shadow contrast barely depends on
   focus because the shadow is much larger than the blur.
 - The bright band at 40.6 to 41 m is the box's top and near face laid over towards the
   sonar (it is 1 m above the image plane), and it smears along track for the same reason.
@@ -1686,31 +1718,35 @@ combines walls with that bottom, so no result in this file changes.
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
-(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4 at commit `4530dc4`).
+(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4, tree `77f5b98`, job
+6b05051fc97b8ed4fcd725d4).
 
 | Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `fls_120k_transit` | 8 | 1 | 6 | 0 | — | 1 | 0 |
 | `fls_170k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
 | `fls_330k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
-| `fls_120k_cluttered_seabed` | 65 | 1 | 47 | 9 | — | 8 | 0 |
-| `fls_120k_rough_surface` | 56 | 15 | 0 | 8 | — | 33 | 13 |
-| `fls_170k_traffic` | 13 | 4 | 3 | 4 | — | 2 | 1 |
+| `fls_120k_cluttered_seabed` | 65 | 1 | 48 | 3 | — | 13 | 0 |
+| `fls_120k_rough_surface` | 56 | 8 | 1 | 5 | — | 42 | 6 |
+| `fls_170k_traffic` | 13 | 3 | 6 | 1 | — | 3 | 0 |
 | `popoto_far_mover` | 4 | 1 | 0 | — | 3 | 0 | 0 |
 | `popoto_12km` | 12 | 1 | 0 | — | 11 | 0 | 0 |
-| `popoto_env_winter_sand_200m` | 5 | 2 | 0 | — | 2 | 1 | 1 |
+| `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 3 | 1 | 0 |
 | `popoto_env_gravel_30m` | 3 | 1 | 1 | — | 1 | 0 | 0 |
 | `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 2 | 0 | 1 (the ship is not tracked at its true position) |
 
-Regenerated with D-155's grouping and scoring (L4, job 6b01577eefaf5e14f4b49804). Every named object
-that is tracked is in its true class. The ship in `popoto_12km` is one mover at 6.05 ± 0.35 m/s (true
-6.0), 68 m from truth, with its eleven other tracks its multipath; before D-155 its scored track was
+Regenerated with D-164, D-171 and D-172, after D-156 and D-157 (L4, job 6b05051fc97b8ed4fcd725d4):
+the counts equal the gallery seed of `classify_rules_eval_afe0806.json`. `fls_120k_rough_surface`
+keeps 6 movers off a moving object (13 before D-157; sonar-9ir); the `popoto_12km` ship is a mover at
+5.68 ± 0.50 m/s, 2.1 m from its hull (D-172). Every named object that is tracked is in its true
+class. The rest of this paragraph is of the D-155 gallery (L4, job 6b01577eefaf5e14f4b49804). The
+ship in `popoto_12km` is one mover at 6.05 ± 0.35 m/s (true 6.0), 68 m from truth, with its eleven other tracks its multipath; before D-155 its scored track was
 `uncertain` (3.3 ± 0.5 m/s) among 4 movers, 4 multipath and 4 uncertain tracks. The anchored boat in
 `fls_170k_transit` and the pinnacle in `fls_120k_transit` are `static` (scored by their established
-track, D-155). `fls_120k_rough_surface` keeps 13 movers off a moving object (issue sonar-9ir). Twenty
+track, D-155). `fls_120k_rough_surface` kept 13 movers off a moving object (issue sonar-9ir). Twenty
 tracks of pure position noise (1 m) give no movers.
 
-This gallery predates D-156 (detections at their reflection time). Ten-seed effect of D-156 on the
+That gallery predated D-156 (detections at their reflection time). Ten-seed effect of D-156 on the
 same scenes, gallery pipeline (`docs/benchmarks/classify_rules_eval_c148f56.json` against
 `classify_rules_eval_a479519.json`; L4, job 6b017453efaf5e14f4b4ecc2): no target class changes,
 false movers 158 -> 152, `popoto_12km` report error at the last ping (median over seeds) range
