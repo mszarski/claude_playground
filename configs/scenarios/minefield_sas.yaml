@@ -2,7 +2,10 @@
 # across track and one along), a sphere and scattered rocks, with sway and heave that
 # navigation does not report. Seafloor at z = 0, sonar at 15 m altitude. Sand ripples
 # (5 cm amplitude, 0.8 m wavelength) modulate the seafloor return through their slopes.
-# About 13,000 scatterers and 80 pings: minutes on a CPU, seconds with the CUDA backend.
+# The seabed spans y 34-53 m, past the receive window's ground extent (35.0-51.5 m at 15 m altitude), so
+# every motion-estimation range window looks at seabed (sonar-7r7: it ended at 48 m before, and the last
+# window, with no seabed, tilted the estimated heave). About 20,600 scatterers and 80 pings: minutes on a
+# CPU, seconds with the CUDA backend.
 name: minefield_sas
 sonar: sas_auv
 fidelity: free_field
@@ -16,7 +19,7 @@ platform:
   motion: {sway_rms: 0.01, heave_rms: 0.004, correlation_pings: 8.0, nav_knows_disturbance: false, dvl_altitude_noise: 0.001}
 pings: {count: 80, interval: 0.2}
 scene:
-  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [36.0, 48.0], density: 30.0, lambert_mu_db: -27.0,
+  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [34.0, 53.0], density: 30.0, lambert_mu_db: -27.0,
      ripples: {amplitude: 0.05, wavelength: 0.8, direction_deg: 70.0}}
   - {type: cylinder, label: cylinder_across, start: [7.0, 40.0, -0.25], end: [7.0, 42.0, -0.25], radius: 0.25, density: 500.0, mu_db: -12.0}
   - {type: cylinder, label: cylinder_along, start: [10.0, 43.5, -0.25], end: [12.0, 43.5, -0.25], radius: 0.25, density: 500.0, mu_db: -12.0}
