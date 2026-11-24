@@ -33,6 +33,7 @@ the same capture: "lost" counts targets correct there and not correct with the r
 Usage:
   tools/classify_rules_eval.py [--backend cuda|host] [--scenes a,b] [--seeds 5] [--seed-step 1]
                                [--captures DIR] [--json OUT] [--table OUT] [--quick] [--commit HASH]
+                               [--profiles] [--popoto-bearing centroid|parabola]
   tools/classify_rules_eval.py --evaluate-only --captures DIR --json OUT     re-score saved captures, no simulation
 
 Captures are one JSON file per (scene, seed) in --captures (default build/classify_rules_eval/captures under the
@@ -362,11 +363,13 @@ def cluster_profiles(detections, power, ranges, bearings, hits, half: int = PROF
     return out
 
 
-def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bool = False) -> dict:
+def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bool = False,
+            popoto_bearing: str = "centroid") -> dict:
     """Run one gallery scene with its seed moved by `seed_offset`; return its confirmed tracks (with real cell
     counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them.
     `profiles` (sonar-4s2 study): also per ping the ping's time, every hit of detect.cluster with its bearing profiles
-    (`cluster_profiles`) and, for the gallery's `echo_position`, the array's origin, velocity and sound speed."""
+    (`cluster_profiles`) and, for the gallery's `echo_position`, the array's origin, velocity and sound speed.
+    `popoto_bearing`: the gallery's POPOTO_BEARING for this run (its Popoto runner's bearing estimate; opt-in)."""
     sys.path.insert(0, str(ROOT / "tools"))
     import gallery
     import matplotlib.pyplot as plt
@@ -428,7 +431,10 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bo
         got.update(tracks=tracks, truth=truth, t_last=float(t_last), gate=float(gate), kw=kw)
         return orig_score(tracks, truth, t_last, gate, **kw)
 
-    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position
+    if popoto_bearing not in gallery.POPOTO_BEARINGS:
+        raise ValueError(f"popoto_bearing {popoto_bearing!r}: one of {gallery.POPOTO_BEARINGS}")
+    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position, gallery.POPOTO_BEARING
+    gallery.POPOTO_BEARING = popoto_bearing
     gallery.detect, gallery.world_tracks, gallery.classify_and_score = DetectProxy(), world_tracks, classify_and_score
     gallery.echo_position = echo_position
     try:
@@ -443,11 +449,11 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bo
         plt.close(out[0])
         seconds = time.perf_counter() - t0
     finally:
-        gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position = saved
+        gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position, gallery.POPOTO_BEARING = saved
     if not got:
         raise RuntimeError(f"{name}: the gallery runner did not classify")
     return {"scene": name, "scene_seed": own_seed, "seed": own_seed + int(seed_offset), "seed_offset": int(seed_offset),
-            "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1),
+            "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1), "popoto_bearing": popoto_bearing,
             "tracks": [track_to_json(t) for t in got["tracks"]], "truth": truth_to_json(got["truth"]),
             # The grid sets `detections` itself (its first cell is off), so the gallery's own rules (D-154) are
             # kept apart and not passed on.
@@ -481,6 +487,8 @@ def main(argv=None):
     ap.add_argument("--table", default=None, help="write the readable table (Markdown) here")
     ap.add_argument("--profiles", action="store_true", help="also record each hit's bearing profiles and each ping's "
                     "array origin, velocity and sound speed in the captures (cluster_profiles; the sonar-4s2 study)")
+    ap.add_argument("--popoto-bearing", default="centroid", help="the gallery's Popoto bearing estimate for the "
+                    "captures: centroid (default, the gallery's) or parabola (gallery.subgrid_bearings; sonar-4s2)")
     ap.add_argument("--commit", default=None, help="the tree's commit, recorded in the JSON (default: git, else $GPUSONAR_COMMIT)")
     args = ap.parse_args(argv)
     names = [n for n in args.scenes.split(",") if n]
@@ -498,8 +506,11 @@ def main(argv=None):
             for k in range(args.seeds):
                 path = cap_dir / f"{name}_k{k * args.seed_step}{'_quick' if args.quick else ''}.json"
                 if path.exists() and not args.recapture:
+                    had = json.loads(path.read_text()).get("popoto_bearing", "centroid")
+                    if had != args.popoto_bearing:
+                        raise SystemExit(f"{path}: captured with popoto_bearing {had}, not {args.popoto_bearing} (--recapture)")
                     continue
-                cap = capture(name, k * args.seed_step, backend, args.quick, args.profiles)
+                cap = capture(name, k * args.seed_step, backend, args.quick, args.profiles, args.popoto_bearing)
                 cap["commit"] = commit
                 path.write_text(json.dumps(cap))
                 print(f"[{name} seed {cap['seed']}] {len(cap['tracks'])} tracks, {cap['seconds']} s", flush=True)
