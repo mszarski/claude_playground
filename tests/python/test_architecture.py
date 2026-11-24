@@ -17,7 +17,17 @@ _spec.loader.exec_module(arch)
 
 def test_stages_listed_with_a_gpu_implementation_take_a_backend():
     with_cuda = {stage for _, stage, _, cuda, _, _ in arch.STAGES if cuda}
-    assert len(with_cuda) == 7                                                     # six kernels' stages, and the stacked rows' elevation on the backprojection kernel
+    # Ten: six kernels' stages, the stacked rows' elevation on the backprojection kernel, and three the table had as CPU
+    # only although each has a CUDA translation unit (the expectation was 7 while the diagram was wrong): the far-field and
+    # MVDR beamformers (libs/live/src/beamform_cuda.cu, D-122), motion estimation's delays (libs/motion/src/delay_cuda.cu,
+    # D-148) and the multiscale detector's cell statistic (libs/live/src/detector_cuda.cu, D-150).
+    assert len(with_cuda) == 10
+    for unit in ("libs/live/src/beamform_cuda.cu", "libs/motion/src/delay_cuda.cu", "libs/live/src/detector_cuda.cu", "libs/sim/src/reverb_cuda.cu"):
+        assert (ROOT / unit).is_file(), unit
+    assert "backend" in inspect.signature(flank.farfield_beamform).parameters and "backend" in inspect.signature(flank.mvdr_beamform).parameters
+    assert "backend" in gs.core.live_multiscale_detect.__doc__                    # the multiscale statistic
+    from gpusonar import motion
+    assert "cuda" in motion.DELAY_BACKENDS and motion.MotionOptions().delay_backend == "numpy"   # opt-in device delays
     from gpusonar import elevation
     assert "backend" in inspect.signature(elevation.profile).parameters           # elevation steers with the backprojection kernel, host or CUDA
     assert "backend" in inspect.signature(__import__("gpusonar.sim.reverb", fromlist=["x"]).add_reverberation).parameters   # reverberation

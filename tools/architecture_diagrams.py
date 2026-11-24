@@ -31,7 +31,7 @@ STAGES = [
     ("Simulator", "Paths: free field, images, sediment refraction", "C++ (NumPy kept)", None, "sim.propagation(engine=)", "small next to synthesis"),
     ("Simulator", "Paths: Bellhop eigenrays", "external program", None, "sim.bellhop", "GPL, separate process"),
     ("Simulator", "Boundary reverberation: sum over sectors into channels", "C++ kernel (NumPy kept)", "same kernel, CUDA",
-     "sim.reverb(backend=, engine=)", "its FFTs and the power stage stay on the CPU"),
+     "sim.reverb(backend=, engine=)", "transforms and steering on the device (D-122); power stage and random draws on the CPU"),
     ("Simulator", "Ambient noise, hardware gain, ADC", "NumPy", None, "sim.noise, sim.receiver", ""),
     ("Conditioning", "Baseband conversion, pulse compression", "C++ (pocketfft)", "cuFFT", "recon.prepare(backend=)", ""),
     ("Conditioning", "Calibration, TVG, whitening, median TVG, DRC", "C++", None, "core.whiten, core.drc ...", "light"),
@@ -39,10 +39,14 @@ STAGES = [
     ("Conditioning", "Array calibration", "C++ (libs/live) and NumPy", None, "calibrate; core.calibrate_*_cpp", "once per trial"),
     ("Imaging", "Backprojection: fan, stripmap, volume, range x bearing", "C++ kernel, OpenMP", "same kernel, CUDA",
      "core.backproject(backend=), BpSession", "with ray culling; the bulk of processing"),
-    ("Imaging", "Far-field beamformer, MVDR", "C++ (libs/live) and NumPy", None, "beamformer: farfield | mvdr; flank",
-     "the live chain's default is the kernel"),
-    ("Imaging", "Motion estimation (SAS)", "C++ and Ceres", None, "motion", "BSD build of Ceres"),
+    ("Imaging", "Far-field beamformer, MVDR", "C++ (libs/live) and NumPy", "same templates, CUDA", "beamformer: farfield | mvdr; flank",
+     "D-122; the live chain's default is the kernel"),
+    ("Imaging", "Motion estimation (SAS): delays between pings", "NumPy (default), C++", "CUDA (opt-in)", "MotionOptions.delay_backend",
+     "D-148; slower than the host on an L4"),
+    ("Imaging", "Motion estimation (SAS): the solve", "C++ and Ceres", None, "motion", "BSD build of Ceres"),
     ("Detection", "CFAR", "C++ kernel", "same kernel, CUDA", "detect.cfar(backend=)", ""),
+    ("Detection", "Multiscale detector: the cell statistic", "C++ (libs/live) and NumPy", "same kernels, CUDA",
+     "cell_statistic: multiscale (the live chain's default)", "D-150; flagging and grouping on the host"),
     ("Detection", "Sparse Bayesian bearings (active gates, passive)", "C++ kernels, OpenMP", "same kernels, CUDA",
      "core.doa_gate(backend=), core.doa_passive, doa: sbl", "2.5x on an L4"),
     ("Detection", "Stacked rows: per-row maps, elevation at each detection", "C++ (libs/live) and NumPy", "same kernel, CUDA",
@@ -76,7 +80,7 @@ def draw_dataflow(path):
     fig, ax = canvas(15.5, 7.6)
     ax.text(0.2, 7.3, "Sources: each yields ping records", color=MUTED, fontsize=10)
     srcs = [("Simulator\nscenario YAML", AQUA), ("Container file\n(.h5) / a tap", AQUA), ("WAV + sidecar\n(file or directory)", AQUA),
-            ("Board stream\n(UDP blocks)", AQUA), ("Ultrasound rig\n(NVIDIA reference)", AQUA)]
+            ("Board stream: UDP blocks,\nor Sensor Bridge frames", AQUA), ("Ultrasound rig\n(NVIDIA reference)", AQUA)]
     for i, (t, c) in enumerate(srcs):
         box(ax, (0.2, 6.0 - i * 1.15), 2.3, 0.85, t, color=c)
         arrow(ax, (2.5, 6.42 - i * 1.15), (3.2, 3.9))
@@ -140,20 +144,23 @@ def draw_backends(path):
     plt.close(fig)
 
 
-def draw_deployment(path):
+def draw_deployment(path, sonar="popoto_long_range", deploy="popoto_vehicle"):
+    """The one-row deployment. The wet end's numbers are read from the sonar file (buildspec.describe_shipped), not typed."""
+    from gpusonar import buildspec
+    d = buildspec.describe_shipped(sonar, deploy)
     fig, ax = canvas(15.5, 6.6)
     ax.text(0.2, 6.3, "Wet end", color=MUTED, fontsize=10)
-    box(ax, (0.2, 4.9), 2.2, 0.9, "Projector + amplifier\n4-6 kHz, 197 dB", color=GRID, text_color=INK)
-    box(ax, (0.2, 3.5), 2.2, 0.9, "32 hydrophones\n15 cm pitch", color=GRID, text_color=INK)
+    box(ax, (0.2, 4.9), 2.2, 0.9, f"Projector + amplifier\n{d['band_hz'][0] / 1e3:g}-{d['band_hz'][1] / 1e3:g} kHz, {d['source_level_db']:g} dB", color=GRID, text_color=INK)
+    box(ax, (0.2, 3.5), 2.2, 0.9, f"{d['channels']} hydrophones\n{100 * d['pitch_m']:.3g} cm pitch", color=GRID, text_color=INK)
     box(ax, (0.2, 2.1), 2.2, 0.9, "shared reference\n(sync bursts)", color=GRID, text_color=INK)
-    for i in range(4):
-        box(ax, (3.2, 5.0 - i * 1.0), 1.9, 0.75, f"Popoto board {i + 1}\n8 inputs, own clock", color=YELLOW, text_color=INK, fs=8)
+    for i in range(d["n_boards"]):
+        box(ax, (3.2, 5.0 - i * 1.0), 1.9, 0.75, f"Popoto board {i + 1}\n{d['inputs_per_board']} inputs, own clock", color=YELLOW, text_color=INK, fs=8)
         arrow(ax, (2.4, 3.95), (3.2, 5.37 - i * 1.0))
         arrow(ax, (2.4, 2.55), (3.2, 5.2 - i * 1.0), color=VIOLET, lw=0.8)
     ax.text(3.2, 6.3, "Capture", color=MUTED, fontsize=10)
     box(ax, (6.0, 4.6), 2.2, 0.9, "files: WAV + sidecar\n(wav_watch source)", color=AQUA, fs=8)
     box(ax, (6.0, 3.1), 2.2, 0.9, "or blocks over UDP\n(flank_udp source)", color=AQUA, fs=8)
-    for i in range(4):
+    for i in range(d["n_boards"]):
         arrow(ax, (5.1, 5.37 - i * 1.0), (6.0, 4.9 if i < 2 else 3.5))
     ax.text(8.9, 6.3, "Vehicle computer: tools/sonar_live.py, one YAML file", color=MUTED, fontsize=10)
     steps = ["record raw\npings (.h5)", "sync boards", "prepare", "beamform", "CFAR,\ncluster", "track,\nclassify"]
@@ -189,13 +196,13 @@ LIVE_STAGES = [
     ("prepare", "baseband,\npulse compression", "both", True, "cuFFT on the device"),
     ("rows", "split into rows\n(from positions)", "both", False, "one row: skipped"),
     ("map", "range x bearing map\nper row, powers added", "both", True, "backprojection kernel"),
-    ("cfar", "CFAR on the\nsummed map", "both", True, "kernel, host or CUDA"),
+    ("cfar", "detect on summed map:\nmultiscale (default)\nor CFAR", "both", True, "statistic host or CUDA"),
     ("cluster", "cluster to\ndetections", "both", False, "tens of objects"),
     ("sbl", "doa: sbl  bearings\nat each range gate", "cpp", True, "<= 64 channels in a row"),
     ("elevation", "elevation: steer all rows\nat each detection;\ncandidates if repeats", "both", True, "backprojection kernel"),
     ("depth", "depth: attitude at arrival,\nfold, ray trace; sigma from\nnoise, roll, refraction", "both", False, "sound speed, water depth"),
     ("track", "tracker\n(range, bearing, depth)", "both", False, "ownship motion removed"),
-    ("classify", "classify: mover, static,\nmultipath", "both", False, ""),
+    ("classify", "classify: mover, static,\nline; echo grouping\n(multipath of its object)", "both", False, "bounces grouped to one object"),
     ("report", "report: JSON line\n(file, UDP)", "both", False, ""),
 ]
 
