@@ -714,6 +714,13 @@ popoto_testauv_trial_1row` simulated its pings and then failed at the first one 
 `KeyError: 'classify_max_fit_rms_bearing'`. The example below is therefore a committed
 test fixture, not a fresh run.
 
+**The example is not what the chain reports today.** It is an old line made with
+`cfar.range_estimate: centroid`; the default is now the leading edge (`first`, D-160), so
+`range_m` and the track positions differ in a current report. Use it to learn the fields,
+not the values. **Current examples: [EXAMPLES.md](EXAMPLES.md)** (worked examples run on
+the CPU at the present tree, with real report lines; written with this set, after this
+page).
+
 One real report line, the last of six pings from the C++ engine. Source:
 `tests/python/data/centroid_d158.json`, key `flank.cpp[5]`, written by
 `tests/python/data/make_centroid_d158.py` from the tree `42d4539`:
