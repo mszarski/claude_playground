@@ -79,8 +79,8 @@ def test_the_simulated_echo_of_a_fast_array_is_placed_on_its_target(gallery):
 def test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival(gallery):
     """sonar-ca3 / sonar-a98: in the Popoto and flank scenes one object's echo is several arrivals within tens of
     metres, the later ones (surface and bottom paths) the stronger, merged into one detection by detect.cluster. Its
-    centroid lies beyond the object; `set_range_estimate("first")` (gallery.RANGE_ESTIMATE, opt-in) gives the nearest
-    cell, the direct arrival. A map of 2 m cells: the direct arrival at 6000 m, 6 dB weaker than one at +34 m, the
+    centroid lies beyond the object; `set_range_estimate("first")` (gallery.RANGE_ESTIMATE, the default since the
+    owner's choice on those issues) gives the nearest cell, the direct arrival. A map of 2 m cells: the direct arrival at 6000 m, 6 dB weaker than one at +34 m, the
     cells between filled by the arrivals in between (above the threshold); background 1."""
     from gpusonar import detect
     ranges = np.arange(5000.0, 7000.0, 2.0)
@@ -98,4 +98,5 @@ def test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival(galle
     assert gallery.set_range_estimate(hits, "first")[0].range == pytest.approx(6000.0)
     with pytest.raises(ValueError):
         gallery.set_range_estimate(hits, "peak")
-    assert gallery.RANGE_ESTIMATE == "centroid"                     # the committed gallery's: unchanged
+    assert gallery.RANGE_ESTIMATE == "first"                        # the default (was "centroid")
+    assert gallery.set_range_estimate(detect.cluster(flags, power, ranges, bearings, guard=50, train=150))[0].range == pytest.approx(6000.0)

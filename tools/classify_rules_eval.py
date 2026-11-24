@@ -338,11 +338,12 @@ def table(agg: dict) -> str:
 
 # --- capture (simulation) ------------------------------------------------------------------------
 
-def capture(name: str, seed_offset: int, backend: str, quick: bool, range_estimate: str = "centroid") -> dict:
+def capture(name: str, seed_offset: int, backend: str, quick: bool, range_estimate: str = "first") -> dict:
     """Run one gallery scene with its seed moved by `seed_offset`; return its confirmed tracks (with real cell
     counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them.
-    `range_estimate`: gallery.RANGE_ESTIMATE for the run (the detection range of flank_patrol and the Popoto scenes;
-    "first", the leading edge, is opt-in: sonar-ca3, sonar-a98)."""
+    `range_estimate`: gallery.RANGE_ESTIMATE for the run (the detection range of flank_patrol and the Popoto scenes:
+    "first", the leading edge, the default since sonar-ca3 / sonar-a98, or "centroid", as before). A capture saved
+    without one was made with the centroid (CAPTURE_RANGE_ESTIMATE_BEFORE)."""
     sys.path.insert(0, str(ROOT / "tools"))
     import gallery
     import matplotlib.pyplot as plt
@@ -415,6 +416,17 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, range_estima
             "gallery_classification": _jsonable(out[1].get("classification"))}
 
 
+# Captures saved before the estimate was recorded were all made with the centroid (the gallery's only range then), not
+# with today's default.
+CAPTURE_RANGE_ESTIMATE_BEFORE = "centroid"
+
+
+def capture_range_estimate(cap: dict) -> str:
+    """The range estimate a capture was made with: its recorded one, else the centroid (a capture saved before it was
+    recorded)."""
+    return cap.get("range_estimate") or CAPTURE_RANGE_ESTIMATE_BEFORE
+
+
 def _commit() -> str:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True,
@@ -434,7 +446,7 @@ def main(argv=None):
     ap.add_argument("--recapture", action="store_true", help="simulate again even where a capture exists")
     ap.add_argument("--evaluate-only", action="store_true", help="no simulation: score the captures already there")
     ap.add_argument("--quick", action="store_true", help="the gallery's thinned scenes (a CPU smoke run, not the evaluation)")
-    ap.add_argument("--range-estimate", choices=("centroid", "first"), default="centroid",
+    ap.add_argument("--range-estimate", choices=("centroid", "first"), default="first",
                     help="detection range of flank_patrol and the Popoto scenes (gallery.RANGE_ESTIMATE; default "
                          "%(default)s); a capture already in --captures made with another is refused")
     ap.add_argument("--json", default=None, help="write the result JSON here")
@@ -456,7 +468,7 @@ def main(argv=None):
             for k in range(args.seeds):
                 path = cap_dir / f"{name}_k{k * args.seed_step}{'_quick' if args.quick else ''}.json"
                 if path.exists() and not args.recapture:
-                    have = json.loads(path.read_text()).get("range_estimate", "centroid")
+                    have = capture_range_estimate(json.loads(path.read_text()))
                     if have != args.range_estimate:
                         raise SystemExit(f"{path} was captured with range estimate {have!r}, not {args.range_estimate!r}: "
                                          "use another --captures directory or --recapture")
@@ -477,7 +489,7 @@ def main(argv=None):
             info.setdefault(name, {})[str(cap["seed"])] = {"tracks": len(cap["tracks"]), "seconds": cap["seconds"],
                                                            "backend": cap["backend"], "quick": cap["quick"],
                                                            "commit": cap.get("commit"), "gate_m": cap["gate"],
-                                                           "range_estimate": cap.get("range_estimate", "centroid"),
+                                                           "range_estimate": capture_range_estimate(cap),
                                                            "classify_kw": cap["classify_kw"],
                                                            "gallery_classification": cap["gallery_classification"]}
     if not per_capture:

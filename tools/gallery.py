@@ -338,14 +338,16 @@ def run_buried(name, cfg, backend, quick):
 # --- flank array -----------------------------------------------------------------------------
 
 # The range of a detection in the scenes that run the energy detector over multipath (run_flank, run_popoto_far):
-# "centroid" (the default, detect.cluster's power-weighted centroid of the detection's cells: the committed gallery) or
-# "first" (opt-in, `--range-estimate first`: the nearest of its cells, Detection.first_range, the leading edge). In
-# these scenes the echo of one object is several arrivals by the surface and bottom, which merge into one detection
-# whose centroid lies beyond the object by their energy-weighted excess path (sonar-ca3, sonar-a98); the leading edge
-# is the earliest, the direct path's. The live chain reads the leading edge by default (D-160); its detector is another
-# one (multiscale), so the two are not the same numbers.
+# "first" (the default since the owner's choice on sonar-ca3 / sonar-a98: the nearest of its cells,
+# Detection.first_range, the leading edge) or "centroid" (`--range-estimate centroid`: detect.cluster's power-weighted
+# centroid of the detection's cells, the gallery before that choice). In these scenes the echo of one object is several
+# arrivals by the surface and bottom, the later ones the stronger, which merge into one detection whose centroid lies
+# 28-38 m beyond the object; the leading edge is the earliest arrival's. It reads short where the earliest arrival is
+# the near end of a long hull at the cluster's mean bearing (popoto_env_gravel_30m: 10 m short of the hull) or a strong
+# echo's leading sidelobe. The live chain reads the leading edge by default (D-160); its detector is another one
+# (multiscale), so the two are not the same numbers.
 RANGE_ESTIMATES = ("centroid", "first")
-RANGE_ESTIMATE = "centroid"
+RANGE_ESTIMATE = "first"
 
 
 def set_range_estimate(hits, estimate=None):
@@ -1180,7 +1182,7 @@ def main():
     ap.add_argument("--out", default=None, help=f"output directory (default: docs/figures; with --quick: {QUICK_OUT})")
     ap.add_argument("--quick", action="store_true", help="thinned scenes and fewer pings, for a CPU")
     ap.add_argument("--no-animation", action="store_true", help="figures and numbers only")
-    ap.add_argument("--range-estimate", choices=RANGE_ESTIMATES, default="centroid",
+    ap.add_argument("--range-estimate", choices=RANGE_ESTIMATES, default="first",
                     help="detection range in flank_patrol and the Popoto tracking scenes (RANGE_ESTIMATE; default %(default)s)")
     args = ap.parse_args()
     global RANGE_ESTIMATE
@@ -1214,8 +1216,8 @@ def main():
             metrics["animation"] = f"{name}.gif"
         metrics["backend"] = args.backend
         metrics["quick"] = bool(args.quick)
-        if args.range_estimate != "centroid" and RUNNERS[name] in (run_flank, run_popoto_far):
-            metrics["range_estimate"] = args.range_estimate
+        if RUNNERS[name] in (run_flank, run_popoto_far):
+            metrics["range_estimate"] = args.range_estimate                # a gallery.json without it: centroid
         fig.savefig(out / f"{name}.png", dpi=110)
         plt.close(fig)
         summary[name] = metrics

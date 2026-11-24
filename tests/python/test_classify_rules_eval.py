@@ -298,3 +298,15 @@ def test_flank_patrol_tracks_are_scored_in_the_order_the_scoring_reads():
     sub = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]["submarine"]
     assert sub["kind"] == "mover" and sub["correct"]
     assert sub["report_centroid_range_error_m"] == pytest.approx(4.0, abs=0.5) and abs(sub["report_centroid_cross_range_error_m"]) < 0.5
+
+
+def test_a_capture_without_a_recorded_range_estimate_is_the_centroid(tmp_path):
+    """The leading edge is the default (sonar-ca3, sonar-a98); captures saved before the estimate was recorded were made
+    with the centroid and are read so, and a run with the default refuses to reuse them (one estimate per directory)."""
+    assert cre.capture_range_estimate({}) == "centroid"
+    assert cre.capture_range_estimate({"range_estimate": "first"}) == "first"
+    assert cre.capture_range_estimate({"range_estimate": "centroid"}) == "centroid"
+    cap = _capture()
+    (tmp_path / "fls_120k_transit_k0.json").write_text(json.dumps(cap))       # an old capture: no range_estimate
+    with pytest.raises(SystemExit, match="'centroid', not 'first'"):
+        cre.main(["--scenes", "fls_120k_transit", "--seeds", "1", "--captures", str(tmp_path), "--backend", "host"])
