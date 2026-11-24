@@ -970,6 +970,58 @@ back to its priors. It reasons in CSS ("change justify to `space-between`", whic
 `justify=between` is also missing from SYSTEM_PROMPT) and over-edits ("also restyle the plan's button").
 Short rationales seem to cost conventions without buying the planning that long reasoning gives plain Qwen.
 
+## Eval v2: realistic screens, a design system in context, criteria grading
+
+The v1 test sets score exact match against one generated answer on the generator's five layouts, and the held-out
+"unseen" kinds follow the generator's own conventions, which no prompt states. Eval v2
+(`mszarski/design-edits-eval-v2`, 445 items from 232 screens) fixes all three:
+
+* **Screens:** DeepSeek-V3.2 writes 20 kinds of app screens (dashboards, checkout, chat, tables, ...) in the design
+  language.
+* **Design system in the prompt:** each screen gets a sampled design system (`design_edit/design_system.py`: brand
+  and text colors, type and spacing scales, button and selection states), so a request like "disable the Save
+  button" has a defined answer.
+* **Requests:** each screen gets requests of five kinds (direct, state, goal, structure, consistency), each with
+  2–5 checkable criteria.
+* **Item filter:** an item is kept only if the writer's reference patch passes its own criteria *and* the unedited
+  design fails them, under a strict gpt-oss-120b judge (`scripts/build_eval_v2.py`).
+* **Grading:** `scripts/grade_eval_v2.py`. Pass = the patch is valid and every criterion passes.
+
+**Deterministic checks (ideas from CADGenBench).** `scripts/compile_checks.py` turns criteria into machine checks
+(`design_edit/checks.py`):
+* must-hold "keep-in" conditions on nodes, plus an "allowed" set of nodes outside which nothing may change
+  ("keep-out"), in place of CADGenBench's keep-in/keep-out regions;
+* a validity gate;
+* an item passes only if every check holds, i.e. it is as good as its worst check;
+* a score renormalized against the no-op, so "do nothing" scores 0.
+
+Of 445 items, 278 compile into checks that the reference passes and the no-op fails. Those checks agree with the
+LLM judge on **92–95%** of items for every model, so they can serve as a cheap, verifiable RL reward that still
+accepts any valid answer.
+
+| Model (one answer, no revision) | eval v2 pass | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|
+| Plain Gemma 4 31B | 0.546 | 0.635 | 0.685 | 0.372 | 0.542 | 0.468 |
+| Plain Gemma 4 31B, **thinking on** | 0.636 | 0.689 | 0.648 | 0.447 | **0.879** | 0.419 |
+| Gemma SFT v8 | 0.665 | 0.622 | 0.778 | **0.564** | 0.794 | 0.452 |
+| Gemma SFT broad (round 9) | 0.656 | 0.486 | **0.889** | 0.479 | 0.729 | 0.597 |
+| Gemma SFT broad-p2 (round 10) | 0.647 | 0.514 | 0.824 | 0.479 | 0.720 | **0.629** |
+| Gemma broad-p2 + RL step 200 | 0.665 | 0.568 | 0.824 | 0.543 | 0.720 | 0.597 |
+| Qwen 27B SFT | 0.663 | 0.649 | 0.685 | **0.564** | 0.813 | 0.532 |
+| DeepSeek-V3.2 (API) | 0.589 | **0.743** | 0.750 | 0.468 | 0.692 | 0.129 |
+| Plain Qwen 3.8 27B, reasoning (API) | **0.717** | 0.635 | 0.815 | 0.543 | **0.907** | 0.581 |
+
+* **Rounds 9–10 did not transfer.** Every fine-tuned Gemma lands at 0.647–0.665 (±2.2 points standard error at
+  n=445), so the v1 gains from broad data, prompt v2 and RL don't show on realistic screens.
+* **Reasoning is the lever.** Thinking lifts plain Gemma by 9 points, and on design-system state requests it beats
+  every fine-tuned model (0.88 vs 0.72–0.81) because it reads the design system. Plain Qwen with reasoning is best
+  overall.
+* **Our fine-tuning destroyed Gemma's thinking.** The RL step-200 model with thinking switched on returns empty
+  answers on v1 tests (exact 0.11–0.19): no-think SFT removed the thinking mode entirely. A reasoning model has to
+  be trained from base Gemma with thinking kept on.
+* DeepSeek-V3.2 wrote the items but fails structure edits, mostly by changing unrelated nodes or writing invalid
+  insert syntax.
+
 ## Round 10: prompt-mismatch fix and system prompt v2 (Gemma 4 31B, broad data, seed 0)
 
 Two single-seed SFT runs on the round-9 *broad* data, both with `train_sft.py --match-inference-prompt`:
