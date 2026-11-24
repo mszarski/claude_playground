@@ -1025,17 +1025,23 @@ So these rounds train from **base** Gemma with thinking on, on its *own* correct
 | v12 + 1 review round | 0.701 | 0.716 | 0.824 | 0.489 | 0.897 | 0.452 |
 | RL checkpoint-50 | 0.694 | 0.703 | 0.778 | 0.511 | 0.897 | 0.468 |
 | RL checkpoint-50 + 1 review round | 0.701 | 0.703 | 0.806 | 0.532 | 0.879 | 0.468 |
-| **RL checkpoint-100** | **0.703** | 0.730 | 0.815 | 0.489 | 0.897 | 0.468 |
+| RL checkpoint-100 | 0.703 | 0.730 | 0.815 | 0.489 | 0.897 | 0.468 |
+| **RL checkpoint-150 (final)** | **0.724** | **0.757** | **0.815** | **0.543** | 0.897 | 0.500 |
 | plain Qwen 3.8 27B, reasoning (API) | 0.717 | 0.635 | 0.815 | 0.543 | 0.907 | 0.581 |
 
-* **RL helps on eval v2, mostly on direct requests** (+12 points by checkpoint-100). This is the gain review gave the SFT
-  model, now in a single pass. A review round on top of RL adds almost nothing (+0.7).
-  On the 278 items with deterministic checks, the check pass rate rises from 0.727 (checkpoint-50) to 0.763 (checkpoint-100).
+* **The final checkpoint matches plain Qwen with reasoning** (0.724 vs 0.717; within the ±2.2-point error), the first
+  Gemma model to do so on eval v2. It is 5.7 points above the v12 SFT start, every category improves, and none of the
+  445 answers is empty. Direct requests rise 12 points: the gain review gave the SFT model, now in a single pass. A
+  review round on top of RL adds almost nothing (+0.7 at checkpoint-50).
+  On the 278 items with deterministic checks, the check pass rate rises from 0.727 (checkpoint-50) to 0.763 (100) and 0.773 (150).
+* The run's final adapter push failed on model-card metadata (PEFT names the local merged base);
+  `train_grpo.py` now skips that README. Checkpoint-150 in `design-edit-grpo-gemma-v12-ckpt` is the final model
+  (apply on top of `design-edit-sft-gemma-v12-think-s0/adapter`).
 * **Truncation pressure.** During training the share of rollouts cut off at 1,024 tokens without an answer rose
   from 31% to 58%, and mean reward fell (0.46 → 0.33), even though answered rollouts scored about 0.68.
   Evaluation allows 4,096 tokens, so only about 1% of answers are lost. A truncation penalty or a longer cap would
   keep training and evaluation consistent.
-* **Still behind Qwen on structure and goal requests** (−11 and −5 points). These are edits whose correct form the
+* **Still behind Qwen on structure requests** (−8 points; goal is now level). These are edits whose correct form the
   model rarely samples, so neither RFT nor RL on its own samples teaches them. Guided traces (a teacher reasoning
   toward the reference) are the next lever.
 
