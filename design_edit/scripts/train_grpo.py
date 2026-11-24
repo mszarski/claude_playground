@@ -83,7 +83,9 @@ def main() -> None:
     ap.add_argument("--vllm-mem", type=float, default=0.3, help="GPU fraction for colocated vLLM")
     ap.add_argument("--no-push", action="store_true", help="smoke test: no checkpoints or Hub uploads")
     ap.add_argument("--report-to", default="trackio")
-    ap.add_argument("--reward", choices=["reference", "rubric", "visual"], default="reference",
+    ap.add_argument("--max-completion-length", type=int, default=256, help="raise for thinking-on RL")
+    ap.add_argument("--max-model-len", type=int, default=3072, help="vLLM context (prompt + completion)")
+    ap.add_argument("--reward", choices=["reference", "rubric", "visual", "checks"], default="reference",
                     help="reference: match the labeled edit; rubric: LLM judge on goal prompts (no labels)")
     ap.add_argument("--judge-model", default="Qwen/Qwen3-235B-A22B-Instruct-2507")
     ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
@@ -136,7 +138,7 @@ def main() -> None:
     if args.vllm_server:
         env = dict(os.environ, CUDA_VISIBLE_DEVICES="1", VLLM_USE_FLASHINFER_SAMPLER="0")
         server = subprocess.Popen(["trl", "vllm-serve", "--model", args.model, "--tensor-parallel-size", "1",
-                                   "--max-model-len", "3072", "--gpu-memory-utilization", "0.9"], env=env)
+                                   "--max-model-len", str(args.max_model_len), "--gpu-memory-utilization", "0.9"], env=env)
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # trainer sees only GPU 0 (set before torch initializes CUDA)
         for _ in range(180):
             try:
@@ -170,10 +172,44 @@ def main() -> None:
     keep_cols = ["prompt", "before", "after", "relax", "kind", "instruction"]
     if "refs" in train.column_names:  # teacher references for goal prompts (JSON list of "after" docs)
         keep_cols.append("refs")
+    if "checks" in train.column_names:  # deterministic keep-in/keep-out checks (design_edit.checks)
+        keep_cols += ["checks", "allowed"]
     train = train.select_columns(keep_cols)
 
+    import re as _re
+
+    _OP = _re.compile(r"^(set|unset|delete|move|insert)\s")
+
     def text_of(c):
-        return c[0]["content"] if isinstance(c, list) else c
+        t = c[0]["content"] if isinstance(c, list) else c
+        if "<channel|>" in t or "</think>" in t or not t.lstrip().startswith("thought"):
+            return t
+        # TRL decodes completions without special tokens, so Gemma's "<|channel>thought ...<channel|>" arrives as
+        # "thought ... <patch>": keep the last contiguous block of patch lines.
+        lines, block = t.splitlines(), []
+        for line in reversed(lines):
+            if _OP.match(line.strip()):
+                block.append(line.strip())
+            elif block:
+                break
+        return "\n".join(reversed(block))
+
+    from design_edit.checks import grade_checks
+
+    def checks_reward(completions, before, after, relax, **kw):
+        """CADGenBench-style: no-op-renormalized keep-in/keep-out score where the row has checks, else
+        exact/F1 against the reference; an invalid patch costs -0.5."""
+        checks, allowed = kw.get("checks") or [""] * len(before), kw.get("allowed") or [""] * len(before)
+        out = []
+        for c, b, a, r, ch, al in zip(completions, before, after, relax, checks, allowed):
+            t = text_of(c)
+            if ch:
+                g = grade_checks(b, t, ch, al)
+                out.append(g["score"] if g["valid"] else -0.5)
+            else:
+                s_ = score(b, a, t, r)
+                out.append(0.5 * s_.f1 + 0.5 * float(s_.exact) if s_.valid else -0.5)
+        return out
 
     # TRL passes extra dataset columns to reward functions as keyword lists.
     def patch_reward(completions, before, after, relax, **_):
@@ -272,7 +308,7 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_generations=args.num_generations,
-        max_completion_length=256,
+        max_completion_length=args.max_completion_length,
         temperature=1.0,
         beta=args.beta,                # 0 = no KL term; rely on the clipped objective
         loss_type="dapo",
@@ -298,7 +334,7 @@ def main() -> None:
         | (json.loads(args.template_kwargs) if args.template_kwargs else {}) or None,
         model_init_kwargs={"dtype": torch.bfloat16},
         vllm_gpu_memory_utilization=args.vllm_mem,
-        vllm_max_model_length=3072,
+        vllm_max_model_length=args.max_model_len,
         report_to=args.report_to,
         project="design-edit",
         run_name=f"grpo-{args.output.split('/')[-1]}",
@@ -306,7 +342,8 @@ def main() -> None:
     trainer = GRPOTrainer(
         model=args.model,
         processing_class=AutoTokenizer.from_pretrained(args.model),  # text-only, even for multimodal checkpoints
-        reward_funcs=[{"rubric": rubric_reward, "visual": visual_reward}.get(args.reward, patch_reward), valid_reward],
+        reward_funcs=[{"rubric": rubric_reward, "visual": visual_reward, "checks": checks_reward}.get(args.reward, patch_reward),
+                      valid_reward],
         train_dataset=train,
         args=config,
         peft_config=LoraConfig(r=args.lora_r, lora_alpha=2 * args.lora_r, target_modules="all-linear",
