@@ -970,6 +970,44 @@ back to its priors. It reasons in CSS ("change justify to `space-between`", whic
 `justify=between` is also missing from SYSTEM_PROMPT) and over-edits ("also restyle the plan's button").
 Short rationales seem to cost conventions without buying the planning that long reasoning gives plain Qwen.
 
+## Rounds 11–12: rejection-sampled reasoning SFT (Gemma 4 thinking kept on)
+
+No-think SFT erased Gemma's thinking mode: with thinking switched on, the round-10 model returned empty answers.
+So these rounds train from **base** Gemma with thinking on, on its *own* correct reasoning:
+1. `scripts/sample_traces.py`: 4 thinking traces per training request (temperature 0.8).
+2. `scripts/filter_traces.py`: keep the shortest finished trace whose patch is correct. Correct means an exact match
+   to the reference, or, for realistic items, passing the compiled checks, so valid alternatives count.
+3. `train_sft.py --template-kwargs '{"enable_thinking": true}' --match-inference-prompt`. Gemma's template drops
+   reasoning from assistant turns, so the inference-matched rendering keeps the full
+   `<|channel>thought ...<channel|>patch` as the target.
+
+* **v11**: 2,959 traces from the synthetic broad-p2 requests. Gemma's own sample accuracy was 59.6%; 67% of requests
+  had a usable correct trace, with a median of 141 tokens.
+* **v12**: v11's traces plus 3,348 traces from the 5,383 realistic design-system items
+  (`design-edits-v11-real`, 1,457 screens written like eval v2 but with different seeds and no overlapping designs),
+  6,307 in total.
+
+| Gemma 31B | v1 seen | paraphrased | goals | unseen v2 | **eval v2** | + 1 review round |
+|---|---|---|---|---|---|---|
+| plain, thinking on | 0.814 | 0.743 | **0.900** | 0.722 | 0.636 | |
+| broad-p2 SFT (no thinking) | **0.956** | **0.904** | 0.864 | 0.770 | 0.647 | |
+| v8 SFT (no thinking) | 0.945 | 0.888 | 0.916 | 0.810* | 0.665 | 0.685 |
+| v11 reasoning SFT | 0.840 | 0.776 | 0.876 | 0.784 | 0.645 | |
+| **v12 reasoning SFT** | 0.832 | 0.763 | 0.871 | **0.822** | 0.667 | **0.701** |
+| plain Qwen 3.8 27B, reasoning (API) | 0.852 | 0.782 | 0.953 | 0.850 | **0.717** | |
+
+\* v8 trained on leaked held-out rows.
+
+* **Reasoning survives this SFT.** On eval v2, 434/445 v11 answers have a closed thinking block (median 113 words)
+  and none is empty.
+* **Design-system examples are what eval v2 needed.** v12 reaches 0.888 on state requests (Qwen: 0.907), and with
+  one review round 0.701 overall, the best Gemma score and within the ±2.2-point error of plain Qwen with reasoning.
+  Unseen v2 reaches 0.822, the best Gemma score without leaked training rows.
+* **Weak spot: conventions the model couldn't already produce.** Training only on its own correct traces leaves out
+  the ~33% of requests it couldn't solve. v1 seen and paraphrased stay about 12 points below no-think SFT, and eval v2
+  goal (0.48) and structure (0.45) requests lag v8 and Qwen. RL on prompts it solves only sometimes, or guided
+  traces for unsolved prompts, are the remedies.
+
 ## Eval v2: realistic screens, a design system in context, criteria grading
 
 The v1 test sets score exact match against one generated answer on the generator's five layouts, and the held-out
