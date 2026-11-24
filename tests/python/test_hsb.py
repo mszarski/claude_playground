@@ -335,15 +335,18 @@ def test_cuda_driver_copies_a_frame_from_device_memory():
         cuda.release()
 
 
-def test_operators_in_a_holoscan_application_behind_a_stand_in_receiver(pings):
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_operators_in_a_holoscan_application_behind_a_stand_in_receiver(pings, engine):
     """HsbFramesToPingsOp and LiveChainOp inside the Holoscan runtime, fed by an operator that emits
     what the receiver operator does (a map with one unnamed uint8 tensor, metadata beside it) from
-    host memory. Everything of the Sensor Bridge path except Sensor Bridge."""
+    host memory. Everything of the Sensor Bridge path except Sensor Bridge; the chain in either engine
+    (engine cpp: sonar-8rj)."""
     if hsb.Operator is None:
         pytest.skip("Holoscan SDK not usable here")
     import holoscan
     from holoscan.conditions import CountCondition
     frames = list(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD))
+    chain_cfg = dict(CHAIN, engine=engine)
     cut = (2 * int(INTERVAL * 64000) + int(LEAD * 64000) + 30000) // FRAME        # inside ping 2's window
 
     class StandInReceiverOp(hsb.Operator):
@@ -377,9 +380,9 @@ def test_operators_in_a_holoscan_application_behind_a_stand_in_receiver(pings):
             self.add_flow(rx, self.frames_op, {("output", "input")})
             self.add_flow(self.frames_op, self.chain_op, {("ping", "ping")})
 
-    with LiveChain(CHAIN) as chain:
+    with LiveChain(chain_cfg) as chain:
         direct = chain.run(hsb.records_from_frames(frames, "flank_32", OVERRIDES))
-    with LiveChain(CHAIN) as chain:
+    with LiveChain(chain_cfg) as chain:
         app = App(chain)
         app.run()
     got, stats = app.chain_op.reports, app.receiver.stats()
@@ -389,7 +392,7 @@ def test_operators_in_a_holoscan_application_behind_a_stand_in_receiver(pings):
     strip = lambda r: {k: v for k, v in r.items() if k != "processing_seconds"}   # noqa: E731
     assert [strip(r) for r in got] == [strip(r) for r in direct]                  # the same records, so the same reports
     # A frame that never arrives costs the ping it cuts and nothing else.
-    with LiveChain(CHAIN) as chain:
+    with LiveChain(chain_cfg) as chain:
         app = App(chain, drop=(cut,))
         app.run()
     stats = app.receiver.stats()
@@ -418,6 +421,13 @@ def test_tool_arguments(tmp_path, pings):
     for bad in ("0", "-2", "x"):
         with pytest.raises(SystemExit):
             tool.parse(["receive", "--sonar", "flank_32", "--chain-omp-threads", bad])
+    # How long receive looks for the board (sonar-8rj): 30 s by default, as before; longer for a board that comes up
+    # late, such as serve --scenario still simulating its pings.
+    assert tool.parse(["receive", "--sonar", "flank_32"]).find_timeout == 30.0
+    assert tool.parse(["receive", "--sonar", "flank_32", "--find-timeout", "600"]).find_timeout == 600.0
+    for bad in ("0", "-1", "x"):
+        with pytest.raises(SystemExit):
+            tool.parse(["receive", "--sonar", "flank_32", "--find-timeout", bad])
     a = tool.parse(["receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES), "--chain", json.dumps(CHAIN),
                     "--recording", str(tmp_path / "rec.h5")])
     plan = tool.receive_plan(a)
@@ -432,6 +442,26 @@ def test_tool_arguments(tmp_path, pings):
     w.close()
     records, interval = tool.serve_records(tool.parse(["serve", "--replay", str(tmp_path / "pings.h5")]))
     assert len(records) == 2 and interval is None and hsb.FrameStream(records, FRAME).tx[1] == int(INTERVAL * 64000)
+
+
+def test_receive_passes_its_options_to_the_receiver(monkeypatch, capsys):
+    """`receive` hands --find-timeout (sonar-8rj) and the chain's engine to run_receiver, without Sensor Bridge."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import sonar_live_hsb as tool
+    finally:
+        sys.path.pop(0)
+    seen = {}
+
+    def fake_run_receiver(chain, sonar, sonar_overrides, **options):
+        seen.update(options, sonar=sonar, engine=chain.cfg["engine"])
+        return [], {"reports": 0, "stopped": "idle"}
+    monkeypatch.setattr(hsb, "run_receiver", fake_run_receiver)
+    for argv, find, engine in ((["--find-timeout", "600", "--engine", "cpp"], 600.0, "cpp"), ([], 30.0, "python")):
+        seen.clear()
+        assert tool.main(["receive", "--sonar", "flank_32", "--chain", json.dumps(CHAIN), "--quiet", *argv]) == 0
+        assert (seen["find_timeout"], seen["engine"], seen["sonar"]) == (find, engine, "flank_32")
+    assert '"stopped": "idle"' in capsys.readouterr().out
 
 
 OMP_CHILD = r"""
@@ -597,16 +627,20 @@ def lines(path):
     return [json.loads(line) for line in pathlib.Path(path).read_text().splitlines() if line.startswith("{")]
 
 
-def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_prefix=(), tag="run", receive_env=None):
+def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_prefix=(), tag="run", receive_env=None,
+                 scenario=None):
     """One loopback: `serve` (the board, through Sensor Bridge's emulator) and `receive` (Sensor
     Bridge's LinuxReceiverOp -> frames to pings -> chain) as separate processes, as deployed.
+    `serve` replays `pings` from a file, or with `scenario` (a scenario file) simulates its pings itself.
     Returns (sender's statistics, receiver's statistics, the receive process, its report path)."""
-    w = gs.RecordWriter(str(tmp_path / "pings.h5"))
-    for r in copies(pings):
-        w.write(r)
-    w.close()
+    if scenario is None:
+        w = gs.RecordWriter(str(tmp_path / "pings.h5"))
+        for r in copies(pings):
+            w.write(r)
+        w.close()
+    source = ("--scenario", str(scenario)) if scenario is not None else ("--replay", str(tmp_path / "pings.h5"))
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
-    serve = subprocess.Popen([*serve_prefix, sys.executable, str(TOOL), "serve", "--replay", str(tmp_path / "pings.h5"),
+    serve = subprocess.Popen([*serve_prefix, sys.executable, str(TOOL), "serve", *source,
                               "--frame-samples", str(FRAME), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20", "--hold", "30",
                               "--send-log", str(tmp_path / f"{tag}_send.json"), *serve_args],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
@@ -647,10 +681,48 @@ def receive_delays(tmp_path, tag):
     return max(delays), min(delays), float(np.median(delays)), len(delays)
 
 
-def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, tmp_path):
-    reason = sensor_bridge_reason()
-    if reason:
-        pytest.skip(reason)
+def usable_cpus(cgroup_root="/sys/fs/cgroup") -> int:
+    """CPUs this process may use: its affinity, capped by a cgroup CPU quota rounded up (cgroup v2 cpu.max, or v1
+    cpu.cfs_quota_us / cpu.cfs_period_us). A container's vCPUs are often a quota: a Hugging Face a10g-small job
+    (4 vCPUs) lists the host's 96 CPUs in its affinity (job 6b04b897c97b8ed4fcd689e1), sonar-8rj."""
+    import math
+    n = len(os.sched_getaffinity(0))
+    root = pathlib.Path(cgroup_root)
+    try:
+        quota, period = (root / "cpu.max").read_text().split()[:2]
+    except (OSError, ValueError):
+        try:
+            quota = (root / "cpu" / "cpu.cfs_quota_us").read_text().strip()
+            period = (root / "cpu" / "cpu.cfs_period_us").read_text().strip()
+        except OSError:
+            return n
+    if quota in ("max", "-1") or float(period) <= 0:
+        return n
+    return max(1, min(n, math.ceil(float(quota) / float(period))))
+
+
+def test_usable_cpus_honours_a_cgroup_quota(tmp_path):
+    n = len(os.sched_getaffinity(0))
+    assert usable_cpus(tmp_path / "none") == n                       # no cgroup files: the affinity
+    v2 = tmp_path / "v2"
+    v2.mkdir()
+    (v2 / "cpu.max").write_text("max 100000\n")
+    assert usable_cpus(v2) == n                                       # no quota
+    (v2 / "cpu.max").write_text("150000 100000\n")
+    assert usable_cpus(v2) == min(n, 2)                               # 1.5 CPUs of quota: 2, rounded up
+    v1 = tmp_path / "v1" / "cpu"
+    v1.mkdir(parents=True)
+    (v1 / "cpu.cfs_quota_us").write_text("100000\n")
+    (v1 / "cpu.cfs_period_us").write_text("100000\n")
+    assert usable_cpus(tmp_path / "v1") == 1
+    (v1 / "cpu.cfs_quota_us").write_text("-1\n")
+    assert usable_cpus(tmp_path / "v1") == n
+
+
+def loopback_against_direct(tmp_path, pings, engine, scenario=None, tag="hsb"):
+    """A real-time loopback (`serve` replaying `pings`, or with `scenario` simulating them itself) received with
+    the chain's `engine`, held to: nothing lost, the worst receive delay, and the reports of the same pings
+    framed and assembled here and run straight through a chain of the same engine. Returns (got, direct)."""
     # Real time (owner's ruling 2026-11-21, D-153; GPUSONAR_HSB_PACE overrides). The margin is the receiver's
     # socket buffer (212,992 bytes, Hugging Face's rmem_max: about 20 ms of the stream): it overflowed while
     # the chain ran on a ping when the board sent its owed frames back to back; with the board's spread
@@ -659,27 +731,38 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     # The chain's OpenMP runs on half the CPUs this process may use (sonar-ihd): with one OpenMP thread per vCPU,
     # flank.backprojection_map kept Sensor Bridge's receiver thread waiting 10-13 ms on an 8-vCPU L4 host and the
     # socket overflowed; with half, its worst delay was 1-3 ms in 16 runs. The socket buffer stays the default.
+    # Half of the CPUs the container is given (usable_cpus: a CPU quota caps the affinity; sonar-8rj).
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
-    omp = max(1, len(os.sched_getaffinity(0)) // 2)
-    board, stats, receive, report = run_loopback(tmp_path, pings, pace, receive_args=("--chain-omp-threads", str(omp)), tag="hsb")
+    omp = max(1, usable_cpus() // 2)
+    receive_args = ("--chain-omp-threads", str(omp)) + (("--engine", engine) if engine != "python" else ())
+    board, stats, receive, report = run_loopback(tmp_path, pings, pace, receive_args=receive_args, tag=tag, scenario=scenario)
     print("sender:", board)
     print("transport:", stats)
     assert stats.get("chain_omp_threads") in (omp, "no OpenMP runtime")
     assert stats["pings"] == N and stats["frames_lost"] == 0 and stats["frames_damaged"] == 0 and stats["dropped_pings"] == 0
     assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
     # Headroom, so that a receiver stall the buffer still absorbed fails too: the worst receive delay.
-    worst, floor, median, n = receive_delays(tmp_path, "hsb")
+    worst, floor, median, n = receive_delays(tmp_path, tag)
     print(f"receive delay over {n} frames: worst {worst:.2f} ms, median {median:.2f} ms, least {floor:.2f} ms "
-          f"(chain OpenMP threads {omp})")
+          f"(chain OpenMP threads {omp}, engine {engine})")
     assert -1.0 < floor and median < 2.0          # the two clocks agree (see receive_delays)
     assert worst < 5.0
     # The same pings straight through the chain: framed and assembled here, no transport.
     direct_records = hsb.records_from_frames(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD), "flank_32", OVERRIDES)
     sent_samples = direct_records[0].samples.array.copy()            # the chain conditions records in place
-    with LiveChain(CHAIN) as chain:
+    with LiveChain(dict(CHAIN, engine=engine)) as chain:
         direct = chain.run(direct_records)
     got = lines(report)
     assert len(got) == len(direct) == N
+    assert_same_reports(got, direct)
+    # What was recorded on the way in is what the board sent.
+    raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / f"{tag}.h5")}))
+    assert len(raw) == N and np.array_equal(raw[0].samples.array, sent_samples)
+    return got, direct
+
+
+def assert_same_reports(got, direct, tolerance=0.05):
+    """The same pings, tracks and detection counts; positions, ranges and bearings within `tolerance` (m, deg)."""
     worst = {"track_m": 0.0, "range_m": 0.0, "bearing_deg": 0.0}
     for a, b in zip(got, direct):
         assert (a["sequence"], a["time_ns"]) == (b["sequence"], b["time_ns"])
@@ -691,13 +774,82 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
             worst["range_m"] = max(worst["range_m"], abs(da["range_m"] - db["range_m"]))
             worst["bearing_deg"] = max(worst["bearing_deg"], abs(da["bearing_deg"] - db["bearing_deg"]))
     print("largest differences from the direct chain:", worst)
-    assert worst["track_m"] < 0.05 and worst["range_m"] < 0.05 and worst["bearing_deg"] < 0.05
+    assert worst["track_m"] < tolerance and worst["range_m"] < tolerance and worst["bearing_deg"] < tolerance
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, tmp_path, engine):
+    """The board replays recorded pings; `receive` runs the chain in either engine (sonar-8rj: engine cpp)."""
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    got, _ = loopback_against_direct(tmp_path, pings, engine)
     # Two confirmed tracks. The stream carries no navigation, so the records sit at the origin and the
     # standing target takes ownship's speed (test_live.py shows the same without navigation).
     assert [t["kind"] for t in got[-1]["tracks"]] == ["mover", "mover"]
-    # What was recorded on the way in is what the board sent.
-    raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "hsb.h5")}))
-    assert len(raw) == N and np.array_equal(raw[0].samples.array, sent_samples)
+
+
+# The pings of test_live.pings as a scenario the board simulates itself (serve --scenario, sonar-8rj): ownship at
+# 1.5 m/s along its array, a target crossing at 3 m/s and one standing, free field, the same receive window.
+SCENARIO = {
+    "name": "hsb_loopback", "sonar": "flank_32", "fidelity": "free_field", "sonar_overrides": OVERRIDES,
+    "platform": {"position": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0], "velocity": [1.5, 0.0, 0.0]},
+    "pings": {"count": N, "interval": INTERVAL},
+    "scene": [{"type": "points", "label": "crossing", "positions": [[40.0, 250.0, 0.0]], "velocity": [-3.0, 0.0, 0.0],
+               "target_strength_db": 10.0},
+              {"type": "points", "label": "standing", "positions": [[-60.0, 320.0, 0.0]], "target_strength_db": 10.0}],
+    "receiver": {"noise_rms": 1e-5, "adc": True},
+    "seed": 5,
+}
+
+
+def scenario_file(tmp_path):
+    import yaml
+    path = tmp_path / "hsb_loopback.yaml"
+    path.write_text(yaml.safe_dump(SCENARIO, sort_keys=False))
+    return path
+
+
+def test_the_scenario_the_board_simulates_is_framed_like_recorded_pings(tmp_path):
+    """serve --scenario (sonar-8rj) without Sensor Bridge: the tool's own simulation of the scenario file is
+    deterministic, its pings fit the stream's frames, and the chain finds both targets in them."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import sonar_live_hsb as tool
+    finally:
+        sys.path.pop(0)
+    path = scenario_file(tmp_path)
+    records, interval = tool.serve_records(tool.parse(["serve", "--scenario", str(path)]))
+    again, _ = tool.serve_records(tool.parse(["serve", "--scenario", str(path)]))
+    assert len(records) == N and interval is None                  # timed records: their own transmit times
+    assert all(np.array_equal(a.samples.array, b.samples.array) for a, b in zip(records, again))
+    stream = hsb.FrameStream(records, FRAME, lead_seconds=LEAD)
+    assert stream.tx[1] - stream.tx[0] == int(INTERVAL * 64000)
+    assembled = hsb.records_from_frames(iter(stream), "flank_32", OVERRIDES, frame_samples=FRAME)
+    assert len(assembled) == N
+    assert [r.transmit.time_ns for r in assembled] == [r.transmit.time_ns for r in records]
+    for engine in ("python", "cpp"):
+        with LiveChain(dict(CHAIN, engine=engine)) as chain:
+            reports = chain.run(hsb.records_from_frames(hsb.frames_from_records(records, FRAME, lead_seconds=LEAD),
+                                                        "flank_32", OVERRIDES))
+        assert len(reports) == N
+        assert any(abs(d["range_m"] - 250.0) < 15.0 for d in reports[0]["detections"])
+        assert any(abs(d["range_m"] - 325.0) < 15.0 for d in reports[0]["detections"])
+        assert len(reports[-1]["tracks"]) == 2, (engine, reports[-1]["tracks"])
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_loopback_of_a_scenario_the_board_simulates_gives_the_direct_chains_reports(tmp_path, engine):
+    """serve --scenario (sonar-8rj): the emulated board simulates its pings itself; `receive` in either engine
+    reports what the same pings, simulated here, framed and assembled, give straight through the chain."""
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    from gpusonar.sim import run_scenario
+    path = scenario_file(tmp_path)
+    pings = run_scenario(str(path)).records                           # as serve_records simulates them
+    got, _ = loopback_against_direct(tmp_path, pings, engine, scenario=path, tag="hsb_scenario")
+    assert len(got[-1]["tracks"]) == 2
 
 
 def loss_around(tmp_path, tag, stats, board, width=3):
