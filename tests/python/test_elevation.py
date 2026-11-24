@@ -599,6 +599,42 @@ def test_cpp_chain_gives_the_python_chains_elevation_and_depth(free_field):
                 assert a[key] == pytest.approx(b[key], abs=0.2), key
 
 
+def bounce_object_pings(n=5):
+    """sonar-bal: two standing points at one bearing (10 degrees), 30 m apart in horizontal range: nearer, an image 8
+    degrees up whose straight-line depth is 78 m above the surface (what a surface bounce looks like), farther the object
+    itself 2 degrees down at 95 m in 300 m of water. With echo grouping on, the image is the group's object (the
+    established track nearest in range, D-155) and the real one its echo."""
+    sonar = sonar_rows(FACE3, window=(800.0, 1200.0))
+    scene = Scene().add_points([at(10.0, 8.0, 990.0), at(10.0, -2.0, 1010.0)], target_strength_db=10.0)
+    return [simulate_ping(sonar, make_pose(position=(0.0, 0.0, 60.0)), scene, environment={"sound_speed": C}, sequence=i,
+                          time_ns=int(i * 2e9), noise_rms=1e-6, rng=np.random.default_rng(40 + i)) for i in range(n)]
+
+
+def test_a_bounce_is_never_an_echo_groups_object_in_either_engine():
+    """sonar-bal. The elevation step makes a track whose straight-line depth lies outside the water multipath (a bounce).
+    Before, it did so after echo grouping: when that track was a group's object, it became multipath with no parent and
+    its group's other members kept it as their parent (a multipath track's parent itself multipath; the object no
+    mover or static). Now the bounce is found before grouping and is never a group's anchor or object: the group forms
+    about the real arrival, and the bounce, within its gates, is that arrival's multipath. No track's parent is
+    multipath; both engines alike."""
+    chain = dict(CHAIN, elevation=dict(QUIET, roll_sigma_deg=0.2, water_depth=300.0),
+                 classify=dict(CHAIN["classify"], multipath={"max_excess_range": 80.0, "bearing_deg": 3.0, "velocity": 2.5}))
+    records = bounce_object_pings()
+    out = {engine: run(records, chain, engine) for engine in ("python", "cpp")}
+    for w, g in zip(out["python"], out["cpp"]):
+        assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
+    for engine, reports in out.items():
+        for rep in reports:
+            kinds = {t["id"]: t["kind"] for t in rep["tracks"]}
+            assert all(kinds.get(t["parent"]) != "multipath" for t in rep["tracks"] if t["parent"] is not None), engine
+        tracks = sorted(reports[-1]["tracks"], key=lambda t: t["range_m"])
+        assert len(tracks) == 2, engine
+        image, real = tracks
+        assert image["path"] == "surface" and real["path"] == "direct", engine      # the image folded about the surface
+        assert real["kind"] == "static" and real["parent"] is None, engine
+        assert image["kind"] == "multipath" and image["parent"] == real["id"], engine
+
+
 def test_two_rows_on_the_face_candidates_reach_the_track_and_the_water_depth_decides():
     """Two rows on the face. 100 m of water, a target at 60 m depth 3 km away: every arrival is within 4 degrees of level,
     less than half a repeat (5.7 degrees). Searching only where the water lets an echo come from, two rows

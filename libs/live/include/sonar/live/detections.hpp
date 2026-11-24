@@ -169,4 +169,11 @@ struct ClassifyOptions {
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& options = {});
 
+/// Echo grouping (D-155, D-172; classify.py group_echoes), in place: classify_tracks' last step when options.multipath
+/// (it reads only the multipath_* fields and origin_x, origin_y). `bounces`: ids of tracks the caller knows to be bounces
+/// (the live chain's elevation step, sonar-bal): multipath before grouping, so never an anchor nor a group's object; a
+/// member of a group like any other track (its parent the group's object), else multipath of nothing (parent -1). With
+/// none it is the grouping as before.
+void group_echoes(std::vector<TrackClass>& classes, const ClassifyOptions& options, const std::vector<std::int64_t>& bounces = {});
+
 }  // namespace sonar::live

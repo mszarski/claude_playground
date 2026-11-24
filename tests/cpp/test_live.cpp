@@ -509,6 +509,45 @@ TEST(Tracker, TakesAnEarlierDetectionAtItsOwnTime) {
   EXPECT_EQ(tracker.tracks()[0].hits, 10);
 }
 
+TEST(Classify, ABounceIsNeverAnEchoGroupsObject) {
+  // sonar-bal (classify.py group_echoes, test_classify.py the same case): three arrivals at one bearing and velocity, the
+  // nearest a bounce; a fourth track, a bounce at another bearing. The group forms about the second; the bounce within
+  // its gates is its multipath, the other bounce multipath of nothing; no parent is multipath.
+  auto tc = [](std::int64_t id, double range, double bearing_deg, double snr) {
+    TrackClass c;
+    c.id = id;
+    c.kind = Kind::Mover;
+    c.x = range * std::sin(bearing_deg * kDeg);
+    c.y = range * std::cos(bearing_deg * kDeg);
+    c.vx = 0.0;
+    c.vy = -6.0;
+    c.speed = 6.0;
+    c.mean_snr_db = snr;
+    return c;
+  };
+  ClassifyOptions o;
+  o.multipath = true;
+  o.multipath_bearing = 3.0 * kDeg;
+  const std::vector<TrackClass> start{tc(1, 6000.0, 4.0, 14.0), tc(2, 6070.0, 4.0, 22.0), tc(3, 6130.0, 4.0, 12.0), tc(4, 6050.0, 20.0, 15.0)};
+  std::vector<TrackClass> out = start;
+  group_echoes(out, o, {1, 4});
+  EXPECT_EQ(out[0].kind, Kind::Multipath);
+  EXPECT_EQ(out[0].parent, 2);
+  EXPECT_EQ(out[1].kind, Kind::Mover);
+  EXPECT_EQ(out[1].parent, -1);
+  EXPECT_EQ(out[2].kind, Kind::Multipath);
+  EXPECT_EQ(out[2].parent, 2);
+  EXPECT_EQ(out[3].kind, Kind::Multipath);
+  EXPECT_EQ(out[3].parent, -1);
+  // No bounce: the nearest established arrival is the object, as before.
+  out = start;
+  group_echoes(out, o);
+  EXPECT_EQ(out[0].kind, Kind::Mover);
+  EXPECT_EQ(out[1].parent, 1);
+  EXPECT_EQ(out[2].parent, 1);
+  EXPECT_EQ(out[3].kind, Kind::Mover);
+}
+
 TEST(Tracker, DropsATrackThatIsNoLongerSeen) {
   TrackerOptions o;
   o.max_misses = 2;

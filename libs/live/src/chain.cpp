@@ -752,7 +752,12 @@ Report LiveChain::process(PingRecord& record) {
   co2.origin_x = f.origin.y - origin_.y;
   co2.origin_y = f.origin.x - origin_.x;
   co2.time = t;   // positions at the report's time (the ping's transmit time), not at each track's last detection (D-156)
-  for (const TrackClass& tc : classify_tracks(confirmed, co2)) {
+  // Echo grouping after the elevation step below, which finds the bounces (sonar-bal; python/gpusonar/live.py the same).
+  const bool group = co2.multipath;
+  co2.multipath = false;
+  std::vector<TrackClass> classes = classify_tracks(confirmed, co2);
+  std::vector<std::int64_t> bounces;   // tracks whose straight-line depth lies outside the water
+  for (const TrackClass& tc : classes) {
     ReportTrack rt{tc.id, tc.parent, kind_name(tc.kind), tc.y + origin_.x, tc.x + origin_.y, tc.vy, tc.vx, tc.speed,
                    std::hypot(tc.y - co2.origin_y, tc.x - co2.origin_x), tc.mean_snr_db, tc.seen};
     if (stacked && eo.depth) {
@@ -788,11 +793,25 @@ Report LiveChain::process(PingRecord& record) {
         // Its straight-line depth is above the surface or below the bottom: a bounce.
         if (eo.classify && outside_water(tr->depth, std::hypot(std::sqrt(tr->depth_var), bent), water, eo.surface_z, eo.classify_sigma,
                                          eo.water_depth_sigma)) {
-          rt.kind = "multipath";
+          bounces.push_back(tc.id);
         }
       }
     }
     rep.tracks.push_back(rt);
+  }
+  // A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath after
+  // grouping, an object left its members a parent that was itself multipath).
+  if (group) {
+    co2.multipath = true;
+    group_echoes(classes, co2, bounces);
+  } else {
+    for (TrackClass& tc : classes) {
+      if (std::find(bounces.begin(), bounces.end(), tc.id) != bounces.end()) tc.kind = Kind::Multipath;
+    }
+  }
+  for (std::size_t i = 0; i < classes.size(); ++i) {
+    rep.tracks[i].kind = kind_name(classes[i].kind);
+    rep.tracks[i].parent = classes[i].parent;
   }
   // --- hook: depth from multipath timing (multipath_depth.hpp), opt-in; adds report members only ---
   if (opt_.multipath_depth.enabled) {

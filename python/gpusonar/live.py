@@ -1666,12 +1666,14 @@ class LiveChain:
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
-        # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
+        # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156). Echo
+        # grouping after the elevation step below, which finds the bounces (sonar-bal).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t,
+                                           max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
                                            outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
                                            origin=(own[1], own[0]))
         track_extra = {}
+        bounces = []                           # tracks whose straight-line depth lies outside the water
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}
             for c_ in classes:
@@ -1701,7 +1703,15 @@ class LiveChain:
                     track_extra[c_.id]["depth_profile_source"] = ladder["rung"]
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],
                                                                   el_cfg["classify_sigma"], el_cfg["water_depth_sigma_m"]):
-                    c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce
+                    bounces.append(c_.id)      # its straight-line depth is above the surface or below the bottom: a bounce
+        # A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath
+        # after grouping, an object left its members a parent that was itself multipath). classify.group_echoes.
+        if mp:
+            classify.group_echoes(classes, mp, bounces)
+        else:
+            for c_ in classes:
+                if c_.id in bounces:
+                    c_.kind = "multipath"
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,

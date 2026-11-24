@@ -249,6 +249,77 @@ const char* kind_name(Kind kind) {
   }
 }
 
+void group_echoes(std::vector<TrackClass>& out, const ClassifyOptions& o, const std::vector<std::int64_t>& bounces) {
+  // A bounce (the chain's elevation step: a straight-line depth outside the water; sonar-bal) is multipath before
+  // grouping: never an anchor nor an object; a member of a group like any other track, else multipath of nothing.
+  for (TrackClass& c : out) {
+    if (std::find(bounces.begin(), bounces.end(), c.id) != bounces.end()) {
+      c.kind = Kind::Multipath;
+      c.parent = -1;
+    }
+  }
+  // Echo grouping (ours, D-155; classify.py has the reasons): from each established track, strongest first, a group
+  // grown transitively from the tracks not yet grouped: a track joins when it is within multipath_max_excess_range in
+  // range (either side), the bearing gate and the velocity gate of ANY member, until none joins. The group's object is
+  // its established member nearest in range (ties: the lowest id), every other member is multipath of it. A member
+  // farther than multipath_max_excess_range from the object in range is left out of the group and free for one of
+  // its own; when it is the anchor, the anchor groups again from what is left (sonar-a5x: grown transitively, a chain
+  // of arrivals linked two objects farther apart than one gate).
+  std::vector<std::size_t> order(out.size());
+  for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+  auto key = [&](std::size_t i) { return std::isfinite(out[i].mean_snr_db) ? out[i].mean_snr_db : -std::numeric_limits<double>::infinity(); };
+  std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return key(a) > key(b); });
+  std::vector<double> range(out.size()), bearing(out.size());
+  for (std::size_t i = 0; i < out.size(); ++i) {
+    const double dx = out[i].x - o.origin_x, dy = out[i].y - o.origin_y;
+    range[i] = std::hypot(dx, dy);
+    bearing[i] = std::atan2(dx, dy);
+  }
+  auto established = [&](std::size_t i) { return out[i].kind == Kind::Mover || out[i].kind == Kind::Static || out[i].kind == Kind::Line; };
+  auto linked = [&](std::size_t i, std::size_t j) {   // false when anything is NaN, as in classify.py
+    const double db = std::abs(std::atan2(std::sin(bearing[i] - bearing[j]), std::cos(bearing[i] - bearing[j])));
+    const double dv = std::hypot(out[i].vx - out[j].vx, out[i].vy - out[j].vy);
+    return std::abs(range[i] - range[j]) <= o.multipath_max_excess_range && db <= o.multipath_bearing && dv <= o.multipath_velocity;
+  };
+  std::vector<bool> taken(out.size(), false), member(out.size(), false);
+  for (const std::size_t a : order) {
+    if (!established(a)) continue;
+    if (!linked(a, a)) continue;   // NaN range, bearing or velocity: nothing to group by; left as it is
+    while (!taken[a]) {            // again when the anchor itself lay beyond its group's object
+      std::vector<std::size_t> group{a};
+      std::fill(member.begin(), member.end(), false);
+      member[a] = true;
+      for (bool grew = true; grew;) {
+        grew = false;
+        for (std::size_t i = 0; i < out.size(); ++i) {
+          if (taken[i] || member[i]) continue;
+          for (const std::size_t g : group) {
+            if (linked(i, g)) {
+              group.push_back(i);
+              member[i] = true;
+              grew = true;
+              break;
+            }
+          }
+        }
+      }
+      // The anchor is established, so an established member exists.
+      std::size_t obj = a;
+      for (const std::size_t i : group) {
+        if (established(i) && (range[i] < range[obj] || (range[i] == range[obj] && out[i].id < out[obj].id))) obj = i;
+      }
+      for (const std::size_t i : group) {
+        if (std::abs(range[i] - range[obj]) > o.multipath_max_excess_range) continue;   // not its echo (sonar-a5x)
+        taken[i] = true;
+        if (i != obj) {
+          out[i].kind = Kind::Multipath;
+          out[i].parent = out[obj].id;
+        }
+      }
+    }
+  }
+}
+
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o) {
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
@@ -318,68 +389,7 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
       if (c.kind == Kind::Mover && c.extent_cells < o.min_mover_cells) c.kind = Kind::Uncertain;
     }
   }
-  if (o.multipath) {
-    // Echo grouping (ours, D-155; classify.py has the reasons): from each established track, strongest first, a group
-    // grown transitively from the tracks not yet grouped: a track joins when it is within multipath_max_excess_range in
-    // range (either side), the bearing gate and the velocity gate of ANY member, until none joins. The group's object is
-    // its established member nearest in range (ties: the lowest id), every other member is multipath of it. A member
-    // farther than multipath_max_excess_range from the object in range is left out of the group and free for one of
-    // its own; when it is the anchor, the anchor groups again from what is left (sonar-a5x: grown transitively, a chain
-    // of arrivals linked two objects farther apart than one gate).
-    std::vector<std::size_t> order(out.size());
-    for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
-    auto key = [&](std::size_t i) { return std::isfinite(out[i].mean_snr_db) ? out[i].mean_snr_db : -std::numeric_limits<double>::infinity(); };
-    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return key(a) > key(b); });
-    std::vector<double> range(out.size()), bearing(out.size());
-    for (std::size_t i = 0; i < out.size(); ++i) {
-      const double dx = out[i].x - o.origin_x, dy = out[i].y - o.origin_y;
-      range[i] = std::hypot(dx, dy);
-      bearing[i] = std::atan2(dx, dy);
-    }
-    auto established = [&](std::size_t i) { return out[i].kind == Kind::Mover || out[i].kind == Kind::Static || out[i].kind == Kind::Line; };
-    auto linked = [&](std::size_t i, std::size_t j) {   // false when anything is NaN, as in classify.py
-      const double db = std::abs(std::atan2(std::sin(bearing[i] - bearing[j]), std::cos(bearing[i] - bearing[j])));
-      const double dv = std::hypot(out[i].vx - out[j].vx, out[i].vy - out[j].vy);
-      return std::abs(range[i] - range[j]) <= o.multipath_max_excess_range && db <= o.multipath_bearing && dv <= o.multipath_velocity;
-    };
-    std::vector<bool> taken(out.size(), false), member(out.size(), false);
-    for (const std::size_t a : order) {
-      if (!established(a)) continue;
-      if (!linked(a, a)) continue;   // NaN range, bearing or velocity: nothing to group by; left as it is
-      while (!taken[a]) {            // again when the anchor itself lay beyond its group's object
-        std::vector<std::size_t> group{a};
-        std::fill(member.begin(), member.end(), false);
-        member[a] = true;
-        for (bool grew = true; grew;) {
-          grew = false;
-          for (std::size_t i = 0; i < out.size(); ++i) {
-            if (taken[i] || member[i]) continue;
-            for (const std::size_t g : group) {
-              if (linked(i, g)) {
-                group.push_back(i);
-                member[i] = true;
-                grew = true;
-                break;
-              }
-            }
-          }
-        }
-        // The anchor is established, so an established member exists.
-        std::size_t obj = a;
-        for (const std::size_t i : group) {
-          if (established(i) && (range[i] < range[obj] || (range[i] == range[obj] && out[i].id < out[obj].id))) obj = i;
-        }
-        for (const std::size_t i : group) {
-          if (std::abs(range[i] - range[obj]) > o.multipath_max_excess_range) continue;   // not its echo (sonar-a5x)
-          taken[i] = true;
-          if (i != obj) {
-            out[i].kind = Kind::Multipath;
-            out[i].parent = out[obj].id;
-          }
-        }
-      }
-    }
-  }
+  if (o.multipath) group_echoes(out, o);
   return out;
 }
 
