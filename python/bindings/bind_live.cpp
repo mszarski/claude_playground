@@ -967,6 +967,7 @@ void bind_live(py::module_& m) {
         get("cfar_search_factor", o.detector.search_factor);
         get("cfar_merge_m", o.detector.merge_m);
         if (kw.contains("cfar_range_estimate") && !kw["cfar_range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
+        if (kw.contains("range_doppler")) o.range_doppler = live::parse_range_doppler(kw["range_doppler"].cast<std::string>());   // sonar-fyj
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) {

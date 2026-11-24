@@ -393,4 +393,16 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
   return out;
 }
 
+void shift_for_target_doppler(std::vector<TrackClass>& classes, double factor, double origin_x, double origin_y) {
+  for (TrackClass& c : classes) {
+    const double dx = c.x - origin_x, dy = c.y - origin_y;
+    const double r = std::hypot(dx, dy);
+    if (!(r > 0.0) || !std::isfinite(c.vx) || !std::isfinite(c.vy)) continue;
+    const double ux = dx / r, uy = dy / r;
+    const double shift = factor * -(c.vx * ux + c.vy * uy);
+    c.x += shift * ux;
+    c.y += shift * uy;
+  }
+}
+
 }  // namespace sonar::live

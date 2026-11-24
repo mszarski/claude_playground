@@ -364,6 +364,26 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     return out
 
 
+def shift_for_target_doppler(classes: list[TrackClass], factor: float, origin=(0.0, 0.0)) -> list[TrackClass]:
+    """The target's part of the LFM range-Doppler correction (sonar-fyj; the live chain's `range_doppler: full`), in
+    place: each class's position is moved along the line of sight from `origin` (the sonar, in the tracker's frame) by
+    `factor` (detect.lfm_range_doppler_factor) times the closing speed its fitted velocity gives, -v . u. The ownship's
+    part is taken out of each detection before tracking; the target's speed is known only from its track, so its part
+    is taken out of the reported position. The velocity, and the track's filter, are not changed. A position at the
+    origin or a velocity that is not finite is left as it is. libs/live shift_for_target_doppler is the same."""
+    o = np.asarray(origin, dtype=float)
+    for c in classes:
+        d = np.asarray(c.position, dtype=float) - o
+        r = float(np.hypot(d[0], d[1]))
+        v = np.asarray(c.velocity, dtype=float)
+        if not (r > 0.0 and np.all(np.isfinite(v))):
+            continue
+        u = d / r
+        shift = factor * -float(v @ u)
+        c.position = (float(c.position[0] + shift * u[0]), float(c.position[1] + shift * u[1]))
+    return classes
+
+
 def group_echoes(classes: list[TrackClass], multipath: dict, bounces=()) -> list[TrackClass]:
     """Echo grouping (D-155, D-172), in place: classify_tracks' last step with `multipath` given ({"max_excess_range": m,
     "bearing": rad, "velocity": m/s, "origin": (x, y)}). Returns `classes`.
