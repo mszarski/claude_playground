@@ -3056,3 +3056,95 @@ changed class. The classes equal the gallery seed of `classify_rules_eval_afe080
   test expectation changed (`test_documented_full_size_classes` passes on the new `gallery.json`).
 - Not done: the `minefield_sas` echo-synthesis benchmark row in RESULTS is of the old scene (14,870
   scatterers, now 20,558); `docs/SCENARIOS.md`'s gallery tables are stale.
+
+### D-175 Tracker: earlier detections at the track's time; bounces never a group's object; pings without time counted (issues sonar-uc5, sonar-bal, sonar-4bs)
+
+None of these moves a default result: with increasing transmit times and a ping interval longer than
+R/c the tracker golden (D-156), the classes golden (D-157), the engine-parity tests and the C++
+tracker, classify and report tests are unchanged. Both engines throughout.
+- sonar-uc5: a detection timed before the time a track already holds is gated against and taken by
+  it at that time (dt = 0; ours), not predicted back to, so a track's history stays in time order.
+  One target cannot give such a detection when transmit times increase by more than the echo delays
+  differ; it comes from another arrival or from pings without timestamps. Rejecting it would lose
+  closing targets on such sources; reordering would be an out-of-sequence update. A held missed row
+  was already left out of the fit (D-157; a test now holds it). Changed on purpose: the C++ test
+  `Tracker.APredictionToAnEarlierDetectionStillGrowsTheDepthVariance` became
+  `Tracker.AnEarlierDetectionIsTakenAtTheTracksTimeWithItsDepthVariance`; the illustration in D-165's
+  test now reads 874 m/s from the old fit rule (asserted > 500, was > 1000; the guard is unchanged).
+- sonar-bal: echo grouping is its own step (`group_echoes`), run after the elevation step finds the
+  tracks outside the water; those are made multipath first, so a bounce is never an anchor or an
+  object, joins a group as a member, and otherwise has no parent. No track's parent is multipath.
+  With no bounce the grouping is unchanged. Not measured on gallery captures with `multipath` on.
+- sonar-4bs: pings whose transmit time does not increase are counted (`pings_without_time`, a report
+  member once above 0; one warning). `tracker.ping_interval_s` (opt-in, default off;
+  `tracker_ping_interval_s`) advances the tracker's clock by that interval on such pings; no
+  interval is assumed by default.
+- Full GPU suite 1925 passed, 93 skipped (L4, HF job 6b0536c7ca8b51043c3b3ed9, with D-176 to D-178).
+
+### D-176 Popoto gallery bearing: opt-in sub-grid estimate; the Kalman state's lag explained (issues sonar-4s2, sonar-i6i; no default change)
+
+The gallery's Popoto bearing is the power-weighted mean over a hit's flagged cells; at low SNR that
+set is a small, noise-cut part of a 5° beam on a 0.5° grid, worse than the strongest row's grid
+bearing below 12.5 dB. `tools/gallery.py` `POPOTO_BEARING = "parabola"` (opt-in; `classify_rules_eval
+--popoto-bearing`) takes the vertex of a parabola through the bearing profile in dB about the
+strongest flagged row (ours, algebra in the docstring; the textbook reference could not be opened:
+unconfirmed). Measured on `--profiles` captures (L4 job 6b0506e2c97b8ed4fcd729d6, six Popoto scenes ×
+10 seeds, `tools/popoto_bearing_study.py`): per-hit RMS bearing error at 12 km 0.447 -> 0.297° at
+9-11.5 dB, 0.138 -> 0.109° at 14-17 dB, no gain above 17 dB; 12 km report worst cross-range −94.7 ->
+−50.2 m, speed error 0.77 -> 0.41 m/s. Kept opt-in because it is worse elsewhere: 12 km distance to
+the hull median 2.3 -> 3.3 m, `gravel_30m` mean cross-range −9.7 -> −11.8 m, `far_mover` mean |cross|
+5.3 -> 5.8 m. Not adopted (offline only): an SNR-weighted line fit (12 km worst −94.7 -> −68.1 m).
+The repeatable per-ping bias of the five-point ship side-on (glint) is physics and is left.
+sonar-i6i: on current code the Kalman state is not farther than the fitted line at 12 km (4/10
+seeds). Where detections are clean it trails the report by the zero-velocity birth lag under the
+gallery tracker's 1° bearing sigma (scatter is 0.05-0.3°): `winter_sand_200m` +15.4 to +17.0 m on
+every seed against +15.7 m noise-free. The 12 km outliers (seeds 56, 57) are low-SNR end points both
+estimates share; track hopping between arrivals 35-109 m beyond the ship on seeds 53, 56, 57, 59.
+`classify_rules_eval --profiles` records each hit's bearing profiles for such studies.
+
+### D-177 Every options dict refuses a key it does not read; index skips; failed stops; the beads hook in worktrees (issues sonar-1rf, sonar-2ht, sonar-qnk, sonar-dh6)
+
+- sonar-1rf (extends D-166): PingAssemblerCpp, PingDecimator, StreamAssemblerCpp,
+  live_decimate_plan/record, live_synchronise, NavigationCpp (with water_depth), WaterDepthTracker,
+  SoundSpeedLadder, live_family_profile, live_water_profile, live_derive and live_detector_plan refuse
+  an unread key, naming it and the nearest key read; `sonar_live` key=value says "unknown option K; did
+  you mean J?" (`live::nearest_key`, the D-166 rule). Python: decimate, nav (`from_config` and
+  `program_options` now refuse unknown nav keys), elevation.profile (with `built` and `supplied`),
+  detector_plan and budget_threshold_db. A reference dict may carry the sonar file's mode, level and
+  channels. water_depth reads `source` ("altitude" is from_altitude; the two must agree). What could get
+  worse: an out-of-repo configuration with a stale nav, profile or water_depth key now stops; all 18
+  in-repo deploy and build files pass. Not covered: the stages' own key=value readers (tonal_,
+  multipath_depth_, coverage_).
+- sonar-2ht (amends D-161): a ping-index jump of d counts d − 1 lost pings only if, besides the timing
+  rule, a given-up or still-awaited sample span lies between the two transmits (a ping lost whole
+  leaves samples missing; a renumbering leaves none; ours). Both engines. Fuzz, 4000 provoked streams:
+  renumberings counted as loss 1268/1378 -> 0/1378; with an unrelated lost block 574/622 -> 162/622;
+  losses missed 35/2000 -> 35/2000. Still miscounts a skip that also lost samples in that gap, and a
+  real loss with jitter beyond half an interval.
+- sonar-qnk: `run_receiver` keeps an application alive only after a failed stop (closes D-163's open).
+- sonar-dh6: `.beads/hooks/pre-commit` exits before calling bd in a linked worktree
+  (`BEADS_HOOK_IN_WORKTREE=1` overrides), so a worktree commit no longer exports into the main
+  checkout's `issues.jsonl`; main-checkout commits are unchanged (tested with a stub bd).
+
+### D-178 The gallery's range in the multipath scenes is the leading edge (owner's choice, issues sonar-ca3, sonar-a98)
+
+The 33-41 m range error of `popoto_far_mover` and `popoto_env_gravel_30m`, and `flank_patrol`'s +29 m,
+came from `detect.cluster`'s power-weighted centroid of one detection made of several surface and
+bottom arrivals, the later ones stronger. Separated with one-ping host simulations (m from the
+target's centre): direct path only far_mover +0.7, gravel −0.3, flank −1.3 (timing and placement
+correct); point target with multipath gravel +34.1, flank +27.9, far_mover's echo split from +2.7 to
++100 m (strongest +41); LFM coupling f0·v·T/B 0.9-2.0 m (far_mover), 3.1-4.8 m (gravel), 0.85-1.2 m
+(flank), nearer for these closing targets. `tools/gallery.py` (`RANGE_ESTIMATE`, `--range-estimate`)
+and `tools/classify_rules_eval.py` now default to `first` (`Detection.first_range`; the live chain's
+default since D-160); `centroid` stays selectable; a capture with no recorded estimate is read as
+centroid and a default run refuses to reuse it. Distance to the hull, ten seeds (Popoto L4 job
+6b05072eca8b51043c3b0d03 against the D-172 captures; flank on host from saved pings):
+`far_mover` 36.9 -> 0.4 m; `flank_patrol` submarine 30.0 -> 1.1 m, wreck 6.9 -> 5.2 m, false movers 1
+-> 0. What got worse: `gravel_30m` 34.3 m beyond -> 10.1 m short (the near end of a hull at about 15°
+aspect read at the cluster's mean bearing, plus the closing up-chirp's coupling), mover -> uncertain
+on seed 52; `winter_sand_200m` 0.8 -> 2.5 m; `popoto_12km` median 2.3 -> 3.4 m, seed 60 3.0 -> 65.4 m
+(track hopping, −65 m cross-range); seeds 56 / 57 better (34.8 -> 5.4, 18.6 -> 7.0 m). `flank_patrol` is
+now classified (`run_flank` -> `classify_and_score` through `flank_tracks_yx`: its tracker's (x, y)
+was read as (y, x)) and `classify_rules_eval --scenes flank_patrol` scores it; its `small_vehicle` has
+no detection near it on any ping. The committed gallery (D-174, centroid) is regenerated separately.
+Full GPU suite 1925 passed, 93 skipped (HF job 6b0536c7ca8b51043c3b3ed9).
