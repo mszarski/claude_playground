@@ -337,6 +337,29 @@ def run_buried(name, cfg, backend, quick):
 
 # --- flank array -----------------------------------------------------------------------------
 
+# The range of a detection in the scenes that run the energy detector over multipath (run_flank, run_popoto_far):
+# "centroid" (the default, detect.cluster's power-weighted centroid of the detection's cells: the committed gallery) or
+# "first" (opt-in, `--range-estimate first`: the nearest of its cells, Detection.first_range, the leading edge). In
+# these scenes the echo of one object is several arrivals by the surface and bottom, which merge into one detection
+# whose centroid lies beyond the object by their energy-weighted excess path (sonar-ca3, sonar-a98); the leading edge
+# is the earliest, the direct path's. The live chain reads the leading edge by default (D-160); its detector is another
+# one (multiscale), so the two are not the same numbers.
+RANGE_ESTIMATES = ("centroid", "first")
+RANGE_ESTIMATE = "centroid"
+
+
+def set_range_estimate(hits, estimate=None):
+    """`hits` (detect.cluster's) with their range the estimate `estimate` (default RANGE_ESTIMATE) asks for:
+    unchanged for "centroid", Detection.first_range for "first". Changes the detections in place and returns them."""
+    estimate = RANGE_ESTIMATE if estimate is None else estimate
+    if estimate not in RANGE_ESTIMATES:
+        raise ValueError(f"range estimate {estimate!r}: one of {', '.join(RANGE_ESTIMATES)}")
+    if estimate == "first":
+        for h in hits:
+            h.range = float(h.first_range)
+    return hits
+
+
 def run_flank(name, cfg, backend, quick):
     result = run_scenario(cfg, backend=backend)
     interval = float(cfg["pings"]["interval"])
@@ -357,7 +380,7 @@ def run_flank(name, cfg, backend, quick):
         ranges = bm.ranges[:n].reshape(-1, k).mean(axis=1)
         hits = detect.cluster(detect.cfar(power, pfa=1e-6, guard=15, train=60), power, ranges, bearings,
                               guard=15, train=60)
-        hits = [h for h in hits if h.snr_db > 12.0]
+        hits = set_range_estimate([h for h in hits if h.snr_db > 12.0])
         for h in hits:
             h.time = i * interval + echo_delay(rec, h.range)      # where the echo shows the target (D-156)
         counts.append(len(hits))
@@ -374,6 +397,11 @@ def run_flank(name, cfg, backend, quick):
         truth[item["label"]] = TrueObject(np.asarray(item["positions"], dtype=float).mean(axis=0), v, item_footprint(item))
         start += n
     metrics = {"pings": len(result.records), "detections_per_ping": counts, "confirmed_tracks": len(tracks), "targets": {}}
+    # Classified as the other world-frame scenes are, through classify_and_score in the tracker order the scoring reads
+    # (flank_tracks_yx: this tracker's state is (x, y)); the classify options are classify_tracks' defaults, the gate
+    # this scene's own 60 m, the array (the origin) the sonar for the outlier test (sonar-a98). Added; the targets
+    # scored below are unchanged.
+    _, metrics["classification"] = classify_and_score(flank_tracks_yx(tracks), truth, t_last, 60.0, origin=(0.0, 0.0))
     for label, obj in truth.items():
         pos, vel = obj
 
@@ -431,6 +459,22 @@ def run_flank(name, cfg, backend, quick):
                 extent=[ranges[0], ranges[-1], np.degrees(bearings[0]), np.degrees(bearings[-1])], aspect="auto",
                 xlabel="range (m)", ylabel="bearing (deg)", vmin=0, vmax=40, overlays=overlays, figsize=(7.0, 4.6))
     return fig, metrics, anim
+
+
+def flank_tracks_yx(tracks):
+    """run_flank's tracks seen in the order the gallery's scoring and classify_and_score read (world_tracks: state
+    [y, x, vy, vx], history (t, y, x), measured (y, x)). run_flank feeds its tracker bearings from broadside (+y)
+    towards +x, so its states are (x, y, vx, vy); scored as they are, object_track compared a track's (y, x) with the
+    truth (sonar-a98). A view with the axes swapped; everything else (times, pings, snr, cells, counts) as tracked."""
+    from types import SimpleNamespace
+    out = []
+    for t in tracks:
+        s = np.asarray(t.state, dtype=float)
+        out.append(SimpleNamespace(
+            id=t.id, state=np.array([s[1], s[0], s[3], s[2]]), hits=t.hits, misses=getattr(t, "misses", 0),
+            history=[(h[0], h[2], h[1]) for h in t.history], measured=[(m[1], m[0]) for m in getattr(t, "measured", [])],
+            pings=list(getattr(t, "pings", [])), snr=list(t.snr), cells=list(t.cells)))
+    return out
 
 
 def run_popoto(name, cfg, backend, quick):
@@ -1008,7 +1052,7 @@ def run_popoto_far(name, cfg, backend, quick):
         power = fine[:, :n].reshape(len(bearings), -1, k).mean(axis=2)
         ranges = bm.ranges[:n].reshape(-1, k).mean(axis=1)
         hits = detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150)
-        hits = [h for h in hits if h.snr_db > 9.0]
+        hits = set_range_estimate([h for h in hits if h.snr_db > 9.0])
         # Bearing is from broadside (+y) towards +x, the array's own axis; placed from where the array is when the echo
         # arrives (echo_position; sonar-960: from the array at transmit the ship's echoes lay 24 m behind it).
         v_rx, c = rec.geometry.rx_pose.velocity, rec.environment.sound_speed
@@ -1136,7 +1180,11 @@ def main():
     ap.add_argument("--out", default=None, help=f"output directory (default: docs/figures; with --quick: {QUICK_OUT})")
     ap.add_argument("--quick", action="store_true", help="thinned scenes and fewer pings, for a CPU")
     ap.add_argument("--no-animation", action="store_true", help="figures and numbers only")
+    ap.add_argument("--range-estimate", choices=RANGE_ESTIMATES, default="centroid",
+                    help="detection range in flank_patrol and the Popoto tracking scenes (RANGE_ESTIMATE; default %(default)s)")
     args = ap.parse_args()
+    global RANGE_ESTIMATE
+    RANGE_ESTIMATE = args.range_estimate
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
     out = output_dir(args.out, args.quick)
     out.mkdir(parents=True, exist_ok=True)
@@ -1166,6 +1214,8 @@ def main():
             metrics["animation"] = f"{name}.gif"
         metrics["backend"] = args.backend
         metrics["quick"] = bool(args.quick)
+        if args.range_estimate != "centroid" and RUNNERS[name] in (run_flank, run_popoto_far):
+            metrics["range_estimate"] = args.range_estimate
         fig.savefig(out / f"{name}.png", dpi=110)
         plt.close(fig)
         summary[name] = metrics

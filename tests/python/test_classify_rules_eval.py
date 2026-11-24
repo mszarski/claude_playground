@@ -256,3 +256,45 @@ def test_footprints_of_the_scene_items():
     assert gallery.item_footprint({"type": "points", "positions": [[1.0, 2.0, 0.0]]}) is None
     back = cre.truth_from_json(json.loads(json.dumps(cre.truth_to_json({"ship": ship}))))
     assert np.allclose(back["ship"].footprint, ship.footprint) and np.allclose(back["ship"][1], ship[1])
+
+
+def test_flank_patrol_tracks_are_scored_in_the_order_the_scoring_reads():
+    """sonar-a98: gallery.run_flank's tracker takes bearings from broadside (+y) towards +x, so its states are world
+    (x, y); the scoring (object_track, classify_and_score, track_error) reads (y, x). A submarine crossing at 3 m/s at
+    about 2.96 km, tracked by run_flank's tracker from the detections it would make: as tracked, no track is within the
+    gate of it (its x and y swapped are 3.5 km away); seen through gallery.flank_tracks_yx it is the mover, scored with
+    the range / cross-range split about the array (classify_and_score's `origin`, which classify_rules_eval reads)."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gallery
+    from gpusonar import detect
+    interval, c = 12.0, 1500.0
+    p0, v = np.array([-600.0, 2900.0]), np.array([3.0, 0.0])
+    tracker = detect.Tracker(range_sigma=5.0, bearing_sigma=np.radians(0.7), confirm_hits=3, max_misses=2,
+                             initial_speed_sigma=5.0)
+    for i in range(6):
+        t = i * interval
+        r = 3000.0
+        for _ in range(20):                                 # where the submarine is when the sound reaches it (D-156)
+            q = p0 + v * (t + r / c)
+            q = q + 4.0 * q / np.hypot(*q)                  # 4 m beyond its centre in range
+            r = float(np.hypot(*q))
+        h = detect.Detection(r, float(np.arctan2(q[0], q[1])), 20.0, 3)   # run_flank: bearing from +y towards +x
+        h.time = t + r / c
+        tracks = tracker.update(t, [h])
+    truth = {"submarine": gallery.TrueObject(np.array([-600.0, 2900.0, 60.0]), np.array([3.0, 0.0, 0.0]),
+                                             gallery.convex_hull([[-628.0, 2900.0], [-572.0, 2900.0]]))}
+    t_last = 5 * interval
+    kinds = {t.id: "mover" for t in tracks}
+    assert gallery.object_track(tracks, kinds, truth["submarine"], 60.0) is None          # as tracked: (x, y) read as (y, x)
+    yx = gallery.flank_tracks_yx(tracks)
+    assert np.allclose(yx[0].state[:2], tracks[0].state[1::-1]) and np.allclose(yx[0].history[-1][1:], tracks[0].history[-1][:0:-1])
+    classes, out = gallery.classify_and_score(yx, truth, t_last, 60.0, origin=(0.0, 0.0))
+    assert out["targets"]["submarine"]["kind"] == "mover" and out["movers_not_on_a_moving_object"] == 0
+    assert out["targets"]["submarine"]["speed_m_s"] == pytest.approx(3.0, abs=0.1)
+    # Through the capture's JSON and classify_rules_eval's scoring: the 4 m beyond the centre is range, not cross-range.
+    cap = {"tracks": [cre.track_to_json(t) for t in yx], "truth": cre.truth_to_json(truth), "t_last": t_last, "gate": 60.0,
+           "classify_kw": {"origin": (0.0, 0.0)}, "seed": 17}
+    sub = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]["submarine"]
+    assert sub["kind"] == "mover" and sub["correct"]
+    assert sub["report_centroid_range_error_m"] == pytest.approx(4.0, abs=0.5) and abs(sub["report_centroid_cross_range_error_m"]) < 0.5

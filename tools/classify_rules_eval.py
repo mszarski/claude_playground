@@ -60,6 +60,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENES = ("fls_120k_cluttered_seabed", "fls_120k_rough_surface", "fls_170k_traffic", "fls_120k_transit",
           "fls_170k_transit", "fls_330k_transit", "popoto_12km", "popoto_far_mover", "popoto_env_winter_sand_200m",
           "popoto_env_gravel_30m", "popoto_env_summer_mud_60m", "popoto_env_deep_silt_1000m")
+# flank_patrol (gallery.run_flank: a fixed flank array, the gallery's tracker on bearings from broadside, classified
+# with classify_tracks' defaults and scored with a 60 m gate) is accepted by --scenes; it is not in the default list
+# so that the pooled numbers of a default run stay comparable with earlier ones (sonar-a98).
 # Study scenes, not in the gallery: name -> the gallery runner that runs them (--scenes names them).
 # popoto_12km_two_ships: two ships at one bearing and velocity 850 m apart, the echo grouping chain-merge test (sonar-a5x).
 STUDY_SCENES = {"popoto_12km_two_ships": "run_popoto_far"}
@@ -213,8 +216,10 @@ def evaluate_capture(cap: dict) -> dict:
     tracks = [track_from_json(t) for t in cap["tracks"]]
     truth = truth_from_json(cap["truth"])
     mp = cap["classify_kw"].get("multipath") or {}
-    # The ownship at the last ping, where the scene's echo grouping is given it (the Popoto scenes): tracker (y, x).
-    origin = (mp["origin"][1], mp["origin"][0]) if mp.get("origin") is not None else None
+    # The ownship at the last ping, where the scene's echo grouping is given it (the Popoto scenes), else the classify
+    # options' own `origin` (flank_patrol: the array, fixed): tracker (y, x).
+    at = mp.get("origin") if mp.get("origin") is not None else cap["classify_kw"].get("origin")
+    origin = (at[1], at[0]) if at is not None else None
     out, base = {}, None
     for key, rule in grid():
         kw = {k: v for k, v in cap["classify_kw"].items() if k != "detections"}
@@ -333,9 +338,11 @@ def table(agg: dict) -> str:
 
 # --- capture (simulation) ------------------------------------------------------------------------
 
-def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
+def capture(name: str, seed_offset: int, backend: str, quick: bool, range_estimate: str = "centroid") -> dict:
     """Run one gallery scene with its seed moved by `seed_offset`; return its confirmed tracks (with real cell
-    counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them."""
+    counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them.
+    `range_estimate`: gallery.RANGE_ESTIMATE for the run (the detection range of flank_patrol and the Popoto scenes;
+    "first", the leading edge, is opt-in: sonar-ca3, sonar-a98)."""
     sys.path.insert(0, str(ROOT / "tools"))
     import gallery
     import matplotlib.pyplot as plt
@@ -379,8 +386,9 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         got.update(tracks=tracks, truth=truth, t_last=float(t_last), gate=float(gate), kw=kw)
         return orig_score(tracks, truth, t_last, gate, **kw)
 
-    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score
+    saved = gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.RANGE_ESTIMATE
     gallery.detect, gallery.world_tracks, gallery.classify_and_score = DetectProxy(), world_tracks, classify_and_score
+    gallery.RANGE_ESTIMATE = range_estimate
     try:
         cfg = gallery.load_scenario_config(name)
         own_seed = int(cfg.get("seed", 0))
@@ -393,11 +401,11 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool) -> dict:
         plt.close(out[0])
         seconds = time.perf_counter() - t0
     finally:
-        gallery.detect, gallery.world_tracks, gallery.classify_and_score = saved
+        gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.RANGE_ESTIMATE = saved
     if not got:
         raise RuntimeError(f"{name}: the gallery runner did not classify")
     return {"scene": name, "scene_seed": own_seed, "seed": own_seed + int(seed_offset), "seed_offset": int(seed_offset),
-            "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1),
+            "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1), "range_estimate": range_estimate,
             "tracks": [track_to_json(t) for t in got["tracks"]], "truth": truth_to_json(got["truth"]),
             # The grid sets `detections` itself (its first cell is off), so the gallery's own rules (D-154) are
             # kept apart and not passed on.
@@ -426,6 +434,9 @@ def main(argv=None):
     ap.add_argument("--recapture", action="store_true", help="simulate again even where a capture exists")
     ap.add_argument("--evaluate-only", action="store_true", help="no simulation: score the captures already there")
     ap.add_argument("--quick", action="store_true", help="the gallery's thinned scenes (a CPU smoke run, not the evaluation)")
+    ap.add_argument("--range-estimate", choices=("centroid", "first"), default="centroid",
+                    help="detection range of flank_patrol and the Popoto scenes (gallery.RANGE_ESTIMATE; default "
+                         "%(default)s); a capture already in --captures made with another is refused")
     ap.add_argument("--json", default=None, help="write the result JSON here")
     ap.add_argument("--table", default=None, help="write the readable table (Markdown) here")
     ap.add_argument("--commit", default=None, help="the tree's commit, recorded in the JSON (default: git, else $GPUSONAR_COMMIT)")
@@ -445,8 +456,12 @@ def main(argv=None):
             for k in range(args.seeds):
                 path = cap_dir / f"{name}_k{k * args.seed_step}{'_quick' if args.quick else ''}.json"
                 if path.exists() and not args.recapture:
+                    have = json.loads(path.read_text()).get("range_estimate", "centroid")
+                    if have != args.range_estimate:
+                        raise SystemExit(f"{path} was captured with range estimate {have!r}, not {args.range_estimate!r}: "
+                                         "use another --captures directory or --recapture")
                     continue
-                cap = capture(name, k * args.seed_step, backend, args.quick)
+                cap = capture(name, k * args.seed_step, backend, args.quick, args.range_estimate)
                 cap["commit"] = commit
                 path.write_text(json.dumps(cap))
                 print(f"[{name} seed {cap['seed']}] {len(cap['tracks'])} tracks, {cap['seconds']} s", flush=True)
@@ -462,6 +477,7 @@ def main(argv=None):
             info.setdefault(name, {})[str(cap["seed"])] = {"tracks": len(cap["tracks"]), "seconds": cap["seconds"],
                                                            "backend": cap["backend"], "quick": cap["quick"],
                                                            "commit": cap.get("commit"), "gate_m": cap["gate"],
+                                                           "range_estimate": cap.get("range_estimate", "centroid"),
                                                            "classify_kw": cap["classify_kw"],
                                                            "gallery_classification": cap["gallery_classification"]}
     if not per_capture:
