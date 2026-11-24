@@ -117,6 +117,9 @@ def test_flank_patrol_detects_and_tracks():
     assert abs(sub["track_velocity"][1]) < 1.0
     assert wreck["tracked"] and np.hypot(*wreck["track_velocity"]) < 0.6     # it does not move
     assert max(m["detections_per_ping"]) <= 6                               # no flood of false alarms
+    # Classified and scored as the other world-frame scenes (sonar-a98: the tracker's (x, y) seen as (y, x)).
+    cls = m["classification"]["targets"]
+    assert cls["submarine"]["kind"] == "mover" and cls["wreck"]["kind"] == "static"
 
 
 # --- the owner's designs: moving ownship, world-fixed boundaries -----------------------------
