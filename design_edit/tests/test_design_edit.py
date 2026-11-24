@@ -230,3 +230,41 @@ def test_strip_fences_gemma_thinking_channel():
     from design_edit.schema import strip_fences
     assert strip_fences("<|channel>thought\nThe button is n4.<channel|>set n4 fill=#2563EB") == "set n4 fill=#2563EB"
     assert strip_fences("<|channel>thought\nstill thinking") == ""
+
+
+def test_checks_keep_in_keep_out_and_noop_renorm():
+    from design_edit.checks import grade_checks
+    before = ('frame#n1 "Page" layout=col w=400\n'
+              '  frame#n2 "Save button" pad=8 fill=#2563EB radius=8\n'
+              '    text#n3 "Save label" text="Save" size=14 color=#FFFFFF\n'
+              '  text#n4 "Title" text="Hi" size=20 color=#111827')
+    checks = [{"node": "n2", "prop": "opacity", "eq": 0.5}, {"node": "n2", "prop": "fill", "unchanged": True}]
+    allowed = ["n2", "n3"]
+    good = grade_checks(before, "set n2 opacity=0.5", checks, allowed)
+    assert good["pass"] and good["score"] == 1.0
+    noop = grade_checks(before, "", checks, allowed)
+    assert not noop["pass"] and noop["score"] == 0.0
+    overedit = grade_checks(before, "set n2 opacity=0.5\nset n4 size=24", checks, allowed)
+    assert not overedit["pass"] and 0 < overedit["score"] < 1 and overedit["keep_out"] < 1
+    wrong = grade_checks(before, "set n2 fill=#D1D5DB", checks, allowed)
+    assert not wrong["pass"] and wrong["score"] < good["score"]
+    assert not grade_checks(before, "set n9 opacity=0.5", checks, allowed)["valid"]
+
+
+def test_checks_new_node_order_same():
+    from design_edit.checks import grade_checks
+    before = ('frame#n1 "Form" layout=col\n'
+              '  frame#n2 "Field" layout=col\n'
+              '    text#n3 "Label" text="Email" size=13\n'
+              '    frame#n4 "Input" stroke=#E5E7EB\n'
+              '  frame#n5 "Other" fill=#FFFFFF stroke=#E5E7EB')
+    checks = [{"new_node": {"parent": "n2", "type": "text", "text_contains": "required",
+                            "props": {"size": {"le": 13}}}},
+              {"node": "n4", "prop": "stroke", "eq": "#dc2626"},
+              {"same": ["n4", "n5"], "props": ["fill"]}]
+    patch = 'set n4 stroke=#DC2626 fill=#FFFFFF\ninsert n2 2 text#n6 "Error" text="Email is required" size=12'
+    r = grade_checks(before, patch, checks, ["n2", "n4"])
+    assert r["pass"], r
+    r2 = grade_checks(before, 'insert n2 0 text#n6 "Error" text="Required" size=12\nset n4 stroke=#DC2626',
+                      checks + [{"order": ["n3", "n4", "n6"]}], ["n2", "n4"])
+    assert not r2["pass"]

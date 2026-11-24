@@ -30,6 +30,16 @@ from design_edit.schema import PatchError, apply_patch, parse, serialize, strip_
 
 
 def grade_row(row: dict, output: str, cache: dict, judge: str) -> dict:
+    g = _grade_row(row, output, cache, judge)
+    if row.get("checks"):  # deterministic keep-in/keep-out grade (design_edit.checks), where the item has one
+        from design_edit.checks import grade_checks
+
+        d = grade_checks(row["before"], strip_fences(output).strip(), row["checks"], row["allowed"])
+        g |= {"det_pass": d["pass"], "det_score": d["score"]}
+    return g
+
+
+def _grade_row(row: dict, output: str, cache: dict, judge: str) -> dict:
     before = parse(row["before"])
     patch = strip_fences(output).strip()
     if not patch:
@@ -69,7 +79,8 @@ def main() -> None:
     args = ap.parse_args()
     from datasets import load_dataset
 
-    rows = list(load_dataset(args.dataset, split="test"))
+    rows = (list(load_dataset(args.dataset, split="test")) if not args.dataset.endswith(".jsonl")
+            else [json.loads(line) for line in open(args.dataset)])
     cache = json.loads(Path(args.cache).read_text()) if os.path.exists(args.cache) else {}
     names = args.names or [Path(p).stem for p in args.outputs]
     report = {}
@@ -87,6 +98,13 @@ def main() -> None:
         report[name] = {k: {"pass": round(sum(g["pass"] for g in v) / len(v), 3),
                             "criteria": round(sum(g["frac"] for g in v) / len(v), 3), "n": len(v)}
                         for k, v in sorted(by.items())}
+        det = [g for g in grades if "det_pass" in g and g["pass"] is not None]
+        if det:
+            report[name]["ALL"] |= {
+                "det_pass": round(sum(g["det_pass"] for g in det) / len(det), 3),
+                "det_score": round(sum(g["det_score"] for g in det) / len(det), 3),
+                "judge_pass_same_items": round(sum(g["pass"] for g in det) / len(det), 3),
+                "agreement": round(sum(g["det_pass"] == g["pass"] for g in det) / len(det), 3), "n_det": len(det)}
         if args.save:
             Path(args.save.replace(".json", f"_{name}.json")).write_text(json.dumps(grades, indent=1))
         print(name, json.dumps(report[name]["ALL"]), flush=True)
