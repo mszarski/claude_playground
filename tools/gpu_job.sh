@@ -22,7 +22,7 @@
 #                                               output in the log only, nothing uploaded
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py --backend cuda --out /work/gallery (set GPUSONAR_ORACLES=1
 #                                               and GPUSONAR_CERES=1 too; GPUSONAR_GALLERY_ARGS appended); uploaded to the
-#                                               dataset folder gallery/ (fixed; GPUSONAR_UPLOAD_PATH is not read)
+#                                               dataset folder GPUSONAR_UPLOAD_PATH, default gallery
 #        GPUSONAR_JOB=elevbench tools/gpu_job.sh  run tools/popoto_elevation_bench.py --full-rate --backend cuda
 #                                               (GPUSONAR_ELEVBENCH_ARGS appended); uploads docs/design/popoto_stage2.json
 #                                               to GPUSONAR_UPLOAD_PATH, default elevbench
@@ -124,7 +124,7 @@ if [ "${GPUSONAR_JOB:-tests}" = "gallery" ]; then
   # to GPUSONAR_UPLOAD_REPO (a Hugging Face dataset) when it is set.
   PYTHONPATH=python python3 tools/gallery.py --backend cuda --out /work/gallery ${GPUSONAR_GALLERY_ARGS:-}
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
-    hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery gallery --type dataset > /dev/null
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery "${GPUSONAR_UPLOAD_PATH:-gallery}" --type dataset > /dev/null
   fi
   exit 0
 fi

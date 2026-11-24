@@ -111,12 +111,12 @@ hf jobs run --detach --flavor "$flavor" --timeout "$to" --secrets HF_TOKEN "$@" 
   2>&1 | grep -o "mszarski/[0-9a-f]\{24\}" | head -1
 ```
 
-Job modes of `tools/gpu_job.sh` (its header lists every switch and variable; uploads need `-e GPUSONAR_UPLOAD_REPO=<dataset>`, and `GPUSONAR_UPLOAD_PATH` defaults to the mode's name, except for the gallery). `benchall` also reads `GPUSONAR_SCALE` (default 1), `GPUSONAR_BENCHALL_ARGS` and `GPUSONAR_BENCHALL_PYTEST`; `elevbench` reads `GPUSONAR_ELEVBENCH_ARGS`; the gallery `GPUSONAR_GALLERY_ARGS`:
+Job modes of `tools/gpu_job.sh` (its header lists every switch and variable; uploads need `-e GPUSONAR_UPLOAD_REPO=<dataset>`, and `GPUSONAR_UPLOAD_PATH` defaults to the mode's name, `gallery` for the gallery). `benchall` also reads `GPUSONAR_SCALE` (default 1), `GPUSONAR_BENCHALL_ARGS` and `GPUSONAR_BENCHALL_PYTEST`; `elevbench` reads `GPUSONAR_ELEVBENCH_ARGS`; the gallery `GPUSONAR_GALLERY_ARGS`:
 
 | Mode | How | Typical time on `l4x1` | Output |
 | --- | --- | --- | --- |
 | whole test suite (default) | `-e GPUSONAR_ORACLES=1 -e GPUSONAR_CERES=1 -e GPUSONAR_HOLOSCAN_CPP=1` | about 80 min, timeout 150m | log only; grep for `passed` and `JOB_EXIT` |
-| gallery | add `-e GPUSONAR_JOB=gallery -e GPUSONAR_UPLOAD_REPO=mszarski/gpusonar-ci` | about 40 min, timeout 4h | 57 files uploaded to the dataset folder **`gallery/`** (fixed name; `GPUSONAR_UPLOAD_PATH` is ignored in this mode) |
+| gallery | add `-e GPUSONAR_JOB=gallery -e GPUSONAR_UPLOAD_REPO=mszarski/gpusonar-ci` | about 40 min, timeout 4h | 57 files uploaded to the dataset folder `GPUSONAR_UPLOAD_PATH`, default **`gallery/`** |
 | every-stage benchmark | `-e GPUSONAR_JOB=benchall -e GPUSONAR_UPLOAD_PATH=<folder>` | 150m | json and md in that folder |
 | full-rate elevation bench | `-e GPUSONAR_JOB=elevbench -e GPUSONAR_UPLOAD_PATH=<folder>` | 60m | `popoto_stage2.json` |
 | live-chain ablation (issue `sonar-y7a`) | `-e GPUSONAR_JOB=liveablate -e GPUSONAR_UPLOAD_PATH=<folder>` (default folder `liveablate`; `GPUSONAR_LIVEABLATE_ARGS` appended to `tools/live_chain_ablation.py --backend cuda`) | not recorded | `live_chain_ablation.json` in that folder (committed as `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`) |
