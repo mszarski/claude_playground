@@ -3243,3 +3243,32 @@ family and the headline results). `docs/HANDOFF.md` is refreshed to this tree; `
 - The last whole CPU suite on record is the tree of D-157 (157 of 157); the last full GPU suite is
   2078 passed, 93 skipped at D-181. Checked for this merge on the CPU: test_architecture,
   test_tools_help (78), test_yaml_numbers, test_hardcoded, test_design, test_buildspec, test_simcal.
+
+### D-183 `source.sound_speed`: the receive window's layout speed in every receiver; `sonar_live` reports an error on its UDP path (issue sonar-8zj)
+
+Found by running the examples of the handoff set. `tools/sonar_live.py <deploy> --emulate <scenario>`
+received at the sonar's nominal 1500 m/s what the simulator made at the scenario's 1496.8 m/s
+(D-140): `popoto_testauv_trial_1row` ended on its first ping with "sync: reference burst not found
+on a board" (the tail burst 2.5 ms from where it is looked for, search 2 ms), and one board read
+ranges 0.2 % long (1001.5 m for 999.5 m).
+- The Python `flank_udp` source takes `source.sound_speed` (m/s; absent, None or 0: the sonar
+  file's nominal speed, so existing deployments are bit-for-bit unchanged): the speed at which
+  `receive.window.range` becomes the window's first sample and length. `--export-template` (the C++
+  program's template) and `sonar_live_hsb.py receive` already read the same key; no change to
+  `libs/live`, whose receiver takes the window from the template. `--emulate` sets it to the
+  scenario's speed. Now: four pings synchronised (worst residual 0.43-0.47 µs), target at 498, 498,
+  496, 496 m (direct chain 498, 498, 498, 496: the stream opens on a whole sample, up to half a
+  sample from the simulated record); one board 999.5 m, equal to the direct chain within 0.05 m.
+- Open (owner's question, kept as it was): the key both lays out the window and is the speed a
+  record carries until navigation or `chain.sound_speed` replaces it. Not verified: `sonar_live_hsb.py
+  receive` against `serve --scenario` of a multi-board scenario at a non-nominal speed.
+- `apps/sonar_live.cpp`, UDP path: an exception from a ping (e.g. that sync failure) unwound past
+  two joinable threads and the program died with "terminate called without an active exception"
+  (exit −6), the reason lost. The receiver and navigation threads are now stopped and joined however
+  the block is left; the program prints `sonar_live: <reason>` and exits 1 as on its other error
+  paths. Not changed: the Holoscan `UdpSourceOp` joins in `stop()` only.
+- `tools/build_diagrams.py`: the heading wraps inside the page and close row labels are spread with
+  leader lines (the 2×24 example ran off the edge); no number changes.
+- Tests: `tests/python/test_emulate.py` (15; five fail without the fix; the program case pins the
+  message and exit status), `tests/python/test_build_diagrams_layout.py` (8). Full GPU suite 2102
+  passed, 95 skipped (L4, HF job 6b060a4b1460ffe1d5e93111), which also covers the merge of D-182.

@@ -112,7 +112,7 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
-| Full GPU suite, NVIDIA L4, tree of D-181 | **2078 passed, 93 skipped**, none failed | `docs/DECISIONS.md` D-181, job `6b055ee4c97b8ed4fcd799db` |
+| Full GPU suite, NVIDIA L4, tree of D-183 | **2102 passed, 95 skipped**, none failed (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
 | GoogleTest at this tree | 172 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`) | section 2 |
 | pytest at this tree | 1375 test functions in 114 files (counted in `tests/python/test_*.py`); parametrisation makes them 2171 collected on the L4 job | D-181's counts |

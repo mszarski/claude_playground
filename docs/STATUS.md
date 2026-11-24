@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-182); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-183); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -777,7 +777,7 @@ the arrival-time solve runs (4, 4) passes (D-83).
 ## What is next
 
 1. The whole CPU suite (`tools/test.sh`) on the present tree: last run whole on the tree of
-   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU job on the final tree is done (2078 passed,
+   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU job on the final tree is done (2102 passed, 95 skipped at D-183, HF job 6b060a4b1460ffe1d5e93111; before it 2078 passed,
    93 skipped on an L4, job 6b055ee4c97b8ed4fcd799db, tree `90f7d29`, D-181).
    `docs/design/popoto_depth_planner.json` and `docs/figures/fjord_depth_plan.md` were
    regenerated for D-134 (open item 37) and predate D-156 to D-181, as the list of generated

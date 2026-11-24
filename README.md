@@ -17,7 +17,7 @@ honest about where it stands: one long row at 197 dB is 1.1 dB short of detectio
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
 (the depth sigma now says so). The full GPU suite ran on the tree of decision D-181
-(2078 passed, 93 skipped, none failed, on an NVIDIA L4); the whole CPU suite has not been
+(2102 passed, 95 skipped, none failed, on an NVIDIA L4; D-183); the whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
 entries). [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;

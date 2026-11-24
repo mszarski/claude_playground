@@ -2,7 +2,7 @@
 
 The entry point for whoever continues this work: a hardware engineer, a software engineer,
 or a coding model with no conversation history. Written 2026-11-24 at commit `933972b`,
-decisions to D-181. Everything said here was checked against the repository at that commit;
+decisions to D-183. Everything said here was checked against the repository at that commit;
 where two documents disagree, trust in this order: code and configs, `docs/DECISIONS.md`
 (later entries amend earlier ones), `docs/STATUS.md`, `docs/RESULTS.md`, the rest.
 
@@ -87,8 +87,8 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 | Item | State | Source |
 | --- | --- | --- |
 | Branch | `claude/gpu-sonar-suite-u289p5`, HEAD `933972b` (2026-11-24) | `git log` |
-| Latest decision | D-181: opt-in LFM range-Doppler correction; the gravel and 12 km seed 60 errors explained | `docs/DECISIONS.md` |
-| Last full GPU suite | 2078 passed, 93 skipped, none failed, on an NVIDIA L4 (Hugging Face job 6b055ee4c97b8ed4fcd799db) | D-181 |
+| Latest decision | D-183: `source.sound_speed` lays out the receive window (`--emulate` fixed); `sonar_live` reports an error on its UDP path. D-182 is this documentation set | `docs/DECISIONS.md` |
+| Last full GPU suite | 2102 passed, 95 skipped, none failed, on an NVIDIA L4 (Hugging Face job 6b060a4b1460ffe1d5e93111) | D-183 |
 | Last whole CPU suite in one run | the tree of D-157, `605a4e1` (2026-11-22; 157 of 157 ctest entries); since then (D-158 to D-181) affected files per package only | `docs/STATUS.md`, the result paragraphs just before "Open questions for the project owner" |
 | Gallery (`docs/figures/`, `gallery.json`) | regenerated at D-179 on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`); D-180 and D-181 move no default | D-179 |
 | Milestones | 1 to 10 of 13 done; 11 (Holoscan), 12 (propagation), 13 (performance model, Jetson) open | `README.md`, `bd` |
@@ -152,7 +152,7 @@ commit" dates of those files are a day or less older than their present state.
 | `handoff/OUTPUTS.md` | pictures, headline numbers, a report line, how to regenerate | 2026-11-24 | yes | current |
 | `HANDOFF.md` | rules, build and test, GPU jobs, open work, how to work here | 2026-11-24 | yes | current (refreshed to D-181) |
 | `STATUS.md` | what works, how it was checked, what is wrong, owner questions | 2026-11-24 | yes (to D-181) | current. Corrected 2026-11-24: "State of verification of this tree" names the 2078-passed job and the last whole CPU run, "Where the code has run", "What is next" items 1 and 7, open item 14 and the list of stale generated files are brought to D-181 |
-| `DECISIONS.md` | every decision D-1 to D-181 with what got worse | 2026-11-24 | yes | current; the authority after code and configs |
+| `DECISIONS.md` | every decision D-1 to D-183 with what got worse | 2026-11-24 | yes | current; the authority after code and configs |
 | `RESULTS.md` | every measured number and its source | 2026-11-24 | yes (to D-178) | mostly current. Corrected 2026-11-24: "Sensor Bridge loopback" carries the state since D-153, D-162, D-163 and D-173 beside its 2026-11-17 record; the `minefield_sas` and live-chain rows of "Every stage with a CUDA backend" are marked as old with the current figures beside them; the `sst_validation` sentence; "Not yet measured". Still: D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only; the `minefield_sas` row is not re-timed (issue `sonar-egj`) |
 | `SCENARIOS.md` | every scene with figures and per-scene results | 2026-11-24 | yes (to D-178) | current with the D-179 gallery. CPU times in its table are from a much older tree |
 | `CONFIGURATION.md` | every config key | 2026-11-24 | yes (to D-181) | current |
