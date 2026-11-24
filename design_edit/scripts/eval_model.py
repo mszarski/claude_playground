@@ -64,6 +64,8 @@ def main() -> None:
                     help="transformers path for models that only load as AutoModelForMultimodalLM + AutoProcessor")
     ap.add_argument("--max-new-tokens", type=int, default=320)
     ap.add_argument("--max-model-len", type=int, default=4096, help="vLLM context (raise for reasoning runs)")
+    ap.add_argument("--revise-rounds", type=int, default=0,
+                    help="after answering, show the model the applied result and let it revise (vLLM path)")
     ap.add_argument("--keep-special-tokens", action="store_true",
                     help="decode special tokens (needed to split Gemma 4 thinking from the answer)")
     ap.add_argument("--tag", default="", help="subfolder for the result files, e.g. 'think' (keeps runs apart)")
@@ -87,6 +89,7 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     from design_edit.evaluate import evaluate, format_report
+    from design_edit.schema import strip_fences
 
     tkw = {"enable_thinking": False} if args.no_think else {}
     if args.template_kwargs:
@@ -109,6 +112,15 @@ def main() -> None:
                 generate._shown = True
                 for t in texts[:2]:
                     print("raw output sample:", repr(t[:200]), flush=True)
+            for _ in range(args.revise_rounds):  # propose -> apply -> review -> revise
+                from design_edit.revise import review_message
+
+                convs = [p + [{"role": "assistant", "content": strip_fences(t)},
+                              {"role": "user", "content": review_message(p, t)}] for p, t in zip(prompts, texts)]
+                outs = llm.chat(convs, params, chat_template_kwargs=tkw, use_tqdm=False)
+                revised = [o.outputs[0].text for o in outs]
+                # a revision that comes back empty (e.g. reasoning ran out of tokens) keeps the previous answer
+                texts = [r if strip_fences(r).strip() else t for r, t in zip(revised, texts)]
             return texts
     elif args.multimodal:
         from transformers import AutoModelForMultimodalLM, AutoProcessor
