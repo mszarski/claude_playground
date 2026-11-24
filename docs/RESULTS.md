@@ -241,6 +241,30 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
   offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
   40.188 mm), so it is a property of the data, not of the kernel.
 
+## Gallery regenerated with D-178 (leading-edge range)
+
+Full-size gallery on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`), `docs/figures/`, against
+the D-174 gallery (job 6b05051fc97b8ed4fcd725d4). One run, one seed per scene. Only `flank_patrol`
+and the six Popoto scenes moved, and each moved number equals the gallery seed (k = 0) of D-178's
+ten-seed evaluation (`classify_rules_eval` on the D-172 captures, tree `7e1d265`) to the digits shown.
+- What got worse: `popoto_env_gravel_30m` ship 33.7 m beyond -> 10.0 m short of its hull (smaller,
+  other side; 11.8 m from its centre, was 33.7), speed 5.92 -> 5.79 m/s (true 6.0); `popoto_12km`
+  ship from its centre 4.7 -> 9.8 m (to the hull 2.14 -> 2.11 m), speed 5.68 -> 5.66 ± 0.50 m/s;
+  `popoto_env_winter_sand_200m` ship to the hull 2.71 -> 2.79 m; `popoto_far_mover` speed 6.00 ->
+  5.94 m/s.
+- Better: `popoto_far_mover` ship to the hull 34.2 -> 0.9 m (centre 36.3 -> 8.2 m), confirmed
+  tracks 4 -> 3 (multipath 3 -> 2); `popoto_env_winter_sand_200m` speed 5.24 ± 0.38 -> 6.06 ± 0.07
+  m/s (true 6.0), centre 29.1 -> 17.7 m; `flank_patrol` submarine 25.8 -> 1.0 m from its outline
+  (centre 26.1 -> 2.6 m), velocity 2.94, −0.23 -> 2.98, 0.02 m/s (true 3.0, 0), wreck 5.8 -> 3.5 m.
+- New: `flank_patrol` is classified (D-178): 5 tracks, 1 mover (the submarine, 3.02 ± 0.02 m/s),
+  2 static (one the wreck), 2 uncertain, no mover off a moving object; the small vehicle has no
+  detection. Each Popoto and flank entry of `gallery.json` records `range_estimate: first`.
+- Unchanged: every other scene, to GPU rounding (largest relative change 4e-4, on a 0.009 m/s
+  track velocity; every count and class equal), and so D-175 moved nothing in the gallery; every
+  detection count, also in the moved scenes; every animation (at most 2 grey levels); in the moved
+  figures only the track panels. `popoto_env_deep_silt_1000m`'s untracked ship 302.3 -> 301.2 m;
+  `summer_mud` has no detection. No test expectation changed.
+
 ## Gallery regenerated with D-164, D-171 and D-172
 
 Full-size gallery on an L4 (job 6b05051fc97b8ed4fcd725d4, tree `77f5b98`), `docs/figures/`, against
@@ -624,7 +648,8 @@ motion estimation, backprojection at 2.5 cm.
 | Box face over seafloor | 20.4 dB | 20.3 dB | 20.2 dB |
 
 - Sway, heave and sharpness are from the regenerated gallery (`docs/figures/gallery.json`, L4,
-  job 6b05051fc97b8ed4fcd725d4; 13,555 scatterers since D-171); the other rows, the navigation-only
+  job 6b05051fc97b8ed4fcd725d4, equal to rounding in the D-178 regeneration, job
+  6b054768c97b8ed4fcd78015; 13,555 scatterers since D-171); the other rows, the navigation-only
   sway and the timings below are from the earlier CPU run of the 7500-scatterer scene.
 - With the estimated track the image is within 3% of the true-motion sharpness; with
   navigation alone it is 3.7 times less sharp. The shadow contrast barely depends on
@@ -1718,8 +1743,8 @@ combines walls with that bottom, so no result in this file changes.
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
-(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4, tree `77f5b98`, job
-6b05051fc97b8ed4fcd725d4).
+(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4, tree `4a80876`, job
+6b054768c97b8ed4fcd78015; range from the leading edge in the flank and Popoto scenes, D-178).
 
 | Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1729,15 +1754,21 @@ Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
 | `fls_120k_cluttered_seabed` | 65 | 1 | 48 | 3 | — | 13 | 0 |
 | `fls_120k_rough_surface` | 56 | 8 | 1 | 5 | — | 42 | 6 |
 | `fls_170k_traffic` | 13 | 3 | 6 | 1 | — | 3 | 0 |
-| `popoto_far_mover` | 4 | 1 | 0 | — | 3 | 0 | 0 |
+| `flank_patrol` | 5 | 1 | 2 | — | 0 | 2 | 0 |
+| `popoto_far_mover` | 3 | 1 | 0 | — | 2 | 0 | 0 |
 | `popoto_12km` | 12 | 1 | 0 | — | 11 | 0 | 0 |
 | `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 3 | 1 | 0 |
 | `popoto_env_gravel_30m` | 3 | 1 | 1 | — | 1 | 0 | 0 |
 | `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 2 | 0 | 1 (the ship is not tracked at its true position) |
 
-Regenerated with D-164, D-171 and D-172, after D-156 and D-157 (L4, job 6b05051fc97b8ed4fcd725d4):
-the counts equal the gallery seed of `classify_rules_eval_afe0806.json`. `fls_120k_rough_surface`
-keeps 6 movers off a moving object (13 before D-157; sonar-9ir); the `popoto_12km` ship is a mover at
+Regenerated with D-178 (L4, job 6b054768c97b8ed4fcd78015): the counts and every Popoto and flank
+position equal the gallery seed of D-178's ten-seed run; against the D-174 gallery only
+`popoto_far_mover` changed (4 -> 3 tracks, one multipath fewer) and `flank_patrol` is new. The
+`popoto_12km` ship is a mover at 5.66 ± 0.50 m/s, 2.1 m from its hull (9.8 m from its centre);
+`flank_patrol`'s submarine a mover at 3.02 ± 0.02 m/s (true 3.0), 1.0 m from its outline, the wreck
+static. Regenerated with D-164, D-171 and D-172, after D-156 and D-157 (L4, job
+6b05051fc97b8ed4fcd725d4): the counts equal the gallery seed of `classify_rules_eval_afe0806.json`. `fls_120k_rough_surface`
+keeps 6 movers off a moving object (13 before D-157; sonar-9ir); the `popoto_12km` ship was a mover at
 5.68 ± 0.50 m/s, 2.1 m from its hull (D-172). Every named object that is tracked is in its true
 class. The rest of this paragraph is of the D-155 gallery (L4, job 6b01577eefaf5e14f4b49804). The
 ship in `popoto_12km` is one mover at 6.05 ± 0.35 m/s (true 6.0), 68 m from truth, with its eleven other tracks its multipath; before D-155 its scored track was
