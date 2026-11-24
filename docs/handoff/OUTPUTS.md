@@ -609,7 +609,7 @@ The live chain on the device, C++ engine, per ping, as deployed. Source: `RESULT
 | 2 | 25.92 | 22.88 |
 | 3 | 37.52 | 33.94 |
 
-A full-rate ping (0.5 to 13 km at 102.4 kHz, no decimation) takes 0.48 / 1.02 / 1.51 s for
+A full-rate ping (0.5 to 13 km at 102.4 kHz, no decimation) takes 0.48 / 1.03 / 1.49 s for
 one, two and three rows on an L4 against a 17.9 s ping interval, timed on a loaded machine
 (`docs/design/popoto_stage2.json`, `decimation.timing.cuda`).
 

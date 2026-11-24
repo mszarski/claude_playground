@@ -7,8 +7,8 @@ One row per processing stage: the host source file, the CUDA translation unit wh
 the backend is chosen. Nothing here is typed from memory: every file named in ROWS must exist, and every `.cu`
 file under libs/ must be named by a row, or the tool stops and says which. So a stage that gains a device build
 cannot be left out, and a row cannot claim one that is not in the tree. It imports nothing of gpusonar and needs
-no build. (docs/architecture/backends.png, drawn by tools/architecture_diagrams.py from a typed table, lists three
-stages as CPU only that have a device build today; docs/handoff/SOFTWARE.md says which.)
+no build. (docs/architecture/backends.png, drawn by tools/architecture_diagrams.py from a typed table, was corrected to
+the same content on 2026-11-24; this tool's check is what keeps the two from drifting.)
 """
 import argparse
 import sys

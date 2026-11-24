@@ -64,7 +64,6 @@ not written and the navigation mapping for the vehicle's unit is a template (STA
 | Motion estimation | lambda 2 is tuned on few scenes; `MotionOptions.bathymetry` also moves the DVL seabed; delays read 0.2 to 0.9 % below the model in every window; no along-track surge estimation; the CUDA delay path is slower than the host | `sonar-0bc`, `sonar-dix`, `sonar-oii`, `sonar-7k2`, `sonar-b6r` |
 | Classes in the gallery scenes | glint movers in `fls_120k_rough_surface` and the FLS detection merge (off) remain (D-135, D-170); FLS slant range is read as horizontal (+h²/2R); a stray ping-1 detection near the winter-sand ship moves its speed | `sonar-mib`, `sonar-m1r`, `sonar-2o5` |
 | Propagation | N x 2-D only; Bellhop 2-D against Bellhop3D differ by 1 to 2.5 dB; the energy rule lowers the gravel-water peak by 3.3 dB | `sonar-6c8`, `sonar-9b8` |
-| Diagram | `docs/architecture/backends.png` shows three stages as CPU only that have a device build (section 2) | section 10 |
 
 The record schema is frozen at 1.0.0 (`docs/RECORD_FORMAT.md`): changing it is on the
 stop-and-ask list (section 9).
@@ -216,11 +215,12 @@ each contribution is simulated once and scaled.
 
 ![Calibrating the simulator](../architecture/sim_calibration.png)
 
-`dataflow.png`, `deployment.png` and `sim_calibration.png` were drawn on 2026-11-16 and
-`backends.png`, `live_chain.png` and `deployment_build.png` on 2026-11-19 (`git log`); the
-generator's data has not changed since (its one later commit adds `--help`). None was
-regenerated for this document: `live_chain.png` and `deployment_build.png` need the built
-module, which this work did not build.
+The architecture pictures were corrected and redrawn when this set was merged (2026-11-24):
+`backends.png` now shows the device builds of the beamformers, the motion delays, the reverberation
+FFTs and the multiscale statistic (`tests/python/test_architecture.py` pins 10 CUDA rows);
+`live_chain.png` shows the multiscale detector and echo grouping; `dataflow.png` includes Sensor
+Bridge frames. Known left: `dataflow.png` still labels detection "detect (CFAR)", and
+`deployment.png` draws a shared sync reference that `popoto_long_range` does not have.
 
 ## 3. Repository map
 
@@ -825,6 +825,9 @@ From the owner's brief (`docs/HANDOFF.md` section 2) and the working rules of th
 - sending project content anywhere but the approved Hugging Face dataset and Jobs.
 
 ## 10. Stale or contradictory statements found in existing documents
+
+**Fixed since.** Every row below except the last (`CLAUDE.md`, the owner's file) was corrected in
+the same merge that added this document; the table is kept as a record of what was wrong.
 
 Not rewritten here; listed for whoever owns each file.
 
