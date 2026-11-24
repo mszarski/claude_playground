@@ -51,6 +51,7 @@ void PingAssembler::reset() {
   frontier_ = origin_ = stream_ns_ = first_tx_ = 0;
   holes_.clear();
   expired_.clear();
+  lost_.clear();
   pings_.clear();
   owner_ = nullptr;
   released_.clear();
@@ -78,6 +79,8 @@ bool PingAssembler::holds(std::int64_t a, std::int64_t b) const {
 void PingAssembler::lose(std::int64_t a, std::int64_t b) {
   lost_samples += b - a;
   expired_.push_back({a, b});
+  lost_.push_back({a, b});
+  if (lost_.size() > 64) lost_.erase(lost_.begin());
 }
 
 void PingAssembler::give_up(std::int64_t limit) {
@@ -331,12 +334,21 @@ void PingAssembler::release(std::vector<PingRecord>& out, bool wait) {
           const std::int64_t off = gap - d * interval;
           // ... and longer than d - 1 of the longest recent intervals by half an interval
           const std::int64_t longest = *std::max_element(deltas_.begin(), deltas_.end());
-          if ((off < 0 ? -off : off) * 2 < interval && (gap - (d - 1) * longest) * 2 > interval) dropped_pings += d - 1;
+          // ... and samples lost between the two transmits: the blocks of a ping lost whole name it, so they are missing
+          // from the counter; a sender that skipped an index leaves none missing (sonar-2ht)
+          const std::int64_t tx = released_.back().first;
+          bool lost_between = false;
+          for (const std::vector<Hole>* v : {&lost_, &holes_}) {
+            for (const Hole& h : *v) lost_between = lost_between || (h.a < p.tx && h.b > tx);
+          }
+          if ((off < 0 ? -off : off) * 2 < interval && (gap - (d - 1) * longest) * 2 > interval && lost_between) dropped_pings += d - 1;
         }
       }
     }
     released_.emplace_back(p.tx, p.index);
     if (released_.size() > 8) released_.erase(released_.begin());
+    const std::int64_t after = p.tx;   // later pings are transmitted after this one
+    lost_.erase(std::remove_if(lost_.begin(), lost_.end(), [after](const Hole& h) { return h.b <= after; }), lost_.end());
     if (p.state == State::kComplete) out.push_back(std::move(p.record));
     else ++dropped_pings;
     pings_.pop_front();

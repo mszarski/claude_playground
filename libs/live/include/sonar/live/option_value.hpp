@@ -22,5 +22,8 @@ std::vector<double> option_numbers(const std::string& key, const std::string& va
 std::vector<std::int64_t> option_integers(const std::string& key, const std::string& value);
 /// One of `allowed` exactly; otherwise throws naming the key and the allowed words.
 std::string option_choice(const std::string& key, const std::string& value, const std::vector<std::string>& allowed);
+/// The key of `known` nearest to `key` in edits (insert, delete, substitute), or "" when every one is more than
+/// max(3, len(key) / 3) edits away: for naming the key meant when an unknown one is refused (D-166, sonar-1rf; ours).
+std::string nearest_key(const std::string& key, const std::vector<std::string>& known);
 
 }  // namespace sonar::live

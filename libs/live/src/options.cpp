@@ -113,6 +113,30 @@ std::string option_choice(const std::string& key, const std::string& value, cons
   refuse(key, value, words);
 }
 
+std::string nearest_key(const std::string& key, const std::vector<std::string>& known) {
+  std::string nearest;
+  std::size_t best = std::max<std::size_t>(3, key.size() / 3) + 1;   // this many edits or more: no suggestion
+  std::vector<std::size_t> row;
+  for (const std::string& k : known) {
+    row.resize(k.size() + 1);
+    for (std::size_t j = 0; j <= k.size(); ++j) row[j] = j;
+    for (std::size_t i = 1; i <= key.size(); ++i) {
+      std::size_t diagonal = row[0];
+      row[0] = i;
+      for (std::size_t j = 1; j <= k.size(); ++j) {
+        const std::size_t above = row[j];
+        row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + (key[i - 1] == k[j - 1] ? 0 : 1)});
+        diagonal = above;
+      }
+    }
+    if (row[k.size()] < best) {
+      best = row[k.size()];
+      nearest = k;
+    }
+  }
+  return nearest;
+}
+
 Backend parse_backend(const std::string& value) {
   const std::string b = option_choice("backend", value, {"auto", "host", "cuda"});
   if (b == "cuda") return Backend::Cuda;
@@ -129,162 +153,168 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   const auto v = [&] { return option_number(key, value); };
   const auto i = [&] { return option_integer(key, value); };
   const auto on = [&] { return option_flag(key, value); };
-  if (key == "bearing_first_deg") c.bearing_first_deg = p.bearing_first_deg = v();
-  else if (key == "bearing_last_deg") c.bearing_last_deg = p.bearing_last_deg = v();
-  else if (key == "bearing_step_deg") c.bearing_step_deg = p.bearing_step_deg = v();
-  else if (key == "range_cell_m") c.range_cell_m = v();
-  else if (key == "cfar_pfa") c.cfar_pfa = v();
-  else if (key == "cfar_guard_m") c.cfar_guard_m = v();
-  else if (key == "cfar_train_m") c.cfar_train_m = v();
-  else if (key == "min_snr_db") c.min_snr_db = v();
-  else if (key == "cell_statistic") {
+  // Every key compared is noted, so that an unknown one is refused with the nearest of them (sonar-1rf).
+  std::vector<std::string> keys;
+  const auto is = [&](const char* k) {
+    keys.emplace_back(k);
+    return key == k;
+  };
+  if (is("bearing_first_deg")) c.bearing_first_deg = p.bearing_first_deg = v();
+  else if (is("bearing_last_deg")) c.bearing_last_deg = p.bearing_last_deg = v();
+  else if (is("bearing_step_deg")) c.bearing_step_deg = p.bearing_step_deg = v();
+  else if (is("range_cell_m")) c.range_cell_m = v();
+  else if (is("cfar_pfa")) c.cfar_pfa = v();
+  else if (is("cfar_guard_m")) c.cfar_guard_m = v();
+  else if (is("cfar_train_m")) c.cfar_train_m = v();
+  else if (is("min_snr_db")) c.min_snr_db = v();
+  else if (is("cell_statistic")) {
     if (value != "mean" && value != "peak" && value != "multiscale") throw std::invalid_argument("cell_statistic: mean, peak or multiscale");
     c.cell_peak = value == "peak";
     c.cell_multiscale = value == "multiscale";
   }
-  else if (key == "cfar_false_alarms_per_ping") c.detector.false_alarms_per_ping = v();
-  else if (key == "cfar_sidelobe_margin_db") c.detector.sidelobe_margin_db = v();
-  else if (key == "cfar_sidelobe_floor_db") c.detector.sidelobe_floor_db = v();
-  else if (key == "cfar_search_factor") c.detector.search_factor = v();
-  else if (key == "cfar_merge_m") c.detector.merge_m = v();
-  else if (key == "cfar_range_estimate") c.range_estimate = parse_range_estimate(value);   // centroid | first (D-157); unset: chain_range_estimate (D-158)
+  else if (is("cfar_false_alarms_per_ping")) c.detector.false_alarms_per_ping = v();
+  else if (is("cfar_sidelobe_margin_db")) c.detector.sidelobe_margin_db = v();
+  else if (is("cfar_sidelobe_floor_db")) c.detector.sidelobe_floor_db = v();
+  else if (is("cfar_search_factor")) c.detector.search_factor = v();
+  else if (is("cfar_merge_m")) c.detector.merge_m = v();
+  else if (is("cfar_range_estimate")) c.range_estimate = parse_range_estimate(value);   // centroid | first (D-157); unset: chain_range_estimate (D-158)
   // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
-  else if (key == "cell_multiscale") {
+  else if (is("cell_multiscale")) {
     c.cell_multiscale = on();
     if (c.cell_multiscale) c.cell_peak = false;
   }
-  else if (key == "cell_peak") {
+  else if (is("cell_peak")) {
     c.cell_peak = on();
     if (c.cell_peak) c.cell_multiscale = false;
   }
-  else if (key == "cfar_integrate_cells") c.detector.integrate_cells = option_integers(key, value);   // range cells: 1,4,16 (or [1, 4, 16])
-  else if (key == "beamformer") c.beamformer = option_choice(key, value, {"backprojection", "farfield", "mvdr"});
-  else if (key == "tracker_association") c.tracker.association = parse_association(value);
-  else if (key == "doa") c.doa = option_choice(key, value, {"map", "sbl"});
-  else if (key == "mvdr_subbands") c.mvdr.n_subbands = i();
-  else if (key == "mvdr_loading") c.mvdr.loading = v();
-  else if (key == "gate_fft") c.gate_fft = i();
-  else if (key == "sbl_grid_step_deg") c.sbl_grid_step_deg = v();
-  else if (key == "sbl_max_iterations") c.sbl.max_iterations = p.sbl.max_iterations = static_cast<std::int32_t>(i());
-  else if (key == "sbl_tolerance") c.sbl.tolerance = p.sbl.tolerance = v();
-  else if (key == "sbl_max_gates") c.sbl_max_gates = i();
-  else if (key == "sbl_min_contrast_db") c.sbl_min_contrast_db = v();
-  else if (key == "sbl_max_sources") c.sbl.max_sources = p.sbl.max_sources = static_cast<std::int32_t>(i());
-  else if (key == "sbl_min_snr_db") c.sbl.min_snr_db = p.sbl.min_snr_db = v();
-  else if (key == "sbl_dynamic_range_db") c.sbl.dynamic_range_db = p.sbl.dynamic_range_db = v();
-  else if (key == "look") c.starboard = p.starboard = option_choice(key, value, {"starboard", "port"}) == "starboard";
-  else if (key == "elevation") c.elevation.enabled = p.elevation.enabled = on();
-  else if (key == "elevation_first_deg") c.elevation.first_deg = p.elevation.first_deg = v();
-  else if (key == "elevation_last_deg") c.elevation.last_deg = p.elevation.last_deg = v();
-  else if (key == "elevation_step_deg") c.elevation.step_deg = p.elevation.step_deg = v();
-  else if (key == "elevation_range_window_m") c.elevation.range_window_m = v();
-  else if (key == "elevation_max_detections") c.elevation.max_detections = i();
-  else if (key == "elevation_first_arrival") c.elevation.first_arrival = on();
-  else if (key == "elevation_first_arrival_db") c.elevation.first_arrival_db = v();
-  else if (key == "elevation_first_arrival_snr_db") c.elevation.first_arrival_snr_db = v();
-  else if (key == "sound_speed") c.sound_speed = v();
-  else if (key == "elevation_ambiguity_sigma") c.elevation.ambiguity_sigma = v();
-  else if (key == "elevation_alternatives_db") c.elevation.alternatives_db = v();
-  else if (key == "elevation_sector_from_depth") c.elevation.sector_from_depth = on();
-  else if (key == "elevation_sector_bounces") c.elevation.sector_bounces = v();
-  else if (key == "elevation_sector_margin_deg") c.elevation.sector_margin = v() * kDeg;
-  else if (key == "elevation_water_depth_sigma") c.elevation.water_depth_sigma = v();
-  else if (key == "elevation_attitude_arrival") c.elevation.attitude_arrival = on();
-  else if (key == "elevation_attitude_rate_sigma_deg_s") c.elevation.attitude_rate_sigma = v() * kDeg;
-  else if (key == "elevation_use_gradient") c.elevation.use_gradient = on();
-  else if (key == "elevation_gradient") c.elevation.gradient = v();
-  else if (key == "elevation_gradient_sigma") c.elevation.gradient_sigma = v();
-  else if (key == "elevation_min_quality") c.elevation.min_quality = p.elevation.min_quality = v();
-  else if (key == "elevation_ambiguity_db") c.elevation.ambiguity_db = v();
-  else if (key == "elevation_correct_bearing") c.elevation.correct_bearing = on();
-  else if (key == "elevation_depth") c.elevation.depth = on();
-  else if (key == "elevation_fold") c.elevation.fold = on();
-  else if (key == "elevation_classify") c.elevation.classify = on();
-  else if (key == "elevation_classify_sigma") c.elevation.classify_sigma = v();
-  else if (key == "elevation_water_depth") c.elevation.water_depth = v();
-  else if (key == "elevation_surface_z") c.elevation.surface_z = v();
-  else if (key == "elevation_roll_sigma_deg") c.elevation.roll_sigma = v() * kDeg;
-  else if (key == "elevation_depth_process_noise") c.tracker.depth_process_noise = v();
-  else if (key == "elevation_row_tolerance_m") c.elevation.row_tolerance_m = p.elevation.row_tolerance_m = v();
-  else if (key == "blanking") c.blanking.enabled = on();
-  else if (key == "blanking_recovery_s") c.blanking.recovery_s = v();
-  else if (key == "blanking_taper_s") c.blanking.taper_s = v();
-  else if (key == "blanking_mode") c.blanking.zero = option_choice(key, value, {"zero", "ignore"}) == "zero";
-  else if (key == "sync_min_quality") c.reference.min_quality = v();
-  else if (key == "sync_search_time") c.reference.search_time = v();
-  else if (key == "sync_tolerance_us") c.reference.tolerance_us = v();
-  else if (key == "sync_clip_level") c.reference.clip_level = v();
-  else if (key == "elevation_min_row_elements") c.elevation.min_row_elements = p.elevation.min_row_elements = i();
-  else if (key == "nav_surface_z") c.nav.surface_z = v();   // z of the sea surface in the navigation's frame: depth = z - surface_z
-  else if (key == "nav_history_margin_s") c.nav.history_margin_s = v();
-  else if (key == "nav_lever_arm_m" || key == "nav_mount_rpy_deg") {
+  else if (is("cfar_integrate_cells")) c.detector.integrate_cells = option_integers(key, value);   // range cells: 1,4,16 (or [1, 4, 16])
+  else if (is("beamformer")) c.beamformer = option_choice(key, value, {"backprojection", "farfield", "mvdr"});
+  else if (is("tracker_association")) c.tracker.association = parse_association(value);
+  else if (is("doa")) c.doa = option_choice(key, value, {"map", "sbl"});
+  else if (is("mvdr_subbands")) c.mvdr.n_subbands = i();
+  else if (is("mvdr_loading")) c.mvdr.loading = v();
+  else if (is("gate_fft")) c.gate_fft = i();
+  else if (is("sbl_grid_step_deg")) c.sbl_grid_step_deg = v();
+  else if (is("sbl_max_iterations")) c.sbl.max_iterations = p.sbl.max_iterations = static_cast<std::int32_t>(i());
+  else if (is("sbl_tolerance")) c.sbl.tolerance = p.sbl.tolerance = v();
+  else if (is("sbl_max_gates")) c.sbl_max_gates = i();
+  else if (is("sbl_min_contrast_db")) c.sbl_min_contrast_db = v();
+  else if (is("sbl_max_sources")) c.sbl.max_sources = p.sbl.max_sources = static_cast<std::int32_t>(i());
+  else if (is("sbl_min_snr_db")) c.sbl.min_snr_db = p.sbl.min_snr_db = v();
+  else if (is("sbl_dynamic_range_db")) c.sbl.dynamic_range_db = p.sbl.dynamic_range_db = v();
+  else if (is("look")) c.starboard = p.starboard = option_choice(key, value, {"starboard", "port"}) == "starboard";
+  else if (is("elevation")) c.elevation.enabled = p.elevation.enabled = on();
+  else if (is("elevation_first_deg")) c.elevation.first_deg = p.elevation.first_deg = v();
+  else if (is("elevation_last_deg")) c.elevation.last_deg = p.elevation.last_deg = v();
+  else if (is("elevation_step_deg")) c.elevation.step_deg = p.elevation.step_deg = v();
+  else if (is("elevation_range_window_m")) c.elevation.range_window_m = v();
+  else if (is("elevation_max_detections")) c.elevation.max_detections = i();
+  else if (is("elevation_first_arrival")) c.elevation.first_arrival = on();
+  else if (is("elevation_first_arrival_db")) c.elevation.first_arrival_db = v();
+  else if (is("elevation_first_arrival_snr_db")) c.elevation.first_arrival_snr_db = v();
+  else if (is("sound_speed")) c.sound_speed = v();
+  else if (is("elevation_ambiguity_sigma")) c.elevation.ambiguity_sigma = v();
+  else if (is("elevation_alternatives_db")) c.elevation.alternatives_db = v();
+  else if (is("elevation_sector_from_depth")) c.elevation.sector_from_depth = on();
+  else if (is("elevation_sector_bounces")) c.elevation.sector_bounces = v();
+  else if (is("elevation_sector_margin_deg")) c.elevation.sector_margin = v() * kDeg;
+  else if (is("elevation_water_depth_sigma")) c.elevation.water_depth_sigma = v();
+  else if (is("elevation_attitude_arrival")) c.elevation.attitude_arrival = on();
+  else if (is("elevation_attitude_rate_sigma_deg_s")) c.elevation.attitude_rate_sigma = v() * kDeg;
+  else if (is("elevation_use_gradient")) c.elevation.use_gradient = on();
+  else if (is("elevation_gradient")) c.elevation.gradient = v();
+  else if (is("elevation_gradient_sigma")) c.elevation.gradient_sigma = v();
+  else if (is("elevation_min_quality")) c.elevation.min_quality = p.elevation.min_quality = v();
+  else if (is("elevation_ambiguity_db")) c.elevation.ambiguity_db = v();
+  else if (is("elevation_correct_bearing")) c.elevation.correct_bearing = on();
+  else if (is("elevation_depth")) c.elevation.depth = on();
+  else if (is("elevation_fold")) c.elevation.fold = on();
+  else if (is("elevation_classify")) c.elevation.classify = on();
+  else if (is("elevation_classify_sigma")) c.elevation.classify_sigma = v();
+  else if (is("elevation_water_depth")) c.elevation.water_depth = v();
+  else if (is("elevation_surface_z")) c.elevation.surface_z = v();
+  else if (is("elevation_roll_sigma_deg")) c.elevation.roll_sigma = v() * kDeg;
+  else if (is("elevation_depth_process_noise")) c.tracker.depth_process_noise = v();
+  else if (is("elevation_row_tolerance_m")) c.elevation.row_tolerance_m = p.elevation.row_tolerance_m = v();
+  else if (is("blanking")) c.blanking.enabled = on();
+  else if (is("blanking_recovery_s")) c.blanking.recovery_s = v();
+  else if (is("blanking_taper_s")) c.blanking.taper_s = v();
+  else if (is("blanking_mode")) c.blanking.zero = option_choice(key, value, {"zero", "ignore"}) == "zero";
+  else if (is("sync_min_quality")) c.reference.min_quality = v();
+  else if (is("sync_search_time")) c.reference.search_time = v();
+  else if (is("sync_tolerance_us")) c.reference.tolerance_us = v();
+  else if (is("sync_clip_level")) c.reference.clip_level = v();
+  else if (is("elevation_min_row_elements")) c.elevation.min_row_elements = p.elevation.min_row_elements = i();
+  else if (is("nav_surface_z")) c.nav.surface_z = v();   // z of the sea surface in the navigation's frame: depth = z - surface_z
+  else if (is("nav_history_margin_s")) c.nav.history_margin_s = v();
+  else if (is("nav_lever_arm_m") || is("nav_mount_rpy_deg")) {
     // Three numbers: the array from the navigation unit (sonar-3rv; NavOptions).
     const std::vector<double> q = option_numbers(key, value);
     if (q.size() != 3) refuse(key, value, "three comma-separated numbers");
     for (double x : q) {
       if (!std::isfinite(x)) refuse(key, value, "three finite numbers");
     }
-    const double f = key == "nav_lever_arm_m" ? 1.0 : kDeg;
-    (key == "nav_lever_arm_m" ? c.nav.lever_arm : c.nav.mount_rpy) = Vec3d{q[0] * f, q[1] * f, q[2] * f};
+    const double f = is("nav_lever_arm_m") ? 1.0 : kDeg;
+    (is("nav_lever_arm_m") ? c.nav.lever_arm : c.nav.mount_rpy) = Vec3d{q[0] * f, q[1] * f, q[2] * f};
   }
   // The program around the chain: the board stream, its socket and queue, the report datagrams.
-  else if (key == "stream_sample_bytes") c.stream.sample_bytes = static_cast<int>(i());
-  else if (key == "stream_buffer_bytes") c.stream.buffer_bytes = i();
-  else if (key == "stream_queue_mb") c.stream.queue_mb = v();
-  else if (key == "idle_seconds") c.stream.idle_seconds = v();
-  else if (key == "bind") c.stream.bind = value;
-  else if (key == "report_udp_max_bytes") c.stream.report_max_bytes = i();
-  else if (key == "decimate") c.decimate.enabled = on();
-  else if (key == "decimate_streaming") c.decimate_streaming = on();
-  else if (key == "decimate_f_low") c.decimate.f_low = v();
-  else if (key == "decimate_f_high") c.decimate.f_high = v();
-  else if (key == "decimate_band_margin") c.decimate.band_margin = v();
-  else if (key == "decimate_output_rate") c.decimate.output_rate = v();
-  else if (key == "decimate_oversample") c.decimate.oversample = v();
-  else if (key == "decimate_ripple_db") c.decimate.ripple_db = v();
-  else if (key == "decimate_stopband_db") c.decimate.stopband_db = v();
-  else if (key == "decimate_taps") c.decimate.taps = i();
-  else if (key == "decimate_blank_until_s") c.decimate.blank_until_s = v();
-  else if (key == "decimate_blank_taper_s") c.decimate.blank_taper_s = v();
-  else if (key == "nav_water_depth_from_altitude") c.nav.water_depth.from_altitude = on();
-  else if (key == "nav_dvl_offset_m") c.nav.water_depth.dvl_offset_m = v();
-  else if (key == "nav_altitude_sigma_m") c.nav.water_depth.altitude_sigma_m = v();
-  else if (key == "nav_depth_sigma_m") c.nav.water_depth.depth_sigma_m = v();
-  else if (key == "nav_hold_s") c.nav.water_depth.hold_s = v();
-  else if (key == "nav_hold_sigma_m_per_s") c.nav.water_depth.hold_sigma_m_per_s = v();
-  else if (key == "nav_hold_sigma_m_per_m") c.nav.water_depth.hold_sigma_m_per_m = v();
-  else if (key == "nav_max_altitude_m") c.nav.water_depth.max_altitude_m = v();
-  else if (key == "nav_keep_s") c.nav.keep_s = v();
-  else if (key == "nav_profile_step_m") c.nav.profile_step_m = v();
-  else if (key == "elevation_profile") c.elevation.profile.enabled = on();
-  else if (key == "elevation_profile_bin_m") c.elevation.profile.bin_m = v();
-  else if (key == "elevation_profile_sample_sigma") c.elevation.profile.sample_sigma = v();
-  else if (key == "elevation_profile_age_sigma_per_hour") c.elevation.profile.age_sigma_per_hour = v();
-  else if (key == "elevation_profile_distance_sigma_per_km") c.elevation.profile.distance_sigma_per_km = v();
-  else if (key == "elevation_profile_max_age_s") c.elevation.profile.max_age_s = v();
-  else if (key == "elevation_profile_max_distance_m") c.elevation.profile.max_distance_m = v();
-  else if (key == "elevation_profile_min_span_m") c.elevation.profile.min_span_m = v();
-  else if (key == "elevation_profile_extrapolation_sigma_per_s") c.elevation.profile.extrapolation_sigma_per_s = v();
-  else if (key == "elevation_ray_arcs") c.elevation.ray_arcs = on();
-  else if (key == "elevation_sector_from_rays") c.elevation.sector_from_rays = on();
-  else if (key == "elevation_sector_rays_bounces") c.elevation.sector_rays_bounces = v();
-  else if (key == "elevation_sector_rays_margin_deg") c.elevation.sector_rays_margin = v() * kDeg;
-  else if (key == "elevation_sector_rays_max_depth") c.elevation.sector_rays_max_depth = v();
-  else if (key == "elevation_multipath_sigma") c.elevation.multipath_sigma = on();
-  else if (key == "elevation_multipath_sigma_bounces") c.elevation.multipath_sigma_bounces = v();
-  else if (key == "elevation_multipath_sigma_max_depth") c.elevation.multipath_sigma_max_depth = v();
-  else if (key == "elevation_profile_ensemble") c.elevation.profile.ensemble = on();
-  else if (key == "elevation_profile_ensemble_sigma_members") c.elevation.profile.ensemble_sigma_members = on();
-  else if (key == "elevation_profile_file") c.elevation.profile.file = value;
-  else if (key == "elevation_profile_cast") c.elevation.profile.cast = value;
-  else if (key == "elevation_profile_supplied_sigma") c.elevation.profile.supplied_sigma = v();
-  else if (key == "elevation_profile_family") c.elevation.profile.family = value;
-  else if (key == "elevation_profile_family_gradient") c.elevation.profile.family_gradient = v();
-  else if (key == "elevation_profile_layer_depth") c.elevation.profile.layer_depth = v();
-  else if (key == "elevation_profile_thermocline_gradient") c.elevation.profile.thermocline_gradient = v();
-  else if (key == "elevation_profile_thermocline_thickness") c.elevation.profile.thermocline_thickness = v();
-  else if (key == "elevation_profile_family_sigma") c.elevation.profile.family_sigma = v();
-  else if (key == "elevation_profile_ladder") {
+  else if (is("stream_sample_bytes")) c.stream.sample_bytes = static_cast<int>(i());
+  else if (is("stream_buffer_bytes")) c.stream.buffer_bytes = i();
+  else if (is("stream_queue_mb")) c.stream.queue_mb = v();
+  else if (is("idle_seconds")) c.stream.idle_seconds = v();
+  else if (is("bind")) c.stream.bind = value;
+  else if (is("report_udp_max_bytes")) c.stream.report_max_bytes = i();
+  else if (is("decimate")) c.decimate.enabled = on();
+  else if (is("decimate_streaming")) c.decimate_streaming = on();
+  else if (is("decimate_f_low")) c.decimate.f_low = v();
+  else if (is("decimate_f_high")) c.decimate.f_high = v();
+  else if (is("decimate_band_margin")) c.decimate.band_margin = v();
+  else if (is("decimate_output_rate")) c.decimate.output_rate = v();
+  else if (is("decimate_oversample")) c.decimate.oversample = v();
+  else if (is("decimate_ripple_db")) c.decimate.ripple_db = v();
+  else if (is("decimate_stopband_db")) c.decimate.stopband_db = v();
+  else if (is("decimate_taps")) c.decimate.taps = i();
+  else if (is("decimate_blank_until_s")) c.decimate.blank_until_s = v();
+  else if (is("decimate_blank_taper_s")) c.decimate.blank_taper_s = v();
+  else if (is("nav_water_depth_from_altitude")) c.nav.water_depth.from_altitude = on();
+  else if (is("nav_dvl_offset_m")) c.nav.water_depth.dvl_offset_m = v();
+  else if (is("nav_altitude_sigma_m")) c.nav.water_depth.altitude_sigma_m = v();
+  else if (is("nav_depth_sigma_m")) c.nav.water_depth.depth_sigma_m = v();
+  else if (is("nav_hold_s")) c.nav.water_depth.hold_s = v();
+  else if (is("nav_hold_sigma_m_per_s")) c.nav.water_depth.hold_sigma_m_per_s = v();
+  else if (is("nav_hold_sigma_m_per_m")) c.nav.water_depth.hold_sigma_m_per_m = v();
+  else if (is("nav_max_altitude_m")) c.nav.water_depth.max_altitude_m = v();
+  else if (is("nav_keep_s")) c.nav.keep_s = v();
+  else if (is("nav_profile_step_m")) c.nav.profile_step_m = v();
+  else if (is("elevation_profile")) c.elevation.profile.enabled = on();
+  else if (is("elevation_profile_bin_m")) c.elevation.profile.bin_m = v();
+  else if (is("elevation_profile_sample_sigma")) c.elevation.profile.sample_sigma = v();
+  else if (is("elevation_profile_age_sigma_per_hour")) c.elevation.profile.age_sigma_per_hour = v();
+  else if (is("elevation_profile_distance_sigma_per_km")) c.elevation.profile.distance_sigma_per_km = v();
+  else if (is("elevation_profile_max_age_s")) c.elevation.profile.max_age_s = v();
+  else if (is("elevation_profile_max_distance_m")) c.elevation.profile.max_distance_m = v();
+  else if (is("elevation_profile_min_span_m")) c.elevation.profile.min_span_m = v();
+  else if (is("elevation_profile_extrapolation_sigma_per_s")) c.elevation.profile.extrapolation_sigma_per_s = v();
+  else if (is("elevation_ray_arcs")) c.elevation.ray_arcs = on();
+  else if (is("elevation_sector_from_rays")) c.elevation.sector_from_rays = on();
+  else if (is("elevation_sector_rays_bounces")) c.elevation.sector_rays_bounces = v();
+  else if (is("elevation_sector_rays_margin_deg")) c.elevation.sector_rays_margin = v() * kDeg;
+  else if (is("elevation_sector_rays_max_depth")) c.elevation.sector_rays_max_depth = v();
+  else if (is("elevation_multipath_sigma")) c.elevation.multipath_sigma = on();
+  else if (is("elevation_multipath_sigma_bounces")) c.elevation.multipath_sigma_bounces = v();
+  else if (is("elevation_multipath_sigma_max_depth")) c.elevation.multipath_sigma_max_depth = v();
+  else if (is("elevation_profile_ensemble")) c.elevation.profile.ensemble = on();
+  else if (is("elevation_profile_ensemble_sigma_members")) c.elevation.profile.ensemble_sigma_members = on();
+  else if (is("elevation_profile_file")) c.elevation.profile.file = value;
+  else if (is("elevation_profile_cast")) c.elevation.profile.cast = value;
+  else if (is("elevation_profile_supplied_sigma")) c.elevation.profile.supplied_sigma = v();
+  else if (is("elevation_profile_family")) c.elevation.profile.family = value;
+  else if (is("elevation_profile_family_gradient")) c.elevation.profile.family_gradient = v();
+  else if (is("elevation_profile_layer_depth")) c.elevation.profile.layer_depth = v();
+  else if (is("elevation_profile_thermocline_gradient")) c.elevation.profile.thermocline_gradient = v();
+  else if (is("elevation_profile_thermocline_thickness")) c.elevation.profile.thermocline_thickness = v();
+  else if (is("elevation_profile_family_sigma")) c.elevation.profile.family_sigma = v();
+  else if (is("elevation_profile_ladder")) {
     c.elevation.profile.ladder.clear();
     for (const std::string& rung : list_items(value)) {
       if (rung.empty()) refuse(key, value, "rung names separated by commas");
@@ -292,69 +322,73 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
     }
   }
   // Comma-separated lists.
-  else if (key == "elevation_profile_ensemble_gradients") c.elevation.profile.ensemble_gradients = option_numbers(key, value);
-  else if (key == "elevation_profile_ensemble_extents") c.elevation.profile.ensemble_extents = option_numbers(key, value);
-  else if (key == "elevation_ssp_depth") c.elevation.ssp_depth = option_numbers(key, value);
-  else if (key == "elevation_ssp_speed") c.elevation.ssp_speed = option_numbers(key, value);
-  else if (key == "dead_channels") c.dead_channels = option_integers(key, value);
+  else if (is("elevation_profile_ensemble_gradients")) c.elevation.profile.ensemble_gradients = option_numbers(key, value);
+  else if (is("elevation_profile_ensemble_extents")) c.elevation.profile.ensemble_extents = option_numbers(key, value);
+  else if (is("elevation_ssp_depth")) c.elevation.ssp_depth = option_numbers(key, value);
+  else if (is("elevation_ssp_speed")) c.elevation.ssp_speed = option_numbers(key, value);
+  else if (is("dead_channels")) c.dead_channels = option_integers(key, value);
   // auto (as gpusonar.live): CUDA when the build has it and a device is present, else the host. Without the key: the host.
-  else if (key == "backend") c.backend = p.sbl.backend = parse_backend(value);
-  else if (key == "sbl_kernels") c.sbl.kernels = p.sbl.kernels = on();
-  else if (key == "tracker_range_sigma") c.tracker.range_sigma = v();
-  else if (key == "tracker_bearing_sigma_deg") c.tracker.bearing_sigma = v() * kDeg;
-  else if (key == "tracker_confirm_hits") c.tracker.confirm_hits = i();
-  else if (key == "tracker_max_misses") c.tracker.max_misses = i();
-  else if (key == "tracker_ping_interval_s") {
+  else if (is("backend")) c.backend = p.sbl.backend = parse_backend(value);
+  else if (is("sbl_kernels")) c.sbl.kernels = p.sbl.kernels = on();
+  else if (is("tracker_range_sigma")) c.tracker.range_sigma = v();
+  else if (is("tracker_bearing_sigma_deg")) c.tracker.bearing_sigma = v() * kDeg;
+  else if (is("tracker_confirm_hits")) c.tracker.confirm_hits = i();
+  else if (is("tracker_max_misses")) c.tracker.max_misses = i();
+  else if (is("tracker_ping_interval_s")) {
     // sonar-4bs: given, seconds above 0 (leave the key out for off).
     const double s = v();
     if (!(std::isfinite(s) && s > 0.0)) throw std::invalid_argument("tracker_ping_interval_s: seconds above 0, got '" + value + "' (leave the key out for off)");
     c.tracker_ping_interval_s = s;
   }
-  else if (key == "classify_min_speed") c.classify.min_speed = c.classify.static_speed = v();
-  else if (key == "classify_static_speed") c.classify.static_speed = v();   // after classify_min_speed, which sets both
-  else if (key == "classify_max_fit_rms") c.classify.max_fit_rms = v();
-  else if (key == "classify_max_fit_rms_bearing_deg") {
+  else if (is("classify_min_speed")) c.classify.min_speed = c.classify.static_speed = v();
+  else if (is("classify_static_speed")) c.classify.static_speed = v();   // after classify_min_speed, which sets both
+  else if (is("classify_max_fit_rms")) c.classify.max_fit_rms = v();
+  else if (is("classify_max_fit_rms_bearing_deg")) {
     const double b = v();
     if (!(std::isfinite(b) && b >= 0.0)) throw std::invalid_argument("classify_max_fit_rms_bearing_deg: a finite angle, 0 (off) or more, got '" + value + "' (leave the key out to derive it)");
     c.classify.max_fit_rms_bearing = b * kDeg;
   }
-  else if (key == "classify_outlier_alpha") {
+  else if (is("classify_outlier_alpha")) {
     const double a = v();
     if (!(a >= 0.0 && a < 1.0)) throw std::invalid_argument("classify_outlier_alpha: from 0 (off) to below 1, got '" + value + "'");
     c.classify.outlier_alpha = a;
   }
-  else if (key == "classify_min_mover_cells") {
+  else if (is("classify_min_mover_cells")) {
     // Off unless given (the field's default is below 0); given, it must be a number of cells, zero or more.
     const double m = v();
     if (!(m >= 0.0)) throw std::invalid_argument("classify_min_mover_cells: zero or more cells, got '" + value + "' (leave the key out for off)");
     c.classify.min_mover_cells = m;
-  } else if (key == "classify_row_snr_db") {
+  } else if (is("classify_row_snr_db")) {
     throw std::invalid_argument("classify_row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
   }
-  else if (key == "tracker_initial_speed_sigma") c.tracker.initial_speed_sigma = v();
-  else if (key == "tracker_process_noise") c.tracker.process_noise = v();
-  else if (key == "multipath_max_excess_range") c.classify.multipath_max_excess_range = v();
-  else if (key == "multipath_bearing_deg") c.classify.multipath_bearing = v() * kDeg;
-  else if (key == "multipath_velocity") c.classify.multipath_velocity = v();
-  else if (key == "window") c.hann = option_choice(key, value, {"hann", "rect"}) == "hann";
-  else if (key == "multipath") c.classify.multipath = on();
-  else if (key == "sync") c.sync = on();
-  else if (key == "sync_f_start") c.reference.f_start = v();
-  else if (key == "sync_f_stop") c.reference.f_stop = v();
-  else if (key == "sync_duration") c.reference.duration = v();
-  else if (key == "sync_lead") c.reference.lead = v();
-  else if (key == "sync_tail") c.reference.tail = v();
-  else if (key == "sync_dedicated") c.reference.dedicated = on();
-  else if (key == "f_low") p.f_low = v();
-  else if (key == "f_high") p.f_high = v();
-  else if (key == "n_fft") p.n_fft = i();
-  else if (key == "hop") p.hop = i();
-  else if (key == "n_average") p.n_average = i();
-  else if (key == "passive_method") p.use_sbl = option_choice(key, value, {"sbl", "conventional"}) == "sbl";
+  else if (is("tracker_initial_speed_sigma")) c.tracker.initial_speed_sigma = v();
+  else if (is("tracker_process_noise")) c.tracker.process_noise = v();
+  else if (is("multipath_max_excess_range")) c.classify.multipath_max_excess_range = v();
+  else if (is("multipath_bearing_deg")) c.classify.multipath_bearing = v() * kDeg;
+  else if (is("multipath_velocity")) c.classify.multipath_velocity = v();
+  else if (is("window")) c.hann = option_choice(key, value, {"hann", "rect"}) == "hann";
+  else if (is("multipath")) c.classify.multipath = on();
+  else if (is("sync")) c.sync = on();
+  else if (is("sync_f_start")) c.reference.f_start = v();
+  else if (is("sync_f_stop")) c.reference.f_stop = v();
+  else if (is("sync_duration")) c.reference.duration = v();
+  else if (is("sync_lead")) c.reference.lead = v();
+  else if (is("sync_tail")) c.reference.tail = v();
+  else if (is("sync_dedicated")) c.reference.dedicated = on();
+  else if (is("f_low")) p.f_low = v();
+  else if (is("f_high")) p.f_high = v();
+  else if (is("n_fft")) p.n_fft = i();
+  else if (is("hop")) p.hop = i();
+  else if (is("n_average")) p.n_average = i();
+  else if (is("passive_method")) p.use_sbl = option_choice(key, value, {"sbl", "conventional"}) == "sbl";
   else if (set_tonal_option(p.tonal, key, value)) {}                 // tonal...: Goertzel lines and DEMON (tonal.hpp)
   else if (set_multipath_option(c.multipath_depth, key, value)) {}   // multipath_depth...: depth from multipath timing (multipath_depth.hpp)
   else if (set_coverage_option(c.coverage, key, value)) {}           // coverage...: the coverage picture (coverage.hpp)
-  else throw std::invalid_argument("unknown option " + key);
+  else {
+    // The stages' own keys (tonal_, multipath_depth_, coverage_) are not among those named.
+    const std::string nearest = nearest_key(key, keys);
+    throw std::invalid_argument("unknown option " + key + (nearest.empty() ? std::string() : "; did you mean " + nearest + "?"));
+  }
 }
 
 void set_pair(ChainOptions& c, PassiveOptions& p, const std::string& pair) {

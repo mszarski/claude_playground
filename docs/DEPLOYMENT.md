@@ -794,12 +794,13 @@ decided) when the run stopped; pings + `dropped_pings` + these = pings heard.
 `dropped_pings` includes pings none of whose frames arrived, counted from a jump of d in the
 frame header's ping index as d - 1 only when the transmits are d ping intervals apart: the
 interval is the median of the last 5 between consecutive indices, the gap must be within half
-an interval of d intervals and exceed d - 1 of the longest of those 5 by half an interval.
-Otherwise the jump is a renumbering and counts nothing, and so does any jump before two
-consecutive pings have been heard. How this fails: a sender that skips indices across a gap
-that, with ping-interval jitter not yet seen, happens to be near d intervals is counted as
-d - 1 pings lost (an index skip over 1.6 intervals with steady intervals before it counts one);
-a real loss with jitter beyond half an interval is not counted.
+an interval of d intervals and exceed d - 1 of the longest of those 5 by half an interval,
+and samples between the two transmits must have been lost (the frames of a ping lost whole
+name it, so the sample counter has a gap there; a sender that skipped an index leaves none;
+sonar-2ht). Otherwise the jump is a renumbering and counts nothing, and so does any jump
+before two consecutive pings have been heard. How this fails: a sender that skips indices
+across a gap near d intervals and also loses samples in that gap is counted as d - 1 pings
+lost; a real loss with jitter beyond half an interval is not counted.
 
 How `receive` stops (issue sonar-dkb). It stops once `--pings` pings are accounted for,
 whether reported by the chain or counted as dropped. It also stops when no frame has arrived for
