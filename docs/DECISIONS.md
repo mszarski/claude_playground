@@ -2962,3 +2962,79 @@ capacity; job 6b049e57ca8b51043c3a4932 cancelled before it started).
   each separate at most 57 of 78 without losing a boat track, a threshold fitted to one scene),
   and the winter-sand ship's speed (a stray detection 18-22 m beyond the hull at ping 1 on every
   seed; the opt-in per-axis outlier test of D-159 removes it, its default stays the owner's call).
+
+### D-171 Motion estimation: range windows with no seabed at the footprint (owner chose both remedies, issue sonar-7r7)
+
+The heave tilt left in `minefield_sas` after D-164 did not come from its objects or ripples:
+removing the objects' echoes, flattening the ripples, or giving the footprints the relief each moved
+ping 0's height by less than 0.07 mm (it stayed 1.76 mm off against a 0.34 mm DVL error). Both SAS
+gallery scenes laid their seabed only to 48 m ground range (slant 50.3 m) while the receive window
+reaches slant 53.6 m. The last of the eight delay windows (slant 52.6 m) was 38-39 dB below the
+ping's median window, with no seabed at the broadside footprint Eq. 4 is evaluated at; without
+receiver noise its coherence stayed 0.99. At the truth its delays read 0.94 of the model's plus
+18.9 µm per ping pair, and as the window with the lowest depression angle it moved the split between
+sway and heave (the DVL term resisted it, which is why a smaller λ2 made it worse).
+- `MotionOptions.min_window_energy_db` (default −20; ours: windows with seabed in the main lobe were
+  −9.4 to +18.3 dB of the median, a window past the seabed's edge −34 to −52 dB) drops a window that
+  far below its ping pair's median energy. `None` restores the old behaviour.
+- Both scenes' seabed now spans y 34-53 m, covering the window's ground extent of 35.0-51.5 m. That
+  re-draws each scene (scatterers: `minefield_sas` 14,870 -> 20,558, `wreck_sas` 9,180 -> 13,555), so
+  before and after are not paired.
+- Full size (host): `minefield_sas` sway 0.140 -> 0.022 λ, heave 0.101 -> 0.044 λ, ping-0 height
+  error −1.76 -> +0.03 mm. What got worse: `wreck_sas` sway 0.045 -> 0.053 λ (heave 0.083 -> 0.044 λ),
+  the new draw's motion; the gate drops nothing in the new scenes. Object levels in the gallery rows
+  move with the draw (`minefield_sas` 18.9 / 21.7 / 23.4 dB, `wreck_sas` 26.9 dB). On the old scenes
+  the gate alone gave 0.021 / 0.019 λ. Acceptance seeds 1-10 identical, nothing dropped.
+- `test_sas_scenes_with_unknown_motion`: "estimated sharpness > 2 × navigation-only" is replaced by
+  "navigation < 0.6 × true and the estimate wins back more than 80 % of the loss" (still est > 0.8 ×
+  true): in the new `minefield_sas` draw the true-motion image is only 1.91 × the navigation one.
+- Not done: the gallery and the `minefield_sas` benchmark row are not regenerated; lambdas unchanged.
+- Full GPU suite 1875 passed, 92 skipped (L4, HF job 6b04f660c97b8ed4fcd7093a, with D-172, D-173).
+
+### D-172 Echo groups within one gate of their object; gallery places Popoto echoes from the array at reception (owner's choice, issues sonar-a5x, sonar-960)
+
+sonar-960: the 12 km object's cross-range error was not the cone angle (bias for its arrival at
+most 6.7 m at the first ping, under 0.01 m at the report; earliest arrival about 0.05° elevation),
+nor heading (zero in the scene), nor the tracker (the filtered state errs as much as the measured
+line). The gallery placed Popoto echoes from the array at transmit while the simulator receives
+where the array is when the echo arrives: v·2R/c = 24 m behind at 12 km. `gallery.echo_position`
+places them from the array at reception (ours, first order; |d|²/R 0.05 m at 12 km; motion during
+the pulse, at most 0.75 m for a 1 s pulse, left out); tools only. Full size (a10g-small, job
+6b04b891c97b8ed4fcd689d3, against the afe0806 L4 captures re-scored; track counts identical):
+`popoto_12km` median to hull 8.2 -> 2.3 m, mean cross-range from centre −55.9 -> −31.8 m, worst
+−118.8 -> −94.7 m; `popoto_far_mover` −16.3 -> −4.2 m; `gravel_30m` −15.8 -> −9.7 m. What got worse:
+`winter_sand_200m` now reads ahead of the ship's centre, mean −7.0 -> +9.2 m, worst +24.5 m (distance
+to the hull unchanged, 0.6-4 m). No class, track-count or false-mover change. What remains: low-SNR
+and glinting end points (0.4-0.8° of bearing; 12 km seeds k5, k6 79-95 m), and a 33-41 m range error
+in `popoto_far_mover` and `gravel_30m` this does not touch. Gallery not regenerated.
+
+sonar-a5x: grown transitively (D-155), copies of the 12 km ship's arrivals up to 900 m apart in range
+(gate 800 m) were one object on 10/10 seeds. Now a group member farther than `max_excess_range` from
+the group's object in range is left out and free to form its own group (when it is the anchor, the
+anchor groups again from what is left); both engines, parity-tested. Measured group extents are at
+most 193 m. The new scene `popoto_12km_two_ships` (two ships 852 m apart at one bearing and velocity,
+`classify_rules_eval.py` study scene, not in the gallery): ship B its own mover on 0/10 seeds before,
+10/10 after, ship A unchanged, 0 false movers. The 120 gallery captures do not change.
+`max_excess_range` is not scaled to water depth: excess grows with range, and the 1000 m scene has the
+smallest groups (21 m). Two tests now expect the opposite result by design
+(`test_a_group_grows_through_any_member_not_only_the_anchor` moved to a one-gate case;
+`test_transitive_echo_grouping_matches_python`'s third arrival is its own object). Full GPU suite
+1875 passed, 92 skipped (HF job 6b04f660c97b8ed4fcd7093a).
+
+### D-173 Sensor Bridge end to end with `serve --scenario` and `engine: cpp`; thread count from the CPU quota (issue sonar-8rj)
+
+`serve --scenario` and `receive` with the chain's C++ engine now have real-time loopback tests
+through Sensor Bridge; each run's reports equal the direct chain of the same engine on the same pings
+(largest difference 0.0). Nothing in either path needed a fix. `serve` simulates every ping before
+announcing the board, so `receive --find-timeout` (opt-in; default 30 s as before) lets `receive`
+wait longer. The loopback test's OpenMP count is half of min(affinity, cgroup CPU quota): on
+quota-limited hosts the affinity lists the host's CPUs (a10g-small listed 16 or 96 for a 3- or 4-CPU
+quota), and with 8 or 48 threads the receiver waited 44-184 ms behind CFS throttling (jobs
+6b04b897c97b8ed4fcd689e1, 6b04b837c97b8ed4fcd68929); unchanged where there is no quota (L4: 4).
+- Pace (ours, a10g-small, 160 runs, job 6b04bedcc97b8ed4fcd6969f): with the cap, 0 of 80 runs lost
+  frames at pace 1.0 and 0.5, default and halved buffer, worst delay at most 2.4 ms; without it 2-20 of
+  20 per configuration, worst 169 ms. Cost +40-57 % chain time with one thread there (+10 % on L4 with
+  four). Pace 1.0 kept (D-153). Not repeated on L4 (no capacity at the time).
+- Open: `serve` has no `--backend` (realistic scenarios simulate on the host).
+- Full GPU suite 1875 passed, 92 skipped (L4, HF job 6b04f660c97b8ed4fcd7093a), including the new
+  loopback tests and the quota-aware count on L4.

@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-170); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-173); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -590,8 +590,11 @@ Grouped; within a group the most consequential first.
     `rmem_max`, about 20 ms of stream) while the chain ran on a ping and the emulated board then
     sent its owed frames back to back; the board now spreads its catch-up (`catch_up: spread`,
     default; `burst` the old behaviour): at real time burst lost frames in 3 of 14 runs, spread in
-    0 of 20. A halved buffer still loses frames. The test runs at real time since D-153 (owner's
-    ruling). Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
+    0 of 20. The test runs at real time since D-153 (owner's ruling). With the chain's OpenMP at
+    half the CPUs the container's quota allows (D-173), real time lost nothing in 40 of 40
+    a10g-small runs, 20 of them at a halved buffer (worst receive delay 2.2 ms; job
+    6b04bedcc97b8ed4fcd6969f); without the cap 12 of 20 at the default buffer and 20 of 20 at a
+    halved buffer lost frames. Not yet repeated on L4 under the new count (unchanged there). Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
     an isolated receiver core) in `DEPLOYMENT.md`.
 35. **Wire format**: the sample word length is configuration on both ends because the
     block header has no field for it; an over-long report is split into parts; the
@@ -956,9 +959,11 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   ours, milestone 8, ASASIN reports no motion accuracy) hold on seeds 1-8 at the default
   lambda1 = lambda2 = 1. Seed 2's miss (0.87 mm against 0.375 mm) came from holding ping 0's height
   on one noisy DVL sample; that height is now an unknown with its own Eq. 7 term (worst sway 0.24 mm).
-  `minefield_sas` sway rose 0.081 -> 0.139 lambda RMS with the fix, mostly a common offset (sharpness
-  319.8 -> 323.1); its delays carry a heave tilt the old anchor masked, not yet explained. The
-  committed `wreck_sas` and `minefield_sas` gallery figures and JSON predate D-164.
+  `minefield_sas` sway rose 0.081 -> 0.139 lambda RMS with that fix; explained in D-171: its last
+  delay window held no seabed. The window energy gate (`min_window_energy_db`, -20 dB) is now the
+  default and both SAS scenes' seabed covers the receive window: full-size `minefield_sas` sway
+  0.022 lambda, heave 0.044; `wreck_sas` sway 0.053, heave 0.044. The committed `wreck_sas` and
+  `minefield_sas` gallery figures and JSON predate D-164 and D-171.
 - Delay estimation has a C++ port (host and CUDA, `MotionOptions.delay_backend`), bit-close to
   NumPy, which stays the default and the reference. On an L4 the CUDA path is slower than the
   host path (22.6 against 5.2 ms for 1248 windows; per-pair uploads and double sums). The fine

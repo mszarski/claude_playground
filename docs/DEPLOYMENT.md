@@ -767,6 +767,10 @@ tools/sonar_live_hsb.py serve --scenario flank_target_1km --ip 127.0.0.1        
 tools/sonar_live_hsb.py receive configs/deploy/popoto_vehicle.yaml --hololink 127.0.0.1 --report out.jsonl
 ```
 
+`serve --scenario` simulates all its pings before the board appears (17.7 s for
+`flank_target_1km` on one CPU thread; `flank_patrol` more than 25 min): start `receive` once `serve`
+prints that it is waiting for a receiver, or give `receive --find-timeout S` (default 30 s).
+
 `serve` cuts the board stream into fixed-size frames (one block of the UDP format each)
 and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan application of
 Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
@@ -917,7 +921,10 @@ was possible in the containers used. Two settings work without privilege, and we
   for example half the cores. It is applied with `omp_set_num_threads` on the thread that
   runs the chain, before the first ping, and so applies to the chain's parallel stages only.
   Without it, OpenMP keeps its default (one thread per core, or `OMP_NUM_THREADS`). The
-  loopback test runs with half the CPUs available to it.
+  loopback test runs with half the CPUs available to it. In a container with a CPU quota
+  (cgroup `cpu.max`) that means half the quota, not half the CPUs the process's affinity lists:
+  OpenMP's default ignores the quota, and on a 3-CPU quota its 16 threads kept the receiver
+  waiting 80-170 ms and lost frames in 12 of 20 real-time runs (D-173).
 - Ask for at least `net.core.rmem_max` with `receive --socket-buffer` (in bytes). The kernel
   doubles what it grants, up to twice `rmem_max`. In those containers that is 425,984 bytes,
   about 40 ms of the stream, against the 212,992 bytes Sensor Bridge leaves.
