@@ -62,6 +62,15 @@ MAX_CORRELATION = 0.98
 DOMINANT_SHARE = 0.5        # which term the data mostly are, for the explanation of an unconstrained parameter
 
 
+def yaml_number(value: float, spec: str) -> str:
+    """`value` formatted with `spec`, written so that PyYAML (YAML 1.1) reads it back as a number: `:g` gives
+    `1e-05` for 0.00001, which YAML 1.1 reads as a STRING (a float there needs a dot in the mantissa); it is
+    written `1.0e-05` (sonar-iwq)."""
+    text = format(float(value), spec)
+    mantissa, e, exponent = text.partition("e")
+    return f"{mantissa}.0e{exponent}" if e and "." not in mantissa else text
+
+
 @dataclass
 class SedimentFit:
     params: dict                                 # the six parameters
@@ -92,7 +101,7 @@ class SedimentFit:
         """An entry for configs/sediments.yaml. `status: fitted (...)`; parameters the data do
         not fix are listed in `unconfirmed_fields`, so that using the row warns about them."""
         p = self.params
-        lines = [f"{name}:"] + [f"  {k}: {p[k]:.6g}" for k in bottom.SEDIMENT_KEYS]
+        lines = [f"{name}:"] + [f"  {k}: {yaml_number(p[k], '.6g')}" for k in bottom.SEDIMENT_KEYS]
         lines.append(f"  status: fitted ({data_source})")
         if self.unconstrained:
             lines.append(f"  unconfirmed_fields: [{', '.join(self.unconstrained)}]")
@@ -103,11 +112,11 @@ class SedimentFit:
                   f"    backscattering strength, {self.grazing_deg[0]:g} to {self.grazing_deg[1]:g} degrees grazing, at {freqs} kHz:",
                   f"    {data_source}. Held: {', '.join(held) if held else 'nothing'}.",
                   "  fit:",
-                  f"    rms_residual_db: {self.rms_residual_db:.3g}",
-                  f"    measurement_error_db: {self.sigma_db:.3g}",
+                  f"    rms_residual_db: {yaml_number(self.rms_residual_db, '.3g')}",
+                  f"    measurement_error_db: {yaml_number(self.sigma_db, '.3g')}",
                   "    one_sigma:"]
         for k in self.fitted:
-            lines.append(f"      {k}: " + (f"factor {self.factor(k):.3g}" if k in LOG_KEYS else f"{self.std[k]:.3g}"))
+            lines.append(f"      {k}: " + (f"factor {self.factor(k):.3g}" if k in LOG_KEYS else yaml_number(self.std[k], '.3g')))
         if self.notes:
             lines.append("    notes:")
             lines += [f"      - \"{n}\"" for n in self.notes]

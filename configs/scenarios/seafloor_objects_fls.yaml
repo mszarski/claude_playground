@@ -6,7 +6,7 @@ name: seafloor_objects_fls
 sonar: fls_300k
 fidelity: free_field
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 150.0e3, window: {range: [3.0, 10.5]}, tvg: null}
+  receive: {kind: baseband, sample_rate: 150.0e+3, window: {range: [3.0, 10.5]}, tvg: null}
 environment: {base: coastal_12c, absorption: none}
 platform:
   position: [0, 0, -1.0]

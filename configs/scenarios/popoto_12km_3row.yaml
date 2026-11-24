@@ -10,7 +10,7 @@ name: popoto_12km_3row
 sonar: popoto_long_range_3row
 fidelity: eigenray
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [11300.0, 12700.0]}}
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
 environment: {base: shelf_100m_sand_12c, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   max_range: 13200.0

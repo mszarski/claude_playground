@@ -20,15 +20,15 @@ transmit:
   aperture_height: 0.03
   waveform:
     type: lfm
-    f_start: 180.0e3
-    f_stop: 220.0e3
+    f_start: 180.0e+3
+    f_stop: 220.0e+3
     duration: 2.0e-3
     window_alpha: 0.1
     amplitude: 1.0
 
 receive:
   kind: real
-  sample_rate: 1.0e6
+  sample_rate: 1.0e+6
   adc_bits: 16
   adc_full_scale: 1.0
   window: {range: [10.0, 150.0]}

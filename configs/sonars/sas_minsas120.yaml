@@ -28,15 +28,15 @@ transmit:
   aperture_height: 0.012
   waveform:
     type: lfm
-    f_start: 310.0e3
-    f_stop: 350.0e3              # 40 kHz: c / 2B = 1.9 cm before windowing
+    f_start: 310.0e+3
+    f_stop: 350.0e+3              # 40 kHz: c / 2B = 1.9 cm before windowing
     duration: 5.0e-3
     window_alpha: 0.1
     source_level_db_rms: 215.0           # design value; sets how far the seabed stays above noise (docs/DESIGN.md)
 
 receive:
   kind: real
-  sample_rate: 1.5e6
+  sample_rate: 1.5e+6
   adc_bits: 16
   adc_full_scale: 1.0
   sensitivity_db: -190.0

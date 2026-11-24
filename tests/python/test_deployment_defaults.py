@@ -218,3 +218,19 @@ def test_the_programs_options_carry_the_new_settings():
     assert [float(v) for v in o["coverage_pd_value"].split(",")] == pytest.approx(pd, abs=1e-9) and len(o["coverage_pd_snr_db"].split(",")) == len(snr)
     assert o["multipath_depth"] == 1 and o["multipath_depth_rays"] == 1 and o["multipath_depth_withhold_flagged"] == 1
     assert not any(isinstance(v, (dict, list)) for k, v in o.items() if k.startswith(("coverage", "multipath_depth", "elevation")))     # values the program can read
+
+
+def test_the_rehearsal_sync_reference_reaches_the_cpp_receivers():
+    """popoto_elevation_rehearsal.yaml's shared reference, read by plain PyYAML as well as by our loader, passes through
+    the C++ readers of a reference (PingAssemblerCpp, PingDecimator: flank_udp with decimate and sync) (sonar-iwq).
+    Before, it was written `f_start: 38.0e3`: YAML 1.1 reads that as a string, and the readers refused it with a cast
+    error."""
+    import yaml
+    path = DEPLOY / "popoto_elevation_rehearsal.yaml"
+    for cfg in (yaml.safe_load(path.read_text()), load_yaml(path)):
+        ref = live.sync_reference(cfg["chain"])
+        assert ref == {"f_start": 38000.0, "f_stop": 48000.0, "duration": 4.0e-3, "lead": 5.0e-3, "tail": 10.0e-3}
+        assert all(type(v) is float for v in ref.values())
+        template = SonarModel.load(cfg["source"]["sonar"]).make_record(gs.core.Pose())
+        gs.core.PingAssemblerCpp(template, {}, ref)
+        gs.core.PingDecimator(template, {}, ref)

@@ -27,8 +27,8 @@ receive:
   reference:
     mode: sync_chirp
     dedicated: true              # the reference inputs carry no hydrophone signal
-    f_start: 22.0e3              # a dedicated input can carry an in-band reference
-    f_stop: 32.0e3
+    f_start: 22.0e+3              # a dedicated input can carry an in-band reference
+    f_stop: 32.0e+3
     duration: 4.0e-3
     level: 0.5                   # V peak at the ADC
     lead: 5.0e-3

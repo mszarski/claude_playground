@@ -12,7 +12,7 @@ name: wreck_sas
 sonar: sas_auv
 fidelity: free_field
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 100.0e3, window: {range: [38.0, 52.0]}}
+  receive: {kind: baseband, sample_rate: 100.0e+3, window: {range: [38.0, 52.0]}}
 environment: {base: coastal_12c, absorption: none}
 platform:
   position: [0, 0, -15.0]

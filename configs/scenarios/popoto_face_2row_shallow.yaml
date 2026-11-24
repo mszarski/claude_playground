@@ -12,7 +12,7 @@ name: popoto_face_2row_shallow
 sonar: popoto_long_range_2row
 fidelity: image_source
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [2700.0, 3300.0]}}
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [2700.0, 3300.0]}}
 environment: {base: coastal_12c_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0

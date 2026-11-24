@@ -9,7 +9,7 @@ name: popoto_env_winter_sand_200m
 sonar: popoto_long_range
 fidelity: eigenray
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [7300.0, 8700.0]}}
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [7300.0, 8700.0]}}
 environment: {base: winter_200m_sand_profile, temperature_c: 12.0, salinity_psu: 35.0, shipping: 0.5, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   max_range: 9200.0

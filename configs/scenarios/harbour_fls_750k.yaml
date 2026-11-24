@@ -6,7 +6,7 @@ name: harbour_fls_750k
 sonar: fls_750k
 fidelity: free_field
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 400.0e3, window: {range: [4.0, 34.0]}, tvg: null}
+  receive: {kind: baseband, sample_rate: 400.0e+3, window: {range: [4.0, 34.0]}, tvg: null}
 environment: {base: coastal_12c, absorption: francois_garrison}
 platform:
   position: [0, 0, -2.0]           # seafloor at z = 0

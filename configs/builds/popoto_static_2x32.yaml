@@ -52,7 +52,7 @@ boards:
 
 sync:
   scheme: shared_reference       # one electrical burst wired to every board and summed into its first input, above the acoustic band
-  reference: {f_start_hz: 38.0e3, f_stop_hz: 48.0e3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
+  reference: {f_start_hz: 38.0e+3, f_stop_hz: 48.0e+3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
   elevation_error_deg: 0.05      # the elevation error allowed from clock error between rows: sets the required agreement
 
 projector:

@@ -43,7 +43,7 @@ boards:
 
 sync:
   scheme: shared_reference
-  reference: {f_start_hz: 20.0e3, f_stop_hz: 28.0e3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
+  reference: {f_start_hz: 20.0e+3, f_stop_hz: 28.0e+3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
 
 projector:
   source_level_db_rms: 185.0     # an RMS level, dB re 1 uPa at 1 m

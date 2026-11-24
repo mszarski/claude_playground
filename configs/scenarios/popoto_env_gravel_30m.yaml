@@ -9,7 +9,7 @@ name: popoto_env_gravel_30m
 sonar: popoto_long_range
 fidelity: eigenray
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [2300.0, 3700.0]}}
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [2300.0, 3700.0]}}
 environment: {base: coastal_12c, water_depth_m: 30.0, bottom: {speed: 1800.0, density: 2.0, attenuation: 0.6}, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   max_range: 4200.0

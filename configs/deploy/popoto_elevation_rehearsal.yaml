@@ -10,7 +10,7 @@ source:
   timeout: 30.0
 
 chain:
-  sync: {reference: {f_start: 38.0e3, f_stop: 48.0e3, duration: 4.0e-3, lead: 5.0e-3, tail: 10.0e-3}}   # the shared reference summed into each board's first input
+  sync: {reference: {f_start: 38.0e+3, f_stop: 48.0e+3, duration: 4.0e-3, lead: 5.0e-3, tail: 10.0e-3}}   # the shared reference summed into each board's first input
   bearings_deg: [-60.0, 60.0, 0.5]
   look: starboard
   # range cell, CFAR windows, SNR floor, tracker and classifier sizes: the chain derives or defaults them from the sonar
