@@ -179,10 +179,12 @@ class PingAssembler:
       The jump d (modulo 2^32: a wrap continues) counts d - 1 dropped pings when the transmits are d ping
       intervals apart, the interval being the median of the last 5 transmit gaps between consecutive indices
       and "d apart" meaning within half an interval of d intervals and longer than d - 1 of the longest of
-      those 5 by more than half an interval; otherwise it is a renumbering and counts nothing. Failure modes:
-      a sender that skips indices across a gap that, with jitter, happens to be near d intervals is counted as
-      d - 1 lost (an index skip over 1.6 intervals counts 1); a real loss with jitter beyond half an interval
-      is not counted. Before an interval is known (fewer than two consecutive pings heard) a jump counts nothing:
+      those 5 by more than half an interval, and only when samples between the two transmits were lost (given
+      up or still awaited): the blocks of a ping lost whole name it, so they are missing from the sample
+      counter, while a sender that skipped an index leaves none missing (sonar-2ht). Otherwise it is a
+      renumbering and counts nothing. Failure modes: a sender that skips indices across a gap near d
+      intervals that also lost samples there is counted as d - 1 lost; a real loss with jitter beyond half an
+      interval is not counted. Before an interval is known (fewer than two consecutive pings heard) a jump counts nothing:
       losses are then under-counted, never invented. Pings before the first one heard are not counted.
     * A ping named late (a block behind the stream naming a transmit between two heard ones, its index in
       between) is placed in order. A block naming a transmit before the last ping already emitted or dropped
@@ -268,6 +270,7 @@ class PingAssembler:
         self._frontier = self._origin = self._stream_ns = None
         self._holes = []                  # [a, b): samples not received, not yet given up (sorted, disjoint)
         self._expired = []                # [a, b): given up, the recent ones
+        self._lost = []                   # [a, b): given up, ending after the last ping released (an index jump needs one, sonar-2ht)
         self._pings = []                  # open or undecided pings, in transmit order
         self._owner = None                # the ping the decimator is open for
         self._released = []               # (tx, index) of the pings emitted or dropped, the latest 8
@@ -305,6 +308,7 @@ class PingAssembler:
     def _lose(self, h0: int, h1: int) -> None:
         self.lost_samples += h1 - h0
         self._expired.append([h0, h1])
+        self._lost = (self._lost + [[h0, h1]])[-64:]
 
     def _give_up(self, limit: int) -> None:
         """Give up the holes ending at or before `limit` that reach into no open ping's window."""
@@ -488,9 +492,13 @@ class PingAssembler:
                     interval = sorted(self._deltas)[len(self._deltas) // 2]
                     # d intervals within half an interval, and longer than d - 1 of the longest recent intervals
                     # by half an interval (with jitter seen, a skip of the index needs a longer gap to count)
-                    if abs(gap - d * interval) * 2 < interval and (gap - (d - 1) * max(self._deltas)) * 2 > interval:
+                    # and samples lost between the two transmits: the blocks of a ping lost whole name it, so they are
+                    # missing from the counter; a sender that skipped an index leaves none missing (sonar-2ht)
+                    if abs(gap - d * interval) * 2 < interval and (gap - (d - 1) * max(self._deltas)) * 2 > interval and \
+                            any(h0 < p["tx"] and h1 > tx for h0, h1 in self._lost + self._holes):
                         self.dropped_pings += d - 1               # pings none of whose blocks arrived
             self._released = (self._released + [(p["tx"], p["index"])])[-8:]
+            self._lost = [h for h in self._lost if h[1] > p["tx"]]   # later pings are transmitted after this one
             if p["state"] == "complete":
                 out.append(p["record"])
             else:

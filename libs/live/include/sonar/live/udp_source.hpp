@@ -120,6 +120,7 @@ class PingAssembler {
   std::vector<std::int64_t> left_;                            ///< capture starts left by a restart: never returned to
   std::pair<std::int64_t, std::int64_t> max_named_{0, 0};
   std::vector<Hole> holes_, expired_;
+  std::vector<Hole> lost_;   ///< given up, ending after the last ping released: an index jump counts only with one between (sonar-2ht)
   std::list<Ping> pings_;                                     ///< open or undecided, in transmit order
   Ping* owner_ = nullptr;                                     ///< the ping the decimator is open for
   std::vector<std::pair<std::int64_t, std::int64_t>> released_;   ///< (tx, index) emitted or dropped, the latest 8

@@ -666,8 +666,8 @@ def test_restarts_are_told_from_stale_copies(engine, name):
 @pytest.mark.parametrize("engine", ["python", "cpp"])
 def test_an_index_skip_with_jitter_seen_is_not_a_loss(engine):
     """Intervals of I and 1.4 I heard, then the index skips 3 -> 5 over 1.6 I: within half an interval of 2 I, but not
-    longer than the longest interval by half an interval, so not counted. (With no jitter heard it would be: the
-    documented failure mode.)"""
+    longer than the longest interval by half an interval, so not counted (nor would it be with no jitter heard: no
+    samples were lost between, sonar-2ht)."""
     gaps = [P, int(1.4 * P), P, int(1.6 * P), P]
     txs = [64]
     for g in gaps:
@@ -675,6 +675,24 @@ def test_an_index_skip_with_jitter_seen_is_not_a_loss(engine):
     by, order = small_stream(txs, 64, txs[-1] + P, index=[0, 1, 2, 3, 5, 6])
     a = small(engine)
     assert feed_all(a, [by[f] for f in order], finish=True) == [0, 1, 2, 3, 5, 6] and a.dropped_pings == 0
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+@pytest.mark.parametrize("lost", [False, True])
+def test_an_index_skip_over_d_intervals_counts_only_with_samples_lost(engine, lost):
+    """sonar-2ht: the transmits 2 intervals apart and the index skipping 3 -> 5, no jitter. A ping lost whole leaves
+    samples lost between the two transmits (its blocks); a sender that skipped an index leaves none, so that is a
+    renumbering, not a loss (before: counted 1, the failure mode D-161 named). With ping 4's blocks lost it counts."""
+    txs = [64 + i * P for i in range(4)] + [64 + 5 * P, 64 + 6 * P]
+    if lost:
+        txs = [64 + i * P for i in range(7)]
+    index = [0, 1, 2, 3, 5, 6] if not lost else list(range(7))
+    by, order = small_stream(txs, 64, txs[-1] + P, index=index)
+    if lost:
+        order = [f for f in order if not txs[4] <= f < txs[5]]
+    a = small(engine)
+    assert feed_all(a, [by[f] for f in order], finish=True) == [0, 1, 2, 3, 5, 6]
+    assert (a.dropped_pings, a.lost_samples) == ((1, P) if lost else (0, 0))
 
 
 @pytest.mark.parametrize("engine", ["python", "cpp"])
