@@ -39,5 +39,9 @@ x86_64 numbers to compare with.
 - Unified memory: the CUDA driver copies samples host-to-device on every call. On a
   Jetson that copy is avoidable (the memory is shared) and is not yet avoided.
 - Capture: per the Sensor Bridge source, AGX Orin receives over Linux sockets only and AGX
-  Thor is built without RoCE (`HOLOSCAN_NOTES.md`). The 49 Mbit/s flank source fits either;
-  the 38.4 Gbit/s ultrasound capture does not.
+  Thor is built without RoCE (`HOLOSCAN_NOTES.md`). The 49 Mbit/s flank
+  source (`flank_32`: 32 channels, 24 bits, 64 kHz) fits either; the 38.4 Gbit/s ultrasound capture
+  does not. The Popoto builds send 78.6, 157 and 236 Mbit/s for one, two and three rows
+  (`docs/handoff/hardware_builds.json`, `rate_total_bit_s`): 1.6 to 4.8 times the flank source and
+  far below the ultrasound capture, so the rate alone does not rule either receiver out; no stream
+  has been received on a Jetson at any of these rates.

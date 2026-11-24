@@ -266,6 +266,14 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `trial.bottom` | — | no | {speed, density, attenuation} of the sea bed for the shallow scenarios | site survey | sand: 1650 m/s, 1.9, 0.8 dB/wavelength: textbook values, flagged |
 | `trial.seed` | — | no | seed of the scenarios' noise | — | 1 |
 
+**Not a spec field yet: the navigation unit's offset from the array (D-167).** The live chain takes the
+surveyed lever arm and mounting rotation from the deployment file, `nav.lever_arm_m` (m, in the unit's body
+axes: x forward, y starboard, z down) and `nav.mount_rpy_deg` (degrees), both zero until surveyed and
+`unconfirmed`. The build spec has no field for them and the generated deployment files do not carry the keys
+(issue `sonar-vjq`): add them by hand to the generated file's `nav` section after the survey, as
+`configs/deploy/popoto_vehicle.yaml` shows them commented out. Keys: `CONFIGURATION.md`; what is not
+corrected (the array's velocity): `DECISIONS.md` D-167.
+
 ## Where things are
 
 | | |

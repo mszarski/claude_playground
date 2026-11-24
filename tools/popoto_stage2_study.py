@@ -278,13 +278,15 @@ NAVIGATION = {
 # Option (ii), a GPU: what is measured, copied from docs/benchmarks/gpu_benchmark_all_l4.md (group "live", engine cpp,
 # doa map, backprojection), and what is not.
 GPU = {
-    "source": "docs/benchmarks/gpu_benchmark_all_l4.md (NVIDIA L4; host AMD EPYC 7R13, 8 threads; commit 15f1121, before the 1.5 m geometry)",
-    "case": "scenario-size pings: 15,467 complex samples a channel, 241 bearings, popoto_long_range[_2row|_3row] with the deployment files' chains",
-    "seconds_per_ping": {"host": {"1": 0.1454, "2": 0.2953, "3": 0.4429}, "cuda": {"1": 0.0097, "2": 0.0212, "3": 0.0310}},
-    "speed_up": {"1": 15.0, "2": 14.0, "3": 14.3},
-    "not_measured": ["a full-length ping (0.5 to 13 km) at the boards' rate on a GPU, with or without the decimate-first stage",
-                     "the 1.5 m row geometry on a GPU", "a Jetson or any embedded GPU",
-                     "MVDR and far-field beamformers on a GPU (no CUDA path in that table)"],
+    "source": "docs/benchmarks/gpu_benchmark_all_l4.md (NVIDIA L4; host AMD EPYC 7R13, 8 threads; commit e10b17f, the 1.5 m row geometry, "
+              "the multiscale detector on the CPU; the first run, commit 15f1121, is kept as gpu_benchmark_all_l4_15f1121.md: 0.0097 / 0.0212 / 0.0310 s)",
+    "case": "scenario-size pings: 15,483 complex samples a channel, 241 bearings, popoto_long_range[_2row|_3row] with the deployment files' chains",
+    "seconds_per_ping": {"host": {"1": 0.1514, "2": 0.3064, "3": 0.4554}, "cuda": {"1": 0.0155, "2": 0.0282, "3": 0.0395}},
+    "speed_up": {"1": 9.8, "2": 10.8, "3": 11.5},
+    "measured_elsewhere": ["a full-length ping (0.5 to 13 km) at the boards' rate on an L4, with and without the decimate-first stage: "
+                           "decimation.timing.cuda in this file (timed on a loaded machine: upper figures)",
+                           "MVDR and far-field beamformers on a GPU: rows of the same table (group live)"],
+    "not_measured": ["a full-length ping at the boards' rate on an idle GPU machine", "a Jetson or any embedded GPU"],
     "command": "PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda   # writes decimation.timing.cuda here",
 }
 

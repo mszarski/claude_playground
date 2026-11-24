@@ -3,6 +3,12 @@
 How the pieces fit, where each runs, and how to get at the data between them.
 Diagrams are drawn by `tools/architecture_diagrams.py`.
 
+**Since D-160.** This file was written before decisions D-161 to D-181 and is kept as the
+overview. The current stage-by-stage description of the live chain, with every default, its
+config key and the decision behind it, is [`handoff/SOFTWARE.md`](handoff/SOFTWARE.md)
+(section 5; sections 2 to 4 for the layers, the repository map and the two engines). Where
+the two differ, that file and the code are right.
+
 ## One record, many sources, the same stages
 
 ![Data flow](architecture/dataflow.png)
@@ -22,6 +28,12 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
 | `flank_udp` | capture-board blocks arriving over UDP | `sources/flank_stream.py` |
 | `nvus_scanner` | the NVIDIA ultrasound reference's runtime | `sources/nvus_scanner.py` |
 | `picmus` | the PICMUS benchmark files | `sources/picmus.py` |
+
+  `scenario` and `tap` are read by `pipeline.py` itself (`_load_records`); the others are
+  registered sources (`sources/base.py` `register`, `make_source`). One more path is not a
+  `type`: Holoscan Sensor Bridge frames (`sources/hsb.py`, `tools/sonar_live_hsb.py`), the
+  `flank_udp` blocks as fixed-size frames through Sensor Bridge's receiver operator into the
+  live chain (`DEPLOYMENT.md`, "Through Holoscan Sensor Bridge's receiver").
 
 - **Stages** are library functions on records. Three things call them, and nothing else
   holds processing logic:
@@ -94,7 +106,9 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   chain takes 18 ms a ping with bearings from the map and 0.48 s with SBL (`RESULTS.md`).
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
   objects per ping. Whitening, median TVG, DRC, board synchronisation and motion
-  estimation are CPU code (MVDR has a device path, `libs/live/src/beamform_cuda.cu`); none is the bottleneck of a chain that uses them. In the simulator,
+  estimation are CPU code (the far-field and MVDR beamformers have a device path, `libs/live/src/beamform_cuda.cu`, D-122;
+  so has motion estimation's delay measurement, `libs/motion/src/delay_cuda.cu`, opt-in by `MotionOptions.delay_backend`
+  and slower than the host on an L4, D-148 and `STATUS.md`, "Motion estimation limits so far"; its solve is CPU only); none is the bottleneck of a chain that uses them. In the simulator,
   reverberation's power against time and direction and its random draws stay on the CPU; on an L4 they leave
   the whole generator 2.2 to 4.1 times faster than the host, against 5.6 to 8.8 times for its
   device kernel alone (`RESULTS.md`, "Reverberation, before and after the batched kernels").
@@ -160,8 +174,8 @@ spectra of a recording gives passive bearing-time records (`sonar_live --passive
 - **What runs on a GPU** is drawn from `LIVE_STAGES` in `tools/architecture_diagrams.py` and checked
   by `tests/python/test_architecture.py`: conditioning, the maps, CFAR, the elevation steering
   (the same backprojection kernel) and the sparse Bayesian bearings. Measured on an L4 with
-  decimated pings of scenario size and the row heights before the 1.5 m change
-  (`benchmarks/gpu_benchmark_all_l4.md`, tree `e10b17f`): the C++ chain takes 0.015, 0.028 and
+  decimated pings of scenario size
+  (`benchmarks/gpu_benchmark_all_l4.md`, tree `e10b17f`, which has the 1.5 m row heights): the C++ chain takes 0.015, 0.028 and
   0.040 s a ping for one, two and three rows of 32, against 0.15, 0.31 and 0.46 s on that machine's
   eight CPU threads. The first run (`gpu_benchmark_all_l4_15f1121.md`) gave 0.010, 0.021 and
   0.031 s; the difference was the multiscale cell statistic (D-93), which then ran on the CPU. It now
@@ -176,7 +190,7 @@ spectra of a recording gives passive bearing-time records (`sonar_live --passive
   allocation per call (`..._3d666df.json`, another job); 12.7, 25.9 and 37.5 ms compiled with
   `--fmad=false` (`..._b2a918e.json`, a third job, same agreement). That is still 2.8 to 3.6 ms over the
   cell-mean detector: the map comes back to the host before the statistic sends it to the device again.
-  Raw pings at the boards' full rate through the C++ chain on a GPU: 0.48, 1.02 and 1.51 s for one,
+  Raw pings at the boards' full rate through the C++ chain on a GPU: 0.48, 1.03 and 1.49 s for one,
   two and three rows (`design/popoto_stage2.json`,
   `decimation.timing.cuda`; machine still loaded by the build, so upper figures).
 - **Passive** exists in the C++ library and program only.
@@ -209,7 +223,7 @@ real array's channel errors.
 | Path | What |
 | --- | --- |
 | `libs/core`, `libs/dsp`, `libs/recon`, `libs/sim`, `libs/detect`, `libs/io` | C++20 / CUDA: record, conditioning, backprojection, synthesis, CFAR, container file |
-| `libs/motion` | C++20 (host only): platform motion estimation, the Ceres solve of ASASIN Eq. 8 (`dpc_solver.hpp`, D-30), used by `python/gpusonar/motion.py`. Built only when a Ceres without SuiteSparse is found (`SONAR_CERES_DIR`, default `/opt/ceres-nosuitesparse`; `SONAR_ALLOW_SUITESPARSE=OFF` keeps a GPL-linked Ceres out); CMake prints `motion estimation ON/OFF` |
+| `libs/motion` | C++20; CUDA for the delay measurement only (`delay_cuda.cu`, D-148: opt-in, NumPy stays the default and the reference): platform motion estimation, the Ceres solve of ASASIN Eq. 8 (`dpc_solver.hpp`, D-30; host only), used by `python/gpusonar/motion.py`. Built only when a Ceres without SuiteSparse is found (`SONAR_CERES_DIR`, default `/opt/ceres-nosuitesparse`; `SONAR_ALLOW_SUITESPARSE=OFF` keeps a GPL-linked Ceres out); CMake prints `motion estimation ON/OFF` |
 | `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
 | `libs/holoscan_ops`, `apps/sonar_live_holoscan.cpp` | the same chain as C++ Holoscan operators and an application (`-DSONAR_BUILD_HOLOSCAN=ON`) |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |

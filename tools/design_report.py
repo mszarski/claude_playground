@@ -544,14 +544,16 @@ def _compute_options_text() -> str:
     """The two compute options with the measured figures there are (docs/benchmarks, docs/design)."""
     sys.path.insert(0, str(ROOT / "tools"))
     from gpusonar import buildspec
+    import parts_list
     t = buildspec.measured_timings()
+    full_rate = parts_list.gpu_full_rate_text(t)
     gpu = t.get("gpu")
     out = ""
     if gpu:
         h = gpu["header"]
         out += (f"Measured on an {h['gpus'][0]} (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes {gpu['seconds']['1']:.3f}, {gpu['seconds']['2']:.3f} and {gpu['seconds']['3']:.3f} s a ping for one, two and three rows "
                 f"against {gpu['host_seconds']['1']:.2f}, {gpu['host_seconds']['2']:.2f} and {gpu['host_seconds']['3']:.2f} s on that machine's {h['host_threads']} CPU threads ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times for one row), on pings of scenario size "
-                f"({gpu['samples']:,} baseband samples a channel) and with the row heights before the 1.5 m change. Raw pings at the boards' full rate have not been run on a GPU. ")
+                f"({gpu['samples']:,} baseband samples a channel). " + full_rate[0].upper() + full_rate[1:] + ". ")
     out += ("Decimate-first timings: `design/popoto_stage2.json`." if t.get("stage2") else "The decimate-first stage is being built separately: **its timing is pending** (`design/popoto_stage2.json` does not exist yet).")
     return out
 

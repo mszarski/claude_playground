@@ -523,8 +523,14 @@ centimetres and is not a useful comparison).
   it dropped two thirds of the one-way energy at 10 km, and with it most of the
   reverberation. The scenarios now keep 24 to 80 arrivals (D-39) and the table below was
   re-measured.
-- RAM (parabolic equation) was not run: PyRAM is the permissive candidate and is not
-  installed here.
+- RAM (parabolic equation) was not run when this section was written. It has been since
+  (D-149): `tests/python/test_ram_crosscheck.py` compares the eigenray tier's coherent
+  transmission loss with PyRAM 1.3.0 (a test oracle only) in a Pekeris waveguide and an
+  upslope wedge at 6, 8 and 10 kHz, in 500 m range windows from 0.5 to 5 km. Measured, as its
+  docstring records (2026-11-21): the largest window difference 1.42 dB (Pekeris, 6 kHz,
+  82 m), the mean over the windows of one depth at most 0.44 dB in magnitude (Pekeris, 8 kHz,
+  50 m); bounds 3 dB and 1 dB (ours). Point by point the two do not compare. The test skips
+  without PyRAM and Bellhop; the GPU job installs both.
 
 ## Long-range scenarios at the eigenray tier
 
@@ -855,7 +861,7 @@ cores.
 | The Holoscan application fed by the emulated board over UDP with navigation | all pings, ownship position from navigation, mover and static tracks |
 | Sensor Bridge 2.7.0 built natively against Holoscan 4.6.0 on an L4 (`tools/build_hsb.sh`) | builds (272 targets, about 7.5 minutes) and imports, receiver operator and emulator included |
 | Frames-to-pings operator inside Holoscan behind a stand-in for Sensor Bridge's receiver, six pings as 502 frames of 153,728 bytes | reports equal to the direct chain's (processing time aside); no frame lost; with one frame withheld exactly one ping is dropped |
-| Loopback through Sensor Bridge's emulator and `LinuxReceiverOp` | with the stock emulator: not run, its raw socket is refused in Hugging Face containers ("Failed to create socket: Operation not permitted"). With the opt-in UDP-socket patch it runs; see "Sensor Bridge loopback" below, including what has not yet passed |
+| Loopback through Sensor Bridge's emulator and `LinuxReceiverOp` | with the stock emulator: not run, its raw socket is refused in Hugging Face containers ("Failed to create socket: Operation not permitted"). With the opt-in UDP-socket patch it runs; see "Sensor Bridge loopback" below; the loopback test has passed at real time since D-153 |
 
 ## Bearings by sparse Bayesian learning
 
@@ -1387,8 +1393,10 @@ file passed together with the four `test_reverb_*` files (108 passed, 5 skipped 
 
 **Which run the numbers come from.** The committed matrix, its JSON and the two figures
 were made by the first full run, before that fix, and had not been regenerated when this
-was written (`git log -1 -- docs/figures/sst_validation.md` shows whether they have been
-since). The Pursuit rows on reverberation below carry the numbers after the fix, from
+was written. They have been since: regenerated on 2026-11-19 (commit `26586a3`) and again
+on 2026-11-20 (commit `1debe6d`, D-144), both after the fix, so the committed files are
+not the first run's; where this section's prose and the matrix differ, the matrix is the
+later run (`git log -- docs/figures/sst_validation.md`). The Pursuit rows on reverberation below carry the numbers after the fix, from
 `PYTHONPATH=python python3 tools/sst_validation.py --only pursuit --json <file>`; all other
 numbers in this section are from the first full run. The figure of the Pursuit example is
 the one from before the fix.
@@ -1565,6 +1573,39 @@ re-run on a GPU. They await the GPU job on the merged tree, which was running wi
 result reported when this was written. The last finished job therefore still shows
 `1 failed, 7 passed`.
 
+**Since then (D-151, D-153, D-162, D-163, D-173; the numbers are those decisions', in
+`DECISIONS.md`).** The paragraph above and the table and list below are the state of
+2026-11-17 and are kept as the record of it. Now:
+
+- The loopback test passes in jobs, at real time. The burst lost at pace 1.0 was datagrams
+  refused by the receiver's full socket buffer while the board sent its owed frames back to
+  back after a stall (D-151); the board now spreads its catch-up: 20 runs at real time with
+  the spread lost nothing, 3 of 14 with the old burst did. The test runs at pace 1.0 by the
+  owner's ruling (D-153; `GPUSONAR_HSB_PACE` still overrides). First job at pace 1.0: L4,
+  `6b012ef14fdc5ab3c55c698a`, the Sensor Bridge and Holoscan selection 22 passed, 0 failed.
+- The margin is thin: the container's `rmem_max` (212,992 bytes) is about 20 ms of stream.
+  With one OpenMP thread per vCPU the receiver thread waited 5 to 13 ms for a CPU on an
+  8-vCPU L4 host and the occasional frame was lost. The test now runs the chain at half the
+  available CPUs (`receive --chain-omp-threads`, opt-in; D-162) and asserts the worst
+  receive delay under 5 ms. L4: loss with a halved buffer in 9 of 15 runs before, 0 of 10
+  after; normal buffer 0 of 6; worst delay 10 to 13 ms before, 1 to 2 ms after; about 10 %
+  more chain time. Loopback alone 8 of 8 passed, worst delay 0.8 to 2.3 ms (job
+  `6b037e168d268c0fbd23006c`).
+- `receive` always stops (D-163): it used to hang without statistics when the stream ended
+  before `--pings` pings were reported. It now stops on the ping count or after `--idle`
+  seconds, prints the statistics, and exits with status 3 if fewer pings were reported than
+  asked. An idle stop after the board has gone is reported as `shutdown_error` (a clean
+  shutdown would need a change inside Sensor Bridge).
+- `serve --scenario` and `engine: cpp` have real-time loopback tests of their own; each
+  run's reports equal the direct chain of the same engine (largest difference 0.0). The
+  OpenMP count is half of min(affinity, cgroup CPU quota). On a quota-limited a10g-small
+  (160 runs, job `6b04bedcc97b8ed4fcd6969f`): 0 of 80 runs lost frames with the cap at pace
+  1.0 and 0.5, default and halved buffer, worst delay at most 2.4 ms; without it 2 to 20 of
+  20 per configuration, worst 169 ms; 40 to 57 % more chain time with one thread there.
+  Not repeated on an L4 (D-173).
+- Still untested: the RoCE receiver; the unpatched emulator on a machine with CAP_NET_RAW;
+  the CUDA chain backend through this path; any board. `serve` has no `--backend`.
+
 | Job | Machine | Frame | Pace | Frames sent / used | Lost or damaged | Datagrams dropped | Pings |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `6afc5bf64643bac7ac62879d` | L4 | 1600 samples, 153,728 B | 1.0 | 502 / 497 | 5 lost | 76 | 6 |
@@ -1587,7 +1628,7 @@ result reported when this was written. The last finished job therefore still sho
   raise. A guess that the pinned receiver thread was the cause could not be tested (the
   Python binding takes one core number and refuses a set).
 - Settings now: frame 400 samples (38,528 bytes; 160 frames/s at real time, 80 in the
-  test), receiver queue 256 frames, test pace 0.5 (`GPUSONAR_HSB_PACE` overrides).
+  test), receiver queue 256 frames, test pace 0.5 then (1.0 since D-153; `GPUSONAR_HSB_PACE` overrides).
 - Chain time per ping: about 450 ms for the first and 85–95 ms after on the L4; 643 ms
   then about 130 ms on the T4.
 - Verified in jobs: transport statistics, report equality, the tool's two roles as
@@ -1600,10 +1641,11 @@ result reported when this was written. The last finished job therefore still sho
   and the recording is now compared with a copy of the records taken before the chain
   conditions them in place.
 - Local: `19 passed, 4 skipped` for `test_hsb.py`, `test_flank_stream.py`, `test_live.py`.
-- Untested: the RoCE receiver; the unpatched emulator on a machine with CAP_NET_RAW;
+- Untested then: the RoCE receiver; the unpatched emulator on a machine with CAP_NET_RAW;
   `engine: cpp`, the CUDA chain backend, `serve --scenario`, navigation and the
   idle-timeout stop through this path; frames larger than 400 samples at reduced pace; a
-  full `gpu_job.sh` run without `-k hsb`.
+  full `gpu_job.sh` run without `-k hsb`. (Since: `engine: cpp`, `serve --scenario` and the
+  idle stop are tested, and full-suite jobs include this path; see "Since then" above.)
 
 ## Sampled pulses and per-ray Doppler in the C++ engine
 
@@ -1807,14 +1849,18 @@ hull 8.2 m. `flank_patrol` (seeds 17-26): submarine 29.5 -> 28.0 m, one false mo
 
 ## Simulator calibration against a log with hidden settings
 
-Source: `tests/python/test_simcal.py`; see `SIM_CALIBRATION.md`.
+Source: `tests/python/test_simcal.py`; see `SIM_CALIBRATION.md`. The first four rows are what
+the test prints at the tree of D-181 (CPU, 2026-11-24, `pytest tests/python/test_simcal.py -s`);
+which change moved them from the first values was not traced. The SAS rows below are the
+first values and were not updated: the same run prints 647 and 8450 per m² and cells of 6.5
+and 5.8 cm².
 
 | Quantity | Hidden | Found |
 | --- | --- | --- |
-| Bottom strength offset, absolute log | +6.0 dB | +6.1 dB |
+| Bottom strength offset, absolute log | +6.0 dB | +5.9 dB (was +6.1 when first written) |
 | Surface strength offset | −4.0 dB | −4.0 dB |
-| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.0 dB |
-| Fit misfit | — | 0.17 dB RMS |
+| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.6 dB (was 38.0) |
+| Fit misfit | — | 0.16 dB RMS (was 0.17) |
 | Bottom minus surface offset, log scaled by an unknown 37 dB | 10.0 dB | within 1.5 dB |
 | Seabed density from SAS image speckle, sparse / dense | 400 / 6000 per m² | 620 / 8000 per m² |
 | Speckle cell area | 5.2 cm² (design) | 5.6 to 6.6 cm² |
@@ -1871,7 +1917,7 @@ measured.
 | Stage, case | Host, s | CUDA, s | Speed-up | Host-CUDA rel. rms |
 | --- | --- | --- | --- | --- |
 | Echo synthesis, `fls_120k_transit` (4 pings, 128 channels, 1,691 scatterers) | 5.62 | 0.559 | 10.0× | 6.6e-7 |
-| Echo synthesis, `minefield_sas` (20 pings, 14,870 scatterers) | 14.30 | 0.337 | 42.4× | 8.1e-7 |
+| Echo synthesis, `minefield_sas` (20 pings, 14,870 scatterers; the scene before D-171, which now draws 20,558: not re-timed) | 14.30 | 0.337 | 42.4× | 8.1e-7 |
 | Echo synthesis, flank array, sampled m-sequence pulse | 13.52 | 0.700 | 19.3× | 3.9e-7 |
 | Echo synthesis, one ping of 20 points (`point_grid_fls_300k`) | 0.0096 | 0.0468 | 0.21× | 4.5e-8 |
 | Backprojection, SAS, 200 pings, 1.5 million pixels (one call / session) | 11.91 / 11.75 | 0.346 / 0.184 | 34.5× / 64.0× | 1.8e-7 |
@@ -1880,7 +1926,14 @@ measured.
 | Pulse compression, `sas_auv` | 0.0454 | 0.0071 | 6.4× | 3.1e-7 |
 | CFAR, 241 bearings × 8,000 cells | 0.0620 | 0.0083 | 7.5× | 0 |
 | Sparse Bayesian bearing gate, 24 gates | 2.15 | 1.10 | 2.0× | 0 |
-| Live chain, one row, C++ engine, backprojection map, per ping | 0.149 | 0.0095 | 15.6× | 3.2e-7 |
+| Live chain, one row, C++ engine, backprojection map, per ping (first run, tree `15f1121`, before the multiscale detector) | 0.149 | 0.0095 | 15.6× | 3.2e-7 |
+
+The live-chain row is not the current figure. `docs/benchmarks/gpu_benchmark_all_l4.json`
+(tree `e10b17f`, with the multiscale detector of D-93 on the CPU) holds 0.1514 s on the host
+and 0.0155 s on the device for one row (9.8×, rel. rms 3.4e-7), 0.0282 s for two rows and
+0.0395 s for three. With the multiscale statistic on the device (D-150) the chain as
+deployed takes 12.73 / 25.92 / 37.52 ms a ping
+(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`; "Performance", first paragraph).
 
 Small cases are slower on the device (the 20-point ping above): the transfer costs more
 than the work.
@@ -3214,6 +3267,10 @@ chain's backend. On the host the same variants are within the run-to-run spread 
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
-The full CPU suite and any GPU job on the final tree (`STATUS.md`). Anything on real
+The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
+D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
+rerun since, and each later package (D-158 to D-181) ran its affected test files. The full GPU suite has run on the tree of D-181
+(`90f7d29`): 2078 passed, 93 skipped, none failed, on an NVIDIA L4 (Hugging Face job
+6b055ee4c97b8ed4fcd799db; `STATUS.md`). Anything on real
 hardware or in real water: every number in this file is from simulation, from analysis,
 or from other people's published channel soundings.

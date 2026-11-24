@@ -102,7 +102,7 @@ Each detection:
 
 | Field | Unit, frame, sign | What it is |
 | --- | --- | --- |
-| `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`). `cell_statistic: multiscale` (default): the detection's leading edge, its nearest sample above the single-sample threshold (`chain.cfar.range_estimate: first`, the default since D-158); with stacked rows a detection the elevation places (`elevation.correct_bearing`, not ambiguous) reports the elevation's own range instead, the one it is placed and timed at (D-158). With `range_estimate: centroid`: the energy-weighted mean of its samples (the default until D-158; at 12 km on `popoto_12km` behind the target by about 50 m of multipath spread, D-157). `mean`, `peak`: the energy-weighted mean of the centres of its range cells |
+| `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`). `cell_statistic: multiscale` (default): the detection's leading edge, its nearest sample above the single-sample threshold (`chain.cfar.range_estimate: first`, the default since D-160); with stacked rows a detection the elevation places (`elevation.correct_bearing`, not ambiguous) reports the elevation's own range instead, the one it is placed and timed at (D-160). With `range_estimate: centroid`: the energy-weighted mean of its samples (the default until D-160; at 12 km on `popoto_12km` behind the target by about 50 m of multipath spread, D-157). `mean`, `peak`: the energy-weighted mean of the centres of its range cells. With `chain.range_doppler: ownship` or `full` (opt-in, default `off`, D-181) the LFM range-Doppler term is added: factor × the ownship's closing speed along the detection's line of sight, factor f0·T/(f_stop − f_start), 0 for a waveform that is not an LFM; `first_range_m` stays the detector's uncorrected value (`CONFIGURATION.md`) |
 | `bearing_deg` | degrees from broadside, in the horizontal plane | 0 is broadside on the `chain.look` side; positive towards the last receive element along the array (the axis from the first element to the last). Broadside is that axis turned 90° clockwise seen from above for `look: starboard` (north to east), anticlockwise for `port`. With stacked rows and `elevation.correct_bearing`: the horizontal bearing after the elevation correction, and `cone_bearing_deg` is the line's own |
 | `snr_db` | dB | the detector's signal-to-noise ratio: "What `snr_db` is" below (the C++ line writes `null` for a value that is not finite) |
 | `extent_m`, `first_range_m` | m | multiscale detector only: the cluster's extent in range and where it starts (it covers `[first_range_m - cell / 2, first_range_m + extent_m]`) |
@@ -281,8 +281,10 @@ spec, then `tools/build_from_spec.py --write-shipped`. `REFERENCE_DESIGN.md` is 
 
 ### The projector's direct sound and the first usable range
 
-At every placeholder position the projector overloads the nearest inputs (19 dB over full scale on the face,
-34 to 36 dB on the test AUV and the static frame; `DESIGN.md` Sec. 3 has the table and the options). Until
+At every placeholder position the projector overloads the nearest inputs (21 to 22 dB over full scale on the face,
+37 to 38 dB on the test AUV and the static frame, with the source level as an rms level, D-102;
+`docs/handoff/hardware_builds.json`, `direct_sound.over_full_scale_db`; `DESIGN.md` Sec. 3 has the table and the
+options). Until
 the inputs' recovery time is measured: record one ping at the lowest source level and look at the raw samples
 of the nearest hydrophone (`tools/inspect_tap.py`), then at full level; put the recovery in the spec
 (`projector.blanking_after_s`), and move the first synchronisation burst after it (`sync.reference.lead_s`;
@@ -472,18 +474,25 @@ conversion the chain did per ping by FFT, done once, early.
   interest is all there, the reference and everything outside the band are gone for good.
 
 **Option (ii), a GPU.** No new code. Measured on an NVIDIA L4
-(`docs/benchmarks/gpu_benchmark_all_l4.md`): the C++ chain with the backprojection map takes
-0.010 / 0.021 / 0.031 s per ping for 1 / 2 / 3 rows, 14 to 15 times faster than that host
-(0.15 / 0.30 / 0.44 s on 8 threads), on scenario-size pings (15,467 complex samples at 8 kHz,
-241 bearings, a 1.4 km window).
+(`docs/benchmarks/gpu_benchmark_all_l4.md`, tree `e10b17f`): the C++ chain with the backprojection map takes
+0.0155 / 0.0282 / 0.0395 s per ping for 1 / 2 / 3 rows, 10 to 12 times faster than that host
+(0.15 / 0.31 / 0.46 s on 8 threads), on scenario-size pings (15,483 complex samples at 8 kHz,
+241 bearings, a 1.4 km window). The first run (tree `15f1121`, before the multiscale detector and the 1.5 m row
+geometry; kept as `gpu_benchmark_all_l4_15f1121.md`) gave 0.010 / 0.021 / 0.031 s; with the multiscale statistic on
+the device (D-150) the chain as deployed takes 12.73 / 25.92 / 37.52 ms
+(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`).
 
 - What a GPU gives: the map, which is the part option (i) cannot shrink, and the elevation
   search (the same kernel).
-- **Not measured**: a full-length ping at the boards' rate on a GPU (the L4 table is on
-  decimated, scenario-size data: about a ninth of the range cells of the 0.5 to 13 km
-  window); the present 1.5 m geometry (the table was run on the tree before it); a Jetson.
-  MVDR and far-field beamformers had no CUDA path in that table.
-- The command for that measurement, in a GPU job with a CUDA build:
+- **A full-length ping at the boards' rate on a GPU is measured, on a loaded machine**: one ping of
+  0.5 to 13 km at 102.4 kHz through the C++ chain took 0.479 / 1.028 / 1.495 s for 1 / 2 / 3 rows on an
+  L4 against the 17.9 s ping interval, and 0.783 / 1.308 / 1.777 s when decimating first
+  (`docs/design/popoto_stage2.json`, `decimation.timing.cuda`; load average 11 to 16 on 8 threads while
+  timed, so upper figures). The L4 table above is on decimated, scenario-size data: about a ninth of the
+  range cells of that window.
+- **Not measured**: the same on an idle machine; a Jetson or any embedded GPU. (MVDR and far-field
+  beamformers have a CUDA path and rows in that table since D-122.)
+- The command for the full-rate measurement, in a GPU job with a CUDA build:
   `PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda`
   (add `--clocks` for boards on their own clocks). It writes
   `decimation.timing.cuda` into `docs/design/popoto_stage2.json`.
@@ -491,10 +500,10 @@ conversion the chain did per ping by FFT, done once, early.
 | | Option (i): decimate first, CPU | Option (ii): GPU |
 | --- | --- | --- |
 | New hardware | none | a GPU module, its power and cooling |
-| Makes the map faster | no | yes (14 to 15x on an L4, scenario size) |
+| Makes the map faster | no | yes (10 to 12x on an L4, scenario size) |
 | Shrinks storage and the stream | 8.5x | no (unless (i) is used too) |
-| Three rows, full window, in real time | not on this 4-thread CPU | expected, **not measured** |
-| State | built, tested, measured here | built; full-rate figure pending a GPU job |
+| Three rows, full window, in real time | not on this 4-thread CPU | yes on an L4: 1.5 s a ping against 17.9 s (loaded machine) |
+| State | built, tested, measured here | built; full-rate figure measured on an L4, not on a Jetson |
 
 The two are not alternatives in the end: (i) is what makes the stream and the recording
 small and is worth having in any case; (ii), or a shorter window, coarser cells or fewer
@@ -986,9 +995,9 @@ nothing: the threshold on the mean stayed where it was, so two or three rows det
   further apart in bearing than half the beam's half-power width (2.6° for a 32-hydrophone row at 5 kHz); touching cells
   always are. So a target's highlights and the arrivals of one multipath group are one detection. It reports its
   strongest sample as `snr_db`; its range, its leading edge (the nearest sample above the single-sample threshold;
-  `cfar.range_estimate: first`, the default since D-158) or with `range_estimate: centroid` the energy-weighted mean of
+  `cfar.range_estimate: first`, the default since D-160) or with `range_estimate: centroid` the energy-weighted mean of
   its samples. Whichever it reports, the chain keeps the centroid too: the elevation of stacked rows, SBL's range gates,
-  `multipath_depth`, blanking and the reference-burst filter go by it, as before D-158 (from the leading edge the
+  `multipath_depth`, blanking and the reference-burst filter go by it, as before D-160 (from the leading edge the
   elevation's search stopped short of the echo's peak; the two filters' limits were set for the centroid, and the
   detector does not see blanked cells, so blanking differs at most by a cell); its bearing, the mean of its beams
   weighted by their energy above half the strongest one's (within 0.06° of truth on `popoto_elevation_free`, as before;
@@ -1168,7 +1177,8 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
 | `chain.tracker.association` | how detections are shared out among tracks: `likelihood` (default, D-141) or `in_order` (the rule before it) |
 | `chain.cfar.false_alarms_per_ping`, `chain.min_snr_db` | the false-alarm rate wanted: expected false detections per ping in noise (10⁻³), and a floor on `snr_db` (9 dB). `chain.cfar.pfa` is for `cell_statistic: mean` and `peak` only |
-| `chain.cfar.range_estimate` | `first` (default with `multiscale`, D-158): a detection's range is its leading edge, or with stacked rows the elevation's own range where the elevation places it; `centroid` puts it at the energy-weighted mean of its samples, behind the target by the multipath spread (on `popoto_12km`, chain `popoto_vehicle`: +49.5 m against +0.9 m with `first`, D-157). A strong point echo reads a metre or two short with `first` where no elevation places it. Leave it out unless output from before D-158 is wanted for comparison |
+| `chain.cfar.range_estimate` | `first` (default with `multiscale`, D-160): a detection's range is its leading edge, or with stacked rows the elevation's own range where the elevation places it; `centroid` puts it at the energy-weighted mean of its samples, behind the target by the multipath spread (on `popoto_12km`, chain `popoto_vehicle`: +49.5 m against +0.9 m with `first`, D-157). A strong point echo reads a metre or two short with `first` where no elevation places it. Leave it out unless output from before D-160 is wanted for comparison |
+| `chain.range_doppler` | `off` (default), `ownship` or `full` (D-181, opt-in): the LFM range-Doppler coupling, an echo closing at v reading f0·v·T/B nearer with an up-chirp. `ownship` corrects each detection's range, placement and time by the ownship's closing speed from navigation's velocity; `full` also moves each reported track along its line of sight by its own fitted closing speed. Measured on gallery captures replayed offline only, with one scene worse (`far_mover` 0.4 -> 0.9 m); the live chain is held by its tests, not measured on scenes. The factor is ours (textbook unconfirmed). Nothing on the report line says which setting made it. Keys: `CONFIGURATION.md` |
 | `chain.cfar.merge_m`, `sidelobe_floor_db` | what is one detection: echoes of one bearing within the tracker's range sigma (15 m) are merged; the bearing sidelobe floor (−40 dB) is an assumption about the array's gain and phase errors until it is measured |
 | `chain.sync.reference`, `search_time`, `tolerance_us`, `min_quality` | several boards: the reference burst above the band, how far apart the boards can start (2 ms), how well they must agree (a twentieth of a period; tighter for rows) |
 | `chain.elevation.*` (sector, `min_row_elements`, `water_depth`, sigmas, gradient) | stacked rows only; the row tolerance is derived |
@@ -1189,8 +1199,9 @@ reports a single line that is too long, where `build/bin/sonar_live` splits it.
 
 - **Refraction in operation: what is still missing.** The coverage picture, the profile ensemble and rays through the
   ladder's profile are built (sections above). Not there: rays through water that changes with range; reverberation as
-  a limit in the coverage picture; a depth sigma for two rows that owns up to unresolved boundary echoes (the
-  `popoto_face_2x32` rehearsal self-test fails on it); a multipath depth for the test AUV in 30 m of water (the ray
+  a limit in the coverage picture; a useful depth from two rows among unresolved boundary echoes (the sigma now owns up to them and all six
+  builds pass their self-tests, 42 of 42 on both engines, D-142 and D-143: the `popoto_face_2x32` rehearsal failed
+  on the judge, not the chain; the depths are honest, not useful, `STATUS.md` open item 38); a multipath depth for the test AUV in 30 m of water (the ray
   mode answers `window`). `STATUS.md`, "Open and known wrong", has the list.
 - The board forwarder. The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the
   vehicle's own unit is a template: its interface document has not been seen.
