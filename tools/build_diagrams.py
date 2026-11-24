@@ -18,6 +18,7 @@ or "to be supplied", never filled in.
 """
 import argparse
 import sys
+import textwrap
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +71,22 @@ def named(value, missing="not chosen"):
     return str(value) if value else missing
 
 
+TITLE_CHARS = 185      # a heading line's length: 185 characters of this kind of text at 9 pt are 10.8 in of the panel's 13.95 in
+
+
+def spread(values, need: float) -> list[float]:
+    """The values in ascending order, moved apart until neighbours are at least `need` apart, about their own middle:
+    where to write labels that would overlap at the values themselves. Unchanged when they are far enough apart."""
+    v = sorted(float(x) for x in values)
+    if all(b - a >= need for a, b in zip(v, v[1:])):
+        return v
+    out = [v[0]]
+    for x in v[1:]:
+        out.append(max(x, out[-1] + need))
+    shift = (v[0] + v[-1]) / 2 - (out[0] + out[-1]) / 2
+    return [x + shift for x in out]
+
+
 def draw_hardware(d: dict, path, title: str | None = None) -> None:
     """The face to scale and the system block diagram of one build."""
     with plt.rc_context(RC):
@@ -90,22 +107,41 @@ def draw_hardware(d: dict, path, title: str | None = None) -> None:
         bp = d["cables"]["assumed_board_position_m"]
         ax.plot(bp[0], -bp[2], marker="P", ms=10, color=VIOLET)
         ax.annotate("boards (assumed)", (bp[0], -bp[2]), textcoords="offset points", xytext=(8, -12), fontsize=8, color=VIOLET)
-        for h, n in zip(d["heights_m"], d["per_row"]):
-            ax.text(-d["row_length_m"] / 2 - 0.05 * span, h, f"{h:+.2f} m\n{n}", ha="right", va="center", fontsize=8, color=MUTED)
         lim_x = max(span / 2, abs(tx[0]) + 0.2) * 1.08
         lim_y = max(height / 2, abs(tx[2]) + 0.1) * 1.25
+        # A face much taller than wide (a projector hung far below a short frame) would leave a narrow box with the
+        # labels outside it: the box keeps the panel's shape instead, the scale being set by the height either way.
+        box_w, box_h = (fig.get_size_inches() * [0.90, 0.33]).tolist()
+        lim_x = max(lim_x, lim_y * box_w / box_h)
         ax.set_xlim(-lim_x, lim_x)
         ax.set_ylim(-lim_y, lim_y)
         ax.set_aspect("equal", adjustable="box")
+        # Row labels: at their row, or, where rows are closer on the page than a label is tall, left of the face, spread
+        # about the rows' middle, with a line to each row.
+        label_x, row_x = -d["row_length_m"] / 2 - 0.05 * span, -d["row_length_m"] / 2
+        need = 2.5 * 8.0 / (box_h * 72.0 / (2.0 * lim_y))                    # two lines of 8 pt, in metres on the face
+        rows_low_first = sorted(zip(d["heights_m"], d["per_row"]))
+        label_y = spread(d["heights_m"], need)
+        moved = any(abs(y - h) > 1e-9 for (h, _), y in zip(rows_low_first, label_y))
+        text_w = 0.55 * 8.0 * 7 / (box_h * 72.0 / (2.0 * lim_y))             # "+0.00 m" at 8 pt, in metres on the face
+        if moved or label_x - text_w < -span / 2 < label_x:                  # ... or the label would lie across the face's edge
+            label_x = min(label_x, -span / 2 - 0.015 * lim_x)
+        if moved:
+            for (h, _), y in zip(rows_low_first, label_y):
+                ax.plot([label_x + 0.004 * lim_x, row_x - 0.004 * lim_x], [y, h], color=MUTED, lw=0.6)
+        for (h, n), y in zip(rows_low_first, label_y):
+            ax.text(label_x, y, f"{h:+.2f} m\n{n}", ha="right", va="center", fontsize=8, color=MUTED)
         ax.set_xlabel("along the platform (m), forward to the right")
         ax.set_ylabel("up (m)")
         end = (usable - d["row_length_m"]) / 2
         row_word = "row" if d["rows"] == 1 else "rows"
-        ax.set_title(f"{title or d['name']}: {named(plat.get('mounting'), 'mounting not described')}, {span:g} m x {height:g} m (grey); usable zone {usable:g} m x {usable_h:g} m (dashed)\n"
-                     f"{d['rows']} {row_word} of {d['per_row'][0]} at {d['pitch_m'] * 100:.1f} cm ({d['pitch_wavelengths_top']:.2f} wavelengths at {d['band_hz'][1] / 1e3:g} kHz), "
-                     f"{d['row_length_m']:.2f} m long, {end:.2f} m of the usable zone free at each end; colours: capture boards ({d['inputs_per_board']} inputs each)"
-                     + (f"; wired {d['interleave']} of each row per board (interleave)" if d["interleave"] else "; wired row by row"),
-                     fontsize=9, loc="left")
+        # The title belongs to the panel, not to the box (which is as narrow as the face is): from the panel's left edge,
+        # each sentence wrapped to the panel's width.
+        heading = [f"{title or d['name']}: {named(plat.get('mounting'), 'mounting not described')}, {span:g} m x {height:g} m (grey); usable zone {usable:g} m x {usable_h:g} m (dashed)",
+                   f"{d['rows']} {row_word} of {d['per_row'][0]} at {d['pitch_m'] * 100:.1f} cm ({d['pitch_wavelengths_top']:.2f} wavelengths at {d['band_hz'][1] / 1e3:g} kHz), "
+                   f"{d['row_length_m']:.2f} m long, {end:.2f} m of the usable zone free at each end; colours: capture boards ({d['inputs_per_board']} inputs each)"
+                   + (f"; wired {d['interleave']} of each row per board (interleave)" if d["interleave"] else "; wired row by row")]
+        fig.text(0.05, 0.995, "\n".join(textwrap.fill(line, TITLE_CHARS) for line in heading), fontsize=9, ha="left", va="top")
         # --- the system ---
         ax = fig.add_axes([0.02, 0.02, 0.96, 0.53])
         ax.set_xlim(0, 16)
