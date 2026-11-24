@@ -1022,6 +1022,18 @@ accepts any valid answer.
 * DeepSeek-V3.2 wrote the items but fails structure edits, mostly by changing unrelated nodes or writing invalid
   insert syntax.
 
+**Propose → apply → review → revise (CADGenBench's render-and-review loop, text version).** `eval_model.py
+--revise-rounds 1` applies the model's patch, shows it every change in plain words and the resulting design (or the
+error), and lets it keep or correct the answer (`design_edit/revise.py`). One round, no training:
+
+| | eval v2 pass | state | goal | direct | answers changed |
+|---|---|---|---|---|---|
+| Plain Gemma | 0.546 → **0.584** | 0.542 → 0.626 | 0.372 → 0.404 | 0.685 → 0.722 | 148 / 445 |
+| Gemma SFT v8 | 0.665 → **0.685** | 0.794 → 0.832 | 0.564 → 0.585 | 0.778 → 0.769 | 43 / 445 |
+
+The fine-tuned model revises far less (43 vs 148 answers changed) but still gains 2 points. The review turn needs a
+longer context (`--max-model-len 8192`).
+
 ## Round 10: prompt-mismatch fix and system prompt v2 (Gemma 4 31B, broad data, seed 0)
 
 Two single-seed SFT runs on the round-9 *broad* data, both with `train_sft.py --match-inference-prompt`:
