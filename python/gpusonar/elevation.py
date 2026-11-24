@@ -158,9 +158,10 @@ def profile_options(profile: dict | None) -> dict | None:
     """`elevation.profile` as the options of core.SoundSpeedLadder (and of the C++ chain)."""
     if profile is None:
         return None
-    unknown = set(profile) - set(PROFILE_DEFAULTS)
-    if unknown:
-        raise ValueError(f"elevation.profile: unknown key(s) {sorted(unknown)}")
+    from .live import _refuse_unknown          # by name, with the nearest key (sonar-1rf)
+    _refuse_unknown(profile, PROFILE_DEFAULTS, "elevation.profile.")
+    for name in ("built", "supplied"):
+        _refuse_unknown(profile.get(name) or {}, PROFILE_DEFAULTS[name], f"elevation.profile.{name}.")
     b = dict(PROFILE_DEFAULTS["built"], **(profile.get("built") or {}))
     s = dict(PROFILE_DEFAULTS["supplied"], **(profile.get("supplied") or {}))
     out = {"ladder": [str(r) for r in profile.get("ladder", PROFILE_DEFAULTS["ladder"])], "bin_m": float(b["bin_m"]),
@@ -183,9 +184,7 @@ def profile_options(profile: dict | None) -> dict | None:
     if fam:
         names = {"gradient_per_s": "family_gradient", "layer_depth_m": "layer_depth", "thermocline_gradient_per_s": "thermocline_gradient",
                  "thermocline_thickness_m": "thermocline_thickness", "sigma_m_s": "family_sigma"}
-        unknown = set(fam) - set(names) - {"kind"}
-        if unknown:
-            raise ValueError(f"elevation.profile.family: unknown key(s) {sorted(unknown)}")
+        _refuse_unknown(fam, (*names, "kind"), "elevation.profile.family.")
         out["family"] = str(fam["kind"])
         out.update({names[k]: float(v) for k, v in fam.items() if k in names and v is not None})
     return out

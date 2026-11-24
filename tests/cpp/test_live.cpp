@@ -333,6 +333,26 @@ TEST(Tracker, SharesDetectionsMostProbableFirstByDefaultAndKeepsTheOldRuleByName
   EXPECT_THROW(live::set_option(c, p, "tracker_association", "best"), std::invalid_argument);
 }
 
+TEST(Options, AnUnknownKeyIsRefusedWithTheNearestKnownOne) {
+  // sonar-1rf: set_option refused an unknown key without saying which was meant.
+  live::ChainOptions c;
+  live::PassiveOptions p;
+  const auto message = [&](const std::string& key) {
+    try {
+      live::set_option(c, p, key, "1");
+    } catch (const std::invalid_argument& e) {
+      return std::string(e.what());
+    }
+    return std::string("accepted");
+  };
+  EXPECT_EQ(message("classify_min_mover_cell"), "unknown option classify_min_mover_cell; did you mean classify_min_mover_cells?");
+  EXPECT_EQ(message("elevation_profile_bin"), "unknown option elevation_profile_bin; did you mean elevation_profile_bin_m?");
+  EXPECT_EQ(message("passive_methods"), "unknown option passive_methods; did you mean passive_method?");   // the last key compared
+  EXPECT_EQ(message("zzzzzzzzzzzz"), "unknown option zzzzzzzzzzzz");                                     // nothing near
+  EXPECT_EQ(live::nearest_key("keep", {"keep_s", "hold_s"}), "keep_s");
+  EXPECT_EQ(live::nearest_key("abcdefgh", {"keep_s"}), "");
+}
+
 TEST(Options, RefuseTextThatIsNotWhatTheKeyExpects) {
   // A tool that passed Python text on (`decimate={}`, `True`, `None`) used to switch a stage off without a word:
   // atof read it as 0. Every reader now refuses it and names the key.

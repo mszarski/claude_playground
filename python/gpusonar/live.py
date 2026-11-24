@@ -212,6 +212,7 @@ def detector_plan(record, cfg: dict | None = None, rows: int | None = None) -> d
     the sonar's empty template (`SonarModel.make_record`); `rows`: maps added in power (default: the array's rows when
     `elevation` is configured, else 1)."""
     cfg = _merge(DEFAULTS, cfg)
+    check_keys(cfg)                        # as live_detector_plan refuses a key it does not read (sonar-1rf)
     g = _map_geometry(record, cfg)
     rows = _rows_of(record, cfg) if rows is None else int(rows)
     b = cfg["bearings_deg"]
@@ -365,6 +366,7 @@ def budget_threshold_db(record, cfg: dict | None = None, range_cell_m: float | N
     (the same thing at a probability near one half). `range_cell_m`: the cell the chain resolved (default: the
     configuration's, else the derivation's for this record)."""
     cfg = _merge(DEFAULTS, cfg)
+    check_keys(cfg)                        # as live_derive refuses a key it does not read (sonar-1rf)
     if range_cell_m is not None:
         cfg = dict(cfg, range_cell_m=float(range_cell_m))
     if pd is None and cfg["cell_statistic"] != "multiscale":
@@ -740,6 +742,7 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
     if (deploy.get("output") or {}).get("report_udp_max_bytes") is not None:
         out["report_udp_max_bytes"] = int(deploy["output"]["report_udp_max_bytes"])
     nav = deploy.get("nav") or {}
+    check_nav_keys(nav)
     water = nav.get("water_depth") or {}
     if water.get("source") == "altitude":
         out["nav_water_depth_from_altitude"] = 1
@@ -798,6 +801,18 @@ def _three(key: str, v) -> tuple:
     return q
 
 
+NAV_KEYS = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m", "history_margin_s", "lever_arm_m",
+            "mount_rpy_deg")
+
+
+def check_nav_keys(nav: dict) -> None:
+    """The `nav` section of a deployment file: a key NavListener does not take is refused by name, with the nearest
+    (as NavigationCpp refuses one, sonar-1rf); before, it was passed over."""
+    _refuse_unknown(nav, NAV_KEYS, "nav.")
+    if isinstance(nav.get("water_depth"), dict):
+        _refuse_unknown(nav["water_depth"], WATER_DEPTH_DEFAULTS, "nav.water_depth.")
+
+
 class NavListener:
     """The vehicle's navigation, received as JSON datagrams on a UDP port, one fix each:
         {"time_ns": ..., "x": north m, "y": east m, "z": down m, "roll": rad, "pitch": rad, "yaw": rad,
@@ -846,10 +861,9 @@ class NavListener:
         self.mount = (np.asarray(core.rotation_ned(mount[0] * deg, mount[1] * deg, mount[2] * deg))
                       if any(q != 0.0 for q in mount) else None)
         self._water = None
+        if water_depth:
+            _refuse_unknown(water_depth, WATER_DEPTH_DEFAULTS, "nav.water_depth.")   # whatever its source (sonar-1rf)
         if water_depth and water_depth.get("source", "datagram") == "altitude":
-            unknown = set(water_depth) - set(WATER_DEPTH_DEFAULTS)
-            if unknown:
-                raise ValueError(f"nav.water_depth: unknown key(s) {sorted(unknown)}")
             w = dict(WATER_DEPTH_DEFAULTS, **water_depth)
             w.pop("source")
             self._water = core.WaterDepthTracker(dict(w, from_altitude=True))
@@ -868,9 +882,8 @@ class NavListener:
     @classmethod
     def from_config(cls, nav: dict) -> "NavListener":
         """From the `nav` section of a deployment file."""
-        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m", "history_margin_s", "lever_arm_m",
-                "mount_rpy_deg")
-        return cls(**{k: nav[k] for k in keys if nav.get(k) is not None})
+        check_nav_keys(nav)
+        return cls(**{k: nav[k] for k in NAV_KEYS if nav.get(k) is not None})
 
     def _listen(self) -> None:
         while not self._stop.is_set():
@@ -1113,9 +1126,7 @@ def decimate_options(decimate) -> dict | None:
     if d.pop("enabled", True) is False:
         return None
     d.pop("reference", None)
-    unknown = set(d) - set(DECIMATE_KEYS) - {"blank_until_s", "blank_taper_s"}
-    if unknown:
-        raise ValueError(f"decimate: unknown key(s) {sorted(unknown)}")
+    _refuse_unknown(d, DECIMATE_KEYS + ("blank_until_s", "blank_taper_s"), "decimate.")
     return {k: v for k, v in d.items() if v is not None}
 
 

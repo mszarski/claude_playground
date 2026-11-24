@@ -16,6 +16,7 @@
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/option_value.hpp"
 #include "sonar/live/options.hpp"
 #include "sonar/live/sbl_kernel.hpp"
 #include "sonar/live/udp_source.hpp"
@@ -75,22 +76,6 @@ live::DoaOptions doa_options(int max_iterations, double tolerance, int max_sourc
 
 // --- stage 2: options from dicts (decimation, reference, water depth, sound-speed ladder) --------
 
-// Edits (insert, delete, substitute) from a to b: for naming the nearest known key.
-std::size_t edit_distance(const std::string& a, const std::string& b) {
-  std::vector<std::size_t> row(b.size() + 1);
-  for (std::size_t j = 0; j <= b.size(); ++j) row[j] = j;
-  for (std::size_t i = 1; i <= a.size(); ++i) {
-    std::size_t diagonal = row[0];
-    row[0] = i;
-    for (std::size_t j = 1; j <= b.size(); ++j) {
-      const std::size_t above = row[j];
-      row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
-      diagonal = above;
-    }
-  }
-  return row[b.size()];
-}
-
 // An options dict that remembers every key looked up in it, so that a key nothing looked up (a misspelt one, which
 // would otherwise leave its setting at the default without a word) can be refused by name: the keys taken are
 // exactly the keys read (sonar-6hf). Made from a py::dict where one is passed, so the helpers below take either.
@@ -110,16 +95,8 @@ class Keys {
     for (const auto& item : d_) {
       const std::string key = py::str(item.first).cast<std::string>();
       if (std::find(read_.begin(), read_.end(), key) != read_.end()) continue;
-      std::string nearest;
-      std::size_t best = std::max<std::size_t>(3, key.size() / 3) + 1;   // this many edits or more: no suggestion
-      for (const std::string& k : read_) {
-        const std::size_t d = edit_distance(key, k);
-        if (d < best) {
-          best = d;
-          nearest = k;
-        }
-      }
-      throw py::value_error(where + key + ": unknown key" + (nearest.empty() ? std::string(" (the C++ chain reads no such option)") : "; did you mean '" + nearest + "'?"));
+      const std::string nearest = live::nearest_key(key, read_);   // within max(3, len / 3) edits (option_value.hpp)
+      throw py::value_error(where + key + ": unknown key" + (nearest.empty() ? std::string(" (no key read here is near it)") : "; did you mean '" + nearest + "'?"));
     }
   }
 
@@ -163,9 +140,17 @@ live::Reference reference_options(const Keys& r) {
   return o;
 }
 
-live::WaterDepthOptions water_options(const py::dict& d) {
+live::WaterDepthOptions water_options(const Keys& d) {
   live::WaterDepthOptions o;
   if (d.contains("from_altitude")) o.from_altitude = d["from_altitude"].cast<bool>();
+  // `source` as a deployment file's nav.water_depth says it (live.py WATER_DEPTH_DEFAULTS): "altitude" is from_altitude.
+  if (d.contains("source") && !d["source"].is_none()) {
+    const std::string s = d["source"].cast<std::string>();
+    if (s != "altitude" && s != "datagram") throw py::value_error("water_depth.source: altitude or datagram, got '" + s + "'");
+    if (d.contains("from_altitude") && o.from_altitude != (s == "altitude"))
+      throw py::value_error("water_depth: source '" + s + "' and from_altitude disagree");
+    o.from_altitude = s == "altitude";
+  }
   number(d, "dvl_offset_m", o.dvl_offset_m);
   number(d, "altitude_sigma_m", o.altitude_sigma_m);
   number(d, "depth_sigma_m", o.depth_sigma_m);
@@ -176,9 +161,29 @@ live::WaterDepthOptions water_options(const py::dict& d) {
   return o;
 }
 
-live::NavOptions nav_options(const py::dict& d) {
+// A binding's options dict read whole, then refused if it holds a key nothing read, as LiveChainCpp does (sonar-1rf).
+template <class Read>
+auto read_dict(const py::object& d, const std::string& where, Read read) {
+  const Keys k(d.cast<py::dict>());
+  auto o = read(k);
+  k.refuse_unread(where);
+  return o;
+}
+
+live::DecimateOptions decimate_dict(const py::object& d, const std::string& where) { return read_dict(d, where + "decimate.", decimate_options); }
+
+// The reference as a sonar file describes it: `mode`, `level` and `channels` (the burst as the simulator sends it and
+// sync.py finds its channels) are taken without being read here.
+live::Reference reference_dict(const py::object& d, const std::string& where) {
+  return read_dict(d, where + "reference.", [](const Keys& r) {
+    for (const char* k : {"mode", "level", "channels"}) r.contains(k);
+    return reference_options(r);
+  });
+}
+
+live::NavOptions nav_options(const Keys& d, const std::string& where) {
   live::NavOptions o;
-  if (d.contains("water_depth") && !d["water_depth"].is_none()) o.water_depth = water_options(d["water_depth"].cast<py::dict>());
+  if (d.contains("water_depth") && !d["water_depth"].is_none()) o.water_depth = read_dict(d["water_depth"], where + "water_depth.", water_options);
   number(d, "keep_s", o.keep_s);
   number(d, "surface_z", o.surface_z);
   number(d, "profile_step_m", o.profile_step_m);
@@ -264,19 +269,19 @@ py::dict ladder_dict(const live::LadderProfile& p) {
 
 void bind_live(py::module_& m) {
   m.def("live_decimate_plan",
-        [](const PingRecord& record, const py::dict& options) { return plan_dict(live::plan_decimation(record, decimate_options(options))); },
+        [](const PingRecord& record, const py::dict& options) { return plan_dict(live::plan_decimation(record, decimate_dict(options, "live_decimate_plan: "))); },
         py::arg("record"), py::arg("options") = py::dict(),
         "The filter and factor the decimate-first stage uses for a record (decimate.hpp).");
   m.def(
       "live_decimate_record",
       [](PingRecord& record, const py::dict& options, const py::object& reference) {
-        const live::DecimateOptions o = decimate_options(options);
+        const live::DecimateOptions o = decimate_dict(options, "live_decimate_record: ");
         live::SyncResult r;
         if (reference.is_none()) {
           py::gil_scoped_release release;
           r = live::decimate_record(record, o);
         } else {
-          const live::Reference ref = reference_options(reference.cast<py::dict>());
+          const live::Reference ref = reference_dict(reference, "live_decimate_record: ");
           py::gil_scoped_release release;
           r = live::decimate_record(record, o, &ref);
         }
@@ -287,9 +292,9 @@ void bind_live(py::module_& m) {
       "synchronised from the reference bursts (decimate.hpp). Returns the clock facts.");
   py::class_<live::PingDecimator>(m, "PingDecimator")
       .def(py::init([](const PingRecord& t, const py::dict& options, const py::object& reference) {
-             if (reference.is_none()) return live::PingDecimator(t, decimate_options(options));
-             const live::Reference ref = reference_options(reference.cast<py::dict>());
-             return live::PingDecimator(t, decimate_options(options), &ref);
+             if (reference.is_none()) return live::PingDecimator(t, decimate_dict(options, "PingDecimator: "));
+             const live::Reference ref = reference_dict(reference, "PingDecimator: ");
+             return live::PingDecimator(t, decimate_dict(options, "PingDecimator: "), &ref);
            }),
            py::arg("template_record"), py::arg("options") = py::dict(), py::arg("reference") = py::none())
       .def("open", &live::PingDecimator::open)
@@ -303,7 +308,7 @@ void bind_live(py::module_& m) {
   py::class_<live::StreamAssembler>(m, "StreamAssemblerCpp")
       .def(py::init([](const PingRecord& t, std::int64_t chunk, const py::object& decimate) {
              if (decimate.is_none()) return live::StreamAssembler(t, chunk);
-             const live::DecimateOptions o = decimate_options(decimate.cast<py::dict>());
+             const live::DecimateOptions o = decimate_dict(decimate, "StreamAssemblerCpp: ");
              return live::StreamAssembler(t, chunk, &o);
            }),
            py::arg("template_record"), py::arg("chunk_samples"), py::arg("decimate") = py::none())
@@ -318,14 +323,18 @@ void bind_live(py::module_& m) {
       .def_readonly("blanked_samples", &live::StreamAssembler::blanked_samples)
       .def_readonly("dropped_chunks", &live::StreamAssembler::dropped_chunks);
   py::class_<live::Navigation>(m, "NavigationCpp")
-      .def(py::init([](const py::dict& options) { return live::Navigation(nav_options(options)); }), py::arg("options") = py::dict())
+      .def(py::init([](const py::dict& options) {
+             return live::Navigation(read_dict(options, "NavigationCpp: ", [](const Keys& k) { return nav_options(k, "NavigationCpp: "); }));
+           }),
+           py::arg("options") = py::dict())
       .def("push", &live::Navigation::push)
       .def("apply", &live::Navigation::apply)
       .def("velocity_given", &live::Navigation::velocity_given,
            "Whether the last apply() had a velocity over ground from navigation (udp_source.hpp; sonar-8is).")
       .def("__len__", &live::Navigation::size);
   py::class_<live::WaterDepthTracker>(m, "WaterDepthTracker")
-      .def(py::init([](const py::dict& options) { return live::WaterDepthTracker(water_options(options)); }), py::arg("options") = py::dict())
+      .def(py::init([](const py::dict& options) { return live::WaterDepthTracker(read_dict(options, "WaterDepthTracker: ", water_options)); }),
+           py::arg("options") = py::dict())
       .def("update",
            [](live::WaterDepthTracker& w, std::int64_t time_ns, double x, double y, double depth, double altitude, bool lock,
               double altitude_sigma, double depth_sigma) {
@@ -336,7 +345,8 @@ void bind_live(py::module_& m) {
            py::arg("altitude_sigma") = kNaN, py::arg("depth_sigma") = kNaN,
            "One fix -> (water depth, sigma, held, seconds held); NaN when unknown (environment.hpp).");
   py::class_<live::SoundSpeedLadder>(m, "SoundSpeedLadder")
-      .def(py::init([](const py::dict& options) { return live::SoundSpeedLadder(profile_options(options)); }), py::arg("options") = py::dict())
+      .def(py::init([](const py::dict& options) { return live::SoundSpeedLadder(read_dict(options, "SoundSpeedLadder: ", profile_options)); }),
+           py::arg("options") = py::dict())
       .def("add", &live::SoundSpeedLadder::add)
       .def("absorb", &live::SoundSpeedLadder::absorb, py::arg("record"), py::arg("surface_z") = 0.0)
       .def("evaluate",
@@ -355,7 +365,7 @@ void bind_live(py::module_& m) {
       "live_family_profile",
       [](const py::dict& options, double own_depth, double sound_speed, double bottom) {
         std::vector<double> depth, speed;
-        live::family_profile(profile_options(options), own_depth, sound_speed, bottom, depth, speed);
+        live::family_profile(read_dict(options, "live_family_profile: ", profile_options), own_depth, sound_speed, bottom, depth, speed);
         return py::make_tuple(depth, speed);
       },
       "Knots (depths, speeds) of an assumed profile family through the sound speed at the vehicle (environment.hpp).");
@@ -376,7 +386,7 @@ void bind_live(py::module_& m) {
       [](const py::object& profile, const py::object& ladder, const std::vector<double>& ssp_depth, const std::vector<double>& ssp_speed,
          bool use_gradient, double gradient, double gradient_sigma, double own_depth, double sound_speed, double water_depth) {
         live::ProfileOptions po;
-        if (!profile.is_none()) po = profile_options(profile.cast<py::dict>());
+        if (!profile.is_none()) po = read_dict(profile, "live_water_profile: profile.", profile_options);
         live::LadderProfile lp;
         if (!ladder.is_none()) {
           const py::dict l = ladder.cast<py::dict>();
@@ -407,7 +417,7 @@ void bind_live(py::module_& m) {
         "Zero every channel between record times t0 and t1 (s after the transmit), raised-cosine edges of `taper` s (sync.hpp).");
   m.def(
       "live_synchronise",
-      [](PingRecord& record, const py::dict& reference) { return sync_dict(live::synchronise(record, reference_options(reference))); },
+      [](PingRecord& record, const py::dict& reference) { return sync_dict(live::synchronise(record, reference_dict(reference, "live_synchronise: "))); },
       "The C++ board synchronisation on a raw record, in place (sync.hpp): the clock facts, with `flagged` per board.");
   m.def(
       "live_cluster",
@@ -617,8 +627,9 @@ void bind_live(py::module_& m) {
   m.attr("SBL_KERNEL_MAX_CHANNELS") = live::kSblMaxChannels;
   m.def(
       "live_derive",
-      [](const PingRecord& record, const py::dict& given) {
+      [](const PingRecord& record, const py::dict& given_dict) {
         // The chain's derived settings for this record: `given` holds the ones the configuration set (the C++ option names).
+        const Keys given(given_dict);
         live::ChainOptions o;
         number(given, "range_cell_m", o.range_cell_m);
         number(given, "cfar_guard_m", o.cfar_guard_m);
@@ -633,6 +644,7 @@ void bind_live(py::module_& m) {
         if (given.contains("min_row_elements") && !given["min_row_elements"].is_none()) {
           o.elevation.min_row_elements = given["min_row_elements"].cast<std::int64_t>();
         }
+        given.refuse_unread("live_derive: ");
         const live::ChainDefaults d = live::resolve(o, record);
         py::dict out;
         out["range_cell_m"] = d.range_cell_m;
@@ -653,7 +665,8 @@ void bind_live(py::module_& m) {
   m.def(
       "live_detector_plan",
       [](const PingRecord& record, std::int64_t n_cells, std::int64_t samples_per_cell, double step, const std::vector<double>& bearings,
-         std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, const py::dict& kw) {
+         std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, const py::dict& options) {
+        const Keys kw(options);
         live::DetectorOptions o;
         number(kw, "false_alarms_per_ping", o.false_alarms_per_ping);
         number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
@@ -668,6 +681,7 @@ void bind_live(py::module_& m) {
         const live::SonarFacts facts = live::sonar_facts(record, live::row_tolerance(record, tolerance), min_elements);
         double merge_m = 0.0;
         number(kw, "merge_m", merge_m);
+        kw.refuse_unread("live_detector_plan: ");
         // The lines whose maps are added: the array's rows when the chain stacks them (rows > 1), else every channel as one.
         std::vector<std::vector<std::int64_t>> lines;
         if (rows > 1) lines = live::find_rows(record, live::row_tolerance(record, tolerance), min_elements);
@@ -1086,9 +1100,9 @@ void bind_live(py::module_& m) {
              if (reorder_blocks < 0) throw py::value_error("reorder_blocks must be 0 or more");
              auto make = [&]() {
                if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
-               const live::DecimateOptions o = decimate_options(decimate.cast<py::dict>());
+               const live::DecimateOptions o = decimate_dict(decimate, "PingAssemblerCpp: ");
                if (reference.is_none()) return live::PingAssembler(t, &o, nullptr, sample_bytes);
-               const live::Reference ref = reference_options(reference.cast<py::dict>());
+               const live::Reference ref = reference_dict(reference, "PingAssemblerCpp: ");
                return live::PingAssembler(t, &o, &ref, sample_bytes);
              };
              live::PingAssembler a = make();
