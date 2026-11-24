@@ -74,3 +74,29 @@ def test_the_simulated_echo_of_a_fast_array_is_placed_on_its_target(gallery):
     assert abs(got[0] - q[0]) < 0.5 and abs(got[1] - q[1]) < 0.5, (got, q)
     old = origin[:2] + rng * np.array([np.sin(bearing), np.cos(bearing)])
     assert old[0] - q[0] < -8.0                                       # from the array at transmit: about 10 m behind
+
+
+def test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival(gallery):
+    """sonar-ca3 / sonar-a98: in the Popoto and flank scenes one object's echo is several arrivals within tens of
+    metres, the later ones (surface and bottom paths) the stronger, merged into one detection by detect.cluster. Its
+    centroid lies beyond the object; `set_range_estimate("first")` (gallery.RANGE_ESTIMATE, the default since the
+    owner's choice on those issues) gives the nearest cell, the direct arrival. A map of 2 m cells: the direct arrival at 6000 m, 6 dB weaker than one at +34 m, the
+    cells between filled by the arrivals in between (above the threshold); background 1."""
+    from gpusonar import detect
+    ranges = np.arange(5000.0, 7000.0, 2.0)
+    bearings = np.radians(np.arange(-10.0, 10.01, 0.5))
+    power = np.ones((len(bearings), len(ranges)))
+    ib = len(bearings) // 2
+    on = (ranges >= 6000.0) & (ranges <= 6040.0)
+    power[ib, on] = 1e3
+    power[ib, ranges == 6000.0] = 1e4
+    power[ib, ranges == 6034.0] = 4e4
+    flags = power > 100.0
+    hits = detect.cluster(flags, power, ranges, bearings, guard=50, train=150)
+    assert len(hits) == 1 and hits[0].range > 6015.0               # the centroid: well beyond the direct arrival
+    assert gallery.set_range_estimate(hits, "centroid")[0].range > 6015.0
+    assert gallery.set_range_estimate(hits, "first")[0].range == pytest.approx(6000.0)
+    with pytest.raises(ValueError):
+        gallery.set_range_estimate(hits, "peak")
+    assert gallery.RANGE_ESTIMATE == "first"                        # the default (was "centroid")
+    assert gallery.set_range_estimate(detect.cluster(flags, power, ranges, bearings, guard=50, train=150))[0].range == pytest.approx(6000.0)
