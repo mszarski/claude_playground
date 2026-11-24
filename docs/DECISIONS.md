@@ -3148,3 +3148,18 @@ now classified (`run_flank` -> `classify_and_score` through `flank_tracks_yx`: i
 was read as (y, x)) and `classify_rules_eval --scenes flank_patrol` scores it; its `small_vehicle` has
 no detection near it on any ping. The committed gallery (D-174, centroid) is regenerated separately.
 Full GPU suite 1925 passed, 93 skipped (HF job 6b0536c7ca8b51043c3b3ed9).
+
+### D-179 Gallery regenerated with D-178 (issues sonar-27y, sonar-627)
+
+Full-size CUDA run on an NVIDIA L4 (HF job 6b054768c97b8ed4fcd78015, tree 4a80876). Only
+`flank_patrol` and the six Popoto scenes moved, each to the gallery seed of D-178's ten-seed run;
+every other scene equals the D-174 gallery to GPU rounding (relative 4e-4 at most; detection, track
+and class counts equal), so D-175 moved nothing in the gallery.
+- Better: `far_mover` 34.2 -> 0.9 m from its hull (confirmed tracks 4 -> 3); `winter_sand_200m` speed
+  5.24 -> 6.06 m/s (true 6.0); `flank_patrol` submarine 25.8 -> 1.0 m, wreck 5.8 -> 3.5 m.
+- Worse: `gravel_30m` ship 33.7 m beyond -> 10.0 m short of its hull (speed 5.92 -> 5.79 m/s);
+  `popoto_12km` 4.7 -> 9.8 m from the ship's centre (2.1 m from the hull in both).
+- `flank_patrol` is now classified in the gallery: 1 mover (the submarine, 3.02 m/s), 2 static, 2
+  uncertain; the small vehicle has still no detection.
+- No test expectation changed. `docs/SCENARIOS.md`'s gallery tables, last updated at 1442de5, now quote
+  this run.
