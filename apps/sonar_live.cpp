@@ -16,6 +16,8 @@
 //   backend (auto | host | cuda; auto, also without the key: CUDA when built with it and a device is present, else
 //   the host; cuda without a usable device is an error)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
+//   tracker_ping_interval_s (s: the tracker's clock on a ping whose transmit time does not increase, a source without
+//   timestamps; left out: off, such pings are counted in pings_without_time)
 //   tracker_association (likelihood | in_order)
 //   classify_min_speed classify_static_speed classify_max_fit_rms classify_max_fit_rms_bearing_deg (the fit limit's
 //   growth with range, degrees: a track's limit is at least this times its range; 0: off) classify_outlier_alpha
@@ -203,6 +205,13 @@ int main(int argc, char** argv) {
       live::Report rep = chain.process(rec);
       rep.pings_without_nav = nav_counts.without_nav;     // as the Python chain reports it: pings so far without a fix, this one included
       rep.pings_without_velocity = nav_counts.without_velocity;   // pings so far whose fix had no velocity (sonar-8is)
+      // The chain counts pings whose transmit time did not increase (sonar-4bs); said once, at the first.
+      if (rep.pings_without_time == 1) {
+        std::fprintf(stderr, "sonar_live: a ping's transmit time did not increase over the ping before (a source without timestamps?); "
+                             "counted in pings_without_time%s\n",
+                     chain.options().tracker_ping_interval_s > 0.0 ? ", the tracker's clock advanced by tracker_ping_interval_s"
+                                                                   : "; without tracker_ping_interval_s the tracker has no time between such pings");
+      }
       report << rep.json() << "\n" << std::flush;
       if (out_socket) send_report(rep.datagrams(report_bytes));
       if (done == 0) {

@@ -105,6 +105,10 @@ struct ChainOptions {
   // so the active chain stops at 20: iterations, tolerance, sources, dynamic range, SNR, frequencies.
   DoaOptions sbl{20, 1e-2, 6, 20.0, 6.0, 24};
   TrackerOptions tracker{0.05, kDerive, kDerive, 4.0, 3, 2, 8.0};      // range and bearing sigma: derived
+  /// s, > 0: the tracker's clock on a ping whose transmit time does not increase over the ping before (a source without
+  /// timestamps) advances by this instead (sonar-4bs; gpusonar.live `tracker.ping_interval_s`). 0: off, the default:
+  /// such a ping is counted (Report::pings_without_time) and the clock stays where the transmit time puts it.
+  double tracker_ping_interval_s = 0.0;
   // fit limit, multipath bearing, the fit limit's growth with range: derived
   ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, kDerive, false, 40.0, 2.0, true, 800.0, kDerive, 2.5, 0.0, 0.0, -1.0, -1.0,
                            std::numeric_limits<double>::quiet_NaN(), 0.0, kDerive};
@@ -170,6 +174,10 @@ struct Report {
   /// Pings so far (this one included) whose navigation fix carried no velocity over ground (Navigation::velocity_given):
   /// processed with the array at rest over the round trip. Set like pings_without_nav; on the line only when above 0.
   std::int64_t pings_without_velocity = 0;
+  /// Pings so far (this one included) whose transmit time did not increase over the ping before's (a source without
+  /// timestamps): the tracker had no time between them, or tracker_ping_interval_s gave it (sonar-4bs). Counted by the
+  /// chain itself; on the line only when above 0, after pings_without_velocity.
+  std::int64_t pings_without_time = 0;
   std::vector<ReportDetection> detections;
   std::vector<ReportTrack> tracks;
   double blanking_min_range_m = -1.0;   ///< >= 0: blanking is on; nothing nearer than this is reported
@@ -256,6 +264,9 @@ class LiveChain {
   bool have_origin_ = false;
   Vec3d origin_;
   std::int64_t t0_ns_ = 0;
+  std::int64_t last_ns_ = 0;            ///< the transmit time of the ping before
+  std::int64_t clock_offset_ns_ = 0;    ///< what tracker_ping_interval_s has added to the tracker's clock (sonar-4bs)
+  std::int64_t pings_without_time_ = 0; ///< Report::pings_without_time
 };
 
 struct PassiveOptions {

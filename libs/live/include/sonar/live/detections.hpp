@@ -113,8 +113,9 @@ class Tracker {
   /// Advance to the ping at `time` (s) with its detections. Each detection is compared with every track predicted to
   /// the detection's own time (Detection::time; the ping's when NaN or otherwise not finite; D-156), a track takes its
   /// detection at that time and a new track is born there; tracks that take none count a miss and are predicted to
-  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). Returns the
-  /// confirmed tracks.
+  /// `time`, or stay where they are if they already hold at a later time (never moved back in time). A detection timed
+  /// before the time a track holds is compared with and taken by it at the track's time (dt = 0; sonar-uc5), so no
+  /// history steps back. Returns the confirmed tracks.
   std::vector<const Track*> update(double time, const std::vector<Detection>& detections);
   const std::vector<Track>& tracks() const { return tracks_; }
 
@@ -167,5 +168,12 @@ struct ClassifyOptions {
 
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& options = {});
+
+/// Echo grouping (D-155, D-172; classify.py group_echoes), in place: classify_tracks' last step when options.multipath
+/// (it reads only the multipath_* fields and origin_x, origin_y). `bounces`: ids of tracks the caller knows to be bounces
+/// (the live chain's elevation step, sonar-bal): multipath before grouping, so never an anchor nor a group's object; a
+/// member of a group like any other track (its parent the group's object), else multipath of nothing (parent -1). With
+/// none it is the grouping as before.
+void group_echoes(std::vector<TrackClass>& classes, const ClassifyOptions& options, const std::vector<std::int64_t>& bounces = {});
 
 }  // namespace sonar::live

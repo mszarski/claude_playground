@@ -933,6 +933,11 @@ void bind_live(py::module_& m) {
         if (kw.contains("tracker_confirm_hits")) o.tracker.confirm_hits = kw["tracker_confirm_hits"].cast<std::int64_t>();
         if (kw.contains("tracker_association")) o.tracker.association = live::parse_association(kw["tracker_association"].cast<std::string>());
         if (kw.contains("tracker_max_misses")) o.tracker.max_misses = kw["tracker_max_misses"].cast<std::int64_t>();
+        if (kw.contains("tracker_ping_interval_s")) {        // off unless given; given, seconds above 0 (sonar-4bs)
+          const double s = kw["tracker_ping_interval_s"].cast<double>();
+          if (!(std::isfinite(s) && s > 0.0)) throw py::value_error("tracker_ping_interval_s: seconds above 0 (leave the key out for off)");
+          o.tracker_ping_interval_s = s;
+        }
         if (kw.contains("sbl_max_sources")) o.sbl.max_sources = kw["sbl_max_sources"].cast<std::int32_t>();
         if (kw.contains("gate_fft")) o.gate_fft = kw["gate_fft"].cast<std::int64_t>();
         if (kw.contains("multipath")) o.classify.multipath = kw["multipath"].cast<bool>();

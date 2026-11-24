@@ -112,6 +112,29 @@ def test_an_earlier_uncertain_arrival_is_multipath_not_the_object():
     assert out[1].kind == "mover" and (out[2].kind, out[2].parent) == ("multipath", 1)
 
 
+def test_a_bounce_is_never_an_echo_groups_object():
+    """sonar-bal: `group_echoes(classes, multipath, bounces)` (classify_tracks' last step; the live chain calls it after
+    its elevation step with the tracks it found outside the water). A bounce is multipath before grouping, so never an
+    anchor or an object; within the gates of a group it is that group's multipath, else multipath of nothing. The
+    others group as they would without it: here the arrival at 6070 m becomes the object of the one at 6130 m.
+    Before (the chain marking the bounce multipath after grouping), the bounce at 6000 m was the object, multipath with
+    no parent, and the other two kept it as their parent."""
+    tracks = [arrival(1, 6000.0, 4.0, 14.0), arrival(2, 6070.0, 4.0, 22.0), arrival(3, 6130.0, 4.0, 12.0),
+              arrival(4, 6050.0, 20.0, 15.0)]
+    kw = dict(SHIP_KW, multipath=None)
+    out = classify.classify_tracks(tracks, **kw)
+    classify.group_echoes(out, MP, bounces={1, 4})
+    got = {c.id: (c.kind, c.parent) for c in out}
+    assert got == {1: ("multipath", 2), 2: ("mover", None), 3: ("multipath", 2), 4: ("multipath", None)}
+    kinds_ = {c.id: c.kind for c in out}
+    assert all(kinds_[c.parent] != "multipath" for c in out if c.parent is not None)
+    # No bounce: exactly classify_tracks with multipath on.
+    plain = classify.classify_tracks(tracks, **kw)
+    classify.group_echoes(plain, MP)
+    assert repr(plain) == repr(classify.classify_tracks(tracks, **SHIP_KW))      # repr: extent_cells is NaN
+    assert {c.id: (c.kind, c.parent) for c in plain}[2] == ("multipath", 1)
+
+
 def test_an_uncertain_track_alone_is_not_an_anchor():
     """No established track: nothing is grouped (an uncertain track explains nothing away)."""
     out = classify.classify_tracks([arrival(4, 5990.0, 4.0, 22.0, n=3), arrival(5, 6050.0, 4.0, 13.0, n=3)], **SHIP_KW)

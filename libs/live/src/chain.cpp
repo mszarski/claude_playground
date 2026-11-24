@@ -227,6 +227,9 @@ LiveChain::LiveChain(const ChainOptions& options)
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
   // classify.py `detections` rules: the row rule acts only in the corridor test, which the chain never runs.
   if (!(opt_.classify.row_snr_db < 0.0)) throw std::invalid_argument("LiveChain: classify row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
+  if (!(std::isfinite(opt_.tracker_ping_interval_s) && opt_.tracker_ping_interval_s >= 0.0)) {
+    throw std::invalid_argument("LiveChain: tracker_ping_interval_s: seconds above 0, or 0 (off)");
+  }
   if (std::isnan(opt_.classify.min_mover_cells)) throw std::invalid_argument("LiveChain: classify min_mover_cells is NaN");
   if (!(opt_.classify.outlier_alpha >= 0.0 && opt_.classify.outlier_alpha < 1.0)) throw std::invalid_argument("LiveChain: classify outlier_alpha: from 0 (off) to below 1");
   // NaN: derived from the first record (derive.hpp); given, a finite angle, 0 (off) or more.
@@ -640,8 +643,17 @@ Report LiveChain::process(PingRecord& record) {
     origin_ = f.origin;
     t0_ns_ = record.transmit.time_ns;
     have_origin_ = true;
+  } else if (record.transmit.time_ns <= last_ns_) {
+    // No time since the ping before (a source without timestamps; sonar-4bs): counted, and with a ping interval given the
+    // tracker's clock advances by it. Ordinary pings (increasing transmit times) never come here: their clock is as before.
+    ++pings_without_time_;
+    if (opt_.tracker_ping_interval_s > 0.0) {
+      clock_offset_ns_ += last_ns_ - record.transmit.time_ns + static_cast<std::int64_t>(std::llround(opt_.tracker_ping_interval_s * 1e9));
+    }
   }
-  const double t = static_cast<double>(record.transmit.time_ns - t0_ns_) * 1e-9;
+  last_ns_ = record.transmit.time_ns;
+  rep.pings_without_time = pings_without_time_;
+  const double t = static_cast<double>(record.transmit.time_ns - t0_ns_ + clock_offset_ns_) * 1e-9;
   // A monostatic echo shows the target where it was when the sound reached it: transmit + range / c, with the c that
   // turned the two-way time into range (the record's, after `sound_speed`). D-156; python/gpusonar/live.py the same.
   const double c_range = record.environment.sound_speed;
@@ -752,7 +764,12 @@ Report LiveChain::process(PingRecord& record) {
   co2.origin_x = f.origin.y - origin_.y;
   co2.origin_y = f.origin.x - origin_.x;
   co2.time = t;   // positions at the report's time (the ping's transmit time), not at each track's last detection (D-156)
-  for (const TrackClass& tc : classify_tracks(confirmed, co2)) {
+  // Echo grouping after the elevation step below, which finds the bounces (sonar-bal; python/gpusonar/live.py the same).
+  const bool group = co2.multipath;
+  co2.multipath = false;
+  std::vector<TrackClass> classes = classify_tracks(confirmed, co2);
+  std::vector<std::int64_t> bounces;   // tracks whose straight-line depth lies outside the water
+  for (const TrackClass& tc : classes) {
     ReportTrack rt{tc.id, tc.parent, kind_name(tc.kind), tc.y + origin_.x, tc.x + origin_.y, tc.vy, tc.vx, tc.speed,
                    std::hypot(tc.y - co2.origin_y, tc.x - co2.origin_x), tc.mean_snr_db, tc.seen};
     if (stacked && eo.depth) {
@@ -788,11 +805,25 @@ Report LiveChain::process(PingRecord& record) {
         // Its straight-line depth is above the surface or below the bottom: a bounce.
         if (eo.classify && outside_water(tr->depth, std::hypot(std::sqrt(tr->depth_var), bent), water, eo.surface_z, eo.classify_sigma,
                                          eo.water_depth_sigma)) {
-          rt.kind = "multipath";
+          bounces.push_back(tc.id);
         }
       }
     }
     rep.tracks.push_back(rt);
+  }
+  // A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath after
+  // grouping, an object left its members a parent that was itself multipath).
+  if (group) {
+    co2.multipath = true;
+    group_echoes(classes, co2, bounces);
+  } else {
+    for (TrackClass& tc : classes) {
+      if (std::find(bounces.begin(), bounces.end(), tc.id) != bounces.end()) tc.kind = Kind::Multipath;
+    }
+  }
+  for (std::size_t i = 0; i < classes.size(); ++i) {
+    rep.tracks[i].kind = kind_name(classes[i].kind);
+    rep.tracks[i].parent = classes[i].parent;
   }
   // --- hook: depth from multipath timing (multipath_depth.hpp), opt-in; adds report members only ---
   if (opt_.multipath_depth.enabled) {
@@ -835,6 +866,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
     << ownship.x << ", " << ownship.y << ", " << ownship.z << "], \"pings_without_nav\": " << pings_without_nav;
   // Only when some ping had no velocity from navigation (sonar-8is): every line without it is the one it was.
   if (pings_without_velocity > 0) s << ", \"pings_without_velocity\": " << pings_without_velocity;
+  if (pings_without_time > 0) s << ", \"pings_without_time\": " << pings_without_time;   // sonar-4bs
   s << ", \"detections\": [";
   for (std::size_t i = det_first; i < det_last; ++i) {
     const auto& d = detections[i];

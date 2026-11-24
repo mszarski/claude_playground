@@ -65,8 +65,8 @@ Association parse_association(const std::string& name) {
 namespace {
 
 // A track's state, covariance and depth variance moved by the constant-velocity model from its time to `to`. `to` may
-// be earlier than the track's time when a detection within a ping is (D-156: each detection at transmit + R/c, so a
-// nearer one is earlier). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
+// be earlier than the track's time (Tracker::update no longer asks for that since sonar-uc5: an earlier detection is
+// taken at the track's time). The process noise then still grows the uncertainty: Q = G G^T q^2 is an outer product,
 // positive semi-definite for either sign of dt, and the depth's random walk grows by q_d^2 |dt| (ours: a variance never
 // shrinks by predicting; the same for dt >= 0 as before). python/gpusonar/detect.py Tracker._predict is the same.
 struct Prior {
@@ -99,9 +99,13 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
   // Each detection's own time (D-156): the ping's when it carries none (any time that is not finite, as detect.py).
   std::vector<double> when(detections.size());
   for (std::size_t j = 0; j < detections.size(); ++j) when[j] = std::isfinite(detections[j].time) ? detections[j].time : time;
+  // The time a track compares with and takes a detection at: the detection's, or the track's own when the detection's is
+  // earlier (sonar-uc5, ours; detect.py Tracker._not_before has the reasons): no history steps back in time.
+  auto not_before = [&](std::size_t ti, double when) { return when < tracks_[ti].time ? tracks_[ti].time : when; };
   // Each track predicted to each distinct detection time, once.
   std::vector<std::vector<std::pair<double, Prior>>> cache(tracks_.size());
-  auto predicted = [&](std::size_t ti, double to) -> const Prior& {
+  auto predicted = [&](std::size_t ti, double when) -> const Prior& {
+    const double to = not_before(ti, when);
     for (const auto& [at, pr] : cache[ti]) {
       if (at == to) return pr;
     }
@@ -118,7 +122,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     x = prior.x;
     p = prior.p;
     t.depth_var = prior.depth_var;
-    t.time = at;
+    t.time = at < t.time ? t.time : at;   // not_before
     const M2 s = h * p * h.transpose() + measurement_cov(d, opt_);
     const Eigen::Matrix<double, 4, 2> k = p * h.transpose() * s.inverse();
     const V2 z = xy(d);

@@ -77,7 +77,10 @@ DEFAULTS = {
             "max_gates": 24, "min_contrast_db": 8.0, "max_iterations": 20, "tolerance": 0.01},
     "tracker": {"range_sigma": None, "bearing_sigma_deg": None, "confirm_hits": 3, "max_misses": 2,
                 "initial_speed_sigma": 8.0, "process_noise": 0.05,
-                "association": "likelihood"},     # or "in_order", the rule before D-141 (gpusonar/detect.py, Tracker)
+                "association": "likelihood",      # or "in_order", the rule before D-141 (gpusonar/detect.py, Tracker)
+                # s: on a ping whose transmit time does not increase over the ping before (a source without timestamps)
+                # the tracker's clock advances by this (sonar-4bs). None: off; such pings are counted (pings_without_time)
+                "ping_interval_s": None},
     "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
@@ -457,6 +460,16 @@ def check_keys(cfg: dict) -> None:
                 _refuse_unknown(e[name], SECTION_KEYS["elevation." + name], f"chain.elevation.{name}.")
 
 
+def check_ping_interval(s):
+    """chain.tracker.ping_interval_s: None (off) or seconds above 0, as libs/live refuses it (sonar-4bs). Returns it as a
+    float (None as None)."""
+    if s is None:
+        return None
+    if not (np.isfinite(float(s)) and float(s) > 0.0):
+        raise ValueError(f"chain.tracker.ping_interval_s = {s}: seconds above 0 (None: off)")
+    return float(s)
+
+
 def check_classify_fit(c: dict) -> None:
     """chain.classify's fit settings, refused as libs/live refuses them: outlier_alpha from 0 (off) to below 1;
     max_fit_rms_bearing_deg None (derived) or a finite angle, 0 (off) or more."""
@@ -499,6 +512,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "tracker_confirm_hits": int(t["confirm_hits"]), "tracker_max_misses": int(t["max_misses"]),
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
          "tracker_association": t["association"],
+         **({"tracker_ping_interval_s": check_ping_interval(t["ping_interval_s"])} if t["ping_interval_s"] is not None else {}),
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath")), "backend": cfg["backend"]}
     if cfg["cell_statistic"] == "peak":
@@ -1139,6 +1153,11 @@ class LiveChain:
         check_keys(self.cfg)                   # refuses a misspelt key, which would otherwise leave its setting at the default
         live_detection_rules(self.cfg["classify"].get("detections"))        # refuses an unknown, negative or row rule now
         check_classify_fit(self.cfg["classify"])
+        interval = check_ping_interval(self.cfg["tracker"]["ping_interval_s"])
+        self._ping_interval_ns = 0 if interval is None else int(round(interval * 1e9))
+        self.pings_without_time = 0            # pings whose transmit time did not increase over the ping before (sonar-4bs)
+        self._last_ns = None                   # the transmit time of the ping before
+        self._clock_offset_ns = 0              # what ping_interval_s has added to the tracker's clock
         self.resolved = None                   # what the first ping resolved of the settings left to be derived (derive.hpp)
         self.report_udp_max_bytes = int(report_udp_max_bytes)
         self.reports_split = 0                 # reports that went out as several datagrams
@@ -1255,6 +1274,9 @@ class LiveChain:
             self.sbl_fallbacks += bool(report.get("sbl_fallback"))
             report.update(ping=index, pings_without_nav=self.pings_without_nav,
                           processing_seconds=time.perf_counter() - t_wall)
+            if report.get("pings_without_time", 0) and not self.pings_without_time:
+                self._warn_without_time()
+            self.pings_without_time = int(report.get("pings_without_time", 0))     # the C++ chain counts them itself
             if self.pings_without_velocity:            # only when some ping had none: every other line is the one it was
                 # right after pings_without_nav, where Report::json and the Python engine put it
                 ordered = {}
@@ -1593,7 +1615,17 @@ class LiveChain:
 
         if self._origin is None:
             self._origin, self._t0 = origin.copy(), record.transmit.time_ns
-        t = (record.transmit.time_ns - self._t0) * 1e-9
+        elif record.transmit.time_ns <= self._last_ns:
+            # No time since the ping before (a source without timestamps; sonar-4bs): counted, and with a ping interval
+            # given the tracker's clock advances by it. Ordinary pings (increasing transmit times) never come here: their
+            # clock is as before, bit for bit. libs/live chain.cpp the same.
+            if not self.pings_without_time:
+                self._warn_without_time()
+            self.pings_without_time += 1
+            if self._ping_interval_ns:
+                self._clock_offset_ns += self._last_ns - record.transmit.time_ns + self._ping_interval_ns
+        self._last_ns = record.transmit.time_ns
+        t = (record.transmit.time_ns - self._t0 + self._clock_offset_ns) * 1e-9
         # A monostatic echo shows the target where it was when the sound reached it: transmit + range / c, with the c that
         # turned the two-way time into range (the record's, after `sound_speed`). D-156; libs/live chain.cpp the same.
         c_range = float(record.environment.sound_speed)
@@ -1666,12 +1698,14 @@ class LiveChain:
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
-        # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156).
+        # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156). Echo
+        # grouping after the elevation step below, which finds the bounces (sonar-bal).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
-                                           max_fit_rms=c["max_fit_rms"], multipath=mp, detections=c.get("detections"), time=t,
+                                           max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
                                            outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
                                            origin=(own[1], own[0]))
         track_extra = {}
+        bounces = []                           # tracks whose straight-line depth lies outside the water
         if el_cfg is not None and el_cfg["depth"]:
             by_id = {tr.id: tr for tr in tracks}
             for c_ in classes:
@@ -1701,12 +1735,21 @@ class LiveChain:
                     track_extra[c_.id]["depth_profile_source"] = ladder["rung"]
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],
                                                                   el_cfg["classify_sigma"], el_cfg["water_depth_sigma_m"]):
-                    c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce
+                    bounces.append(c_.id)      # its straight-line depth is above the surface or below the bottom: a bounce
+        # A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath
+        # after grouping, an object left its members a parent that was itself multipath). classify.group_echoes.
+        if mp:
+            classify.group_echoes(classes, mp, bounces)
+        else:
+            for c_ in classes:
+                if c_.id in bounces:
+                    c_.kind = "multipath"
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
             # only when some ping had no velocity from navigation (sonar-8is): every other line is the one it was
             **({"pings_without_velocity": self.pings_without_velocity} if self.pings_without_velocity else {}),
+            **({"pings_without_time": self.pings_without_time} if self.pings_without_time else {}),       # sonar-4bs
             "sync": sync_facts,
             "detections": [dict({"range_m": out_range[i_], "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
                                 **({"extent_m": h.extent, "first_range_m": h.first_range} if np.isfinite(h.extent) else {}),
@@ -1739,6 +1782,13 @@ class LiveChain:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}
         return self._emit(report)
+
+    def _warn_without_time(self) -> None:
+        """Said once, at the first ping whose transmit time did not increase over the ping before (sonar-4bs)."""
+        how = ("the tracker's clock advanced by tracker.ping_interval_s" if self._ping_interval_ns
+               else "without tracker.ping_interval_s the tracker has no time between such pings")
+        warnings.warn("a ping's transmit time did not increase over the ping before (a source without timestamps?); "
+                      f"counted in pings_without_time; {how}", RuntimeWarning, stacklevel=3)
 
     def _emit(self, report: dict) -> dict:
         report = finite_or_null(report)
