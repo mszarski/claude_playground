@@ -980,6 +980,55 @@ def run_sas_survey(name, cfg, backend, quick):
     return fig, metrics, anim
 
 
+# The Popoto runner's bearing estimate (sonar-4s2): "centroid" (detect.cluster's power-weighted mean over the flagged
+# cells; the default, as before) or "parabola" (`subgrid_bearings`). Opt-in.
+POPOTO_BEARING = "centroid"
+POPOTO_BEARINGS = ("centroid", "parabola")
+
+
+def parabola_vertex(left, mid, right):
+    """Offset (in grid steps, -0.5 to 0.5) of the vertex of the parabola through (-1, left), (0, mid), (1, right), where
+    `mid` is a maximum of the three; 0 when they do not curve down. For y = a (u - p)^2 + b sampled at u = -1, 0, 1:
+    left - right = 4 a p and left - 2 mid + right = 2 a, so p = (left - right) / (2 (left - 2 mid + right)) (ours,
+    algebra). Exact when the samples lie on a parabola; applied to the beam's power in dB, it is exact for a Gaussian
+    main lobe, near enough for the Hann beam's top when the grid step is a tenth of the beam (the clip at +-0.5 keeps
+    the estimate within the strongest row's cell)."""
+    den = left - 2.0 * mid + right
+    if not den < 0.0:
+        return 0.0
+    return float(np.clip(0.5 * (left - right) / den, -0.5, 0.5))
+
+
+def subgrid_bearings(flags, power, bearings, hits):
+    """Each hit of `detect.cluster(flags, power, ranges, bearings)` (no merge) at a sub-grid bearing (sonar-4s2, ours):
+    the bearing profile is the power summed over the hit's range cells at every bearing, flagged or not; its strongest
+    flagged row and the rows either side give the vertex of a parabola through the profile in dB (`parabola_vertex`).
+    At a map edge the hit keeps its centroid. Why: a hit of few cells holds one or two bearing rows, and the
+    power-weighted mean over its flagged cells is then the grid's own bearing or the midpoint of two (0.5 deg grid,
+    up to 0.25 deg = 52 m at 12 km); at low SNR the flagged cells are an irregular, noise-cut part of the beam whose
+    mean is pulled further. Measured on the six Popoto scenes (tools/popoto_bearing_study.py, 10 seeds each, hits
+    near the ship): RMS from its centre at 9-11.5 dB 0.45 -> 0.30 deg at 12 km, 1.02 -> 0.57 deg in winter_sand_200m;
+    above 17 dB 0.13 -> 0.12 and 0.22 -> 0.26 deg (gravel_30m). The unflagged neighbours still carry the beam's shape."""
+    from scipy import ndimage
+    labels, n = ndimage.label(np.asarray(flags), structure=np.ones((3, 3), dtype=int))
+    if n != len(hits):
+        raise ValueError(f"subgrid_bearings: {n} groups of flagged cells for {len(hits)} hits")
+    power = np.asarray(power, dtype=float)
+    b = np.asarray(bearings, dtype=float)
+    out = []
+    for k, h in enumerate(hits, start=1):
+        ib, ir = np.nonzero(labels == k)
+        prof = power[:, np.unique(ir)].sum(axis=1)
+        rows = np.unique(ib)
+        j = int(rows[np.argmax(prof[rows])])
+        if j == 0 or j == len(b) - 1 or not np.all(prof[j - 1:j + 2] > 0.0):
+            out.append(float(h.bearing))
+            continue
+        y = 10.0 * np.log10(prof[j - 1:j + 2])
+        out.append(float(b[j] + parabola_vertex(*y) * (b[j + 1] - b[j])))
+    return out
+
+
 def run_popoto_far(name, cfg, backend, quick):
     from gpusonar import sync
     result = run_scenario(cfg, backend=backend)
@@ -1007,7 +1056,13 @@ def run_popoto_far(name, cfg, backend, quick):
         n = fine.shape[1] // k * k
         power = fine[:, :n].reshape(len(bearings), -1, k).mean(axis=2)
         ranges = bm.ranges[:n].reshape(-1, k).mean(axis=1)
-        hits = detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150)
+        flags = detect.cfar(power, pfa=1e-5, guard=50, train=150)
+        hits = detect.cluster(flags, power, ranges, bearings, guard=50, train=150)
+        if POPOTO_BEARING == "parabola":
+            for h, b in zip(hits, subgrid_bearings(flags, power, bearings, hits)):
+                h.bearing = b
+        elif POPOTO_BEARING != "centroid":
+            raise ValueError(f"POPOTO_BEARING = {POPOTO_BEARING!r}: one of {POPOTO_BEARINGS}")
         hits = [h for h in hits if h.snr_db > 9.0]
         # Bearing is from broadside (+y) towards +x, the array's own axis; placed from where the array is when the echo
         # arrives (echo_position; sonar-960: from the array at transmit the ship's echoes lay 24 m behind it).
