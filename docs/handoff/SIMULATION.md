@@ -1,0 +1,445 @@
+# The simulator: how it works and how far to trust it
+
+Part of the handoff set (`README.md` in this directory is the entry point; `OUTPUTS.md` has the
+gallery and the results tables; `SOFTWARE.md` the processing chain; `TESTS.md` the test suite;
+`EXAMPLES.md` commands that run on a CPU). Written at decision D-181 (`docs/DECISIONS.md`).
+
+Everything in this project that looks like a result is a result on simulated data. This file says
+what makes that data, which parts were checked against what, and which parts are known to be wrong
+or unchecked. Code: `python/gpusonar/sim/` (NumPy reference and orchestration) and `libs/sim` (the
+C++ and CUDA kernels behind it). Deeper documents: `docs/PHYSICS_NOTES.md` (equations and
+derivations), `docs/SCENARIOS.md` (the gallery scenes with their numbers), `docs/REFERENCES.md`
+(every source with its status), `docs/SIM_CALIBRATION.md`, `docs/RESULTS.md`.
+
+Status words are those of `docs/REFERENCES.md`: **confirmed** (read in the source itself), **via
+secondary** (read in an opened document that attributes it), **ours** (our derivation, tested as
+stated), **unconfirmed** (in the code, not checked against any opened document).
+
+## 1. What the simulator does not model, or gets wrong
+
+Read this before trusting a number. Item numbers are those of `docs/STATUS.md`, "Open and known
+wrong"; bd ids are issues in `.beads/issues.jsonl`.
+
+**No real data has been through it.** The simulator has never been fitted to, or compared with, a
+recording from any of the sonars it simulates (issue `sonar-sul`, open, P1; `docs/tasks/REAL_DATA.md`).
+The only measured data it has met are other people's channel soundings (section 5). Every sonar
+config value marked `unconfirmed`, every sediment, every target strength and every noise level is a
+placeholder or a class default until then.
+
+| What | Consequence | Where recorded |
+| --- | --- | --- |
+| Objects are clouds of point scatterers on their surfaces (`sim/scene.py`, D-41) | Highlights, shadows, layover and speckle are there; specular glints, diffraction and resonances are not. Smooth spheres, cylinders, plates and discs that glint exist (`sim/targets.py`, D-65) and no gallery scene uses them | `STATUS.md` "Simulator limits so far"; `SCENARIOS.md` "What no scenario has yet" |
+| Target strengths are assumed | The ship's +25 dB, every class in `configs/builds/targets/reference_classes.yaml`: placeholders. Detection ranges scale with them directly | `STATUS.md` open question 7 |
+| Four propagation tiers, none with 3-D refraction | `free_field`, `image_source` (isovelocity, flat boundaries), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149) | `sonar-6c8` (open): our Bellhop runs and Bellhop3D's N×2-D mode differ by 1 to 2.5 dB |
+| Range-dependent water is rings about the sonar (D-110) | A front lying across a map, and horizontal refraction, are not modelled. Only the `eigenray` tier has it; the other tiers use the local speed and warn | item 26 |
+| Arrivals are cut by energy with a cap (D-105, D-137) | `popoto_12km` leaves out 1.4 % of a point's arrival energy at the cap of 64 (measured in `EXAMPLES.md` example 5; `SCENARIOS.md` says 1.5 %), `popoto_env_gravel_30m` 14 % | item 22; `sonar-9b8` (open): the rule lowers the gravel-water peak 3.3 dB |
+| 9 Bellhop scenarios reflect eigenrays from a flat surface in a windy sea; 21 simulate a bottom the record does not mention | Kept on purpose so records did not change; each is named under `environment_overrides` in its file (D-101) | item 21 |
+| Scattering-function reverberation: flat boundary, horizontally stratified medium, incoherent eigenray pairs, one Doppler shift per echo, new noise every ping | No ping-to-ping coherence: wrong for a still sonar over a still bottom. By default monostatic, uniform boundary, Gaussian statistics; `geometry: bistatic`, `strength_map`, `statistics: {model: k}` lift those. The K `shape` has no default: no confirmed value exists for any seabed | `STATUS.md` "Simulator limits so far" |
+| Reverberation over relief | Legs with a bottom bounce before the scattering cell are left out by default: 5 to 6 dB low beyond five water depths over a reflective level bed. Shadowing uses straight rays | same |
+| `fls_170k_transit` reverberation | 1 to 1.5 dB off its expected power over the second half of the record; cause not investigated | item 32 |
+| Time spreading of bounce paths | The decay-time rule is not settled by any data set (worth 0.1 to 0.4 dB in detection at long range, less than the spread between seeds). Small-angle geometry, isotropic slopes, no shadowing. The coherent-phase wander is linear within a ping | items 27, 28 |
+| Boundary models | The bubble-loss law `hall_novarini` is an upper estimate above about 10 kHz; `apl_1994` has no stated range of validity; Chapman-Harris is **unconfirmed** (not read in any opened document); elastic and layered bottoms are not modelled; the roughness interpolation and composite split are ours | `REFERENCES.md` sections 3, 4 |
+| Sediments | 20 named sediments with per-parameter provenance are class defaults, not site values; `rock` and `pebbles` carry a Lambert parameter (pebbles' is flagged unconfirmed) | `configs/sediments.yaml`, D-88, D-132 |
+| The sediment fit tool fits with the perturbation model | The default roughness model has been small-slope since D-86; the tool was not switched | item 30 |
+| A placeholder sound speed in the reverberation bindings | `kSoundSpeedNotUsed`, 1500 m/s, in `python/bindings/bind_simcpp.cpp`; several study tools keep their own `1500` | item 31 |
+| The basin's late reverberation tail (D-106) | No Doppler; none behind the direct sound or the boundary reverberation; its numbers are one fjord, one night, 4 to 8 kHz | `STATUS.md` "Simulator limits so far" |
+| Direct sound and receiver overload (D-125) | The model exists; no hardware value in it is measured | `SCENARIOS.md`, direct-overload group |
+| `fls_300k` analogue gain ramp | A placeholder so that a 300 m echo registers in 16 bits; flagged unconfirmed in its config | `STATUS.md` |
+| Navigation errors | Sway and heave unknown to navigation, DVL altitude noise, rail position errors and attitude rates are simulated. An along-track (surge) error is not simulated (estimating one is issue `sonar-7k2`), nor a drifting INS, nor a navigation-to-sonar clock offset | `sim/simulator.py` `simulate_collection` |
+| What no scenario has | Wall multipath in the pool scenes; bounce paths to objects in the FLS sea scenes; waves that move as waves; a long-range clutter scene (`sonar-kal`); a sampled transmit pulse in a shipped scenario | `SCENARIOS.md` "What no scenario has yet" |
+| Parts still in NumPy | Ambient noise (2.0 s of a 15 to 31 s ping), the reverberation's random draws, time spreading's taps, scene modifiers, ADC, board clocks. Path pairing has no CUDA backend | `RESULTS.md` "What in the simulator still runs in NumPy" |
+
+Open issues that carry simulator work: `sonar-dzu` (milestone 12, realistic propagation and
+reverberation, in progress), `sonar-k7m` (closer to SST, in progress), `sonar-sul` (real data, open),
+`sonar-6c8`, `sonar-9b8`, `sonar-kal`, `sonar-80b` (the small vehicle of `flank_patrol` is never
+detected), `sonar-i28` (two-ship scene), `sonar-egj` (rerun the `minefield_sas` benchmark row on the
+re-drawn scene), `sonar-l6j` (CUDA for `serve --scenario` and `--emulate`).
+
+## 2. The pipeline
+
+One function runs a scenario: `run_scenario` in `python/gpusonar/sim/simulator.py`. It returns
+ping records in the one record format (`docs/RECORD_FORMAT.md`), and the processing chain that
+reads them is the chain that reads a recording: the simulator hands over nothing a real sonar
+would not (true clock errors, true element positions and the true trajectory are used for
+synthesis and then removed or kept beside the records as `truth`).
+
+```mermaid
+flowchart TD
+  Y["scenario YAML<br/>configs/scenarios/NAME.yaml<br/>config.load_scenario_config (base:, overrides)"]
+  E["one environment per site<br/>environment.resolve, apply_to_scenario<br/>configs/environments, configs/sediments.yaml"]
+  S["sonar model<br/>SonarModel.load(sonar, sonar_overrides)<br/>configs/sonars"]
+  SC["scene: scatterers, targets, seabed, surface facets, volume<br/>sim/scene.py build_scene, sim/targets.py<br/>rng = default_rng(seed)"]
+  P["propagation provider: sim/propagation.py make_provider(fidelity)<br/>free_field | image_source | sediment | eigenray"]
+  BH["Bellhop, a separate GPL-3 program<br/>sim/bellhop.py BellhopProvider<br/>(also the oracle of the image-source tier)"]
+  W["optional wrappers<br/>timespread.wrap (rough-boundary spreading)<br/>basin.attach (late tail)"]
+  subgraph PING["per ping: simulator.simulate_ping"]
+    A["scene.evaluate, scene.visible (shadowing)<br/>two_way_paths: eigenray pairs, amplitudes, range rates"]
+    K["echo synthesis: Doppler, spreading, absorption, beam patterns<br/>core.synthesize_into (C++ / CUDA kernel)<br/>sim/waveform.py synthesize (sampled pulse)"]
+    R["boundary and volume reverberation<br/>sim/reverb.py add_reverberation<br/>strength laws: sim/bottom.py, sim/surface.py"]
+    O["one-way sources, projector's direct sound<br/>sim/sources.py add_sources, direct_arrival"]
+    C["sync reference, board clocks, channel errors<br/>sim/receiver.py add_reference_signal, apply_channel_errors"]
+    N["ambient noise<br/>sim/noise.py (Wenz fit, coherence, K, alpha-stable)<br/>sim/noise_fit.py (fitted to a recording)"]
+    F["front end: gain ramp or overload model, ADC<br/>sim/receiver.py apply_hardware_tvg, apply_front_end, apply_adc"]
+    A --> K --> R --> O --> C --> N --> F
+  end
+  NAV["platform motion and navigation errors<br/>simulate_collection: sway, heave, DVL noise<br/>platform.legs, raster, rates"]
+  REC["PingRecord list (+ truth beside it)<br/>core.RecordWriter: NAME.h5"]
+  CH["the same chain as real data<br/>recon.prepare, fan_image, sas_image; motion.estimate_motion<br/>live.LiveChain / libs/live; pipeline.run"]
+  Y --> E --> P
+  Y --> S --> PING
+  Y --> SC --> PING
+  P -. "fidelity: eigenray" .-> BH --> W
+  P --> W --> PING
+  NAV --> PING
+  PING --> REC --> CH
+```
+
+Notes on the diagram, each checked in `simulator.py`:
+
+- **Bellhop is never linked.** It is an external program run as a separate process
+  (`GPUSONAR_BELLHOP` names it; `tools/build_oracles.sh` builds it). It has two roles: the ray
+  tracer of the `eigenray` tier (22 of the 76 shipped scenarios; without it they and their tests skip), and
+  the oracle the `image_source` tier is tested against. KRAKEN, Bellhop3D and PyRAM are oracles
+  only (`tests/python/kraken_oracle.py`, `bellhop3d_oracle.py`, `test_ram_crosscheck.py`).
+- **Two engines.** Path pairing, reverberation and sampled-pulse synthesis exist in NumPy and in
+  C++ (`sim/engine.py`): `engine="numpy"` or `GPUSONAR_SIM_ENGINE=numpy` selects the reference.
+  Analytic-pulse synthesis is C++ only, on the host or on CUDA (`backend=`).
+- **Order inside a ping** is the order of the boxes; `taps.sim_capture(dir)` saves the samples
+  after each stage (`echoes`, `reverberation`, `reference_and_clocks`, `noise`, `hardware_gain`,
+  `adc`) for inspection (`docs/ARCHITECTURE.md`).
+- **Truth is removed.** Board clock errors drive synthesis and are then cleared from the record
+  (`_set_board_clocks(truth=False)`); with `platform.motion` the record's pose is the nominal track
+  unless `nav_knows_disturbance`; overload truth is returned beside the records
+  (`ScenarioResult.front_end`), never in them.
+- **A written file** (`run_scenario(..., output=path)`) holds the records, the scenario as typed
+  (`config_yaml` attribute) and a `truth` group (platform and scatterer positions, velocities,
+  amplitudes, the fidelity tier, labels). `EXAMPLES.md` example 2 shows one.
+
+## 3. The models
+
+"PN" is `docs/PHYSICS_NOTES.md`; "RES" is `docs/RESULTS.md`. Agreement numbers are quoted from RES
+unless marked "measured here" (run for `EXAMPLES.md` on this tree, CPU).
+
+| Model | Code | Equation or description | Source and status | Scenario keys and defaults | Validated by | Agreement |
+| --- | --- | --- | --- | --- | --- | --- |
+| Echo synthesis: delay, Doppler, spreading, both directivities | `libs/sim` kernel via `core.synthesize_into`; sampled pulses `sim/waveform.py` | PN 3 (one-way chain, variable delay), 15, 19 | TR 0702 Sec. 8-9: confirmed; the analytic-pulse kernel and the four-pass arrival-time solve: ours (D-83) | `sonar` config `transmit.waveform`; `synthesis.beam_floor_db` (off) | `test_sim.py`, `test_sampled_waveform.py`, `test_sampled_engine.py` | delay within 0.01 carrier period; amplitude 0.5 %; arrival time with a 30 m/s receiver within 0.2 µs; Doppler within 0.2 % (RES "Simulator") |
+| Free field | `propagation.FreeFieldProvider` | direct path, 1/r | standard | `fidelity: free_field` (the default when `fidelity` is left out) | `test_sim.py` | flank echo level at 1 km against SL − 2TL + TS within 0.7 dB |
+| Isovelocity images | `propagation.ImageSourceProvider` | PN 2.2 (straight-line model) | TR 0702 Sec. 5.4: confirmed; Rayleigh fluid-bottom coefficient: standard; the energy rule for bounce order: ours (D-105) | `fidelity: image_source`; `propagation: {surface_z: 0, bottom_z, bottom \| bottom_coefficient (no default, D-104), max_order \| arrival_floor_db: 20, max_order_cap: 8, walls}` | `test_propagation.py` against Bellhop, Pekeris waveguide; `test_propagation_defaults.py` | coherent TL 0.06 dB median, 0.4 dB worst; first four delays within 2 µs (RES); measured here: 0.062 / 0.392 dB, 1.92 µs (`EXAMPLES.md` example 11) |
+| Refraction into sediment | `propagation.SedimentProvider`, `snell_crossing` | one refracted ray through a flat fluid interface | standard (Snell); ours as a tier | `fidelity: sediment`; `propagation: {sediment_speed, interface_z, ...}` | `test_scene_objects.py`; RES "3D near-field imaging of a buried object" | see RES |
+| Eigenrays in a profile | `sim/bellhop.py` `BellhopProvider`, `OceanEnvironment` | PN 2.3-2.5, 27 (range-dependent speed) | Bellhop (Acoustics Toolbox, GPL-3, external): the community reference code, "not independently re-validated" (`OPEN_SOURCE.md`); our lookup grid and delay correction: ours | `fidelity: eigenray`; `propagation: {max_range, range_step (max_range / 200), depth_step, max_arrivals \| arrival_floor_db: 20, max_arrivals_cap: 64, wind_speed: 0, angles: (-80, 80), environment: {...}}` | `test_kraken_crosscheck.py` (normal modes), `test_ram_crosscheck.py` (parabolic equation), `test_seamount_3d.py`, `test_ssp_range.py`, `test_long_range.py` | rays minus modes at 8 kHz: at most 0.21 dB over 1 to 10 km (RES); against PyRAM in 500 m windows: largest 1.42 dB, depth mean at most 0.44 dB (test docstring; not in RES); lookup between grid nodes: delays within 20 µs |
+| Absorption | `acoustics.absorption` | PN 6.1 | Francois-Garrison, Ainslie-McColm: via secondary (within 0.6 % and 3 % of 21 published values); Thorp: confirmed (TR 0702 eq. 42) | `environment.absorption: francois_garrison` (default) \| `ainslie_mccolm` \| `thorp` \| `none`; water from `temperature_c: 10`, `salinity_psu: 35`, `ph: 8` | `test_medium_models.py`, `test_literature_models.py` | as in the status column |
+| Sound speed from the water | `acoustics.sound_speed` | Mackenzie nine-term equation | **unconfirmed in print** (Mackenzie's paper not opened); held to arlpy 1.9.3 to 1e-13 (`test_medium_models.py`); below 5 PSU a mix of ours | `environment: {temperature_c, salinity_psu}` or a typed `sound_speed_m_s` (an error if it contradicts the water, unless named under `environment_overrides`; D-140) | `test_medium_models.py`, `test_environment.py` | 1496.8 m/s at 12 °C and 35 PSU |
+| Bottom reflection | `propagation.rayleigh_reflection`; `sim/bottom.py` `fluid_halfspace` | fluid half-space | standard; sediment table: via secondary (section 3.1 of `REFERENCES.md`) | `environment.bottom: {speed, density, attenuation}` or `{sediment: name}` | `test_propagation.py::test_rayleigh_reflection_limits`, `test_sediment_table.py` | closed-form limits |
+| Bottom scattering, Lambert | `sim/reverb.py` | S = µ sin θᵢ sin θₛ | the law and −29 dB as a thesis quotes them: confirmed there, the original paper not opened; a deep-water value at about 1 kHz, not a high-frequency one; rock by measured values: confirmed | `reverberation: [{mu_db}]`; default −29 dB (D-89; warns at 10 kHz and above); `{sediment: rock \| pebbles}` | `test_reverberation.py` | level against the analytic prediction within 2 dB in every range bin, mean within 1 dB |
+| Bottom scattering, rough fluid sediment | `sim/bottom.py` | PN 13; perturbation, Kirchhoff, small-slope, composite | perturbation and volume terms: ours, equal to published forms to 1e-10; small-slope validity limits: confirmed; composite recipe and interpolation: ours | `reverberation: [{model: fluid_sediment, sediment: name \| rho, nu, delta, w2, gamma2, sigma2, roughness_model: small_slope}]` (default since D-86) | `test_bottom.py`, `test_bottom_models.py`, `test_sediment_literature.py`; `sst_sediment_reverb` | reverberation against σ(g)·πcT/R³: mean +0.27 dB, −0.17 to +0.59 dB |
+| Surface scattering | `sim/surface.py`, `acoustics.chapman_harris_db` | PN 13, 23.3 | Chapman-Harris: **unconfirmed**; `kraus_surface`: via secondary; `bubble_layer_surface`: via secondary (a dissertation that prints the published model's terms) | `reverberation: [{model: chapman_harris \| kraus_surface \| bubble_layer_surface, wind_speed}]`; wind from `environment.wind_speed_m_s` (5) or `sea_state` | `test_surface.py`, `test_surface_models.py`, `test_bubble_layer.py` | Chapman-Harris level at 8 m/s against S(θ)·area/r⁴ within 2 dB in every bin; the two printed forms agree within 0.3 dB |
+| Rough-surface coherent loss | `acoustics.surface_coherent_reflection` | Rayleigh-parameter factor exp(−Γ²/2) | ours (standard result, not checked against an opened print) | `propagation.wind_speed` (0: flat) on the eigenray tier | `test_timespread.py` | to 1e-12 against the factor; overstates the loss when used alone (D-38) |
+| Bubble loss per surface bounce | `sim/surface.py` | PN 20.4 | `apl_1994`: via secondary; `hall_novarini`: via secondary, an upper estimate above 10 kHz | opt-in through the surface models' `extinction` and `time_spread.surface` | `test_bubble_layer.py` | no measurement could be opened (`REFERENCES.md` section 1, "Not settled") |
+| Time, angle and Doppler spreading of bounce paths | `sim/timespread.py` | PN 3.6, 16 | TR 0702 eqs. 89-103 (rule of thumb, coherence relations): confirmed; the facet model, tap directions, Doppler width: ours | `time_spread: {surface: {wind_speed \| rms_height ...}, bottom, taps: 6, coherence_length: 10, decay_time: facet, doppler: false, doppler_spectrum: gaussian, multi_bounce: convolve, angle_spread: false, tail_quantile, coherent_phase}` | `test_timespread.py`, `test_coherent_phase.py`; measured channels (section 5) | mean excess delay within 8 % of the rule over 300 realisations; Gaussian Doppler shape inside the measured spread for 15 of 18 arrivals |
+| Scattering-function reverberation | `sim/reverb.py`, `reverb_bistatic.py`, `reverb_relief.py`, `reverb_specular.py` | PN 5.4, 14, 17 | TR 0702 Sec. 11.3: confirmed; Doppler keying, relief, statistics options: ours (D-72, D-73, D-80) | `reverberation: [{boundary_z, n_azimuth, max_range, geometry: monostatic, statistics, strength_map, band_taper, guard, bathymetry, scatterer_motion, exclude_specular, offset_db: 0}]` | `test_reverberation.py`, `test_reverb_bistatic.py`, `test_reverb_motion.py`, `test_reverb_relief.py`, `test_reverb_statistics.py`, `test_reverb_specular.py` | against point scatterers on the same seabed within 2 dB in every range block; coherence J0(kd) within 0.1; Rayleigh statistics: scintillation index 1 ± 0.25 |
+| Volume scattering | `sim/reverb.py` `volume_layer_strength`; scene item `volume` | PN 6.3 | TR 0702 Sec. 6.5: confirmed (a layer as a sheet) | `reverberation: [{model: volume, layer: [top, bottom], sv_db}]` | `test_volume.py`, `test_reverberation.py` | within 2 dB in every range bin, mean within 1 dB |
+| Targets | `sim/targets.py`, `sim/scene.py` | PN 4, 12 | highlight model TR 0702 Sec. 9.2: confirmed; geometric-acoustics shapes: ours | scene items `points`, `target` (highlights, aspect table), `sphere`, `cylinder`, `plate`, `box`, `hull`, `boat`, ... with `target_strength_db` or `mu_db`, `density` | `test_scene_targets.py`, `test_scene_objects.py`, `test_scene_sediment.py` | RES "Targets, specular shapes and sediment scatterers" |
+| Ambient noise | `sim/noise.py` | PN 7, 20.3 | four-term fit to the Wenz curves: via secondary (three prints; the attribution to the originals is unconfirmed); Cron-Sherman surface coherence: function only | `receiver.ambient_noise: {model: wenz \| level_db \| {model: fitted, file}, coherence: isotropic, spectrum: shaped, statistics}`; wind 5 m/s, shipping 0.5 from the environment | `test_noise.py`, `test_baseband_noise.py`, `test_noise_statistics.py`, `test_noise_fit.py` | against the requested spectrum within 1 dB, 0.5 to 30 kHz; coherence against sin(kd)/(kd) within 0.12 |
+| One-way sources, direct sound, overload | `sim/sources.py`, `sim/receiver.py` | PN 20.1, 22 | ours | `sources: [...]`, `pings.transmit: false`; sonar keys `transmit.direct_path`, `receive.overload` (absent by default) | `test_oneway_sources.py`, `test_direct_overload.py` (20 tests against closed forms) | closed forms |
+| Receiver: gain ramp, ADC, board clocks, sync reference, channel errors | `sim/receiver.py`, `simulator._set_board_clocks` | quantisation to the sonar's `adc_bits` and `adc_full_scale`; per-board offset, drift, jitter | ours; every hardware value from the sonar config, many `unconfirmed` there | `receiver: {adc: true, noise_rms: 0}`; sonar `receive.boards[*].clock_offset, clock_drift_ppm, jitter_rms` | `test_calibration_sync.py`, `test_decimate.py` | sync tested with 300 µs offsets and 25 ppm drifts (`DEPLOYMENT.md`); measured here: 0.43 µs worst residual on `popoto_testauv_trial_1row` |
+| Platform motion and navigation errors | `simulator.simulate_collection`, `run_scenario` | piecewise-linear true track; navigation reports the nominal one | ours (the paper's first-order kinematic model) | `platform: {position, rpy, velocity, rates, motion: {sway_rms, heave_rms, correlation_pings: 8, nav_knows_disturbance: false, dvl_altitude_noise}, legs, raster, stop_and_go}` | `test_motion.py`, `test_realistic_scenes.py` | measured here, `wreck_sas` full size on a CPU: sway error 0.053 λ, heave 0.044 λ, equal to `docs/figures/gallery.json` (L4) |
+| A basin's late tail | `sim/basin.py` | PN 26 | ours, fitted to one data set | `basin_reverberation: {...}` (opt-in) | `test_basin.py` | RES "A basin's late reverberation: the fit" |
+
+The absolute echo level through the whole path (`run_scenario`, then pulse compression) is
+checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in free field
+(`sst_echo_level`, RES "Closed forms through `run_scenario` and the processing chain").
+
+## 4. The scenario catalogue
+
+`configs/scenarios/` holds **76 files**. `docs/SCENARIOS.md` says 75: it predates
+`popoto_12km_two_ships` (added with D-172), which it does not list.
+
+Columns: **tier** is `fidelity`; **used by** names the tests under `tests/python/` (without the
+`test_` prefix and `.py`) and tools that load the file by name; **gallery** means
+`tools/gallery.py` runs it and `OUTPUTS.md` shows its figure. **Cost**: "CPU" is the older
+full-size 4-core run quoted in `docs/SCENARIOS.md` (not re-measured on this tree), "L4" is
+`seconds` in `docs/figures/gallery.json` (simulate and process, CUDA). Where neither exists the
+cost was never recorded as a scenario; the tests that use the file run inside the suite. A scenario
+at the `eigenray` tier needs Bellhop.
+
+### Point targets, for measuring resolution (14)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `point_grid_l12_5d` | `l12_5d` | free | grid for the 5 MHz probe, two pings (one per multiplexer half) | `sim` (by pattern `point_grid_<sonar>`) | seconds |
+| `point_grid_p4_2v` | `p4_2v` | free | grid for the 2.7 MHz phased array | `sim`, `pipeline` | seconds |
+| `point_grid_fls_300k` | `fls_300k` | free | grid for the 300 kHz FLS | `backproject`, `literature_models`, `medium_models`, `sediment_table`; `gpu_benchmark_all.py` | seconds |
+| `point_grid_fls_750k` | `fls_750k` | free | grid for the 750 kHz placeholder sonar | `sim` | seconds |
+| `point_grid_sas_auv` | `sas_auv` | free | grid for the 200 kHz SAS array | `sim` | seconds |
+| `point_grid_sas_rail` | `sas_rail` | free | grid for the rail SAS | `sim` | seconds |
+| `point_grid_flank_32` | `flank_32` | free | 20 targets, 1 to 9 km | `sim`; `EXAMPLES.md` examples 2, 12 | 1.5 s (measured here) |
+| `point_grid_popoto_8`, `_8_low`, `_4x8` | `popoto_8`, `popoto_8_low`, `popoto_4x8` | free | grids for the Popoto boards | `sim` | seconds |
+| `pool_wires_l12_5d` | `l12_5d` | free | thin wires: beam width and range resolution | `scene_objects` | seconds |
+| `stripmap_points` | `sas_auv` | free | stripmap with exact navigation, 90 pings | `sas`, `pipeline`, `taps`, `holoscan`, `multigpu`, `hardcoded_defaults`; `configs/chains/stripmap_points.yaml` | not recorded |
+| `rail_points` | `sas_rail` | free | rail SAS past points, 151 stop-and-go pings | `sas` | not recorded |
+| `rail_position_errors` | (base `rail_points`) | free | the carriage a fraction of a millimetre off; shows `base:` | `scene_objects` | not recorded |
+
+### Forward-looking sonar (12)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `pool_fls_l12_5d` | `l12_5d` | free | pool walls, block, pipe, rope, wires; shadows, 12-bit ADC | gallery; `realistic_scenes` | CPU 15 s; L4 3.0 s |
+| `pool_fls_p4_2v` | `p4_2v` | free | wall, steps, ladder, floats | gallery; `realistic_scenes` | CPU 11 s; L4 1.7 s |
+| `harbour_fls_750k` | `fls_750k` | free | quay wall, pilings, rocks; absorption | gallery; `realistic_scenes` | CPU 14 s; L4 1.6 s |
+| `seafloor_objects_fls` | `fls_300k` | free | sphere, box, rocks with shadows | gallery; `realistic_scenes`, `scene_objects`; `EXAMPLES.md` example 3 | CPU 5 s (measured here: 5 s on 2 threads); L4 0.3 s |
+| `fls_120k_transit` | `fls_120k` | image | boats, buoy, pinnacle; reverberation with ownship Doppler; 10 pings, tracking | gallery; `realistic_scenes`, `simcal`, `taps`, `classify_rules_eval`; `calibrate_sim.py` | CPU 77 s; L4 10.4 s |
+| `fls_170k_transit` | `fls_170k` | image | the same out to 450 m | gallery; `realistic_scenes` | CPU 3 min; L4 17.6 s |
+| `fls_330k_transit` | `fls_330k` | image | the same at 330 kHz | gallery; `realistic_scenes` | CPU 3 min; L4 14.7 s |
+| `fls_120k_cluttered_seabed` | `fls_120k` | free | boat with wake over boulders, debris, a pipeline | gallery; `realistic_scenes` | CPU 54 s; L4 9.3 s |
+| `fls_120k_rough_surface` | `fls_120k` | free | wave facets at 10 m/s wind, kayak, buoy | gallery; `rough_surface_bands.py` | CPU 2 min; L4 18.7 s |
+| `fls_170k_traffic` | `fls_170k` | image | three boats: closing, crossing, at anchor | gallery; `realistic_scenes` | CPU 2 min; L4 14.5 s |
+| `fls_glints_on_sediment` | `fls_300k` | free | specular sphere and cylinder on a model-driven seabed | `scene_targets`; `gpu_benchmark_all.py` | not recorded |
+| `fls_highlight_target_aspect` | `fls_120k` | free | a five-highlight target, strength against aspect | `scene_targets` | not recorded |
+
+### Synthetic aperture sonar and buried objects (10)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `wreck_sas` | `sas_auv` | free | unknown sway and heave, motion estimation, 80 pings | gallery; `realistic_scenes`, `scene_objects`; `EXAMPLES.md` example 4 | CPU 42 s (older scene); measured here 70 s on 2 threads; L4 2.6 s |
+| `minefield_sas` | `sas_auv` | free | rippled sand, cylinders, sphere, rocks; unknown motion | gallery; `realistic_scenes`; `gpu_benchmark_all.py` | CPU 56 s (older scene); L4 5.8 s |
+| `sas_minsas_survey` | `sas_minsas120` | free | two opposite legs over a wreck, a cable, a cube | gallery; `realistic_scenes`, `minsas_resolution`, `moving_ownship` | CPU 3 min; L4 16.3 s |
+| `sas_minsas_boulder_field` | `sas_minsas120` | free | 45 boulders on sand | gallery; `realistic_scenes`, `minsas_resolution` | CPU 98 s; L4 17.1 s |
+| `sas_minsas_rocky_ripples` | `sas_minsas120` | free | rippled sand, outcrop, stones, cable | gallery; `realistic_scenes`, `minsas_resolution` | CPU 105 s; L4 20.2 s |
+| `sas_minsas_speckle` | `sas_minsas120` | free | 5000 scatterers per m² (445,567 in all): developed speckle | gallery; `realistic_scenes`, `simcal` | CPU 14 min; L4 92.3 s. The one scene that wants a GPU |
+| `rail_objects` | `sas_rail` | free | ball, pipe, brick, pebbles; stop-and-go | gallery; `realistic_scenes` | CPU 3 min; L4 15.8 s |
+| `rail_cylinder_glint` | `sas_rail` | free | a smooth rod: one glint per ping | `scene_targets`; `gpu_benchmark_all.py` | not recorded |
+| `buried_cylinder` | `subbottom` | sediment | refraction into the sediment, one cylinder | `scene_objects` | not recorded |
+| `buried_objects` | `subbottom` | sediment | cylinder and sphere under a rough interface; raster of 625 positions | gallery; `realistic_scenes` | CPU 109 s; L4 19.5 s |
+
+### Flank array, 32 hydrophones, 6 to 10 kHz (6)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `flank_target_1km`, `_5km`, `_10km` | `flank_32` | eigenray | one target in noise and reverberation: the link-budget cases | `long_range`; `sonar_live.py --emulate` example | not recorded |
+| `flank_patrol` | `flank_32` | eigenray | six pings, a 56 m mover, a small vehicle, a wreck; detection and tracking | gallery; `realistic_scenes`, `hsb`; `sonar_live_hsb.py` | CPU 11 min; L4 50.3 s |
+| `flank_sst_shallow` | `flank_32` | image | time-spread bounce paths, sediment and surface reverberation, a volume layer | `timespread`; `decay_time_sensitivity.py` | not recorded |
+| `flank_sst_spread` | `flank_32` | image | the same with angle and Doppler spreading, multi-bounce tails | `timespread` | not recorded |
+
+### Validation against TR 0702 (4)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `sst_pursuit` | `flank_32` | image | a vehicle at 20 m/s chasing a three-highlight target; `band_taper` | `sst_validation`, `batched`; `tools/sst_validation.py` | whole validation tool: about 2 min on a CPU (RES) |
+| `sst_asiaex` | `flank_32` | image | forward scatter over about 500 m by a one-way source, 20 pings | `sst_validation` | same |
+| `sst_echo_level` | `flank_32` | image | one highlight against the sonar equation | `tools/sst_validation.py` | same |
+| `sst_sediment_reverb` | `popoto_8` | free | `medium_sand` reverberation against the integral of its strength | `tools/sst_validation.py`, `gpu_benchmark_all.py` | same |
+
+Their parameters are ours and marked `unconfirmed` in the files: TR 0702 does not print them.
+
+### Popoto boards at 27.5 kHz, and the first long-range design (4)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_trial_100m`, `_1000m`, `_2000m` | `popoto_8` | eigenray | eight hydrophones, a +10 dB target; reverberation- or noise-limited by range | `long_range`; `_1000m` is in the gallery | CPU 11 s; L4 2.4 s (`_1000m`) |
+| `popoto_far_mover` | `popoto_array` | eigenray | a ship-sized mover at 6 km, ownship at 1.5 m/s, six pings | gallery; `realistic_scenes` | CPU 4 min; L4 25.5 s |
+
+### The 12 km design (8)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_12km` | `popoto_long_range` | eigenray | the design point: a mover at 12 km in 100 m over sand, six pings | gallery; `realistic_scenes`, `detector`, `classify`, `deployment_defaults` and five more; `EXAMPLES.md` example 5 | CPU 2 min (older run); measured here 5 min 42 s on 2 threads with the live chain; L4 52.3 s |
+| `popoto_12km_2row`, `_3row` | `popoto_long_range_2row`, `_3row` | eigenray | the same with stacked rows; the ship 4 m deep | `multipath_depth`, `buildspec`; `popoto_12km_study.py` | not recorded |
+| `popoto_12km_two_ships` | `popoto_long_range` | eigenray | two ships 852 m apart at one bearing and velocity: echo grouping's chain-merge case (D-172, issue `sonar-a5x`) | `classify_rules_eval.py --scenes` (a study scene; no test loads it by name) | not recorded |
+| `popoto_env_winter_sand_200m` | `popoto_long_range` | eigenray | 8 km in a surface duct | gallery; `realistic_scenes` | CPU 2 min; L4 26.3 s |
+| `popoto_env_summer_mud_60m` | `popoto_long_range` | eigenray | 4 km under a thermocline over mud: not detected | gallery; `realistic_scenes` | CPU 52 s; L4 7.3 s |
+| `popoto_env_gravel_30m` | `popoto_long_range` | eigenray | 3 km in 30 m over gravel; 14 % of arrival energy cut at the cap | gallery; `study_resume` | CPU 2 min; L4 31.8 s |
+| `popoto_env_deep_silt_1000m` | `popoto_long_range` | eigenray | 10 km in 1000 m over silt | gallery | CPU 59 s; L4 11.7 s |
+
+### Stacked rows: elevation and depth (4)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_elevation_free` | `popoto_long_range_3row` | free | three rows, rolled 3°, three targets above, level, below | `elevation`; `popoto_elevation_bench.py` | not recorded |
+| `popoto_elevation_shallow` | `popoto_long_range_3row` | image | 100 m over sand, a target at 50 m depth | `elevation` | not recorded |
+| `popoto_elevation_rehearsal` | `popoto_long_range_3row_clocks` | image | raw 102.4 kHz samples on twelve boards with their own clocks, rolling | `elevation`, `deployment_defaults` | not recorded |
+| `popoto_face_2row_shallow` | `popoto_long_range_2row` | image | the geometry in which two rows cannot separate direct, surface and bottom echoes | `elevation` | not recorded |
+
+### Staged builds: trials in open water (5)
+
+Each is the rehearsal of one build, run through that build's deployment file
+(`tools/sonar_live.py configs/deploy/<file>.yaml --scenario <name> --out DIR`).
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_testauv_trial_1row` | `popoto_testauv_1row_clocks` | image | stage 1: one row on the test AUV, a target at 500 m; board sync, decimation | `elevation`, `decimate`; `EXAMPLES.md` example 5 | measured here: 8 s on 2 threads, four pings, simulate and chain |
+| `popoto_static_trial_2row` | `popoto_static_2row_clocks` | image | stage 2: two rows, a target 2.6 km away | `elevation`, `decimate` | not recorded |
+| `popoto_static_trial_3row` | `popoto_static_3row_clocks` | image | stage 3: three rows, a target at 150 m | `elevation`, `decimate` | not recorded |
+| `popoto_static_free` | `popoto_static_3row` | free | three targets at known depths | `elevation` | not recorded |
+| `popoto_static_passing` | `popoto_static_3row` | image | a target passing at 3 m/s, eight pings | `elevation` | not recorded |
+
+### Direct sound and receiver overload, D-125 (3)
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_testauv_direct_overload` | `popoto_testauv_1row` | image | a front end that overloads on the projector's direct sound and recovers slowly | `direct_overload` | not recorded |
+| `popoto_testauv_direct_overload_fast`, `_gain_switch` | (base: the first) | image | a fast-recovering front end; a gain held 40 dB down during transmit | `direct_overload` (by pattern) | not recorded |
+
+### Fjord-type water, D-106 (3), and water that changes with range, D-110 (3)
+
+All six are **illustrative**: nobody measured the profiles or the section of sills.
+
+| Scenario | Sonar | Tier | What it exercises | Used by | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `fjord_testauv_trial_1row`, `fjord_static_trial_2row`, `fjord_static_trial_3row` | the staged builds' `_clocks` sonars | eigenray | the three trials in a fjord's water, with sills, a late basin tail and K-distributed noise | `basin`; `fjord_rehearsal.py` | `docs/figures/fjord_rehearsal.md` |
+| `ssp_front_static_trial_2row`, `ssp_front_testauv_trial_1row` | the same | eigenray | a front between the sonar and the target | `ssp_range`; `ssp_range_study.py` | `docs/figures/ssp_range_study.md` |
+| `ssp_thermocline_static_trial_3row` | `popoto_static_3row_clocks` | eigenray | a mixed layer that deepens with range (the case behind `elevation.sector_from_rays`, D-116) | `ssp_range`, `refraction_rays` | same |
+
+### How a scenario file is written
+
+A real, short one: `configs/scenarios/wreck_sas.yaml` (comments shortened here).
+
+```yaml
+name: wreck_sas                 # a label; the file name is what tools use
+sonar: sas_auv                  # configs/sonars/sas_auv.yaml: array, waveform, receive window, ADC
+fidelity: free_field            # propagation tier: free_field | image_source | sediment | eigenray
+sonar_overrides:                # merged into the sonar config for this scenario only
+  receive: {kind: baseband, sample_rate: 100.0e+3, window: {range: [38.0, 52.0]}}
+environment: {base: coastal_12c, absorption: none}   # one site: configs/environments/coastal_12c.yaml, changed here
+platform:
+  position: [0, 0, -15.0]       # m, north-east-down; the seafloor is z = 0 in this scene, so 15 m altitude
+  rpy: [0, 0, 0]                # roll, pitch, yaw, rad
+  velocity: [1.2, 0, 0]         # m/s; 0.24 m per ping
+  motion: {sway_rms: 0.01, heave_rms: 0.004, correlation_pings: 8.0,   # the TRUE track wanders by this much
+           nav_knows_disturbance: false, dvl_altitude_noise: 0.001}    # navigation reports the straight line
+pings: {count: 80, interval: 0.2}                    # s between transmits
+scene:                          # a list of items; each draws scatterers from the scenario's one generator
+  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [34.0, 53.0], density: 25.0, lambert_mu_db: -27.0}
+  - {type: box, label: wreck, min: [8.0, 41.0, -1.0], max: [11.0, 42.0, 0.0], density: 120.0, mu_db: -15.0}
+receiver: {noise_rms: 0.0, adc: false}               # no added noise, no quantisation
+seed: 5                         # numpy default_rng(seed): scene, motion, noise, reverberation
+```
+
+Keys a larger scenario adds (all read in `run_scenario`; an unknown scene item type raises):
+
+| Key | What it sets |
+| --- | --- |
+| `base: other_scenario` | start from another file and change only what is written here (`rail_position_errors.yaml` is five lines). `unconfirmed:` lists accumulate through `base` (`config.merge_flags`) |
+| `propagation: {...}` | the tier's options (the models table above); for `eigenray` the Bellhop grid and `environment` |
+| `environment` | inline values, a name under `configs/environments/`, or `{base: name, ...}`. Propagation, time spreading, reverberation, noise and absorption take the site's values from it (D-100) |
+| `environment_overrides: {dotted.key: "reason"}` | the only way to keep a typed value that contradicts the site; without it the contradiction is an error |
+| `reverberation: [...]` | boundary and volume reverberation items (models table) |
+| `time_spread`, `basin_reverberation`, `sources` | opt-in models; absent, the record is bit-identical to what it was before they existed |
+| `receiver.ambient_noise` | `{model: wenz}`, `{level_db: 45}` or `{model: fitted, file: ...}` |
+| `pings: {count, interval, start_ns, transmit}` | `transmit: false` is a passive capture |
+| `platform: {legs \| raster \| motion \| rates, stop_and_go}` | survey legs, a stop-and-go raster, unknown motion, attitude rates during the ping |
+| `synthesis: {beam_floor_db}` | skip paths far down both beam patterns |
+| `truth`, `unconfirmed`, `description` | carried, not simulated |
+
+**Overrides.** There are three levels, and they compose:
+
+1. `sonar_overrides` in the file changes the sonar for that scenario (usually the receive window
+   and sampling, so that only the range of interest is synthesised).
+2. `load_scenario_config(name, overrides)` deep-merges a dict over the file: mappings merge,
+   everything else (lists included, so the whole `scene`) is replaced. This is what tests and
+   `tools/gallery.py --quick` use.
+3. `base:` in a new file, found through `GPUSONAR_CONFIG_PATH` or given as a path.
+
+**Numbers.** Write exponents with a sign: `38.0e+3`, not `38.0e3`. Our loader reads both, plain
+PyYAML reads the second as a string (D-180; `tests/python/test_yaml_numbers.py`).
+
+**Quick mode.** A scenario file has no quick switch. `tools/gallery.py --quick` and
+`tools/classify_rules_eval.py --quick` apply the per-scene thinning in `gallery.py`'s `QUICK` table
+(scatterer densities × 0.1 to 0.5, 4 or 40 pings, coarser pixels, 12 to 16 Bellhop arrivals) and
+write to `build/gallery_quick/`, never to `docs/figures`. A thinned scene is a different random
+draw, so its numbers are not the full-size numbers (section 6).
+
+## 5. Validation and calibration
+
+**What is missing first:** no comparison with data from the project's own sonars; no measured
+target strength; no site. The comparisons below are against other models, closed forms and three
+public channel data sets.
+
+| Compared | Against | Result | Source |
+| --- | --- | --- | --- |
+| Image-source tier | Bellhop, Pekeris waveguide (100 m, 1600 m/s bottom), 1 kHz, 0.1 to 3 km | coherent TL 0.06 dB median, 0.4 dB worst; incoherent (1 and 8 kHz) 0.1 dB median, 0.7 dB worst; first four delays within 2 µs | `test_propagation.py`; RES "Propagation, reverberation and noise". Reproduced here: `EXAMPLES.md` example 11 |
+| Eigenray tier (rays) | KRAKEN normal modes, 8 kHz, 1 to 10 km, incoherent | at most 0.21 dB; below 0.1 dB from 2 km; with only 8 arrivals kept, 4.9 dB too much loss at 10 km (the fault that led to D-39) | `test_kraken_crosscheck.py`; RES "Rays against normal modes at 8 kHz" |
+| Eigenray tier | PyRAM 1.3.0 parabolic equation, Pekeris and an upslope wedge, 6, 8, 10 kHz, 500 m window averages | largest window difference 1.42 dB, depth mean at most 0.44 dB; bounds 3 dB and 1 dB | `test_ram_crosscheck.py` docstring (D-149). RES line 526 still says RAM was not run |
+| Eigenray tier, N × 2-D | Bellhop3D over a 180 m seamount, 8 kHz | −3.8 dB on the flanks (ours too loud), −2.2 dB over the summit: quantified, not modelled | `test_seamount_3d.py`; D-149; `sonar-6c8` |
+| Range-dependent sound speed | closed forms and Bellhop | 37 tests | `test_ssp_range.py`; RES "Water that changes with range" |
+| Echo level end to end | SL − 2TL + TS | 0.004 dB free field; 0.005 dB and 0.13 µs through images | `tools/sst_validation.py`; RES "Closed forms through `run_scenario`" |
+| Reverberation level | analytic prediction, Lambert seabed | within 2 dB in every range bin, mean within 1 dB; `medium_sand`: mean +0.27 dB | `test_reverberation.py`, `sst_sediment_reverb` |
+| TR 0702 (SST), section by section | what the report states | a 61-row matrix, `docs/figures/sst_validation.md`. **Neither worked example is a numerical reproduction**: the report prints no parameters | `test_sst_validation.py`; RES "Validation against TR 0702" |
+| Francois-Garrison absorption | 21 published values | within 0.6 % | `REFERENCES.md` section 7 |
+| Time spreading | measured channels, three sets (below) | Gaussian Doppler shape confirmed at three sites; decay-time rule not settled; one fitted rms height per recording closes the coherent-share gap; one K shape per sea does not predict scintillation | `tools/channel_validation.py`, `channel_watermark.py`, `channel_smartocean.py`; RES "Time spreading against measured channels"; PN 21 |
+| Ambient noise | requested spectrum; sin(kd)/(kd) | within 1 dB, 0.5 to 30 kHz; coherence within 0.12 | `test_noise.py` |
+| GPU kernels | host kernels | sampled-pulse synthesis host against CUDA 3.9e-7 | RES "Sampled pulses and per-ray Doppler in the C++ engine" |
+
+**The measured channel data sets** are fetched at test time and **never committed**
+(`tools/fetch_channels.py`; `docs/OPEN_SOURCE.md` section 3.13; the tests
+skip when the data directory variable, `GPUSONAR_UACR_DIR` or `GPUSONAR_WATERMARK_DIR`, is not set):
+
+| Set | Licence as `OPEN_SOURCE.md` records it | Band | Used for |
+| --- | --- | --- | --- |
+| Underwater Acoustic Channel Repository (UACR) on Zenodo, the "Purple" recordings among them | CC BY 4.0 | 12.5 kHz | Doppler shape and width, decay time, coherent share; the basis of D-84 |
+| Watermark benchmark channels (three of five) | **not recorded: to check**; the archive carries no licence text | 14 and 35 kHz | Doppler shape, scintillation, band ratio; no geometry or sea state is stated |
+| SFI Smart Ocean | CC BY 4.0; behind a login, supplied to a session by the owner | 4 to 8 kHz | one clean surface bounce, noise statistics (K shape 3.5), the fjord tail |
+
+No data set states a sea state: every sea parameter in those comparisons is fitted or assumed, and
+each table in RES says which.
+
+**Calibrating the simulator to a log** (`python/gpusonar/simcal.py`, `tools/calibrate_sim.py`,
+`docs/SIM_CALIBRATION.md`). The simulator is linear in each contribution, so each boundary and the
+noise are simulated alone, imaged exactly as the log is, reduced to a range profile (median over
+bearings, which ignores targets), and the log's profile is fitted as a non-negative sum of them.
+The factors are written as scenario overrides (`offset_db` per boundary, the noise level). A log
+with unknown gains gives only differences between terms. A SAS image gives scatterer density and
+shadow depth from its speckle, never absolute levels.
+
+The self-check (`tests/python/test_simcal.py`) hides three settings in a simulated log. Run on
+this tree (`EXAMPLES.md` example 9, and the test itself with `-s`):
+
+| Quantity | Hidden | Found here | `SIM_CALIBRATION.md` and RES say |
+| --- | --- | --- | --- |
+| Bottom strength offset | +6.0 dB | +5.9 dB | +6.1 dB |
+| Surface strength offset | −4.0 dB | −4.0 dB | −4.0 dB |
+| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.6 dB | 38.0 dB |
+| Misfit | — | 0.16 dB RMS | 0.17 dB RMS |
+
+The test passes (its tolerances are 1.0, 1.5 and 1.0 dB); the documented numbers are from an older
+tree and were not updated. The log comes from the same simulator, so this checks the method, not
+the models: model error (a seabed that is not Lambert, a beam pattern that is not the config's) is
+not in these numbers. **No real log has been through `calibrate_sim.py`** (`docs/tasks/REAL_DATA.md`,
+`sonar-sul`): the owner has to supply the data and the facts listed in that file's section 3.
+
+## 6. Determinism and reproducibility
+
+- **One seed per scenario.** `seed` makes `numpy.random.default_rng(seed)` in `run_scenario`; the
+  scene is drawn from it first, then, in order, motion disturbances, board clock jitter,
+  reverberation and noise for each ping. `time_spread` and `basin_reverberation` take the same
+  seed unless they state their own; one-way sources have their own generator
+  (`default_rng([seed, 0x50])`), so adding a source does not change the rest.
+  `simulate_ping` called directly with no `rng` draws fresh noise each call: pass one.
+- **Same machine, same seed: identical samples.** Measured here with
+  `docs/handoff/examples/determinism.py` on `fls_120k_transit` (two pings, reverberation, noise,
+  ADC): two runs hash the same; seed 1 differs.
+- **C++ against NumPy engine: rounding only.** The same run with `engine="numpy"` differs by
+  6.2e-9 against a largest sample of 0.018 (relative 3.4e-7, single precision), so sample hashes
+  differ while every result agrees. `STATUS.md` item 32 notes that `fls_120k_rough_surface` gives
+  different hashes on the two engines and that nobody checked whether beyond single precision.
+- **Host against GPU: rounding only.** The gallery regenerated on an NVIDIA L4 at D-179 equals
+  the D-174 gallery, a different job on the same GPU type, "to GPU rounding (relative 4e-4 at
+  most; detection, track and class counts equal)" for every scene the code change did not touch
+  (D-179). Host against CUDA, RES reports agreement "to the digits printed" on whole scenarios.
+  Measured here: `wreck_sas` at full size on this CPU gives sway 0.053 λ, heave 0.044 λ and
+  sharpness 59.62 / 219.62 / 224.55, the values in `docs/figures/gallery.json` from the L4.
+  Detection counts can differ where a cell sits within rounding of its threshold
+  (`detect.cfar` docstring).
+- **A scene re-draw.** Changing anything that changes how many random numbers the scene consumes
+  (an item's extent or density, an added item, a different ping count before a draw) gives a new
+  realisation of everything drawn after it. D-171 widened the SAS scenes' seabed from 48 m to 53 m
+  ground range: `wreck_sas` went from 9,180 to 13,555 scatterers and `minefield_sas` from 14,870 to
+  20,558, and "before and after are not paired": the motion disturbance, the speckle and the object
+  levels are all new draws. Compare such changes over several seeds
+  (`tools/classify_rules_eval.py --seeds N` does this for the tracking scenes), not on one.
+  `--quick` is a re-draw too.
+- **Replay.** A recording replayed through the same chain gives the same reports
+  (`tests/python/test_live.py::test_replaying_the_recording_gives_the_same_reports`; `EXAMPLES.md`
+  example 6: identical apart from `processing_seconds`). The two live-chain engines agree to about
+  1e-7 relative on every number of the report, not bit for bit (`EXAMPLES.md` example 5).
+- **Not reproducible from the repository alone:** anything at the `eigenray` tier without Bellhop;
+  the measured-channel comparisons without the fetched data; GPU timings without an L4.
