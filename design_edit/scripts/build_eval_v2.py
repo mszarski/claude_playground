@@ -222,10 +222,24 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=12)
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
+    # Resumable: each design's items are appended as soon as it finishes, and finished designs are skipped.
+    import threading
+
+    done_path = Path(args.out + ".done")
+    done = {int(x) for x in done_path.read_text().split()} if done_path.exists() else set()
+    lock = threading.Lock()
+
+    def run(i: int) -> None:
+        rs = build_one(i, token, args.seed_base, args.k, not args.no_empty_check)
+        with lock, open(args.out, "a") as f, open(done_path, "a") as d:
+            f.write("".join(json.dumps(r) + "\n" for r in rs))
+            d.write(f"{i}\n")
+
+    if not done:
+        Path(args.out).write_text("")
     with ThreadPoolExecutor(args.workers) as pool:
-        rows = [r for rs in pool.map(lambda i: build_one(i, token, args.seed_base, args.k, not args.no_empty_check),
-                                     range(args.n_designs)) for r in rs]
-    Path(args.out).write_text("".join(json.dumps(r) + "\n" for r in rows))
+        list(pool.map(run, [i for i in range(args.n_designs) if i not in done]))
+    rows = [json.loads(line) for line in open(args.out)]
     print(f"{len(rows)} items from {args.n_designs} designs -> {args.out}")
     if args.push:
         from datasets import Dataset, DatasetDict
