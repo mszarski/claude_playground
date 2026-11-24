@@ -1,4 +1,13 @@
 #!/usr/bin/env sh
+# In a linked worktree (git dir != common dir) the export is skipped (sonar-dh6): core.hooksPath names this
+# directory in the main checkout, and bd resolves its workspace to the main checkout's .beads, so the export
+# would rewrite the main checkout's issues.jsonl from a commit made elsewhere. The main checkout runs it as before.
+# BEADS_HOOK_IN_WORKTREE=1 runs it anyway. Kept outside the managed block, which `bd hooks install` rewrites.
+if [ "${BEADS_HOOK_IN_WORKTREE:-0}" != 1 ]; then
+  _git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) && _git_common=$(git rev-parse --git-common-dir 2>/dev/null) &&
+    _git_dir=$(cd "$_git_dir" && pwd -P) && _git_common=$(cd "$_git_common" && pwd -P) &&
+    [ "$_git_dir" != "$_git_common" ] && exit 0
+fi
 # --- BEGIN BEADS INTEGRATION v1.3.4 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then
