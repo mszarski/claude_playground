@@ -3178,3 +3178,32 @@ loads every tracked YAML with plain PyYAML and fails on any such string. `Sedime
 profile_step_m and history_margin_s used to be dropped silently, and an unknown nav key is now refused
 before the board is looked for (D-177). Open: five readers still use plain `yaml.safe_load` on
 user-written files. Full GPU suite 2065 passed, 93 skipped (L4, HF job 6b054bd0c97b8ed4fcd78494).
+
+### D-181 Opt-in LFM range-Doppler correction; the leading edge's costs explained (issues sonar-fyj, sonar-l4i, sonar-oqa; no default change)
+
+sonar-fyj: `range_doppler: off | ownship | full` in both live-chain engines (`range_doppler=` for
+`sonar_live`; `gallery --range-doppler`, `classify_rules_eval --range-doppler`), default off. Factor
+f0·T/(f_stop − f_start), signed by the sweep, 0 for a non-LFM waveform (ours, derived from the LFM
+matched filter in `tests/python/test_lfm_range_doppler.py`; textbook unconfirmed). `ownship` adds
+factor × the ownship's closing speed along each detection's line of sight (mean of the transmit and
+receive pose velocities) to its range, placement and time; `full` also moves each reported track by
+factor × its own closing speed (from the fitted velocity). Engine parity within 0.05 m. Measured on
+gallery captures (L4 job 6b0551faca8b51043c3b5e25, offline replay, `first` -> `first` + `full`, median
+distance to the hull over 10 seeds): gravel 10.1 -> 7.5 m, flank submarine 1.1 -> 0.3 m, winter_sand
+2.5 -> 2.1 m, 12 km 3.4 -> 2.7 m. What got worse: far_mover 0.4 -> 0.9 m; fls_170k_traffic boat_closing
+4.6 -> 5.9 m from its centre (the coupling had hidden part of its propeller offset, D-169; hull 0.00 m
+both). No class or false-mover change. Kept opt-in. The live chain is held by its tests only (not
+measured on these scenes).
+
+sonar-l4i (explained, no change): `gravel_30m`'s leading edge reads 10.3 m short at the last ping =
+hull geometry 7.8 m (the near end's range read on the cluster's bearing, 43-51 m inside the near end)
++ LFM coupling 3.0 m + leading edge +0.4 m. Seed 52 loses its mover because the nearer leading edge
+brings the ship's detection within the tracker's gate of a weak hit at the near end, 80 m along the
+hull; the tracks swap on ping 2 (speed/sigma 6.9 < 7.66). `full` removes the coupling term only.
+
+sonar-oqa (explained, no change): at 12 km the gallery tracker's 1° bearing sigma is 210 m across,
+and about a dozen arrivals lie inside one 4σ gate, so association is decided by small likelihood
+differences; the leading edge reshuffles which arrival each track takes (seed 60 3.0 -> 65.4 m, the
+mover left with an 11.5 dB hit 1.1° off). Tighter bearing sigmas move the hop to other seeds (0.5°:
+seed 60 65.4 -> 3.5 m but seed 53 1.1 -> 29.2 m). Open: association among many arrivals in one gate.
+Full GPU suite 2078 passed, 93 skipped (L4, HF job 6b055ee4c97b8ed4fcd799db).
