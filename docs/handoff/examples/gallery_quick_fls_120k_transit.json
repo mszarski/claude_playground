@@ -1,0 +1,110 @@
+{
+  "fls_120k_transit": {
+    "pings": 4,
+    "scatterers": 785,
+    "detections_per_ping": [
+      10,
+      11,
+      10,
+      13
+    ],
+    "confirmed_tracks": 7,
+    "classification": {
+      "counts": {
+        "mover": 0,
+        "static": 6,
+        "line": 0,
+        "multipath": 0,
+        "uncertain": 1
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "uncertain",
+          "speed_m_s": 3.640901524315561,
+          "speed_sigma_m_s": 0.6918154329440523,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "static",
+          "speed_m_s": 0.3656543432030904,
+          "speed_sigma_m_s": 0.3837981888014471,
+          "truly_moving": false
+        },
+        "mooring_buoy": {
+          "kind": "static",
+          "speed_m_s": 0.009968226998549344,
+          "speed_sigma_m_s": 0.05534838248809555,
+          "truly_moving": false
+        },
+        "pinnacle": {
+          "kind": "static",
+          "speed_m_s": 0.08187043006153867,
+          "speed_sigma_m_s": 0.1749357116625577,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 0
+    },
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 0.0,
+        "centroid_error_m": 0.6753440040928537,
+        "true_velocity_xy": [
+          0.0,
+          -4.0
+        ],
+        "track_velocity_xy": [
+          -0.0444882860082248,
+          -3.4345992969022907
+        ],
+        "track_speed_m_s": 3.4348874126925413
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 0.0,
+        "centroid_error_m": 2.2591266736800386,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.3198318223256007,
+          -0.134095827749109
+        ],
+        "track_speed_m_s": 0.3468055443499041
+      },
+      "mooring_buoy": {
+        "tracked": true,
+        "position_error_m": 0.5178819444574649,
+        "centroid_error_m": 0.5178819444574649,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.006781396637925055,
+          0.006641788938424861
+        ],
+        "track_speed_m_s": 0.009492138887703028
+      },
+      "pinnacle": {
+        "tracked": true,
+        "position_error_m": 0.0,
+        "centroid_error_m": 0.2971023460661769,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.06280699993297452,
+          -0.04524066482080119
+        ],
+        "track_speed_m_s": 0.07740437322276268
+      }
+    },
+    "seconds": 25.0,
+    "backend": "host",
+    "quick": true
+  }
+}

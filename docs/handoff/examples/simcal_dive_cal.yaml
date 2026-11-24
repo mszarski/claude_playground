@@ -1,0 +1,11 @@
+reverberation:
+- mu_db: -27.0
+  boundary_z: 45.0
+  offset_db: 5.920643884919121
+- model: chapman_harris
+  boundary_z: 0.0
+  wind_speed: 5.0
+  offset_db: -3.9548779122916855
+receiver:
+  ambient_noise:
+    level_db: 38.6370626650515
