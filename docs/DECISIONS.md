@@ -3163,3 +3163,18 @@ and class counts equal), so D-175 moved nothing in the gallery.
   uncertain; the small vehicle has still no detection.
 - No test expectation changed. `docs/SCENARIOS.md`'s gallery tables, last updated at 1442de5, now quote
   this run.
+
+### D-180 YAML numbers PyYAML reads as strings; sonar_live_hsb's navigation (issues sonar-iwq, sonar-plk)
+
+PyYAML follows YAML 1.1, where a float needs a dot and a signed exponent, so `38.0e3` loads as a
+string. Our loader (`config.load_yaml`) has always read it as a float, but plain `yaml.safe_load` (the
+sediment table, the WAV and navigation adapters, any outside script) does not, and the C++ dictionary
+readers then refuse it with a cast error: the rehearsal's sync reference failed in PingAssemblerCpp and
+PingDecimator. Every shipped YAML now writes such numbers with a signed exponent (`38.0e+3`): 77 values
+in 48 files, identical through our loader (checked file by file). `tests/python/test_yaml_numbers.py`
+loads every tracked YAML with plain PyYAML and fails on any such string. `SedimentFit.yaml_row` writes
+`1.0e-05` where `:g` gave `1e-05`. `tools/sonar_live_hsb.py receive` now builds its navigation with
+`NavListener.from_config`, as `tools/sonar_live.py` does: water_depth, keep_s, surface_z,
+profile_step_m and history_margin_s used to be dropped silently, and an unknown nav key is now refused
+before the board is looked for (D-177). Open: five readers still use plain `yaml.safe_load` on
+user-written files. Full GPU suite 2065 passed, 93 skipped (L4, HF job 6b054bd0c97b8ed4fcd78494).
