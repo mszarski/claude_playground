@@ -3208,3 +3208,38 @@ differences; the leading edge reshuffles which arrival each track takes (seed 60
 mover left with an 11.5 dB hit 1.1° off). Tighter bearing sigmas move the hop to other seeds (0.5°:
 seed 60 65.4 -> 3.5 m but seed 53 1.1 -> 29.2 m). Open: association among many arrivals in one gate.
 Full GPU suite 2078 passed, 93 skipped (L4, HF job 6b055ee4c97b8ed4fcd799db).
+
+### D-182 The handoff documentation set; stale statements corrected (issue sonar-4mu; no chain change)
+
+At the owner's request, `docs/handoff/` holds a set from which an engineer or a coding model can
+continue the hardware and software work: `README.md` (entry point, reading orders, state, risks,
+document map), `HARDWARE.md` (22 unknowns, block diagram, the assumptions register with status and
+config key, the six builds, link budget, interfaces, a 19-step bring-up plan), `SOFTWARE.md`
+(architecture, repository map, the two engines, every live-chain stage's defaults and their
+decisions, tools, how to add things), `TESTS.md` (how to run, a map of 114 pytest files and 15
+GoogleTest binaries, decision-to-test table, false failures, gaps), `SIMULATION.md` (what is not
+modelled, pipeline, models table, 76 scenarios, validation), `EXAMPLES.md` with `examples/` (twelve
+examples run on the CPU with commands, times, outputs and pictures), `OUTPUTS.md` (the gallery by
+family and the headline results). `docs/HANDOFF.md` is refreshed to this tree; `CLAUDE.md` and
+`AGENTS.md` point to the set.
+- What writing it found, filed as issues: `sonar_live --emulate` lays out the receive window at the
+  nominal sound speed and fails board synchronisation on the multi-board trial scenarios (sonar-8zj);
+  one GSFB block carries every channel on one sample counter, so several boards' streams need a merge
+  that is not designed; `transmit.time_ns` drifts with the board clock (ours, not tested); a grating
+  lobe is in view beyond ±42° at 6 kHz on five of six builds; the Sensor Bridge loopback has only
+  run at 32 channels and 64 kHz; function defaults (`detect.Tracker()`, `classify_tracks()`) differ
+  from the chain's.
+- Forty stale or contradictory statements in existing documents were corrected against the code,
+  the configs and the JSON files (RESULTS, STATUS, DEPLOYMENT, SCENARIOS, ARCHITECTURE, REFERENCES,
+  SIM_CALIBRATION, JETSON, HOLOSCAN_NOTES, the root README). Changed besides text: the architecture
+  diagrams' table (`tools/architecture_diagrams.py`: device builds of the beamformers, motion delays,
+  reverberation FFTs, the multiscale statistic; Sensor Bridge frames; echo grouping) with
+  `tests/python/test_architecture.py`'s pin of CUDA rows 7 -> 10, because the table was wrong; the
+  build diagrams (direct sound 3 dB low before, D-102); `popoto_parts`, `DESIGN.md` and
+  `popoto_stage2.json` regenerated through their generators (the full-rate GPU ping is measured:
+  0.479 / 1.028 / 1.495 s on an L4); the simulator-calibration self-check reads +5.9, −4.0, 38.6 dB,
+  0.16 dB RMS (was +6.1, −4.0, 38.0, 0.17; the cause of the move not traced). New tools:
+  `tools/handoff_hardware.py`, `tools/software_diagrams.py`.
+- The last whole CPU suite on record is the tree of D-157 (157 of 157); the last full GPU suite is
+  2078 passed, 93 skipped at D-181. Checked for this merge on the CPU: test_architecture,
+  test_tools_help (78), test_yaml_numbers, test_hardcoded, test_design, test_buildspec, test_simcal.
