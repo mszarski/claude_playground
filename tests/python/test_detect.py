@@ -519,6 +519,21 @@ def earlier_arrival_pings(n=10, interval=0.01, c=1500.0):
 EARLIER_TRACKER = dict(range_sigma=5.0, bearing_sigma=float(np.radians(0.5)), process_noise=0.05, initial_speed_sigma=2.0)
 
 
+def zero_transmit_mover(n=8, interval=2.0, c=1500.0, stamp=True, seed=7):
+    """A target crossing at 3 m/s at 250 m (x forward, y across), seen every `interval` s with 0.3 m of position noise,
+    each detection stamped transmit + R/c. `stamp` False: every ping carries transmit time 0 (a source without
+    timestamps, sonar-4bs), the detections still at 0 + R/c. Per ping (transmit time given, [detection])."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for k in range(n):
+        tp = interval * k
+        x, y = 250.0 + 0.3 * rng.standard_normal(), 40.0 - 3.0 * tp + 0.3 * rng.standard_normal()
+        r, b = float(np.hypot(x, y)), float(np.arctan2(y, x))
+        given = tp if stamp else 0.0
+        out.append((given, [detect.Detection(r, b, 20.0, 4, time=given + r / c)]))
+    return out
+
+
 @pytest.mark.parametrize("association", ["likelihood", "in_order"])
 @pytest.mark.parametrize("case", ["earlier_arrival", "one_transmit_time"])
 def test_a_track_never_steps_back_in_time_when_it_takes_an_earlier_detection(association, case):
@@ -570,6 +585,24 @@ def test_a_held_missed_row_is_not_fitted_twice():
         (a,) = classify.classify_tracks([tr], time=at, max_fit_rms=10.0)
         (b,) = classify.classify_tracks([without], time=at, max_fit_rms=10.0)
         assert (a.position, a.velocity, a.fit_rms, a.speed_sigma, a.kind) == (b.position, b.velocity, b.fit_rms, b.speed_sigma, b.kind)
+
+
+def test_a_mover_on_pings_without_timestamps_has_no_clock():
+    """sonar-4bs, what the tracker does on its own (no change here: the chain gives it a clock, test_live_cpp). A target
+    crossing at 3 m/s at 250 m, every 2 s: with its transmit times the tracker follows it as one track throughout. The same
+    detections on pings that all carry transmit time 0 leave the Kalman filter no time between them (dt is the
+    difference of echo delays, about 1e-5 s, or 0 when held, sonar-uc5): the process noise does not grow and the state
+    has no velocity, so the moving target falls out of its track's gate and is followed by several short tracks."""
+    counts = {}
+    for stamp in (True, False):
+        tracker = detect.Tracker(**SCENARIO_TRACKER)
+        ids = set()
+        for tp, dets in zero_transmit_mover(stamp=stamp):
+            tracker.update(tp, dets)
+            ids |= {tr.id for tr in tracker.tracks}
+        counts[stamp] = len(ids)
+    assert counts[True] == 1
+    assert counts[False] >= 3
 
 
 def test_tracker_drops_a_target_that_disappears():

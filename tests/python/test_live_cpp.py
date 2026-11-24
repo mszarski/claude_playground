@@ -749,6 +749,81 @@ def test_cpp_assembler_matches_python(pings):
 needs_exe = pytest.mark.skipif(not EXE.exists(), reason="build/bin/sonar_live not built")
 
 
+def _without_timestamps(pings):
+    """The pings with every transmit time 0: a source without timestamps (sonar-4bs)."""
+    out = copies(pings)
+    for r in out:
+        r.transmit.time_ns = 0
+    return out
+
+
+def _chain_run(cfg, records):
+    with LiveChain(cfg) as chain:
+        return chain.run(records)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_a_source_without_timestamps_is_counted_and_clocked_by_a_configured_ping_interval(pings, engine):
+    """sonar-4bs, both engines. Pings whose transmit time does not increase over the ping before (a source without
+    timestamps: all 0) give the tracker no clock. Each such ping is counted in the report's `pings_without_time` (on a
+    line only once above 0, as pings_without_velocity) with one RuntimeWarning. With `tracker.ping_interval_s` given, the
+    chain's clock advances by it on such a ping instead: the pings at 0 then give exactly the reports of the same pings
+    with their own transmit times 2 s apart (tracks, detections). Ordinary pings (increasing transmit times) are not
+    touched by the setting (bit for bit) and carry no new member."""
+    cfg = dict(CHAIN, engine=engine)
+    timed = _chain_run(cfg, copies(pings))
+    clocked_cfg = dict(cfg, tracker=dict(CHAIN["tracker"], ping_interval_s=INTERVAL))
+    assert all("pings_without_time" not in r for r in timed)
+    for r_timed, r_set in zip(timed, _chain_run(clocked_cfg, copies(pings))):
+        assert r_set["tracks"] == r_timed["tracks"] and r_set["detections"] == r_timed["detections"]
+        assert "pings_without_time" not in r_set
+    with pytest.warns(RuntimeWarning, match="pings_without_time"):
+        bare = _chain_run(cfg, _without_timestamps(pings))
+    assert [r.get("pings_without_time", 0) for r in bare] == list(range(N))
+    keys = list(bare[-1])
+    assert keys.index("pings_without_time") == keys.index("pings_without_nav") + 1
+    with pytest.warns(RuntimeWarning, match="pings_without_time"):
+        clocked = _chain_run(clocked_cfg, _without_timestamps(pings))
+    assert [r.get("pings_without_time", 0) for r in clocked] == list(range(N))
+    for r_timed, r_clocked in zip(timed, clocked):
+        assert r_clocked["tracks"] == r_timed["tracks"] and r_clocked["detections"] == r_timed["detections"]
+    # What happens without the setting: the crossing target (3 m/s at 250 m) is never a mover.
+    assert any(t["kind"] == "mover" for t in timed[-1]["tracks"])
+    assert not any(t["kind"] == "mover" for t in bare[-1]["tracks"])
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf")])
+def test_the_ping_interval_is_refused_unless_positive(bad):
+    """tracker.ping_interval_s: None (off) or a finite number of seconds above 0, in both engines."""
+    for engine in ("python", "cpp"):
+        with pytest.raises(ValueError, match="ping_interval_s"):
+            LiveChain(dict(CHAIN, engine=engine, tracker=dict(CHAIN["tracker"], ping_interval_s=bad)))
+    with pytest.raises(ValueError, match="ping_interval_s"):
+        core.LiveChainCpp(dict(CPP_CHAIN, tracker_ping_interval_s=bad))
+
+
+@needs_exe
+def test_program_counts_pings_without_time_and_takes_the_ping_interval(pings, tmp_path):
+    """sonar-4bs through build/bin/sonar_live: a recording of pings all at transmit time 0 is counted
+    (pings_without_time, a line on stderr once) and, with tracker_ping_interval_s, tracked as the timed pings are."""
+    def replay(records, name, *extra):
+        w = gs.RecordWriter(str(tmp_path / f"{name}.h5"))
+        for r in records:
+            w.write(r)
+        w.close()
+        out = subprocess.run([str(EXE), "--replay", str(tmp_path / f"{name}.h5"), "--report", str(tmp_path / f"{name}.jsonl"),
+                              *EXE_OPTIONS, "classify_min_speed=1", *extra], capture_output=True, text=True, timeout=300)
+        assert out.returncode == 0, out.stderr
+        return [json.loads(line) for line in (tmp_path / f"{name}.jsonl").read_text().splitlines()], out.stderr
+    timed, err = replay(copies(pings), "timed")
+    assert all("pings_without_time" not in r for r in timed) and "pings_without_time" not in err
+    bare, err = replay(_without_timestamps(pings), "bare")
+    assert [r.get("pings_without_time", 0) for r in bare] == list(range(N)) and err.count("pings_without_time") == 1
+    clocked, _ = replay(_without_timestamps(pings), "clocked", f"tracker_ping_interval_s={INTERVAL}")
+    for a, b in zip(timed, clocked):
+        assert a["tracks"] == b["tracks"]
+
+
 @needs_exe
 def test_program_replays_a_recording_like_the_python_chain(pings, tmp_path):
     with LiveChain(CHAIN, recording=str(tmp_path / "rec.h5")) as chain:
@@ -1113,7 +1188,7 @@ def _every_option_chain(tmp_path):
               "search_factor": 2.5, "sidelobe_margin_db": 9.0, "sidelobe_floor_db": -35.0},
         sbl={"grid_step_deg": 0.5, "max_sources": 5, "min_snr_db": 7.0, "dynamic_range_db": 18.0, "max_gates": 20, "min_contrast_db": 7.0,
              "max_iterations": 25, "tolerance": 0.02},
-        tracker={"range_sigma": 4.0, "bearing_sigma_deg": 0.8, "confirm_hits": 4, "max_misses": 3, "initial_speed_sigma": 6.0, "process_noise": 0.07,
+        tracker={"range_sigma": 4.0, "bearing_sigma_deg": 0.8, "confirm_hits": 4, "max_misses": 3, "initial_speed_sigma": 6.0, "process_noise": 0.07, "ping_interval_s": 1.5,
                  "association": "in_order"},
         classify={"min_speed": 1.2, "static_speed": 0.8, "max_fit_rms": 50.0,
                   "multipath": {"max_excess_range": 700.0, "bearing_deg": 2.5, "velocity": 2.0}},

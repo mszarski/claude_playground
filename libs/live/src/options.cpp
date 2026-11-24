@@ -304,6 +304,12 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "tracker_bearing_sigma_deg") c.tracker.bearing_sigma = v() * kDeg;
   else if (key == "tracker_confirm_hits") c.tracker.confirm_hits = i();
   else if (key == "tracker_max_misses") c.tracker.max_misses = i();
+  else if (key == "tracker_ping_interval_s") {
+    // sonar-4bs: given, seconds above 0 (leave the key out for off).
+    const double s = v();
+    if (!(std::isfinite(s) && s > 0.0)) throw std::invalid_argument("tracker_ping_interval_s: seconds above 0, got '" + value + "' (leave the key out for off)");
+    c.tracker_ping_interval_s = s;
+  }
   else if (key == "classify_min_speed") c.classify.min_speed = c.classify.static_speed = v();
   else if (key == "classify_static_speed") c.classify.static_speed = v();   // after classify_min_speed, which sets both
   else if (key == "classify_max_fit_rms") c.classify.max_fit_rms = v();
@@ -450,7 +456,8 @@ std::string options_json(const ChainOptions& c) {
   const TrackerOptions& t = c.tracker;
   j.num("tracker_process_noise", t.process_noise).num("tracker_range_sigma", t.range_sigma).num("tracker_bearing_sigma_deg", t.bearing_sigma / kDeg)
       .integer("tracker_confirm_hits", t.confirm_hits).integer("tracker_max_misses", t.max_misses).num("tracker_initial_speed_sigma", t.initial_speed_sigma)
-      .text("tracker_association", t.association == Association::InOrder ? "in_order" : "likelihood");
+      .text("tracker_association", t.association == Association::InOrder ? "in_order" : "likelihood")
+      .num("tracker_ping_interval_s", c.tracker_ping_interval_s);
   const ClassifyOptions& k = c.classify;
   j.num("classify_min_speed", k.min_speed).num("classify_static_speed", k.static_speed).num("classify_max_fit_rms", k.max_fit_rms)
       .num("classify_min_mover_cells", k.min_mover_cells).num("classify_outlier_alpha", k.outlier_alpha)

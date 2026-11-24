@@ -227,6 +227,9 @@ LiveChain::LiveChain(const ChainOptions& options)
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
   // classify.py `detections` rules: the row rule acts only in the corridor test, which the chain never runs.
   if (!(opt_.classify.row_snr_db < 0.0)) throw std::invalid_argument("LiveChain: classify row_snr_db: the live chain never runs the row (corridor) test, so this rule would do nothing there; it applies only to classify_tracks with linear (the gallery)");
+  if (!(std::isfinite(opt_.tracker_ping_interval_s) && opt_.tracker_ping_interval_s >= 0.0)) {
+    throw std::invalid_argument("LiveChain: tracker_ping_interval_s: seconds above 0, or 0 (off)");
+  }
   if (std::isnan(opt_.classify.min_mover_cells)) throw std::invalid_argument("LiveChain: classify min_mover_cells is NaN");
   if (!(opt_.classify.outlier_alpha >= 0.0 && opt_.classify.outlier_alpha < 1.0)) throw std::invalid_argument("LiveChain: classify outlier_alpha: from 0 (off) to below 1");
   // NaN: derived from the first record (derive.hpp); given, a finite angle, 0 (off) or more.
@@ -640,8 +643,17 @@ Report LiveChain::process(PingRecord& record) {
     origin_ = f.origin;
     t0_ns_ = record.transmit.time_ns;
     have_origin_ = true;
+  } else if (record.transmit.time_ns <= last_ns_) {
+    // No time since the ping before (a source without timestamps; sonar-4bs): counted, and with a ping interval given the
+    // tracker's clock advances by it. Ordinary pings (increasing transmit times) never come here: their clock is as before.
+    ++pings_without_time_;
+    if (opt_.tracker_ping_interval_s > 0.0) {
+      clock_offset_ns_ += last_ns_ - record.transmit.time_ns + static_cast<std::int64_t>(std::llround(opt_.tracker_ping_interval_s * 1e9));
+    }
   }
-  const double t = static_cast<double>(record.transmit.time_ns - t0_ns_) * 1e-9;
+  last_ns_ = record.transmit.time_ns;
+  rep.pings_without_time = pings_without_time_;
+  const double t = static_cast<double>(record.transmit.time_ns - t0_ns_ + clock_offset_ns_) * 1e-9;
   // A monostatic echo shows the target where it was when the sound reached it: transmit + range / c, with the c that
   // turned the two-way time into range (the record's, after `sound_speed`). D-156; python/gpusonar/live.py the same.
   const double c_range = record.environment.sound_speed;
@@ -854,6 +866,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
     << ownship.x << ", " << ownship.y << ", " << ownship.z << "], \"pings_without_nav\": " << pings_without_nav;
   // Only when some ping had no velocity from navigation (sonar-8is): every line without it is the one it was.
   if (pings_without_velocity > 0) s << ", \"pings_without_velocity\": " << pings_without_velocity;
+  if (pings_without_time > 0) s << ", \"pings_without_time\": " << pings_without_time;   // sonar-4bs
   s << ", \"detections\": [";
   for (std::size_t i = det_first; i < det_last; ++i) {
     const auto& d = detections[i];

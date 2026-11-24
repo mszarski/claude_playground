@@ -480,6 +480,17 @@ TEST(Report, CarriesPingsWithoutVelocityOnlyWhenThereWereAny) {
   for (const std::string& d : r.datagrams(10)) EXPECT_NE(d.find("\"pings_without_velocity\": 2"), std::string::npos);
 }
 
+TEST(Report, CarriesPingsWithoutTimeOnlyWhenThereWereAny) {
+  // sonar-4bs: pings whose transmit time did not increase; after pings_without_velocity, on a line only once above 0.
+  Report r;
+  EXPECT_EQ(r.json().find("pings_without_time"), std::string::npos);
+  r.pings_without_time = 4;
+  EXPECT_NE(r.json().find("\"pings_without_nav\": 0, \"pings_without_time\": 4, \"detections\""), std::string::npos) << r.json();
+  r.pings_without_velocity = 2;
+  EXPECT_NE(r.json().find("\"pings_without_velocity\": 2, \"pings_without_time\": 4, \"detections\""), std::string::npos) << r.json();
+  for (const std::string& d : r.datagrams(10)) EXPECT_NE(d.find("\"pings_without_time\": 4"), std::string::npos);
+}
+
 TEST(Tracker, TakesAnEarlierDetectionAtItsOwnTime) {
   // sonar-uc5: pings 10 ms apart, one standing target whose detection alternates between arrivals at 1500 and 1480 m,
   // each at transmit + R/c: the nearer one is earlier than the time the track holds. It is taken there (dt = 0), so the
