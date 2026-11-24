@@ -55,8 +55,12 @@ def render_as_inference(tok, prompt: list, completion: list, template_kwargs: di
     The completion is the assistant text plus whatever the template puts after an assistant turn (end of turn)."""
     text = completion[0]["content"]
     gen = tok.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True, **template_kwargs)
-    full = tok.apply_chat_template(prompt + completion, tokenize=False, **template_kwargs)
-    end = full[full.rindex(text) + len(text):]
+    # Templates may drop reasoning from assistant turns (Gemma 4 strips <|channel>thought...<channel|>), so find
+    # the end-of-turn suffix from the answer part, and train on the full text including the reasoning.
+    answer = text.rsplit("<channel|>", 1)[-1] if "<channel|>" in text else text
+    full = tok.apply_chat_template(prompt + [{"role": "assistant", "content": answer}], tokenize=False,
+                                   **template_kwargs)
+    end = full[full.rindex(answer) + len(answer):] if answer else "<turn|>\n"
     adds_bos = tok.bos_token_id is not None and tok(text="a")["input_ids"][:1] == [tok.bos_token_id]
     if adds_bos and gen.startswith(tok.bos_token):
         gen = gen[len(tok.bos_token):]  # TRL tokenizes a plain string with the tokenizer, which adds BOS itself
