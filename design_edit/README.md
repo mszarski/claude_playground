@@ -1008,6 +1008,37 @@ So these rounds train from **base** Gemma with thinking on, on its *own* correct
   goal (0.48) and structure (0.45) requests lag v8 and Qwen. RL on prompts it solves only sometimes, or guided
   traces for unsolved prompts, are the remedies.
 
+### Round 12 RL: GRPO with thinking on, check-based reward, dynamically sampled prompts
+
+* **Prompts** (`design-edits-v12-think-rl`, built by `scripts/build_v12.py`): realistic design-system items that have
+  compiled checks and that base Gemma solved 1–3 times out of 4 (408), plus 136 items it never solved (25%).
+  About 2,200 of the 3,412 checkable items were solved 4/4 and were left out, because they give zero advantage.
+  This is DAPO's dynamic sampling, done once up front.
+* **Reward** (`--reward checks`): `grade_checks` score (0.6 keep-in + 0.3 keep-out + 0.1 no new lint, renormalized
+  against the no-op), -0.5 for an invalid patch. This is deterministic and needs no judge calls during training.
+* **Run**: starts from the v12 reasoning-SFT adapter (merged in a CPU subprocess), thinking on, 8 samples per prompt,
+  1,024-token completion cap, β=0.02, lr 1e-5, 32 prompts per step, 150 steps on 2×H200 (~2.5 min/step).
+
+| eval v2 | ALL | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|
+| v12 reasoning SFT | 0.667 | 0.730 | 0.694 | 0.479 | 0.888 | 0.452 |
+| v12 + 1 review round | 0.701 | 0.716 | 0.824 | 0.489 | 0.897 | 0.452 |
+| RL checkpoint-50 | 0.694 | 0.703 | 0.778 | 0.511 | 0.897 | 0.468 |
+| RL checkpoint-50 + 1 review round | 0.701 | 0.703 | 0.806 | 0.532 | 0.879 | 0.468 |
+| **RL checkpoint-100** | **0.703** | 0.730 | 0.815 | 0.489 | 0.897 | 0.468 |
+| plain Qwen 3.8 27B, reasoning (API) | 0.717 | 0.635 | 0.815 | 0.543 | 0.907 | 0.581 |
+
+* **RL helps on eval v2, mostly on direct requests** (+12 points by checkpoint-100). This is the gain review gave the SFT
+  model, now in a single pass. A review round on top of RL adds almost nothing (+0.7).
+  On the 278 items with deterministic checks, the check pass rate rises from 0.727 (checkpoint-50) to 0.763 (checkpoint-100).
+* **Truncation pressure.** During training the share of rollouts cut off at 1,024 tokens without an answer rose
+  from 31% to 58%, and mean reward fell (0.46 → 0.33), even though answered rollouts scored about 0.68.
+  Evaluation allows 4,096 tokens, so only about 1% of answers are lost. A truncation penalty or a longer cap would
+  keep training and evaluation consistent.
+* **Still behind Qwen on structure and goal requests** (−11 and −5 points). These are edits whose correct form the
+  model rarely samples, so neither RFT nor RL on its own samples teaches them. Guided traces (a teacher reasoning
+  toward the reference) are the next lever.
+
 ## Eval v2: realistic screens, a design system in context, criteria grading
 
 The v1 test sets score exact match against one generated answer on the generator's five layouts, and the held-out
