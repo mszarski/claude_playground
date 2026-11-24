@@ -3038,3 +3038,21 @@ quota), and with 8 or 48 threads the receiver waited 44-184 ms behind CFS thrott
 - Open: `serve` has no `--backend` (realistic scenarios simulate on the host).
 - Full GPU suite 1875 passed, 92 skipped (L4, HF job 6b04f660c97b8ed4fcd7093a), including the new
   loopback tests and the quota-aware count on L4.
+
+### D-174 Gallery regenerated with D-164, D-171 and D-172 (issue sonar-gae)
+
+Full-size CUDA run on an NVIDIA L4 (HF job 6b05051fc97b8ed4fcd725d4, tree 77f5b98); it also takes in
+D-156 and D-157, which the committed gallery predated too. Every change traces to one of those
+decisions; detection and confirmed-track counts are unchanged in every scene, image-only scenes and
+animations agree to at most 2 grey levels (except the two re-drawn SAS scenes), and no named object
+changed class. The classes equal the gallery seed of `classify_rules_eval_afe0806.json`.
+- Better: `fls_120k_rough_surface` movers off a moving object 13 -> 6, `fls_170k_traffic` 1 -> 0,
+  `winter_sand_200m` false movers 1 -> 0 (ship 19.8 -> 2.7 m from its hull); `popoto_12km` ship 67.9 ->
+  2.1 m from its hull; SAS sway `wreck_sas` 0.089 -> 0.053 λ, `minefield_sas` 0.081 -> 0.022 λ.
+- Worse or not comparable: `popoto_12km` ship speed 6.05 -> 5.68 ± 0.50 m/s (true 6.0); the SAS
+  sharpness numbers are new scene draws (estimate 0.978 and 0.991 of the true-motion image, against
+  0.978 and 1.006 before).
+- `tools/gpu_job.sh`'s gallery mode now uploads to `GPUSONAR_UPLOAD_PATH` (default `gallery`). No
+  test expectation changed (`test_documented_full_size_classes` passes on the new `gallery.json`).
+- Not done: the `minefield_sas` echo-synthesis benchmark row in RESULTS is of the old scene (14,870
+  scatterers, now 20,558); `docs/SCENARIOS.md`'s gallery tables are stale.
