@@ -6,7 +6,7 @@ name: popoto_elevation_free
 sonar: popoto_long_range_3row
 fidelity: free_field
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [700.0, 1400.0]}}
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [700.0, 1400.0]}}
 environment: {base: coastal_12c, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 platform: {position: [0, 0, 60.0], rpy: [0.0524, 0, 0], velocity: [1.5, 0, 0]}     # roll 3 degrees
 pings: {count: 5, interval: 4.0}

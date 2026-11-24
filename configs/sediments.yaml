@@ -95,7 +95,7 @@ medium_sand:
     density: 1845.0
     sound_speed: 1767.0
     attenuation_db_per_m: 10.0
-    attenuation_frequency: 20.0e3
+    attenuation_frequency: 20.0e+3
     w2: 1.410e-4
     gamma2: 3.25
     volume_strength_db: -20.0
@@ -139,7 +139,7 @@ very_fine_silt:
     density: 1147.0
     sound_speed: 1476.0
     attenuation_db_per_m: 1.4
-    attenuation_frequency: 20.0e3
+    attenuation_frequency: 20.0e+3
     w2: 1.638e-5
     gamma2: 3.25
     volume_strength_db: -28.6
@@ -230,7 +230,7 @@ pebbles:
     model: lambert
     mu_db: -9.0
     mu_db_range: [-10.0, -8.0]
-    valid_from_hz: 150.0e3
+    valid_from_hz: 150.0e+3
     basis: >-
       Lambert's law with the level of the one open statement found: "coarse sediments, such as
       maerl, pebbles, and boulders, can exhibit backscatter levels exceeding those of rock at

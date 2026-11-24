@@ -10,8 +10,8 @@ array:
 transmit:
   lever_arm: [0, 0, 1.0]
   waveform:
-    f_start: 6.0e3
-    f_stop: 10.0e3
+    f_start: 6.0e+3
+    f_stop: 10.0e+3
     duration: 0.5
     source_level_db_rms: 175.0       # 170-180 dB projector
 

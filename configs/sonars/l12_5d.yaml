@@ -19,14 +19,14 @@ transmit:
   aperture_height: 0.004
   waveform:
     type: gaussian               # stands in for the pulser's 2-cycle burst through the probe
-    f_start: 3.75e6
-    f_stop: 6.25e6               # 5 MHz centre, 50% -6 dB bandwidth
+    f_start: 3.75e+6
+    f_stop: 6.25e+6               # 5 MHz centre, 50% -6 dB bandwidth
     duration: 2.0e-6
     amplitude: 1.0               # uncalibrated chain: echo amplitude of a 0 dB target at 1 m
 
 receive:
   kind: real
-  sample_rate: 50.0e6
+  sample_rate: 50.0e+6
   adc_bits: 12
   adc_full_scale: 1.0
   window: {range: [0.75, 2.95]}  # m; about 150k samples

@@ -17,8 +17,8 @@ sonar_overrides:
     lever_arm: [0, 0, 1.0]
     # A 1 s sweep at 185 dB: with 0.5 s at 180 dB the ship at 6 km is 8 dB above the
     # background on 32 hydrophones, too little to detect reliably.
-    waveform: {f_start: 6.0e3, f_stop: 10.0e3, duration: 1.0, source_level_db_rms: 185.0}
-  receive: {kind: baseband, sample_rate: 16.0e3, window: {range: [5200.0, 6800.0]}}
+    waveform: {f_start: 6.0e+3, f_stop: 10.0e+3, duration: 1.0, source_level_db_rms: 185.0}
+  receive: {kind: baseband, sample_rate: 16.0e+3, window: {range: [5200.0, 6800.0]}}
 environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   max_range: 7200

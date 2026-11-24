@@ -15,8 +15,8 @@ transmit:
   lever_arm: [0, 0, 0.5]
   waveform:
     type: lfm
-    f_start: 6.0e3
-    f_stop: 10.0e3
+    f_start: 6.0e+3
+    f_stop: 10.0e+3
     duration: 1.0
     window_alpha: 0.05
     source_level_db_rms: 200.0       # configurable from 170 to 210

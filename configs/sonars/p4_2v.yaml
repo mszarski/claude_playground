@@ -19,14 +19,14 @@ transmit:
   aperture_height: 0.014
   waveform:
     type: gaussian
-    f_start: 1.7136e6
-    f_stop: 3.7264e6             # 2.72 MHz centre, 74% -6 dB bandwidth
+    f_start: 1.7136e+6
+    f_stop: 3.7264e+6             # 2.72 MHz centre, 74% -6 dB bandwidth
     duration: 3.0e-6
     amplitude: 1.0
 
 receive:
   kind: real
-  sample_rate: 50.0e6
+  sample_rate: 50.0e+6
   adc_bits: 12
   adc_full_scale: 1.0
   window: {range: [5.0, 10.0]}

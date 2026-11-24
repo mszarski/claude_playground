@@ -23,8 +23,8 @@ transmit:
   lever_arm: [0, 0, 0.3]
   waveform:
     type: lfm
-    f_start: 20.0e3
-    f_stop: 35.0e3                # the plan's example is a 22-32 kHz sweep inside this band
+    f_start: 20.0e+3
+    f_stop: 35.0e+3                # the plan's example is a 22-32 kHz sweep inside this band
     duration: 0.5                 # s, as in the plan's Phase 0 link budget
     window_alpha: 0.1
     source_level_db_rms: 190.0       # dB re 1 uPa at 1 m, RMS

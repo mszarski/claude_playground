@@ -25,8 +25,8 @@ receive:
   # using up a hydrophone. See STATUS.md, open question 5.
   reference:
     mode: sync_chirp
-    f_start: 38.0e3
-    f_stop: 48.0e3
+    f_start: 38.0e+3
+    f_stop: 48.0e+3
     duration: 4.0e-3
     level: 2.0e-3                # V peak at the ADC
     lead: 5.0e-3                 # first burst this long after the window opens,

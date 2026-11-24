@@ -19,14 +19,14 @@ transmit:
   boresight: [0, 0, 1]
   waveform:
     type: gaussian
-    f_start: 10.0e3
-    f_stop: 30.0e3                 # 20 kHz centre, 20 kHz bandwidth
+    f_start: 10.0e+3
+    f_stop: 30.0e+3                 # 20 kHz centre, 20 kHz bandwidth
     duration: 3.0e-4
     amplitude: 1.0
 
 receive:
   kind: baseband
-  sample_rate: 100.0e3
+  sample_rate: 100.0e+3
   window: {range: [1.0, 3.0]}
 
 unconfirmed:

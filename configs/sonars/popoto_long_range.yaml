@@ -12,8 +12,8 @@ array:
 transmit:
   lever_arm: [0, 0, 1.5]
   waveform:
-    f_start: 4.0e3
-    f_stop: 6.0e3
+    f_start: 4.0e+3
+    f_stop: 6.0e+3
     duration: 1.0
     source_level_db_rms: 197.0       # dB re 1 uPa at 1 m, RMS: sized as 13 dB in one row at 12 km with spherical spreading, plus 2 dB. What the chain's detector needs of that SNR is not typed: docs/DESIGN.md, the 12 km design point
 

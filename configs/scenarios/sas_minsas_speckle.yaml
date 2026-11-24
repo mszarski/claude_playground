@@ -10,7 +10,7 @@ name: sas_minsas_speckle
 sonar: sas_minsas120
 fidelity: free_field
 sonar_overrides:
-  receive: {kind: baseband, sample_rate: 60.0e3, window: {range: [44.0, 60.0]}}
+  receive: {kind: baseband, sample_rate: 60.0e+3, window: {range: [44.0, 60.0]}}
   transmit: {waveform: {duration: 2.5e-3}}
 environment: {base: coastal_10c, absorption: francois_garrison}
 platform:

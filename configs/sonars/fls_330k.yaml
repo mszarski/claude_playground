@@ -24,15 +24,15 @@ transmit:
   lever_arm: [0, 0, 0.1]
   waveform:
     type: lfm
-    f_start: 315.0e3
-    f_stop: 345.0e3
+    f_start: 315.0e+3
+    f_stop: 345.0e+3
     duration: 10.0e-3
     window_alpha: 0.1
     source_level_db_rms: 210.0       # dB re 1 uPa at 1 m, RMS; link budget in docs/DESIGN.md
 
 receive:
   kind: real
-  sample_rate: 1.5e6
+  sample_rate: 1.5e+6
   adc_bits: 16
   adc_full_scale: 1.0            # V
   sensitivity_db: -190.0         # dB re 1 V/uPa

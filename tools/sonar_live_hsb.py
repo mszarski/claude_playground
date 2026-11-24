@@ -124,6 +124,9 @@ def receive_plan(args) -> dict:
     sonar = args.sonar or source.get("sonar")
     if not sonar:
         sys.exit("receive: name the stream's sonar with --sonar or a deployment file")
+    if cfg.get("nav"):
+        from gpusonar.live import check_nav_keys
+        check_nav_keys(cfg["nav"])    # a key NavListener does not take is refused before the board is looked for (D-177)
     out = cfg.get("output") or {}
     stamp = time.strftime
     return {"sonar": sonar, "chain": chain, "nav": cfg.get("nav"), "sound_speed": source.get("sound_speed"),
@@ -148,9 +151,9 @@ def main(argv=None):
         return 0
     from gpusonar.live import LiveChain, NavListener
     plan = receive_plan(args)
-    n = plan["nav"]
-    nav = NavListener(port=n.get("port"), host=n.get("host", "0.0.0.0"), static=n.get("static"), lever_arm_m=n.get("lever_arm_m"),
-                      mount_rpy_deg=n.get("mount_rpy_deg")) if n else None
+    # Every key of the `nav` section, as tools/sonar_live.py takes it (sonar-plk: water_depth, keep_s, surface_z and the
+    # rest were dropped here before).
+    nav = NavListener.from_config(plan["nav"]) if plan["nav"] else None
     with LiveChain(plan["chain"], nav=nav, recording=plan["recording"], report_path=plan["report"],
                    report_udp=plan["report_udp"], taps=plan["taps"]) as chain:
         _, stats = hsb.run_receiver(chain, plan["sonar"], plan["sonar_overrides"], hololink_ip=args.hololink,

@@ -464,6 +464,42 @@ def test_receive_passes_its_options_to_the_receiver(monkeypatch, capsys):
     assert '"stopped": "idle"' in capsys.readouterr().out
 
 
+def test_receive_builds_its_navigation_as_sonar_live_does(monkeypatch, tmp_path):
+    """`receive` takes every key of the deployment file's `nav` section, as tools/sonar_live.py does
+    (NavListener.from_config), and refuses one it does not know before it looks for the board (sonar-plk). Before, it
+    passed on port, host, static, lever arm and mount only: water_depth, keep_s, surface_z and the rest were dropped
+    without a word."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import sonar_live_hsb as tool
+    finally:
+        sys.path.pop(0)
+    seen = {}
+
+    def fake_run_receiver(chain, sonar, sonar_overrides, **options):
+        seen["nav"] = chain.nav
+        return [], {"reports": 0, "stopped": "idle"}
+    monkeypatch.setattr(hsb, "run_receiver", fake_run_receiver)
+    nav = {"static": {"z": 20.0, "altitude": 30.0}, "water_depth": {"source": "altitude"}, "keep_s": 30.0, "surface_z": 1.5,
+           "profile_step_m": 2.0, "history_margin_s": 3.0}
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text(json.dumps({"source": {"sonar": "flank_32", "sonar_overrides": OVERRIDES}, "chain": CHAIN, "nav": nav}))
+    assert tool.main(["receive", str(deploy), "--quiet"]) == 0
+    got = seen["nav"]
+    assert (got.keep_ns, got.surface_z, got.profile_step_m, got.history_margin_ns) == (30_000_000_000, 1.5, 2.0, 3_000_000_000)
+    assert got._water is not None and got.socket is None             # the depth from the log's altitude; no port, no socket
+    seen.clear()
+    deploy.write_text(json.dumps({"source": {"sonar": "flank_32"}, "chain": CHAIN, "nav": dict(nav, keep=30.0)}))
+    with pytest.raises(ValueError, match=r"nav\.keep: unknown key; did you mean 'keep_s'\?"):
+        tool.receive_plan(tool.parse(["receive", str(deploy)]))       # refused before the board is looked for
+    with pytest.raises(ValueError, match=r"nav\.keep: unknown key"):
+        tool.main(["receive", str(deploy), "--quiet"])
+    assert seen == {}
+    deploy.write_text(json.dumps({"source": {"sonar": "flank_32"}, "chain": CHAIN, "nav": dict(nav, water_depth={"sorce": "altitude"})}))
+    with pytest.raises(ValueError, match=r"nav\.water_depth\.sorce: unknown key"):
+        tool.receive_plan(tool.parse(["receive", str(deploy)]))
+
+
 OMP_CHILD = r"""
 import ctypes, json, sys, threading
 import gpusonar  # noqa: F401  (loads the OpenMP runtime the library is built with)
