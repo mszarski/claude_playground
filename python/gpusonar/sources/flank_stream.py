@@ -714,6 +714,21 @@ class PingAssembler:
         return record
 
 
+def window_sound_speed(value) -> float | None:
+    """`source.sound_speed` of a deployment file as a number, or None for the sonar file's nominal value (absent, None
+    or 0). Anything else that is not a positive, finite number of m/s is refused: the receive window is laid out by it."""
+    if value is None:
+        return None
+    if isinstance(value, (bool, str)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"source.sound_speed: a number of m/s, not {value!r}")
+    c = float(value)
+    if c == 0.0:
+        return None
+    if not np.isfinite(c) or c < 0.0:
+        raise ValueError(f"source.sound_speed: a positive number of m/s, not {value!r}")
+    return c
+
+
 @register
 class FlankUdpSource(Source):
     """Ping records from blocks arriving as UDP datagrams: a stand-in for the Sensor
@@ -727,7 +742,14 @@ class FlankUdpSource(Source):
     Iteration ends after `max_pings` records or `timeout` seconds without one (0 or None: never).
 
     `sonar` has no default: the array the blocks come from must be named. `sample_bytes` is the
-    boards' word (see the top of this file). The socket's receive buffer is `buffer_bytes`, or
+    boards' word (see the top of this file). `sound_speed` (m/s; None or 0: the sonar file's
+    `nominal_sound_speed`) is the speed at which the sonar file's `receive.window.range` becomes
+    the window's first sample after the transmit and its length, and the speed the records carry
+    until navigation or `chain.sound_speed` replaces it. It is a statement of the layout the
+    boards' timing was set up for (the synchronisation bursts are looked for from the window's
+    two ends), not a measurement: the same value in `tools/sonar_live.py --export-template`
+    (the C++ program's template) and `tools/sonar_live_hsb.py receive`.
+    The socket's receive buffer is `buffer_bytes`, or
     the larger of 8 MB and half a second of this sonar's stream; `buffer_granted` is what the
     system gave, and a warning says so when that is less.
     """
@@ -737,14 +759,16 @@ class FlankUdpSource(Source):
     def __init__(self, sonar: str, port: int = 0, host: str = "127.0.0.1",
                  sonar_overrides: dict | None = None, max_pings: int | None = None, timeout: float | None = 2.0,
                  queue_pings: int = 8, decimate: dict | None = None, reference: dict | None = None,
-                 sample_bytes: int = SAMPLE_BYTES, buffer_bytes: int | None = None, queue_mb: float = 1024.0):
+                 sample_bytes: int = SAMPLE_BYTES, buffer_bytes: int | None = None, queue_mb: float = 1024.0,
+                 sound_speed: float | None = None):
         import queue
         import sys
         import warnings
         model = SonarModel.load(sonar, sonar_overrides)
+        sound_speed = window_sound_speed(sound_speed)
         if decimate is not None and reference is None and len(model.boards) > 1:
             reference = (decimate.get("reference") if isinstance(decimate, dict) else None) or model.config["receive"].get("reference")
-        self.assembler = PingAssembler(model, decimate=decimate, reference=reference, sample_bytes=sample_bytes)
+        self.assembler = PingAssembler(model, sound_speed=sound_speed, decimate=decimate, reference=reference, sample_bytes=sample_bytes)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.stream_bytes_per_second = self.assembler.n_channels * self.assembler.sample_rate * int(sample_bytes)
         self.buffer_asked = stream_buffer_bytes(self.assembler.n_channels, self.assembler.sample_rate, int(sample_bytes), buffer_bytes)

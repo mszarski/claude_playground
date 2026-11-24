@@ -39,7 +39,9 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     from gpusonar.sonar import SonarModel
     src = cfg["source"]
     sonar = SonarModel.load(src["sonar"], src.get("sonar_overrides"))
-    env = {"sound_speed": float(src["sound_speed"])} if src.get("sound_speed") else None
+    from gpusonar.sources.flank_stream import window_sound_speed
+    c = window_sound_speed(src.get("sound_speed"))             # the receive window's layout, as flank_udp takes it
+    env = {"sound_speed": c} if c else None
     writer = core.RecordWriter(path)
     template = sonar.make_record(core.Pose(), environment=env)
     writer.write(template)
@@ -65,6 +67,26 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
         from gpusonar.tonal import cpp_options
         cmd += [f"{k}={v}" for k, v in cpp_options(passive["tonal"], passive.get("f_low", 0.0), passive.get("f_high", 0.0)).items()]
     return " ".join(shlex.quote(c) for c in cmd)
+
+
+def emulated_source(src_cfg: dict, scenario) -> tuple:
+    """(source, sender thread) of --emulate: the scenario's pings simulated, sent as board blocks over UDP to a
+    `flank_udp` source set up as the deployment file's, but for the scenario's sonar and the scenario's sound speed.
+    The simulated board lays its receive window out at the speed the simulator made the pings with (the scenario's
+    water, D-140), so the receiver must too: at the sonar file's nominal speed the window opens and closes at other
+    samples, the synchronisation bursts are not where the chain looks, and ranges are scaled by the ratio of the two
+    speeds (sonar-8zj)."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    from gpusonar.sources import FlankBoardEmulator
+    sc = load_scenario_config(scenario)
+    records = run_scenario(sc).records
+    src_cfg = dict(src_cfg, sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), host="127.0.0.1",
+                   sound_speed=float(records[0].environment.sound_speed), max_pings=len(records), timeout=10.0)
+    source = make_source(src_cfg)
+    sender = FlankBoardEmulator(records, float(sc["pings"]["interval"]),
+                                sample_bytes=int(src_cfg.get("sample_bytes", 3))).send(source.port, pace=0.25)
+    return source, sender
 
 
 def ping_line(r: dict) -> str:
@@ -117,16 +139,7 @@ def main(argv=None):
             from gpusonar.live import sync_reference
             src_cfg["reference"] = sync_reference(cfg["chain"])    # the receiver synchronises the boards as it decimates
         if args.emulate:
-            from gpusonar.config import load_scenario_config
-            from gpusonar.sim import run_scenario
-            from gpusonar.sources import FlankBoardEmulator
-            sc = load_scenario_config(args.emulate)
-            records = run_scenario(sc).records
-            src_cfg.update(sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), host="127.0.0.1",
-                           max_pings=len(records), timeout=10.0)
-            source = make_source(src_cfg)
-            sender = FlankBoardEmulator(records, float(sc["pings"]["interval"]),
-                                        sample_bytes=int(src_cfg.get("sample_bytes", 3))).send(source.port, pace=0.25)
+            source, sender = emulated_source(src_cfg, args.emulate)
         else:
             source = make_source(src_cfg)
     nav_cfg = cfg.get("nav") if not (args.scenario or args.replay or args.emulate) else None

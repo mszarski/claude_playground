@@ -1167,6 +1167,7 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | --- | --- |
 | `source.sonar`, `source.port`, `nav.port`, `output.report_udp` | required or site-specific; there is no default sonar and no default port in code |
 | `source.sample_bytes` → `stream_sample_bytes` | the boards' sample word (3 bytes). The block header does not say it; a wrong value is a counted bad block, never wrong samples |
+| `source.sound_speed` → the template | leave it out unless the boards' timing (where the window opens and closes, where the synchronisation bursts sit) was set up with a speed other than the sonar file's nominal one; then state that speed, the same for sender and receiver. The measured speed goes in `chain.sound_speed` or the navigation datagrams, not here |
 | `source.buffer_bytes` → `stream_buffer_bytes` | derived from the data rate; read the granted size at start-up and raise `net.core.rmem_max` if a warning says it is smaller |
 | `source.queue_mb` → `stream_queue_mb` | 1024 MB of waiting blocks: seconds of stream = this / (channels × rate × bytes). A chain slower than real time fills it; the summary then counts dropped blocks |
 | `source.timeout` → `idle_seconds` | longer than the longest silence of the stream (a board that sends only inside its receive window is silent for the rest of the ping interval); 0 for a service that must never end by itself |
