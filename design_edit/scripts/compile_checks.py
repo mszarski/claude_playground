@@ -67,6 +67,14 @@ WRITER = "deepseek-ai/DeepSeek-V3.2"
 
 
 def compile_one(row: dict) -> dict:
+    try:
+        return _compile_one(row)
+    except Exception as e:  # noqa: BLE001  one malformed LLM reply must not kill a 5k-item run
+        print(f"compile error: {type(e).__name__}: {e}", flush=True)
+        return {**row, "checks": "", "allowed": ""}
+
+
+def _compile_one(row: dict) -> dict:
     patch = row["completion"][0]["content"] if isinstance(row["completion"], list) else row["completion"]
     feedback = ""
     for _ in range(2):

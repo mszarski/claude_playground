@@ -138,7 +138,7 @@ def _in_subtree(root: Node, anc_id: str, nid: str) -> bool:
 def keep_out(before: Node, after: Node, allowed: list[str]) -> tuple[float, list[str]]:
     """1.0 when nothing outside ``allowed`` changed; each outside change costs a third."""
     b, a = index_nodes(before), index_nodes(after)
-    allowed = set(allowed)
+    allowed = {x if isinstance(x, str) else str((x or {}).get("id", x)) for x in allowed}  # tolerate {"id": ...}
     bad = []
     for nid, (n, parent) in b.items():
         if nid in allowed:
