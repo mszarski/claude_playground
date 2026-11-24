@@ -5,8 +5,11 @@ libraries (ids C, I, D, T, R, S, M below, prefixed `cpp-`), the live chain in bo
 (`L`), the Python package (`P`), configuration keys against `CONFIGURATION.md` (`K`), the
 tools and programs (`tools-T`), and physical models against their sources (`R`). Every
 finding has file:line evidence; the ones marked **checked** were re-read against the code
-before this list was written. Nothing has been changed yet: each group needs the owner's
-decision (the owner's rule for this audit: no code change without asking).
+before this list was written. Nothing had been changed when the list was written: each group
+needed the owner's decision (the owner's rule for this audit: no code change without asking).
+Since then the owner approved every group and the fixes are merged (D-145, D-146; "Status after
+the fixes" below says what was done and what was not). The findings below are kept as found, so
+they describe the tree at `2c5bb8a`, not the present one.
 
 Duplicates found by more than one part are merged (the ids of each part are kept in
 brackets). Line numbers are at `2c5bb8a`.

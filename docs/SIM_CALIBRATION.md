@@ -50,10 +50,13 @@ surface 4 dB weaker and noise at 38 dB, with targets in it, six pings:
 
 | Quantity | Hidden | Found |
 | --- | --- | --- |
-| Bottom strength offset | +6.0 dB | +6.1 dB |
+| Bottom strength offset | +6.0 dB | +5.9 dB |
 | Surface strength offset | −4.0 dB | −4.0 dB |
-| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.0 dB |
-| Misfit of the fitted profile | — | 0.17 dB RMS |
+| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.6 dB |
+| Misfit of the fitted profile | — | 0.16 dB RMS |
+
+(As the test prints at the tree of D-181, CPU, 2026-11-24: `pytest tests/python/test_simcal.py -s`. This table
+read +6.1 dB, 38.0 dB and 0.17 dB RMS when first written; which change moved it was not traced.)
 
 With the same log multiplied by an unknown 37 dB, the difference between bottom and
 surface offsets is still found to within 1.5 dB. This is the method checking itself: the

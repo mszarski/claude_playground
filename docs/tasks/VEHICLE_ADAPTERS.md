@@ -102,7 +102,9 @@ Facts about these that an adapter must respect:
   `tools/sonar_live.py CONFIG --export-template template.h5`.
 - **Sensor Bridge** (`python/gpusonar/sources/hsb.py`, `tools/sonar_live_hsb.py`) carries
   the same `GSFB` blocks as fixed-size frames. Feeding Sensor Bridge's receiver from real
-  hardware is a separate issue (`sonar-0ra`); do not do it here.
+  hardware is not part of this task and no open issue covers it: `sonar-0ra`, now closed, was
+  the mode with the simulator behind Sensor Bridge's emulator (the loopback path, D-151), not
+  a real board. Do not do it here.
 
 Hardware facts already in config, all unconfirmed (`unconfirmed:` lists in the files):
 `configs/sonars/popoto_8.yaml` (102.4 kHz, 24 bits, 2.61 V full scale at the ADC, 43 dB

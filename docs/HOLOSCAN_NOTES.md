@@ -1,8 +1,12 @@
 # Holoscan acquisition notes: ultrasound reference + Sensor Bridge
 
 Source-reading notes for reusing NVIDIA's ultrasound acquisition path in the GPU sonar suite
-(FLS / SAS / flank array). Nothing here was built or run: the reading host is x86_64 with no GPU,
-no Holoscan SDK and a restricted network. Every claim cites `file:line` in one of the trees below.
+(FLS / SAS / flank array). Sections 1 to 6 and most of 7 and 8 are from reading the source only: the
+reading host is x86_64 with no GPU, no Holoscan SDK and a restricted network, and every claim there cites
+`file:line` in one of the trees below. Built and run since, and marked where they stand: the socket
+receiver on loopback in rented GPU containers (Sec. 7.5, measured) and the reference's native module
+built without the SDK and driven with its `FakeHardware` (Sec. 9.1). Nothing here has run on Sensor
+Bridge hardware or on the ultrasound reference's rig.
 
 ## 0. Sources and conventions
 

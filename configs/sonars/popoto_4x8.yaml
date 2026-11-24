@@ -22,7 +22,8 @@ receive:
   # summed into the first hydrophone input of each. It is a short chirp above the
   # acoustic band, sent at two known instants of the receive window, so it gives each
   # board's clock offset (from one burst) and drift (from the spacing of the two) without
-  # using up a hydrophone. See STATUS.md, open question 5.
+  # using up a hydrophone. See STATUS.md, "Open questions for the project owner", question 3 (the converter:
+  # whether the boards can be synchronised).
   reference:
     mode: sync_chirp
     f_start: 38.0e+3

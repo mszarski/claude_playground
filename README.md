@@ -5,6 +5,10 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
+**Continuing the work?** Start at [`docs/handoff/README.md`](docs/handoff/README.md): the
+entry point of the handoff set (state, risks, hardware, software, tests, outputs, and a map
+of every other document).
+
 **State of the project.** Everything here is software, simulation and analysis: no sonar
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
 Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU and
@@ -12,8 +16,10 @@ the CUDA backend has been run and benchmarked on rented GPUs. The long-range des
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full CPU suite and a GPU
-job have not yet been rerun on the present tree. [`docs/STATUS.md`](docs/STATUS.md) says
+(the depth sigma now says so). The full GPU suite ran on the tree of decision D-181
+(2078 passed, 93 skipped, none failed, on an NVIDIA L4); the whole CPU suite has not been
+rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
+entries). [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;
 [`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
 
@@ -183,7 +189,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 75 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 76 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |

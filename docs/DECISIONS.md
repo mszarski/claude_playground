@@ -2342,6 +2342,7 @@ through both routes. An options file written before this with `window=none` or a
 boolean the reader did not know now stops the program instead of running a different chain.
 The program's own default backend stays `host`; whether it should become `auto`, as the
 Python chain's is, is an open owner question (STATUS).
+*Later (pointer added 2026-11-24): superseded by D-147, the program starts from `auto`.*
 
 ### D-146 Simulation inputs that were assumed silently are now stated or refused (API audit)
 
