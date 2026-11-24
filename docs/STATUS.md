@@ -36,9 +36,9 @@ The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for on
   wrong"): by the 0.11 to 0.15 dB the detector's thresholds moved (D-134),
   `docs/design/popoto_depth_planner.json` and `.png`, `docs/figures/fjord_depth_plan.md`
   and the depth sections of `DESIGN.md` that read the planner file (item 37).
-  `docs/figures/gallery.json` and its figures, stale at the last status, were regenerated
-  by a full-size CUDA run on an NVIDIA L4 (commit `4530dc4`) and `SCENARIOS.md` quotes
-  the new numbers; what got worse in it is item 16.
+  `docs/figures/gallery.json` and its figures are from a full-size CUDA run on an NVIDIA L4
+  at `4a80876` with D-178's leading-edge range (job 6b054768c97b8ed4fcd78015), and
+  `SCENARIOS.md`'s gallery tables quote it; what got worse in earlier regenerations is item 16.
   `docs/figures/fjord_rehearsal.md` and `docs/design/popoto_12km.json`, stale at the last
   status, were regenerated with the shipped deployment files (commits `506e959` and
   `1efa598`; items 5 and 18).
@@ -349,6 +349,14 @@ Grouped; within a group the most consequential first.
       (true 6.0; 4.71 and 5.31 on two other seeds), from a stray detection taken at the
       track's birth on ping 1; `classify.outlier_alpha: 0.01` (opt-in, D-159) gives 6.13 /
       5.74 / 6.09 m/s.
+    - **The gallery regenerated with D-178** (leading-edge range in the flank and Popoto
+      scenes; L4, job 6b054768c97b8ed4fcd78015, tree `4a80876`): only `flank_patrol` and the
+      Popoto scenes moved, each to the gallery seed of D-178's ten-seed run. Worse:
+      `popoto_env_gravel_30m` ship 33.7 m beyond -> 10.0 m short of its hull;
+      `popoto_12km` 4.7 -> 9.8 m from the ship's centre (2.1 m from the hull in both).
+      Better: `popoto_far_mover` 34.2 -> 0.9 m (tracks 4 -> 3), `winter_sand_200m` speed
+      5.24 -> 6.06 m/s (true 6.0), `flank_patrol` submarine 25.8 -> 1.0 m, now classified
+      (1 mover, 2 static, 2 uncertain). Every other scene equal to GPU rounding.
 
 ### The 12 km design point
 
@@ -892,7 +900,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   - In the cluttered scene 65 tracks are classified 1 mover (the boat), 48 static, 3 line,
     13 uncertain; under the rough sea 56 tracks are 8 mover (one is the boat), 1 static,
     5 line, 42 uncertain (the gallery regenerated with D-164, D-171, D-172, L4 job
-    6b05051fc97b8ed4fcd725d4; at first 64 tracks: 5 mover, 31 static, 16 line, 12 uncertain,
+    6b05051fc97b8ed4fcd725d4, unchanged by the D-178 regeneration; at first 64 tracks: 5 mover, 31 static, 16 line, 12 uncertain,
     and 8 mover, 39 uncertain). A buoy, a rock and a steady wave face still look alike.
   - In deep water the ship's echo arrives about 310 m late in range, consistent with a
     bottom path; ranges are not corrected for propagation.
@@ -949,8 +957,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   surfaces have fewer scatterers than resolution cells except in `sas_minsas_speckle`; no
   specular echoes in any gallery scene (the shapes that glint are used only in the three
   new target scenarios).
-- In `flank_patrol` the −3 dB small vehicle is not detected, and multipath splits the
-  wreck into several tracks (5 confirmed tracks for 2 objects).
+- In `flank_patrol` the −3 dB small vehicle is not detected, and 5 confirmed tracks are
+  made for 2 objects: 1 mover (the submarine, 1.0 m from its outline since D-178's
+  leading-edge range, was 25.8 m), 2 static (one the wreck, 3.5 m off), 2 uncertain.
 
 ## Motion estimation limits so far
 
@@ -965,7 +974,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   delay window held no seabed. The window energy gate (`min_window_energy_db`, -20 dB) is now the
   default and both SAS scenes' seabed covers the receive window: full-size `minefield_sas` sway
   0.022 lambda, heave 0.044; `wreck_sas` sway 0.053, heave 0.044 (host, D-171; the regenerated
-  gallery on an L4, job 6b05051fc97b8ed4fcd725d4, gives the same to the digits shown). The
+  gallery on an L4, job 6b05051fc97b8ed4fcd725d4, and its D-178 regeneration, job
+  6b054768c97b8ed4fcd78015, give the same to the digits shown). The
   `minefield_sas` echo-synthesis row of the GPU benchmark (14,870 scatterers) is of the old draw
   and has not been rerun.
 - Delay estimation has a C++ port (host and CUDA, `MotionOptions.delay_backend`), bit-close to
