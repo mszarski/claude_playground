@@ -362,6 +362,37 @@ def set_range_estimate(hits, estimate=None):
     return hits
 
 
+# The LFM range-Doppler coupling correction (sonar-fyj; the live chain's `range_doppler`, opt-in) in the tracking scenes
+# (run_flank, run_popoto_far, run_fls_transit): "off" (the default: not corrected, the gallery as before), "ownship"
+# (each detection's range + f0 T / B x the ownship's closing speed along its line of sight, detect.lfm_range_doppler_factor
+# and the record's transmit and receive velocities) or "full" (that, and each classified track's position moved along
+# the line of sight from the ownship by the factor x its own closing speed, classify.shift_for_target_doppler, through
+# classify_and_score's `range_doppler`). `--range-doppler`.
+RANGE_DOPPLERS = detect.RANGE_DOPPLER
+RANGE_DOPPLER = "off"
+
+
+def doppler_range(record, rng, look):
+    """Range `rng` (m) of a detection seen along the world unit vector `look` (x, y) with the ownship's part of the LFM
+    coupling taken out when RANGE_DOPPLER is not "off" (as the live chain does: range + factor x (v_tx + v_rx) / 2 . look);
+    unchanged otherwise."""
+    if RANGE_DOPPLER not in RANGE_DOPPLERS:
+        raise ValueError(f"RANGE_DOPPLER = {RANGE_DOPPLER!r}: one of {RANGE_DOPPLERS}")
+    if RANGE_DOPPLER == "off":
+        return float(rng)
+    g = record.geometry
+    v = 0.5 * (np.asarray(g.tx_pose.velocity, dtype=float) + np.asarray(g.rx_pose.velocity, dtype=float))
+    return float(rng) + detect.lfm_range_doppler_factor(record.transmit.waveform) * float(v[:2] @ np.asarray(look, dtype=float)[:2])
+
+
+def target_doppler(record, origin_yx):
+    """classify_and_score's `range_doppler` for a run (the target's part, "full" only): {"factor": s, "origin": the
+    ownship in the tracker's (y, x) order}; None otherwise."""
+    if RANGE_DOPPLER != "full":
+        return None
+    return {"factor": detect.lfm_range_doppler_factor(record.transmit.waveform), "origin": [float(v) for v in origin_yx]}
+
+
 def run_flank(name, cfg, backend, quick):
     result = run_scenario(cfg, backend=backend)
     interval = float(cfg["pings"]["interval"])
@@ -384,6 +415,7 @@ def run_flank(name, cfg, backend, quick):
                               guard=15, train=60)
         hits = set_range_estimate([h for h in hits if h.snr_db > 12.0])
         for h in hits:
+            h.range = doppler_range(rec, h.range, (np.sin(h.bearing), np.cos(h.bearing)))     # sonar-fyj, opt-in
             h.time = i * interval + echo_delay(rec, h.range)      # where the echo shows the target (D-156)
         counts.append(len(hits))
         tracks = tracker.update(i * interval, hits)
@@ -403,7 +435,8 @@ def run_flank(name, cfg, backend, quick):
     # (flank_tracks_yx: this tracker's state is (x, y)); the classify options are classify_tracks' defaults, the gate
     # this scene's own 60 m, the array (the origin) the sonar for the outlier test (sonar-a98). Added; the targets
     # scored below are unchanged.
-    _, metrics["classification"] = classify_and_score(flank_tracks_yx(tracks), truth, t_last, 60.0, origin=(0.0, 0.0))
+    _, metrics["classification"] = classify_and_score(flank_tracks_yx(tracks), truth, t_last, 60.0, origin=(0.0, 0.0),
+                                                      range_doppler=target_doppler(result.records[-1], (0.0, 0.0)))
     for label, obj in truth.items():
         pos, vel = obj
 
@@ -749,8 +782,13 @@ def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
     the kind given to each true object's track (object_track) and how many tracks called
     movers are not on an object that moves (count_false_movers, against each moving object's outline at the last
-    ping: D-157). The classes' positions are taken at the last ping (`t_last`), as the live report gives them (D-156)."""
+    ping: D-157). The classes' positions are taken at the last ping (`t_last`), as the live report gives them (D-156).
+    `range_doppler` ({"factor", "origin"}, target_doppler; None: off): the target's part of the LFM coupling correction
+    (sonar-fyj), applied to the classes' positions before they are scored."""
+    rd = kw.pop("range_doppler", None)
     classes = classify.classify_tracks(tracks, time=t_last, **kw)
+    if rd is not None:
+        classify.shift_for_target_doppler(classes, float(rd["factor"]), tuple(rd["origin"]))
     by_id = {c.id: c for c in classes}
     out = {"counts": classify.summary(classes), "targets": {}}
     moving_ends = []
@@ -852,6 +890,8 @@ def run_fls_transit(name, cfg, backend, quick):
         hits = detect.cluster(detect.cfar(power, pfa=1e-7, guard=guard, train=train), power, r_cells, bearings,
                               guard=guard, train=train, merge=merge)
         hits = [h for h in hits if h.snr_db > 13.0 and h.cells >= 2]
+        for h in hits:
+            h.range = doppler_range(rec, h.range, (np.cos(h.bearing), np.sin(h.bearing)))     # sonar-fyj, opt-in
         per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db,
                           echo_delay(rec, h.range)) for h in hits])
         if first is None:
@@ -865,9 +905,11 @@ def run_fls_transit(name, cfg, backend, quick):
     # A mover's fitted speed must be five times its uncertainty; positions must fit a line to 2.5 m.
     # A track counts in a mover's row only if its mean SNR is at most 6 dB below the mover's (D-154, owner's
     # ruling after the ten-seed evaluation: no target lost, the cluttered boat a mover on every seed).
+    own_last = result.records[-1].rx_positions().mean(axis=0)
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
-        linear={"length": 40.0, "width": 2.0}, detections={"row_snr_db": 6.0})
+        linear={"length": 40.0, "width": 2.0}, detections={"row_snr_db": 6.0},
+        range_doppler=target_doppler(result.records[-1], (own_last[1], own_last[0])))
     metrics["targets"] = score_tracks(tracks, truth, t_last, 15.0, kinds={c.id: c.kind for c in classes})
     for label, m in metrics["targets"].items():
         if m.get("tracked"):
@@ -1110,6 +1152,8 @@ def run_popoto_far(name, cfg, backend, quick):
         elif POPOTO_BEARING != "centroid":
             raise ValueError(f"POPOTO_BEARING = {POPOTO_BEARING!r}: one of {POPOTO_BEARINGS}")
         hits = set_range_estimate([h for h in hits if h.snr_db > 9.0])
+        for h in hits:
+            h.range = doppler_range(rec, h.range, (np.sin(h.bearing), np.cos(h.bearing)))     # sonar-fyj, opt-in
         # Bearing is from broadside (+y) towards +x, the array's own axis; placed from where the array is when the echo
         # arrives (echo_position; sonar-960: from the array at transmit the ship's echoes lay 24 m behind it).
         v_rx, c = rec.geometry.rx_pose.velocity, rec.environment.sound_speed
@@ -1129,7 +1173,8 @@ def run_popoto_far(name, cfg, backend, quick):
     own_last = result.true_positions[-1]
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 200.0, min_speed=1.0, static_speed=1.0, max_fit_rms=60.0,
-        multipath={"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (own_last[1], own_last[0])})
+        multipath={"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (own_last[1], own_last[0])},
+        range_doppler=target_doppler(result.records[-1], (own_last[1], own_last[0])))
     metrics["targets"] = score_tracks(tracks, truth, t_last, 200.0, kinds={c.id: c.kind for c in classes})
     ranges, power = first
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8), constrained_layout=True)
@@ -1239,9 +1284,12 @@ def main():
     ap.add_argument("--no-animation", action="store_true", help="figures and numbers only")
     ap.add_argument("--range-estimate", choices=RANGE_ESTIMATES, default="first",
                     help="detection range in flank_patrol and the Popoto tracking scenes (RANGE_ESTIMATE; default %(default)s)")
+    ap.add_argument("--range-doppler", choices=RANGE_DOPPLERS, default="off",
+                    help="LFM range-Doppler coupling correction in the tracking scenes (RANGE_DOPPLER, sonar-fyj; default %(default)s)")
     args = ap.parse_args()
-    global RANGE_ESTIMATE
+    global RANGE_ESTIMATE, RANGE_DOPPLER
     RANGE_ESTIMATE = args.range_estimate
+    RANGE_DOPPLER = args.range_doppler
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
     out = output_dir(args.out, args.quick)
     out.mkdir(parents=True, exist_ok=True)
@@ -1273,6 +1321,8 @@ def main():
         metrics["quick"] = bool(args.quick)
         if RUNNERS[name] in (run_flank, run_popoto_far):
             metrics["range_estimate"] = args.range_estimate                # a gallery.json without it: centroid
+        if args.range_doppler != "off" and RUNNERS[name] in (run_flank, run_popoto_far, run_fls_transit):
+            metrics["range_doppler"] = args.range_doppler                  # opt-in: said only when on
         fig.savefig(out / f"{name}.png", dpi=110)
         plt.close(fig)
         summary[name] = metrics

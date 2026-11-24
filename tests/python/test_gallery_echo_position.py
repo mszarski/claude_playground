@@ -100,3 +100,25 @@ def test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival(galle
         gallery.set_range_estimate(hits, "peak")
     assert gallery.RANGE_ESTIMATE == "first"                        # the default (was "centroid")
     assert gallery.set_range_estimate(detect.cluster(flags, power, ranges, bearings, guard=50, train=150))[0].range == pytest.approx(6000.0)
+
+
+def test_doppler_range_takes_out_the_ownships_lfm_coupling_only_when_asked(gallery, monkeypatch):
+    """sonar-fyj, the gallery's opt-in RANGE_DOPPLER: off (the default) leaves a range as it is; ownship and full add
+    f0 T / B times the ownship's closing speed along the look direction (popoto_long_range's 4-6 kHz, 1 s up-chirp: 2.5 s;
+    1.5 m/s along x seen 30 degrees off +y: 0.75 m/s, 1.875 m); target_doppler is given only with full."""
+    from types import SimpleNamespace
+    from gpusonar import core
+    w = core.Waveform()
+    w.type, w.f_start, w.f_stop, w.duration = core.WaveformType.Lfm, 4.0e3, 6.0e3, 1.0
+    pose = SimpleNamespace(velocity=(1.5, 0.0, 0.0))
+    rec = SimpleNamespace(transmit=SimpleNamespace(waveform=w), geometry=SimpleNamespace(tx_pose=pose, rx_pose=pose))
+    look = (np.sin(np.radians(30.0)), np.cos(np.radians(30.0)))
+    assert gallery.RANGE_DOPPLER == "off"
+    assert gallery.doppler_range(rec, 3000.0, look) == 3000.0 and gallery.target_doppler(rec, (0.0, 0.0)) is None
+    for mode in ("ownship", "full"):
+        monkeypatch.setattr(gallery, "RANGE_DOPPLER", mode)
+        assert gallery.doppler_range(rec, 3000.0, look) == pytest.approx(3001.875)
+    assert gallery.target_doppler(rec, (1.0, 2.0)) == {"factor": pytest.approx(2.5), "origin": [1.0, 2.0]}
+    monkeypatch.setattr(gallery, "RANGE_DOPPLER", "on")
+    with pytest.raises(ValueError, match="RANGE_DOPPLER"):
+        gallery.doppler_range(rec, 3000.0, look)

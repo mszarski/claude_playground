@@ -225,6 +225,9 @@ def evaluate_capture(cap: dict) -> dict:
     for key, rule in grid():
         kw = {k: v for k, v in cap["classify_kw"].items() if k != "detections"}
         classes = classify.classify_tracks(tracks, **kw, detections=rule, time=cap["t_last"])
+        if cap.get("target_doppler"):           # sonar-fyj, a capture made with --range-doppler full
+            td = cap["target_doppler"]
+            classify.shift_for_target_doppler(classes, float(td["factor"]), tuple(td["origin"]))
         s = score(classes, tracks, truth, cap["t_last"], cap["gate"], origin)
         s["counts"] = classify.summary(classes)
         if base is None:
@@ -344,7 +347,8 @@ PROFILE_HALF = 8          # bearing rows recorded either side of a hit's flagged
 
 def cluster_profiles(detections, power, ranges, bearings, hits, half: int = PROFILE_HALF) -> list[dict]:
     """What `--profiles` records of one call of detect.cluster (no merge: groups of touching flagged cells, in the
-    order cluster reports them): per hit its range, bearing, snr_db and cells as cluster gave them, the bearing rows
+    order cluster reports them): per hit its range (the centroid), first_range (the leading edge), bearing, snr_db and
+    cells as cluster gave them, the bearing rows
     it flagged, and two bearing profiles of the map `power` [bearing, range cell] in dB from row `lo` on: `sum`, the
     power summed over the hit's range cells at each bearing (flagged or not), and `peak`, the column of its strongest
     flagged cell. The rows run from `half` below its first flagged row to `half` above its last, clipped to the map.
@@ -362,22 +366,27 @@ def cluster_profiles(detections, power, ranges, bearings, hits, half: int = PROF
         lo, hi = max(int(ib.min()) - half, 0), min(int(ib.max()) + half, power.shape[0] - 1)
         cols = np.unique(ir)
         db_ = lambda v: [round(float(x), 3) for x in 10.0 * np.log10(np.maximum(v, 1e-300))]
-        out.append({"range": float(h.range), "bearing": float(h.bearing), "snr_db": float(h.snr_db), "cells": int(h.cells),
+        out.append({"range": float(h.range), "first_range": float(h.first_range),
+                    "bearing": float(h.bearing), "snr_db": float(h.snr_db), "cells": int(h.cells),
                     "rows": sorted(int(b) for b in np.unique(ib)), "lo": lo, "peak_row": int(ib[j]),
                     "sum": db_(power[lo:hi + 1][:, cols].sum(axis=1)), "peak": db_(power[lo:hi + 1, ir[j]])})
     return out
 
 
 def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bool = False,
-            popoto_bearing: str = "centroid", range_estimate: str = "first") -> dict:
+            popoto_bearing: str = "centroid", range_estimate: str = "first", range_doppler: str = "off") -> dict:
     """Run one gallery scene with its seed moved by `seed_offset`; return its confirmed tracks (with real cell
     counts), truth, last ping time, gate and classify options, as the gallery's classify_and_score receives them.
     `profiles` (sonar-4s2 study): also per ping the ping's time, every hit of detect.cluster with its bearing profiles
-    (`cluster_profiles`) and, for the gallery's `echo_position`, the array's origin, velocity and sound speed.
+    (`cluster_profiles`; a call with `merge`, the FLS scenes: each hit's range, first_range, bearing, snr_db and cells
+    only) and, for the gallery's `echo_position`, the array's origin, velocity and sound speed, with the transmit pose's
+    velocity and the pulse's lfm_range_doppler_factor (`lfm_factor`) from the first echo_delay of the ping (sonar-fyj).
     `popoto_bearing`: the gallery's POPOTO_BEARING for this run (its Popoto runner's bearing estimate; opt-in).
     `range_estimate`: gallery.RANGE_ESTIMATE for the run (the detection range of flank_patrol and the Popoto scenes:
     "first", the leading edge, the default since sonar-ca3 / sonar-a98, or "centroid", as before). A capture saved
-    without one was made with the centroid (CAPTURE_RANGE_ESTIMATE_BEFORE)."""
+    without one was made with the centroid (CAPTURE_RANGE_ESTIMATE_BEFORE).
+    `range_doppler`: gallery.RANGE_DOPPLER for the run (sonar-fyj; "off", the default, as before). With "full" the
+    target's part of the correction is recorded as `target_doppler` and applied by evaluate_capture."""
     sys.path.insert(0, str(ROOT / "tools"))
     import gallery
     import matplotlib.pyplot as plt
@@ -394,14 +403,31 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bo
             hits = detect.cluster(*a, **k)
             calls.append(hits)
             if profiles:
-                if k.get("merge") is not None or len(a) > 6:
-                    raise RuntimeError(f"{name}: --profiles records cluster without merge only")
                 b = np.asarray(a[3], dtype=float)
-                pings.append({"bearings": [float(b[0]), float(b[1] - b[0]), len(b)],
-                              "hits": cluster_profiles(a[0], a[1], a[2], b, hits), "echo": None})
+                if k.get("merge") is not None or len(a) > 6:
+                    # Merged groups are not the flagged cells' connected groups: their hits without bearing profiles.
+                    rec_hits = [{"range": float(h.range), "first_range": float(h.first_range), "bearing": float(h.bearing),
+                                 "snr_db": float(h.snr_db), "cells": int(h.cells)} for h in hits]
+                else:
+                    rec_hits = cluster_profiles(a[0], a[1], a[2], b, hits)
+                pings.append({"bearings": [float(b[0]), float(b[1] - b[0]), len(b)], "hits": rec_hits, "echo": None})
             return hits
 
-    orig_echo = gallery.echo_position
+    orig_echo, orig_delay = gallery.echo_position, gallery.echo_delay
+
+    def echo_delay(record, rng):
+        # Every tracking runner times its detections by it: the ping's array (at transmit), velocities and pulse, for an
+        # offline replay of what follows the detector (the range-Doppler correction, sonar-fyj, among others).
+        if profiles and pings:
+            e = pings[-1]["echo"]
+            if e is None:
+                e = pings[-1]["echo"] = {"origin": [float(v) for v in record.rx_positions().mean(axis=0)[:2]],
+                                         "velocity": [float(v) for v in np.asarray(record.geometry.rx_pose.velocity, dtype=float)[:2]],
+                                         "c": float(record.environment.sound_speed)}
+            if "lfm_factor" not in e:
+                e["velocity_tx"] = [float(v) for v in np.asarray(record.geometry.tx_pose.velocity, dtype=float)[:2]]
+                e["lfm_factor"] = float(detect.lfm_range_doppler_factor(record.transmit.waveform))
+        return orig_delay(record, rng)
 
     def echo_position(origin, velocity, rng, bearing, c):
         if profiles and pings and pings[-1]["echo"] is None:
@@ -436,17 +462,19 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bo
     orig_score = gallery.classify_and_score
 
     def classify_and_score(tracks, truth, t_last, gate, **kw):
-        got.update(tracks=tracks, truth=truth, t_last=float(t_last), gate=float(gate), kw=kw)
+        got.update(tracks=tracks, truth=truth, t_last=float(t_last), gate=float(gate),
+                   kw={k: v for k, v in kw.items() if k != "range_doppler"}, target_doppler=kw.get("range_doppler"))
         return orig_score(tracks, truth, t_last, gate, **kw)
 
     if popoto_bearing not in gallery.POPOTO_BEARINGS:
         raise ValueError(f"popoto_bearing {popoto_bearing!r}: one of {gallery.POPOTO_BEARINGS}")
     saved = (gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position, gallery.POPOTO_BEARING,
-             gallery.RANGE_ESTIMATE)
+             gallery.RANGE_ESTIMATE, gallery.RANGE_DOPPLER, gallery.echo_delay)
     gallery.POPOTO_BEARING = popoto_bearing
     gallery.detect, gallery.world_tracks, gallery.classify_and_score = DetectProxy(), world_tracks, classify_and_score
-    gallery.echo_position = echo_position
+    gallery.echo_position, gallery.echo_delay = echo_position, echo_delay
     gallery.RANGE_ESTIMATE = range_estimate
+    gallery.RANGE_DOPPLER = range_doppler
     try:
         cfg = gallery.load_scenario_config(name)
         own_seed = int(cfg.get("seed", 0))
@@ -460,12 +488,13 @@ def capture(name: str, seed_offset: int, backend: str, quick: bool, profiles: bo
         seconds = time.perf_counter() - t0
     finally:
         (gallery.detect, gallery.world_tracks, gallery.classify_and_score, gallery.echo_position, gallery.POPOTO_BEARING,
-         gallery.RANGE_ESTIMATE) = saved
+         gallery.RANGE_ESTIMATE, gallery.RANGE_DOPPLER, gallery.echo_delay) = saved
     if not got:
         raise RuntimeError(f"{name}: the gallery runner did not classify")
     return {"scene": name, "scene_seed": own_seed, "seed": own_seed + int(seed_offset), "seed_offset": int(seed_offset),
             "backend": backend, "quick": bool(quick), "seconds": round(seconds, 1), "popoto_bearing": popoto_bearing,
             "range_estimate": range_estimate,
+            **({"range_doppler": range_doppler, "target_doppler": _jsonable(got.get("target_doppler"))} if range_doppler != "off" else {}),
             "tracks": [track_to_json(t) for t in got["tracks"]], "truth": truth_to_json(got["truth"]),
             # The grid sets `detections` itself (its first cell is off), so the gallery's own rules (D-154) are
             # kept apart and not passed on.
@@ -509,6 +538,9 @@ def main(argv=None):
     ap.add_argument("--range-estimate", choices=("centroid", "first"), default="first",
                     help="detection range of flank_patrol and the Popoto scenes (gallery.RANGE_ESTIMATE; default "
                          "%(default)s); a capture already in --captures made with another is refused")
+    ap.add_argument("--range-doppler", choices=("off", "ownship", "full"), default="off",
+                    help="LFM range-Doppler coupling correction in the tracking scenes (gallery.RANGE_DOPPLER, sonar-fyj; "
+                         "default %(default)s); a capture already in --captures made with another is refused")
     ap.add_argument("--json", default=None, help="write the result JSON here")
     ap.add_argument("--table", default=None, help="write the readable table (Markdown) here")
     ap.add_argument("--profiles", action="store_true", help="also record each hit's bearing profiles and each ping's "
@@ -539,9 +571,13 @@ def main(argv=None):
                     if have != args.range_estimate:
                         raise SystemExit(f"{path} was captured with range estimate {have!r}, not {args.range_estimate!r}: "
                                          "use another --captures directory or --recapture")
+                    rd = json.loads(path.read_text()).get("range_doppler", "off")
+                    if rd != args.range_doppler:
+                        raise SystemExit(f"{path} was captured with range_doppler {rd!r}, not {args.range_doppler!r}: "
+                                         "use another --captures directory or --recapture")
                     continue
                 cap = capture(name, k * args.seed_step, backend, args.quick, args.profiles, args.popoto_bearing,
-                              args.range_estimate)
+                              args.range_estimate, args.range_doppler)
                 cap["commit"] = commit
                 path.write_text(json.dumps(cap))
                 print(f"[{name} seed {cap['seed']}] {len(cap['tracks'])} tracks, {cap['seconds']} s", flush=True)
@@ -558,6 +594,7 @@ def main(argv=None):
                                                            "backend": cap["backend"], "quick": cap["quick"],
                                                            "commit": cap.get("commit"), "gate_m": cap["gate"],
                                                            "range_estimate": capture_range_estimate(cap),
+                                                           "range_doppler": cap.get("range_doppler", "off"),
                                                            "classify_kw": cap["classify_kw"],
                                                            "gallery_classification": cap["gallery_classification"]}
     if not per_capture:

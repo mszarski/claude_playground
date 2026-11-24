@@ -284,6 +284,7 @@ def test_cluster_profiles_record_each_hits_bearing_profiles():
         assert p["peak_row"] == ib[j]
         np.testing.assert_allclose(p["peak"], 10 * np.log10(power[p["lo"]:p["lo"] + len(p["peak"]), ir[j]]), atol=1e-3)
         assert p["bearing"] == h.bearing and p["cells"] == h.cells
+        assert p["range"] == h.range and p["first_range"] == h.first_range and p["first_range"] < p["range"]
     assert prof[0]["peak_row"] == 12 and prof[1]["peak_row"] == 30
 
 
@@ -339,3 +340,25 @@ def test_a_capture_without_a_recorded_range_estimate_is_the_centroid(tmp_path):
     (tmp_path / "fls_120k_transit_k0.json").write_text(json.dumps(cap))       # an old capture: no range_estimate
     with pytest.raises(SystemExit, match="'centroid', not 'first'"):
         cre.main(["--scenes", "fls_120k_transit", "--seeds", "1", "--captures", str(tmp_path), "--backend", "host"])
+
+
+def test_a_capture_with_the_targets_doppler_part_is_scored_with_it(tmp_path):
+    """sonar-fyj: a capture made with --range-doppler full carries `target_doppler` ({factor, origin}); evaluate_capture
+    moves each class along the line of sight from the origin by factor x its closing speed before scoring, as the
+    gallery's classify_and_score did. The boat (4 m/s along +x, seen from 100 m behind it on its course) opens at 4 m/s,
+    which an up-chirp reads farther: with a factor of 2.5 s its report moves 10 m nearer the ownship (its truth was
+    under it, so the error grows by 10 m); the static anchored boat does not move. A directory of
+    captures made without it is refused for a run with it."""
+    cap = _capture()
+    base = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]
+    cap["target_doppler"] = {"factor": 2.5, "origin": [0.0, 0.0]}        # tracker order (y, x): the ownship at x = 0
+    cap["range_doppler"] = "full"
+    got = cre.evaluate_capture(cap)["cells=off,row=off"]["targets"]
+    assert got["boat"]["report_error_m"] == pytest.approx(base["boat"]["report_error_m"] + 10.0, abs=0.05)
+    assert got["anchored"]["report_error_m"] == pytest.approx(base["anchored"]["report_error_m"], abs=0.05)
+    old = _capture()
+    old["range_estimate"] = "first"
+    (tmp_path / "fls_120k_transit_k0.json").write_text(json.dumps(old))
+    with pytest.raises(SystemExit, match="range_doppler 'off', not 'full'"):
+        cre.main(["--scenes", "fls_120k_transit", "--seeds", "1", "--captures", str(tmp_path), "--backend", "host",
+                  "--range-doppler", "full"])
