@@ -743,3 +743,27 @@ def test_frames_from_before_the_join_or_deep_in_a_hole_are_not_restarts(numbered
     s = rx.stats()
     assert rx.assembler.restarts == 0 and got == [0, 1, 2, 3, 4] and s["dropped_pings"] == 0
     assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == len(o)
+
+
+def test_the_receiver_queue_defaults_to_four_seconds_of_the_stream():
+    """D-187 (owner's): the receiver operator's queue is 4 s of the stream whatever its rate, not a fixed 256 frames
+    (1.6 s of flank_32, 1.0 s of a Popoto build); `receive --queue` still gives a frame count."""
+    import pathlib
+    import sys
+    assert hsb.QUEUE_SECONDS == 4.0
+    assert hsb.queue_frames_for(64000.0, 400) == 640
+    assert hsb.queue_frames_for(102400.0, 400) == 1024
+    assert hsb.queue_frames_for(102400.0, 200) == 2048
+    assert hsb.queue_frames_for(64000.0, 300) == 854                 # rounded up: never less than the seconds asked
+    for bad in ((0.0, 400), (64000.0, 0)):
+        with pytest.raises(ValueError):
+            hsb.queue_frames_for(*bad)
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools"))
+    try:
+        import sonar_live_hsb
+    finally:
+        sys.path.pop(0)
+    assert sonar_live_hsb.parse(["receive"]).queue is None            # None: run_receiver takes the 4 s
+    assert sonar_live_hsb.parse(["receive", "--queue", "256"]).queue == 256
+    with pytest.raises(SystemExit):
+        sonar_live_hsb.parse(["receive", "--queue", "0"])

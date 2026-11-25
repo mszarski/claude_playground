@@ -1136,6 +1136,79 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
                      f"delay {m['worst_ms']:.1f} ms (flank_32's bound 5 ms)")
 
 
+def popoto_loss_location(tmp_path, tag, rows, frame=FRAME, width=4):
+    """sonar-bep: where in a ping's cycle a Popoto-rate loopback loses frames, from the sender's and the receiver's
+    per-frame logs and the chain's run times. A frame's `phase_s` is its place in the stream after the ping's
+    transmit (the window is `window_s`). For every frame number missing from the arrival log: the phase, whether the
+    board sent it while the chain ran on a ping (and how long into that run), and the sender's lateness, gap and send
+    time over the frames around it. Over the whole run, per second of phase: frames missing, and the worst sender
+    lateness, sender gap, send-call time and receive delay."""
+    records, _ = popoto_trial(rows)
+    n = stream_numbers(records, frame)
+    period = 1.0 / n["frames_per_s"]
+    interval = (records[1].transmit.time_ns - records[0].transmit.time_ns) * 1e-9
+    r0 = records[0]
+    window = [float(r0.samples.start_time), float(r0.samples.start_time) + r0.samples.array.shape[0] / n["sample_rate"]]
+    send_log = json.loads((tmp_path / f"{tag}_send.json").read_text())
+    send = {row[0]: row for row in send_log["rows"]}
+    log = json.loads((tmp_path / f"{tag}_arrivals.json").read_text())
+    arrived = {row[0]: row for row in log["rows"]}
+    chain = log["chain_wall_ns"]
+    first, last = min(arrived), max(arrived)
+    missing = [k for k in range(first, last + 1) if k not in arrived]
+    phase = lambda k: (k * period - LEAD) % interval                  # noqa: E731
+    bins = {}
+    for k in range(first, last + 1):
+        b = bins.setdefault(int(phase(k)), {"frames": 0, "missing": 0, "late_ms": 0.0, "gap_ms": 0.0, "send_ms": 0.0, "delay_ms": 0.0})
+        b["frames"] += 1
+        b["missing"] += k not in arrived
+        if k in send:
+            b["late_ms"], b["gap_ms"] = max(b["late_ms"], send[k][2]), max(b["gap_ms"], send[k][3])
+            b["send_ms"] = max(b["send_ms"], send[k][4])
+            if k in arrived:
+                b["delay_ms"] = max(b["delay_ms"], round((arrived[k][1] - send[k][1]) * 1e-6, 3))
+    detail = []
+    for k in missing[:24]:
+        t = send[k][1] if k in send else None
+        into = [(i, round((t - a) * 1e-6, 1)) for i, (a, b) in enumerate(chain) if t is not None and a <= t <= b]
+        since = [round((t - b) * 1e-6, 1) for a, b in chain if t is not None and t > b]
+        around = range(k - width, k + width + 1)
+        detail.append({"frame": k, "phase_s": round(phase(k), 4), "chain_run_and_ms_into_it": into[0] if into else None,
+                       "ms_after_last_chain_run": since[-1] if since and not into else None,
+                       "late_ms": [send[j][2] if j in send else None for j in around],
+                       "gap_ms": [send[j][3] if j in send else None for j in around],
+                       "send_ms": [send[j][4] if j in send else None for j in around],
+                       "delay_ms": [round((arrived[j][1] - send[j][1]) * 1e-6, 2) if j in arrived and j in send else None for j in around]})
+    starts = [round(((a - send[first + 1][1]) * 1e-9 + (first + 1) * period - LEAD) % interval, 3) for a, _ in chain] if first + 1 in send else []
+    return {"period_ms": 1e3 * period, "interval_s": interval, "window_s": window, "frames": last - first + 1,
+            "missing": len(missing), "missing_phase_s": [round(phase(k), 3) for k in missing[:64]],
+            "chain_start_phase_s": starts, "chain_s": [round((b - a) * 1e-9, 3) for a, b in chain],
+            "by_second_of_phase": {str(s): bins[s] for s in sorted(bins)}, "detail": detail}
+
+
+def test_the_loss_location_places_missing_frames_in_the_pings_cycle(tmp_path):
+    """Without Sensor Bridge: from made-up logs of a one-row run in which frames 300 and 301 never arrived and the
+    board sent them 0.2 s into the chain's run on ping 0, the study's reading says so."""
+    records, _ = popoto_trial(1)
+    period = 1.0 / stream_numbers(records)["frames_per_s"]
+    t0 = 1_700_000_000_000_000_000
+    wall = lambda k: t0 + int(round(k * period * 1e9))                # noqa: E731
+    rows = [[k, wall(k), 0.01, 1e3 * period, 0.3] for k in range(1, 1000)]
+    rows[299][2:] = [9.0, 12.9, 0.4]                                   # frame 300: 9 ms late
+    (tmp_path / "t_send.json").write_text(json.dumps({"rows": rows}))
+    got = [[k, wall(k) + 300_000, 28, 38528] for k in range(0, 1000) if k not in (300, 301)]
+    chain = [[wall(300) - 200_000_000, wall(300) + 100_000_000]]
+    (tmp_path / "t_arrivals.json").write_text(json.dumps({"rows": got, "chain_wall_ns": chain}))
+    w = popoto_loss_location(tmp_path, "t", 1)
+    assert w["missing"] == 2 and [d["frame"] for d in w["detail"]] == [300, 301]
+    assert w["detail"][0]["phase_s"] == pytest.approx((300 * period - LEAD) % w["interval_s"], abs=1e-4)
+    assert w["detail"][0]["chain_run_and_ms_into_it"] == [0, 200.0] or w["detail"][0]["chain_run_and_ms_into_it"] == (0, 200.0)
+    assert w["detail"][0]["late_ms"][4] == 9.0 and w["detail"][0]["delay_ms"][3] == pytest.approx(0.3)
+    assert sum(b["missing"] for b in w["by_second_of_phase"].values()) == 2
+    assert sum(b["frames"] for b in w["by_second_of_phase"].values()) == 1000
+    assert w["chain_s"] == [0.3] and w["interval_s"] == pytest.approx(3.0)
+
+
 @pytest.mark.skipif(os.environ.get("GPUSONAR_HSB_STUDY") != "1", reason="a measurement, run with GPUSONAR_HSB_STUDY=1")
 def test_popoto_rate_loopback_study(tmp_path):
     """sonar-x8v: Popoto-rate loopbacks repeated, one line per run (POPOTO_STUDY {...}). Measures; asserts nothing
@@ -1171,6 +1244,11 @@ def test_popoto_rate_loopback_study(tmp_path):
                                                     check=False, omp=omp, serve_args=catch)
                     m.update(run=k, config=cfg_text)
                     print("POPOTO_STUDY " + json.dumps(m), flush=True)
+                    try:
+                        where = popoto_loss_location(tmp_path, tag, rows, int(frame))
+                        print("POPOTO_LOSS " + json.dumps(dict(where, run=k, config=cfg_text, rows=rows, engine=engine)), flush=True)
+                    except (OSError, ValueError, KeyError, IndexError) as exc:
+                        print(f"POPOTO_LOSS failed {type(exc).__name__}: {exc}", flush=True)
                     for f in tmp_path.glob(f"{tag}*.h5"):
                         f.unlink()                                     # the disk: recordings are not needed here
 

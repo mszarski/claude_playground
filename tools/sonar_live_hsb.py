@@ -83,7 +83,9 @@ def parse(argv=None):
                         "such as `serve --scenario` still simulating its pings, needs more")
     r.add_argument("--report", help="JSON lines file, one report per ping")
     r.add_argument("--recording", help="container file of the raw pings")
-    r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
+    r.add_argument("--queue", type=positive_int, metavar="FRAMES",
+                   help="frames the receiver holds while the chain is busy (default: 4 s of the stream, e.g. 640 frames of "
+                        "400 samples at 64 kHz, 1024 at 102.4 kHz); it drops the oldest beyond that")
     r.add_argument("--quiet", action="store_true")
     r.add_argument("--receiver-core", type=int, help="core for Sensor Bridge's receiver thread (its default is core 2)")
     r.add_argument("--chain-omp-threads", type=positive_int, metavar="N",

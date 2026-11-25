@@ -30,6 +30,7 @@ else) - and, as Holoscan metadata, among others `frame_number` (counted by the s
 from __future__ import annotations
 
 import ctypes
+import math
 import time
 from typing import Iterable, Iterator
 
@@ -411,6 +412,18 @@ def raw_sockets_permitted() -> bool:
 CATCH_UP = ("burst", "spread")
 
 
+QUEUE_SECONDS = 4.0             # of stream the receiver operator holds while the chain works on a ping (D-187; owner's)
+
+
+def queue_frames_for(sample_rate: float, frame_samples: int, seconds: float = QUEUE_SECONDS) -> int:
+    """Frames of `frame_samples` samples that hold `seconds` of a stream at `sample_rate`: the receiver operator's
+    queue (it drops the oldest frames beyond it). 640 for flank_32's 160 frames a second, 1024 for a Popoto build's
+    256 (400-sample frames at 102.4 kHz); before D-187 a fixed 256 frames, 1.6 s and 1.0 s."""
+    if not (sample_rate > 0 and frame_samples > 0 and seconds > 0):
+        raise ValueError("queue_frames_for: sample_rate, frame_samples and seconds must be positive")
+    return int(math.ceil(seconds * sample_rate / frame_samples))
+
+
 LOG_FRAMES = 100_000            # per-frame logs keep the newest this many frames (10.4 min at 160 frames/s)
 
 
@@ -476,12 +489,12 @@ class SendTiming:
         return int(t * 1e9) + self.wall_offset_ns
 
     def dump(self, path: str) -> None:
-        """The kept frames' send times as JSON: frame, system-clock ns at the send's start, ms late, ms since the previous send."""
+        """The kept frames' send times as JSON: frame, system-clock ns at the send's start, ms late, ms since the previous send, ms the send call took."""
         import json
-        rows = [[k, self.wall_ns(self.t0 + k * self.period + late), round(1e3 * late, 3), round(1e3 * gap, 3)]
-                for k, late, gap, _ in self.records]
+        rows = [[k, self.wall_ns(self.t0 + k * self.period + late), round(1e3 * late, 3), round(1e3 * gap, 3), round(1e3 * took, 3)]
+                for k, late, gap, took in self.records]
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"period_ms": 1e3 * self.period, "columns": ["frame", "wall_ns", "late_ms", "gap_ms"], "rows": rows}, f)
+            json.dump({"period_ms": 1e3 * self.period, "columns": ["frame", "wall_ns", "late_ms", "gap_ms", "send_ms"], "rows": rows}, f)
 
     def summary(self) -> dict:
         self.stop()
@@ -952,20 +965,25 @@ if Operator is not None:
     class HsbLiveApp(Application):
         """LinuxReceiverOp -> HsbFramesToPingsOp -> LiveChainOp.
 
-        The receiver keeps up to `queue_frames` frames while the chain works on a ping (it
+        The receiver keeps up to `queue_frames` frames (default: QUEUE_SECONDS of stream) while the chain works on a ping (it
         drops the oldest beyond that, which `FrameReceiver` counts as lost frames). Ends
         after `n_pings` pings are accounted for (reported, or dropped by the receiver), or when
         no frame has arrived for `idle_timeout` seconds (`ReceiveStop`; `stop_reason` says which).
         """
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
-                     n_pings: int | None = None, queue_frames: int = 256, idle_timeout: float | None = 15.0,
+                     n_pings: int | None = None, queue_frames: int | None = None, idle_timeout: float | None = 15.0,
                      on_report=None, receiver_affinity=None, socket_buffer: int | None = None, log_arrivals: bool = False,
                      chain_omp_threads: int | None = None):
             self.chain, self.receiver = chain, receiver
             self._omp_threads = chain_omp_threads
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
+            if queue_frames is None:        # QUEUE_SECONDS of this stream
+                queue_frames = queue_frames_for(receiver.assembler.sample_rate, receiver.frame_samples)
+            if int(queue_frames) < 1:
+                raise ValueError("queue_frames must be at least 1")
             self._n, self._queue, self._idle = n_pings, int(queue_frames), idle_timeout
+            self.queue_frames = self._queue
             self._on_report, self._affinity = on_report, receiver_affinity
             self.socket_watch = DataSocketWatch(socket_buffer)
             from collections import deque
@@ -1062,6 +1080,7 @@ def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = 
     receiver.finish(keep=False)  # the end of the stream: what is still awaited is counted, waiting pings in pings_discarded_at_stop
     stats = receiver.stats()
     stats["reports"] = len(app.chain_op.reports)
+    stats["queue_frames"] = getattr(app, "queue_frames", None)   # frames the receiver operator held (default: QUEUE_SECONDS)
     stats["stopped"] = app.stop_reason or "ended"        # pings, idle, or the application ended by itself
     if shutdown_error:
         stats["shutdown_error"] = shutdown_error
