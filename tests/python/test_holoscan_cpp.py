@@ -75,3 +75,45 @@ def test_holoscan_takes_blocks_over_udp_with_navigation(pings, tmp_path):
     assert "0 without navigation" in err
     assert reports[-1]["ownship_xyz"][0] == pytest.approx(1.5 * (N - 1) * INTERVAL, abs=0.6)
     assert {t["kind"] for t in reports[-1]["tracks"]} >= {"mover", "static"}
+
+
+def test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort(tmp_path):
+    """sonar-ogg: the chain operator, downstream of UdpSourceOp, throws on its first ping. The application must end
+    with the reason and an error status. Before, UdpSourceOp joined its receiver and navigation threads in stop() only;
+    destroyed with them still running (the application unwinding from the operator's exception), std::thread's
+    destructor called std::terminate: "terminate called without an active exception", SIGABRT, the reason lost - the
+    fault D-183 fixed in build/bin/sonar_live. The throw is D-183's: the one-row trial's stream (water at 1496.8 m/s)
+    received with the window laid out at the nominal 1500 m/s, so the reference bursts are not where sync looks."""
+    import shlex
+    import sys
+    from gpusonar.config import load_scenario_config, load_yaml
+    from gpusonar.sim import run_scenario
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import sonar_live
+    finally:
+        sys.path.pop(0)
+    sc = load_scenario_config("popoto_testauv_trial_1row")
+    records = run_scenario(sc).records
+    cfg = load_yaml(str(ROOT / "configs" / "deploy" / "popoto_testauv_1row.yaml"))
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    cfg["source"] = dict(cfg["source"], sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), timeout=15.0, host="127.0.0.1",
+                         port=port)
+    cfg.pop("nav")                                                     # the navigation thread runs too: give it a port
+    cfg["output"] = {"report": str(tmp_path / "rep.jsonl")}
+    cmd = shlex.split(sonar_live.export_template(cfg, str(tmp_path / "template.h5"), str(HOLO)))
+    proc = subprocess.Popen([*cmd, "--nav-port", str(port + 1), "--pings", str(len(records))], stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(4.0)                                                # the runtime takes a moment to start
+        FlankBoardEmulator(records, float(sc["pings"]["interval"])).send(port, pace=0.25).join(timeout=120.0)
+        _, err = proc.communicate(timeout=180.0)
+    finally:
+        proc.kill()
+    print(err[-3000:])
+    assert "terminate called" not in err, err.strip()[-600:]
+    assert proc.returncode == 1, f"ended with {proc.returncode} (negative: a signal): {err.strip()[-600:]}"
+    assert "reference burst not found" in err                          # the reason reaches the operator's log or main's
+    assert not (tmp_path / "rep.jsonl").exists() or not lines(tmp_path / "rep.jsonl")
