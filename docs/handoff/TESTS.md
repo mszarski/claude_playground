@@ -55,7 +55,7 @@ Run one pytest process at a time. The program tests need `build/bin/sonar_live` 
 | the Holoscan SDK (Python wheel) | `test_holoscan.py`, parts of `test_hsb.py` | skip |
 | `-DSONAR_BUILD_HOLOSCAN=ON` | `test_holoscan_cpp.py` (needs `build/bin/sonar_live_holoscan`) | skip |
 | Sensor Bridge built (`tools/build_hsb.sh`) and a CUDA device | the loopback tests of `test_hsb.py` | skip |
-| `GPUSONAR_HSB_STUDY=1` | one measurement in `test_hsb.py` that is not a test | skip, always, in the suite |
+| `GPUSONAR_HSB_STUDY=1` | two measurements in `test_hsb.py` that are not tests (`test_loopback_loss_study`; `test_popoto_rate_loopback_study`, with `GPUSONAR_HSB_STUDY_RUNS`, `_ROWS`, `_ENGINES`, `_CONFIGS`, `_BUDGET_S`) | skip, always, in the suite |
 | `GPUSONAR_PICMUS_DIR`, `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN`, `GPUSONAR_SMARTOCEAN_CACHE` | tests on public data sets, never committed (`tools/fetch_picmus.py`, `tools/fetch_channels.py`) | skip |
 | `GPUSONAR_NVUS_PYTHON`, `GPUSONAR_NVUS_DIR` | the NVIDIA ultrasound reference's module and checkout (`tools/build_nvus_reference.sh`) | skip |
 | `arlpy` installed | independent checks of medium and noise formulas | skip |
@@ -135,7 +135,7 @@ that skips without a git checkout).
 | PICMUS data not in the job | 6 | | `test_picmus.py` |
 | NVIDIA ultrasound reference not built or not checked out | 2 | `GPUSONAR_NVUS=1` is not part of the suite command | `test_nvus_scanner.py`, `test_nvus_adapter.py` |
 | Apply to a host-only build | 3 | "built with CUDA" (2), "checks the refusal without a device" (1) | `test_conditioning.py`, `test_sim_cpp.py`, `test_motion_delays.py` |
-| A measurement, not a test | 1 | needs `GPUSONAR_HSB_STUDY=1` | `test_hsb.py` |
+| A measurement, not a test | 1 | needs `GPUSONAR_HSB_STUDY=1` | `test_hsb.py` (a second, `test_popoto_rate_loopback_study`, was added with D-186: one more skip from then on) |
 
 The rows sum to 93. The earlier log's rows were the same with 64 in the first group. Read the
 `-rs` lines at the end of the next job's log to confirm the list.
@@ -219,9 +219,9 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_taps.py` | 5 | taps can be inspected, exported and fed back in | | fast | |
 | `test_flank_stream.py` | 5 | the capture stream from an emulated board through UDP back to records | skips if the loopback dropped samples | minutes | |
 | `test_hsb_receive.py` | 24 | what the receiver and assembler count when frames go missing, repeat or arrive out of order, with no network (D-161, D-177) | | fast | **parity** |
-| `test_hsb.py` | 21 | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173) | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
+| `test_hsb.py` | 24 (35 collected; 26 before D-186) | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173); a Popoto build's trial at 32, 64 and 96 channels and 102.4 kHz, framed and through the loopback in both engines (D-186) | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
 | `test_holoscan.py` | 5 | stages as Holoscan operators, fed by the simulator and by replay | Holoscan SDK | minutes | |
-| `test_holoscan_cpp.py` | 2 | the C++ Holoscan application against the standalone program | built with `-DSONAR_BUILD_HOLOSCAN=ON` | minutes | **parity** |
+| `test_holoscan_cpp.py` | 3 | the C++ Holoscan application against the standalone program; an operator's error ends it with status 1 and the reason, not an abort (D-186) | built with `-DSONAR_BUILD_HOLOSCAN=ON` | minutes | **parity** |
 | `test_nvus_adapter.py`, `test_nvus_scanner.py` | 7, 6 | the ultrasound reference's frames to records; its runtime as a source | the reference's checkout and native module | fast | |
 | `test_picmus.py`, `test_fetch_picmus.py` | 9, 5 | the PICMUS benchmark through the kernel; the fetch tool without the network | PICMUS data for the first | minutes, fast | |
 
@@ -339,6 +339,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-178 | the gallery's range is the leading edge | `test_gallery_echo_position.py::test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival`; `test_classify_rules_eval.py::test_a_capture_without_a_recorded_range_estimate_is_the_centroid`, `::test_flank_patrol_tracks_are_scored_in_the_order_the_scoring_reads`; `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
 | D-180 | YAML numbers; `sonar_live_hsb`'s navigation | `test_yaml_numbers.py`; `test_sediment_fit.py::test_the_row_writes_numbers_plain_yaml_reads_as_numbers`; `test_deployment_defaults.py::test_the_rehearsal_sync_reference_reaches_the_cpp_receivers`; `test_hsb.py::test_receive_builds_its_navigation_as_sonar_live_does` |
 | D-181 | the opt-in LFM range-Doppler correction | `test_live_cpp.py::test_range_doppler_is_off_by_default_and_said_only_when_on`, `::test_range_doppler_ownship_adds_the_factor_times_the_ownships_closing_speed_to_each_range`, `::test_range_doppler_full_moves_each_track_by_its_own_closing_speed`, `::test_range_doppler_full_gives_the_same_report_in_both_engines`, `::test_range_doppler_refuses_an_unknown_word`; `test_lfm_range_doppler.py::test_ownship_under_way_couples_like_a_closing_target_and_the_correction_removes_it`; `Options.RangeDopplerIsOffUnlessGivenAndRefusesOtherWords` and the `RangeDoppler` suite; `test_gallery_echo_position.py::test_doppler_range_takes_out_the_ownships_lfm_coupling_only_when_asked`; `test_classify_rules_eval.py::test_a_capture_with_the_targets_doppler_part_is_scored_with_it` |
+| D-186 (placeholder number; sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 
 The option round trip that every chain key must pass, whatever decision added it:
 `test_live_cpp.py::test_every_chain_option_round_trips_through_binding_and_text`.
@@ -355,6 +356,7 @@ The option round trip that every chain key must pass, whatever decision added it
 | A GPU job on `a10g-small` hangs at 0 % CPU during the Ceres build | 16 GB of RAM: out of memory | use `l4x1`, or `a10g-large` |
 | Sensor Bridge loopback loses frames or shows receive delays of tens of milliseconds on `a10g-small` | a 3-CPU cgroup quota the CPU affinity does not show; with too many OpenMP threads the receiver waits behind throttling (D-173) | the tests take half of min(affinity, quota); on other hosts pass `--chain-omp-threads` |
 | A job never starts | L4 capacity: the job sits in `SCHEDULING`; `hf jobs wait` may return early | poll `hf jobs inspect <id> --format json`; fall back to `a10g-large` |
+| `test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` ends XFAIL with "measured limit (D-186)" | at a Popoto build's rate the receiver's socket buffer (capped by the container's `rmem_max`) overflows; every lost datagram is counted as refused by it | not a code failure: the measured limit of the container. A FAIL of that test (an assertion before the xfail) is real: an uncounted loss, a malformed frame, the chain behind real time, or reports that differ |
 | A test skips with "the loopback dropped N samples" | a UDP loopback on a loaded machine lost datagrams (`test_flank_stream.py`, `test_live.py`, `test_holoscan.py`, `test_live_cpp.py`, `test_tonal.py`, `test_holoscan_cpp.py`) | a skip by design; rerun alone |
 | Many failures naming `GPUSONAR_BELLHOP` or `pyram` | `GPUSONAR_REQUIRE_ORACLES=1` is set and the oracle is missing | build the oracles (`tools/build_oracles.sh`) or unset the variable |
 | `test_tools_help.py` skips entirely | not a git checkout (the GPU job's tarball) | run it on a checkout |

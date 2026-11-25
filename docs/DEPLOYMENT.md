@@ -941,6 +941,53 @@ was possible in the containers used. Two settings work without privilege, and we
   about 40 ms of the stream, against the 212,992 bytes Sensor Bridge leaves.
   This adds margin but does not remove the stall.
 
+**At a Popoto build's channel count and rate the loopback loses frames (D-186, issue sonar-x8v).**
+Everything above is `flank_32`: 32 channels at 64 kHz, 49 Mbit/s. The Popoto builds stream 32, 64
+or 96 channels at 102.4 kHz: 78.6, 157.3 and 235.9 Mbit/s of samples
+(`docs/handoff/hardware_builds.json`), 256 frames a second of 38,528, 76,928 or 115,328 bytes with
+400-sample frames. On loopback the 212,992-byte socket buffer holds 92 datagrams of 2,304 bytes of
+kernel accounting: about 3.3 frames (12.8 ms) at 32 channels, 1.7 (6.5 ms) at 64 and 1.1 (4.4 ms) at
+96, and one 96-channel frame arrives as a burst of 82 datagrams. Measured with each build's shortest
+trial and deployment file, real time, the chain's OpenMP at half the usable CPUs, the receiver's queue
+at 4 s of stream (`--queue 1024`; the default 256 frames is 1.0 s at 256 frames a second), on
+Hugging Face **a10g-large** jobs (12-CPU quota, 48 CPUs listed; no L4 was available), 210 runs
+(jobs `6b063a21d0582cfbbefd60a3`, `6b0641ce1460ffe1d5e98956`; `RESULTS.md`, "Sensor Bridge at Popoto
+rates"):
+
+- C++ engine, default buffer: frames lost or damaged in 12 of 20 runs at 32 channels, 20 of 20 at 64
+  and 20 of 20 at 96 (at most 8, 57 and 66 frames a run; median 1, 11 and 11.5); a ping dropped in 2, 1
+  and 3 runs. The Python engine lost alike (6, 10 and 10 of 10), and at 96 channels it is not real time on this host: its receiver
+  queue overflowed as well (493 to 721 frames a run).
+- Not cured by: the socket buffer doubled to 425,984 bytes (`--socket-buffer 212992`, as much as the
+  container's `rmem_max` allows: 5, 10 and 10 of 10 runs lost frames), 200-sample frames with that
+  buffer (10 of 10 at every row count, and more frames lost), the chain's OpenMP on 2 threads instead
+  of 6 (8, 10 and 10 of 10, with either buffer).
+- Every datagram lost was refused by the receiver's full socket buffer: the socket's kernel drop count
+  equals `RcvbufErrors` in all 210 runs. The chain keeps up (C++: 0.13, 1.4 and 2.2 s a ping after the
+  first, against the trials' 3 s interval). The worst receive delay over the frames that arrived
+  was 1.2 to 99 ms (3.6 to 7.9 ms in the 21 runs that lost nothing, all at 32 channels) against 0.8
+  to 3.5 ms for `flank_32` on the same machines, and the emulated board itself ran 10 to 34 ms late in
+  every run (its Python sender at 256 frames a second, then catching up at twice the rate).
+- The reports of the pings that did come through equal the direct chain's on the same pings (largest
+  difference 0.0), and every ping is accounted for (reported, or dropped and counted).
+- The loss is regular: about 3 frames a ping at 64 and 96 channels (9 to 13 frames in 16 of 20 C++
+  runs; exactly 12 in each of the last job's three 96-channel runs). Something the receiving side does
+  once a ping is the lead; it was not located.
+
+`test_hsb.py::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports`
+asserts what holds (losses only as counted socket refusals, the chain in real time, equal reports on
+the pings that came through) and ends as an expected failure with the numbers when frames were lost
+or the worst receive delay reached `flank_32`'s 5 ms bound.
+**What a host needs before a Popoto build goes through Sensor Bridge's socket receiver:** Sensor
+Bridge's own setup (`net.core.rmem_max = 31326208`, then `--socket-buffer` of that order: 31 MB, which the
+kernel doubles, is about 1.3 s of the 96-channel stream in loopback accounting; and an isolated core for the receiver with `isolcpus` and
+`--receiver-core` or `HOLOLINK_AFFINITY`), the chain's OpenMP below the core count, and the board
+pacing its own stream (the emulator's Python sender fell behind here). None of these could be set in
+the containers used, so whether they are enough at 236 Mbit/s is not measured. A RoCE receiver
+(ConnectX hosts) takes the socket out of the path; it is untested. A full 12.7 km window (17 s a
+ping, 1.7 M samples a channel) does not change the stream's rate; it adds chain time and memory per
+ping and so the receiver queue's length in seconds that `--queue` must cover.
+
 On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock emulator
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network
 cards.

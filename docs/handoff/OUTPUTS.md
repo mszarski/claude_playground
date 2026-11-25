@@ -570,6 +570,9 @@ socket buffer (212,992 bytes, which the container cannot raise) is about 20 ms o
 and a halved buffer still loses frames in some configurations. An idle stop after the
 board has gone ends in a Sensor Bridge shutdown error (`shutdown_error`, `os._exit`). The
 pace table is from an `a10g-small`, not the L4 reference (issue `sonar-e2u`).
+**At a Popoto build's rate (32, 64, 96 channels at 102.4 kHz) the loopback loses frames in
+nearly every run** in the containers, whatever buffer, frame size or thread count was tried (D-186;
+measured on `a10g-large`, no L4 available).
 **`RESULTS.md`'s "Sensor Bridge loopback" section is stale**: it still says the loopback
 test has not passed in a job and lists pace 0.5 as the setting. The numbers below are in
 the `DECISIONS.md` entries only.
@@ -582,6 +585,10 @@ the `DECISIONS.md` entries only.
 | `receive` when the stream ends early | always stops: quarter buffer 12 of 12 runs ended in 16 s; idle stops 4 of 4 at 53 s with statistics | D-163 |
 | Pace 1.0 and 0.5, default and halved buffer, `a10g-small`, thread cap from the CPU quota | 0 of 80 runs lost frames, worst delay at most 2.4 ms; without the cap 2 to 20 of 20 per configuration lost frames, worst 169 ms; cost +40-57 % chain time with one thread there | D-173 |
 | Chain time per ping in the loopback, L4, host backend | about 450 ms for the first ping, 85 to 95 ms after | `RESULTS.md`, "Sensor Bridge loopback" (older run) |
+| Popoto rates, real time, C++ engine, default buffer, `a10g-large`: runs with frames lost or damaged at 32 / 64 / 96 channels | 12 of 20 / 20 of 20 / 20 of 20; at most 8 / 57 / 66 frames a run; a ping dropped in 2 / 1 / 3 runs; every lost datagram refused by the full socket buffer | D-186, `RESULTS.md` "Sensor Bridge at Popoto rates" (jobs `6b063a21d0582cfbbefd60a3`, `6b0641ce1460ffe1d5e98956`) |
+| Popoto rates: doubled buffer (425,984 B), 200-sample frames, chain OpenMP on 2 threads | none lossless at 64 or 96 channels (10 of 10 runs lost frames in each); at 32 channels 5 to 10 of 10 | same |
+| Popoto rates: chain time per ping after the first, C++ / Python, CUDA backend, `a10g-large` | 0.13 / 0.17 s (32 ch), 1.40 / 1.69 s (64), 2.17 / 2.64 s (96), against the trials' 3 s interval; the Python engine at 96 channels falls behind the stream (receiver queue overflow) | same |
+| Popoto rates: reports of the pings that came through against the direct chain on the same pings | equal (largest difference 0.0) | the test, job `6b064e8e1460ffe1d5e9a072` |
 
 ### 2.6 Throughput per GPU
 

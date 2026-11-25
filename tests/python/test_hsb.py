@@ -978,10 +978,10 @@ def popoto_trial(rows):
     return [r.copy() for r in records], json.loads(json.dumps(cfg))
 
 
-def popoto_direct(records, cfg, engine, frame=FRAME, sequences=None):
+def popoto_direct(records, cfg, engine, frame=FRAME, sequences=None, recording=None):
     """The same pings framed and assembled here, without transport, straight through the deployment's chain; with
     `sequences`, only the pings of those sequence numbers (the ones a lossy loopback reported), in order. Returns
-    (reports, the first of those pings' samples)."""
+    (reports, the first of those pings' samples). With `recording`, the chain records them there as `receive` does."""
     from gpusonar.live import NavListener
     src = cfg["source"]
     assembled = hsb.records_from_frames(hsb.frames_from_records(records, frame, lead_seconds=LEAD), src["sonar"],
@@ -990,7 +990,7 @@ def popoto_direct(records, cfg, engine, frame=FRAME, sequences=None):
         assembled = [r for r in assembled if int(r.metadata.sequence) in set(sequences)]
     sent = assembled[0].samples.array.copy()                          # the chain conditions records in place
     nav = NavListener.from_config(cfg["nav"]) if cfg.get("nav") else None
-    with LiveChain(dict(cfg["chain"], engine=engine), nav=nav) as chain:
+    with LiveChain(dict(cfg["chain"], engine=engine), nav=nav, recording=recording) as chain:
         return chain.run(assembled), sent
 
 
@@ -1118,12 +1118,17 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
     assert max(m["chain_s"][1:]) < m["interval_s"], m["chain_s"]
     got = lines(report)
     assert len(got) == stats["reports"] and got, "no ping came through"
-    direct, sent = popoto_direct(records, cfg, engine, sequences=[r["sequence"] for r in got])
+    direct, _ = popoto_direct(records, cfg, engine, sequences=[r["sequence"] for r in got], recording=str(tmp_path / "direct.h5"))
     assert len(direct) == len(got)
     assert all(r["sync"]["ok"] for r in got if "sync" in r)
     assert_same_reports(got, direct)
+    # What `receive` recorded is what the same chain records of the same pings without transport. (Not the assembled
+    # samples themselves: with a Popoto deployment the recording differs from them by float32 rounding, 2e-9 to 7e-9 V
+    # measured, transport or not.)
     raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / f"popoto{rows}.h5")}))
-    assert len(raw) == len(got) and np.array_equal(raw[0].samples.array, sent)
+    ref = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "direct.h5")}))
+    assert len(raw) == len(ref) == len(got)
+    assert all(np.array_equal(a.samples.array, b.samples.array) for a, b in zip(raw, ref))
     if not lossless or m["worst_ms"] >= 5.0:
         pytest.xfail(f"measured limit (D-186): {rows * 32} channels at 102.4 kHz lost {stats['frames_lost']} frames "
                      f"({stats['frames_damaged']} damaged, {stats['socket']['drops']} datagrams refused by a "
