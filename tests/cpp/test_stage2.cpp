@@ -63,7 +63,91 @@ double burst_at(const Reference& ref, double t) {
   return w * w * std::cos(2.0 * kPi * (ref.f_start * t + 0.5 * k * t * t));
 }
 
+// The board resampler's arithmetic until sonar-drc, one channel row at a time (sync.cpp then; the reference for the
+// test below): every sample's sinc weights computed again for every row.
+void resample_row_by_row(float* x, std::int64_t n, double offset, double drift, double fs) {
+  constexpr int taps = 16, half = taps / 2;
+  std::vector<float> out(static_cast<std::size_t>(n), 0.0F);
+  for (std::int64_t m = 0; m < n; ++m) {
+    const double pos = (static_cast<double>(m) / fs - offset) * fs * (1.0 + drift);
+    const auto base = static_cast<std::int64_t>(std::floor(pos));
+    const double frac = pos - static_cast<double>(base);
+    double acc = 0.0;
+    for (int k = -half + 1; k <= half; ++k) {
+      const std::int64_t idx = base + k;
+      if (idx < 0 || idx >= n) continue;
+      const double d = static_cast<double>(k) - frac;
+      const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
+      acc += sinc * (0.5 + 0.5 * std::cos(kPi * d / half)) * static_cast<double>(x[idx]);
+    }
+    out[static_cast<std::size_t>(m)] = static_cast<float>(acc);
+  }
+  std::copy(out.begin(), out.end(), x);
+}
+
 }  // namespace
+
+TEST(Sync, BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit) {
+  // sonar-drc: synchronise() computes a board's sinc weights once a block of samples for all its rows, in groups of
+  // rows. Its samples must be the row-by-row resampler's, to the bit, with the clocks it estimated: three boards of 4,
+  // 11 (more than one group) and 1 inputs, a window that is not a whole number of blocks, a board 2.1 ms late (taps
+  // past the start) and one early (taps past the end), drifts both ways. Each board's first input carries the
+  // reference bursts as its clock sees them, every input noise and a tone.
+  const std::int64_t n = 3 * 4096 + 1237;
+  const std::vector<std::int64_t> counts = {4, 11, 1};
+  const std::vector<double> late = {0.0, 2.1e-3, -1.3e-3}, fast = {0.0, 35e-6, -20e-6};
+  Reference ref;
+  ref.lead = 5e-3;
+  ref.tail = 10e-3;
+  ref.search_time = 3e-3;
+  PingRecord r = raw_record(1, n);
+  r.samples.resize(16, n, SampleKind::RealPassband);
+  r.samples.sample_rate = kFs;
+  r.geometry.rx.resize(16);
+  r.metadata.boards.assign(3, Board{});
+  r.metadata.channel_board.clear();
+  r.metadata.channel_element.clear();
+  std::uint64_t state = 12345U;
+  auto noise = [&state] {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<double>(state >> 11) / 9007199254740992.0 - 0.5;
+  };
+  const double t_a = ref.lead, t_b = static_cast<double>(n) / kFs - ref.tail - ref.duration;
+  std::int64_t c = 0;
+  for (std::size_t b = 0; b < counts.size(); ++b) {
+    r.metadata.boards[b].reference_channel = static_cast<std::int32_t>(c);
+    for (std::int64_t k = 0; k < counts[b]; ++k, ++c) {
+      r.metadata.channel_board.push_back(static_cast<std::int32_t>(b));
+      r.metadata.channel_element.push_back(static_cast<std::int32_t>(c));
+      for (std::int64_t i = 0; i < n; ++i) {
+        const double since = late[b] + static_cast<double>(i) / (kFs * (1.0 + fast[b]));
+        double v = 1e-3 * std::cos(2.0 * kPi * (4700.0 + 37.0 * static_cast<double>(c)) * since) + 1e-4 * noise();
+        if (k == 0) v += 2e-3 * (burst_at(ref, since - t_a) + burst_at(ref, since - t_b));
+        r.samples.channel(c)[i] = static_cast<float>(v);
+      }
+    }
+  }
+  PingRecord got = r;
+  const SyncResult s = synchronise(got, ref);
+  ASSERT_EQ(s.offset.size(), 3U);
+  EXPECT_NEAR(s.offset[1], late[1], 1e-6);
+  EXPECT_NEAR(s.offset[2], late[2], 1e-6);
+  EXPECT_NEAR(s.drift_ppm[1], 35.0, 1.0);
+  EXPECT_NEAR(s.drift_ppm[2], -20.0, 1.0);
+  PingRecord want = r;
+  for (std::int64_t ch = 0; ch < 16; ++ch) {
+    const auto b = static_cast<std::size_t>(want.metadata.channel_board[static_cast<std::size_t>(ch)]);
+    if (s.offset[b] == 0.0 && s.drift_ppm[b] == 0.0) continue;
+    resample_row_by_row(want.samples.channel(ch), n, s.offset[b], s.drift_ppm[b] * 1e-6, kFs);
+  }
+  ASSERT_EQ(got.samples.data.size(), want.samples.data.size());
+  std::size_t moved = 0;
+  for (std::size_t i = 0; i < want.samples.data.size(); ++i) {
+    ASSERT_EQ(got.samples.data[i], want.samples.data[i]) << i;   // exact: the same float, not a near one
+    moved += want.samples.data[i] != r.samples.data[i] ? 1 : 0;
+  }
+  EXPECT_GT(moved, want.samples.data.size() / 2);   // the boards that run late or early were resampled
+}
 
 TEST(Decimate, PlanFollowsTheBandAndATonePassesWithItsPhase) {
   PingRecord r = raw_record(1, 40000);

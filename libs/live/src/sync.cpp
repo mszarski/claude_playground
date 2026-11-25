@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstddef>
 #include <stdexcept>
 
+#include "sonar/core/parallel.hpp"
 #include "sonar/dsp/fft.hpp"
 #include "sonar/live/derive.hpp"
 
@@ -152,26 +154,59 @@ void estimate(const PingRecord& record, const Reference& r, std::vector<double>&
   }
 }
 
-// Values of a real series at fractional sample positions (Hann-windowed sinc, 16 taps).
-void resample(float* x, std::int64_t n, double offset, double drift, double fs) {
+// Values of a board's real series (`rows`, each `n` samples) at fractional sample positions (Hann-windowed sinc,
+// 16 taps), in place. A board's rows share their positions, so the weights are computed once a block of samples for
+// all of them (sonar-drc: this stage, one row at a time with a sine and a cosine a tap, was most of the C++ engine's
+// time at 64 and 96 channels). Every sample is the one the row-by-row loop gave, to the bit: the same weight
+// (sinc x window, in double) times the same input, added in the same tap order (tests/cpp/test_stage2.cpp holds it).
+void resample_rows(const std::vector<float*>& rows, std::int64_t n, double offset, double drift, double fs) {
   constexpr int taps = 16, half = taps / 2;
-  std::vector<float> out(static_cast<std::size_t>(n), 0.0F);
-  for (std::int64_t m = 0; m < n; ++m) {
-    // Nominal sample m is wanted at time m / fs; this board holds that instant at index `pos`.
-    const double pos = (static_cast<double>(m) / fs - offset) * fs * (1.0 + drift);
-    const auto base = static_cast<std::int64_t>(std::floor(pos));
-    const double frac = pos - static_cast<double>(base);
-    double acc = 0.0;
-    for (int k = -half + 1; k <= half; ++k) {
-      const std::int64_t idx = base + k;
-      if (idx < 0 || idx >= n) continue;
-      const double d = static_cast<double>(k) - frac;
-      const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
-      acc += sinc * (0.5 + 0.5 * std::cos(kPi * d / half)) * static_cast<double>(x[idx]);
+  // Samples whose weights are held at once (32 KiB of them): small, so a window splits into enough blocks for
+  // parallel_for_host's chunks of 16 to reach every thread.
+  constexpr std::int64_t block = 256;
+  constexpr std::size_t group = 8;        // rows resampled together: at most group x n floats held besides the record
+  const std::int64_t n_blocks = (n + block - 1) / block;
+  for (std::size_t g = 0; g < rows.size(); g += group) {
+    const std::size_t n_rows = std::min(group, rows.size() - g);
+    std::vector<float> out(n_rows * static_cast<std::size_t>(n), 0.0F);
+    parallel_for_host(n_blocks, [&](std::int64_t j) {
+      const std::int64_t m0 = j * block, m1 = std::min(n, m0 + block);
+      std::vector<std::int64_t> base(static_cast<std::size_t>(m1 - m0));
+      std::vector<double> weight(static_cast<std::size_t>((m1 - m0) * taps));
+      for (std::int64_t m = m0; m < m1; ++m) {
+        // Nominal sample m is wanted at time m / fs; this board holds that instant at index `pos`.
+        const double pos = (static_cast<double>(m) / fs - offset) * fs * (1.0 + drift);
+        const auto b = static_cast<std::int64_t>(std::floor(pos));
+        const double frac = pos - static_cast<double>(b);
+        base[static_cast<std::size_t>(m - m0)] = b;
+        double* w = weight.data() + (m - m0) * taps;
+        for (int k = -half + 1; k <= half; ++k) {
+          const double d = static_cast<double>(k) - frac;
+          const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
+          w[k + half - 1] = sinc * (0.5 + 0.5 * std::cos(kPi * d / half));
+        }
+      }
+      for (std::size_t r = 0; r < n_rows; ++r) {
+        const float* x = rows[g + r];
+        float* o = out.data() + r * static_cast<std::size_t>(n);
+        for (std::int64_t m = m0; m < m1; ++m) {
+          const std::int64_t b = base[static_cast<std::size_t>(m - m0)];
+          const double* w = weight.data() + (m - m0) * taps;
+          double acc = 0.0;
+          for (int k = -half + 1; k <= half; ++k) {
+            const std::int64_t idx = b + k;
+            if (idx < 0 || idx >= n) continue;
+            acc += w[k + half - 1] * static_cast<double>(x[idx]);
+          }
+          o[m] = static_cast<float>(acc);
+        }
+      }
+    });
+    for (std::size_t r = 0; r < n_rows; ++r) {
+      std::copy(out.begin() + static_cast<std::ptrdiff_t>(r * static_cast<std::size_t>(n)),
+                out.begin() + static_cast<std::ptrdiff_t>((r + 1) * static_cast<std::size_t>(n)), rows[g + r]);
     }
-    out[static_cast<std::size_t>(m)] = static_cast<float>(acc);
   }
-  std::copy(out.begin(), out.end(), x);
 }
 
 }  // namespace
@@ -342,10 +377,13 @@ SyncResult synchronise(PingRecord& record, const Reference& reference) {
   Reference ref = reference;
   if (ref.min_quality > 0.0 && !(ref.clip_level > 0.0) && std::isfinite(record.metadata.adc_full_scale)) ref.clip_level = record.metadata.adc_full_scale;
   estimate(record, ref, out.offset, out.drift_ppm, out.quality, &out.flagged);
+  std::vector<std::vector<float*>> board_rows(out.offset.size());
   for (std::int64_t c = 0; c < s.n_channels; ++c) {
-    const auto b = static_cast<std::size_t>(record.metadata.channel_board[static_cast<std::size_t>(c)]);
+    board_rows[static_cast<std::size_t>(record.metadata.channel_board[static_cast<std::size_t>(c)])].push_back(s.channel(c));
+  }
+  for (std::size_t b = 0; b < board_rows.size(); ++b) {
     if (out.offset[b] == 0.0 && out.drift_ppm[b] == 0.0) continue;
-    resample(s.channel(c), s.n_samples, out.offset[b], out.drift_ppm[b] * 1e-6, s.sample_rate);
+    resample_rows(board_rows[b], s.n_samples, out.offset[b], out.drift_ppm[b] * 1e-6, s.sample_rate);
   }
   // Measure the bursts again: what is left is the check that the boards now line up.
   std::vector<double> off2, drift2, q2;
