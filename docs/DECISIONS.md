@@ -3385,3 +3385,43 @@ fix too.
   delay under 5 ms). The job does not print which or their numbers (the run has no `-rx`), so the
   only L4 result is this count. The suite's two further skips are the opt-in study and one not
   looked up.
+
+### D-187 The Popoto-rate loopback loses its frames at the start of the run, not once a ping; the receiver queue defaults to 4 s of stream (issues sonar-bep, sonar-us7; amends D-186)
+
+D-186 said the loss was "regular, about 3 frames a ping". **That was wrong**: it divided a run's
+loss by its four pings without locating it. Located now (`test_popoto_rate_loopback_study` prints
+every missing frame's number and place, `POPOTO_LOSS`):
+- In all 62 runs located (C++ engine, real time, default socket buffer; 34 on an L4, jobs
+  6b0666a6d0582cfbbefda036 and 6b066a811460ffe1d5e9c92a with the queue at 4 s or 12 s; 18 on
+  a10g-large, job 6b066a2cd0582cfbbefda4be) every frame that never arrived was among the first
+  after the receiver connected: frames 1 to 5 on the L4 at 4 s of queue, 1 to 13 on a10g-large.
+  Nothing was lost later, all four pings were reported in every run, and the worst receive delay
+  after the start was 1.2 to 3.4 ms. The sender was not late there (0.07 ms, 3.9 ms apart).
+- The start-up loss grows with the receiver queue (L4, 64 and 96 channels, 4 runs each): none
+  with 64 or 256 frames, 2 to 5 frames with 1024, 14 to 22 with 3072. Likely cause, read in Sensor
+  Bridge's source (the checkout here, `linux_receiver.cpp` `LinuxReceiver::run`; 2.7.0's was not
+  re-read) and consistent with those counts but not proven by a trace: the receiver thread
+  allocates the whole queue as pinned host memory and one CUDA event a frame before its first
+  `recv`, while its socket is already open with a buffer of 1.1 to 3.3 frames.
+- What stays wrong: the first 12 to 20 ms (L4) or 51 ms (a10g-large) of a stream are lost at these
+  rates with the 4 s queue. A board must start streaming at least 0.25 s before the first transmit
+  that matters; nothing enforces it. Sensor Bridge's receiver is not ours and is unchanged. Not
+  explained: the earlier a10g-large runs that lost 49 to 66 frames or a ping (D-186), and whether
+  a host with Sensor Bridge's socket setup loses the start too.
+
+The receiver queue's default (the owner's ruling, 2026-11-25): `sonar_live_hsb.py receive --queue`
+and `hsb.run_receiver(queue_frames=None)` hold `hsb.QUEUE_SECONDS` = 4 s of the stream, whatever its
+rate (640 frames of 400 samples at 64 kHz, 1024 at 102.4 kHz), in place of 256 frames (1.6 s of
+`flank_32`, 1.0 s at Popoto rates). `--queue N` still gives a count; the statistics name
+`queue_frames`. What it costs: pinned memory (65,536 B a frame for `flank_32`, 131,072 B at 64 and
+96 channels: 42 and 134 MB) and the start-up loss above, which the old 256 frames did not have.
+What it buys: with 256 frames an L4 lost 73 to 81 frames a run at 64 channels and 588 to 618 at
+96 to the queue itself (the chain takes 1.1 and 1.7 s a ping); they fell between these trials'
+short windows, so no ping was lost and D-186's tests, which set 4 s, did not see it.
+
+The test (`test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports`)
+now passes when every missing frame lies in the first 0.25 s of stream, every ping was reported and
+the worst delay after that start is under 5 ms; any other loss still ends as an expected failure
+with its numbers. The send log gained the send call's time per frame (`send_ms`).
+- Tests: `tests/python/test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`,
+  `tests/python/test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`. SUITE187

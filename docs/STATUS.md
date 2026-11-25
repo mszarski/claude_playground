@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-186); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-187); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -646,8 +646,15 @@ Grouped; within a group the most consequential first.
     located. The chain keeps up (C++ 0.13, 1.4, 2.2 s a ping against 3 s); the Python engine is not
     real time at 96 channels. The test records the loss as an expected failure (xfail) with its
     numbers. On an L4 the suite's five cases gave four expected failures and one pass (job
-    6b06553a1460ffe1d5e9aa10; which, and their numbers, are not in its log). Untested: an L4 for the study, a host with Sensor Bridge's socket setup, the RoCE
-    receiver.
+    6b06553a1460ffe1d5e9aa10; which, and their numbers, are not in its log). Untested: a host with Sensor Bridge's socket setup, the RoCE
+    receiver. **Located (D-187): the loss is at the start of the run, not once a ping** (the first 12
+    to 20 ms of stream on an L4, 51 ms on a10g-large, with the queue at 4 s; nothing later, every ping
+    reported, in 62 located runs). It grows with the receiver queue, whose default is now 4 s of
+    stream (owner's ruling; the old 256 frames lost 73 to 618 frames a run to the queue itself at 64
+    and 96 channels). A board must start streaming at least 0.25 s before the first transmit that
+    matters. The cause is read from Sensor Bridge's source, not proven by a trace. The test now
+    passes when the loss is only that start; the earlier runs that lost 49 to 66 frames or a ping
+    (a10g-large) are not explained.
 35. **Wire format**: the sample word length is configuration on both ends because the
     block header has no field for it; an over-long report is split into parts; the
     Holoscan report sink cannot split and refuses an over-long line (questions for the

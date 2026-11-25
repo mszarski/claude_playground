@@ -1052,6 +1052,20 @@ rates"):
 - The loss is regular: about 3 frames a ping at 64 and 96 channels (9 to 13 frames in 16 of 20 C++
   runs; exactly 12 in each of the last job's three 96-channel runs). Something the receiving side does
   once a ping is the lead; it was not located.
+- **Located since (D-187): the loss is at the start of the run, not once a ping.** In 62 located runs
+  (L4 and a10g-large) every frame that never arrived was among the first frames after the receiver
+  connected: frames 1 to 5 on an L4 (12 to 20 ms of stream), 1 to 13 on a10g-large (51 ms), with the
+  queue at 4 s; all four pings were reported in every run and after the start the worst receive delay
+  was 1.2 to 3.4 ms. The start-up loss grows with `--queue`: none with 64 or 256 frames, 2 to 5 frames
+  with 1024 (4 s), 14 to 22 with 3072 (12 s) on an L4. The likely cause (read in Sensor Bridge's
+  source, not proven by a trace): the receiver thread allocates its whole queue as pinned memory
+  (`cuMemHostAlloc`, 131,072 B a frame here: 134 MB for 1024 frames) before its first `recv`, while
+  the socket already takes datagrams into a buffer of 1.1 to 3.3 frames. **So start the board's stream
+  at least 0.25 s before the first transmit that matters** (the tests lead by 1 s). A queue shorter
+  than the chain's time on a ping loses far more, later and silently between windows: with the old
+  default of 256 frames (1.0 s) an L4 lost 73 to 81 frames a run at 64 channels and 588 to 618 at 96
+  (chain 1.1 and 1.7 s a ping); they fell outside these trials' short windows, so no ping was lost,
+  but a long window would have lost them. The default is now 4 s of stream.
 
 `test_hsb.py::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports`
 asserts what holds (losses only as counted socket refusals, the chain in real time, equal reports on

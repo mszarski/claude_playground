@@ -1696,6 +1696,28 @@ damaged at 1 / 2 / 3 rows (most frames lost in a run):
   exactly 12 frames, 985 datagrams (12 x 82). Something done once a ping on the receiving side is the
   lead; where the losses fall against the chain's runs (`loss_around`, as in the `flank_32` study) was
   not measured: no job was left.
+- **Measured since (D-187): "about 3 frames a ping" was wrong; the loss is at the start of the run.**
+  `GPUSONAR_HSB_STUDY=1`, `test_popoto_rate_loopback_study`, which now prints where each missing frame
+  lies (`POPOTO_LOSS`). C++ engine, real time, default socket buffer, 4 pings.
+
+  | Machine (job) | Queue | Rows | Runs | Frames lost a run | Frame numbers lost | Pings reported | Worst receive delay of a run, ms |
+  |---|---|---|---|---|---|---|---|
+  | L4 (`6b0666a6d0582cfbbefda036`) | 1024 (4 s) | 1 | 6 | 1, 0, 0, 0, 0, 0 | 3 | 4 of 4 | 0.9 to 8.8 |
+  | | | 2 | 6 | 5, 4, 3, 3, 3, 3 | 1 to 5 | 4 of 4 | 1.6 to 3.1 |
+  | | | 3 | 6 | 3 in each | 1 to 3 | 4 of 4 | 1.8 to 3.4 |
+  | a10g-large (`6b066a2cd0582cfbbefda4be`) | 1024 (4 s) | 1 | 6 | 1, 1, 1, 1, 1, 2 | 3 to 4 | 4 of 4 | 10.4 to 12.7 |
+  | | | 2 | 6 | 11 or 13 | 1 to 13 | 4 of 4 | 1.2 to 1.7 |
+  | | | 3 | 6 | 12 or 13 | 1 to 13 | 4 of 4 | 1.5 to 1.8 |
+  | L4 (`6b066a811460ffe1d5e9c92a`) | 64 (0.25 s) | 2, 3 | 4, 4 | 647 to 893; 1138 to 1160 | none of the first 64 missing is at the start | 4 of 4 | 1.3 to 2.0 |
+  | | 256 (1 s, the old default) | 2, 3 | 4, 4 | 73 to 81; 588 to 618 | none of the first 64 missing is at the start | 4 of 4 | 1.3 to 1.8 |
+  | | 1024 (4 s) | 2, 3 | 4, 4 | 2 to 5; 2 to 3 | all at the start | 4 of 4 | 1.3 to 3.0 |
+  | | 3072 (12 s) | 2, 3 | 4, 4 | 14 to 22; 14 to 16 | all at the start | 4 of 4 | 1.2 to 2.1 |
+
+  The delay column is the worst receive delay of each run over all its frames (the 8.8 ms and the
+  10 to 13 ms at one row are frames 1 and 2, held up at the start with frame 3 lost). With the short
+  queues the frames lost are the queue's own (the chain takes 1.1 and 1.7 s a ping at 2 and 3 rows on
+  an L4); they fell between these trials' 0.12 to 0.5 s windows, so every ping still came through.
+  The earlier a10g-large study's runs that lost 49 to 66 frames or a ping were not located.
 - Last job, `6b064e8e1460ffe1d5e9a072` (a10g-large, the test selection 3 times): at 32 channels the C++
   engine lost nothing in 3 of 3 runs, the Python engine in 2 of 3, but the worst receive delay was 4.6
   to 8.6 ms (flank_32's bound is 5 ms); 64 channels lost 10 to 12 frames in every run, 96 channels 12

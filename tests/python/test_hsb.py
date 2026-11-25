@@ -1085,6 +1085,19 @@ def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None
 # time, and the reports of the pings that came through equal to the same pings straight through the chain. A run that
 # loses nothing passes; one that loses frames ends as an expected failure (xfail) with its numbers, so the loss stays
 # visible in the summary. A deployed host needs what Sensor Bridge's own setup guide asks (DEPLOYMENT.md).
+POPOTO_START_S = 0.25          # of stream after the receiver connects in which start-up loss is expected (D-187); LEAD is 1 s
+
+
+def popoto_startup_loss(tmp_path, tag, start_frames):
+    """(frame numbers that never arrived, worst receive delay in ms over the frames from `start_frames` on) of a
+    loopback, from its send and arrival logs."""
+    send = {row[0]: row[1] for row in json.loads((tmp_path / f"{tag}_send.json").read_text())["rows"]}
+    arrived = {row[0]: row[1] for row in json.loads((tmp_path / f"{tag}_arrivals.json").read_text())["rows"]}
+    missing = [k for k in range(0, max(arrived) + 1) if k not in arrived]
+    after = [(arrived[k] - send[k]) * 1e-6 for k in arrived if k in send and k >= start_frames]
+    return missing, (max(after) if after else float("nan"))
+
+
 POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python")]
 # Not (3, "python"): the Python engine's 2.5-2.9 s a ping and its per-frame work at 256 frames a second of 115 kB
 # together fall behind the stream, and the receiver's queue drops frames beyond the socket's losses (493 to 721 frames
@@ -1129,6 +1142,16 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
     ref = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "direct.h5")}))
     assert len(raw) == len(ref) == len(got)
     assert all(np.array_equal(a.samples.array, b.samples.array) for a, b in zip(raw, ref))
+    # D-187: where the loss is. In every run located (L4 and a10g-large, 62 runs) the frames lost were the first ones
+    # after the receiver connected, before the first ping's window: Sensor Bridge's receiver thread is not yet reading
+    # while it allocates its queue. Such a run passes if, after that start, nothing is lost and the delay bound holds.
+    missing, worst_after = popoto_startup_loss(tmp_path, f"popoto{rows}", POPOTO_START_S * m["frames_per_s"])
+    print("POPOTO_START", json.dumps({"rows": rows, "engine": engine, "frames_lost": stats["frames_lost"], "missing": missing[:32],
+                                      "worst_ms_after_start": worst_after, "worst_ms": m["worst_ms"]}))
+    only_at_start = bool(missing) and max(missing) < POPOTO_START_S * m["frames_per_s"] and stats["frames_damaged"] == 0 \
+        and len(missing) == stats["frames_lost"] and stats["reports"] == n
+    if only_at_start and worst_after < 5.0:
+        return
     if not lossless or m["worst_ms"] >= 5.0:
         pytest.xfail(f"measured limit (D-186): {rows * 32} channels at 102.4 kHz lost {stats['frames_lost']} frames "
                      f"({stats['frames_damaged']} damaged, {stats['socket']['drops']} datagrams refused by a "
@@ -1183,7 +1206,7 @@ def popoto_loss_location(tmp_path, tag, rows, frame=FRAME, width=4):
     return {"period_ms": 1e3 * period, "interval_s": interval, "window_s": window, "frames": last - first + 1,
             "missing": len(missing), "missing_phase_s": [round(phase(k), 3) for k in missing[:64]],
             "chain_start_phase_s": starts, "chain_s": [round((b - a) * 1e-9, 3) for a, b in chain],
-            "by_second_of_phase": {str(s): bins[s] for s in sorted(bins)}, "detail": detail}
+            "missing_frames": missing[:64], "by_second_of_phase": {str(s): bins[s] for s in sorted(bins)}, "detail": detail[:6]}
 
 
 def test_the_loss_location_places_missing_frames_in_the_pings_cycle(tmp_path):
@@ -1206,6 +1229,7 @@ def test_the_loss_location_places_missing_frames_in_the_pings_cycle(tmp_path):
     assert w["detail"][0]["late_ms"][4] == 9.0 and w["detail"][0]["delay_ms"][3] == pytest.approx(0.3)
     assert sum(b["missing"] for b in w["by_second_of_phase"].values()) == 2
     assert sum(b["frames"] for b in w["by_second_of_phase"].values()) == 1000
+    assert popoto_startup_loss(tmp_path, "t", 64) == ([300, 301], pytest.approx(0.3))
     assert w["chain_s"] == [0.3] and w["interval_s"] == pytest.approx(3.0)
 
 
