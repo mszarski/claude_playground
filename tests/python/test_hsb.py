@@ -1023,7 +1023,8 @@ def test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back(row
         assert np.all(np.abs(a.samples.array - b.samples.array)[~clipped] <= 0.55 * lsb)
 
 
-def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None, queue_s=POPOTO_QUEUE_S, check=True):
+def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None, queue_s=POPOTO_QUEUE_S, check=True, omp=None,
+                    serve_args=()):
     """One real-time loopback of a row count's trial: `serve --replay` of its pings, `receive` with the build's
     deployment file, the chain's OpenMP on half the usable CPUs (D-162, D-173). Returns (board, stats, receive process,
     report path, measurements)."""
@@ -1035,13 +1036,13 @@ def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None
     path.write_text(yaml.safe_dump(cfg, sort_keys=False))
     numbers = stream_numbers(records, frame)
     queue = math.ceil(queue_s * numbers["frames_per_s"])
-    omp = max(1, usable_cpus() // 2)
+    omp = omp or max(1, usable_cpus() // 2)
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
     receive_args = ["--chain-omp-threads", str(omp), "--queue", str(queue), "--engine", engine, "--quiet"]
     if socket_buffer:
         receive_args += ["--socket-buffer", str(socket_buffer)]
-    board, stats, receive, report = run_loopback(tmp_path, records, pace, receive_args=receive_args, tag=tag, stream=(str(path),),
-                                                 frame=frame, n_pings=len(records), check=check)
+    board, stats, receive, report = run_loopback(tmp_path, records, pace, serve_args=serve_args, receive_args=receive_args, tag=tag,
+                                                 stream=(str(path),), frame=frame, n_pings=len(records), check=check)
     m = dict(numbers, rows=rows, engine=engine, queue_frames=queue, omp=omp, pace=pace, exit=receive.returncode,
              interval_s=(records[1].transmit.time_ns - records[0].transmit.time_ns) * 1e-9)
     try:
@@ -1062,6 +1063,7 @@ def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None
         m[key] = stats.get(key)
     m["socket"] = stats.get("socket")
     m["udp"] = stats.get("udp_counters")
+    m["cpu_throttled_during"] = (stats.get("cpu") or {}).get("nr_throttled_during")
     if receive.returncode != 0:
         m["stderr"] = receive.stderr[-600:]
     return board, stats, receive, report, m
@@ -1106,8 +1108,8 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
 def test_popoto_rate_loopback_study(tmp_path):
     """sonar-x8v: Popoto-rate loopbacks repeated, one line per run (POPOTO_STUDY {...}). Measures; asserts nothing
     about the transport. GPUSONAR_HSB_STUDY_RUNS (10), _ROWS ("1,2,3"), _ENGINES ("cpp"), _CONFIGS (space-separated
-    frame:buffer:queue_s, buffer "def" or a --socket-buffer in bytes; default "400:def:4"), _BUDGET_S (seconds after
-    which no run starts; 5400)."""
+    frame:buffer:queue_s[:omp[:catch_up]], buffer "def" or a --socket-buffer in bytes, omp "half" or a thread count,
+    catch_up "spread" or "burst"; default "400:def:4"), _BUDGET_S (seconds after which no run starts; 5400)."""
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
@@ -1123,16 +1125,18 @@ def test_popoto_rate_loopback_study(tmp_path):
     t0 = time.time()
     for k in range(runs):
         for cfg_text in configs:
-            frame, buffer, queue_s = cfg_text.split(":")
+            frame, buffer, queue_s, *more = cfg_text.split(":")
+            omp = None if not more or more[0] == "half" else int(more[0])
+            catch = ("--catch-up", more[1]) if len(more) > 1 else ()
             for rows in rows_list:
                 for engine in engines:
                     if time.time() - t0 > budget:
                         print("POPOTO_STUDY budget reached", flush=True)
                         return
-                    tag = f"s{k}_{frame}_{buffer}_{rows}_{engine}"
+                    tag = f"s{k}_{cfg_text.replace(':', '_')}_{rows}_{engine}"
                     _, _, _, _, m = popoto_loopback(tmp_path, rows, engine, tag, frame=int(frame),
                                                     socket_buffer=None if buffer == "def" else int(buffer), queue_s=float(queue_s),
-                                                    check=False)
+                                                    check=False, omp=omp, serve_args=catch)
                     m.update(run=k, config=cfg_text)
                     print("POPOTO_STUDY " + json.dumps(m), flush=True)
                     for f in tmp_path.glob(f"{tag}*.h5"):

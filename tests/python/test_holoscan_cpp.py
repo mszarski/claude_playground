@@ -78,12 +78,14 @@ def test_holoscan_takes_blocks_over_udp_with_navigation(pings, tmp_path):
 
 
 def test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort(tmp_path):
-    """sonar-ogg: the chain operator, downstream of UdpSourceOp, throws on its first ping. The application must end
-    with the reason and an error status. Before, UdpSourceOp joined its receiver and navigation threads in stop() only;
-    destroyed with them still running (the application unwinding from the operator's exception), std::thread's
-    destructor called std::terminate: "terminate called without an active exception", SIGABRT, the reason lost - the
-    fault D-183 fixed in build/bin/sonar_live. The throw is D-183's: the one-row trial's stream (water at 1496.8 m/s)
-    received with the window laid out at the nominal 1500 m/s, so the reference bursts are not where sync looks."""
+    """sonar-ogg: the chain operator, downstream of UdpSourceOp, throws on its first ping. The application ends with
+    the reason and an error status, not std::terminate from UdpSourceOp's threads (the fault D-183 fixed in
+    build/bin/sonar_live). This passed before the fix too: Holoscan 4.6 deactivates the graph after an operator's
+    exception, which calls UdpSourceOp::stop(), and run() rethrows (A10G job 6b063a21d0582cfbbefd60a3; an operator
+    whose start() throws ended with status 1 too). The destructor that now also joins the threads guards the case no
+    run here produced: the operator destroyed without stop(). The throw is D-183's: the
+    one-row trial's stream (water at 1496.8 m/s) received with the window laid out at the nominal 1500 m/s, so the
+    reference bursts are not where sync looks."""
     import shlex
     import sys
     from gpusonar.config import load_scenario_config, load_yaml
