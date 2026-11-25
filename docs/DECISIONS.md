@@ -3543,3 +3543,6 @@ bytes during `feed` would see it (none does).
 - Tests: `test_flank_stream.py` (the 24-bit decoder against the byte formula; assembled samples; a held
   block survives the caller reusing its buffer), `test_calibration_sync.py` (the resampler against the
   row-by-row arithmetic, to the bit), `test_hsb.py` (the queue emulation).
+- Full GPU suite on this tree: **2180 passed, 100 skipped**, none failed, no expected failure (NVIDIA L4,
+  HF job 6b06d64fd91f621b93079be0, 48 min 30 s): 9 more passed (8 new tests and the (3, python) case), 2
+  more skipped (the opt-in timing study; the new tool's `--help` test in the job's tarball).
