@@ -1045,6 +1045,50 @@ So these rounds train from **base** Gemma with thinking on, on its *own* correct
   model rarely samples, so neither RFT nor RL on its own samples teaches them. Guided traces (a teacher reasoning
   toward the reference) are the next lever.
 
+## Eval v2.1: repaired criteria (the "ceiling" was mostly grading defects)
+
+On eval v2, 59 items (13%) failed for every strong model. Reading them showed mostly grading defects, not model errors:
+* **Alternatives AND-ed:** "One acceptable solution ..." and "Another acceptable solution ..." were separate
+  criteria, so every answer failed one of them (22 items).
+* **Arbitrary choices required:** the criteria demanded the id or child index of a node the edit creates (70 items).
+* **Invented exact values:** for vague requests, e.g. "a bit wider" required "w=280 or more".
+* **Bad references:** e.g. a "Skip for now" link placed *inside* the button frame.
+
+`scripts/repair_eval_v2.py` fixes this in two stages; both use DeepSeek-V3.2 as the writer:
+1. **Rewrite every item's criteria under those rules.** A rewrite is kept only if the reference still passes
+   (judge). Result: 381 rewritten, 33 unchanged, 31 kept their original criteria because the reference failed.
+2. **Adjudicate the items every strong model still fails** (51 items). The adjudicator sees the request, the
+   criteria, the reference and 7 models' answers, and decides keep / fix / drop. A fix the reference fails counts as
+   a drop. Result: 32 fixed and 19 dropped, leaving 426 items.
+
+Grading also changed: `grade_eval_v2.py --show-checks` tells the judge the deterministic check result as evidence.
+Judge/check agreement stays at 88–94%, so the judge doesn't just copy it.
+The file is `v21/eval_v21.jsonl` in the eval dataset repo. It has all 445 rows; dropped ones are marked and skipped.
+
+| eval v2.1 (426 items) | v2 | **v2.1** | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|---|
+| RL v12b checkpoint-100 | 0.733 | **0.843** | 0.908 | 0.913 | 0.696 | 0.933 | 0.717 |
+| RL v12b checkpoint-50 | 0.733 | **0.843** | 0.908 | 0.923 | 0.674 | 0.933 | 0.733 |
+| RL v12 checkpoint-150 | 0.724 | 0.824 | 0.877 | 0.923 | 0.674 | 0.924 | 0.650 |
+| plain Qwen 3.8 27B, reasoning | 0.717 | 0.822 | 0.769 | 0.894 | 0.663 | **0.962** | **0.750** |
+| v12 reasoning SFT + 1 review | 0.701 | 0.808 | 0.815 | 0.904 | 0.663 | 0.943 | 0.617 |
+| RL v12 checkpoint-50 | 0.694 | 0.782 | 0.815 | 0.865 | 0.620 | 0.914 | 0.617 |
+| Gemma v8 SFT (no thinking) | 0.665 | 0.770 | 0.738 | 0.875 | **0.728** | 0.838 | 0.567 |
+| v12 reasoning SFT | 0.667 | 0.763 | 0.815 | 0.779 | 0.630 | 0.924 | 0.600 |
+| Qwen SFT (no thinking) | 0.663 | 0.758 | 0.754 | 0.750 | **0.728** | 0.857 | 0.650 |
+| plain Gemma, thinking | 0.636 | 0.742 | 0.785 | 0.740 | 0.598 | 0.933 | 0.583 |
+| DeepSeek-V3.2 | 0.589 | 0.636 | 0.831 | 0.817 | 0.522 | 0.695 | 0.183 |
+| plain Gemma, no thinking | 0.546 | 0.608 | 0.723 | 0.750 | 0.457 | 0.562 | 0.550 |
+
+* **The ranking survives the repair.** Strong models gain about 10 points, weak ones 3–5: the old criteria mostly
+  rejected *good* answers, which strong models give more often.
+* **The ceiling is now about 0.98:** only 10 items fail for all 10 trained or reasoning models, against 59 before.
+  Real headroom is about 14 points, not 4.
+* **Our RL model leads plain Qwen by 2.1 points, which is not significant** (paired: 40 items won and 31 lost,
+  ±3.9 at 95%). It is much better on consistency (+14) and worse on structure (−3) and state (−3).
+* **Caveat:** the adjudication step chose which items to fix from these models' failures. That raises everyone on
+  those items, but the comparison between models is fair; the 381 stage-1 rewrites were made blind to model outputs.
+
 ## Eval v2: realistic screens, a design system in context, criteria grading
 
 The v1 test sets score exact match against one generated answer on the generator's five layouts, and the held-out
