@@ -3391,7 +3391,7 @@ fix too.
 D-186 said the loss was "regular, about 3 frames a ping". **That was wrong**: it divided a run's
 loss by its four pings without locating it. Located now (`test_popoto_rate_loopback_study` prints
 every missing frame's number and place, `POPOTO_LOSS`):
-- In all 62 runs located (C++ engine, real time, default socket buffer; 34 on an L4, jobs
+- In all 52 runs located (C++ engine, real time, default socket buffer; 34 on an L4, jobs
   6b0666a6d0582cfbbefda036 and 6b066a811460ffe1d5e9c92a with the queue at 4 s or 12 s; 18 on
   a10g-large, job 6b066a2cd0582cfbbefda4be) every frame that never arrived was among the first
   after the receiver connected: frames 1 to 5 on the L4 at 4 s of queue, 1 to 13 on a10g-large.

@@ -1052,7 +1052,7 @@ rates"):
 - The loss is regular: about 3 frames a ping at 64 and 96 channels (9 to 13 frames in 16 of 20 C++
   runs; exactly 12 in each of the last job's three 96-channel runs). Something the receiving side does
   once a ping is the lead; it was not located.
-- **Located since (D-187): the loss is at the start of the run, not once a ping.** In 62 located runs
+- **Located since (D-187): the loss is at the start of the run, not once a ping.** In 52 located runs
   (L4 and a10g-large) every frame that never arrived was among the first frames after the receiver
   connected: frames 1 to 5 on an L4 (12 to 20 ms of stream), 1 to 13 on a10g-large (51 ms), with the
   queue at 4 s; all four pings were reported in every run and after the start the worst receive delay

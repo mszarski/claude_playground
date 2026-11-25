@@ -649,7 +649,7 @@ Grouped; within a group the most consequential first.
     6b06553a1460ffe1d5e9aa10; which, and their numbers, are not in its log). Untested: a host with Sensor Bridge's socket setup, the RoCE
     receiver. **Located (D-187): the loss is at the start of the run, not once a ping** (the first 12
     to 20 ms of stream on an L4, 51 ms on a10g-large, with the queue at 4 s; nothing later, every ping
-    reported, in 62 located runs). It grows with the receiver queue, whose default is now 4 s of
+    reported, in 52 located runs). It grows with the receiver queue, whose default is now 4 s of
     stream (owner's ruling; the old 256 frames lost 73 to 618 frames a run to the queue itself at 64
     and 96 channels). A board must start streaming at least 0.25 s before the first transmit that
     matters. The cause is read from Sensor Bridge's source, not proven by a trace. The test now

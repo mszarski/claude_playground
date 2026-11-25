@@ -1142,7 +1142,7 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
     ref = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "direct.h5")}))
     assert len(raw) == len(ref) == len(got)
     assert all(np.array_equal(a.samples.array, b.samples.array) for a, b in zip(raw, ref))
-    # D-187: where the loss is. In every run located (L4 and a10g-large, 62 runs) the frames lost were the first ones
+    # D-187: where the loss is. In every run located (L4 and a10g-large, 52 runs) the frames lost were the first ones
     # after the receiver connected, before the first ping's window: Sensor Bridge's receiver thread is not yet reading
     # while it allocates its queue. Such a run passes if, after that start, nothing is lost and the delay bound holds.
     missing, worst_after = popoto_startup_loss(tmp_path, f"popoto{rows}", POPOTO_START_S * m["frames_per_s"])
