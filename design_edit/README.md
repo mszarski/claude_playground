@@ -1291,35 +1291,52 @@ compared against plain Qwen *with* reasoning. `design-edit-sft27b` (trained no-t
   Training on reasoning traces (round 9's broad-think arm) or RL with thinking on are the next things to try.
 * Caveat: the plain-with-reasoning row came from the router, not this harness.
 
-## Design decisions and next steps
+## Design decisions, lessons and next steps
 
-- **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
-  and can't silently change unrelated nodes.
+### Design decisions
+- **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to
+  verify, and can't silently change unrelated nodes.
 - **Labels come from `diff`, never hand-written.** Every SFT target applies cleanly by construction. The tests check
   `apply(before, diff(before, after)) == after` for every edit type.
-- **Reward on effects.** Different-but-equivalent patches (another id for a new node, any yellow for "yellow") get full credit.
-  This matters most for RL, where a text-match reward would punish correct answers.
-- **Repairs are reverse edits.** Break a clean design in a known way, so the correct fix is known exactly. This is the cheapest
-  source of "make it look right" data.
+- **Reward on effects.** A patch is scored by applying it and checking the result. Different-but-equivalent patches
+  (another id for a new node, any yellow for "yellow") get full credit.
+- **Repairs are reverse edits.** Break a clean design in a known way, so the correct fix is known exactly.
+- **Keep the base model's reasoning.** Train on the model's own correct thinking traces, with thinking on, rendered
+  exactly as at inference (`--match-inference-prompt`).
 
-Not built yet, in priority order:
-- **Many more goal types, few examples each** (v4 shows 4 goal types become fixed recipes that leak into nearby
-  goals). An LLM could propose goals and a strong model could write candidate patches, filtered by the reward.
-- **GRPO with a rubric-judge reward** on distilled goal prompts (training goals, not test goals), from v3 or v5.
-  Rubric pass on held-out goals is the metric to beat (v3 0.83, Qwen3.8-27B 0.99).
-- **A larger student** (e.g. Qwen3.8-27B LoRA, as the Figma post suggests for its newer model). The 4B student can't
-  absorb the teacher's reasoning through SFT.
-- **Real designs** (Figma REST API; needs a Figma token) for broader structure than the 5 templates.
-- **GRPO from v3 on held-out-style goals.** v3's pass@8 is 0.79–0.92 on `duplicate_setting` / `darken_text`, so RL
-  now has signal there. It still needs training goals that aren't the test set.
-- **GRPO with entropy kept up**: use higher temperature, or a KL or entropy bonus, so RL doesn't collapse onto the SFT
-  mode, and train on a broader prompt mix rather than only the variance-bearing subset.
-- **More varied training values.** v2 shows the model copies specific values from templates (`#6B7280`, `end`).
-  Randomizing target values within each edit type should push it toward reading the request.
-- **GRPO where the model is close.** RL needs some correct samples per group. Measure pass@8 on the
-  failing edit types first. `promote_button` (one missing line) and `duplicate_setting` (right content, wrong
-  index) are good candidates; `spread_out` probably needs data first.
-- **Real designs.** Import Figma Community files through the REST API and convert them to the DSL. Synthetic templates are narrow.
-- **More natural requests.** Have an LLM rewrite the template requests, and keep a held-out set of human-written requests.
-- **VLM judge reward.** Use `render.screenshot` on before and after, then have a vision model grade against designer-written
-  criteria. Add it as a third reward function in `train_grpo.py` for requests the programmatic checks can't verify.
+### Where it stands
+The best model is **v13**, which is Gemma-4-31B with these adapters stacked: v12 reasoning SFT, RL v12 checkpoint-150,
+RL v12b checkpoint-100 and the v13 hint SFT. On eval v2.1 it scores **0.845**; plain Qwen 3.8 27B with reasoning
+scores 0.822 (within noise), and plain Gemma 0.608. The weak spots are goal (0.72) and structure (0.68) requests.
+Only 10 items fail for every model, so the headroom is about 13 points.
+
+### What we learned
+1. **Data drives most of the gains.** The large jumps came from realistic design-system examples, broader edit types
+   and the model's own correct reasoning. Optimization adds a few points on top.
+2. **Don't train the reasoning away.** No-think SFT disabled Gemma's thinking mode. Rejection-sampled reasoning SFT kept
+   it and generalized better to unseen requests.
+3. **RL works with an effect-based reward and prompts the model sometimes solves.** It added 4–8 points in round 12.
+   Text-match rewards and loose judges caused over-editing or gains that didn't transfer. RL can't teach prompts the
+   model never solves, and re-picking prompts or a longer token budget doesn't change that (round 12c).
+4. **Audit the eval before believing a ceiling.** 13% of eval v2 items failed for every model, mostly because of grading
+   defects (AND-ed alternatives, ids of new nodes, invented exact values). Repairing them (eval v2.1) showed about 14
+   points of real headroom instead of 4.
+5. **The remaining errors are systematic.** Voting over 8 samples gains nothing. Rationalized traces (the reference
+   as a hidden hint) lift the targeted goal requests by 2 points but not the total.
+6. **The recipe transfers across models.** Qwen 27B and Gemma 31B end at about the same level.
+7. **Operational:**
+   * Verify every HF Job gets past model loading.
+   * Skip the PEFT model card when uploading adapters.
+   * Compare models item by item. Most differences at this level are within ±2–4 points.
+
+### Next steps, in priority order
+- **New training data for goal and structure requests.** Make it more varied and harder, and have a strong model write
+  references that must pass the compiled checks and a judge. Then run the same SFT → RL recipe. This is the step
+  most likely to move the score.
+- **Real designs** (Figma Community files through the REST API; needs a Figma token), for structures the generators
+  don't produce.
+- **Human-written requests**, as a held-out set at least, to check that paraphrased and templated phrasing isn't
+  inflating scores.
+- **A rendered (VLM) check** for goal requests, where the text criteria are the least reliable.
+- **A short RL run on top of v13 on re-picked prompts.** It is cheap, but expect at most about 1 point.
+- **Not worth repeating:** more RL steps on the current prompts, best-of-n voting, or a longer reasoning budget.
