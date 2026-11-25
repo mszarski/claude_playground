@@ -96,6 +96,9 @@ def main() -> None:
     ap.add_argument("--n-eval", type=int, default=200)
     ap.add_argument("--eval-batch", type=int, default=4)
     ap.add_argument("--max-steps", type=int, default=-1)
+    ap.add_argument("--base-adapter", default=None,
+                    help="LoRA adapter(s) 'repo/sub' (comma-separated, merged in order) to train on top of, e.g. an "
+                         "SFT+RL stack; the new adapter then applies on top of that merged model")
     ap.add_argument("--seed", type=int, default=0, help="data order and LoRA init (0 = the setting all earlier runs used)")
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
@@ -161,8 +164,13 @@ def main() -> None:
     )
     # Text-only tokenizer: multimodal checkpoints (e.g. Qwen3.8) would otherwise load an image/video processor.
     tok = AutoTokenizer.from_pretrained(args.model)
+    model_path = args.model
+    if args.base_adapter:
+        from design_edit.lora import merge_adapter
+
+        model_path = merge_adapter(args.model, args.base_adapter, "/tmp/base_merged")
     trainer = SFTTrainer(
-        model=args.model,
+        model=model_path,
         train_dataset=train,
         args=config,
         processing_class=tok,
