@@ -42,6 +42,8 @@ def main() -> None:
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--split", default="train")
     ap.add_argument("--model", default="google/gemma-4-31B-it")
+    ap.add_argument("--adapter", default=None,
+                    help="LoRA adapter(s) 'repo/sub' merged in order before sampling (comma-separated to stack)")
     ap.add_argument("--k", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--max-new-tokens", type=int, default=3072)
@@ -62,7 +64,12 @@ def main() -> None:
     ds = load_dataset(args.dataset, split=args.split)
     if args.n:
         ds = ds.select(range(min(args.n, len(ds))))
-    llm = LLM(model=args.model, dtype="bfloat16", max_model_len=8192, gpu_memory_utilization=0.92,
+    model = args.model
+    if args.adapter:
+        from design_edit.lora import merge_adapter
+
+        model = merge_adapter(args.model, args.adapter, "/tmp/merged")
+    llm = LLM(model=model, dtype="bfloat16", max_model_len=8192, gpu_memory_utilization=0.92,
               limit_mm_per_prompt={"image": 0})
     params = SamplingParams(n=args.k, temperature=args.temperature, top_p=0.95, max_tokens=args.max_new_tokens,
                             skip_special_tokens=False, seed=0)

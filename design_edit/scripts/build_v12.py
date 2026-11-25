@@ -28,12 +28,14 @@ from design_edit.schema import strip_fences  # noqa: E402
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sft", nargs="+", required=True, help="filter_traces.py outputs")
+    ap.add_argument("--sft", nargs="+", default=[], help="filter_traces.py outputs")
     ap.add_argument("--real", required=True, help="realistic items with checks (compile_checks.py output)")
     ap.add_argument("--real-traces", required=True, help="sample_traces.py output on --real (same order)")
-    ap.add_argument("--src", required=True)
+    ap.add_argument("--src", default=None)
     ap.add_argument("--dst", required=True)
     ap.add_argument("--hard-frac", type=float, default=0.25, help="share of 0/k prompts in the rl split")
+    ap.add_argument("--rl-only", action="store_true",
+                    help="re-pick RL prompts only (e.g. from a later model's samples): push them as <dst>")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -60,16 +62,23 @@ def main() -> None:
     from datasets import Dataset, DatasetDict, load_dataset
     from huggingface_hub import HfApi
 
-    src = load_dataset(args.src)
-    feats = src["train"].features
-    train = Dataset.from_list([{c: r.get(c, "") for c in feats} for r in sft], features=feats).shuffle(seed=0)
     rl_cols = ["prompt", "completion", "before", "after", "relax", "kind", "instruction", "checks", "allowed",
                "criteria", "design_system"]
     rl_ds = Dataset.from_list([{c: r.get(c, "") for c in rl_cols} for r in rl])
+    root = Path(__file__).resolve().parents[1]
+    if args.rl_only:
+        DatasetDict({"train": rl_ds}).push_to_hub(args.dst, private=True)
+        for d in ("design_edit", "scripts"):
+            HfApi().upload_folder(repo_id=args.dst, repo_type="dataset", folder_path=str(root / d),
+                                  path_in_repo=f"code/{d}", ignore_patterns=["__pycache__/*", "*.pyc"])
+        print("pushed", args.dst)
+        return
+    src = load_dataset(args.src)
+    feats = src["train"].features
+    train = Dataset.from_list([{c: r.get(c, "") for c in feats} for r in sft], features=feats).shuffle(seed=0)
     # Splits of one repo must share features, so the RL prompts (with checks) go to <dst>-rl.
     DatasetDict({"train": train, **{k: v for k, v in src.items() if k != "train"}}).push_to_hub(args.dst, private=True)
     DatasetDict({"train": rl_ds}).push_to_hub(args.dst + "-rl", private=True)
-    root = Path(__file__).resolve().parents[1]
     for repo in (args.dst, args.dst + "-rl"):
         for d in ("design_edit", "scripts"):
             HfApi().upload_folder(repo_id=repo, repo_type="dataset", folder_path=str(root / d),
