@@ -88,6 +88,86 @@ def test_a_lost_block_costs_one_ping_only(pings):
     assert [r.metadata.sequence for r in out] == [1, 2] and assembler.dropped_pings == 1
 
 
+def _counts_by_the_byte_formula(data, n, ch):
+    """The 24-bit words of a block's samples, sign-extended byte by byte (decode_block's arithmetic until sonar-h1f)."""
+    raw = np.frombuffer(data, dtype=np.uint8, offset=fs.HEADER_BYTES).reshape(n, ch, 3).astype(np.int32)
+    counts = raw[:, :, 0] | (raw[:, :, 1] << 8) | (raw[:, :, 2] << 16)
+    return np.where(counts >= (1 << 23), counts - (1 << 24), counts)
+
+
+def test_24_bit_samples_decode_to_the_byte_formulas_words_whole_or_in_rows():
+    """sonar-h1f: the 24-bit decoder (whole block, and the rows the assembler asks for) gives exactly the words of the
+    byte-by-byte formula, over random bytes and every edge of the word."""
+    rng = np.random.default_rng(5)
+    n, ch = 400, 96
+    counts = rng.integers(-(1 << 23), 1 << 23, size=(n, ch))
+    counts[0, :8] = [-(1 << 23), (1 << 23) - 1, -1, 0, 1, -(1 << 23) + 1, 0x7FFF, -0x8000]
+    data = fs.encode_block(counts, sample_index=7)
+    want = _counts_by_the_byte_formula(data, n, ch)
+    np.testing.assert_array_equal(want, counts)
+    got = fs.decode_block(data)["counts"]
+    assert got.dtype == np.int32 and got.shape == (n, ch)
+    np.testing.assert_array_equal(got, want)
+    for a, b in [(0, n), (0, 1), (3, 4), (17, 333), (n - 1, n), (5, 5)]:
+        rows = fs.decode_rows(data, ch, a, b)
+        assert rows.dtype == np.int32 and rows.shape == (b - a, ch)
+        np.testing.assert_array_equal(rows, want[a:b])
+    whole = bytearray(rng.integers(0, 256, size=fs.HEADER_BYTES + 3 * n * ch, dtype=np.uint8).tobytes())
+    whole[:fs.HEADER_BYTES] = data[:fs.HEADER_BYTES]                  # any bytes at all as samples
+    np.testing.assert_array_equal(fs.decode_block(bytes(whole))["counts"], _counts_by_the_byte_formula(bytes(whole), n, ch))
+    np.testing.assert_array_equal(fs.decode_rows(np.frombuffer(bytes(whole), dtype=np.uint8), ch, 10, 20),
+                                  _counts_by_the_byte_formula(bytes(whole), n, ch)[10:20])
+
+
+@pytest.mark.parametrize("block_samples", [128, 1000, 6400, 10000])
+def test_assembled_samples_are_exactly_the_streams_words_in_volts(pings, block_samples):
+    """sonar-h1f: every sample of an assembled ping is exactly float32(word x volts per count) of the word the board
+    sent there, whatever the block size (so a block decoded only in the rows a ping takes, or a record converted in
+    pieces, cannot move a bit)."""
+    sonar, records = pings
+    emulator = FlankBoardEmulator(records, INTERVAL, block_samples=block_samples, start_ns=10**18)
+    stream = emulator.stream()
+    assembler = PingAssembler(sonar)
+    out = [r for block in emulator.blocks() for r in assembler.feed(block)]
+    assert len(out) == 3
+    vpc = records[0].metadata.adc_full_scale / 2**23
+    for i, got in enumerate(out):
+        a = i * emulator.period + emulator.window_start
+        words = stream[a:a + got.samples.n_samples]
+        want = (words.T * vpc).astype(np.float32)
+        assert got.samples.array.dtype == np.float32
+        assert np.array_equal(got.samples.array, want)
+
+
+def test_a_held_block_keeps_its_samples_when_the_callers_buffer_is_reused(pings):
+    """sonar-h1f: a block held as a possible restart is used later; the caller may reuse its buffer for the next block
+    in between (a receiver that fills one buffer). The restart's pings are the same as from separate buffers."""
+    sonar, records = pings
+    a_blocks = list(FlankBoardEmulator(records, INTERVAL, block_samples=10000, start_ns=1).blocks())[:3]
+    b_blocks = list(FlankBoardEmulator(records, INTERVAL, block_samples=10000, start_ns=2).blocks())
+    runs = []
+    for reuse in (False, True):
+        assembler = PingAssembler(sonar)
+        buf = bytearray(len(a_blocks[0]))
+        out = []
+        for block in a_blocks + b_blocks:
+            if reuse:
+                buf[:] = block
+                out += assembler.feed(buf)
+            else:
+                out += assembler.feed(bytes(block))
+        out += assembler.finish()
+        assert assembler.restarts == 1
+        runs.append(([r.metadata.sequence for r in out], [r.samples.array.copy() for r in out],
+                     assembler.dropped_pings, assembler.lost_samples, assembler.repeated_blocks))
+    assert runs[0][0] == runs[1][0] == [0, 1, 2]
+    assert all(np.array_equal(x, y) for x, y in zip(runs[0][1], runs[1][1]))
+    assert runs[0][2:] == runs[1][2:]
+    # The first block of the new capture (held, then taken at the restart) carries ping 0's first window rows.
+    w0 = FlankBoardEmulator(records, INTERVAL).window_start
+    assert 0 < w0 < 10000 and np.any(runs[1][1][0][:, :10000 - w0] != 0)
+
+
 def test_wrong_channel_count_is_refused(pings):
     sonar, _ = pings
     with pytest.raises(fs.BlockError, match="channels"):

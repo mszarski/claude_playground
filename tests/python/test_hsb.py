@@ -1172,9 +1172,16 @@ def test_start_up_loss_is_accepted_only_where_every_index_confirms_it():
 
 
 POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python")]
-# Not (3, "python"): the Python engine's 2.5-2.9 s a ping and its per-frame work at 256 frames a second of 115 kB
-# together fall behind the stream, and the receiver's queue drops frames beyond the socket's losses (493 to 721 frames
-# in a run against about 11 refused at the socket; job 6b063a21d0582cfbbefd60a3). The vehicle runs the C++ engine.
+# Not (3, "python") by default. Measured on a10g-large (D-186, jobs 6b063a21d0582cfbbefd60a3 and 6b0641ce1460ffe1d5e98956,
+# before sonar-h1f): the Python engine took 2.64 s a ping after the first (median; at most 2.91), and the receiver's queue
+# overflowed: 368 frames lost in the median run of 10, at most 721 (RESULTS.md), against about 11 refused at the socket.
+# HsbLiveApp runs every operator on one thread (Holoscan's greedy scheduler), so no frame is taken while the chain works
+# on a ping. Since sonar-h1f, measured on a CPU here (tools/hsb_frame_timing.py, 96 channels): the frame path costs
+# 0.07-0.08 ms a frame on average (0.27-0.32 before) and the Python engine's board resampling 0.44 s a ping (2.0 before),
+# the outputs the same to the bit; not re-measured on a GPU. The vehicle runs the C++ engine.
+# GPUSONAR_HSB_PYTHON_3ROWS=1 adds the case, to measure it again.
+if os.environ.get("GPUSONAR_HSB_PYTHON_3ROWS") == "1":
+    POPOTO_ENGINES.append((3, "python"))
 
 
 @pytest.mark.parametrize("rows,engine", POPOTO_ENGINES)
@@ -1238,6 +1245,55 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
                      f"({stats['frames_damaged']} damaged: frames {damaged}, {stats['socket']['drops']} datagrams refused by a "
                      f"{stats['socket']['rcvbuf']}-byte socket buffer), {stats['dropped_pings']} of {n} pings; worst receive "
                      f"delay {m['worst_ms']:.1f} ms (flank_32's bound 5 ms)")
+
+
+def frame_timing_tool():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import hsb_frame_timing
+    return hsb_frame_timing
+
+
+def test_the_frame_timing_harness_emulates_the_one_thread_schedule_and_its_queue():
+    """sonar-h1f: tools/hsb_frame_timing.py's emulation of HsbLiveApp's one thread, with chain times given. A chain that
+    takes 0.1 s a ping loses nothing; one whose first ping takes 6 s overflows the 4 s queue, and every frame the queue
+    dropped is one the receiver counts lost (the frames before the first ping's end were all taken by then)."""
+    tool = frame_timing_tool()
+    records, cfg = popoto_trial(1)
+    assert tool.POPOTO == POPOTO and tool.LEAD == LEAD
+    frames, fps, interval = tool.frames_of(records, FRAME)
+    assert fps == pytest.approx(256.0) and interval == pytest.approx(3.0) and len(frames) == stream_numbers(records)["frames"]
+    queue = hsb.queue_frames_for(stream_numbers(records)["sample_rate"], FRAME)
+    quick = tool.serial_schedule(frames, cfg, FRAME, fps, queue, chain_seconds=[0.1])
+    assert quick["frames_dropped_by_the_queue"] == 0 and quick["pings"] == len(records)
+    assert quick["chain_s"] == [0.1] * len(records)
+    assert quick["frames_lost_by_the_receiver"] == 0 and quick["peak_backlog_frames"] < 64
+    slow = tool.serial_schedule(frames, cfg, FRAME, fps, queue, chain_seconds=[6.0, 0.1])
+    assert slow["frames_dropped_by_the_queue"] > 0 and slow["peak_backlog_frames"] == queue
+    assert slow["frames_lost_by_the_receiver"] == slow["frames_dropped_by_the_queue"]
+    assert slow["pings"] + slow["dropped_pings"] == len(records)
+    rows = tool.frame_path_timing(frames[:300], cfg, FRAME, fps, interval, repeats=1)
+    assert rows[0]["frames"] == 300 and rows[0]["all_ms"]["n"] == 300
+
+
+@pytest.mark.skipif(os.environ.get("GPUSONAR_HSB_TIMING") != "1", reason="a measurement, run with GPUSONAR_HSB_TIMING=1")
+def test_frame_path_timing_study():
+    """sonar-h1f: the receive path's cost a frame and the one-thread schedule with each engine's chain on this host (a
+    GPU's where there is one), one line each (HSB_TIMING {...}). Measures; asserts nothing. GPUSONAR_HSB_TIMING_ROWS
+    ("3"), _ENGINES ("python,cpp")."""
+    import math
+    tool = frame_timing_tool()
+    for rows in [int(x) for x in os.environ.get("GPUSONAR_HSB_TIMING_ROWS", "3").split(",")]:
+        records, cfg = popoto_trial(rows)
+        frames, fps, interval = tool.frames_of(records, FRAME)
+        for row in tool.frame_path_timing(frames, cfg, FRAME, fps, interval, repeats=3):
+            print("HSB_TIMING " + json.dumps(dict(row, rows=rows, what="frame_path")), flush=True)
+        for engine in os.environ.get("GPUSONAR_HSB_TIMING_ENGINES", "python,cpp").split(","):
+            chain = tool.make_chain(cfg, engine)
+            try:
+                out = tool.serial_schedule(frames, cfg, FRAME, fps, math.ceil(POPOTO_QUEUE_S * fps), chain)
+            finally:
+                chain.close()
+            print("HSB_TIMING " + json.dumps(dict(out, rows=rows, engine=engine, what="serial_schedule")), flush=True)
 
 
 def popoto_loss_location(tmp_path, tag, rows, frame=FRAME, width=4):
