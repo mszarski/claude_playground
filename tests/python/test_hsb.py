@@ -1171,17 +1171,15 @@ def test_start_up_loss_is_accepted_only_where_every_index_confirms_it():
     assert not popoto_start_only([], [], 0, fps)                      # nothing lost: lossless, not start-up loss
 
 
-POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python")]
-# Not (3, "python") by default. Measured on a10g-large (D-186, jobs 6b063a21d0582cfbbefd60a3 and 6b0641ce1460ffe1d5e98956,
-# before sonar-h1f): the Python engine took 2.64 s a ping after the first (median; at most 2.91), and the receiver's queue
-# overflowed: 368 frames lost in the median run of 10, at most 721 (RESULTS.md), against about 11 refused at the socket.
+POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python"), (3, "python")]
+# (3, "python") was left out until D-190 (sonar-h1f). On a10g-large (D-186, jobs 6b063a21d0582cfbbefd60a3 and
+# 6b0641ce1460ffe1d5e98956) the Python engine took 2.64 s a ping after the first (median; at most 2.91) of the trial's
+# 3 s, and the receiver's queue overflowed: 368 frames lost in the median run of 10, at most 721 (RESULTS.md).
 # HsbLiveApp runs every operator on one thread (Holoscan's greedy scheduler), so no frame is taken while the chain works
-# on a ping. Since sonar-h1f, measured on a CPU here (tools/hsb_frame_timing.py, 96 channels): the frame path costs
-# 0.07-0.08 ms a frame on average (0.27-0.32 before) and the Python engine's board resampling 0.44 s a ping (2.0 before),
-# the outputs the same to the bit; not re-measured on a GPU. The vehicle runs the C++ engine.
-# GPUSONAR_HSB_PYTHON_3ROWS=1 adds the case, to measure it again.
-if os.environ.get("GPUSONAR_HSB_PYTHON_3ROWS") == "1":
-    POPOTO_ENGINES.append((3, "python"))
+# on a ping. Since D-190 the frame path decodes only the rows a window takes and the Python engine resamples a board's
+# rows together, the outputs the same to the bit. On an L4 (job 6b06cd69b6a90bbe997d1b7a, 4 runs each way) the Python
+# engine at 96 channels went from 2.06-2.20 s a ping after the first (first ping 2.53-2.56) to 0.42-0.47 s (0.99-1.02),
+# and lost only its first 2 to 4 frames (D-187) both ways. Not re-measured on a10g-large.
 
 
 @pytest.mark.parametrize("rows,engine", POPOTO_ENGINES)

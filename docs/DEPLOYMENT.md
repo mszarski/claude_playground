@@ -1041,10 +1041,11 @@ rates"):
   and 3 runs. The Python engine lost alike (6, 10 and 10 of 10), and at 96 channels it is not real time on this host: its receiver
   queue overflowed as well (368 frames lost in the median run, at most 721; `RESULTS.md`). The application runs every
   operator on one thread (Holoscan's greedy scheduler), so the receiver's queue holds the stream while the chain works
-  on a ping. Since then (sonar-h1f), measured on a CPU without a GPU, not on these hosts: the frame path's own cost fell
-  from 0.27-0.32 to 0.07-0.08 ms a frame on average and the Python engine's board resampling (on the CPU in either
-  backend) from 2.0 to 0.44 s a ping, every output the same to the bit (`tools/hsb_frame_timing.py`). Whether the Python
-  engine is now real time at 96 channels on a GPU host is not measured (`GPUSONAR_HSB_PYTHON_3ROWS=1` runs that case).
+  on a ping. Since D-190 (sonar-h1f) the frame path decodes only the rows a
+  window takes and the Python engine resamples a board's rows together, every output the same to the bit. On an L4
+  (job `6b06cd69b6a90bbe997d1b7a`, 4 runs each way) the Python engine at 96 channels went from 2.06-2.20 s a ping after
+  the first to 0.42-0.47 s and lost only its first 2 to 4 frames both ways; the case is in the suite since. It was not
+  re-measured on a10g-large (`tools/hsb_frame_timing.py` gives the frame path's cost on any host).
 - Not cured by: the socket buffer doubled to 425,984 bytes (`--socket-buffer 212992`, as much as the
   container's `rmem_max` allows: 5, 10 and 10 of 10 runs lost frames), 200-sample frames with that
   buffer (10 of 10 at every row count, and more frames lost), the chain's OpenMP on 2 threads instead

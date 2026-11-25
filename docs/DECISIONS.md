@@ -3495,3 +3495,51 @@ Nothing below measures either.
 - Full GPU suite on this tree: **2171 passed, 98 skipped**, none failed (NVIDIA L4, HF job
   6b06bbda1460ffe1d5ea75b5, 49 min 39 s): 12 more passed (the new file) and one more skipped (the new
   tool's `--help` test, which skips in the job's tarball with the other 58).
+
+### D-190 The Python engine is real time at 96 channels through Sensor Bridge on an L4: the frame path decodes only what a window takes, and a board's rows are resampled together (issue sonar-h1f)
+
+What got worse first: nothing in a result (every output is the same to the bit). The receive path's
+assembler, which every live source uses, now keeps a block's bytes until a window takes rows from them
+and decodes a block it holds as a possible restart when it holds it; a caller that changed a block's
+bytes during `feed` would see it (none does).
+
+- Where the time went (measured on this container's CPU, 96 channels, 115,328-byte frames, before):
+  `FrameReceiver.take` 0.27 to 0.32 ms a frame on average, most of it decoding every 24-bit sample
+  although about 83 % of the stream lies between receive windows; 67 to 80 ms on the frame that
+  completes a ping (the record's array reordered); in the Python engine `sync.resample_boards` 2.0 s
+  of 3.4 s a ping, row by row.
+- Changed, outputs equal to the bit (samples, receiver statistics, record metadata, both engines'
+  reports of the 96-channel trial, clean and with frames lost):
+  `sources/flank_stream.py`: `decode_header` and `decode_rows` (`decode_block` is the two together);
+  `PingAssembler` decodes only the rows a window takes, with an in-place 24-bit decoder, and builds the
+  record's array channel-major in pieces. `sync.py`: a board's sinc weights once, its rows together
+  (the Python engine only; `libs/` is untouched).
+- Measured on an L4 through Sensor Bridge (HF job 6b06cd69b6a90bbe997d1b7a; four runs of the six cases
+  with the change, then four with the two files as before, same job, 4 s queue):
+
+  | Python engine, chain time a ping | before | after |
+  |---|---|---|
+  | 64 channels, after the first ping | 1.30 to 1.35 s | 0.27 to 0.30 s |
+  | 64 channels, first ping | 1.79 to 1.82 s | 0.74 to 0.78 s |
+  | 96 channels, after the first ping | 2.06 to 2.20 s | 0.42 to 0.47 s |
+  | 96 channels, first ping | 2.53 to 2.56 s | 0.99 to 1.02 s |
+
+  32 channels (one board, nothing to resample): 0.13 to 0.15 s both ways. The C++ engine is unchanged:
+  0.10 to 0.12, 1.05 to 1.12 and 1.64 to 1.83 s. At 96 channels the Python engine lost its first 2 to 4
+  frames and nothing after, before and after alike: **on an L4 it was already real time at 96 channels
+  with D-187's 4 s queue** (2.1 s of the trial's 3 s); D-186's "not real time" was a10g-large (2.64 s
+  a ping, median; 368 frames lost in the median run), which was not measured again. The frame path
+  on that L4: 0.066 ms a frame on average, 31 ms on the frame that completes a ping.
+- The (3, "python") Popoto loopback case is in the suite from here on.
+- Seen in that job and not explained: in the first of the four runs with the change, the 32-channel
+  C++ case lost nothing and had a worst receive delay of 6.4 ms (its first ping took 0.92 s against
+  0.12 in every other run: the job's first use of the device), and the 64-channel Python case had frames
+  1 and 2 missing, frame 3 damaged and a worst delay of 5.1 ms; both ended as expected failures on the
+  5 ms bound. The other 22 runs with the change and all 24 without passed.
+- Now visible, not looked into: the C++ engine takes 1.05 to 1.12 s a ping at 64 channels and 1.64 to
+  1.83 s at 96, four times the Python engine after this change. Follow-up sonar-drc.
+- New: `tools/hsb_frame_timing.py` (the frame path's cost, a profile, the one-thread schedule emulated
+  with the real chain); the opt-in `test_hsb.py::test_frame_path_timing_study` (`GPUSONAR_HSB_TIMING=1`).
+- Tests: `test_flank_stream.py` (the 24-bit decoder against the byte formula; assembled samples; a held
+  block survives the caller reusing its buffer), `test_calibration_sync.py` (the resampler against the
+  row-by-row arithmetic, to the bit), `test_hsb.py` (the queue emulation).

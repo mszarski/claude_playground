@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-189); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-190); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -644,7 +644,7 @@ Grouped; within a group the most consequential first.
     socket buffer that `rmem_max` caps, about 3 frames a ping; a larger buffer (as far as the
     container allows), smaller frames and fewer OpenMP threads did not cure it and the cause is not
     located. The chain keeps up (C++ 0.13, 1.4, 2.2 s a ping against 3 s); the Python engine is not
-    real time at 96 channels. The test records the loss as an expected failure (xfail) with its
+    real time at 96 channels on a10g-large (on an L4 it is: 2.1 s a ping, and 0.42 to 0.47 s since D-190, which made the frame path and the board resampling faster with every output unchanged; that case is in the suite since). The test records the loss as an expected failure (xfail) with its
     numbers. On an L4 the suite's five cases gave four expected failures and one pass (job
     6b06553a1460ffe1d5e9aa10; which, and their numbers, are not in its log). On D-187's tree the suite gave 2155 passed, 97 skipped, 1 xfailed (job 6b06728ad0582cfbbefdb5eb): the one is a Popoto case in which a frame arrived in part (counted damaged) beside 2 frames lost at the start (D-187). Since D-188 the receiver names its damaged frames (`damaged_frames`) and the test accepts one in the first 0.25 s of stream: in 40 L4 runs the one damaged frame was frame 3, after frames 1 and 2 never arrived, and all 40 passed (job 6b0693c6d0582cfbbefdf55e); the full suite on that tree: 2159 passed, 97 skipped, none failed (job 6b0699f4d0582cfbbefe0373). Untested (sonar-02c; D-189 adds a read-only host check, `tools/hsb_host_check.py`, and a runbook in DEPLOYMENT.md, and records that the containers refuse every such setting): a host with Sensor Bridge's socket setup, the RoCE
     receiver. **Located (D-187): the loss is at the start of the run, not once a ping** (the first 12
