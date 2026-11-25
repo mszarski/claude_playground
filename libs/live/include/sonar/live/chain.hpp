@@ -70,6 +70,12 @@ struct StreamOptions {
   double idle_seconds = 30.0;         ///< the program ends when no block has arrived for this long (0: never)
   std::string bind = "0.0.0.0";       ///< the address the block and navigation sockets listen on
   std::int64_t report_max_bytes = 65000;  ///< a report line longer than this goes out as several datagrams (Report::datagrams)
+  /// One stream per capture board, merged before the assembler (board_merge.hpp; sonar-6f9). Off: one whole-array stream.
+  bool boards = false;
+  std::string board_channels;         ///< "id:first:count,..."; empty: the template's metadata.channel_board
+  int board_reference = -1;           ///< the board whose counter the merged stream has; -1: the first in the map
+  bool board_zero = false;            ///< a board's missing part: false drops the span, true fills it with zeros
+  double board_wait_s = 0.05;         ///< how long a board may lag the others (board_merge.hpp kBoardWaitSeconds)
 };
 
 struct ChainOptions {

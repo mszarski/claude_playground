@@ -93,6 +93,11 @@ int main(int argc, char** argv) {
     }
     sonar::live::program_defaults(chain, passive);        // backend auto, as build/bin/sonar_live (D-147)
     ops::apply_options(s.options, chain, passive);        // fail on a bad option before the pipeline starts
+    // The source operator takes one whole-array stream; per-board streams are not merged here (sonar-6f9).
+    if (chain.stream.boards) {
+      throw std::invalid_argument("stream_boards: the Holoscan source operator takes one whole-array stream; merge the boards' streams "
+                                  "with tools/board_merge.py in front of it, or run build/bin/sonar_live");
+    }
     // The stream's own settings go to the source operator; the frame length of a listening run follows from the
     // passive options and, for block sizes left to be derived, from the sonar in the template.
     s.idle_seconds = chain.stream.idle_seconds;

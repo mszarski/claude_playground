@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
@@ -1159,4 +1160,64 @@ void bind_live(py::module_& m) {
                                }
                              })
       .def_readonly("bad_blocks", &live::PingAssembler::bad_blocks);
+
+  // Per-board streams merged into the whole-array stream (sonar-6f9; python/gpusonar/sources/board_merge.py
+  // BoardMerger is the twin). `options`: the keys of a deployment file's source.boards (channels as a list of
+  // {id, first, count}; without it one board of every channel), refused by name when unread.
+  py::class_<live::BoardMerger>(m, "BoardMergerCpp")
+      .def(py::init([](const py::dict& options, std::int64_t n_channels, double sample_rate, int sample_bytes) {
+             const Keys d(options);
+             live::BoardMergeOptions o;
+             o.sample_bytes = sample_bytes;
+             if (d.contains("channels") && !d["channels"].is_none()) {
+               int k = 0;
+               for (const py::handle& item : d["channels"]) {
+                 const std::string where = "boards.channels[" + std::to_string(k++) + "].";
+                 if (!py::isinstance<py::dict>(item)) throw py::value_error(where.substr(0, where.size() - 1) + ": {id, first, count}");
+                 const Keys c(py::reinterpret_borrow<py::dict>(item));
+                 live::BoardSpec b;
+                 for (const char* key : {"id", "first", "count"}) {
+                   if (!c.contains(key)) throw py::value_error(where + key + ": needed");
+                 }
+                 b.id = c["id"].cast<int>();
+                 b.first = c["first"].cast<std::int64_t>();
+                 b.count = c["count"].cast<std::int64_t>();
+                 c.refuse_unread(where);
+                 o.boards.push_back(b);
+               }
+             } else {
+               o.boards.push_back({0, 0, n_channels});
+             }
+             if (d.contains("reference") && !d["reference"].is_none()) o.reference = d["reference"].cast<int>();
+             if (d.contains("missing")) {
+               const std::string w = py::str(d["missing"]).cast<std::string>();
+               if (w != "drop" && w != "zero") throw py::value_error("boards.missing: '" + w + "': drop or zero");
+               o.zero = w == "zero";
+             }
+             number(d, "wait_s", o.wait_s);
+             d.refuse_unread("boards.");
+             return live::BoardMerger(o, n_channels, sample_rate);
+           }),
+           py::arg("options"), py::arg("n_channels"), py::arg("sample_rate"), py::arg("sample_bytes") = 3)
+      .def("feed",
+           [](live::BoardMerger& b, const py::bytes& block) {
+             const std::string data = block;
+             std::vector<std::vector<unsigned char>> out;
+             b.feed(reinterpret_cast<const unsigned char*>(data.data()), data.size(), out);
+             py::list blocks;
+             for (const auto& x : out) blocks.append(py::bytes(reinterpret_cast<const char*>(x.data()), x.size()));
+             return blocks;
+           })
+      .def("finish",
+           [](live::BoardMerger& b) {
+             std::vector<std::vector<unsigned char>> out;
+             b.finish(out);
+             py::list blocks;
+             for (const auto& x : out) blocks.append(py::bytes(reinterpret_cast<const char*>(x.data()), x.size()));
+             return blocks;
+           })
+      .def("stats_json", &live::BoardMerger::stats_json)
+      .def_readonly("last_error", &live::BoardMerger::last_error)
+      .def_property_readonly("wait", &live::BoardMerger::wait)
+      .def_property_readonly("reference", &live::BoardMerger::reference);
 }

@@ -17,10 +17,17 @@ Block, little-endian, 128-byte header then samples:
     20  i64  sample index at which the most recent transmit started (-1: none yet)
     28  u32  ping index of that transmit
     32  u16  gain code            (carried into the record's metadata)
-    34  u16  flags                (bit 0: ADC overflow in this block)
+    34  u16  flags                (bit 0: ADC overflow in this block; bit 1: a per-board block, below)
     36  u64  capture start, ns since the Unix epoch (PTP time when the board has it)
-    44  ...  reserved, zero
+    44  u16  board id             (only with flag bit 1; else reserved, zero)
+    46  ...  reserved, zero
     128 n_samples x n_channels x sample_bytes: signed samples, sample by sample
+
+A whole-array block (every channel of the array on one sample counter) leaves flag bit 1 clear and offset 44 zero, so
+it is the block it always was. A per-board block (sonar-6f9) sets bit 1 and names its board at offset 44: it carries
+that board's channels on that board's own counter and capture start, and `board_merge.BoardMerger` turns the boards'
+streams into the whole-array stream (the board -> channel map is configuration). A receiver of the whole-array stream
+refuses a per-board block. This use of reserved bytes is ours and provisional, like the rest of the layout.
 
 The header does not say how many bytes a sample has: `sample_bytes` (3: 24-bit, the default; 2 or
 4 for boards with another word) is a parameter of the stream, set alike on the sender and on the
@@ -59,6 +66,8 @@ VERSION = 1
 HEADER_BYTES = 128
 _HEADER = struct.Struct("<4sHHIQqIHHQ")
 FLAG_OVERFLOW = 1
+FLAG_BOARD = 2                         # a per-board block: the board id is the u16 at BOARD_OFFSET (sonar-6f9)
+BOARD_OFFSET = 44
 SAMPLE_BYTES = 3                       # the default word: 24 bits
 FULL_SCALE_COUNTS = float(1 << 23)     # of the default word (full_scale_counts for another)
 # Payload bytes of one block of the plain-UDP stream: what 128 samples of 32 channels of 24 bits take. Well inside
@@ -106,9 +115,15 @@ class BlockError(ValueError):
 
 
 def encode_block(counts: np.ndarray, sample_index: int, tx_sample: int = -1, ping_index: int = 0,
-                 gain_code: int = 0, flags: int = 0, start_ns: int = 0, sample_bytes: int = SAMPLE_BYTES) -> bytes:
-    """`counts` [n_samples, n_channels] signed integers within the word (24 bits by default) -> block bytes."""
+                 gain_code: int = 0, flags: int = 0, start_ns: int = 0, sample_bytes: int = SAMPLE_BYTES,
+                 board: int | None = None) -> bytes:
+    """`counts` [n_samples, n_channels] signed integers within the word (24 bits by default) -> block bytes.
+    `board`: a per-board block of that board (flag bit 1 and the id at offset 44); None: a whole-array block."""
     counts = np.asarray(counts)
+    if board is not None:
+        if not 0 <= int(board) < (1 << 16):
+            raise BlockError(f"board id {board} does not fit the header (0 to 65535)")
+        flags = int(flags) | FLAG_BOARD
     if counts.ndim != 2:
         raise BlockError("counts must be [n_samples, n_channels]")
     full = int(full_scale_counts(sample_bytes))
@@ -116,6 +131,8 @@ def encode_block(counts: np.ndarray, sample_index: int, tx_sample: int = -1, pin
         raise BlockError(f"sample outside the {8 * sample_bytes}-bit range")
     n, ch = counts.shape
     header = _HEADER.pack(MAGIC, VERSION, ch, n, sample_index, tx_sample, ping_index, gain_code, flags, start_ns)
+    if board is not None:
+        header += struct.pack("<H", int(board))
     u = np.ascontiguousarray(counts, dtype="<i4").view(np.uint8).reshape(n, ch, 4)[:, :, :sample_bytes]
     return header.ljust(HEADER_BYTES, b"\0") + u.tobytes()
 
@@ -139,9 +156,10 @@ def decode_block(data: bytes, sample_bytes: int = SAMPLE_BYTES) -> dict:
     else:
         full_scale_counts(sample_bytes)        # 2 or 4, or an error
         counts = np.frombuffer(data, dtype="<i2" if sample_bytes == 2 else "<i4", offset=HEADER_BYTES).reshape(n, ch).astype(np.int32)
+    board = struct.unpack_from("<H", data, BOARD_OFFSET)[0] if flags & FLAG_BOARD else None
     return {"n_channels": ch, "n_samples": n, "sample_index": sample_index, "tx_sample": tx_sample,
             "ping_index": ping_index, "gain_code": gain_code, "flags": flags, "start_ns": start_ns,
-            "counts": counts}
+            "board": board, "counts": counts}
 
 
 class PingAssembler:
@@ -533,6 +551,9 @@ class PingAssembler:
     def feed(self, data: bytes) -> list:
         """Take one block; return the ping records it releases (usually none or one)."""
         block = decode_block(data, self.sample_bytes)
+        if block["board"] is not None:
+            raise BlockError(f"a per-board block (board {block['board']}) where one whole-array stream is received: "
+                             "per-board streams are merged first (source.boards)")
         if block["n_channels"] != self.n_channels:
             raise BlockError(f"block has {block['n_channels']} channels, the sonar config {self.n_channels}")
         if not 0 <= block["sample_index"] < MAX_SAMPLE_INDEX or not -1 <= block["tx_sample"] < MAX_SAMPLE_INDEX:
@@ -741,6 +762,9 @@ class FlankUdpSource(Source):
     are dropped and counted in `dropped_blocks` (0: no bound).
     Iteration ends after `max_pings` records or `timeout` seconds without one (0 or None: never).
 
+    `boards` ({} for every default): the boards send one stream each, merged before the assembler by
+    `board_merge.BoardMerger` (keys there); `board_stats()` says what each board lost. None: one whole-array stream.
+
     `sonar` has no default: the array the blocks come from must be named. `sample_bytes` is the
     boards' word (see the top of this file). `sound_speed` (m/s; None or 0: the sonar file's
     `nominal_sound_speed`) is the speed at which the sonar file's `receive.window.range` becomes
@@ -760,7 +784,7 @@ class FlankUdpSource(Source):
                  sonar_overrides: dict | None = None, max_pings: int | None = None, timeout: float | None = 2.0,
                  queue_pings: int = 8, decimate: dict | None = None, reference: dict | None = None,
                  sample_bytes: int = SAMPLE_BYTES, buffer_bytes: int | None = None, queue_mb: float = 1024.0,
-                 sound_speed: float | None = None):
+                 sound_speed: float | None = None, boards: dict | None = None):
         import queue
         import sys
         import warnings
@@ -768,6 +792,11 @@ class FlankUdpSource(Source):
         sound_speed = window_sound_speed(sound_speed)
         if decimate is not None and reference is None and len(model.boards) > 1:
             reference = (decimate.get("reference") if isinstance(decimate, dict) else None) or model.config["receive"].get("reference")
+        # One stream per capture board, merged into the whole-array stream before the assembler (sonar-6f9).
+        self.merger = None
+        if boards is not None:
+            from .board_merge import BoardMerger
+            self.merger = BoardMerger.from_options(boards, model, sample_bytes, where="source.boards.")
         self.assembler = PingAssembler(model, sound_speed=sound_speed, decimate=decimate, reference=reference, sample_bytes=sample_bytes)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.stream_bytes_per_second = self.assembler.n_channels * self.assembler.sample_rate * int(sample_bytes)
@@ -822,11 +851,20 @@ class FlankUdpSource(Source):
             except queue.Empty:
                 continue
             self._queued_bytes -= len(data)
-            try:
-                records = self.assembler.feed(data)
-            except BlockError:
-                self.bad_blocks += 1
-                continue
+            if self.merger is not None:
+                try:
+                    merged = self.merger.feed(data)
+                except BlockError:
+                    self.bad_blocks += 1
+                    continue
+            else:
+                merged = [data]
+            records = []
+            for block in merged:
+                try:
+                    records += self.assembler.feed(block)
+                except BlockError:
+                    self.bad_blocks += 1
             for r in records:
                 try:
                     self._queue.put_nowait(r)
@@ -853,7 +891,17 @@ class FlankUdpSource(Source):
             thread.join(timeout=2.0)
         if not any(thread.is_alive() for thread in self._threads):
             # The end of the stream: what is still awaited is counted; complete pings still waiting are not used.
+            if self.merger is not None:
+                for block in self.merger.finish():
+                    try:
+                        self.pings_discarded_at_stop += len(self.assembler.feed(block))
+                    except BlockError:
+                        self.bad_blocks += 1
             self.pings_discarded_at_stop += len(self.assembler.finish())
+
+    def board_stats(self) -> dict | None:
+        """What the merge of per-board streams counted, per board (BoardMerger.stats); None for a whole-array stream."""
+        return self.merger.stats() if self.merger is not None else None
 
 
 class FlankBoardEmulator:
@@ -879,8 +927,9 @@ class FlankBoardEmulator:
         if self.window_start + first.n_samples > self.period:
             raise ValueError("the receive window is longer than the ping interval")
 
-    def blocks(self) -> Iterator[bytes]:
-        """Every block of the run, in order."""
+    def stream(self) -> np.ndarray:
+        """The whole run as one array of counts [samples, channels]: transmit i at sample i * period, zeros outside
+        the receive windows."""
         n_ch = self.records[0].samples.n_channels
         total = self.period * len(self.records)
         stream = np.zeros((total, n_ch), dtype=np.int32)
@@ -888,6 +937,12 @@ class FlankBoardEmulator:
             x = np.rint(r.samples.array.T * self.counts_per_volt)
             a = i * self.period + self.window_start
             stream[a:a + len(x)] = np.clip(x, -self.full_counts, self.full_counts - 1).astype(np.int32)
+        return stream
+
+    def blocks(self) -> Iterator[bytes]:
+        """Every block of the run, in order."""
+        stream = self.stream()
+        total = len(stream)
         for first in range(0, total, self.block_samples):
             ping = first // self.period                     # the transmit at or before this block
             last_tx = ping * self.period

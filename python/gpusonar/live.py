@@ -765,6 +765,19 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
                         ("timeout", "idle_seconds"), ("host", "bind")):
         if src.get(key) is not None:
             out[option] = src[key]
+    # Per-board streams (sonar-6f9): merged before the assembler, with the same keys (sources/board_merge.py).
+    if src.get("boards") is not None:
+        from .sources.board_merge import CHANNEL_KEYS, OPTION_KEYS
+        boards = dict(src["boards"] or {})
+        _refuse_unknown(boards, OPTION_KEYS, "source.boards.")
+        out["stream_boards"] = 1
+        if boards.get("channels") is not None:
+            for k, c in enumerate(boards["channels"]):
+                _refuse_unknown(c, CHANNEL_KEYS, f"source.boards.channels[{k}].")
+            out["stream_board_channels"] = ",".join(f"{int(c['id'])}:{int(c['first'])}:{int(c['count'])}" for c in boards["channels"])
+        for key in ("reference", "missing", "wait_s"):
+            if boards.get(key) is not None:
+                out[f"stream_board_{key}"] = boards[key]
     if (deploy.get("output") or {}).get("report_udp_max_bytes") is not None:
         out["report_udp_max_bytes"] = int(deploy["output"]["report_udp_max_bytes"])
     nav = deploy.get("nav") or {}

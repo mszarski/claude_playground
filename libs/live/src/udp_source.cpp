@@ -467,7 +467,8 @@ PingAssembler::Block PingAssembler::take(const Header& h, std::vector<PingRecord
 }
 
 bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out) {
-  if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1) {
+  // A per-board block (flag bit 1, sonar-6f9) is not part of a whole-array stream: merged first (board_merge.hpp).
+  if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1 || (get<std::uint16_t>(data + 34) & 2) != 0) {
     ++bad_blocks;
     return false;
   }
@@ -599,7 +600,7 @@ StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t
 }
 
 bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out) {
-  if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1) {
+  if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1 || (get<std::uint16_t>(data + 34) & 2) != 0) {
     ++bad_blocks;
     return false;
   }
