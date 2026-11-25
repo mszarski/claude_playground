@@ -5,9 +5,11 @@
 // the values carried in metadata.extra_json, and the sound-speed ladder (rungs, the built profile,
 // the depth sigma's limit). tests/python/test_decimate.py, test_blanking.py, test_nav_adapter.py and
 // test_profile_ladder.py hold the same code against simulated pings and the Python stages.
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,6 +19,7 @@
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
+#include "sonar/live/sync.hpp"
 #include "sonar/live/udp_source.hpp"
 
 using namespace sonar;        // NOLINT(google-build-using-namespace)
@@ -63,36 +66,104 @@ double burst_at(const Reference& ref, double t) {
   return w * w * std::cos(2.0 * kPi * (ref.f_start * t + 0.5 * k * t * t));
 }
 
-// The board resampler's arithmetic until sonar-drc, one channel row at a time (sync.cpp then; the reference for the
-// test below): every sample's sinc weights computed again for every row.
-void resample_row_by_row(float* x, std::int64_t n, double offset, double drift, double fs) {
+// The board resampler's 16 weights at fractional position `frac` from the formula, a sine and a cosine a tap (sync.cpp
+// until sonar-fy6).
+void direct_weights(double frac, double* w) {
+  constexpr int half = 8;
+  for (int k = -half + 1; k <= half; ++k) {
+    const double d = static_cast<double>(k) - frac;
+    const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
+    w[k + half - 1] = sinc * (0.5 + 0.5 * std::cos(kPi * d / half));
+  }
+}
+
+// The board resampler one channel row at a time (sync.cpp until sonar-drc; the reference for the tests below): every
+// sample's weights computed again for every row, from the formula (`direct`, sync.cpp until sonar-fy6) or from
+// resample_weights (sync.cpp since).
+void resample_row_by_row(float* x, std::int64_t n, double offset, double drift, double fs, bool direct) {
   constexpr int taps = 16, half = taps / 2;
   std::vector<float> out(static_cast<std::size_t>(n), 0.0F);
   for (std::int64_t m = 0; m < n; ++m) {
     const double pos = (static_cast<double>(m) / fs - offset) * fs * (1.0 + drift);
     const auto base = static_cast<std::int64_t>(std::floor(pos));
     const double frac = pos - static_cast<double>(base);
+    double w[taps];
+    if (direct) {
+      direct_weights(frac, w);
+    } else {
+      resample_weights(frac, w);
+    }
     double acc = 0.0;
     for (int k = -half + 1; k <= half; ++k) {
       const std::int64_t idx = base + k;
       if (idx < 0 || idx >= n) continue;
-      const double d = static_cast<double>(k) - frac;
-      const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
-      acc += sinc * (0.5 + 0.5 * std::cos(kPi * d / half)) * static_cast<double>(x[idx]);
+      acc += w[k + half - 1] * static_cast<double>(x[idx]);
     }
     out[static_cast<std::size_t>(m)] = static_cast<float>(acc);
   }
   std::copy(out.begin(), out.end(), x);
 }
 
+// The largest difference between a weight from three trig calls and the formula's, over every tap and position below
+// (measured 2.8e-16 with this C++ library's sine and cosine, 2.5e-16 with numpy's; the weights are at most 1): a weight's
+// last bit or two.
+constexpr double kWeightBound = 4.5e-16;
+
 }  // namespace
+
+TEST(Sync, ResampleWeightsFromThreeTrigCallsAreTheFormulasTapByTap) {
+  // sonar-fy6: resample_weights makes a position's 16 weights from sin(pi frac), cos(pi frac / 8) and sin(pi frac / 8).
+  // Tap by tap against the formula over a dense set of fractions, the ones at the ends (0, the smallest, next to 1/2 and
+  // to 1) and the fractions the chain makes (positions (m / fs - offset) fs (1 + drift) of a board late or early,
+  // with or without drift).
+  std::vector<double> fracs;
+  for (int i = 0; i < 200000; ++i) fracs.push_back(static_cast<double>(i) / 200000.0);
+  for (double f : {0.0, std::numeric_limits<double>::denorm_min(), 1e-300, 1e-13, 1e-12, 1.1e-12, 1e-9, 0.5, std::nextafter(0.5, 0.0),
+                   std::nextafter(0.5, 1.0), std::nextafter(1.0, 0.0), 1.0 - 1e-12, 1.0 - 1.1e-12, 1.0 - 1e-9, 1.0 - 1e-15}) {
+    fracs.push_back(f);
+  }
+  for (double offset : {3.1e-4, -1.7e-4, 2.1e-3, 1.234567e-5}) {
+    for (double drift : {0.0, 12e-6, -55.5e-6}) {
+      for (std::int64_t m = 0; m < 20000; m += 7) {
+        const double pos = (static_cast<double>(m) / kFs - offset) * kFs * (1.0 + drift);
+        fracs.push_back(pos - std::floor(pos));
+      }
+    }
+  }
+  double worst = 0.0;
+  for (double f : fracs) {
+    ASSERT_GE(f, 0.0);
+    ASSERT_LT(f, 1.0);
+    double got[16], want[16];
+    resample_weights(f, got);
+    direct_weights(f, want);
+    for (int k = 0; k < 16; ++k) {
+      ASSERT_TRUE(std::isfinite(got[k])) << f << " " << k;
+      worst = std::max(worst, std::abs(got[k] - want[k]));
+    }
+  }
+  std::printf("resample_weights against the formula: largest difference %.3g over %zu positions\n", worst, fracs.size());
+  EXPECT_LE(worst, kWeightBound);
+  // On a sample: the tap at k = 0 is 1 and every other tap 0, exactly, so the sample is passed on as it is.
+  double w[16];
+  resample_weights(0.0, w);
+  for (int k = -7; k <= 8; ++k) EXPECT_EQ(w[k + 7], k == 0 ? 1.0 : 0.0) << k;
+  // Next to the following sample (frac = 1 - 2^-53, 1 - 1e-9): its tap (k = 1) is 1 to a bit or two, as the formula's;
+  // sin(pi frac) taken as is there (not from frac - 1) is off by up to 3e-16 / (pi (1 - frac)) relatively: all of it at 1 - 2^-53.
+  for (double f : {std::nextafter(1.0, 0.0), 1.0 - 1e-9}) {
+    resample_weights(f, w);
+    EXPECT_NEAR(w[8], 1.0, kWeightBound) << f;
+  }
+}
 
 TEST(Sync, BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit) {
   // sonar-drc: synchronise() computes a board's sinc weights once a block of samples for all its rows, in groups of
-  // rows. Its samples must be the row-by-row resampler's, to the bit, with the clocks it estimated: three boards of 4,
-  // 11 (more than one group) and 1 inputs, a window that is not a whole number of blocks, a board 2.1 ms late (taps
-  // past the start) and one early (taps past the end), drifts both ways. Each board's first input carries the
-  // reference bursts as its clock sees them, every input noise and a tone.
+  // rows. Its samples must be the row-by-row resampler's with the same weights, to the bit, with the clocks it
+  // estimated: three boards of 4, 11 (more than one group) and 1 inputs, a window that is not a whole number of blocks,
+  // a board 2.1 ms late (taps past the start) and one early (taps past the end), drifts both ways. Each board's first
+  // input carries the reference bursts as its clock sees them, every input noise and a tone.
+  // sonar-fy6: the weights come from three trig calls a sample, not a sine and a cosine a tap; against the formula's
+  // weights every sample is within one float spacing of its value plus 16 x kWeightBound x the largest input.
   const std::int64_t n = 3 * 4096 + 1237;
   const std::vector<std::int64_t> counts = {4, 11, 1};
   const std::vector<double> late = {0.0, 2.1e-3, -1.3e-3}, fast = {0.0, 35e-6, -20e-6};
@@ -134,18 +205,34 @@ TEST(Sync, BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit) {
   EXPECT_NEAR(s.offset[2], late[2], 1e-6);
   EXPECT_NEAR(s.drift_ppm[1], 35.0, 1.0);
   EXPECT_NEAR(s.drift_ppm[2], -20.0, 1.0);
-  PingRecord want = r;
+  PingRecord want = r, formula = r;
   for (std::int64_t ch = 0; ch < 16; ++ch) {
     const auto b = static_cast<std::size_t>(want.metadata.channel_board[static_cast<std::size_t>(ch)]);
     if (s.offset[b] == 0.0 && s.drift_ppm[b] == 0.0) continue;
-    resample_row_by_row(want.samples.channel(ch), n, s.offset[b], s.drift_ppm[b] * 1e-6, kFs);
+    resample_row_by_row(want.samples.channel(ch), n, s.offset[b], s.drift_ppm[b] * 1e-6, kFs, false);
+    resample_row_by_row(formula.samples.channel(ch), n, s.offset[b], s.drift_ppm[b] * 1e-6, kFs, true);
   }
   ASSERT_EQ(got.samples.data.size(), want.samples.data.size());
-  std::size_t moved = 0;
+  float largest = 0.0F;
+  for (float v : r.samples.data) largest = std::max(largest, std::abs(v));
+  std::size_t moved = 0, ulps[4] = {0, 0, 0, 0};
   for (std::size_t i = 0; i < want.samples.data.size(); ++i) {
     ASSERT_EQ(got.samples.data[i], want.samples.data[i]) << i;   // exact: the same float, not a near one
     moved += want.samples.data[i] != r.samples.data[i] ? 1 : 0;
+    const float g = got.samples.data[i], f = formula.samples.data[i];
+    const float spacing = std::nextafter(std::max(std::abs(g), std::abs(f)), std::numeric_limits<float>::infinity()) -
+                          std::max(std::abs(g), std::abs(f));
+    ASSERT_LE(std::abs(static_cast<double>(g) - f), spacing + 16.0 * kWeightBound * largest) << i;
+    float step = f;
+    std::size_t apart = 0;
+    while (step != g && apart < 3) {
+      step = std::nextafter(step, g);
+      ++apart;
+    }
+    ++ulps[apart];
   }
+  std::printf("against the formula's weights: %zu samples equal, %zu one float apart, %zu two, %zu more\n", ulps[0], ulps[1], ulps[2],
+              ulps[3]);
   EXPECT_GT(moved, want.samples.data.size() / 2);   // the boards that run late or early were resampled
 }
 

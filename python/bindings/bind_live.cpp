@@ -20,6 +20,7 @@
 #include "sonar/live/option_value.hpp"
 #include "sonar/live/options.hpp"
 #include "sonar/live/sbl_kernel.hpp"
+#include "sonar/live/sync.hpp"
 #include "sonar/live/udp_source.hpp"
 
 namespace py = pybind11;
@@ -420,6 +421,19 @@ void bind_live(py::module_& m) {
       "live_synchronise",
       [](PingRecord& record, const py::dict& reference) { return sync_dict(live::synchronise(record, reference_dict(reference, "live_synchronise: "))); },
       "The C++ board synchronisation on a raw record, in place (sync.hpp): the clock facts, with `flagged` per board.");
+  m.def(
+      "live_resample_weights",
+      [](const std::vector<double>& frac) {
+        py::array_t<double> out({static_cast<py::ssize_t>(16), static_cast<py::ssize_t>(frac.size())});
+        auto o = out.mutable_unchecked<2>();
+        double w[16];
+        for (std::size_t i = 0; i < frac.size(); ++i) {
+          live::resample_weights(frac[i], w);
+          for (int k = 0; k < 16; ++k) o(k, static_cast<py::ssize_t>(i)) = w[k];
+        }
+        return out;
+      },
+      py::arg("frac"), "The board resampler's weights [16, len(frac)] at fractional positions in [0, 1) (sync.hpp resample_weights).");
   m.def(
       "live_cluster",
       [](const py::array_t<bool, py::array::c_style | py::array::forcecast>& det,
