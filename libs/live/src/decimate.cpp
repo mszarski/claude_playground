@@ -315,38 +315,86 @@ SyncResult decimate_record(PingRecord& record, const DecimateOptions& options, c
   return finish_sync(record, plan, reference != nullptr, ref, bursts, n, options.blank_until_s > 0.0 ? options.blank_until_s + options.blank_taper_s : 0.0);
 }
 
+// A board's baseband rows (`rows`, each `n` samples) at its fractional sample positions, turned by the carrier phase,
+// in place: as resample_rows in sync.cpp does for real samples (sonar-drc), a board's channels share their positions
+// and phase turns, so the weights and turns are computed once a block of samples for up to 8 of its rows, the blocks
+// of every board and group of rows in parallel, each sample's weights from three trig calls (resample_weights; sonar-59u:
+// this stage computed a sine and a cosine a tap for every sample of every channel). Every sample is the one the
+// channel-by-channel loop with the same weights gives, to the bit: the same double weight times the same input, added
+// in the same tap order, times the same turn (tests/cpp/test_stage2.cpp holds it, and the samples against the direct
+// formula's). It holds the moving boards' samples once besides the record until the end
+// (before: one channel a thread).
 void correct_baseband(PingRecord& record, const std::vector<double>& offset, const std::vector<double>& drift_ppm) {
   Samples& s = record.samples;
   if (!s.is_complex()) throw std::invalid_argument("correct_baseband: needs complex baseband samples");
   const std::int64_t n = s.n_samples;
   const double fs = s.sample_rate, fc = s.center_frequency;
   constexpr int taps = 16, half = taps / 2;
-  parallel_for_host(s.n_channels, [&](std::int64_t c) {
+  constexpr std::int64_t block = 256;     // samples whose weights and turns are held at once (36 KiB)
+  constexpr std::size_t group = 8;        // rows resampled together
+  // The rows of each board that moves (a board at offset and drift 0 is left as it is), in channel order.
+  std::vector<std::vector<std::complex<float>*>> rows(offset.size());
+  for (std::int64_t c = 0; c < s.n_channels; ++c) {
     const auto b = static_cast<std::size_t>(record.metadata.channel_board[static_cast<std::size_t>(c)]);
-    const double o = offset[b], d = drift_ppm[b] * 1e-6;
-    if (o == 0.0 && d == 0.0) return;
-    std::complex<float>* x = s.channel_complex(c);
-    std::vector<std::complex<float>> y(static_cast<std::size_t>(n));
-    for (std::int64_t m = 0; m < n; ++m) {
+    if (b >= offset.size() || b >= drift_ppm.size()) throw std::invalid_argument("correct_baseband: a channel's board has no clock");
+    if (offset[b] == 0.0 && drift_ppm[b] * 1e-6 == 0.0) continue;
+    rows[b].push_back(s.channel_complex(c));
+  }
+  // One task a (board, group of rows, block of samples); each group's output apart until all are done.
+  struct Group {
+    std::size_t board, first, count;
+    std::vector<std::complex<float>> out;
+  };
+  std::vector<Group> groups;
+  for (std::size_t b = 0; b < rows.size(); ++b) {
+    for (std::size_t g = 0; g < rows[b].size(); g += group) groups.push_back({b, g, std::min(group, rows[b].size() - g), {}});
+  }
+  if (groups.empty() || n == 0) return;
+  for (Group& g : groups) g.out.resize(g.count * static_cast<std::size_t>(n));
+  const std::int64_t n_blocks = (n + block - 1) / block;
+  parallel_for_host(static_cast<std::int64_t>(groups.size()) * n_blocks, [&](std::int64_t task) {
+    Group& g = groups[static_cast<std::size_t>(task / n_blocks)];
+    const double o = offset[g.board], d = drift_ppm[g.board] * 1e-6;
+    const std::int64_t m0 = (task % n_blocks) * block, m1 = std::min(n, m0 + block);
+    std::int64_t base[block];
+    double weight[block * taps];
+    std::complex<double> turn[block];
+    for (std::int64_t m = m0; m < m1; ++m) {
       // Nominal sample m is wanted at time m / fs after the window opens; this board holds that instant at
       // index `pos`, mixed with the phase of its own nominal time pos / fs: (m - pos) / fs too early.
       const double pos = (static_cast<double>(m) / fs - o) * fs * (1.0 + d);
-      const auto base = static_cast<std::int64_t>(std::floor(pos));
-      const double frac = pos - static_cast<double>(base);
-      std::complex<double> acc = 0.0;
-      for (int k = -half + 1; k <= half; ++k) {
-        const std::int64_t idx = base + k;
-        if (idx < 0 || idx >= n) continue;
-        const double q = static_cast<double>(k) - frac;
-        const double sinc = std::abs(q) < 1e-12 ? 1.0 : std::sin(kPi * q) / (kPi * q);
-        acc += sinc * (0.5 + 0.5 * std::cos(kPi * q / half)) * std::complex<double>(x[idx]);
-      }
+      const auto b = static_cast<std::int64_t>(std::floor(pos));
+      const double frac = pos - static_cast<double>(b);
+      base[m - m0] = b;
+      // The board resampler's Hann-windowed sinc (the same 16 taps, k = -7..8, and the same 1e-12 rule) from three trig
+      // calls (sync.hpp resample_weights, sonar-fy6), not a sine and a cosine a tap.
+      resample_weights(frac, weight + (m - m0) * taps);
       const double cycles = fc * (static_cast<double>(m) - pos) / fs;
       const double ph = -2.0 * kPi * (cycles - std::floor(cycles));
-      y[static_cast<std::size_t>(m)] = std::complex<float>(acc * std::complex<double>(std::cos(ph), std::sin(ph)));
+      turn[m - m0] = std::complex<double>(std::cos(ph), std::sin(ph));
     }
-    std::copy(y.begin(), y.end(), x);
+    for (std::size_t r = 0; r < g.count; ++r) {
+      const std::complex<float>* x = rows[g.board][g.first + r];
+      std::complex<float>* y = g.out.data() + r * static_cast<std::size_t>(n);
+      for (std::int64_t m = m0; m < m1; ++m) {
+        const std::int64_t b = base[m - m0];
+        const double* w = weight + (m - m0) * taps;
+        std::complex<double> acc = 0.0;
+        for (int k = -half + 1; k <= half; ++k) {
+          const std::int64_t idx = b + k;
+          if (idx < 0 || idx >= n) continue;
+          acc += w[k + half - 1] * std::complex<double>(x[idx]);
+        }
+        y[m] = std::complex<float>(acc * turn[m - m0]);
+      }
+    }
   });
+  for (const Group& g : groups) {
+    for (std::size_t r = 0; r < g.count; ++r) {
+      const auto first = g.out.begin() + static_cast<std::ptrdiff_t>(r * static_cast<std::size_t>(n));
+      std::copy(first, first + static_cast<std::ptrdiff_t>(n), rows[g.board][g.first + r]);
+    }
+  }
 }
 
 bool decimated_sync_facts(const PingRecord& record, SyncResult& facts) {
