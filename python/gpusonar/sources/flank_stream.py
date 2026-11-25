@@ -110,6 +110,29 @@ def stream_buffer_bytes(n_channels: int, sample_rate: float, sample_bytes: int =
     return int(max(STREAM_BUFFER_BYTES, STREAM_BUFFER_SECONDS * n_channels * sample_rate * sample_bytes))
 
 
+# A board clock's rate error larger than this is refused as a typing error (ours: a crystal is within about 100 ppm).
+MAX_CLOCK_PPM = 1000.0
+
+
+def clock_rate(value, where: str = "clock_ppm") -> float:
+    """A configured clock-rate error in ppm (positive: the board counts fast, fs (1 + ppm 1e-6) samples a true second):
+    a finite number within MAX_CLOCK_PPM, else ValueError naming `where`. None is 0."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (bool, str)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"{where}: a number of ppm, not {value!r}")
+    v = float(value)
+    if not np.isfinite(v) or abs(v) > MAX_CLOCK_PPM:
+        raise ValueError(f"{where}: {value!r}: a finite number of ppm within {MAX_CLOCK_PPM:g}")
+    return v
+
+
+def stamp_offset_ns(sample: int, sample_rate: float, ppm: float) -> int:
+    """True ns from capture start to `sample` of a counter that runs at sample_rate (1 + ppm 1e-6) (sonar-ubg; ours):
+    floor(sample / (fs (1 + ppm 1e-6)) 1e9 + 0.5). libs/live board_merge.cpp stamp_offset_ns is the same."""
+    return int(np.floor(float(sample) / (sample_rate * (1.0 + ppm * 1e-6)) * 1e9 + 0.5))
+
+
 class BlockError(ValueError):
     """A block that is not what the header says it is."""
 
@@ -243,8 +266,11 @@ class PingAssembler:
 
     def __init__(self, sonar: SonarModel, pose=None, sound_speed: float | None = None, decimate: dict | None = None,
                  reference: dict | None = None, sample_bytes: int = SAMPLE_BYTES, reorder_blocks: int = REORDER_BLOCKS,
-                 max_held_bytes: int = MAX_HELD_BYTES):
+                 max_held_bytes: int = MAX_HELD_BYTES, clock_ppm: float = 0.0):
         self.sonar = sonar
+        # The board clock's rate error (ppm, positive fast; sonar-ubg): 0 stamps capture start + tx / fs as always;
+        # otherwise capture start + tx / (fs (1 + ppm 1e-6)). It may be changed between blocks (clock.discipline).
+        self.clock_ppm = clock_rate(clock_ppm)
         self.sample_bytes = int(sample_bytes)
         if int(reorder_blocks) < 0:
             raise ValueError("reorder_blocks must be 0 or more")
@@ -712,7 +738,10 @@ class PingAssembler:
         return hit
 
     def _record(self, p: dict) -> "core.PingRecord":
-        t_tx_ns = p["start_ns"] + int(round(p["tx"] / self.sample_rate * 1e9))
+        if self.clock_ppm == 0.0:
+            t_tx_ns = p["start_ns"] + int(round(p["tx"] / self.sample_rate * 1e9))
+        else:
+            t_tx_ns = p["start_ns"] + stamp_offset_ns(p["tx"], self.sample_rate, self.clock_ppm)
         record = self.sonar.make_record(self.pose, sequence=int(p["index"]), time_ns=t_tx_ns,
                                         environment={"sound_speed": self.sound_speed})
         if self._decimator:
@@ -784,7 +813,8 @@ class FlankUdpSource(Source):
                  sonar_overrides: dict | None = None, max_pings: int | None = None, timeout: float | None = 2.0,
                  queue_pings: int = 8, decimate: dict | None = None, reference: dict | None = None,
                  sample_bytes: int = SAMPLE_BYTES, buffer_bytes: int | None = None, queue_mb: float = 1024.0,
-                 sound_speed: float | None = None, boards: dict | None = None):
+                 sound_speed: float | None = None, boards: dict | None = None, clock_ppm: float | None = None,
+                 clock: dict | None = None):
         import queue
         import sys
         import warnings
@@ -797,7 +827,22 @@ class FlankUdpSource(Source):
         if boards is not None:
             from .board_merge import BoardMerger
             self.merger = BoardMerger.from_options(boards, model, sample_bytes, where="source.boards.")
-        self.assembler = PingAssembler(model, sound_speed=sound_speed, decimate=decimate, reference=reference, sample_bytes=sample_bytes)
+        # The clock's rate (sonar-ubg): `clock_ppm` for a whole-array stream; with per-board streams the merged stream is
+        # the reference board's and its rate is source.boards.clock_ppm's entry for that board.
+        clock_ppm = clock_rate(clock_ppm, "source.clock_ppm")
+        if self.merger is not None:
+            if clock_ppm:
+                raise ValueError("source.clock_ppm: with source.boards give each board's rate in source.boards.clock_ppm")
+            clock_ppm = self.merger.clock_ppm(self.merger.reference)
+        self.clock_ppm = clock_ppm
+        self.clocks = None                 # ClockEstimator by board id (-1: the whole-array stream), with source.clock
+        if clock is not None:
+            from .board_merge import ClockEstimator
+            ids = [b.id for b in self.merger.boards] if self.merger is not None else [-1]
+            self.clocks = {i: ClockEstimator.from_options(clock, model.sample_rate, where="source.clock.") for i in ids}
+            self._stamp_clock = self.merger.reference if self.merger is not None else -1
+        self.assembler = PingAssembler(model, sound_speed=sound_speed, decimate=decimate, reference=reference, sample_bytes=sample_bytes,
+                                       clock_ppm=clock_ppm)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.stream_bytes_per_second = self.assembler.n_channels * self.assembler.sample_rate * int(sample_bytes)
         self.buffer_asked = stream_buffer_bytes(self.assembler.n_channels, self.assembler.sample_rate, int(sample_bytes), buffer_bytes)
@@ -837,7 +882,7 @@ class FlankUdpSource(Source):
                     self.dropped_blocks += 1               # the assembler sees the gap and drops the ping it falls in
                     continue
                 self._queued_bytes += len(data)
-                self._blocks.put(data)
+                self._blocks.put((data, time.time_ns()))        # the arrival on the host clock, for clock.estimate
             except socket.timeout:
                 continue
             except OSError:
@@ -847,10 +892,12 @@ class FlankUdpSource(Source):
         import queue
         while not self._stop.is_set():
             try:
-                data = self._blocks.get(timeout=0.2)
+                data, arrival_ns = self._blocks.get(timeout=0.2)
             except queue.Empty:
                 continue
             self._queued_bytes -= len(data)
+            if self.clocks is not None:
+                self._clock(data, arrival_ns)
             if self.merger is not None:
                 try:
                     merged = self.merger.feed(data)
@@ -898,6 +945,25 @@ class FlankUdpSource(Source):
                     except BlockError:
                         self.bad_blocks += 1
             self.pings_discarded_at_stop += len(self.assembler.finish())
+
+    def _clock(self, data: bytes, arrival_ns: int) -> None:
+        """Feed a block's arrival to its board's rate estimate; at each new bin, the stamps' rate (clock.discipline)."""
+        if len(data) < HEADER_BYTES or data[:4] != MAGIC:
+            return
+        _, _, _, n, first, _, _, _, flags, start_ns = _HEADER.unpack_from(data)
+        key = struct.unpack_from("<H", data, BOARD_OFFSET)[0] if flags & FLAG_BOARD else -1
+        est = self.clocks.get(key)
+        if est is not None and est.feed(first + n, start_ns, arrival_ns) and key == self._stamp_clock:
+            self.assembler.clock_ppm = est.stamp_ppm(self.clock_ppm)
+
+    def clock_stats(self) -> dict | None:
+        """The rate estimate from arrival times (ClockEstimator.estimate): of the stream, or {"boards": {id: ...}} of each
+        board; None without source.clock."""
+        if self.clocks is None:
+            return None
+        if self.merger is None:
+            return dict(self.clocks[-1].estimate(), stamp_ppm=self.assembler.clock_ppm)
+        return {"boards": {str(k): v.estimate() for k, v in self.clocks.items()}, "stamp_ppm": self.assembler.clock_ppm}
 
     def board_stats(self) -> dict | None:
         """What the merge of per-board streams counted, per board (BoardMerger.stats); None for a whole-array stream."""

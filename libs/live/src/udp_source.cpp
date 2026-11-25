@@ -1,5 +1,7 @@
 #include "sonar/live/udp_source.hpp"
 
+#include "sonar/live/board_merge.hpp"
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -258,7 +260,10 @@ void PingAssembler::place(Ping& p, const Header& h, std::int64_t a, std::int64_t
 PingRecord PingAssembler::make_record(Ping& p) {
   PingRecord rec = std::move(p.record);
   rec.metadata.sequence = p.index;
-  rec.transmit.time_ns = p.start_ns + static_cast<std::int64_t>(std::llround(static_cast<double>(p.tx) / rec.samples.sample_rate * 1e9));
+  // clock_ppm 0: capture start + tx / fs, as always; else the board clock's rate taken out (sonar-ubg, board_merge.hpp).
+  rec.transmit.time_ns = clock_ppm == 0.0
+                             ? p.start_ns + static_cast<std::int64_t>(std::llround(static_cast<double>(p.tx) / rec.samples.sample_rate * 1e9))
+                             : p.start_ns + stamp_offset_ns(p.tx, rec.samples.sample_rate, clock_ppm);
   if (decimator_) {
     decimator_->finish(rec);
     return rec;

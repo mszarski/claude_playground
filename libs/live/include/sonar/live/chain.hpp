@@ -76,6 +76,14 @@ struct StreamOptions {
   int board_reference = -1;           ///< the board whose counter the merged stream has; -1: the first in the map
   bool board_zero = false;            ///< a board's missing part: false drops the span, true fills it with zeros
   double board_wait_s = 0.05;         ///< how long a board may lag the others (board_merge.hpp kBoardWaitSeconds)
+  /// The board clock's rate error (sonar-ubg; board_merge.hpp): ppm of the whole-array stream; with boards, each board's
+  /// as "id:ppm,..." (the merged stream is stamped at the reference board's). 0 / empty: as before.
+  double clock_ppm = 0.0;
+  std::string board_ppm;
+  /// The rate estimated from the blocks' arrival times (board_merge.hpp ClockEstimator), reported at the end; with
+  /// clock_discipline the stamps use it once it spans clock_min_span_s with a sigma at most clock_max_sigma_ppm.
+  bool clock_estimate = false, clock_discipline = false;
+  double clock_bin_s = 1.0, clock_window_s = 600.0, clock_min_span_s = 300.0, clock_max_sigma_ppm = 0.5;
 };
 
 struct ChainOptions {

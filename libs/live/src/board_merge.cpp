@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
@@ -35,6 +36,118 @@ std::int64_t block_samples_for(std::int64_t n_channels, std::int64_t sample_byte
 }
 
 std::int64_t half_up(double x) { return static_cast<std::int64_t>(std::floor(x + 0.5)); }
+
+std::int64_t stamp_offset_ns(std::int64_t sample, double sample_rate, double ppm) {
+  return half_up(static_cast<double>(sample) / (sample_rate * (1.0 + ppm * 1e-6)) * 1e9);
+}
+
+double clock_rate(double ppm, const std::string& where) {
+  if (!std::isfinite(ppm) || std::fabs(ppm) > kMaxClockPpm) {
+    throw std::invalid_argument(where + ": a finite number of ppm within 1000");
+  }
+  return ppm;
+}
+
+std::vector<std::pair<int, double>> parse_board_ppm(const std::string& text) {
+  std::vector<std::pair<int, double>> out;
+  std::stringstream s(text);
+  std::string item;
+  while (std::getline(s, item, ',')) {
+    if (item.empty()) continue;
+    std::istringstream in(item);
+    long long id = 0;
+    char c = 0;
+    double ppm = 0.0;
+    if (!(in >> id >> c >> ppm) || c != ':' || !(in >> std::ws).eof()) throw std::invalid_argument("stream_board_ppm: " + item + ": id:ppm");
+    out.emplace_back(static_cast<int>(id), clock_rate(ppm, "stream_board_ppm"));
+  }
+  return out;
+}
+
+std::string ClockEstimate::json() const {
+  std::ostringstream s;
+  s << std::setprecision(17) << "{\"ppm\": ";
+  if (valid) s << ppm << ", \"sigma_ppm\": " << sigma_ppm;
+  else s << "null, \"sigma_ppm\": null";
+  s << ", \"span_s\": " << span_s << ", \"bins\": " << bins << "}";
+  return s.str();
+}
+
+ClockEstimator::ClockEstimator(double sample_rate, const ClockOptions& o) : fs_(sample_rate), o_(o) {
+  for (const auto& kv : {std::pair<const char*, double>{"bin_s", o.bin_s}, {"window_s", o.window_s}, {"min_span_s", o.min_span_s},
+                         {"max_sigma_ppm", o.max_sigma_ppm}}) {
+    if (!std::isfinite(kv.second) || kv.second < 0.0) throw std::invalid_argument(std::string("clock.") + kv.first + ": a number, 0 or more");
+  }
+  bin_ = std::max<std::int64_t>(half_up(o.bin_s * fs_), 1);
+  window_bins_ = std::max<std::int64_t>(half_up(o.window_s / std::max(o.bin_s, 1e-12)), 1);
+}
+
+bool ClockEstimator::feed(std::int64_t sample_end, std::int64_t start_ns, std::int64_t arrival_ns) {
+  if (!started_) {
+    started_ = true;
+    start_ns_ = start_ns;
+  } else if (start_ns != start_ns_) {
+    ++restarts;
+    start_ns_ = start_ns;
+    bins_.clear();
+    have_latest_ = false;
+  }
+  const double x = static_cast<double>(sample_end) / fs_;
+  const double y = static_cast<double>(arrival_ns - start_ns) * 1e-9 - x;
+  const std::int64_t k = sample_end / bin_;
+  auto it = bins_.find(k);
+  if (it == bins_.end() || y < it->second.second) bins_[k] = {x, y};
+  if (!have_latest_ || k > latest_) {
+    have_latest_ = true;
+    latest_ = k;
+    bins_.erase(bins_.begin(), bins_.upper_bound(k - window_bins_));
+    return true;
+  }
+  return false;
+}
+
+ClockEstimate ClockEstimator::estimate() const {
+  ClockEstimate e;
+  e.bins = static_cast<std::int64_t>(bins_.size());
+  if (bins_.empty()) return e;
+  double lo = bins_.begin()->second.first, hi = lo;
+  for (const auto& kv : bins_) {
+    lo = std::min(lo, kv.second.first);
+    hi = std::max(hi, kv.second.first);
+  }
+  e.span_s = hi - lo;
+  if (e.bins < 3) return e;
+  const auto m = static_cast<double>(e.bins);
+  double sx = 0.0, sy = 0.0;
+  for (const auto& kv : bins_) {
+    sx += kv.second.first;
+    sy += kv.second.second;
+  }
+  const double mx = sx / m, my = sy / m;
+  double sxx = 0.0, sxy = 0.0;
+  for (const auto& kv : bins_) {
+    sxx += (kv.second.first - mx) * (kv.second.first - mx);
+    sxy += (kv.second.first - mx) * (kv.second.second - my);
+  }
+  const double slope = sxy / sxx;
+  double rr = 0.0;
+  for (const auto& kv : bins_) {
+    const double r = kv.second.second - my - slope * (kv.second.first - mx);
+    rr += r * r;
+  }
+  const double sigma = std::sqrt(rr / (m - 2.0) / sxx);
+  e.valid = true;
+  e.ppm = -slope / (1.0 + slope) * 1e6;
+  e.sigma_ppm = sigma / ((1.0 + slope) * (1.0 + slope)) * 1e6;
+  return e;
+}
+
+double ClockEstimator::stamp_ppm(double configured) const {
+  if (!o_.discipline) return configured;
+  const ClockEstimate e = estimate();
+  if (!e.valid || e.span_s < o_.min_span_s || e.sigma_ppm > o_.max_sigma_ppm) return configured;
+  return e.ppm;
+}
 
 std::vector<unsigned char> encode_block(const std::int32_t* counts, std::int64_t n, std::int64_t n_channels, std::int64_t first,
                                         std::int64_t tx, std::int64_t index, std::uint16_t gain, std::uint16_t flags,
@@ -130,6 +243,14 @@ BoardMerger::BoardMerger(const BoardMergeOptions& o, std::int64_t n_channels, do
   for (std::size_t i = 0; i < boards_.size(); ++i) {
     if (boards_[i].spec.id == reference) ref_ = i;
   }
+  for (const auto& kv : o.clock_ppm) {
+    Board* hit = nullptr;
+    for (Board& b : boards_) {
+      if (b.spec.id == kv.first) hit = &b;
+    }
+    if (hit == nullptr) throw std::invalid_argument(where + "clock_ppm: board " + std::to_string(kv.first) + " is not in the board map");
+    hit->spec.ppm = clock_rate(kv.second, where + "clock_ppm");
+  }
   if (ref_ == boards_.size()) throw std::invalid_argument(where + "reference: board " + std::to_string(reference) + " is not in the board map");
   if (!std::isfinite(o.wait_s) || o.wait_s < 0.0) throw std::invalid_argument(where + "wait_s: a number of seconds, 0 or more");
   wait_ = half_up(o.wait_s * sample_rate_);
@@ -138,6 +259,13 @@ BoardMerger::BoardMerger(const BoardMergeOptions& o, std::int64_t n_channels, do
 
 int BoardMerger::reference() const { return boards_[ref_].spec.id; }
 
+double BoardMerger::clock_ppm(int id) const {
+  for (const Board& b : boards_) {
+    if (b.spec.id == id) return b.spec.ppm;
+  }
+  return 0.0;
+}
+
 bool BoardMerger::refuse(const std::string& message, Board* board) {
   ++bad_blocks;
   if (board != nullptr) ++board->bad;
@@ -145,8 +273,10 @@ bool BoardMerger::refuse(const std::string& message, Board* board) {
   return false;
 }
 
-std::int64_t BoardMerger::offset(std::int64_t start_ns, std::int64_t /*anchor*/) const {
-  const double d = static_cast<double>(boards_[ref_].start_ns - start_ns) * 1e-9 * sample_rate_;
+std::int64_t BoardMerger::offset(const Board& b, std::int64_t start_ns, std::int64_t anchor) const {
+  const double eb = b.spec.ppm * 1e-6, er = boards_[ref_].spec.ppm * 1e-6;
+  const double x = static_cast<double>(boards_[ref_].start_ns - start_ns) * 1e-9 * sample_rate_;
+  const double d = x * (1.0 + eb) + static_cast<double>(anchor) * (eb - er) / (1.0 + er);
   return -half_up(d);
 }
 
@@ -154,7 +284,7 @@ std::vector<BoardMerger::Span> BoardMerger::spans(const Board& b, std::int64_t a
   std::vector<Span> out;
   out.reserve(b.blocks.size());
   for (const auto& kv : b.blocks) {
-    const std::int64_t f = kv.first.second + offset(kv.first.first, anchor);
+    const std::int64_t f = kv.first.second + offset(b, kv.first.first, anchor);
     out.push_back({f, f + kv.second.n, kv.first});
   }
   std::sort(out.begin(), out.end(), [](const Span& x, const Span& y) { return std::tie(x.f, x.e, x.key) < std::tie(y.f, y.e, y.key); });
@@ -163,7 +293,7 @@ std::vector<BoardMerger::Span> BoardMerger::spans(const Board& b, std::int64_t a
 
 bool BoardMerger::frontier(const Board& b, std::int64_t anchor, std::int64_t& out) const {
   if (!b.have_frontier) return false;
-  out = b.frontier + offset(b.start_ns, anchor);
+  out = b.frontier + offset(b, b.start_ns, anchor);
   return true;
 }
 
@@ -288,7 +418,7 @@ void BoardMerger::finish(std::vector<std::vector<unsigned char>>& out) {
 
 bool BoardMerger::wanted(const Board& b, std::int64_t ns, std::int64_t first, std::int64_t n) const {
   if (!boards_[ref_].started) return true;
-  const std::int64_t f = first + offset(ns, anchor_), e = f + n;
+  const std::int64_t f = first + offset(b, ns, anchor_), e = f + n;
   for (const Pending& p : pending_) {
     if (std::min(e, p.first + p.n) > std::max(f, p.first)) return true;
   }

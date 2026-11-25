@@ -778,6 +778,17 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
         for key in ("reference", "missing", "wait_s"):
             if boards.get(key) is not None:
                 out[f"stream_board_{key}"] = boards[key]
+        if boards.get("clock_ppm"):
+            out["stream_board_ppm"] = ",".join(f"{int(k)}:{float(v)!r}" for k, v in boards["clock_ppm"].items())
+    # The boards' clocks (sonar-ubg): a configured rate error, and the estimate from arrival times (source.clock).
+    if src.get("clock_ppm") is not None:
+        out["stream_clock_ppm"] = float(src["clock_ppm"])
+    if src.get("clock") is not None:
+        from .sources.board_merge import CLOCK_KEYS
+        clock = dict(src["clock"] or {})
+        _refuse_unknown(clock, CLOCK_KEYS, "source.clock.")
+        out["stream_clock_estimate"] = 1
+        out.update({f"stream_clock_{k}": v for k, v in clock.items()})
     if (deploy.get("output") or {}).get("report_udp_max_bytes") is not None:
         out["report_udp_max_bytes"] = int(deploy["output"]["report_udp_max_bytes"])
     nav = deploy.get("nav") or {}

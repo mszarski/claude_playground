@@ -270,6 +270,14 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("stream_board_reference")) c.stream.board_reference = static_cast<int>(i());
   else if (is("stream_board_missing")) c.stream.board_zero = option_choice(key, value, {"drop", "zero"}) == "zero";
   else if (is("stream_board_wait_s")) c.stream.board_wait_s = v();
+  else if (is("stream_clock_ppm")) c.stream.clock_ppm = v();
+  else if (is("stream_board_ppm")) c.stream.board_ppm = value;
+  else if (is("stream_clock_estimate")) c.stream.clock_estimate = on();
+  else if (is("stream_clock_discipline")) c.stream.clock_discipline = on();
+  else if (is("stream_clock_bin_s")) c.stream.clock_bin_s = v();
+  else if (is("stream_clock_window_s")) c.stream.clock_window_s = v();
+  else if (is("stream_clock_min_span_s")) c.stream.clock_min_span_s = v();
+  else if (is("stream_clock_max_sigma_ppm")) c.stream.clock_max_sigma_ppm = v();
   else if (is("decimate")) c.decimate.enabled = on();
   else if (is("decimate_streaming")) c.decimate_streaming = on();
   else if (is("decimate_f_low")) c.decimate.f_low = v();
@@ -561,7 +569,10 @@ std::string options_json(const ChainOptions& c) {
   j.integer("stream_sample_bytes", st.sample_bytes).integer("stream_buffer_bytes", st.buffer_bytes).num("stream_queue_mb", st.queue_mb)
       .num("idle_seconds", st.idle_seconds).text("bind", st.bind).integer("report_udp_max_bytes", st.report_max_bytes)
       .flag("stream_boards", st.boards).text("stream_board_channels", st.board_channels).integer("stream_board_reference", st.board_reference)
-      .text("stream_board_missing", st.board_zero ? "zero" : "drop").num("stream_board_wait_s", st.board_wait_s);
+      .text("stream_board_missing", st.board_zero ? "zero" : "drop").num("stream_board_wait_s", st.board_wait_s)
+      .num("stream_clock_ppm", st.clock_ppm).text("stream_board_ppm", st.board_ppm).flag("stream_clock_estimate", st.clock_estimate)
+      .flag("stream_clock_discipline", st.clock_discipline).num("stream_clock_bin_s", st.clock_bin_s).num("stream_clock_window_s", st.clock_window_s)
+      .num("stream_clock_min_span_s", st.clock_min_span_s).num("stream_clock_max_sigma_ppm", st.clock_max_sigma_ppm);
   const MultipathOptions& q = c.multipath_depth;
   j.flag("multipath_depth", q.enabled).num("multipath_depth_max_depth", q.max_depth).num("multipath_depth_min_delay_bandwidth", q.min_delay_bandwidth)
       .num("multipath_depth_window_s", q.window_s).num("multipath_depth_range_slack", q.range_slack).integer("multipath_depth_oversample", q.oversample)

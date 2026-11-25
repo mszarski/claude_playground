@@ -25,7 +25,10 @@ The rules (ours, all of them):
   is expected. So the boards' capture starts must agree with true time to well inside 2 ms, less the drift between two
   boards over a receive window (25 ppm each, 17.9 s: up to 0.9 ms). Boards on free-running clocks drift apart by
   (ppm_b - ppm_ref) x time since capture start, so without a correction a capture must restart (or the clocks be
-  disciplined) before that sum leaves the search: 40 s at 50 ppm apart.
+  disciplined) before that sum leaves the search: 40 s at 50 ppm apart. `clock_ppm` {board id: ppm} (sonar-ubg; each
+  board's rate error, positive fast; default 0, unconfirmed until measured) takes the rates into the offset, worked
+  out at each reference transmit (`offset`) and held for that ping: a rate known to 0.1 ppm keeps two boards within
+  2 ms for 5.6 hours. The merged stream is stamped at the reference board's rate (flank_udp, sonar_live).
 * Waiting. A reference block is the request for one merged span. It is emitted once every board has delivered its
   part, in the order of the spans (one waiting holds up those after it). A board's part is given up as missing once
   the reference has moved `wait_s` (0.05 s) past the span's end, or the board itself has moved `wait_s` past its part
@@ -44,6 +47,9 @@ The rules (ours, all of them):
 * Output. Each merged span goes out as whole-array blocks of at most `block_samples` (default: what fits the stream's
   datagram, `block_samples_for`), each naming the latest reference transmit at or before its own end.
 
+`ClockEstimator` estimates a board's rate from its blocks' arrival times (reported; used for the stamps only with
+`clock.discipline`).
+
 Counted per board (`stats()`): blocks, used_blocks, late_blocks, repeated_blocks, restarts, missing_samples,
 bad_blocks, and its capture start; for the merge: merged_blocks (spans emitted), dropped_blocks, zero_filled_blocks,
 bad_blocks (every refused block), pending.
@@ -59,7 +65,7 @@ from typing import Iterator
 
 import numpy as np
 
-from .flank_stream import (FLAG_OVERFLOW, MAX_DATAGRAM, MAX_SAMPLE_INDEX, SAMPLE_BYTES, HEADER_BYTES, BlockError,
+from .flank_stream import (FLAG_OVERFLOW, clock_rate, MAX_DATAGRAM, MAX_SAMPLE_INDEX, SAMPLE_BYTES, HEADER_BYTES, BlockError,
                            FlankBoardEmulator, block_samples_for, decode_block, encode_block,
                            full_scale_counts)
 
@@ -67,7 +73,8 @@ WAIT_S = 0.05            # how long (in samples of the stream) a board may lag t
 MAX_LEFT = 8             # capture starts remembered as left, per board (as flank_stream's restarts)
 MAX_DONE = 64            # reference spans remembered as decided, for telling a repeat
 MAX_NAMED = 8            # reference transmits remembered, for naming the blocks of a cut span
-OPTION_KEYS = ("channels", "reference", "missing", "wait_s")
+OPTION_KEYS = ("channels", "reference", "missing", "wait_s", "clock_ppm")
+CLOCK_KEYS = ("bin_s", "window_s", "discipline", "min_span_s", "max_sigma_ppm")
 CHANNEL_KEYS = ("id", "first", "count")
 MISSING = ("drop", "zero")
 
@@ -80,6 +87,7 @@ def half_up(x: float) -> int:
 class _Board:
     def __init__(self, bid: int, first: int, count: int):
         self.id, self.first, self.count = bid, first, count
+        self.ppm = 0.0                    # its clock's configured rate error (clock_ppm; sonar-ubg)
         self.start_ns = None              # the capture start of its latest capture
         self.left = []
         self.blocks = {}                  # (capture start, own first sample) -> [n, counts [n, count] int32, flags, used]
@@ -97,7 +105,8 @@ class BoardMerger:
     """Per-board blocks in (`feed`), whole-array blocks out. The rules are in this module's docstring."""
 
     def __init__(self, boards: list, n_channels: int, sample_rate: float, reference: int | None = None, missing: str = "drop",
-                 wait_s: float = WAIT_S, sample_bytes: int = SAMPLE_BYTES, block_samples: int | None = None, where: str = "boards."):
+                 wait_s: float = WAIT_S, sample_bytes: int = SAMPLE_BYTES, block_samples: int | None = None, where: str = "boards.",
+                 clock_ppm: dict | None = None):
         self.n_channels = int(n_channels)
         self.sample_rate = float(sample_rate)
         self.sample_bytes = int(sample_bytes)
@@ -132,6 +141,10 @@ class BoardMerger:
             raise ValueError(f"{where}wait_s: {wait_s!r}: a number of seconds, 0 or more")
         self.wait = half_up(wait_s * self.sample_rate)
         self.block_samples = int(block_samples) if block_samples else block_samples_for(self.n_channels, self.sample_bytes)
+        for bid, ppm in (clock_ppm or {}).items():
+            if isinstance(bid, bool) or not isinstance(bid, (int, np.integer)) or int(bid) not in self._by_id:
+                raise ValueError(f"{where}clock_ppm: board {bid} is not in the board map")
+            self._by_id[int(bid)].ppm = clock_rate(ppm, f"{where}clock_ppm")
         self._ref = self._by_id[self.reference]
         self._others = [b for b in self.boards if b is not self._ref]
         self.merged_blocks = self.dropped_blocks = self.zero_filled_blocks = self.bad_blocks = 0
@@ -162,28 +175,37 @@ class BoardMerger:
                     raise ValueError(f"{where}channels[{k}].{key}: needed")
         return cls(channels, sonar.n_elements, sonar.sample_rate, reference=options.get("reference"),
                    missing=options.get("missing", "drop"), wait_s=options.get("wait_s", WAIT_S), sample_bytes=sample_bytes,
-                   where=where)
+                   where=where, clock_ppm=options.get("clock_ppm"))
+
+    def clock_ppm(self, bid: int) -> float:
+        """The configured rate error of a board's clock (ppm; 0 when not given)."""
+        return self._by_id[bid].ppm
 
     # -- alignment ---------------------------------------------------------------------------------------------
 
-    def offset(self, start_ns: int, anchor: int) -> int:
+    def offset(self, board: _Board, start_ns: int, anchor: int) -> int:
         """off_b: the reference's sample index minus that of a board whose capture started at `start_ns`, at the same
-        instant (module docstring)."""
-        d = float(self._ref.start_ns - start_ns) * 1e-9 * self.sample_rate
+        instant near the reference's sample `anchor` (module docstring). With the boards' clock rates e (clock_ppm 1e-6):
+            d = x (1 + e_b) + anchor (e_b - e_ref) / (1 + e_ref),   x = (start_ref - start_b) 1e-9 fs
+        (ours: board b counts (t - start_b) fs (1 + e_b) at true time t, the reference (t - start_ref) fs (1 + e_ref);
+        the difference at the reference's count `anchor`). All rates 0: d = x."""
+        eb, er = board.ppm * 1e-6, self._ref.ppm * 1e-6
+        x = float(self._ref.start_ns - start_ns) * 1e-9 * self.sample_rate
+        d = x * (1.0 + eb) + float(anchor) * (eb - er) / (1.0 + er)
         return -half_up(d)
 
     def _spans(self, board: _Board, anchor: int) -> list:
         """The board's blocks as [merged first, merged end, key], sorted by merged first."""
         out = []
         for key, blk in board.blocks.items():
-            f = key[1] + self.offset(key[0], anchor)
+            f = key[1] + self.offset(board, key[0], anchor)
             out.append([f, f + blk[0], key])
         out.sort(key=lambda x: (x[0], x[1], x[2]))
         return out
 
     def _frontier(self, board: _Board, anchor: int):
         """Merged sample after the board's furthest block of its latest capture, or None."""
-        return None if board.frontier is None else board.frontier + self.offset(board.start_ns, anchor)
+        return None if board.frontier is None else board.frontier + self.offset(board, board.start_ns, anchor)
 
     # -- blocks ------------------------------------------------------------------------------------------------
 
@@ -268,7 +290,7 @@ class BoardMerger:
         more than the wait nor in a stretch already decided. Before the reference is heard every block is kept."""
         if self._ref.start_ns is None:
             return True
-        f = first + self.offset(ns, self._anchor)
+        f = first + self.offset(board, ns, self._anchor)
         e = f + n
         if any(min(e, p["first"] + p["n"]) > max(f, p["first"]) for p in self._pending):
             return True
@@ -374,6 +396,99 @@ class BoardMerger:
                 "bad_blocks": self.bad_blocks, "pending": len(self._pending)}
 
 
+class ClockEstimator:
+    """A board clock's rate against the host clock, from the arrival times of its blocks (sonar-ubg; ours).
+
+    Each block's last sample `sample_end` was taken, on the board's counter, at nominal time x = sample_end / fs after
+    capture start, and arrived at `arrival_ns` on the host clock: y = (arrival - capture start) - x = latency - e x / (1 + e)
+    for a board counting fs (1 + e) a true second. Arrival delays are one-sided (queues only add), so per bin of `bin_s`
+    seconds of stream the earliest arrival is kept (its x and y), the bins of the last `window_s` seconds are fitted with
+    a least-squares line y = a + s x, and e = -s / (1 + s). `sigma_ppm` is the slope's standard error from the bins'
+    scatter about the line. Nothing is assumed about the delays but that their least value is steady over the window: a
+    host clock being slewed (NTP corrections up to 500 ppm) or a latency that drifts goes into the estimate whole.
+    A new capture start starts the estimate again. `discipline`: the stamps use the estimate (stamp_ppm) once it spans
+    `min_span_s` with `sigma_ppm` at most `max_sigma_ppm`; else the configured rate. libs/live board_merge.hpp
+    ClockEstimator is the same, sums taken in the same order."""
+
+    def __init__(self, sample_rate: float, bin_s: float = 1.0, window_s: float = 600.0, discipline: bool = False,
+                 min_span_s: float = 300.0, max_sigma_ppm: float = 0.5, where: str = "clock."):
+        for key, v in (("bin_s", bin_s), ("window_s", window_s), ("min_span_s", min_span_s), ("max_sigma_ppm", max_sigma_ppm)):
+            if isinstance(v, bool) or not isinstance(v, (int, float, np.integer, np.floating)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError(f"{where}{key}: {v!r}: a number, 0 or more")
+        if not isinstance(discipline, (bool, np.bool_)):
+            raise ValueError(f"{where}discipline: {discipline!r}: true or false")
+        self.sample_rate = float(sample_rate)
+        self.bin = max(half_up(float(bin_s) * self.sample_rate), 1)
+        self.window_bins = max(half_up(float(window_s) / max(float(bin_s), 1e-12)), 1)
+        self.discipline, self.min_span_s, self.max_sigma_ppm = bool(discipline), float(min_span_s), float(max_sigma_ppm)
+        self.start_ns = None
+        self.restarts = 0
+        self._bins = {}                   # bin -> (x, y) of its earliest arrival, s
+        self._latest = None
+
+    @classmethod
+    def from_options(cls, options: dict | None, sample_rate: float, where: str = "clock.") -> "ClockEstimator":
+        from ..live import _refuse_unknown
+        options = dict(options or {})
+        _refuse_unknown(options, CLOCK_KEYS, where)
+        return cls(sample_rate, where=where, **options)
+
+    def feed(self, sample_end: int, start_ns: int, arrival_ns: int) -> bool:
+        """One block: the counter after its last sample, its capture start, its arrival (ns, host clock). True when it
+        opens a new bin (a new estimate is then worth working out)."""
+        if self.start_ns is None:
+            self.start_ns = start_ns
+        elif start_ns != self.start_ns:
+            self.restarts += 1
+            self.start_ns, self._bins, self._latest = start_ns, {}, None
+        x = float(sample_end) / self.sample_rate
+        y = float(arrival_ns - start_ns) * 1e-9 - x
+        k = sample_end // self.bin
+        old = self._bins.get(k)
+        if old is None or y < old[1]:
+            self._bins[k] = (x, y)
+        if self._latest is None or k > self._latest:
+            self._latest = k
+            for j in [j for j in self._bins if j <= k - self.window_bins]:
+                del self._bins[j]
+            return True
+        return False
+
+    def estimate(self) -> dict:
+        """{ppm, sigma_ppm (None with fewer than 3 bins), span_s, bins}."""
+        keys = sorted(self._bins)
+        m = len(keys)
+        pts = [self._bins[k] for k in keys]
+        span = (max(p[0] for p in pts) - min(p[0] for p in pts)) if m else 0.0
+        if m < 3:
+            return {"ppm": None, "sigma_ppm": None, "span_s": span, "bins": m}
+        sx = sy = 0.0
+        for x, y in pts:
+            sx += x
+            sy += y
+        mx, my = sx / m, sy / m
+        sxx = sxy = 0.0
+        for x, y in pts:
+            sxx += (x - mx) * (x - mx)
+            sxy += (x - mx) * (y - my)
+        slope = sxy / sxx
+        rr = 0.0
+        for x, y in pts:
+            r = y - my - slope * (x - mx)
+            rr += r * r
+        sigma = math.sqrt(rr / (m - 2) / sxx)
+        return {"ppm": -slope / (1.0 + slope) * 1e6, "sigma_ppm": sigma / ((1.0 + slope) * (1.0 + slope)) * 1e6, "span_s": span, "bins": m}
+
+    def stamp_ppm(self, configured: float) -> float:
+        """The rate the stamps use: the estimate when disciplining and it is good enough, else `configured`."""
+        if not self.discipline:
+            return configured
+        e = self.estimate()
+        if e["ppm"] is None or e["span_s"] < self.min_span_s or e["sigma_ppm"] > self.max_sigma_ppm:
+            return configured
+        return e["ppm"]
+
+
 class BoardStreamEmulator:
     """Plays simulated whole-array pings as the capture boards would send them, one stream per board: board k carries
     its channels (`boards`: [{id, first, count}]) on its own counter, which starts at sample `start_offsets[k]` of the
@@ -381,10 +496,17 @@ class BoardStreamEmulator:
     blocks (`block_samples`: one size, or one per board; default what fits a datagram). `restarts` {board id: sample of
     the whole-array stream}: that board starts a new capture there (counter from 0, a new capture start). Every board
     marks every transmit on its own counter. `blocks()` interleaves the boards' blocks by the instant their last sample
-    was taken, as they would arrive."""
+    was taken, as they would arrive.
+
+    `ping_times` (true seconds after `start_ns`, one per record) with `clock_ppm` (one rate per board): the boards'
+    clocks run at their own rates (sonar-ubg). Board k counts (t - its capture start) fs (1 + ppm_k 1e-6) at true time t;
+    the first board in `boards` is taken as the merge's reference, and every other board's stretch of each ping is placed
+    on its counter by BoardMerger's offset at that ping's transmit (the same model). Only each ping's window, with a few
+    blocks either side, is sent: an hour of a stream needs no hour of samples."""
 
     def __init__(self, records, ping_interval: float, boards: list, start_offsets=None, start_ns: int = 0, block_samples=None,
-                 gain_code: int = 0, sample_bytes: int = SAMPLE_BYTES, restarts: dict | None = None):
+                 gain_code: int = 0, sample_bytes: int = SAMPLE_BYTES, restarts: dict | None = None, clock_ppm=None,
+                 ping_times=None):
         self.whole = FlankBoardEmulator(records, ping_interval, start_ns=start_ns, gain_code=gain_code, sample_bytes=sample_bytes)
         self.boards = [(int(b["id"]), int(b["first"]), int(b["count"])) for b in boards]
         self.offsets = [int(o) for o in (start_offsets or [0] * len(self.boards))]
@@ -396,6 +518,13 @@ class BoardStreamEmulator:
         self.start_ns = int(start_ns)
         self.sample_rate = self.whole.sample_rate
         self.sample_bytes = int(sample_bytes)
+        self.records = list(records)
+        self.ping_times = None if ping_times is None else [float(t) for t in ping_times]
+        self.clock_ppm = [float(p) for p in (clock_ppm or [0.0] * len(self.boards))]
+        if self.ping_times is not None and len(self.ping_times) != len(self.records):
+            raise ValueError("ping_times: one time per record")
+        if clock_ppm is not None and self.ping_times is None:
+            raise ValueError("clock_ppm: give ping_times too (the boards' rates are emulated on pings at true times)")
 
     def stamp(self, origin: int) -> int:
         """The capture start of a counter whose sample 0 is sample `origin` of the whole-array stream."""
@@ -424,8 +553,48 @@ class BoardStreamEmulator:
                         tx, index = ping * period - origin, ping
                 yield j1, k, bid, encode_block(counts, i0, tx, index, self.whole.gain_code, 0, ns, self.sample_bytes, board=bid)
 
+    def _timed_blocks(self) -> list:
+        """The blocks of the `ping_times` mode, as (ping, merged end, board order, id, bytes)."""
+        fs_ = self.sample_rate
+        w0, full = self.whole.window_start, self.whole.full_counts
+        stamps = [self.stamp(o) for o in self.offsets]
+        merger = BoardMerger([{"id": b, "first": f, "count": c} for b, f, c in self.boards], sum(c for _, _, c in self.boards), fs_,
+                             reference=self.boards[0][0], clock_ppm={b: p for (b, _, _), p in zip(self.boards, self.clock_ppm)})
+        merger._ref.start_ns = stamps[0]
+        bmax = max(self.block_samples)
+        out = []
+        txs = []
+        for k, t in enumerate(self.ping_times):
+            txs.append(half_up((t - (stamps[0] - self.start_ns) * 1e-9) * fs_ * (1.0 + self.clock_ppm[0] * 1e-6)))
+        offs = [[merger.offset(merger._by_id[b], stamps[q], txs[k]) for q, (b, _, _) in enumerate(self.boards)] for k in range(len(txs))]
+        for k, r in enumerate(self.records):
+            x = np.clip(np.rint(r.samples.array.T * self.whole.counts_per_volt), -full, full - 1).astype(np.int32)
+            a, n = txs[k] + w0, len(x)
+            bs0 = self.block_samples[0]
+            r0, r1 = ((a - 2 * bmax) // bs0) * bs0, -(-(a + n + 2 * bmax) // bs0) * bs0       # the reference's stretch
+            for q, (bid, first, count) in enumerate(self.boards):
+                off, bs = offs[k][q], self.block_samples[q]
+                lo = r0 if q == 0 else ((r0 - off - 2 * bs) // bs) * bs
+                hi = r1 if q == 0 else r1 - off + 2 * bs
+                own_txs = [(txs[j] - offs[j][q], j) for j in range(len(txs))]
+                for i0 in range(lo, hi, bs):
+                    i1 = i0 + bs
+                    counts = np.zeros((bs, count), dtype=np.int32)
+                    j0, j1 = max(i0 + off, a), min(i1 + off, a + n)
+                    if j1 > j0:
+                        counts[j0 - off - i0:j1 - off - i0] = x[j0 - a:j1 - a, first:first + count]
+                    named = [p for p in own_txs if 0 <= p[0] < i1]
+                    tx, index = max(named) if named else (-1, 0)
+                    out.append((k, i1 + off, q, bid, encode_block(counts, i0, tx, index, self.whole.gain_code, 0, stamps[q],
+                                                                  self.sample_bytes, board=bid)))
+        return out
+
     def blocks(self) -> list:
         """[(board id, block bytes)] of every board, in the order they would arrive."""
+        if self.ping_times is not None:
+            every = self._timed_blocks()
+            every.sort(key=lambda x: (x[0], x[1], x[2]))
+            return [(bid, data) for _, _, _, bid, data in every]
         stream = self.whole.stream()
         every = [x for k in range(len(self.boards)) for x in self._board_blocks(k, stream)]
         every.sort(key=lambda x: (x[0], x[1]))
