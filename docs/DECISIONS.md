@@ -3546,3 +3546,51 @@ bytes during `feed` would see it (none does).
 - Full GPU suite on this tree: **2180 passed, 100 skipped**, none failed, no expected failure (NVIDIA L4,
   HF job 6b06d64fd91f621b93079be0, 48 min 30 s): 9 more passed (8 new tests and the (3, python) case), 2
   more skipped (the opt-in timing study; the new tool's `--help` test in the job's tarball).
+
+### D-191 The C++ engine resamples a board's rows together: 0.09 to 0.17 s a ping at 64 and 96 channels on an L4, from 1.05 to 1.83 s (issue sonar-drc)
+
+What got worse first: nothing in a result (every output is the same to the bit). The stage holds up
+to 8 rows of a board at once besides the record (before: one).
+
+- What was slow: `resample` in `libs/live/src/sync.cpp`, which moves a board's samples onto the first
+  board's timeline. It ran one channel at a time on one thread and computed a sine and a cosine for
+  each of 16 taps at every sample of every channel, though a board's channels share their positions.
+  On this container's CPU (host backend, 2 threads) it was 0.95 s of the chain's 1.55 s a ping at 64
+  channels and 1.57 s of 2.30 s at 96. The Python engine had the same cost until D-190.
+- Why one board was fast: the one-row deployment file decimates first (`decimate: {}`), so its boards
+  are synchronised on the short burst stretches; the two- and three-row files have no decimate stage and
+  every channel is resampled at the boards' rate.
+- Not the cause: the backend. In the L4 loopback both engines ran on CUDA (`backend: auto`); board
+  synchronisation is on the host in both and no CUDA source does it.
+- Changed: `resample_rows` computes a board's weights once a block of 256 samples and applies them to
+  up to 8 of its rows, the blocks in parallel (`parallel_for_host`). Each sample is the same double
+  weight (sinc times window) times the same input, added in the same tap order.
+- Equal to the bit, checked two ways: the old and the new build gave the same bytes for 44 arrays and 37
+  facts (the synchronised samples, the sync facts, the board metadata, the C++ chain's reports, beam
+  maps and conditioned samples; the 1-, 2- and 3-row Popoto trials, `flank_32` cut into 4 boards clean
+  and with offsets and drifts, `popoto_4x8` at two seeds; 1, 2 and 4 threads);
+  `Sync.BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit` (`tests/cpp/test_stage2.cpp`) holds the
+  stage against a copy of the old loop.
+- Measured on an L4 (HF job 6b074405b6a90bbe997e6017, chain's OpenMP on 4 threads):
+
+  | C++ engine, chain time a ping after the first | before (D-190's job) | after |
+  |---|---|---|
+  | 32 channels, through Sensor Bridge | 0.10 to 0.12 s | 0.11 to 0.12 s |
+  | 64 channels, through Sensor Bridge | 1.05 to 1.12 s | 0.09 to 0.11 s |
+  | 96 channels, through Sensor Bridge | 1.64 to 1.83 s | 0.13 to 0.17 s |
+
+  The direct chain (`tools/live_chain_timing.py`, 3 repeats of 4 pings): 0.086 s a ping at 64
+  channels, of which synchronisation 0.056 s, and 0.111 s at 96, of which 0.085 s; the Python engine
+  0.27 and 0.40 s, of which 0.22 and 0.33 s. All 24 loopback runs of that job passed (the six cases,
+  four times); the first run's 32-channel C++ case lost one frame at the start and had a worst receive
+  delay of 10.8 ms before the start window's end, as D-190's first run did (the job's first use of the
+  device).
+- Not done, the owner's to decide if wanted: computing the weights from the fractional part alone would
+  cut what is left of synchronisation several times (it is now most of the C++ chain's time at 64 and
+  96 channels) and changes the last bits of the samples; not implemented, not measured. The burst
+  estimates still run board by board on one thread (tens of milliseconds, by the agent's estimate).
+- New: `tools/live_chain_timing.py` (chain and synchronisation time a ping, each engine).
+- Full GPU suite on this tree: **2180 passed, 101 skipped**, none failed (NVIDIA L4, HF job
+  6b07440eb6a90bbe997e6027, 46 min 47 s; one more skipped: the new tool's `--help` test in the job's
+  tarball). The C++ suites ran with no failure listed; the job's log keeps only ctest's last five
+  lines, which do not include its count.
