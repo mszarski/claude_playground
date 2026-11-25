@@ -81,6 +81,9 @@ def _eval_check(c: dict[str, Any], before: Node, after: Node) -> bool | None:
     b, a = index_nodes(before), index_nodes(after)
     if "judge" in c:
         return None
+    if "any" in c:  # {"any": [check, ...]}: passes when one alternative passes
+        vals = [_eval_check(x, before, after) for x in c["any"]]
+        return True if any(v is True for v in vals) else (None if all(v is None for v in vals) else False)
     if "deleted" in c:
         return c["deleted"] not in a
     if "exists" in c:

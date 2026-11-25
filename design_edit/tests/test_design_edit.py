@@ -281,3 +281,13 @@ def test_vote_groups_answers_that_differ_only_in_new_ids_and_names():
     assert canonical(b, "nonsense") is None and canonical(b, "") is None
     assert vote(b, [other, a1, a2]) == 1
     assert vote(b, ["bad", "worse"]) == 0
+
+
+def test_check_any_accepts_either_alternative():
+    from design_edit.checks import eval_check
+    from design_edit.schema import apply_patch, parse
+
+    before = parse('frame#n1 "Page" layout=col\n  text#n2 "Unread" size=14')
+    c = {"any": [{"node": "n2", "prop": "text", "eq": "Pending"}, {"node": "n2", "prop": "name", "eq": "Pending"}]}
+    assert eval_check(c, before, apply_patch(before, 'set n2 text="Pending"')) is True
+    assert eval_check(c, before, before) is False

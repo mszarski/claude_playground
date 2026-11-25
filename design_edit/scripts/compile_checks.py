@@ -35,6 +35,7 @@ SPEC = """Check language (JSON objects; all node ids refer to the design):
   {"order": ["n5", "n7"]}                                   siblings in this order
   {"same": ["n26", "n24"], "props": ["fill", "stroke"]}     these nodes end with equal values for these props
   {"count": {"type": "frame", "parent": "n4", "name_contains": "row"}, "eq": 3}
+  {"any": [<check>, <check>]}                              passes when any alternative passes
   {"judge": "<criterion text>"}                             only for genuinely subjective criteria
 Plus "allowed": every existing node id the edit may change (props, deletion, children order, moving). Include
 nodes whose change is clearly acceptable for the request (e.g. a button's label as well as its frame). New nodes
