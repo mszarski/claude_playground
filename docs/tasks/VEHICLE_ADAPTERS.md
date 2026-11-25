@@ -28,7 +28,8 @@ Done means all of the following:
 1. **Board samples.** One working path from the boards to ping records, chosen with the
    owner (section 4, step 2): either (A) the boards' recordings as WAV with a YAML sidecar
    picked up by `wav_watch`, (B) a forwarder that turns the boards' native output into
-   `GSFB` version 1 blocks for the existing `flank_udp` receivers, or (C) a new native
+   `GSFB` version 1 blocks for the existing `flank_udp` receivers (one stream per board is
+   enough since D-184: see 2.1), or (C) a new native
    source in both engines. Each hardware fact it relies on is in a config file, with the
    source of the fact named in a comment, and removed from that file's `unconfirmed` list
    only when the owner or a document confirmed it.
@@ -88,6 +89,17 @@ Facts about these that an adapter must respect:
   deployment file and `stream_sample_bytes` for the C++ program. `docs/DEPLOYMENT.md` ("Wire
   formats are contracts") treats this layout as a contract: changing it is a format change
   and needs the owner (STATUS question 13).
+- **One stream per board is enough (D-184, added 2026-11-25).** A forwarder for path B need
+  not merge boards: each board's forwarder sends that board's channels as per-board `GSFB`
+  blocks (flag bit 1, the board id as the u16 at offset 44) on that board's own sample
+  counter, with its own capture start stamped on the navigation's clock to well inside 1 ms
+  (about 0.8 ms; the synchronisation search is 2 ms), and the reference board marking each
+  transmit. The receivers merge them (`source.boards` in the deployment file, `stream_boards=1`
+  for `build/bin/sonar_live`, or the relay `tools/board_merge.py`; rules in
+  `python/gpusonar/sources/board_merge.py`). The board -> channel map and each board's
+  clock-rate error (`source.boards.clock_ppm`, D-185) are configuration. The header field is
+  ours and waits on the owner (questions 3 and 9). Tests: `tests/python/test_board_streams.py`,
+  `test_board_clock.py`.
 - **`PingAssembler` needs the transmit's sample index** in the block header to cut a ping:
   each transmit opens the sonar config's receive window. A board stream that does not say
   when the projector fired cannot be cut into pings by this assembler.

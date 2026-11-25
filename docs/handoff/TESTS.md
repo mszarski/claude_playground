@@ -218,6 +218,8 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_wav_watch.py` | 3 | recordings that appear in a watched directory | | fast | |
 | `test_taps.py` | 5 | taps can be inspected, exported and fed back in | | fast | |
 | `test_flank_stream.py` | 5 | the capture stream from an emulated board through UDP back to records | skips if the loopback dropped samples | minutes | |
+| `test_board_streams.py` | 23 | per-board streams merged into the whole-array stream (D-184): the block's board field (whole-array blocks unchanged), the whole-array receivers refusing a board block, merged pings equal to the whole-array pings, loss, restarts, a silent board, a late start, refusals by name, the options, the program and `--emulate --per-board` over UDP, the relay tool | the program for one test; loopback tests skip if data was dropped | minutes | **parity** |
+| `test_board_clock.py` | 20 | a board clock's rate against true time (D-185): the stamp's drift an hour in and the pose it moves, `clock_ppm` in both engines and the program, boards at their own rates aligned by them, the estimate from arrival times and its opt-in discipline | the program for one test | fast | **parity** |
 | `test_hsb_receive.py` | 24 | what the receiver and assembler count when frames go missing, repeat or arrive out of order, with no network (D-161, D-177) | | fast | **parity** |
 | `test_hsb.py` | 21 | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173) | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
 | `test_holoscan.py` | 5 | stages as Holoscan operators, fed by the simulator and by replay | Holoscan SDK | minutes | |
@@ -307,7 +309,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-181)
+## 3. Tests that pin a decision (D-155 to D-181, and D-184, D-185)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -339,6 +341,8 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-178 | the gallery's range is the leading edge | `test_gallery_echo_position.py::test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival`; `test_classify_rules_eval.py::test_a_capture_without_a_recorded_range_estimate_is_the_centroid`, `::test_flank_patrol_tracks_are_scored_in_the_order_the_scoring_reads`; `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
 | D-180 | YAML numbers; `sonar_live_hsb`'s navigation | `test_yaml_numbers.py`; `test_sediment_fit.py::test_the_row_writes_numbers_plain_yaml_reads_as_numbers`; `test_deployment_defaults.py::test_the_rehearsal_sync_reference_reaches_the_cpp_receivers`; `test_hsb.py::test_receive_builds_its_navigation_as_sonar_live_does` |
 | D-181 | the opt-in LFM range-Doppler correction | `test_live_cpp.py::test_range_doppler_is_off_by_default_and_said_only_when_on`, `::test_range_doppler_ownship_adds_the_factor_times_the_ownships_closing_speed_to_each_range`, `::test_range_doppler_full_moves_each_track_by_its_own_closing_speed`, `::test_range_doppler_full_gives_the_same_report_in_both_engines`, `::test_range_doppler_refuses_an_unknown_word`; `test_lfm_range_doppler.py::test_ownship_under_way_couples_like_a_closing_target_and_the_correction_removes_it`; `Options.RangeDopplerIsOffUnlessGivenAndRefusesOtherWords` and the `RangeDoppler` suite; `test_gallery_echo_position.py::test_doppler_range_takes_out_the_ownships_lfm_coupling_only_when_asked`; `test_classify_rules_eval.py::test_a_capture_with_the_targets_doppler_part_is_scored_with_it` |
+| D-184 | per-board streams merged into the whole-array stream (sonar-6f9) | `test_board_streams.py` (the whole file) |
+| D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 
 The option round trip that every chain key must pass, whatever decision added it:
 `test_live_cpp.py::test_every_chain_option_round_trips_through_binding_and_text`.

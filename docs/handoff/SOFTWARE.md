@@ -232,7 +232,7 @@ Bridge frames. Known left: `dataflow.png` still labels detection "detect (CFAR)"
 | `libs/recon` | `backproject_kernel.hpp`, `backproject.hpp`, `sinc_table.hpp`, `backproject_cuda.cu` | the backprojection kernel, culling, the position lookup |
 | `libs/sim` | `synth_kernel.hpp`, `paths.hpp`, `reverb.hpp`, `reverb_batched.hpp`, `reverb_kernel.hpp` | echo synthesis (D-51, D-81, D-83), eigenray providers, the reverberation generator |
 | `libs/detect` | `cfar.hpp`, `cfar_kernel.hpp`, `statistic.hpp` | cell-averaging CFAR, `cfar_window` (D-98), the statistics the multiscale detector is built on |
-| `libs/live` | `chain.hpp` (`ChainOptions`, `Report`, `LiveChain`, `PassiveChain`), `options.cpp` (key=value), `derive.hpp`, `detector.hpp`, `detections.hpp` (tracker, classifier), `elevation.hpp`, `environment.hpp` (sound-speed ladder), `decimate.hpp`, `sync.hpp`, `udp_source.hpp` (assembler, navigation), `doa.hpp`, `sbl_kernel.hpp`, `beamform.hpp`, `raytrace.hpp`, `multipath_depth.hpp`, `coverage.hpp`, `tonal.hpp`, `calibrate.hpp` | the long-range live chain in C++ |
+| `libs/live` | `chain.hpp` (`ChainOptions`, `Report`, `LiveChain`, `PassiveChain`), `options.cpp` (key=value), `derive.hpp`, `detector.hpp`, `detections.hpp` (tracker, classifier), `elevation.hpp`, `environment.hpp` (sound-speed ladder), `decimate.hpp`, `sync.hpp`, `udp_source.hpp` (assembler, navigation), `board_merge.hpp` (per-board streams, clock estimate), `doa.hpp`, `sbl_kernel.hpp`, `beamform.hpp`, `raytrace.hpp`, `multipath_depth.hpp`, `coverage.hpp`, `tonal.hpp`, `calibrate.hpp` | the long-range live chain in C++ |
 | `libs/motion` | `dpc_solver.hpp`, `delay_estimation.hpp`, `delay_kernel.hpp`, `delay_cuda.cu` | the Ceres solve of ASASIN Eq. 8 (D-30) and delay estimation (D-148). Built only with a Ceres without SuiteSparse |
 | `libs/holoscan_ops` | `operators.hpp`, `operators.cpp` | C++ Holoscan operators around `libs/live` |
 | `apps` | `sonar_live.cpp`, `sonar_live_holoscan.cpp` | the standalone program and the Holoscan application |
@@ -243,7 +243,7 @@ Bridge frames. Known left: `dataflow.png` still labels detection "detect (CFAR)"
 | | `sonar_equation.py`, `lloyd.py`, `depthplan.py`, `acoustics.py`, `simcal.py`, `benchmarks.py` | link budget, surface image, depth plan, medium properties, simulator calibration, PICMUS evaluation |
 | `python/gpusonar/recon` | `fls.py`, `sas.py`, `volume.py`, `gain.py`, `multigpu.py` | imaging on the kernel; the gain law derived from the record (D-91) |
 | `python/gpusonar/sim` | `simulator.py`, `scene.py`, `targets.py`, `propagation.py`, `bellhop.py`, `reverb.py`, `reverb_bistatic.py`, `reverb_relief.py`, `reverb_specular.py`, `bottom.py`, `surface.py`, `timespread.py`, `noise.py`, `noise_fit.py`, `receiver.py`, `sources.py`, `waveform.py`, `basin.py`, `bathymetry.py`, `passive.py`, `channel_replay.py`, `channel_sounding.py`, `sediment_fit.py`, `engine.py`, `parallel_normal.py` | the simulator (section 6) |
-| `python/gpusonar/sources` | `base.py`, `container.py`, `wav.py`, `wav_watch.py`, `flank_stream.py`, `hsb.py`, `picmus.py`, `nvus.py`, `nvus_scanner.py` | sources; each yields ping records |
+| `python/gpusonar/sources` | `base.py`, `container.py`, `wav.py`, `wav_watch.py`, `flank_stream.py`, `board_merge.py` (per-board streams, clock estimate), `hsb.py`, `picmus.py`, `nvus.py`, `nvus_scanner.py` | sources; each yields ping records |
 | `configs` | `sonars/`, `scenarios/`, `environments/`, `deploy/`, `builds/` (with `modules/`, `environments/`, `targets/`), `chains/`, `nav/`, `sediments.yaml` | all configuration (section 7) |
 | `tools` | section 8 | programs, studies, generators |
 | `tests/cpp`, `tests/python` | [TESTS.md](TESTS.md) | GoogleTest and pytest |
@@ -342,6 +342,9 @@ Selected by the deployment file's `source:` section (`type`), or by `--replay`, 
 | reorder grace | `REORDER_BLOCKS = 2` (`flank_stream.py`; C++ `PingAssembler`) | blocks | D-161 | blocks are placed by their sample counter; a hole is given up 2 blocks after it. Constructor argument `reorder_blocks`, not a deployment key |
 | held bytes | `MAX_HELD_BYTES = 64 MiB` | bytes | D-161 | rows held behind holes on the decimating path |
 | lost-ping count | a ping-index jump counts lost pings only with missing samples between the transmits | | D-161, D-177 | counters `frames_lost`, `frames_late`, `frames_repeated`, `dropped_pings`, `pings_discarded_at_stop` |
+| `source.boards` (`stream_boards`) | absent: one whole-array stream | | D-184 | one stream per board, merged before the assembler (`sources/board_merge.py` `BoardMerger`, `libs/live` `board_merge.hpp`): `channels` (map; default the sonar file's `receive.boards`), `reference` (first), `missing` (`drop`), `wait_s` (0.05 s), `clock_ppm` (per board, 0). Per-board statistics. Boards aligned by capture start (they must agree to about 0.8 ms) and rate. `tools/board_merge.py` relays for receivers that do not merge |
+| `source.clock_ppm` (`stream_clock_ppm`) | 0: capture start + tx / fs, as before | ppm | D-185 | the board clock's rate error: `transmit.time_ns` = capture start + tx / (fs (1 + ppm 1e-6)). Unconfirmed until measured |
+| `source.clock` (`stream_clock_estimate`) | absent: no estimate | | D-185 | the rate from arrival times (`ClockEstimator`: earliest arrival per `bin_s` 1 s, least squares over `window_s` 600 s), reported; `discipline` (false) stamps with it once `min_span_s` 300 s and `max_sigma_ppm` 0.5 are met |
 
 Through Sensor Bridge (`tools/sonar_live_hsb.py`, `sources/hsb.py`):
 
@@ -693,10 +696,11 @@ Examples are from each tool's docstring or its argument list.
 
 | Tool | Purpose | Example |
 | --- | --- | --- |
-| `sonar_live.py` | the live chain on boards, a recording, the simulator or an emulated board; exports the C++ program's template | `tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_12km` |
+| `sonar_live.py` | the live chain on boards, a recording, the simulator or an emulated board (`--per-board`: one stream per board); exports the C++ program's template | `tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_12km` |
 | `sonar_live_hsb.py` | the chain through Holoscan Sensor Bridge, as two processes | `tools/sonar_live_hsb.py serve --scenario flank_patrol` and `tools/sonar_live_hsb.py receive CONFIG --pings 20 --report r.jsonl` |
 | `sonar_run.py` | a batch chain from a YAML file | `tools/sonar_run.py configs/chains/stripmap_points.yaml` |
 | `inspect_tap.py` | numbers and plots of records in a container or a tap directory | `tools/inspect_tap.py taps/ --stage prepare --ping 2` |
+| `board_merge.py` | per-board GSFB streams to one whole-array stream, as a UDP relay (D-184) | `tools/board_merge.py popoto_testauv_1row_clocks --port 5710 --to 127.0.0.1:5700` |
 | `nav_adapter.py` | a vendor's navigation stream to the chain's datagrams | `tools/nav_adapter.py configs/nav/generic_csv.yaml --replay nav.csv --out-udp 127.0.0.1:5702` |
 | `gallery.py` | every mode's realistic scenario end to end; writes `docs/figures/` and `gallery.json` | `tools/gallery.py --backend host --only popoto_12km --out DIR` (`--quick` for thinned scenes) |
 | `classify_rules_eval.py` | multi-seed scoring of classification against truth; re-scores saved captures | `tools/classify_rules_eval.py --evaluate-only --captures DIR --json OUT` |
