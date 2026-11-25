@@ -88,7 +88,7 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 | --- | --- | --- |
 | Branch | `claude/gpu-sonar-suite-u289p5`, HEAD `933972b` (2026-11-24) | `git log` |
 | Latest decision | D-189: a host check and runbook for the Sensor Bridge measurement that needs a real host (still not measured). D-188: the receiver names its damaged frames, and one damaged at the start of a Popoto-rate loopback is start-up loss. D-187: the Popoto-rate loss is at the start of the run; the receiver queue defaults to 4 s of stream. D-186: the Sensor Bridge loopback at Popoto rates loses frames; D-184 per-board streams merged; D-185 a board clock's rate. D-182 is this documentation set | `docs/DECISIONS.md` |
-| Last full GPU suite | 2159 passed, 97 skipped, none failed, on an NVIDIA L4 (Hugging Face job 6b0699f4d0582cfbbefe0373) | D-188 |
+| Last full GPU suite | 2171 passed, 98 skipped, none failed, on an NVIDIA L4 (Hugging Face job 6b06bbda1460ffe1d5ea75b5) | D-189 |
 | Last whole CPU suite in one run | the tree of D-157, `605a4e1` (2026-11-22; 157 of 157 ctest entries); since then (D-158 to D-181) affected files per package only | `docs/STATUS.md`, the result paragraphs just before "Open questions for the project owner" |
 | Gallery (`docs/figures/`, `gallery.json`) | regenerated at D-179 on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`); D-180 and D-181 move no default | D-179 |
 | Milestones | 1 to 10 of 13 done; 11 (Holoscan), 12 (propagation), 13 (performance model, Jetson) open | `README.md`, `bd` |

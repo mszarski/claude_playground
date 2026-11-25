@@ -3492,3 +3492,6 @@ Nothing below measures either.
 - Not verified: that `receive --receiver-core` can move the receiver onto an isolated core outside the
   process's default affinity (Linux behaviour, not tried: no isolated core here).
 - Tests: `tests/python/test_hsb_host_check.py` (12).
+- Full GPU suite on this tree: **2171 passed, 98 skipped**, none failed (NVIDIA L4, HF job
+  6b06bbda1460ffe1d5ea75b5, 49 min 39 s): 12 more passed (the new file) and one more skipped (the new
+  tool's `--help` test, which skips in the job's tarball with the other 58).
