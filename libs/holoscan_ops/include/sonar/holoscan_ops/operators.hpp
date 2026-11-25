@@ -55,10 +55,14 @@ class ReplaySourceOp : public holoscan::Operator {
 /// `listen` into fixed-length stretches of the untriggered stream. Navigation datagrams on
 /// `nav_port` (0: none) set each ping's pose. A thread of its own drains the socket.
 /// Stops the pipeline after `max_pings`, or when no block has arrived for `idle_seconds`.
+/// Its two socket threads are stopped and joined in stop() and, if the operator is destroyed without
+/// stop() (another operator threw and the application unwound), in the destructor: a std::thread still
+/// joinable when destroyed is std::terminate, and the reason of the error is lost (sonar-ogg, as D-183).
 class UdpSourceOp : public holoscan::Operator {
  public:
   HOLOSCAN_OPERATOR_FORWARD_ARGS(UdpSourceOp)
   UdpSourceOp() = default;
+  ~UdpSourceOp() override;
   void setup(holoscan::OperatorSpec& spec) override;
   void start() override;
   void stop() override;
@@ -85,6 +89,7 @@ class UdpSourceOp : public holoscan::Operator {
   std::thread receiver_, nav_thread_;
   std::int64_t emitted_ = 0;
   live::NavCounts nav_counts_;   ///< pings without a fix, and without a velocity from navigation (stop() reports both)
+  void join_threads();           ///< set the stop flag and join both threads; safe to call again
 };
 
 /// Writes every ping to a container file as it arrives and passes it on unchanged.

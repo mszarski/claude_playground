@@ -576,6 +576,11 @@ to one, and the container cannot raise it.
     of each still had 19 kernel drops outside the frames the receiver counted.
   - With the chain on one thread: no loss in 6 runs.
   - With a halved buffer (106,496 B): losses with spread too.
+- **At a Popoto build's rate** (32 to 96 channels at 102.4 kHz, 78.6 to 236 Mbit/s; 400-sample frames
+  of 38,528 to 115,328 B, 28 to 82 datagrams each, 256 a second) the same container lost frames in nearly
+  every real-time run, all refused by the full socket buffer, with the buffer doubled to what `rmem_max`
+  allows, with 200-sample frames and with 2 OpenMP threads alike (D-186; `DEPLOYMENT.md`; measured on
+  a10g-large, not an L4). The buffer is about 4.4 ms of the 96-channel stream there.
 - **For a deployed host** Sensor Bridge's guide gives `net.core.rmem_max = 31326208`
   (`HSB@2.7.0:docs/user_guide/setup.mdx:784-793`, all configurations). It also gives
   `isolcpus=2`, or `HOLOLINK_AFFINITY` to move the receiver

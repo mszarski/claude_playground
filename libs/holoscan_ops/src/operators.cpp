@@ -107,10 +107,18 @@ void UdpSourceOp::start() {
   });
 }
 
-void UdpSourceOp::stop() {
-  stop_ = true;
+void UdpSourceOp::join_threads() {
+  stop_ = true;                        // both threads look at it at least every 0.2 s (their sockets' receive timeout)
   if (receiver_.joinable()) receiver_.join();
   if (nav_thread_.joinable()) nav_thread_.join();
+}
+
+// Holoscan calls stop() when the run ends normally. When another operator throws, the application can be destroyed
+// without it; the threads (which use this operator's sockets and queue) must still be stopped before the members go.
+UdpSourceOp::~UdpSourceOp() { join_threads(); }
+
+void UdpSourceOp::stop() {
+  join_threads();
   std::size_t discarded = 0;           // complete pings the assembler still held at stop: not emitted
   if (pings_) {
     std::vector<PingRecord> rest;

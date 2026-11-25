@@ -702,10 +702,13 @@ def lines(path):
 
 
 def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_prefix=(), tag="run", receive_env=None,
-                 scenario=None):
+                 scenario=None, stream=None, frame=FRAME, n_pings=N, check=True):
     """One loopback: `serve` (the board, through Sensor Bridge's emulator) and `receive` (Sensor
     Bridge's LinuxReceiverOp -> frames to pings -> chain) as separate processes, as deployed.
     `serve` replays `pings` from a file, or with `scenario` (a scenario file) simulates its pings itself.
+    `stream`: receive's arguments naming the stream's sonar and chain (default: flank_32 with test_live's window and
+    chain); `frame`: samples per frame on both sides; `n_pings`: receive's --pings. With `check` False a failed
+    receive is returned, not asserted (its statistics are {} when it printed none).
     Returns (sender's statistics, receiver's statistics, the receive process, its report path)."""
     if scenario is None:
         w = gs.RecordWriter(str(tmp_path / "pings.h5"))
@@ -714,13 +717,14 @@ def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_pr
         w.close()
     source = ("--scenario", str(scenario)) if scenario is not None else ("--replay", str(tmp_path / "pings.h5"))
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "python"), os.environ.get("PYTHONPATH", "")]))
+    if stream is None:
+        stream = ("--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES), "--chain", json.dumps(CHAIN))
     serve = subprocess.Popen([*serve_prefix, sys.executable, str(TOOL), "serve", *source,
-                              "--frame-samples", str(FRAME), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20", "--hold", "30",
+                              "--frame-samples", str(frame), "--lead", str(LEAD), "--pace", str(pace), "--linger", "20", "--hold", "30",
                               "--send-log", str(tmp_path / f"{tag}_send.json"), *serve_args],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     try:
-        receive = subprocess.run([sys.executable, str(TOOL), "receive", "--sonar", "flank_32", "--sonar-overrides", json.dumps(OVERRIDES),
-                                  "--chain", json.dumps(CHAIN), "--frame-samples", str(FRAME), "--pings", str(N),
+        receive = subprocess.run([sys.executable, str(TOOL), "receive", *stream, "--frame-samples", str(frame), "--pings", str(n_pings),
                                   "--report", str(tmp_path / f"{tag}.jsonl"), "--recording", str(tmp_path / f"{tag}.h5"),
                                   "--arrival-log", str(tmp_path / f"{tag}_arrivals.json"), *receive_args],
                                  capture_output=True, text=True, timeout=600, env=dict(env, **(receive_env or {})))
@@ -729,10 +733,13 @@ def run_loopback(tmp_path, pings, pace, serve_args=(), receive_args=(), serve_pr
         serve.kill()
     print(sent[-1500:])
     print(receive.stdout[-3000:])
-    assert receive.returncode == 0, receive.stderr[-3000:]
-    assert serve.returncode == 0, sent[-3000:]
-    board = json.loads([ln for ln in sent.splitlines() if ln.startswith("hsb: ")][-1][5:])
-    stats = json.loads([ln for ln in receive.stdout.splitlines() if ln.startswith("hsb: ")][-1][5:])
+    if check:
+        assert receive.returncode == 0, receive.stderr[-3000:]
+        assert serve.returncode == 0, sent[-3000:]
+    said = [ln for ln in sent.splitlines() if ln.startswith("hsb: ")]
+    got = [ln for ln in receive.stdout.splitlines() if ln.startswith("hsb: ")]
+    board = json.loads(said[-1][5:]) if said else {}
+    stats = json.loads(got[-1][5:]) if got else {}
     return board, stats, receive, tmp_path / f"{tag}.jsonl"
 
 
@@ -924,6 +931,248 @@ def test_loopback_of_a_scenario_the_board_simulates_gives_the_direct_chains_repo
     pings = run_scenario(str(path)).records                           # as serve_records simulates them
     got, _ = loopback_against_direct(tmp_path, pings, engine, scenario=path, tag="hsb_scenario")
     assert len(got[-1]["tracks"]) == 2
+
+
+# --- A Popoto build's channel count and rate through Sensor Bridge (sonar-x8v) ---------------------------------------
+# Every loopback above runs flank_32: 32 channels at 64 kHz, 49 Mbit/s. The Popoto builds are 32, 64 and 96 channels
+# at 102.4 kHz (docs/handoff/hardware_builds.json: 78.6, 157.3 and 235.9 Mbit/s of samples). The trial for each row
+# count is its build's shortest simulated one, received with its build's deployment file (chain, sync, elevation):
+#   1 row:  popoto_testauv_trial_1row (4 boards on their own clocks, 150-900 m window, 4 pings 3 s apart);
+#   2 rows: popoto_static_trial_3row's scene with the two-row sonar (popoto_static_trial_2row looks 2.45-2.75 km out,
+#           5 s apart: 21 s of stream and about 100 s of simulation on one CPU, against 11 s and 5 s; the stream's rate is
+#           the channel count's whatever the window);
+#   3 rows: popoto_static_trial_3row (12 boards on their own clocks, 90-400 m window, 4 pings 3 s apart).
+# The stream is continuous (zeros between windows), so the transport carries the build's full rate all the time; what
+# a longer receive window (12.7 km: 17 s a ping) adds is chain time and memory per ping, not stream rate.
+POPOTO = {1: ("popoto_testauv_trial_1row", None, "popoto_testauv_1row"),
+          2: ("popoto_static_trial_3row", "popoto_static_2row_clocks", "popoto_static_2row"),
+          3: ("popoto_static_trial_3row", None, "popoto_static_3row")}
+# Seconds of stream the receiver operator holds while the chain works on a ping (`receive --queue`, in frames): the
+# tool's default 256 frames is 1.6 s of flank_32's 160 frames a second but 1.0 s of a Popoto build's 256 (400-sample
+# frames at 102.4 kHz), and the queue drops the oldest frames beyond it.
+POPOTO_QUEUE_S = 4.0
+_popoto_cache = {}
+
+
+def popoto_trial(rows):
+    """(records, deployment dict for `receive`) of a row count's trial. The deployment file is the build's with the
+    trial's sonar (its boards on their own clocks), receive window and sound speed (the window's layout, D-183); a
+    vehicle's navigation port and the file's outputs are left out (the stream carries no navigation; outputs are the
+    test's). Simulated once per process."""
+    if rows not in _popoto_cache:
+        from gpusonar.config import load_scenario_config, load_yaml
+        from gpusonar.sim import run_scenario
+        scenario, sonar, deploy = POPOTO[rows]
+        sc = load_scenario_config(scenario)
+        if sonar:
+            sc = dict(sc, sonar=sonar, name=f"{sc['name']}_as_{sonar}")
+        records = run_scenario(sc).records
+        cfg = load_yaml(str(ROOT / "configs" / "deploy" / f"{deploy}.yaml"))
+        cfg["source"] = dict(cfg["source"], sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"),
+                             sound_speed=float(records[0].environment.sound_speed))
+        if (cfg.get("nav") or {}).get("port"):
+            cfg.pop("nav")
+        cfg.pop("output", None)
+        _popoto_cache[rows] = (records, cfg)
+    records, cfg = _popoto_cache[rows]
+    return [r.copy() for r in records], json.loads(json.dumps(cfg))
+
+
+def popoto_direct(records, cfg, engine, frame=FRAME, sequences=None, recording=None):
+    """The same pings framed and assembled here, without transport, straight through the deployment's chain; with
+    `sequences`, only the pings of those sequence numbers (the ones a lossy loopback reported), in order. Returns
+    (reports, the first of those pings' samples). With `recording`, the chain records them there as `receive` does."""
+    from gpusonar.live import NavListener
+    src = cfg["source"]
+    assembled = hsb.records_from_frames(hsb.frames_from_records(records, frame, lead_seconds=LEAD), src["sonar"],
+                                        src.get("sonar_overrides"), sound_speed=src["sound_speed"])
+    if sequences is not None:
+        assembled = [r for r in assembled if int(r.metadata.sequence) in set(sequences)]
+    sent = assembled[0].samples.array.copy()                          # the chain conditions records in place
+    nav = NavListener.from_config(cfg["nav"]) if cfg.get("nav") else None
+    with LiveChain(dict(cfg["chain"], engine=engine), nav=nav, recording=recording) as chain:
+        return chain.run(assembled), sent
+
+
+def stream_numbers(records, frame=FRAME):
+    st = hsb.FrameStream(records, frame, lead_seconds=LEAD)
+    fps = 1.0 / st.frame_seconds
+    return {"channels": st.n_channels, "sample_rate": st.sample_rate, "frame_samples": frame, "frame_bytes": st.frame_bytes,
+            "frames_per_s": fps, "mbit_s": st.frame_bytes * 8 * fps / 1e6, "frames": st.n_frames,
+            "stream_s": st.n_frames * st.frame_seconds}
+
+
+@pytest.mark.parametrize("rows", [1, 2, 3])
+def test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back(rows):
+    """Without Sensor Bridge: the stream of a Popoto build's trial in the loopback's frames carries the build's rate,
+    and assembled again at the trial's sound speed it gives back every ping at its transmit time, quantised to the
+    stream's 24 bits."""
+    records, cfg = popoto_trial(rows)
+    builds = {pathlib.Path(b["sonar_file"]).stem: b for b in json.loads((ROOT / "docs" / "handoff" / "hardware_builds.json").read_text())["builds"]}
+    build = builds[cfg["source"]["sonar"].removesuffix("_clocks")]
+    n = stream_numbers(records)
+    assert n["channels"] == build["channels"] == 32 * rows and n["sample_rate"] == build["sample_rate_hz"] == 102400.0
+    # 400-sample frames: 256 a second whatever the channel count; the rate is the samples' plus a 128-byte header a frame.
+    assert n["frames_per_s"] == pytest.approx(256.0)
+    assert n["frame_bytes"] * n["frames_per_s"] == pytest.approx(build["stream"]["payload_bytes_per_s"] + 128 * 256.0)
+    src = cfg["source"]
+    back = hsb.records_from_frames(hsb.frames_from_records(records, FRAME, lead_seconds=LEAD), src["sonar"], src.get("sonar_overrides"),
+                                   sound_speed=src["sound_speed"])
+    assert [r.transmit.time_ns for r in back] == [r.transmit.time_ns for r in records]
+    lsb = records[0].metadata.adc_full_scale / hsb.FULL_SCALE_COUNTS
+    for a, b in zip(back, records):
+        assert a.samples.array.shape == b.samples.array.shape
+        clipped = np.abs(b.samples.array) >= records[0].metadata.adc_full_scale
+        # Half a step of the 24-bit word, plus the float32 rounding of the values (0.53 step measured at 2 and 3 rows).
+        assert np.all(np.abs(a.samples.array - b.samples.array)[~clipped] <= 0.55 * lsb)
+
+
+def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None, queue_s=POPOTO_QUEUE_S, check=True, omp=None,
+                    serve_args=()):
+    """One real-time loopback of a row count's trial: `serve --replay` of its pings, `receive` with the build's
+    deployment file, the chain's OpenMP on half the usable CPUs (D-162, D-173). Returns (board, stats, receive process,
+    report path, measurements)."""
+    import math
+
+    import yaml
+    records, cfg = popoto_trial(rows)
+    path = tmp_path / f"{tag}_deploy.yaml"
+    path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    numbers = stream_numbers(records, frame)
+    queue = math.ceil(queue_s * numbers["frames_per_s"])
+    omp = omp or max(1, usable_cpus() // 2)
+    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
+    receive_args = ["--chain-omp-threads", str(omp), "--queue", str(queue), "--engine", engine, "--quiet"]
+    if socket_buffer:
+        receive_args += ["--socket-buffer", str(socket_buffer)]
+    board, stats, receive, report = run_loopback(tmp_path, records, pace, serve_args=serve_args, receive_args=receive_args, tag=tag,
+                                                 stream=(str(path),), frame=frame, n_pings=len(records), check=check)
+    m = dict(numbers, rows=rows, engine=engine, queue_frames=queue, omp=omp, pace=pace, exit=receive.returncode,
+             interval_s=(records[1].transmit.time_ns - records[0].transmit.time_ns) * 1e-9)
+    try:
+        worst, floor, median, n = receive_delays(tmp_path, tag)
+        m.update(worst_ms=worst, median_ms=median, least_ms=floor, delays=n)
+    except (OSError, ValueError, KeyError, AssertionError) as exc:
+        m["delay_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        log = json.loads((tmp_path / f"{tag}_arrivals.json").read_text())
+        m["chain_s"] = [round((b - a) * 1e-9, 3) for a, b in log.get("chain_wall_ns", [])]
+    except (OSError, ValueError):
+        m["chain_s"] = []
+    timing = board.get("timing") or {}
+    m.update(sender_max_late_ms=timing.get("max_late_ms"), sender_late_by_a_period=timing.get("frames_late_by_a_period"),
+             sender_back_to_back=timing.get("back_to_back_frames"))
+    for key in ("reports", "pings", "frames", "frames_lost", "frames_damaged", "frames_late", "dropped_pings", "lost_samples",
+                "bad_frames", "packets_dropped", "stopped", "chain_omp_threads"):
+        m[key] = stats.get(key)
+    m["socket"] = stats.get("socket")
+    m["udp"] = stats.get("udp_counters")
+    m["cpu_throttled_during"] = (stats.get("cpu") or {}).get("nr_throttled_during")
+    if receive.returncode != 0:
+        m["stderr"] = receive.stderr[-600:]
+    return board, stats, receive, report, m
+
+
+# What a Popoto-rate loopback is held to, and what it is not (D-186). Measured on Hugging Face a10g-large jobs (12-CPU
+# quota, rmem_max 212,992 B; no L4 was available), 210 real-time runs with the C++ and Python engines
+# (6b063a21d0582cfbbefd60a3, 6b0641ce1460ffe1d5e98956): frames were lost in 5 to 8 runs of 10 at 32 channels and in
+# every run at 64 and 96, with the default socket buffer, with the buffer doubled to 425,984 B (--socket-buffer
+# 212992, what the container's rmem_max allows), with 200-sample frames, and with the chain's OpenMP on 2 threads as on
+# 6. Every datagram lost was refused by the receiver's full socket buffer (the socket's kernel drop count equals
+# RcvbufErrors in all 210 runs); the chain kept up (C++: 0.13, 1.4 and 2.2 s a ping against 3 s); the worst receive
+# delay of a run was 1.2 to 99 ms, against 0.8 to 3.5 ms for flank_32 on the same machines. So what holds here is asserted:
+# losses only as counted refusals of the socket buffer, every ping accounted for, nothing malformed, the chain in real
+# time, and the reports of the pings that came through equal to the same pings straight through the chain. A run that
+# loses nothing passes; one that loses frames ends as an expected failure (xfail) with its numbers, so the loss stays
+# visible in the summary. A deployed host needs what Sensor Bridge's own setup guide asks (DEPLOYMENT.md).
+POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python")]
+# Not (3, "python"): the Python engine's 2.5-2.9 s a ping and its per-frame work at 256 frames a second of 115 kB
+# together fall behind the stream, and the receiver's queue drops frames beyond the socket's losses (493 to 721 frames
+# in a run against about 11 refused at the socket; job 6b063a21d0582cfbbefd60a3). The vehicle runs the C++ engine.
+
+
+@pytest.mark.parametrize("rows,engine", POPOTO_ENGINES)
+def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports(tmp_path, rows, engine):
+    """sonar-x8v: a Popoto build's trial through Sensor Bridge's emulator and Linux receiver at real time, at its
+    build's 32, 64 or 96 channels and 102.4 kHz, received with its deployment file: the chain keeps up, every ping is
+    accounted for, any loss is the socket buffer's and counted, and the reported pings give the direct chain's reports.
+    Frames lost make the test an expected failure that says how many (see above: so far every 64- and 96-channel run)."""
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    records, cfg = popoto_trial(rows)
+    n = len(records)
+    _, stats, receive, report, m = popoto_loopback(tmp_path, rows, engine, tag=f"popoto{rows}", check=False)
+    print("POPOTO", json.dumps(m))
+    assert receive.returncode in (0, 3), receive.stderr[-3000:]     # 3: fewer pings reported than sent, said on stderr
+    assert m["chain_omp_threads"] in (m["omp"], "no OpenMP runtime")
+    assert stats["stopped"] == "pings" and stats["bad_frames"] == 0
+    assert stats["pings"] + stats["dropped_pings"] + stats["pings_discarded_at_stop"] == n
+    assert (receive.returncode == 3) == (stats["reports"] < n) and stats["reports"] == stats["pings"]
+    # Every datagram lost was refused by the receiver's full socket buffer (the kernel's count for that socket).
+    assert stats["socket"]["found"] and stats["socket"]["drops"] == stats["udp_counters"]["RcvbufErrors"]
+    lossless = stats["frames_lost"] == 0 and stats["frames_damaged"] == 0 and stats["socket"]["drops"] == 0
+    assert lossless or stats["socket"]["drops"] > 0                  # a loss with no refused datagram is another fault
+    assert -1.0 < m["least_ms"] and m["median_ms"] < 2.0               # the two clocks agree (receive_delays)
+    # Real time: the chain takes less than a ping interval on every ping after the first (which pays for set-up).
+    assert max(m["chain_s"][1:]) < m["interval_s"], m["chain_s"]
+    got = lines(report)
+    assert len(got) == stats["reports"] and got, "no ping came through"
+    direct, _ = popoto_direct(records, cfg, engine, sequences=[r["sequence"] for r in got], recording=str(tmp_path / "direct.h5"))
+    assert len(direct) == len(got)
+    assert all(r["sync"]["ok"] for r in got if "sync" in r)
+    assert_same_reports(got, direct)
+    # What `receive` recorded is what the same chain records of the same pings without transport. (Not the assembled
+    # samples themselves: with a Popoto deployment the recording differs from them by float32 rounding, 2e-9 to 7e-9 V
+    # measured, transport or not.)
+    raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / f"popoto{rows}.h5")}))
+    ref = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "direct.h5")}))
+    assert len(raw) == len(ref) == len(got)
+    assert all(np.array_equal(a.samples.array, b.samples.array) for a, b in zip(raw, ref))
+    if not lossless or m["worst_ms"] >= 5.0:
+        pytest.xfail(f"measured limit (D-186): {rows * 32} channels at 102.4 kHz lost {stats['frames_lost']} frames "
+                     f"({stats['frames_damaged']} damaged, {stats['socket']['drops']} datagrams refused by a "
+                     f"{stats['socket']['rcvbuf']}-byte socket buffer), {stats['dropped_pings']} of {n} pings; worst receive "
+                     f"delay {m['worst_ms']:.1f} ms (flank_32's bound 5 ms)")
+
+
+@pytest.mark.skipif(os.environ.get("GPUSONAR_HSB_STUDY") != "1", reason="a measurement, run with GPUSONAR_HSB_STUDY=1")
+def test_popoto_rate_loopback_study(tmp_path):
+    """sonar-x8v: Popoto-rate loopbacks repeated, one line per run (POPOTO_STUDY {...}). Measures; asserts nothing
+    about the transport. GPUSONAR_HSB_STUDY_RUNS (10), _ROWS ("1,2,3"), _ENGINES ("cpp"), _CONFIGS (space-separated
+    frame:buffer:queue_s[:omp[:catch_up]], buffer "def" or a --socket-buffer in bytes, omp "half" or a thread count,
+    catch_up "spread" or "burst"; default "400:def:4"), _BUDGET_S (seconds after which no run starts; 5400)."""
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    runs = int(os.environ.get("GPUSONAR_HSB_STUDY_RUNS", "10"))
+    rows_list = [int(x) for x in os.environ.get("GPUSONAR_HSB_STUDY_ROWS", "1,2,3").split(",")]
+    engines = os.environ.get("GPUSONAR_HSB_STUDY_ENGINES", "cpp").split(",")
+    configs = os.environ.get("GPUSONAR_HSB_STUDY_CONFIGS", "400:def:4").split()
+    budget = float(os.environ.get("GPUSONAR_HSB_STUDY_BUDGET_S", "5400"))
+    print("cpus: affinity", len(os.sched_getaffinity(0)), "usable", usable_cpus(), "rmem",
+          {k: pathlib.Path(f"/proc/sys/net/core/{k}").read_text().strip() for k in ("rmem_default", "rmem_max")}, flush=True)
+    for rows in rows_list:
+        popoto_trial(rows)                                             # simulated before the clock starts
+    t0 = time.time()
+    for k in range(runs):
+        for cfg_text in configs:
+            frame, buffer, queue_s, *more = cfg_text.split(":")
+            omp = None if not more or more[0] == "half" else int(more[0])
+            catch = ("--catch-up", more[1]) if len(more) > 1 else ()
+            for rows in rows_list:
+                for engine in engines:
+                    if time.time() - t0 > budget:
+                        print("POPOTO_STUDY budget reached", flush=True)
+                        return
+                    tag = f"s{k}_{cfg_text.replace(':', '_')}_{rows}_{engine}"
+                    _, _, _, _, m = popoto_loopback(tmp_path, rows, engine, tag, frame=int(frame),
+                                                    socket_buffer=None if buffer == "def" else int(buffer), queue_s=float(queue_s),
+                                                    check=False, omp=omp, serve_args=catch)
+                    m.update(run=k, config=cfg_text)
+                    print("POPOTO_STUDY " + json.dumps(m), flush=True)
+                    for f in tmp_path.glob(f"{tag}*.h5"):
+                        f.unlink()                                     # the disk: recordings are not needed here
 
 
 def loss_around(tmp_path, tag, stats, board, width=3):

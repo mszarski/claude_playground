@@ -1647,6 +1647,71 @@ result reported when this was written. The last finished job therefore still sho
   full `gpu_job.sh` run without `-k hsb`. (Since: `engine: cpp`, `serve --scenario` and the
   idle stop are tested, and full-suite jobs include this path; see "Since then" above.)
 
+## Sensor Bridge at Popoto rates (D-186, issue sonar-x8v)
+
+**What failed first: at every Popoto row count the real-time loopback lost frames, in nearly every
+run, and nothing tried in the container stopped it.** Not an L4: no L4 was available for three hours,
+so these are Hugging Face `a10g-large` jobs (12-CPU quota, 48 CPUs listed, `rmem_max` 212,992 B), jobs
+`6b063a21d0582cfbbefd60a3` and `6b0641ce1460ffe1d5e98956`, 210 runs, measured by
+`tests/python/test_hsb.py::test_popoto_rate_loopback_study`. Each run: the build's shortest trial
+(1 row `popoto_testauv_trial_1row`; 2 rows `popoto_static_trial_3row`'s scene with the two-row sonar;
+3 rows `popoto_static_trial_3row`; 4 pings 3 s apart, boards on their own clocks), `serve --replay` at
+pace 1.0, `receive` with the build's deployment file at the trial's sound speed, the chain's OpenMP on
+6 threads (half the quota), `--queue` 4 s of stream, 400-sample frames (256 a second).
+
+| Rows (channels, Mbit/s of samples) | Engine | Runs | Runs with frames lost or damaged | Frames lost a run (median, max) | Runs with a ping dropped | Worst receive delay (median of runs, range) | Median receive delay | Chain s a ping after the first (median, max) vs interval | Sender's worst lateness |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 (32, 78.6) | C++ | 20 | 12 | 1, 8 | 2 | 8.6 ms, 4.4-27.0 | 0.33 ms | 0.13, 0.16 vs 3 s | 10.6-25.4 ms |
+| 2 (64, 157.3) | C++ | 20 | 20 | 11, 57 | 1 | 3.9 ms, 1.2-13.3 | 0.61 ms | 1.40, 1.66 vs 3 s | 11.5-26.0 ms |
+| 3 (96, 235.9) | C++ | 20 | 20 | 11.5, 66 | 3 | 5.4 ms, 1.6-28.5 | 0.87 ms | 2.17, 2.48 vs 3 s | 15.5-33.6 ms |
+| 1 | Python | 10 | 6 | 1.5, 4 | 0 | 12.4 ms, 3.6-22.5 | 0.32 ms | 0.17, 0.21 vs 3 s | 10.4-14.1 ms |
+| 2 | Python | 10 | 10 | 11, 14 | 0 | 3.2 ms, 1.6-12.6 | 0.61 ms | 1.69, 1.94 vs 3 s | 11.0-24.7 ms |
+| 3 | Python | 10 | 10 | 368, 721 | 0 | 5.1 ms, 1.5-9.1 | 0.88 ms | 2.64, 2.91 vs 3 s | 15.9-25.8 ms |
+
+Default socket buffer in all rows above. Variants, C++ engine, 10 runs each, runs with frames lost or
+damaged at 1 / 2 / 3 rows (most frames lost in a run):
+
+| Variant | 1 row | 2 rows | 3 rows |
+| --- | --- | --- | --- |
+| `--socket-buffer 212992` (granted 425,984 B, the most `rmem_max` allows) | 5 (4) | 10 (16) | 10 (84) |
+| the same with 200-sample frames (512 a second) | 10 (28) | 10 (51) | 10 (286) |
+| the doubled buffer, chain OpenMP on 2 threads | 8 (7) | 10 (25) | 10 (142) |
+| default buffer, chain OpenMP on 2 threads | 8 (10) | 10 (64) | 10 (57) |
+
+- Every lost datagram was refused by the receiver's full socket buffer: the socket's kernel drop count
+  equals `RcvbufErrors` in all 210 runs; no CPU throttling was recorded. Every ping was accounted for
+  (reported plus dropped equals sent). 45 frames in all arrived damaged.
+- The C++ chain keeps up at every row count; the Python engine at 3 rows does not: with 2.6-2.9 s of
+  chain a ping and its per-frame work at 256 frames of 115 kB a second, the receiver's queue overflowed
+  (368 frames lost in the median run, against about 11 refused at the socket).
+- For comparison, `flank_32` (49 Mbit/s) on the same machines: 4 of 4 loopbacks lossless, worst delay
+  0.8 to 3.5 ms (job `6b063a21d0582cfbbefd60a3`).
+- On loopback the 212,992-byte buffer holds 92 datagrams of 2,304 bytes of accounting: about 12.8,
+  6.5 and 4.4 ms of the 32-, 64- and 96-channel streams; one 96-channel frame is a burst of 82
+  datagrams.
+- The emulated board (Python, `HsbBoardEmulator`) ran 10 to 34 ms late at some point in every run and
+  then caught up at twice the frame rate (`catch_up: spread`).
+- **The loss is regular, not random**: at 64 and 96 channels 16 of 20 C++ runs lost 9 to 13 frames
+  (two lost 49 to 66), about 3 frames a ping of the 4; in the last job every 96-channel C++ run lost
+  exactly 12 frames, 985 datagrams (12 x 82). Something done once a ping on the receiving side is the
+  lead; where the losses fall against the chain's runs (`loss_around`, as in the `flank_32` study) was
+  not measured: no job was left.
+- Last job, `6b064e8e1460ffe1d5e9a072` (a10g-large, the test selection 3 times): at 32 channels the C++
+  engine lost nothing in 3 of 3 runs, the Python engine in 2 of 3, but the worst receive delay was 4.6
+  to 8.6 ms (flank_32's bound is 5 ms); 64 channels lost 10 to 12 frames in every run, 96 channels 12
+  in every run; every assertion before the recording comparison held in all 15 Popoto runs (losses
+  counted as socket refusals, every ping accounted for, the chain within the interval, reports equal
+  to the direct chain's on the same pings, largest difference 0.0). The recording comparison failed in
+  all 15: it compared with the assembled samples, from which a Popoto deployment's recording differs
+  by float32 rounding (2e-9 to 7e-9 V, also without transport, checked on the CPU). It now compares
+  with the direct chain's own recording of the same pings; **that correction has not run on a GPU**.
+  In the same job 2 of 12 runs of the existing `flank_32` loopback tests failed their 5 ms bound
+  (6.7 and 6.3 ms; the other 10 were 0.73 to 0.88 ms): this host, not a change.
+- The test now asserts what held in every run (losses only as counted socket refusals, every ping
+  accounted for, no malformed frame, the chain within the ping interval, reports equal to the direct
+  chain's on the pings that came through) and ends as an expected failure with the numbers when frames
+  were lost or the worst receive delay reached 5 ms (`DEPLOYMENT.md`, "Through Holoscan Sensor Bridge's receiver").
+
 ## Sampled pulses and per-ray Doppler in the C++ engine
 
 Source: `tests/python/test_sampled_engine.py` (new), `tests/cpp/test_sim_synth.cpp` (new),
