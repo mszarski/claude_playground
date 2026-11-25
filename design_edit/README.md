@@ -1045,6 +1045,27 @@ So these rounds train from **base** Gemma with thinking on, on its *own* correct
   model rarely samples, so neither RFT nor RL on its own samples teaches them. Guided traces (a teacher reasoning
   toward the reference) are the next lever.
 
+### Round 12 RL, continued (v12b): 150 more steps on the same prompts
+
+The previous run saved no optimizer state, so this one starts a fresh LoRA on top of the merged base + v12 SFT +
+RL checkpoint-150 adapters. It uses the same 544 prompts and settings, on 2×H200 for 6.2 h.
+
+| | eval v2 | eval v2.1 | v2.1 consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|---|
+| start (RL v12 checkpoint-150) | 0.724 | 0.824 | 0.877 | 0.923 | 0.674 | 0.924 | 0.650 |
+| v12b checkpoint-50 | **0.733** | **0.843** | 0.908 | 0.923 | 0.674 | 0.933 | 0.733 |
+| v12b checkpoint-100 | **0.733** | **0.843** | 0.908 | 0.913 | 0.696 | 0.933 | 0.717 |
+| v12b checkpoint-150 | **0.733** | 0.836 | 0.892 | 0.923 | 0.696 | 0.933 | 0.667 |
+| checkpoint-50, vote of 8 samples | 0.726 | **0.843** | 0.938 | 0.933 | 0.674 | 0.924 | 0.700 |
+
+* **It gains about 2 points by step 50 and then plateaus.** Training reward is flat at about 0.75 throughout. About
+  45% of the prompt groups have zero reward variance (all 8 rollouts right, or all wrong), and only 8–14% of rollouts
+  hit the 1,024-token cap. The prompts were picked for the *base* model, so most no longer teach anything: re-pick
+  them for the current model.
+* **Voting doesn't help.** `eval_model.py --vote 8` samples 8 answers at temperature 0.8 and keeps the one whose
+  applied result most samples agree on (`design_edit/vote.py`; new-node ids and names are ignored). It ties a single
+  greedy answer, so the remaining errors are systematic, not sampling noise.
+
 ## Eval v2.1: repaired criteria (the "ceiling" was mostly grading defects)
 
 On eval v2, 59 items (13%) failed for every strong model. Reading them showed mostly grading defects, not model errors:

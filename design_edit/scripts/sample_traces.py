@@ -5,6 +5,8 @@
 #     "transformers>=5.0",
 #     "datasets>=3.0",
 #     "huggingface_hub>=0.34",
+#     "peft>=0.17",
+#     "accelerate>=1.0",
 # ]
 # ///
 """Rejection-sampling data for reasoning SFT: k thinking traces per training request, each scored.
