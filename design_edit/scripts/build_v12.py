@@ -34,6 +34,8 @@ def main() -> None:
     ap.add_argument("--src", default=None)
     ap.add_argument("--dst", required=True)
     ap.add_argument("--hard-frac", type=float, default=0.25, help="share of 0/k prompts in the rl split")
+    ap.add_argument("--hard-out", default=None,
+                    help="write the indices (into --real) of never-solved items here, for sample_traces.py --hint")
     ap.add_argument("--rl-only", action="store_true",
                     help="re-pick RL prompts only (e.g. from a later model's samples): push them as <dst>")
     ap.add_argument("--dry-run", action="store_true")
@@ -41,7 +43,7 @@ def main() -> None:
 
     sft = [json.loads(line) for p in args.sft for line in open(p)]
     real = [json.loads(line) for line in open(args.real)]
-    mixed, hard = [], []
+    mixed, hard, hard_idx = [], [], []
     for line in open(args.real_traces):
         t = json.loads(line)
         r = real[t["index"]]
@@ -50,12 +52,17 @@ def main() -> None:
         n_ok = sum(grade_checks(r["before"], strip_fences(s["text"]), r["checks"], r["allowed"])["pass"]
                    for s in t["samples"])
         (mixed if 0 < n_ok < len(t["samples"]) else hard if n_ok == 0 else []).append(r)
+        if n_ok == 0:
+            hard_idx.append(t["index"])
     rng = random.Random(0)
     rng.shuffle(hard)
     rl = mixed + hard[:int(len(mixed) * args.hard_frac / (1 - args.hard_frac))]
     rng.shuffle(rl)
     print(f"sft rows {len(sft)} | rl: {len(mixed)} mixed + {len(rl) - len(mixed)} hard = {len(rl)} "
           f"(of {len(hard)} hard available)")
+    if args.hard_out:
+        Path(args.hard_out).write_text(json.dumps(hard_idx))
+        print(f"{len(hard_idx)} never-solved indices -> {args.hard_out}")
     if args.dry_run:
         return
 

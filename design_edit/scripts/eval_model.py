@@ -66,6 +66,8 @@ def main() -> None:
     ap.add_argument("--max-model-len", type=int, default=4096, help="vLLM context (raise for reasoning runs)")
     ap.add_argument("--revise-rounds", type=int, default=0,
                     help="after answering, show the model the applied result and let it revise (vLLM path)")
+    ap.add_argument("--vote", type=int, default=0,
+                    help="sample this many answers (temperature 0.8) and keep the one most samples agree on (vLLM)")
     ap.add_argument("--keep-special-tokens", action="store_true",
                     help="decode special tokens (needed to split Gemma 4 thinking from the answer)")
     ap.add_argument("--tag", default="", help="subfolder for the result files, e.g. 'think' (keeps runs apart)")
@@ -106,8 +108,21 @@ def main() -> None:
                                 skip_special_tokens=not args.keep_special_tokens)
 
         def generate(prompts):
-            outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
-            texts = [o.outputs[0].text for o in outs]
+            if args.vote > 1:  # self-consistency over the applied results (design_edit.vote)
+                from design_edit.revise import _design_of
+                from design_edit.vote import vote
+
+                vparams = SamplingParams(n=args.vote, temperature=0.8, top_p=0.95, max_tokens=args.max_new_tokens,
+                                         skip_special_tokens=not args.keep_special_tokens, seed=0)
+                outs = llm.chat(prompts, vparams, chat_template_kwargs=tkw, use_tqdm=False)
+                texts = []
+                for p, o in zip(prompts, outs):
+                    cands = [c.text for c in o.outputs]
+                    design = _design_of(p)
+                    texts.append(cands[vote(design, cands)] if design else cands[0])
+            else:
+                outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
+                texts = [o.outputs[0].text for o in outs]
             if not getattr(generate, "_shown", False):
                 generate._shown = True
                 for t in texts[:2]:

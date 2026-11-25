@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -20,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from design_edit.checks import grade_checks  # noqa: E402
 from design_edit.schema import strip_fences  # noqa: E402
 
+LEAK = re.compile(r"\bhint\b|private note|\bnote\b says|reference (answer|patch|solution)|given answer|"
+                  r"provided answer|correct answer is|the answer (is )?(given|provided)", re.I)
 KEEP = ("prompt", "before", "after", "kind", "instruction", "orig_instruction", "relax", "alts", "refs")
 
 
@@ -29,6 +32,8 @@ def main() -> None:
     ap.add_argument("--split", default="train")
     ap.add_argument("--traces", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--reject-hint-leak", action="store_true",
+                    help="for --hint traces: drop any whose text mentions the hint (it is trained without one)")
     ap.add_argument("--max-tokens", type=int, default=2500, help="drop traces longer than this")
     args = ap.parse_args()
     if args.dataset.endswith(".jsonl"):
@@ -51,6 +56,8 @@ def main() -> None:
                 ok = grade_checks(r["before"], strip_fences(s["text"]), r["checks"], r["allowed"])["pass"]
             if ok:
                 n_correct += 1
+                if args.reject_hint_leak and LEAK.search(s["text"]):
+                    continue
                 if s["finished"] and "<channel|>" in s["text"] and s["tokens"] <= args.max_tokens:
                     good.append(s)
         if good:

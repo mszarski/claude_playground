@@ -146,12 +146,15 @@ def check_design(text: str):
     return (None, bad[0]) if bad else (doc, "")
 
 
-def grade(ds_text: str, before, request: str, criteria: list[str], after, model: str = JUDGE) -> list[bool] | None:
+def grade(ds_text: str, before, request: str, criteria: list[str], after, model: str = JUDGE,
+          note: str = "") -> list[bool] | None:
     from design_edit.goal_reward import describe_changes
 
     msg = GRADE_PROMPT.format(ds=ds_text, before=serialize(before), request=request,
                               changes=describe_changes(before, after) or "(no changes)", after=serialize(after),
                               criteria="\n".join(f"{i + 1}. {c}" for i, c in enumerate(criteria)))
+    if note:
+        msg = msg.replace("\n\nCriteria:\n", f"\n\n{note}\n\nCriteria:\n", 1)
     out = parse_json(chat(model, [{"role": "user", "content": msg}], max_tokens=6000))
     if not isinstance(out, dict):
         return None

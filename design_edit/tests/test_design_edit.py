@@ -268,3 +268,16 @@ def test_checks_new_node_order_same():
     r2 = grade_checks(before, 'insert n2 0 text#n6 "Error" text="Required" size=12\nset n4 stroke=#DC2626',
                       checks + [{"order": ["n3", "n4", "n6"]}], ["n2", "n4"])
     assert not r2["pass"]
+
+
+def test_vote_groups_answers_that_differ_only_in_new_ids_and_names():
+    from design_edit.vote import canonical, vote
+
+    b = 'frame#n1 "Root" layout=col gap=8\n  text#n2 "T" text="Hi" size=14 color=#111111'
+    a1 = 'insert n1 1 text#n9 "Err" text="Bad" size=12 color=#DC2626'
+    a2 = 'insert n1 1 text#n7 "Error msg" text="Bad" size=12 color=#DC2626'
+    other = "set n2 size=16"
+    assert canonical(b, a1) == canonical(b, a2)
+    assert canonical(b, "nonsense") is None and canonical(b, "") is None
+    assert vote(b, [other, a1, a2]) == 1
+    assert vote(b, ["bad", "worse"]) == 0

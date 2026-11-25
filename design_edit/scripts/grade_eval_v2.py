@@ -29,17 +29,23 @@ from design_edit.leak import dsl_violations  # noqa: E402
 from design_edit.schema import PatchError, apply_patch, parse, serialize, strip_fences  # noqa: E402
 
 
-def grade_row(row: dict, output: str, cache: dict, judge: str) -> dict:
-    g = _grade_row(row, output, cache, judge)
+def grade_row(row: dict, output: str, cache: dict, judge: str, show_checks: bool = False) -> dict:
+    d = None
     if row.get("checks"):  # deterministic keep-in/keep-out grade (design_edit.checks), where the item has one
         from design_edit.checks import grade_checks
 
         d = grade_checks(row["before"], strip_fences(output).strip(), row["checks"], row["allowed"])
+    note = ""
+    if show_checks and d and d["valid"]:
+        note = ("Automatic structural checks (exact, but they encode one reading of the request and can be stricter "
+                "or looser than the criteria): " + ("all passed." if d["pass"] else f"failed: {d['why']}."))
+    g = _grade_row(row, output, cache, judge, note)
+    if d:
         g |= {"det_pass": d["pass"], "det_score": d["score"]}
     return g
 
 
-def _grade_row(row: dict, output: str, cache: dict, judge: str) -> dict:
+def _grade_row(row: dict, output: str, cache: dict, judge: str, note: str = "") -> dict:
     before = parse(row["before"])
     patch = strip_fences(output).strip()
     if not patch:
@@ -52,12 +58,13 @@ def _grade_row(row: dict, output: str, cache: dict, judge: str) -> dict:
         return {"pass": False, "frac": 0.0, "why": "not in the design language"}
     if serialize(after) == serialize(before):
         return {"pass": False, "frac": 0.0, "why": "no change"}
-    key = hashlib.sha1((row["instruction"] + row["before"] + serialize(after)).encode()).hexdigest()
+    salt = row["criteria"] + note if (row.get("repair") or note) else ""  # eval v2.1: criteria are part of the key
+    key = hashlib.sha1((row["instruction"] + row["before"] + serialize(after) + salt).encode()).hexdigest()
     if key not in cache:
         crit = json.loads(row["criteria"])
         v = None
         for _ in range(2):  # the judge occasionally returns unparseable output
-            v = grade(row["design_system"], before, row["instruction"], crit, after, model=judge)
+            v = grade(row["design_system"], before, row["instruction"], crit, after, model=judge, note=note)
             if v:
                 break
         cache[key] = v
@@ -76,6 +83,7 @@ def main() -> None:
     ap.add_argument("--judge", default=JUDGE)
     ap.add_argument("--cache", default="eval_v2_judge_cache.json")
     ap.add_argument("--save", default=None, help="write per-row grades here (JSON)")
+    ap.add_argument("--show-checks", action="store_true", help="tell the judge the deterministic check result")
     args = ap.parse_args()
     from datasets import load_dataset
 
@@ -88,7 +96,10 @@ def main() -> None:
         outs = [r["output"] for r in json.load(open(path))["rows"]]
         assert len(outs) == len(rows), f"{path}: {len(outs)} outputs for {len(rows)} items"
         with ThreadPoolExecutor(16) as pool:
-            grades = list(pool.map(lambda i: grade_row(rows[i], outs[i], cache, args.judge), range(len(rows))))
+            grades = list(pool.map(lambda i: grade_row(rows[i], outs[i], cache, args.judge, args.show_checks)
+                                   if rows[i].get("adjudication") != "drop" else {"pass": None, "frac": None,
+                                                                                   "why": "dropped"},
+                                   range(len(rows))))
         Path(args.cache).write_text(json.dumps(cache))
         by = defaultdict(list)
         for r, g in zip(rows, grades):
