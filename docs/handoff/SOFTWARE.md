@@ -698,6 +698,7 @@ Examples are from each tool's docstring or its argument list.
 | --- | --- | --- |
 | `sonar_live.py` | the live chain on boards, a recording, the simulator or an emulated board (`--per-board`: one stream per board); exports the C++ program's template | `tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_12km` |
 | `sonar_live_hsb.py` | the chain through Holoscan Sensor Bridge, as two processes | `tools/sonar_live_hsb.py serve --scenario flank_patrol` and `tools/sonar_live_hsb.py receive CONFIG --pings 20 --report r.jsonl` |
+| `hsb_host_check.py` | read-only check of a host for Sensor Bridge's socket receiver at a Popoto build's rate (`rmem_max`, the granted socket buffer, isolated receiver core, imports, CUDA, RDMA devices); prints the study's command for that host (sonar-02c; nothing measured with it yet) | `tools/hsb_host_check.py --receiver-core 2 --json-out hsb_host_check.json` |
 | `sonar_run.py` | a batch chain from a YAML file | `tools/sonar_run.py configs/chains/stripmap_points.yaml` |
 | `inspect_tap.py` | numbers and plots of records in a container or a tap directory | `tools/inspect_tap.py taps/ --stage prepare --ping 2` |
 | `board_merge.py` | per-board GSFB streams to one whole-array stream, as a UDP relay (D-184) | `tools/board_merge.py popoto_testauv_1row_clocks --port 5710 --to 127.0.0.1:5700` |

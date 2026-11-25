@@ -3466,3 +3466,29 @@ that compares the statistics dictionary exactly must know it (two tests did; no 
   `::test_start_up_loss_is_accepted_only_where_every_index_confirms_it`.
 - Full GPU suite on this tree: **2159 passed, 97 skipped**, none failed, no expected failure (NVIDIA L4,
   HF job 6b0699f4d0582cfbbefe0373, 49 min 44 s).
+
+### D-189 A host check and a runbook for the Sensor Bridge measurement that needs a real host (issue sonar-02c, not closed by this)
+
+What is still not measured: a Popoto build's stream through Sensor Bridge's socket receiver on a host set
+up as its guide asks (`net.core.rmem_max = 31326208`, an isolated receiver core), and the RoCE receiver.
+Nothing below measures either.
+
+- Why not here, measured (NVIDIA L4 Hugging Face job 6b06b5ef1460ffe1d5ea6937): in the container
+  `net.core.rmem_max` is 212,992 and `/proc/sys` is read-only; forcing a 31 MB socket buffer
+  (`SO_RCVBUFFORCE`), a real-time priority (`SCHED_FIFO`) and a raw socket are each refused ("Operation
+  not permitted"; effective capabilities `00000000a80405fb`, without CAP_NET_ADMIN, CAP_NET_RAW and
+  CAP_SYS_NICE); no CPU is isolated; 8 CPUs by affinity and by quota.
+- `tools/hsb_host_check.py` (new, read-only): reports `rmem_max` against the guide's value, the socket
+  buffer the kernel grants and what it holds of each Popoto stream (payload bytes only: an upper bound),
+  isolated CPUs and the receiver core, the CPUs for the chain (D-173's quota rule, now in this one
+  place and used by `tests/python/test_hsb.py`), whether a real-time priority is possible (read, not
+  tried), the raw socket, the imports, a CUDA device, RDMA devices. Exit status 0 ready, 1 not, 2 usage.
+  It prints the guide's commands for what is missing and the commands that make the measurement.
+- The opt-in study `test_popoto_rate_loopback_study` takes `GPUSONAR_HSB_STUDY_RECEIVER_CORE` (unset: as
+  before). No default-run test and no default of the receive path changed.
+- Runbook: `DEPLOYMENT.md`, "Checking a host and making the measurement".
+- RoCE: untested; beyond a ConnectX card it needs a Sensor Bridge build with RoCE (`tools/build_hsb.sh`
+  builds without) and new receiver code (`sources/hsb.py` uses `LinuxReceiverOp` only).
+- Not verified: that `receive --receiver-core` can move the receiver onto an isolated core outside the
+  process's default affinity (Linux behaviour, not tried: no isolated core here).
+- Tests: `tests/python/test_hsb_host_check.py` (12).

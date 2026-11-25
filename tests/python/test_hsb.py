@@ -813,21 +813,14 @@ def receive_delays(tmp_path, tag):
 def usable_cpus(cgroup_root="/sys/fs/cgroup") -> int:
     """CPUs this process may use: its affinity, capped by a cgroup CPU quota rounded up (cgroup v2 cpu.max, or v1
     cpu.cfs_quota_us / cpu.cfs_period_us). A container's vCPUs are often a quota: a Hugging Face a10g-small job
-    (4 vCPUs) lists the host's 96 CPUs in its affinity (job 6b04b897c97b8ed4fcd689e1), sonar-8rj."""
-    import math
-    n = len(os.sched_getaffinity(0))
-    root = pathlib.Path(cgroup_root)
+    (4 vCPUs) lists the host's 96 CPUs in its affinity (job 6b04b897c97b8ed4fcd689e1), sonar-8rj. The rule is
+    tools/hsb_host_check.py's (quota_cpus), which reports it for a host (sonar-02c)."""
+    sys.path.insert(0, str(ROOT / "tools"))
     try:
-        quota, period = (root / "cpu.max").read_text().split()[:2]
-    except (OSError, ValueError):
-        try:
-            quota = (root / "cpu" / "cpu.cfs_quota_us").read_text().strip()
-            period = (root / "cpu" / "cpu.cfs_period_us").read_text().strip()
-        except OSError:
-            return n
-    if quota in ("max", "-1") or float(period) <= 0:
-        return n
-    return max(1, min(n, math.ceil(float(quota) / float(period))))
+        import hsb_host_check
+    finally:
+        sys.path.pop(0)
+    return hsb_host_check.usable_cpus(cgroup_root)
 
 
 def test_usable_cpus_honours_a_cgroup_quota(tmp_path):
@@ -1076,10 +1069,10 @@ def test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back(row
 
 
 def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None, queue_s=POPOTO_QUEUE_S, check=True, omp=None,
-                    serve_args=()):
+                    serve_args=(), receiver_core=None):
     """One real-time loopback of a row count's trial: `serve --replay` of its pings, `receive` with the build's
-    deployment file, the chain's OpenMP on half the usable CPUs (D-162, D-173). Returns (board, stats, receive process,
-    report path, measurements)."""
+    deployment file, the chain's OpenMP on half the usable CPUs (D-162, D-173); with `receiver_core`, `receive
+    --receiver-core` (none by default). Returns (board, stats, receive process, report path, measurements)."""
     import math
 
     import yaml
@@ -1093,10 +1086,14 @@ def popoto_loopback(tmp_path, rows, engine, tag, frame=FRAME, socket_buffer=None
     receive_args = ["--chain-omp-threads", str(omp), "--queue", str(queue), "--engine", engine, "--quiet"]
     if socket_buffer:
         receive_args += ["--socket-buffer", str(socket_buffer)]
+    if receiver_core is not None:
+        receive_args += ["--receiver-core", str(receiver_core)]
     board, stats, receive, report = run_loopback(tmp_path, records, pace, serve_args=serve_args, receive_args=receive_args, tag=tag,
                                                  stream=(str(path),), frame=frame, n_pings=len(records), check=check)
     m = dict(numbers, rows=rows, engine=engine, queue_frames=queue, omp=omp, pace=pace, exit=receive.returncode,
              interval_s=(records[1].transmit.time_ns - records[0].transmit.time_ns) * 1e-9)
+    if receiver_core is not None:
+        m["receiver_core"] = receiver_core
     try:
         worst, floor, median, n = receive_delays(tmp_path, tag)
         m.update(worst_ms=worst, median_ms=median, least_ms=floor, delays=n)
@@ -1322,7 +1319,9 @@ def test_popoto_rate_loopback_study(tmp_path):
     """sonar-x8v: Popoto-rate loopbacks repeated, one line per run (POPOTO_STUDY {...}). Measures; asserts nothing
     about the transport. GPUSONAR_HSB_STUDY_RUNS (10), _ROWS ("1,2,3"), _ENGINES ("cpp"), _CONFIGS (space-separated
     frame:buffer:queue_s[:omp[:catch_up]], buffer "def" or a --socket-buffer in bytes, omp "half" or a thread count,
-    catch_up "spread" or "burst"; default "400:def:4"), _BUDGET_S (seconds after which no run starts; 5400)."""
+    catch_up "spread" or "burst"; default "400:def:4"), _BUDGET_S (seconds after which no run starts; 5400),
+    _RECEIVER_CORE (a core for `receive --receiver-core` in every run; unset: none, as before). On a host set up as
+    Sensor Bridge's guide asks, tools/hsb_host_check.py prints this study's command for that host (sonar-02c)."""
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
@@ -1331,8 +1330,12 @@ def test_popoto_rate_loopback_study(tmp_path):
     engines = os.environ.get("GPUSONAR_HSB_STUDY_ENGINES", "cpp").split(",")
     configs = os.environ.get("GPUSONAR_HSB_STUDY_CONFIGS", "400:def:4").split()
     budget = float(os.environ.get("GPUSONAR_HSB_STUDY_BUDGET_S", "5400"))
+    core = os.environ.get("GPUSONAR_HSB_STUDY_RECEIVER_CORE")
+    core = int(core) if core not in (None, "") else None
+    isolated = pathlib.Path("/sys/devices/system/cpu/isolated")
     print("cpus: affinity", len(os.sched_getaffinity(0)), "usable", usable_cpus(), "rmem",
-          {k: pathlib.Path(f"/proc/sys/net/core/{k}").read_text().strip() for k in ("rmem_default", "rmem_max")}, flush=True)
+          {k: pathlib.Path(f"/proc/sys/net/core/{k}").read_text().strip() for k in ("rmem_default", "rmem_max")},
+          "isolated", repr(isolated.read_text().strip()) if isolated.exists() else None, "receiver_core", core, flush=True)
     for rows in rows_list:
         popoto_trial(rows)                                             # simulated before the clock starts
     t0 = time.time()
@@ -1349,7 +1352,7 @@ def test_popoto_rate_loopback_study(tmp_path):
                     tag = f"s{k}_{cfg_text.replace(':', '_')}_{rows}_{engine}"
                     _, _, _, _, m = popoto_loopback(tmp_path, rows, engine, tag, frame=int(frame),
                                                     socket_buffer=None if buffer == "def" else int(buffer), queue_s=float(queue_s),
-                                                    check=False, omp=omp, serve_args=catch)
+                                                    check=False, omp=omp, serve_args=catch, receiver_core=core)
                     m.update(run=k, config=cfg_text)
                     print("POPOTO_STUDY " + json.dumps(m), flush=True)
                     try:
