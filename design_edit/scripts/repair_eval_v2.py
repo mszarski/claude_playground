@@ -11,7 +11,7 @@ Stage 1 (every item): an LLM rewrites the criteria under those rules. The rewrit
 answer still passes every new criterion (judge); otherwise the item keeps its original criteria.
 Stage 2 (--adjudicate, items all given models fail under the new criteria): the LLM sees the request, criteria,
 reference and the models' answers and decides keep / fix (new criteria, again validated on the reference) / drop
-(ambiguous request or a reference a designer would not accept).
+(ambiguous request or a reference a designer would not accept). A "fix" whose criteria the reference fails is a drop.
 
     python scripts/repair_eval_v2.py --data eval_v2_checks.jsonl --out eval_v21.jsonl
     python scripts/repair_eval_v2.py --data eval_v21.jsonl --out eval_v21b.jsonl --adjudicate \
@@ -141,7 +141,8 @@ def adjudicate_one(row: dict, answers: list[tuple[str, str]]) -> dict:
         if out["verdict"] == "fix":
             new = [str(c) for c in out.get("criteria") or []]
             if not new or not ref_passes(row, new):
-                return {**row, "adjudication": "keep (fix rejected: reference fails)", "adj_reason": why}
+                # the fair reading rejects the reference itself: the item can't be graded reliably
+                return {**row, "adjudication": "drop", "adj_reason": "reference fails the fair criteria: " + why}
             return {**row, "criteria_pre_adj": row["criteria"], "criteria": json.dumps(new),
                     "adjudication": "fix", "adj_reason": why}
         return {**row, "adjudication": out["verdict"], "adj_reason": why}
