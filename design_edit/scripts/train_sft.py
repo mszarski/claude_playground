@@ -188,7 +188,9 @@ def main() -> None:
         if not args.no_push:
             from huggingface_hub import create_repo, upload_folder
             create_repo(args.output, private=True, exist_ok=True)
-            upload_folder(repo_id=args.output, folder_path="adapter", path_in_repo="adapter")
+            # The PEFT model card can name a local merged base (--base-adapter), which the Hub rejects as metadata.
+            upload_folder(repo_id=args.output, folder_path="adapter", path_in_repo="adapter",
+                          ignore_patterns=["README.md"])
             print(f"pushed LoRA adapter to https://huggingface.co/{args.output}/tree/main/adapter")
         return
 
