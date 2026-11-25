@@ -1,12 +1,16 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "vllm>=0.22",
+#     "torch",
 #     "transformers>=5.0",
+#     "accelerate>=1.0",
 #     "datasets>=3.0",
 #     "huggingface_hub>=0.34",
+#     "vllm>=0.22",
+#     "trl==1.17.1",
 #     "peft>=0.17",
-#     "accelerate>=1.0",
+#     "kernels",
+#     "flash-linear-attention",
 # ]
 # ///
 """Rejection-sampling data for reasoning SFT: k thinking traces per training request, each scored.
