@@ -108,5 +108,8 @@ int main(int argc, char** argv) {
   } catch (const std::exception& e) {
     std::fprintf(stderr, "sonar_live_holoscan: %s\n", e.what());
     return 1;
+  } catch (...) {                       // not a std::exception: still an error status, not std::terminate
+    std::fprintf(stderr, "sonar_live_holoscan: an unknown error ended the run\n");
+    return 1;
   }
 }
