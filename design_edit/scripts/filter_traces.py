@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from design_edit.checks import grade_checks  # noqa: E402
 from design_edit.schema import strip_fences  # noqa: E402
 
-LEAK = re.compile(r"\bhint\b|private note|\bnote\b says|reference (answer|patch|solution)|given answer|"
-                  r"provided answer|correct answer is|the answer (is )?(given|provided)", re.I)
+LEAK = re.compile(r"\bhint\b|private note|\bnote\b says|reference (answer|patch|solution)|given answer|correct answer|i.m ignoring|"
+                  r"provided answer|the answer (is )?(given|provided)", re.I)
 KEEP = ("prompt", "before", "after", "kind", "instruction", "orig_instruction", "relax", "alts", "refs")
 
 
