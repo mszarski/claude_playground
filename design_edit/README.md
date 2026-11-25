@@ -1066,6 +1066,48 @@ RL checkpoint-150 adapters. It uses the same 544 prompts and settings, on 2×H20
   applied result most samples agree on (`design_edit/vote.py`; new-node ids and names are ignored). It ties a single
   greedy answer, so the remaining errors are systematic, not sampling noise.
 
+### Round 12c RL: prompts re-picked for the current model, 2,048-token budget
+
+`sample_traces.py --adapter <stack>` samples the v12b checkpoint-150 model 8 times on all 3,412 training prompts.
+572 are never solved, 481 sometimes and 2,359 always. The RL set is the 481 mixed prompts plus 160 never-solved ones
+(641). The token cap is doubled to 2,048 to test whether a longer reasoning budget helps.
+
+| | eval v2 | eval v2.1 | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|---|
+| v12b checkpoint-100 (start of the comparison) | 0.733 | 0.843 | 0.908 | 0.913 | 0.696 | 0.933 | 0.717 |
+| v12c checkpoint-50 | 0.726 | 0.843 | 0.938 | 0.913 | 0.663 | 0.952 | 0.700 |
+| v12c checkpoint-100 | 0.730 | 0.833 | 0.908 | 0.933 | 0.641 | 0.933 | 0.700 |
+
+* **Re-picking worked as intended, but scores didn't move.** Zero-variance groups fell from 45% to about 30%, and only
+  about 1% of rollouts hit the cap. Training reward stayed at about 0.69. Paired against v12b checkpoint-100, the
+  model won as many items as it lost (+15/−15, then +11/−15). We cancelled the run at about step 107.
+* **More reasoning budget doesn't help either:** at 1,024 tokens only 8–14% of rollouts were cut off, and doubling the
+  cap changed nothing. The prompts the model never solves don't get solved by RL, because no rollout earns reward.
+
+## v13: SFT on reference-guided ("rationalized") traces for never-solved prompts
+
+To get learning signal on the 572 never-solved prompts, `sample_traces.py --hint` shows the model the reference answer
+as a private note and asks for its own reasoning (STaR-style rationalization). `filter_traces.py --reject-hint-leak`
+keeps only correct traces that never mention the note. Then we train on them *without* the hint.
+
+* With the hint, 81.6% of samples are correct. 445 of the 572 prompts keep a usable trace; 328 correct traces were
+  dropped for leaking the note. By kind: goal 255, state 69, consistency 59, structure 36, direct 26.
+* Mix: those 445 traces plus 1,500 of the model's own correct traces on mixed and solved prompts (as replay), 1,945 rows.
+  We train one epoch at lr 2e-5 with thinking on, as a new LoRA on top of SFT v12 + RL v12 checkpoint-150 + v12b
+  checkpoint-100 (`train_sft.py --base-adapter`). Loss: 0.18 → 0.15.
+
+| | eval v2 | eval v2.1 | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|---|
+| v12b checkpoint-100 | 0.733 | 0.843 | 0.908 | 0.913 | 0.696 | 0.933 | 0.717 |
+| **v13 hint SFT** | **0.742** | **0.845** | 0.908 | 0.933 | **0.717** | 0.924 | 0.683 |
+
+* **The best score yet on both evals, but within noise:** paired on v2.1, 15 items won and 14 lost (+0.2 ± 2.5 points).
+  Goal requests, which most of the new traces target, gain 2 points; structure loses 3. No empty outputs.
+* **Together with 12b and 12c, this points to a plateau at about 0.84 on v2.1** for Gemma-4-31B with this data. RL,
+  voting, a longer budget and rationalized traces each move the score by about 1 point. The remaining failures are
+  mostly goal and structure requests. They need better training data there (more and harder goal and structure
+  examples, with verified references), not more optimization on the current set.
+
 ## Eval v2.1: repaired criteria (the "ceiling" was mostly grading defects)
 
 On eval v2, 59 items (13%) failed for every strong model. Reading them showed mostly grading defects, not model errors:
@@ -1088,6 +1130,7 @@ The file is `v21/eval_v21.jsonl` in the eval dataset repo. It has all 445 rows; 
 
 | eval v2.1 (426 items) | v2 | **v2.1** | consistency | direct | goal | state | structure |
 |---|---|---|---|---|---|---|---|
+| v13 hint SFT (on top of v12b) | **0.742** | **0.845** | 0.908 | 0.933 | 0.717 | 0.924 | 0.683 |
 | RL v12b checkpoint-100 | 0.733 | **0.843** | 0.908 | 0.913 | 0.696 | 0.933 | 0.717 |
 | RL v12b checkpoint-50 | 0.733 | **0.843** | 0.908 | 0.923 | 0.674 | 0.933 | 0.733 |
 | RL v12 checkpoint-150 | 0.724 | 0.824 | 0.877 | 0.923 | 0.674 | 0.924 | 0.650 |
