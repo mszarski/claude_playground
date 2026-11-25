@@ -3594,3 +3594,53 @@ to 8 rows of a board at once besides the record (before: one).
   6b07440eb6a90bbe997e6027, 46 min 47 s; one more skipped: the new tool's `--help` test in the job's
   tarball). The C++ suites ran with no failure listed; the job's log keeps only ctest's last five
   lines, which do not include its count.
+
+### D-192 The board resampler's 16 weights from three trig calls a sample, in both engines (issue sonar-fy6; the owner: "do that and measure it")
+
+What got worse first: nothing measured. The owner was told this would change the last bits of the
+samples; on every case measured no float32 output changed. A sample could still round one step the
+other way on other data.
+
+- Changed: `resample_weights` (`libs/live/src/sync.cpp`, declared in `sync.hpp`) and `_sinc_weights`
+  (`python/gpusonar/sync.py`) make a sample's weights from sin(pi f), cos(pi f / 8) and sin(pi f / 8)
+  and a 16-entry table, f the fractional position: sin(pi (k - f)) = -(-1)^k sin(pi f) and
+  cos(pi (k - f) / 8) = cos(pi k / 8) cos(pi f / 8) + sin(pi k / 8) sin(pi f / 8). The sine is taken
+  from f - 1 above one half, or the tap next to the following sample loses its accuracy just below 1.
+  `resample_rows` and the burst check in `estimate_from_bursts` use it. The binding
+  `core.live_resample_weights` lets the two engines' weights be compared (equal on 1.2 million
+  fractions).
+- How far the outputs moved, old against new (this container's CPU; the 1-, 2- and 3-row Popoto trials,
+  `flank_32` cut into 4 boards clean and with offsets and drifts, `popoto_4x8` at two seeds; both
+  engines): the weights by at most 2.8e-16 against the formula; all 59,778,304 synchronised samples an
+  engine equal to the bit, as are the sync facts, the 28 beam maps and every field of the 10 sets of
+  reports. Before the rounding to float32 a sample moves by at most 5.9e-16 of the largest input, 0.0094
+  of a float32 step. The two engines agree with each other exactly as before.
+- Zero drift is not a special case: the fractional position is not constant in floating point (21 to 42
+  values a window).
+- Tests re-pinned, nothing loosened: `Sync.BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit`
+  (`tests/cpp/test_stage2.cpp`) and
+  `test_resampling_the_boards_gives_the_row_by_row_resamplers_samples_to_the_bit`
+  (`tests/python/test_calibration_sync.py`) compared against the per-tap formula to the bit (D-190,
+  D-191). They now hold rows together against row by row with the new weights, to the bit, and against
+  the formula within one float32 step plus 16 x 4.5e-16 x the largest input (measured: every one of the
+  test's 216,400 samples equal). New: `Sync.ResampleWeightsFromThreeTrigCallsAreTheFormulasTapByTap`,
+  `test_sinc_weights_from_three_trig_calls_are_the_formulas_tap_by_tap`,
+  `test_whole_sample_positions_pass_the_samples_on_as_they_are`,
+  `test_live_cpp.py::test_both_engines_resample_with_the_same_weights`.
+- Measured on an L4 (HF job 6b076087b6a90bbe997e9449, 4 OpenMP threads; before: D-191's job):
+
+  | chain time a ping after the first | C++ before | C++ after | Python before | Python after |
+  |---|---|---|---|---|
+  | 64 channels, direct chain (median) | 0.086 s | 0.054 s | 0.273 s | 0.180 s |
+  | 96 channels, direct chain (median) | 0.111 s | 0.065 s | 0.395 s | 0.248 s |
+  | 64 channels, through Sensor Bridge | 0.09 to 0.11 s | 0.06 to 0.07 s | 0.27 to 0.33 s | 0.18 to 0.22 s |
+  | 96 channels, through Sensor Bridge | 0.13 to 0.17 s | 0.08 to 0.11 s | 0.42 to 0.49 s | 0.28 to 0.32 s |
+
+  Synchronisation alone: C++ 0.056 to 0.027 s at 64 channels and 0.085 to 0.039 s at 96; Python 0.22 to
+  0.12 s and 0.33 to 0.19 s.
+- Seen again, not explained: in the first of that job's four loopback runs the 32-channel C++ case lost
+  no frame and had a worst receive delay of 7.9 ms, and ended as an expected failure on the 5 ms bound;
+  the other 23 runs passed. The same case in the first run of D-190's job (6.4 ms) and D-191's (10.8 ms,
+  inside the start window). It is the first test of the job to use the device. Follow-up sonar-6rs.
+- Full GPU suite on this tree: **2183 passed, 101 skipped**, none failed (NVIDIA L4, HF job
+  6b07608ed91f621b930918b0, 46 min 30 s): 3 more passed, the new Python tests.
