@@ -160,8 +160,24 @@ def encode_block(counts: np.ndarray, sample_index: int, tx_sample: int = -1, pin
     return header.ljust(HEADER_BYTES, b"\0") + u.tobytes()
 
 
-def decode_block(data: bytes, sample_bytes: int = SAMPLE_BYTES) -> dict:
-    """Block bytes -> header fields and `counts` [n_samples, n_channels] int32."""
+def decode_rows(data, n_channels: int, a: int, b: int, sample_bytes: int = SAMPLE_BYTES) -> np.ndarray:
+    """Samples a..b-1 of a block (already checked by `decode_header`) as `counts` [b - a, n_channels] int32.
+    24-bit words are placed in the top three bytes of a 32-bit word and shifted down arithmetically, which
+    sign-extends them: the same words as the byte-by-byte formula (sonar-h1f, tests/python/test_flank_stream.py).
+    The 32-bit words are read in place, 3 bytes apart, each starting one byte before its sample (the byte before
+    the first sample is the header's last, so it exists; the last word ends with the last sample's last byte)."""
+    a, b, ch = int(a), int(b), int(n_channels)
+    m = max(b - a, 0)
+    offset = HEADER_BYTES + a * ch * sample_bytes
+    if sample_bytes == 3:
+        words = np.ndarray(shape=(m, ch), dtype="<i4", buffer=data, offset=offset - 1, strides=(3 * ch, 3))
+        return (words >> 8).astype(np.int32, copy=False)
+    full_scale_counts(sample_bytes)            # 2 or 4, or an error
+    return np.frombuffer(data, dtype="<i2" if sample_bytes == 2 else "<i4", count=m * ch, offset=offset).reshape(m, ch).astype(np.int32)
+
+
+def decode_header(data, sample_bytes: int = SAMPLE_BYTES) -> dict:
+    """Block bytes -> header fields, every check of `decode_block` made, the samples not decoded (`decode_rows`)."""
     if len(data) < HEADER_BYTES:
         raise BlockError("block shorter than its header")
     magic, version, ch, n, sample_index, tx_sample, ping_index, gain_code, flags, start_ns = \
@@ -172,17 +188,19 @@ def decode_block(data: bytes, sample_bytes: int = SAMPLE_BYTES) -> dict:
         raise BlockError(f"unsupported block version {version}")
     if len(data) != HEADER_BYTES + sample_bytes * n * ch:
         raise BlockError(f"block length does not match its header for samples of {sample_bytes} bytes")
-    if sample_bytes == 3:
-        raw = np.frombuffer(data, dtype=np.uint8, offset=HEADER_BYTES).reshape(n, ch, 3).astype(np.int32)
-        counts = raw[:, :, 0] | (raw[:, :, 1] << 8) | (raw[:, :, 2] << 16)
-        counts = np.where(counts >= (1 << 23), counts - (1 << 24), counts)
-    else:
+    if sample_bytes != 3:
         full_scale_counts(sample_bytes)        # 2 or 4, or an error
-        counts = np.frombuffer(data, dtype="<i2" if sample_bytes == 2 else "<i4", offset=HEADER_BYTES).reshape(n, ch).astype(np.int32)
     board = struct.unpack_from("<H", data, BOARD_OFFSET)[0] if flags & FLAG_BOARD else None
     return {"n_channels": ch, "n_samples": n, "sample_index": sample_index, "tx_sample": tx_sample,
             "ping_index": ping_index, "gain_code": gain_code, "flags": flags, "start_ns": start_ns,
-            "board": board, "counts": counts}
+            "board": board}
+
+
+def decode_block(data: bytes, sample_bytes: int = SAMPLE_BYTES) -> dict:
+    """Block bytes -> header fields and `counts` [n_samples, n_channels] int32."""
+    block = decode_header(data, sample_bytes)
+    block["counts"] = decode_rows(data, block["n_channels"], 0, block["n_samples"], sample_bytes)
+    return block
 
 
 class PingAssembler:
@@ -469,7 +487,7 @@ class PingAssembler:
         a, b = max(a, w0), min(b, w0 + self.window_length)
         if b <= a:
             return
-        rows = block["counts"][a - block["sample_index"]:b - block["sample_index"]]
+        rows = self._rows(block, a - block["sample_index"], b - block["sample_index"])
         if self._decimator:                    # filtered and decimated as it arrives, in order
             piece = (rows * self.volts_per_count).astype(np.float32)
             p["pending"][a - w0] = piece
@@ -479,6 +497,13 @@ class PingAssembler:
             p["buffer"][a - w0:b - w0] = rows
         p["covered"] += b - a
         p["overflow"] |= bool(block["flags"] & FLAG_OVERFLOW)
+
+    def _rows(self, block: dict, a: int, b: int) -> np.ndarray:
+        """Rows a..b-1 of a block's samples: decoded from its bytes now, or from a block decoded when it was held."""
+        counts = block.get("counts")
+        if counts is not None:
+            return counts[a:b]
+        return decode_rows(block["data"], block["n_channels"], a, b, self.sample_bytes)
 
     def _drain(self, p: dict) -> None:
         if p is not self._owner:
@@ -576,7 +601,10 @@ class PingAssembler:
 
     def feed(self, data: bytes) -> list:
         """Take one block; return the ping records it releases (usually none or one)."""
-        block = decode_block(data, self.sample_bytes)
+        # The samples are decoded only in the rows a ping's window takes (`_rows`), when it takes them: most of a
+        # continuous stream lies between windows (sonar-h1f). The records are the same as decoding every block whole.
+        block = decode_header(data, self.sample_bytes)
+        block["data"] = data
         if block["board"] is not None:
             raise BlockError(f"a per-board block (board {block['board']}) where one whole-array stream is received: "
                              "per-board streams are merged first (source.boards)")
@@ -604,6 +632,8 @@ class PingAssembler:
         self._held_run += 1
         run = self._restart_run(block)
         if run is None:
+            # Held past this call: its samples are decoded now, as the caller may reuse its buffer for the next block.
+            block["counts"] = decode_rows(block.pop("data"), block["n_channels"], 0, block["n_samples"], self.sample_bytes)
             self._suspects.append((self._fitting, block))
             if len(self._suspects) > MAX_HELD_BLOCKS:
                 self._suspects.pop(0)
@@ -749,7 +779,14 @@ class PingAssembler:
         else:
             s = record.samples
             kind = s.kind
-            s.array = (p["buffer"].T * self.volts_per_count).astype(np.float32)
+            # float32(word x volts per count) as always, made in pieces of rows into a channel-major array: the record
+            # takes a C-ordered array without reordering it (a transposed one cost about 30 ms more at 96 channels and
+            # 52,656 samples; sonar-h1f). The same values to the bit.
+            buffer = p["buffer"]
+            volts = np.empty((buffer.shape[1], buffer.shape[0]), dtype=np.float32)
+            for r in range(0, buffer.shape[0], 4096):
+                volts[:, r:r + 4096] = (buffer[r:r + 4096] * self.volts_per_count).T
+            s.array = volts
             s.kind = kind
             s.start_time = self.window_start / self.sample_rate
             s.storage = core.StorageType.Int32

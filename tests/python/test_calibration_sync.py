@@ -180,6 +180,48 @@ def test_beam_pattern_after_sync_matches_a_single_clock_array(bearing):
     assert np.abs(diff_db).max() < 1.0, np.abs(diff_db).max()
 
 
+def _resample_row_by_row(x, positions, taps=16):
+    """The board resampler's arithmetic until sonar-h1f, one channel row at a time (the reference for the test below)."""
+    base = np.floor(positions).astype(np.int64)
+    frac = positions - base
+    half = taps // 2
+    out = np.zeros(len(positions), dtype=np.float64)
+    for k in range(-half + 1, half + 1):
+        idx = base + k
+        d = k - frac
+        wgt = np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / half))
+        ok = (idx >= 0) & (idx < len(x))
+        out[ok] += wgt[ok] * x[idx[ok]]
+    return out
+
+
+def test_resampling_the_boards_gives_the_row_by_row_resamplers_samples_to_the_bit():
+    """sonar-h1f: resample_boards computes a board's sinc weights once for all its rows and resamples the rows
+    together; every sample is the one the row-by-row resampler gave, to the bit, with offsets that run the taps
+    past both ends of the window, either sign, with drift, and a board left as it is."""
+    _, rec, _, _ = four_board_ping()
+    est = sync.ClockEstimate(offset=np.array([0.0, 3.1e-4, -2.27e-4, 1.3e-5]), drift_ppm=np.array([0.0, 40.0, -55.5, 0.0]),
+                             method="test", quality=np.ones(4))
+    x = rec.samples.array.astype(np.float64)
+    fs, n = rec.samples.sample_rate, rec.samples.n_samples
+    m = np.arange(n)
+    want = x.copy()
+    for b in range(1, 4):
+        positions = (m / fs - est.offset[b]) * fs * (1.0 + est.drift_ppm[b] * 1e-6)
+        assert positions.min() < 8 or positions.max() > n - 8          # the taps run past an end
+        for row in range(8 * b, 8 * b + 8):
+            want[row] = _resample_row_by_row(x[row], positions)
+        np.testing.assert_array_equal(sync._sinc_resample(x[8 * b], positions), want[8 * b])
+    jumbled = np.random.default_rng(3).permutation(positions)              # inside or outside the series by turns
+    np.testing.assert_array_equal(sync._sinc_resample(x[9], jumbled), _resample_row_by_row(x[9], jumbled))
+    sync.resample_boards(rec, est)
+    got = rec.samples.array
+    assert got.dtype == np.float32
+    assert np.array_equal(got, want.astype(np.float32))
+    assert np.array_equal(got[:8], x[:8].astype(np.float32))          # the first board: not moved
+    assert [b.clock_offset for b in rec.metadata.boards] == list(est.offset)
+
+
 def test_sync_refuses_when_alignment_cannot_be_reached():
     sonar, rec, _, _ = four_board_ping()
     ref = dict(sonar.config["receive"]["reference"])

@@ -310,7 +310,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-189)
+## 3. Tests that pin a decision (D-155 to D-190)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -346,6 +346,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| D-190 (sonar-h1f) | the frame path decodes only the rows a window takes; a board's rows resampled together; outputs to the bit | `test_flank_stream.py` (the decoder, the assembled samples, the held block); `test_calibration_sync.py` (the resampler against row by row); the (3, python) Popoto loopback case |
 | D-189 (sonar-02c) | the host check for the Sensor Bridge measurement; the quota rule in one place | `test_hsb_host_check.py` (the whole file); `test_hsb.py::test_usable_cpus_honours_a_cgroup_quota` |
 | D-188 (sonar-h0e) | the receiver names its damaged frames (`damaged_frames`); a damaged frame in the first 0.25 s of stream is start-up loss, one later or of unknown number is not | `test_hsb.py::test_a_damaged_frames_number_is_reported_wherever_it_lies`, `::test_damaged_frames_keep_the_first_sixteen`, `::test_start_up_loss_is_accepted_only_where_every_index_confirms_it` |
 

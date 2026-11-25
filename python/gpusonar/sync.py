@@ -201,18 +201,33 @@ def estimate_clocks_direct_path(record, search_time: float = SEARCH_TIME) -> Clo
     return ClockEstimate(offsets - offsets[0], np.zeros(len(offsets)), "direct_path", np.array(quality))
 
 
-def _sinc_resample(x: np.ndarray, positions: np.ndarray, taps: int = 16) -> np.ndarray:
-    """Values of real series x at fractional sample positions (Hann-windowed sinc)."""
+def _sinc_taps(positions: np.ndarray, n: int, taps: int = 16) -> list:
+    """The Hann-windowed sinc at fractional sample `positions` of a series of `n` samples, tap by tap: (where the
+    tap's sample lies inside the series, its weights there, its sample indices there)."""
     base = np.floor(positions).astype(np.int64)
     frac = positions - base
     half = taps // 2
-    out = np.zeros(len(positions), dtype=np.float64)
+    out = []
     for k in range(-half + 1, half + 1):
         idx = base + k
         d = k - frac
         wgt = np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / half))
-        ok = (idx >= 0) & (idx < len(x))
-        out[ok] += wgt[ok] * x[idx[ok]]
+        ok = (idx >= 0) & (idx < n)
+        out.append((ok, wgt[ok], idx[ok]))
+    return out
+
+
+def _sinc_resample(x: np.ndarray, positions: np.ndarray, taps: int = 16) -> np.ndarray:
+    """Values of real series x (one row, or rows [rows, samples]) at fractional sample positions (Hann-windowed sinc).
+    Every row gets the same arithmetic, tap by tap in the same order, as one row alone."""
+    out = np.zeros(x.shape[:-1] + (len(positions),), dtype=np.float64)
+    for ok, wgt, idx in _sinc_taps(positions, x.shape[-1], taps):
+        at = np.flatnonzero(ok)
+        if len(at) and at[-1] - at[0] + 1 == len(at):
+            ok = slice(at[0], at[-1] + 1)            # the same places as the mask (monotonic positions), quicker
+        term = np.take(x, idx, axis=-1)
+        term *= wgt
+        out[..., ok] += term
     return out
 
 
@@ -230,8 +245,9 @@ def resample_boards(record, estimate: ClockEstimate) -> None:
             continue
         # Nominal sample m is wanted at time m / fs; this board holds that instant at index n.
         positions = (m / fs - offset) * fs * (1.0 + drift)
-        for row in board_rows:
-            x[row] = _sinc_resample(x[row], positions)
+        # The board's rows together, its weights computed once: the same samples as row by row, faster (sonar-h1f:
+        # this stage took 2.0 s of the Python engine's 3.4 s a ping at 96 channels on one CPU core here).
+        x[board_rows] = _sinc_resample(x[board_rows], positions)
     s.array = x.astype(np.float32)
     record.samples = s
     meta = record.metadata

@@ -1039,7 +1039,13 @@ rates"):
 - C++ engine, default buffer: frames lost or damaged in 12 of 20 runs at 32 channels, 20 of 20 at 64
   and 20 of 20 at 96 (at most 8, 57 and 66 frames a run; median 1, 11 and 11.5); a ping dropped in 2, 1
   and 3 runs. The Python engine lost alike (6, 10 and 10 of 10), and at 96 channels it is not real time on this host: its receiver
-  queue overflowed as well (493 to 721 frames a run).
+  queue overflowed as well (368 frames lost in the median run, at most 721; `RESULTS.md`). The application runs every
+  operator on one thread (Holoscan's greedy scheduler), so the receiver's queue holds the stream while the chain works
+  on a ping. Since D-190 (sonar-h1f) the frame path decodes only the rows a
+  window takes and the Python engine resamples a board's rows together, every output the same to the bit. On an L4
+  (job `6b06cd69b6a90bbe997d1b7a`, 4 runs each way) the Python engine at 96 channels went from 2.06-2.20 s a ping after
+  the first to 0.42-0.47 s and lost only its first 2 to 4 frames both ways; the case is in the suite since. It was not
+  re-measured on a10g-large (`tools/hsb_frame_timing.py` gives the frame path's cost on any host).
 - Not cured by: the socket buffer doubled to 425,984 bytes (`--socket-buffer 212992`, as much as the
   container's `rmem_max` allows: 5, 10 and 10 of 10 runs lost frames), 200-sample frames with that
   buffer (10 of 10 at every row count, and more frames lost), the chain's OpenMP on 2 threads instead
