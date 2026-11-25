@@ -353,7 +353,7 @@ Through Sensor Bridge (`tools/sonar_live_hsb.py`, `sources/hsb.py`):
 | `receive --chain-omp-threads N` | not set: OpenMP's own count | threads | D-162, D-173 | sets OpenMP's count on the thread that runs the chain. The loopback tests pass half of min(affinity, cgroup CPU quota) (`hsb.usable_cpus`) |
 | `receive --idle` | 15.0 | s | D-163 | stop after this long without a frame, whatever was lost; exit status 3 when fewer pings were reported than asked |
 | `receive --find-timeout` | 30.0 | s | D-173 | how long to wait for the board; `serve --scenario` simulates every ping before announcing it |
-| `receive --queue` | 256 | frames | — | |
+| `receive --queue` | 4 s of the stream (640 frames of 400 samples at 64 kHz, 1024 at 102.4 kHz) | frames | D-187 | 256 frames before; the receiver operator drops the oldest beyond it |
 | `--frame-samples` | 400 (`hsb.FRAME_SAMPLES`) | samples | — | the same on both sides |
 | `serve --pace` | 1.0 | x real time | D-153 | |
 | `serve --catch-up` | `spread` | | D-151 | `burst`: the behaviour before |

@@ -948,8 +948,8 @@ POPOTO = {1: ("popoto_testauv_trial_1row", None, "popoto_testauv_1row"),
           2: ("popoto_static_trial_3row", "popoto_static_2row_clocks", "popoto_static_2row"),
           3: ("popoto_static_trial_3row", None, "popoto_static_3row")}
 # Seconds of stream the receiver operator holds while the chain works on a ping (`receive --queue`, in frames): the
-# tool's default 256 frames is 1.6 s of flank_32's 160 frames a second but 1.0 s of a Popoto build's 256 (400-sample
-# frames at 102.4 kHz), and the queue drops the oldest frames beyond it.
+# tool's default was 256 frames when these were measured (1.6 s of flank_32's 160 frames a second, 1.0 s of a Popoto
+# build's 256); since D-187 it is these 4 s of whatever stream. The queue drops the oldest frames beyond it.
 POPOTO_QUEUE_S = 4.0
 _popoto_cache = {}
 

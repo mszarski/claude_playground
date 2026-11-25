@@ -1028,7 +1028,7 @@ or 96 channels at 102.4 kHz: 78.6, 157.3 and 235.9 Mbit/s of samples
 kernel accounting: about 3.3 frames (12.8 ms) at 32 channels, 1.7 (6.5 ms) at 64 and 1.1 (4.4 ms) at
 96, and one 96-channel frame arrives as a burst of 82 datagrams. Measured with each build's shortest
 trial and deployment file, real time, the chain's OpenMP at half the usable CPUs, the receiver's queue
-at 4 s of stream (`--queue 1024`; the default 256 frames is 1.0 s at 256 frames a second), on
+at 4 s of stream (`--queue 1024` then; since D-187 the default is 4 s of whatever stream, before it 256 frames, 1.0 s here), on
 Hugging Face **a10g-large** jobs (12-CPU quota, 48 CPUs listed; no L4 was available), 210 runs
 (jobs `6b063a21d0582cfbbefd60a3`, `6b0641ce1460ffe1d5e98956`; `RESULTS.md`, "Sensor Bridge at Popoto
 rates"):
