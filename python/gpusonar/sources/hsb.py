@@ -194,6 +194,9 @@ class FrameReceiver:
     * `trouble_frames`: the first 16 frame numbers at which a loss or a damaged frame was noticed:
       for a loss, the number of the frame that arrived after the gap, entered when a frame of the
       gap is given up as lost (a gap filled by late frames is not trouble).
+    * `damaged_frames`: the frame numbers of the first 16 frames counted in `frames_damaged` (arrived with
+      packets missing, `frame_bytes_received` below the frame's size; not used). A damaged frame without a
+      frame number is counted but not listed, so fewer listed than `frames_damaged` means some are not known.
 
     Frame numbers are taken as the receiver's extended counter (Sensor Bridge extends the 16-bit
     wire counter on the host, HOLOSCAN_NOTES.md section 8; the metadata does not say its width, so
@@ -219,6 +222,7 @@ class FrameReceiver:
         self.packets_dropped = 0        # the receiver's cumulative count
         self.first_frame_number = None
         self.trouble_frames = []        # frame numbers at which a loss or a damaged frame was noticed (the first 16)
+        self.damaged_frames = []        # frame numbers of damaged frames (the first 16; sonar-h0e)
         self._last_frame_number = None
         self._awaited = []              # [lo, hi, first sample of lo, samples per frame, noticed at]: numbers skipped
         self._anchor = None             # (number, first sample, samples) of the last frame used
@@ -339,6 +343,8 @@ class FrameReceiver:
             self.frames_damaged += 1
             if number is not None and len(self.trouble_frames) < 16:
                 self.trouble_frames.append(number)
+            if number is not None and len(self.damaged_frames) < 16:
+                self.damaged_frames.append(number)
         elif self.frame_bytes is not None and size != self.frame_bytes:
             self.bad_frames += 1
         else:
@@ -383,7 +389,7 @@ class FrameReceiver:
         return {"frames": self.frames, "frames_lost": self.frames_lost, "frames_damaged": self.frames_damaged,
                 "frames_repeated": self.frames_repeated, "frames_late": self.frames_late, "frames_too_late": self.frames_too_late,
                 "bad_frames": self.bad_frames, "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number,
-                "trouble_frames": list(self.trouble_frames), "pings": self.pings,
+                "trouble_frames": list(self.trouble_frames), "damaged_frames": list(self.damaged_frames), "pings": self.pings,
                 "pings_discarded_at_stop": self.pings_discarded_at_stop, "dropped_pings": a.dropped_pings,
                 "lost_samples": a.lost_samples}
 

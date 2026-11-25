@@ -118,6 +118,54 @@ def test_a_dropped_frame_drops_exactly_the_ping_it_cuts(pings):
     assert receiver.stats()["bad_frames"] == 2
 
 
+def damage(frame, metadata):
+    """A frame that arrived with one 4096-byte stretch of packets missing, as LinuxReceiverOp gives it."""
+    return frame[:4096] + b"\xff" * 4096 + frame[8192:], dict(metadata, frame_bytes_received=len(frame) - 4096)
+
+
+def test_a_damaged_frames_number_is_reported_wherever_it_lies(pings):
+    """sonar-h0e: `damaged_frames` names each damaged frame's number, one at the start of the stream (frame 3, just
+    after a gap of two frames that never arrived) and one later between pings alike; a damaged frame without a number
+    is counted but not named. `trouble_frames` keeps its meaning (a damaged frame is listed there too)."""
+    stream = hsb.FrameStream(pings, FRAME, lead_seconds=LEAD)
+    frames = list(stream)
+    quiet = (stream.tx[2] - 100) // FRAME                            # between ping 1's window and ping 2's transmit
+    meta = [{"frame_number": k, "frame_bytes_received": len(f), "packets_dropped": 0} for k, f in enumerate(frames)]
+    receiver = hsb.FrameReceiver("flank_32", OVERRIDES, frame_samples=FRAME)
+    got = []
+    for k, f in enumerate(frames):
+        if k in (1, 2):
+            continue                                                  # never arrived
+        got += receiver.take(*(damage(f, meta[k]) if k in (3, quiet) else (f, meta[k])))
+    s = receiver.stats()
+    assert len(got) == N and s["dropped_pings"] == 0                  # neither frame lies in a ping's window
+    assert (s["frames_damaged"], s["damaged_frames"], s["frames_lost"]) == (2, [3, quiet], 2)
+    assert 3 in s["trouble_frames"] and quiet in s["trouble_frames"]
+    # Without a frame number: counted, not named.
+    receiver = hsb.FrameReceiver("flank_32", OVERRIDES, frame_samples=FRAME)
+    for k, f in enumerate(frames):
+        f, m = damage(f, meta[k]) if k == quiet else (f, meta[k])
+        receiver.take(f, {key: v for key, v in m.items() if key != "frame_number"})
+    s = receiver.stats()
+    assert (s["frames_damaged"], s["damaged_frames"]) == (1, [])
+
+
+def test_damaged_frames_keep_the_first_sixteen(pings):
+    """sonar-h0e: `damaged_frames` holds the first 16 damaged frames' numbers; `frames_damaged` counts them all, so a
+    count above the list's length says some number is not known."""
+    stream = hsb.FrameStream(pings, FRAME, lead_seconds=LEAD)
+    frames = list(stream)
+    hit = [2 + 2 * j for j in range(20)]                             # 20 damaged frames in the lead, every other one
+    assert hit[-1] * FRAME < stream.tx[0]
+    receiver = hsb.FrameReceiver("flank_32", OVERRIDES, frame_samples=FRAME)
+    got = []
+    for k, f in enumerate(frames):
+        m = {"frame_number": k, "frame_bytes_received": len(f), "packets_dropped": 0}
+        got += receiver.take(*(damage(f, m) if k in hit else (f, m)))
+    s = receiver.stats()
+    assert len(got) == N and (s["frames_damaged"], s["damaged_frames"], s["frames_lost"]) == (20, hit[:16], 0)
+
+
 def test_receive_stops_when_its_pings_are_accounted_for_or_the_stream_is_quiet():
     """ReceiveStop (sonar-dkb): the stop rule of the receive application, with a stand-in clock."""
     now = [0.0]
@@ -1098,6 +1146,34 @@ def popoto_startup_loss(tmp_path, tag, start_frames):
     return missing, (max(after) if after else float("nan"))
 
 
+def popoto_start_only(missing, damaged, frames_damaged, frames_per_s, start_s=POPOTO_START_S):
+    """Whether a loopback's loss is start-up loss only (D-187; damaged frames: sonar-h0e, the owner's "accept it if the
+    index confirms"): something was lost, every frame that never arrived (`missing`) and every damaged frame (`damaged`,
+    the receiver's `damaged_frames`) lies in the first `start_s` of stream, and every damaged frame's number is known
+    (`frames_damaged` counted no more than `damaged` lists: beyond its 16, or without a frame number, it is not)."""
+    if len(damaged) < frames_damaged:
+        return False
+    lost = list(missing) + list(damaged)
+    return bool(lost) and max(lost) < start_s * frames_per_s
+
+
+def test_start_up_loss_is_accepted_only_where_every_index_confirms_it():
+    """sonar-h0e: popoto_start_only, the Popoto loopback's acceptance, at 256 frames a second (the first 0.25 s: frames 0
+    to 63). A damaged frame in that window is start-up loss as a missing one is, also with no frame missing: the owner's
+    rule places the loss by its index, and a frame that arrived in part lost its samples as one that never arrived."""
+    fps = 256.0
+    assert popoto_start_only([1, 2], [3], 1, fps)                     # the three L4 runs of job 6b0681011460ffe1d5e9f89f
+    assert popoto_start_only([1, 2], [], 0, fps)                      # D-187's case
+    assert popoto_start_only([], [3], 1, fps)
+    assert popoto_start_only([], [63], 1, fps) and not popoto_start_only([], [64], 1, fps)
+    assert not popoto_start_only([1, 2], [500], 1, fps)               # damaged later: not start-up loss
+    assert not popoto_start_only([1, 2, 500], [], 0, fps)
+    assert not popoto_start_only([1, 2], [3], 2, fps)                 # one damaged frame's number not known
+    assert not popoto_start_only([1, 2], list(range(3, 19)), 17, fps)   # the list's 16 are all early, the 17th unknown
+    assert popoto_start_only([1, 2], list(range(3, 19)), 16, fps)
+    assert not popoto_start_only([], [], 0, fps)                      # nothing lost: lossless, not start-up loss
+
+
 POPOTO_ENGINES = [(1, "cpp"), (2, "cpp"), (3, "cpp"), (1, "python"), (2, "python")]
 # Not (3, "python"): the Python engine's 2.5-2.9 s a ping and its per-frame work at 256 frames a second of 115 kB
 # together fall behind the stream, and the receiver's queue drops frames beyond the socket's losses (493 to 721 frames
@@ -1109,7 +1185,10 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
     """sonar-x8v: a Popoto build's trial through Sensor Bridge's emulator and Linux receiver at real time, at its
     build's 32, 64 or 96 channels and 102.4 kHz, received with its deployment file: the chain keeps up, every ping is
     accounted for, any loss is the socket buffer's and counted, and the reported pings give the direct chain's reports.
-    Frames lost make the test an expected failure that says how many (see above: so far every 64- and 96-channel run)."""
+    It passes with no loss, or with start-up loss only (D-187): every frame that never arrived and every frame that
+    arrived damaged (sonar-h0e: its number from the receiver's `damaged_frames`, all of them known) lies in the first
+    POPOTO_START_S of stream, every ping was reported and the worst delay after that start is under 5 ms. Any other loss
+    makes the test an expected failure that says how many frames and which damaged (see above)."""
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
@@ -1145,16 +1224,21 @@ def test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_cha
     # D-187: where the loss is. In every run located (L4 and a10g-large, 52 runs) the frames lost were the first ones
     # after the receiver connected, before the first ping's window: Sensor Bridge's receiver thread is not yet reading
     # while it allocates its queue. Such a run passes if, after that start, nothing is lost and the delay bound holds.
+    # sonar-h0e (the owner: "accept it if the index confirms"): a frame that arrived damaged is start-up loss too when
+    # its number is in that start; on an L4 3 runs of 15 lost frames 1 and 2 and had 1 frame damaged, its number then
+    # not logged (job 6b0681011460ffe1d5e9f89f). A damaged frame later, or one whose number is not known, is not.
     missing, worst_after = popoto_startup_loss(tmp_path, f"popoto{rows}", POPOTO_START_S * m["frames_per_s"])
+    damaged = stats["damaged_frames"]
     print("POPOTO_START", json.dumps({"rows": rows, "engine": engine, "frames_lost": stats["frames_lost"], "missing": missing[:32],
+                                      "frames_damaged": stats["frames_damaged"], "damaged": damaged,
                                       "worst_ms_after_start": worst_after, "worst_ms": m["worst_ms"]}))
-    only_at_start = bool(missing) and max(missing) < POPOTO_START_S * m["frames_per_s"] and stats["frames_damaged"] == 0 \
+    only_at_start = popoto_start_only(missing, damaged, stats["frames_damaged"], m["frames_per_s"]) \
         and len(missing) == stats["frames_lost"] and stats["reports"] == n
     if only_at_start and worst_after < 5.0:
         return
     if not lossless or m["worst_ms"] >= 5.0:
         pytest.xfail(f"measured limit (D-186): {rows * 32} channels at 102.4 kHz lost {stats['frames_lost']} frames "
-                     f"({stats['frames_damaged']} damaged, {stats['socket']['drops']} datagrams refused by a "
+                     f"({stats['frames_damaged']} damaged: frames {damaged}, {stats['socket']['drops']} datagrams refused by a "
                      f"{stats['socket']['rcvbuf']}-byte socket buffer), {stats['dropped_pings']} of {n} pings; worst receive "
                      f"delay {m['worst_ms']:.1f} ms (flank_32's bound 5 ms)")
 

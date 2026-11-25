@@ -2,7 +2,7 @@
 
 The entry point for whoever continues this work: a hardware engineer, a software engineer,
 or a coding model with no conversation history. Written 2026-11-24 at commit `933972b`,
-decisions to D-187. Everything said here was checked against the repository at that commit;
+decisions to D-188. Everything said here was checked against the repository at that commit;
 where two documents disagree, trust in this order: code and configs, `docs/DECISIONS.md`
 (later entries amend earlier ones), `docs/STATUS.md`, `docs/RESULTS.md`, the rest.
 
@@ -87,7 +87,7 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 | Item | State | Source |
 | --- | --- | --- |
 | Branch | `claude/gpu-sonar-suite-u289p5`, HEAD `933972b` (2026-11-24) | `git log` |
-| Latest decision | D-187: the Popoto-rate loss is at the start of the run; the receiver queue defaults to 4 s of stream. D-186: the Sensor Bridge loopback at Popoto rates loses frames; D-184 per-board streams merged; D-185 a board clock's rate. D-182 is this documentation set | `docs/DECISIONS.md` |
+| Latest decision | D-188: the receiver names its damaged frames, and one damaged at the start of a Popoto-rate loopback is start-up loss. D-187: the Popoto-rate loss is at the start of the run; the receiver queue defaults to 4 s of stream. D-186: the Sensor Bridge loopback at Popoto rates loses frames; D-184 per-board streams merged; D-185 a board clock's rate. D-182 is this documentation set | `docs/DECISIONS.md` |
 | Last full GPU suite | 2155 passed, 97 skipped, 1 xfailed (a Popoto-rate Sensor Bridge loopback case with a frame damaged at the start, D-187), none failed, on an NVIDIA L4 (Hugging Face job 6b06728ad0582cfbbefdb5eb) | D-187 |
 | Last whole CPU suite in one run | the tree of D-157, `605a4e1` (2026-11-22; 157 of 157 ctest entries); since then (D-158 to D-181) affected files per package only | `docs/STATUS.md`, the result paragraphs just before "Open questions for the project owner" |
 | Gallery (`docs/figures/`, `gallery.json`) | regenerated at D-179 on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`); D-180 and D-181 move no default | D-179 |
@@ -146,13 +146,13 @@ commit" dates of those files are a day or less older than their present state.
 | `handoff/README.md` | this page | 2026-11-24 | yes | current |
 | `handoff/HARDWARE.md` | the hardware side: what is unknown or at risk, the system block diagram, a register of every assumption with its status (confirmed, via secondary, ours, unconfirmed), the six Popoto builds with their numbers (`hardware_builds.json`, `tools/handoff_hardware.py`), the link budget and the 12 km design point, the interfaces the hardware must meet (ping record, UDP block, WAV sidecar, timing, navigation datagram), a bring-up plan, open hardware decisions | 2026-11-24 | written with this set | current (D-181). Nothing in it is built or measured on hardware, as its first paragraph says |
 | `handoff/SOFTWARE.md` | the software side: what is fragile or wrong, the layers and data flow, the repository map, the two live-chain engines, the live chain stage by stage with every default, its key and its decision, SAS, FLS and the simulator, configuration, tools and programs, how to add things without breaking the rules | 2026-11-24 | written with this set | current (D-181). Its section 10 lists stale statements found in other documents; those were corrected on 2026-11-24 after it was written (except root `CLAUDE.md`, the owner's file), so read that section as history |
-| `handoff/TESTS.md` | how to run the tests (CPU, GPU job, oracles), a map of what each test file protects, the tests that pin decisions D-155 to D-187, known false failures and how to recognise them, what is not tested or only on simulated input | 2026-11-24 | written with this set | current (D-181). No per-file run time is recorded; the 93 skips of the last GPU job are derived, not read from its log |
+| `handoff/TESTS.md` | how to run the tests (CPU, GPU job, oracles), a map of what each test file protects, the tests that pin decisions D-155 to D-188, known false failures and how to recognise them, what is not tested or only on simulated input | 2026-11-24 | written with this set | current (D-181). No per-file run time is recorded; the 93 skips of the last GPU job are derived, not read from its log |
 | `handoff/SIMULATION.md` | the simulator: what it does not model, its pipeline and a table of its models with their sources and validation, all 76 scenarios by family, calibration to real data, determinism | written with this set | written with this set | written in parallel and merged after this row was written; described here from its author's summary, not read |
 | `handoff/EXAMPLES.md` (with `handoff/examples/`: scripts, pictures, saved outputs) | twelve worked examples run on the CPU with their commands, run times, real outputs and pictures, led by what failed (`--emulate` on multi-board scenarios) | written with this set | written with this set | the same |
 | `handoff/OUTPUTS.md` | pictures, headline numbers, a report line, how to regenerate | 2026-11-24 | yes | current |
 | `HANDOFF.md` | rules, build and test, GPU jobs, open work, how to work here | 2026-11-24 | yes | current (refreshed to D-181) |
 | `STATUS.md` | what works, how it was checked, what is wrong, owner questions | 2026-11-24 | yes (to D-181) | current. Corrected 2026-11-24: "State of verification of this tree" names the 2078-passed job and the last whole CPU run, "Where the code has run", "What is next" items 1 and 7, open item 14 and the list of stale generated files are brought to D-181 |
-| `DECISIONS.md` | every decision D-1 to D-187 with what got worse | 2026-11-24 | yes | current; the authority after code and configs |
+| `DECISIONS.md` | every decision D-1 to D-188 with what got worse | 2026-11-24 | yes | current; the authority after code and configs |
 | `RESULTS.md` | every measured number and its source | 2026-11-24 | yes (to D-178) | mostly current. Corrected 2026-11-24: "Sensor Bridge loopback" carries the state since D-153, D-162, D-163 and D-173 beside its 2026-11-17 record; the `minefield_sas` and live-chain rows of "Every stage with a CUDA backend" are marked as old with the current figures beside them; the `sst_validation` sentence; "Not yet measured". Still: D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only; the `minefield_sas` row is not re-timed (issue `sonar-egj`) |
 | `SCENARIOS.md` | every scene with figures and per-scene results | 2026-11-24 | yes (to D-178) | current with the D-179 gallery. CPU times in its table are from a much older tree |
 | `CONFIGURATION.md` | every config key | 2026-11-24 | yes (to D-181) | current |

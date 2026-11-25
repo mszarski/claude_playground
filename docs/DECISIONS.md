@@ -3437,3 +3437,30 @@ with its numbers. The send log gained the send call's time per frame (`send_ms`)
   and 2 to 4 at 64 and 96 (frames 1 to 4), none damaged. A damaged frame is one that arrived in part;
   the log does not give its index, so that it is the frame at the end of the start-up gap (frame 3) is
   likely, not shown. Not changed: the test still refuses it. Follow-up sonar-h0e.
+
+### D-188 The receiver names its damaged frames; a frame damaged at the start of a Popoto-rate loopback is start-up loss (issue sonar-h0e; the owner: "accept it if the index confirms"; amends D-187)
+
+What got worse first: the Popoto loopback test now passes in a run that D-187's test ended as an expected
+failure (a frame that arrived in part, at the start). The receiver's statistics gained a key, so anything
+that compares the statistics dictionary exactly must know it (two tests did; no tool or C++ code does).
+
+- `FrameReceiver` (`python/gpusonar/sources/hsb.py`) reports `damaged_frames`: the frame numbers of the
+  first 16 frames counted in `frames_damaged`. A damaged frame without a frame number is counted and not
+  listed, so fewer listed than counted means some number is not known. Every other field is as it was.
+- The index, measured (L4, HF job 6b0693c6d0582cfbbefdf55e: the five cases, eight runs each, 40 runs).
+  One run had a damaged frame: 96 channels, C++ engine, frames 1 and 2 never arrived and **frame 3 was the
+  damaged one**, the frame at the end of the start-up gap. That is one observation; D-187's three runs
+  with a damaged frame did not log its number. The other 39 runs had none damaged: no loss in 15 of the 16
+  runs at 32 channels (one lost frame 3), and frames 1 to 2, 3, 4 or (once) 7 missing at 64 and 96
+  channels. All 40 passed.
+- The test's rule (`popoto_start_only` in `tests/python/test_hsb.py`): something was lost; every frame
+  that never arrived and every damaged frame lies in the first 0.25 s of stream; and every damaged
+  frame's number is known. As before: every ping reported and the worst delay after the start under
+  5 ms. A frame missing or damaged later, or a damaged frame whose number is not known, still ends as the
+  expected failure, its message naming the damaged frames.
+- Not changed: the chain, the record, any default result. Still open from D-187: the earlier a10g-large
+  runs that lost 49 to 66 frames or a ping; nothing enforces the 0.25 s lead before the first transmit;
+  a host with Sensor Bridge's own socket setup (sonar-02c).
+- Tests: `tests/python/test_hsb.py::test_a_damaged_frames_number_is_reported_wherever_it_lies`,
+  `::test_damaged_frames_keep_the_first_sixteen`,
+  `::test_start_up_loss_is_accepted_only_where_every_index_confirms_it`.

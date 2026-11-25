@@ -9,9 +9,9 @@ Every expected number is derived from the rules the code documents (FrameReceive
     past it), and the number of the frame that arrived after the gap goes in `trouble_frames` (the first 16); one
     arriving after that is `frames_too_late` (and `frames_late`), not used. A number already received is
     `frames_repeated`, ignored. Without numbers the same is told from the blocks' sample counter.
-  * `frame_bytes_received` below the frame's size: `frames_damaged`, the frame's number in `trouble_frames`, the
-    frame not used. Not a block of this stream (size, magic, version, channel count): `bad_frames`, not used, not
-    in `trouble_frames`.
+  * `frame_bytes_received` below the frame's size: `frames_damaged`, the frame's number in `trouble_frames` and in
+    `damaged_frames` (the first 16; sonar-h0e), the frame not used. Not a block of this stream (size, magic,
+    version, channel count): `bad_frames`, not used, not in `trouble_frames`.
   * The assembler sees only the frames used: samples never received are `lost_samples` once given up, and the ping
     whose window they cut is discarded (never zero-filled); a ping first named by a header after its window has
     opened, with what came before already received or given up, is discarded too ("joined too late"); a jump of the
@@ -121,7 +121,7 @@ def test_lost_frames_cost_their_samples_and_exactly_the_pings_they_cut(run, case
     # pings_discarded_at_stop (0: finish() is not called).
     assert s == {"frames": len(run["frames"]) - len(skip), "frames_lost": len(skip), "frames_damaged": 0,
                  "frames_repeated": 0, "frames_late": 0, "frames_too_late": 0, "bad_frames": 0, "packets_dropped": 0, "first_frame_number": 0,
-                 "trouble_frames": runs_of(skip), "pings": len(kept), "pings_discarded_at_stop": 0, "dropped_pings": len(dropped),
+                 "trouble_frames": runs_of(skip), "damaged_frames": [], "pings": len(kept), "pings_discarded_at_stop": 0, "dropped_pings": len(dropped),
                  "lost_samples": FRAME * len(skip)}
 
 
@@ -206,6 +206,7 @@ def test_damaged_frames_and_frames_not_of_this_stream_are_told_apart(run):
     assert s == {"frames": len(frames) - 5, "frames_lost": 0, "frames_damaged": 2, "frames_repeated": 0, "frames_late": 0,
                  "frames_too_late": 0, "bad_frames": 3,
                  "packets_dropped": 4, "first_frame_number": 0, "trouble_frames": [quiet_damaged, window_damaged],
+                 "damaged_frames": [quiet_damaged, window_damaged],
                  "pings": 4, "pings_discarded_at_stop": 0, "dropped_pings": 2, "lost_samples": 5 * FRAME}
 
 

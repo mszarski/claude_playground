@@ -877,6 +877,9 @@ each frame once) are frames counted lost that came after all, not used. `frames_
 duplicates, and frames that did not fit the stream and were not confirmed as a restart.
 `trouble_frames` lists the first 16 frame numbers at which a loss (entered when it is given
 up; a gap filled by late frames is not listed) or a damaged frame was noticed.
+`damaged_frames` lists the frame numbers of the first 16 frames counted in `frames_damaged`
+(arrived with packets missing, not used); a damaged frame without a frame number is counted
+but not listed.
 `pings_discarded_at_stop` are complete pings still waiting (for an earlier one to be
 decided) when the run stopped; pings + `dropped_pings` + these = pings heard.
 
