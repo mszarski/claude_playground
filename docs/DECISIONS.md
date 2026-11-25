@@ -3427,3 +3427,13 @@ with its numbers. The send log gained the send call's time per frame (`send_ms`)
   `tests/python/test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`.
 - Full GPU suite on this tree: running when this was written (L4, HF job 6b06728ad0582cfbbefdb5eb); the
   result is added below when it ends.
+- Result of that job: **2155 passed, 97 skipped, 1 xfailed**, none failed (49 min 31 s). The one expected
+  failure is one of the five Popoto loopback cases; the suite's log does not print which.
+- What the remaining expected failure is (L4, HF job 6b0681011460ffe1d5e9f89f: the five cases run three
+  times with the reasons printed). In each run four cases passed and one ended as an expected failure: 64
+  channels with the Python engine once, 96 channels with the C++ engine twice. Each of the three lost 2
+  frames (frames 1 and 2), every ping was reported, the worst delay was 1.3 to 1.9 ms, and **1 frame was
+  counted damaged**: the test refuses any damaged frame. The 12 passing runs lost 0 frames at 32 channels
+  and 2 to 4 at 64 and 96 (frames 1 to 4), none damaged. A damaged frame is one that arrived in part;
+  the log does not give its index, so that it is the frame at the end of the start-up gap (frame 3) is
+  likely, not shown. Not changed: the test still refuses it. Follow-up sonar-h0e.

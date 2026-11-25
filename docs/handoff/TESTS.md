@@ -112,7 +112,7 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
-| Full GPU suite, NVIDIA L4, tree of D-186 | **2150 passed, 97 skipped, 4 xfailed**, none failed (job `6b06553a1460ffe1d5e9aa10`; the xfails are the Popoto-rate loopback, D-186). Before it, D-183's tree: 2102 passed, 95 skipped (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
+| Full GPU suite, NVIDIA L4, tree of D-187 | **2155 passed, 97 skipped, 1 xfailed**, none failed (job `6b06728ad0582cfbbefdb5eb`; the xfail is one Popoto-rate loopback case with a frame damaged at the start, D-187). Before it, D-186's tree: 2150 passed, 97 skipped, 4 xfailed (job `6b06553a1460ffe1d5e9aa10`). Before it, D-183's tree: 2102 passed, 95 skipped (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
 | GoogleTest at this tree | 172 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`) | section 2 |
 | pytest at this tree | 1375 test functions in 114 files (counted in `tests/python/test_*.py`); parametrisation makes them 2171 collected on the L4 job | D-181's counts |
@@ -309,7 +309,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-186)
+## 3. Tests that pin a decision (D-155 to D-187)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -344,6 +344,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-184 | per-board streams merged into the whole-array stream (sonar-6f9) | `test_board_streams.py` (the whole file) |
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
+| D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
 
 The option round trip that every chain key must pass, whatever decision added it:
 `test_live_cpp.py::test_every_chain_option_round_trips_through_binding_and_text`.
@@ -360,7 +361,7 @@ The option round trip that every chain key must pass, whatever decision added it
 | A GPU job on `a10g-small` hangs at 0 % CPU during the Ceres build | 16 GB of RAM: out of memory | use `l4x1`, or `a10g-large` |
 | Sensor Bridge loopback loses frames or shows receive delays of tens of milliseconds on `a10g-small` | a 3-CPU cgroup quota the CPU affinity does not show; with too many OpenMP threads the receiver waits behind throttling (D-173) | the tests take half of min(affinity, quota); on other hosts pass `--chain-omp-threads` |
 | A job never starts | L4 capacity: the job sits in `SCHEDULING`; `hf jobs wait` may return early | poll `hf jobs inspect <id> --format json`; fall back to `a10g-large` |
-| `test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` ends XFAIL with "measured limit (D-186)" | at a Popoto build's rate the receiver's socket buffer (capped by the container's `rmem_max`) overflows; every lost datagram is counted as refused by it | not a code failure: the measured limit of the container. A FAIL of that test (an assertion before the xfail) is real: an uncounted loss, a malformed frame, the chain behind real time, or reports that differ |
+| `test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` ends XFAIL with "measured limit (D-186)" | at a Popoto build's rate the receiver's socket buffer (capped by the container's `rmem_max`) overflows; every lost datagram is counted as refused by it | not a code failure: the measured limit of the container. Since D-187 the test passes when the loss is only the first frames after the receiver connects; it still ends XFAIL when a frame arrived in part (counted damaged), about 1 run in 5 of the 64 and 96 channel cases on an L4 (3 of 15 runs, job `6b0681011460ffe1d5e9f89f`; sonar-h0e). A FAIL of that test (an assertion before the xfail) is real: an uncounted loss, a malformed frame, the chain behind real time, or reports that differ |
 | A test skips with "the loopback dropped N samples" | a UDP loopback on a loaded machine lost datagrams (`test_flank_stream.py`, `test_live.py`, `test_holoscan.py`, `test_live_cpp.py`, `test_tonal.py`, `test_holoscan_cpp.py`) | a skip by design; rerun alone |
 | Many failures naming `GPUSONAR_BELLHOP` or `pyram` | `GPUSONAR_REQUIRE_ORACLES=1` is set and the oracle is missing | build the oracles (`tools/build_oracles.sh`) or unset the variable |
 | `test_tools_help.py` skips entirely | not a git checkout (the GPU job's tarball) | run it on a checkout |
