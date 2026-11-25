@@ -3464,3 +3464,5 @@ that compares the statistics dictionary exactly must know it (two tests did; no 
 - Tests: `tests/python/test_hsb.py::test_a_damaged_frames_number_is_reported_wherever_it_lies`,
   `::test_damaged_frames_keep_the_first_sixteen`,
   `::test_start_up_loss_is_accepted_only_where_every_index_confirms_it`.
+- Full GPU suite on this tree: **2159 passed, 97 skipped**, none failed, no expected failure (NVIDIA L4,
+  HF job 6b0699f4d0582cfbbefe0373, 49 min 44 s).

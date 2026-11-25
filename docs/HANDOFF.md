@@ -173,7 +173,7 @@ hf jobs run --detach --flavor "$flavor" --timeout "$to" --secrets HF_TOKEN "$@" 
   2>&1 | grep -o "mszarski/[0-9a-f]\{24\}" | head -1
 ```
 
-The full suite before a merge (what "2155 passed, 97 skipped, 1 xfailed" was run with):
+The full suite before a merge (what "2159 passed, 97 skipped" was run with):
 
 ```bash
 launch_named.sh <name>.tar.gz l4x1 3h -e GPUSONAR_ORACLES=1 -e GPUSONAR_CERES=1 \
@@ -245,7 +245,7 @@ Code worth knowing first:
 
 ## 6. State of verification at `933972b`
 
-- **GPU, latest (NVIDIA L4, HF job 6b06728ad0582cfbbefdb5eb, the tree of D-187): 2155 passed, 97 skipped, 1 xfailed (one Popoto-rate Sensor Bridge loopback case, a frame damaged at the start, D-187), none failed.**
+- **GPU, latest (NVIDIA L4, HF job 6b0699f4d0582cfbbefe0373, the tree of D-188): 2159 passed, 97 skipped, none failed.**
 - **GPU before it (NVIDIA L4, HF job 6b060a4b1460ffe1d5e93111, the merged tree of D-183; before it job 6b055ee4c97b8ed4fcd799db on the tree of D-181 with 2078 passed, 93 skipped): 2102
   passed, 95 skipped, none failed.** CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM,
   Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0. The skips are data and tools
