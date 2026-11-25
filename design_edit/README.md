@@ -1108,6 +1108,62 @@ keeps only correct traces that never mention the note. Then we train on them *wi
   mostly goal and structure requests. They need better training data there (more and harder goal and structure
   examples, with verified references), not more optimization on the current set.
 
+## Eval v2.2: blind re-review by Opus agents, fresh checks, a held-out split
+
+An independent review of v13's 66 eval-v2.1 failures found that about half were still grading defects. It also
+found a bug: `repair_eval_v2.py` rewrote criteria but never recompiled the deterministic checks, so 238 of 278 items
+showed the judge stale check results. Eval v2.2 re-reviews every item:
+
+* **Written conventions** (`eval_v22/CONVENTIONS.md`):
+  * alternatives are merged into one criterion;
+  * no ids or indices for new nodes;
+  * a label stored in a node's name can be changed with `text=` or `name=`;
+  * "next to" accepts a sibling or a new row;
+  * exclusive selection swaps every property the sibling tabs differ in;
+  * the design system takes precedence over the design, with defined exceptions;
+  * the rule for when to drop an item.
+* **A workflow of 8 Opus agents (plus one consistency pass)** reviewed all 445 items, blind to every model's
+  outputs (`eval_v22/repair_workflow.js`). For each item, an agent writes criteria, exact checks (with a new
+  `{"any": [...]}` combinator for alternatives) and at least one valid answer other than the reference.
+  `eval_v22/save_item.py` saves an item only if the reference and the alternatives pass and doing nothing fails.
+* Result: 177 kept, 221 fixed, 47 dropped (false premises, ambiguous requests, poor references), leaving 398 items.
+  Every item now has fresh checks.
+* **Dev/test split by screen** (198/200), so later checkpoint choices can be made on dev and reported on test.
+* **Judge: DeepSeek-V4.1-Flash** (gpt-oss-120b gives the same numbers within 0.5 points; showing the check result to
+  the judge changes nothing).
+
+| eval v2.2 (judge DeepSeek-V4.1-Flash) | all | dev | test | consistency | direct | goal | state | structure |
+|---|---|---|---|---|---|---|---|---|
+| RL v12b checkpoint-150 | **0.960** | 0.959 | **0.960** | 0.982 | 0.991 | 0.895 | 0.980 | 0.926 |
+| v13 hint SFT | 0.957 | 0.959 | 0.955 | 0.982 | 0.981 | 0.895 | 0.971 | 0.945 |
+| RL v12 checkpoint-150 | 0.957 | 0.964 | 0.950 | 1.000 | 0.991 | 0.895 | 0.971 | 0.909 |
+| RL v12c checkpoint-50 | 0.957 | 0.975 | 0.940 | 0.982 | 0.991 | 0.868 | 0.980 | 0.945 |
+| RL v12b checkpoint-100 | 0.955 | 0.959 | 0.950 | 0.982 | 0.981 | 0.895 | 0.980 | 0.909 |
+| v12 reasoning SFT + 1 review | 0.935 | 0.934 | 0.935 | 0.982 | 0.944 | 0.855 | 0.971 | 0.909 |
+| plain Qwen 3.8 27B, reasoning | 0.924 | 0.924 | 0.925 | 0.911 | 0.917 | 0.868 | 0.980 | 0.926 |
+| v12 reasoning SFT | 0.874 | 0.883 | 0.865 | 0.964 | 0.796 | 0.803 | 0.951 | 0.891 |
+| plain Gemma, thinking | 0.861 | 0.858 | 0.865 | 0.982 | 0.741 | 0.868 | 0.951 | 0.800 |
+| Gemma v8 SFT (no thinking) | 0.859 | 0.843 | 0.875 | 0.875 | 0.935 | 0.803 | 0.863 | 0.764 |
+| Qwen SFT (no thinking) | 0.859 | 0.858 | 0.860 | 0.839 | 0.787 | 0.882 | 0.892 | 0.927 |
+| plain Gemma, no thinking | 0.708 | 0.741 | 0.675 | 0.893 | 0.741 | 0.684 | 0.588 | 0.709 |
+| DeepSeek-V3.2 | 0.686 | 0.712 | 0.660 | 0.857 | 0.843 | 0.737 | 0.631 | 0.236 |
+
+* **Our RL models now beat plain Qwen with reasoning significantly:** v13 against Qwen, paired, wins 23 items and
+  loses 10 (+3.3 ± 2.8 points); RL v12b checkpoint-100 is +3.0 ± 2.8. Under v2.1 the gap was hidden by grading noise.
+* **RL is the step that mattered:** RL v12b checkpoint-100 against the v12 SFT it started from is +8.1 ± 3.2 points.
+  The reasoning SFT alone is not significantly better than plain Gemma with thinking (+1.3 ± 3.0).
+* **Everything after the first RL run is flat:** v12b, v12c and v13 are all within ±1 point of RL v12 checkpoint-150
+  (v13 against v12b checkpoint-100: +9/−8).
+* **This eval is now nearly saturated.** Only 2 items fail for every model, and the best models fail about 16 of
+  398. To measure further progress we need a harder eval: more goal and structure requests, multi-step edits, larger
+  screens.
+* **Caveat:** v2.2 accepts closely related extras (e.g. a radius added while making a tab look selected, a bolder
+  label on a "more prominent" button). The earlier review counted 4 of these as over-editing. It is a judgment
+  call, but it is one reason scores rose.
+* **Found on the way:** `rewards.lint` uses a generic type scale (no 13/15/28/32) and a fixed contrast floor. It
+  ignores each item's design system, so it penalizes answers that follow the system. It is part of the RL reward's
+  score and of `filter_traces.py`; fixing it is a candidate for the next training round.
+
 ## Eval v2.1: repaired criteria (the "ceiling" was mostly grading defects)
 
 On eval v2, 59 items (13%) failed for every strong model. Reading them showed mostly grading defects, not model errors:
@@ -1305,10 +1361,11 @@ compared against plain Qwen *with* reasoning. `design-edit-sft27b` (trained no-t
   exactly as at inference (`--match-inference-prompt`).
 
 ### Where it stands
-The best model is **v13**, which is Gemma-4-31B with these adapters stacked: v12 reasoning SFT, RL v12 checkpoint-150,
-RL v12b checkpoint-100 and the v13 hint SFT. On eval v2.1 it scores **0.845**; plain Qwen 3.8 27B with reasoning
-scores 0.822 (within noise), and plain Gemma 0.608. The weak spots are goal (0.72) and structure (0.68) requests.
-Only 10 items fail for every model, so the headroom is about 13 points.
+On eval v2.2 (398 items, blind-repaired), our RL models score 0.955–0.960. That is significantly above plain
+Qwen 3.8 27B with reasoning (0.924; +3 ± 2.8 points paired) and far above plain Gemma (0.708, or 0.861 with
+thinking). The best checkpoints are statistically tied; v13 and RL v12b checkpoint-150 are equally good choices. The
+eval is nearly saturated (2 items fail for every model), so the next step needs a harder eval as much as a
+better model.
 
 ### What we learned
 1. **Data drives most of the gains.** The large jumps came from realistic design-system examples, broader edit types
@@ -1318,9 +1375,10 @@ Only 10 items fail for every model, so the headroom is about 13 points.
 3. **RL works with an effect-based reward and prompts the model sometimes solves.** It added 4–8 points in round 12.
    Text-match rewards and loose judges caused over-editing or gains that didn't transfer. RL can't teach prompts the
    model never solves, and re-picking prompts or a longer token budget doesn't change that (round 12c).
-4. **Audit the eval before believing a ceiling.** 13% of eval v2 items failed for every model, mostly because of grading
-   defects (AND-ed alternatives, ids of new nodes, invented exact values). Repairing them (eval v2.1) showed about 14
-   points of real headroom instead of 4.
+4. **Audit the eval before believing a ceiling, then audit it again.** Eval v2.1 removed AND-ed alternatives, ids of
+   new nodes and invented exact values. But its checks were stale and its criteria were still unfair on about half
+   the remaining failures. A blind re-review (v2.2) showed the RL models were already about 0.96 and ahead of Qwen.
+   What looked like a plateau at 0.84 was mostly grading noise.
 5. **The remaining errors are systematic.** Voting over 8 samples gains nothing. Rationalized traces (the reference
    as a hidden hint) lift the targeted goal requests by 2 points but not the total.
 6. **The recipe transfers across models.** Qwen 27B and Gemma 31B end at about the same level.
@@ -1330,9 +1388,12 @@ Only 10 items fail for every model, so the headroom is about 13 points.
    * Compare models item by item. Most differences at this level are within ±2–4 points.
 
 ### Next steps, in priority order
-- **New training data for goal and structure requests.** Make it more varied and harder, and have a strong model write
-  references that must pass the compiled checks and a judge. Then run the same SFT → RL recipe. This is the step
-  most likely to move the score.
+- **A harder eval (v3).** Eval v2.2 is nearly saturated at about 0.96. Write harder goal and structure requests,
+  multi-step edits and larger screens with the same conventions, blind Opus review and checks. Keep a held-out split.
+- **Fix `rewards.lint`** so it uses each item's design-system type scale and colours. It currently penalizes
+  system-correct answers in the RL reward and the trace filter.
+- **Apply the v2.2 conventions and fresh checks to the training set** (many training structure items have no checks,
+  so RL gets no signal there). Then run new training data for goal and structure requests through the SFT → RL recipe.
 - **Real designs** (Figma Community files through the REST API; needs a Figma token), for structures the generators
   don't produce.
 - **Human-written requests**, as a held-out set at least, to check that paraphrased and templated phrasing isn't
