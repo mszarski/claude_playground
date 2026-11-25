@@ -112,7 +112,7 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
-| Full GPU suite, NVIDIA L4, tree of D-183 | **2102 passed, 95 skipped**, none failed (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
+| Full GPU suite, NVIDIA L4, tree of D-186 | **2150 passed, 97 skipped, 4 xfailed**, none failed (job `6b06553a1460ffe1d5e9aa10`; the xfails are the Popoto-rate loopback, D-186). Before it, D-183's tree: 2102 passed, 95 skipped (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
 | GoogleTest at this tree | 172 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`) | section 2 |
 | pytest at this tree | 1375 test functions in 114 files (counted in `tests/python/test_*.py`); parametrisation makes them 2171 collected on the L4 job | D-181's counts |
@@ -309,7 +309,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-181, and D-184, D-185)
+## 3. Tests that pin a decision (D-155 to D-186)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 

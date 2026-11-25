@@ -3379,4 +3379,9 @@ fix too.
 - Jobs (a10g-large): 6b063a21d0582cfbbefd60a3, 6b0641ce1460ffe1d5e98956 (study),
   6b064e8e1460ffe1d5e9a072 (3 repetitions; its recording comparison was then corrected to compare
   with the direct chain's recording, the two differing from the assembled samples by float32
-  rounding with or without transport). SUITE_LINE
+  rounding with or without transport). 
+- Full GPU suite on the merged tree of D-184 to D-186: 2150 passed, 97 skipped, 4 xfailed, none failed (L4, HF job 6b06553a1460ffe1d5e9aa10). The four
+  expected failures are four of the five Popoto-rate loopback cases; one passed (no loss, worst
+  delay under 5 ms). The job does not print which or their numbers (the run has no `-rx`), so the
+  only L4 result is this count. The suite's two further skips are the opt-in study and one not
+  looked up.
