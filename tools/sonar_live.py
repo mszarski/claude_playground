@@ -6,6 +6,8 @@
     tools/sonar_live.py CONFIG --scenario popoto_12km                  # the simulator, same chain
     tools/sonar_live.py CONFIG --emulate flank_target_1km --port 0     # simulated pings sent as
                                                                        # board blocks over UDP
+    tools/sonar_live.py CONFIG --emulate SCENARIO --per-board          # ... as one stream per capture
+                                                                       # board, merged (source.boards)
     tools/sonar_live.py CONFIG --engine cpp ...                        # any of the above through libs/live
     tools/sonar_live.py CONFIG --export-template template.h5           # for the standalone C++ program:
                                                                        # writes the array's template record and
@@ -69,7 +71,12 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     return " ".join(shlex.quote(c) for c in cmd)
 
 
-def emulated_source(src_cfg: dict, scenario) -> tuple:
+# --per-board: board k's capture starts k x 1031 samples (about 10 ms) before the reference board's, so that the
+# merge has counters and capture starts to align (ours; any values within the first window's lead would do).
+PER_BOARD_START_STEP = 1031
+
+
+def emulated_source(src_cfg: dict, scenario, per_board: bool = False) -> tuple:
     """(source, sender thread) of --emulate: the scenario's pings simulated, sent as board blocks over UDP to a
     `flank_udp` source set up as the deployment file's, but for the scenario's sonar and the scenario's sound speed.
     The simulated board lays its receive window out at the speed the simulator made the pings with (the scenario's
@@ -83,7 +90,19 @@ def emulated_source(src_cfg: dict, scenario) -> tuple:
     records = run_scenario(sc).records
     src_cfg = dict(src_cfg, sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), host="127.0.0.1",
                    sound_speed=float(records[0].environment.sound_speed), max_pings=len(records), timeout=10.0)
+    if per_board and src_cfg.get("boards") is None:
+        src_cfg["boards"] = {}
     source = make_source(src_cfg)
+    if source.merger is not None:
+        # One stream per board (sonar-6f9): each its own counter, capture start and blocks, merged by the source.
+        from gpusonar.sources.board_merge import BoardStreamEmulator
+        boards = [{"id": b.id, "first": b.first, "count": b.count} for b in source.merger.boards]
+        offsets = [0 if b["id"] == source.merger.reference else -PER_BOARD_START_STEP * (k + 1) for k, b in enumerate(boards)]
+        # Capture starts stamped on the simulator's clock (the first transmit at the scenario's time).
+        sender = BoardStreamEmulator(records, float(sc["pings"]["interval"]), boards, start_offsets=offsets,
+                                     start_ns=int(records[0].transmit.time_ns),
+                                     sample_bytes=int(src_cfg.get("sample_bytes", 3))).send(source.port, pace=0.25)
+        return source, sender
     sender = FlankBoardEmulator(records, float(sc["pings"]["interval"]),
                                 sample_bytes=int(src_cfg.get("sample_bytes", 3))).send(source.port, pace=0.25)
     return source, sender
@@ -104,6 +123,8 @@ def main(argv=None):
     ap.add_argument("--replay", help="a container file to process instead of the configured source")
     ap.add_argument("--scenario", help="a simulated scenario to process instead")
     ap.add_argument("--emulate", help="a scenario to simulate and send to the configured UDP source as board blocks")
+    ap.add_argument("--per-board", action="store_true",
+                    help="with --emulate: send one stream per capture board and merge them (source.boards, {} if absent)")
     ap.add_argument("--port", type=int, help="override the UDP port (0: any free port)")
     ap.add_argument("--out", help="directory for the recording, report and taps")
     ap.add_argument("--pings", type=int)
@@ -139,7 +160,7 @@ def main(argv=None):
             from gpusonar.live import sync_reference
             src_cfg["reference"] = sync_reference(cfg["chain"])    # the receiver synchronises the boards as it decimates
         if args.emulate:
-            source, sender = emulated_source(src_cfg, args.emulate)
+            source, sender = emulated_source(src_cfg, args.emulate, per_board=args.per_board)
         else:
             source = make_source(src_cfg)
     nav_cfg = cfg.get("nav") if not (args.scenario or args.replay or args.emulate) else None
@@ -166,6 +187,9 @@ def main(argv=None):
         counters["sbl_fallbacks"] = chain.sbl_fallbacks
     if counters:
         print(f"sonar_live: {json.dumps(counters)}", file=sys.stderr, flush=True)
+    boards = source.board_stats() if hasattr(source, "board_stats") else None
+    if boards is not None:
+        print(f"sonar_live: boards {json.dumps(boards)}", file=sys.stderr, flush=True)
     if sender:
         sender.join(timeout=30.0)
     return 0

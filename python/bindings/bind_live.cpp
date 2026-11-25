@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
@@ -1102,7 +1103,7 @@ void bind_live(py::module_& m) {
 
   py::class_<live::PingAssembler>(m, "PingAssemblerCpp")
       .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes, int reorder_blocks,
-                            std::int64_t max_held_bytes) {
+                            std::int64_t max_held_bytes, double clock_ppm) {
              if (reorder_blocks < 0) throw py::value_error("reorder_blocks must be 0 or more");
              auto make = [&]() {
                if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
@@ -1114,10 +1115,12 @@ void bind_live(py::module_& m) {
              live::PingAssembler a = make();
              a.reorder_blocks = reorder_blocks;
              a.max_held_bytes = max_held_bytes;
+             a.clock_ppm = live::clock_rate(clock_ppm, "clock_ppm");
              return a;
            }),
            py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none(), py::arg("sample_bytes") = 3,
-           py::arg("reorder_blocks") = live::kReorderBlocks, py::arg("max_held_bytes") = live::kMaxHeldBytes)
+           py::arg("reorder_blocks") = live::kReorderBlocks, py::arg("max_held_bytes") = live::kMaxHeldBytes, py::arg("clock_ppm") = 0.0)
+      .def_readwrite("clock_ppm", &live::PingAssembler::clock_ppm)
       .def("feed",
            [](live::PingAssembler& a, const py::bytes& block) {
              const std::string data = block;
@@ -1159,4 +1162,94 @@ void bind_live(py::module_& m) {
                                }
                              })
       .def_readonly("bad_blocks", &live::PingAssembler::bad_blocks);
+
+  // Per-board streams merged into the whole-array stream (sonar-6f9; python/gpusonar/sources/board_merge.py
+  // BoardMerger is the twin). `options`: the keys of a deployment file's source.boards (channels as a list of
+  // {id, first, count}; without it one board of every channel), refused by name when unread.
+  py::class_<live::BoardMerger>(m, "BoardMergerCpp")
+      .def(py::init([](const py::dict& options, std::int64_t n_channels, double sample_rate, int sample_bytes) {
+             const Keys d(options);
+             live::BoardMergeOptions o;
+             o.sample_bytes = sample_bytes;
+             if (d.contains("channels") && !d["channels"].is_none()) {
+               int k = 0;
+               for (const py::handle& item : d["channels"]) {
+                 const std::string where = "boards.channels[" + std::to_string(k++) + "].";
+                 if (!py::isinstance<py::dict>(item)) throw py::value_error(where.substr(0, where.size() - 1) + ": {id, first, count}");
+                 const Keys c(py::reinterpret_borrow<py::dict>(item));
+                 live::BoardSpec b;
+                 for (const char* key : {"id", "first", "count"}) {
+                   if (!c.contains(key)) throw py::value_error(where + key + ": needed");
+                 }
+                 b.id = c["id"].cast<int>();
+                 b.first = c["first"].cast<std::int64_t>();
+                 b.count = c["count"].cast<std::int64_t>();
+                 c.refuse_unread(where);
+                 o.boards.push_back(b);
+               }
+             } else {
+               o.boards.push_back({0, 0, n_channels});
+             }
+             if (d.contains("reference") && !d["reference"].is_none()) o.reference = d["reference"].cast<int>();
+             if (d.contains("missing")) {
+               const std::string w = py::str(d["missing"]).cast<std::string>();
+               if (w != "drop" && w != "zero") throw py::value_error("boards.missing: '" + w + "': drop or zero");
+               o.zero = w == "zero";
+             }
+             number(d, "wait_s", o.wait_s);
+             if (d.contains("clock_ppm") && !d["clock_ppm"].is_none()) {
+               for (const auto& kv : d["clock_ppm"].cast<py::dict>()) {
+                 if (!py::isinstance<py::int_>(kv.first) || py::isinstance<py::bool_>(kv.first)) {
+                   throw py::value_error("boards.clock_ppm: board " + py::str(kv.first).cast<std::string>() + " is not in the board map");
+                 }
+                 if (py::isinstance<py::bool_>(kv.second) || py::isinstance<py::str>(kv.second)) throw py::value_error("boards.clock_ppm: a number of ppm");
+                 o.clock_ppm.emplace_back(kv.first.cast<int>(), kv.second.cast<double>());
+               }
+             }
+             d.refuse_unread("boards.");
+             return live::BoardMerger(o, n_channels, sample_rate);
+           }),
+           py::arg("options"), py::arg("n_channels"), py::arg("sample_rate"), py::arg("sample_bytes") = 3)
+      .def("feed",
+           [](live::BoardMerger& b, const py::bytes& block) {
+             const std::string data = block;
+             std::vector<std::vector<unsigned char>> out;
+             b.feed(reinterpret_cast<const unsigned char*>(data.data()), data.size(), out);
+             py::list blocks;
+             for (const auto& x : out) blocks.append(py::bytes(reinterpret_cast<const char*>(x.data()), x.size()));
+             return blocks;
+           })
+      .def("finish",
+           [](live::BoardMerger& b) {
+             std::vector<std::vector<unsigned char>> out;
+             b.finish(out);
+             py::list blocks;
+             for (const auto& x : out) blocks.append(py::bytes(reinterpret_cast<const char*>(x.data()), x.size()));
+             return blocks;
+           })
+      .def("stats_json", &live::BoardMerger::stats_json)
+      .def_readonly("last_error", &live::BoardMerger::last_error)
+      .def_property_readonly("wait", &live::BoardMerger::wait)
+      .def_property_readonly("reference", &live::BoardMerger::reference)
+      .def("clock_ppm", &live::BoardMerger::clock_ppm);
+
+  // A board clock's rate from its blocks' arrival times (sonar-ubg; board_merge.py ClockEstimator is the twin).
+  py::class_<live::ClockEstimator>(m, "ClockEstimatorCpp")
+      .def(py::init([](double sample_rate, const py::dict& options) {
+             const Keys d(options);
+             live::ClockOptions o;
+             o.enabled = true;
+             number(d, "bin_s", o.bin_s);
+             number(d, "window_s", o.window_s);
+             number(d, "min_span_s", o.min_span_s);
+             number(d, "max_sigma_ppm", o.max_sigma_ppm);
+             if (d.contains("discipline")) o.discipline = d["discipline"].cast<bool>();
+             d.refuse_unread("clock.");
+             return live::ClockEstimator(sample_rate, o);
+           }),
+           py::arg("sample_rate"), py::arg("options") = py::dict())
+      .def("feed", &live::ClockEstimator::feed)
+      .def("estimate_json", [](const live::ClockEstimator& c) { return c.estimate().json(); })
+      .def("stamp_ppm", &live::ClockEstimator::stamp_ppm)
+      .def_readonly("restarts", &live::ClockEstimator::restarts);
 }

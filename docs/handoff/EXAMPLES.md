@@ -456,6 +456,27 @@ gives four pings with `sync ok` and the target at 496 to 498 m. `tools/sonar_liv
 passes the scenario's sonar and overrides to the source and not its sound speed, and `flank_udp`
 has no key for one. The generated builds are not affected (example 10).
 
+**One stream per board** (D-184; run 2026-11-25 on the `fix-streams` branch, after D-183 fixed the failure above):
+the same trial with each of its four boards sending its own stream (`BoardStreamEmulator`; board k's capture starts
+k × 1031 samples before board 0's), merged by the source (`--per-board` sets `source.boards: {}`):
+
+```bash
+python3 tools/sonar_live.py configs/deploy/popoto_testauv_1row.yaml --emulate popoto_testauv_trial_1row --per-board --port 0 --out $OUT/boards
+```
+
+**15 s.**
+
+```
+ping    0  detections   1  tracks {}  1668 ms
+ping    1  detections   1  tracks {}  952 ms
+ping    2  detections   1  tracks {"uncertain": 1}  1218 ms
+ping    3  detections   1  tracks {"static": 1}  930 ms
+sonar_live: boards {"boards": {"0": {"blocks": 2400, "used_blocks": 2400, "late_blocks": 0, "repeated_blocks": 0, "restarts": 0, "missing_samples": 0, "bad_blocks": 0, "start_ns": 1700000000000000000}, "1": {"blocks": 2405, "used_blocks": 2401, ..., "start_ns": 1699999999979863281}, "2": {...}, "3": {...}}, "merged_blocks": 2400, "dropped_blocks": 0, ...}
+```
+
+Every ping synchronised (worst residual 0.43 to 0.47 µs) and the target at 498, 498, 496, 496 m: what the whole-array
+stream gives (above). Boards 1 to 3 sent a few blocks more than they used: the ones before board 0's capture started.
+
 ## 8. The gallery in quick mode, and the classification-rules evaluation
 
 ```bash

@@ -58,6 +58,12 @@
 //   stream_buffer_bytes (socket buffer; 0: from the data rate) stream_queue_mb (blocks waiting for the chain; 0: no bound)
 //   report_udp_max_bytes (a longer report line goes out as several datagrams, each a complete line with "part": [k, n])
 //   sync_search_time sync_tolerance_us elevation_min_row_elements nav_history_margin_s
+//   per-board streams (one GSFB stream per capture board, merged before the assembler; libs/live board_merge.hpp):
+//   stream_boards (0 | 1) stream_board_channels (id:first:count,...; default the template's channel_board)
+//   stream_board_reference (board id; -1: the first) stream_board_missing (drop | zero) stream_board_wait_s
+//   the boards' clocks (sonar-ubg): stream_clock_ppm (the whole-array stream's rate error, ppm; 0: as before)
+//   stream_board_ppm (id:ppm,... per board) stream_clock_estimate (0 | 1: the rate from arrival times, reported)
+//   stream_clock_discipline (0 | 1) stream_clock_bin_s stream_clock_window_s stream_clock_min_span_s stream_clock_max_sigma_ppm
 // range_cell_m, cfar_guard_m, cfar_train_m, tracker_range_sigma, tracker_bearing_sigma_deg, multipath_bearing_deg,
 // classify_max_fit_rms, classify_max_fit_rms_bearing_deg, elevation_row_tolerance_m, n_fft and hop are derived from the sonar when not given
 // (libs/live derive.hpp); what was resolved is printed once on stderr.
@@ -76,6 +82,7 @@
 #include <mutex>
 #include <thread>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -86,6 +93,7 @@
 #include <vector>
 
 #include "sonar/io/record_file.hpp"
+#include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/options.hpp"
 #include "sonar/live/udp_source.hpp"
@@ -242,6 +250,46 @@ int main(int argc, char** argv) {
       }
       live::PingAssembler assembler(template_record, streaming ? &stream_decimate : nullptr,
                                     chain_options.sync ? &chain_options.reference : nullptr, stream_options.sample_bytes);
+      // stream_boards=1: each capture board sends its own stream; they are merged into the whole-array stream first.
+      std::unique_ptr<live::BoardMerger> merger;
+      if (stream_options.boards) {
+        if (listen) throw std::invalid_argument("stream_boards: per-board streams are merged for pings only; --listen takes a whole-array stream (tools/board_merge.py relays one)");
+        live::BoardMergeOptions mo;
+        mo.boards = stream_options.board_channels.empty() ? live::boards_from_template(template_record)
+                                                          : live::parse_board_channels(stream_options.board_channels);
+        mo.reference = stream_options.board_reference;
+        mo.zero = stream_options.board_zero;
+        mo.wait_s = stream_options.board_wait_s;
+        mo.sample_bytes = stream_options.sample_bytes;
+        mo.clock_ppm = live::parse_board_ppm(stream_options.board_ppm);
+        if (stream_options.clock_ppm != 0.0) throw std::invalid_argument("stream_clock_ppm: with stream_boards give each board's rate in stream_board_ppm");
+        merger = std::make_unique<live::BoardMerger>(mo, template_record.samples.n_channels, template_record.samples.sample_rate);
+      } else if (!stream_options.board_ppm.empty()) {
+        throw std::invalid_argument("stream_board_ppm: per-board rates need stream_boards=1 (one whole-array stream: stream_clock_ppm)");
+      }
+      // The clock's rate: configured, and estimated from arrival times per board (-1: the whole-array stream).
+      const double configured_ppm = merger ? merger->clock_ppm(merger->reference()) : live::clock_rate(stream_options.clock_ppm, "stream_clock_ppm");
+      assembler.clock_ppm = configured_ppm;
+      std::map<int, live::ClockEstimator> clocks;
+      const int stamp_clock = merger ? merger->reference() : -1;
+      if (stream_options.clock_estimate) {
+        live::ClockOptions co;
+        co.enabled = true;
+        co.bin_s = stream_options.clock_bin_s;
+        co.window_s = stream_options.clock_window_s;
+        co.discipline = stream_options.clock_discipline;
+        co.min_span_s = stream_options.clock_min_span_s;
+        co.max_sigma_ppm = stream_options.clock_max_sigma_ppm;
+        if (merger) {
+          for (const live::BoardSpec& b : stream_options.board_channels.empty() ? live::boards_from_template(template_record)
+                                                                              : live::parse_board_channels(stream_options.board_channels)) {
+            clocks.emplace(b.id, live::ClockEstimator(template_record.samples.sample_rate, co));
+          }
+        } else {
+          clocks.emplace(-1, live::ClockEstimator(template_record.samples.sample_rate, co));
+        }
+      }
+      std::vector<std::vector<unsigned char>> merged;
       live::DecimateOptions listen_decimate = chain_options.decimate;
       if (listen_decimate.f_low <= 0.0 && listen_decimate.f_high <= 0.0) {
         listen_decimate.f_low = passive_options.f_low;
@@ -280,6 +328,7 @@ int main(int argc, char** argv) {
       std::mutex mutex;
       std::condition_variable ready_cv;
       std::deque<std::vector<unsigned char>> queue;
+      std::deque<std::int64_t> arrivals;           // each block's arrival on the host clock, ns since the epoch
       // The queue is bounded: when the chain falls behind for longer than it holds, arriving blocks are
       // dropped and counted (the assembler then sees a gap and drops the ping it falls in) instead of
       // memory growing until the process is killed.
@@ -313,6 +362,7 @@ int main(int argc, char** argv) {
             }
             queued_bytes += buffer.size();
             queue.push_back(buffer);
+            arrivals.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
           }
           ready_cv.notify_one();
         }
@@ -327,6 +377,7 @@ int main(int argc, char** argv) {
       });
       std::vector<PingRecord> ready;
       std::vector<unsigned char> block;
+      std::int64_t arrival = 0;
       auto last = std::chrono::steady_clock::now();
       while (max_pings < 0 || done < max_pings) {
         {
@@ -339,6 +390,8 @@ int main(int argc, char** argv) {
           }
           block = std::move(queue.front());
           queue.pop_front();
+          arrival = arrivals.front();
+          arrivals.pop_front();
           queued_bytes -= block.size();
         }
         last = std::chrono::steady_clock::now();
@@ -357,7 +410,29 @@ int main(int argc, char** argv) {
           }
           continue;
         }
-        assembler.feed(block.data(), block.size(), ready);
+        if (!clocks.empty() && block.size() >= 128 && std::memcmp(block.data(), "GSFB", 4) == 0) {
+          std::uint16_t flags = 0, board = 0;
+          std::uint32_t n = 0;
+          std::uint64_t first = 0, start = 0;
+          std::memcpy(&n, block.data() + 8, 4);
+          std::memcpy(&first, block.data() + 12, 8);
+          std::memcpy(&flags, block.data() + 34, 2);
+          std::memcpy(&start, block.data() + 36, 8);
+          std::memcpy(&board, block.data() + 44, 2);
+          const int key = (flags & live::kFlagBoard) ? board : -1;
+          auto it = clocks.find(key);
+          if (it != clocks.end() && it->second.feed(static_cast<std::int64_t>(first + n), static_cast<std::int64_t>(start), arrival) &&
+              key == stamp_clock) {
+            assembler.clock_ppm = it->second.stamp_ppm(configured_ppm);
+          }
+        }
+        if (merger) {
+          merged.clear();
+          merger->feed(block.data(), block.size(), merged);     // a refused block is counted in the merge's bad_blocks
+          for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
+        } else {
+          assembler.feed(block.data(), block.size(), ready);
+        }
         for (PingRecord& rec : ready) {
           if (nav_socket) {
             bool first_without_velocity = false;
@@ -377,6 +452,11 @@ int main(int argc, char** argv) {
       std::int64_t discarded = 0;      // complete pings the assembler still held when the run stopped: not processed
       if (!listen) {
         ready.clear();
+        if (merger) {                   // the boards' spans still waiting, decided with what arrived
+          merged.clear();
+          merger->finish(merged);
+          for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
+        }
         assembler.finish(ready);        // the end of the stream: holes still awaited are counted
         discarded = static_cast<std::int64_t>(ready.size());
       }
@@ -398,6 +478,12 @@ int main(int argc, char** argv) {
                    static_cast<long long>(discarded),
                    static_cast<long long>(nav_counts.without_nav), static_cast<long long>(nav_counts.without_velocity), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
                    static_cast<long long>(out_socket ? out_socket->refused : 0));
+      if (merger) std::fprintf(stderr, "sonar_live: boards %s\n", merger->stats_json().c_str());
+      if (!clocks.empty()) {
+        std::string text;
+        for (const auto& kv : clocks) text += (text.empty() ? "" : ", ") + std::string("\"") + std::to_string(kv.first) + "\": " + kv.second.estimate().json();
+        std::fprintf(stderr, "sonar_live: clock {%s, \"stamp_ppm\": %.17g}\n", text.c_str(), assembler.clock_ppm);
+      }
     } else {
       throw std::invalid_argument("give --replay FILE, --udp PORT --template FILE, or --passive FILE");
     }

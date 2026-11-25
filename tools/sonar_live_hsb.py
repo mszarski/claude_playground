@@ -124,6 +124,10 @@ def receive_plan(args) -> dict:
     sonar = args.sonar or source.get("sonar")
     if not sonar:
         sys.exit("receive: name the stream's sonar with --sonar or a deployment file")
+    if source.get("boards") is not None:
+        # Sensor Bridge frames are one whole-array stream; per-board streams are merged before it (sonar-6f9).
+        sys.exit("receive: source.boards: Sensor Bridge carries one whole-array stream; merge per-board streams with "
+                 "tools/board_merge.py before the board side")
     if cfg.get("nav"):
         from gpusonar.live import check_nav_keys
         check_nav_keys(cfg["nav"])    # a key NavListener does not take is refused before the board is looked for (D-177)

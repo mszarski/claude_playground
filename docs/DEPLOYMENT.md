@@ -68,12 +68,12 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
 
 | Interface | Form | State |
 | --- | --- | --- |
-| Samples from the boards | **either** WAV files with a YAML sidecar per recording, dropped into a directory (`wav_watch`), **or** blocks over UDP in the format of `sources/flank_stream.py` | The file path needs only what the boards already do. The UDP path needs a forwarder on each board that is **not written**; the block format here was designed for the flank array's capture board and is unconfirmed for Popoto boards. |
+| Samples from the boards | **either** WAV files with a YAML sidecar per recording, dropped into a directory (`wav_watch`), **or** blocks over UDP in the format of `sources/flank_stream.py` | The file path needs only what the boards already do. The UDP path takes one stream per board: each board's blocks carry its own channels, sample counter and capture start and name the board (flag bit 1, the id at offset 44), and the receiver merges them (`source.boards`, "Several boards: one stream each" below). What turns a board's native output into its stream (a forwarder on or beside each board) is **not written**: the boards' output is not known. The block format was designed here and is unconfirmed for Popoto boards. |
 | Ping timing | the sidecar's `pings.times`, or the block headers | The transmit trigger's timing relative to the boards' clocks is unconfirmed. |
 | Board synchronisation | a reference signal wired to every board (`configs/sonars/popoto_4x7.yaml`: a dedicated input per board, the plan's scheme; `popoto_4x8`: summed into a hydrophone input) | Tested in simulation with 300 µs offsets and 25 ppm drifts. The reference generator and its wiring are hardware to build. |
 | Navigation | UDP JSON: `{"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}`, north-east-down metres and radians, any rate; optionally `sound_speed`, `altitude`, `bottom_lock`, `water_depth` and one-sigma fields (Stage 2 below); interpolated to each ping's transmit time | `tools/nav_adapter.py` converts a vendor stream by a mapping in YAML (a generic CSV / JSON example is shipped). The mapping for the vehicle's own unit is **a template only**: its interface document and datasheet have not been seen. Without navigation, pings are processed where the record says they are and counted in `pings_without_nav`. A fix without `vx`, `vy` and `vz` (or with one not finite) is taken at rest in what it lacks and its pings are counted in `pings_without_velocity`: the velocity is not optional for a moving vehicle. |
 | Navigation unit to array | the surveyed lever arm (m, the unit's body axes) and mounting rotation (degrees, roll, pitch, yaw) from the navigation unit to the array's reference point: `nav.lever_arm_m`, `nav.mount_rpy_deg` (`nav_lever_arm_m`, `nav_mount_rpy_deg` for `build/bin/sonar_live`) | **Not surveyed: left at zero (commented out, marked unconfirmed) in `configs/deploy/popoto_vehicle.yaml`.** Both engines move every fix to the array as it arrives (position and attitude; not the velocity, which needs attitude rates the datagram does not carry). With zero the array is taken to sit at the unit, in its axes: an error of the whole lever arm in the array's position and of the whole misalignment in every bearing and elevation. |
-| Clock | transmit times and navigation times on one clock | Assumed. A difference shows up as tracks that move with ownship. |
+| Clock | transmit times and navigation times on one clock | Assumed. A difference shows up as tracks that move with ownship. A board's sample clock off its nominal rate moves `transmit.time_ns` by the rate error times the time since capture start (25 ppm: 90 ms an hour, 0.18 m of pose at 2 m/s): `source.clock_ppm` / `source.boards.clock_ppm` take a measured rate out (default 0, unconfirmed); `source.clock` estimates it from arrival times. Below. |
 | Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Fields, units and frames: "The report line" below. A report too long for one datagram goes out as several complete lines, each with `"part": [k, n]` (an open wire-format question for the owner, `STATUS.md`). |
 | Compute | any Linux computer with Python 3 and the built library; a GPU is optional | Not measured on a Jetson. At the boards' full 102.4 kHz real sampling the conditioning step is heavier than in the simulated runs, which start at baseband. |
 
@@ -769,6 +769,85 @@ commit 78153dc. That difference shows only on a GPU, where
 `tests/python/test_holoscan_cpp.py` compares the two programs' reports (it failed in job
 `6b010e824fdc5ab3c55c549d`).
 
+## Several boards: one stream each
+
+4 to 12 capture boards each run their own sample counter from their own capture start, so none of them can send the
+whole-array stream (every channel on one counter) that the assembler takes. Each board sends its own stream instead:
+`GSFB` version 1 blocks with flag bit 1 set and the board's id (u16) at header offset 44, holding that board's channels.
+Whole-array blocks leave both zero and are read as before; a whole-array receiver refuses a per-board block. **This use
+of two reserved header fields is ours and waits on the owner** (it is a change to a wire format that is a contract once
+boards use it).
+
+```bash
+tools/sonar_live.py DEPLOY                         # with source.boards: {} (or a map): the Python source merges
+build/bin/sonar_live --udp 5700 --template t.h5 stream_boards=1 ...      # the C++ program merges (--export-template prints it)
+tools/board_merge.py SONAR --port 5710 --to 127.0.0.1:5700               # a relay for receivers that do not merge
+tools/sonar_live.py DEPLOY --emulate SCENARIO --per-board --port 0       # rehearsal: one emulated stream per board
+```
+
+The merge (`python/gpusonar/sources/board_merge.py`, `libs/live` `board_merge.hpp`, the same rules and parity-tested,
+D-184) sits in front of the unchanged assembler, so the rules for order, holes, lost pings and restarts of the
+whole-array stream (D-161, D-177) hold as they were. Its own rules, all ours:
+
+- **Map.** `source.boards.channels` (`stream_board_channels`): board id → first channel and count; default the sonar
+  file's `receive.boards` in order. Every channel is on exactly one board. Unconfirmed until the wiring is known.
+- **Time base.** The merged stream is the `reference` board's (default the first): its counter, capture start,
+  transmit marks, ping index and gain code. Other boards' transmit fields are not used.
+- **Coarse alignment** by the capture starts: board b's sample i is the reference's sample i + off_b,
+  off_b = −floor((start_ref − start_b) × fs × 1e-9 + 0.5), with the boards' rates when configured (below). Everything
+  finer (offsets below a sample, drift within a ping, the time stamps' own error) is the synchronisation stage's, which
+  looks for each reference burst within `sync.search_time` (2 ms) of where it is expected. **So the boards' capture
+  starts must agree with true time to well inside 2 ms**: less the boards' simulated offsets (up to 0.3 ms) and the drift
+  between two boards over a window (50 ppm apart over the face's 17.9 s window: 0.9 ms), about 0.8 ms. PTP time does
+  that; NTP time on each board may not.
+- **Free-running clocks drift apart**: by (ppm_b − ppm_ref) × time since capture start, 50 ppm apart is 2 ms in 40 s.
+  Without a correction a capture must restart, or the clocks be disciplined, more often than that.
+  `source.boards.clock_ppm` gives each board's rate: a rate known to 0.1 ppm keeps two boards within 2 ms for 5.6 hours.
+- **Waiting and missing.** A board's part of a span is given up `wait_s` (0.05 s) after the reference, or that board,
+  has passed it. `missing: drop` (default; an owner's question) leaves the span out and the ping it falls in is dropped;
+  `zero` keeps it with zeros in that board's channels.
+- **Restarts.** A board's new capture start re-aligns it; a capture left is never returned to. A restart of the
+  reference is a restart of the merged stream. A board must stamp its capture start: one whose counter goes back under
+  the same start is not re-aligned.
+
+Statistics, per board (`FlankUdpSource.board_stats()`; `sonar_live: boards {...}` at the end of a run; the relay prints
+them too): `blocks`, `used_blocks`, `late_blocks` (arrived after their span was decided), `repeated_blocks`, `restarts`,
+`missing_samples` (samples of decided spans the board did not deliver), `bad_blocks`, `start_ns`; for the merge
+`merged_blocks`, `dropped_blocks`, `zero_filled_blocks`, `bad_blocks` (every refused block: no board id, a board not in
+the map, another channel count), `pending`.
+
+Not merged: `--listen` (passive) on `build/bin/sonar_live`, the Holoscan application and `sonar_live_hsb.py receive`
+refuse per-board streams; put `tools/board_merge.py` in front of them.
+
+### The boards' clocks and `transmit.time_ns`
+
+`transmit.time_ns` is the capture start plus the transmit's sample index over the nominal rate. A board clock fast by e
+(it counts fs (1 + e) samples a true second) stamps every ping e × (time since capture start) late: 25 ppm is 90.0 ms
+after an hour, and navigation, interpolated at that time, gives the pose of 90 ms later: 0.18 m at 2 m/s, 0.18° of roll
+at 2°/s (both engines, `tests/python/test_board_clock.py`). With several boards each drifts by its own rate; the
+merged stream is stamped at the reference board's.
+
+- `source.clock_ppm` (`stream_clock_ppm`) for a whole-array stream, `source.boards.clock_ppm` (`stream_board_ppm`) per
+  board: the stamp becomes capture start + tx / (fs (1 + ppm 1e-6)), true to half a sample. Default 0: the stamp as
+  before. Unconfirmed until measured: the report's `sync.drift_ppm` gives each board against the first board; the
+  first board's own rate needs a reference time (1PPS, or the estimate below).
+- `source.clock: {}` (`stream_clock_estimate=1`) estimates each board's rate against the host clock from its blocks'
+  arrival times: per second of stream the earliest arrival, a least-squares line over the last 600 s. Reported at the
+  end of a run (`clock`, with `ppm`, `sigma_ppm`, `span_s`, `bins`). On synthetic one-sided delays shaped like those
+  measured on L4 loopback (D-162; worst 1-2 ms with the chain capped, stalls of 5-15 ms in 1 % of blocks) it was within
+  0.013 ppm after 10 minutes and 0.4 ppm after 1 minute; with delays of 2 ms mean and 10 % stalls of 10-30 ms within
+  0.07 ppm after 10 minutes. It takes the host clock's own steering and any drift of the latency whole: a latency
+  wandering by 1 ms over 300 s biased it by 1.6 ppm (10 minutes) to 16 ppm (1 minute) without raising its sigma. Never
+  measured on a real network.
+- `source.clock.discipline: true` (opt-in) stamps with the estimate once it spans `min_span_s` (300 s) with a sigma at
+  most `max_sigma_ppm` (0.5). Use it only with a disciplined host clock and a quiet network; otherwise configure the
+  measured rate.
+- **The receive window and ranges** are laid out in samples. A board fast by e opens and closes its window e × (window
+  length) early in true time and reads every range e × R long: 25 ppm is 5 cm at 2 km and 0.32 m at 12.7 km, against a
+  range resolution of 0.375 m at 2 kHz of band and 8.5 m for 1 m/s of sound-speed error at 12.7 km. Not corrected (the
+  record's sample rate stays the nominal one). The window's timing in true time moves by e × 17.9 s = 0.45 ms at most on
+  the face, inside the synchronisation search.
+
 ## Through Holoscan Sensor Bridge's receiver
 
 ```bash
@@ -1189,7 +1268,9 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `output.report_udp_max_bytes` | 65000: lower it if the receiving side's buffer is smaller |
 
 **Wire formats are contracts.** The block stream (`sources/flank_stream.py`: `GSFB`, version 1, 128-byte header) and the
-report line are unchanged. Two things were added in ways an existing peer does not notice: the sample word length is a
+report line are unchanged for every existing peer. Per-board blocks (D-184) use flag bit 1 and the reserved u16 at offset
+44 for the board id; a whole-array block leaves both zero, so it is the same bytes as before. That is a change to the
+format, made compatibly and waiting on the owner. Two things were added in ways an existing peer does not notice: the sample word length is a
 parameter set alike on both ends (the header has no field for it; adding one is a format change that has not been
 made), and a report line too long for one datagram is sent as several complete lines with `"part": [k, n]` (a reader
 that parses each datagram as JSON sees reports of the same ping with fewer detections; one that knows the field joins
@@ -1204,7 +1285,8 @@ reports a single line that is too long, where `build/bin/sonar_live` splits it.
   builds pass their self-tests, 42 of 42 on both engines, D-142 and D-143: the `popoto_face_2x32` rehearsal failed
   on the judge, not the chain; the depths are honest, not useful, `STATUS.md` open item 38); a multipath depth for the test AUV in 30 m of water (the ray
   mode answers `window`). `STATUS.md`, "Open and known wrong", has the list.
-- The board forwarder. The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the
+- The board forwarder: whatever turns a board's native output into its per-board `GSFB` stream (the merge of the
+  boards' streams exists, D-184). The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the
   vehicle's own unit is a template: its interface document has not been seen.
 - The surveyed lever arm and mounting rotation between the navigation unit and the array: the keys exist
   (`nav.lever_arm_m`, `nav.mount_rpy_deg`), the values are zero and unconfirmed. The array's velocity is not

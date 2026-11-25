@@ -71,6 +71,9 @@ class PingAssembler {
   /// Set before the first block (0 or more).
   int reorder_blocks = kReorderBlocks;
   std::int64_t max_held_bytes = kMaxHeldBytes;
+  /// The board clock's rate error in ppm (positive: it counts fast; sonar-ubg). 0: transmit.time_ns = capture start +
+  /// tx / fs, as always; else capture start + tx / (fs (1 + ppm 1e-6)) (stamp_offset_ns). May change between blocks.
+  double clock_ppm = 0.0;
   enum class Block { kNone, kInOrder, kGap, kLate, kTooLate, kRepeated, kHeld, kRestart };
   Block last_block = Block::kNone;   ///< what the last well-formed block was
 
