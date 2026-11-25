@@ -240,6 +240,9 @@ Code worth knowing first:
   that can be re-scored offline; the ten-seed numbers of D-159 to D-181 come from it.
 - `tools/sonar_live.py`, `tools/sonar_live_hsb.py`, `apps/sonar_live.cpp`: the live chain
   as a program (Python, through Sensor Bridge, standalone C++).
+- `tools/hsb_host_check.py`: a read-only check of a host for Sensor Bridge's socket receiver
+  at a Popoto build's rate, and the command that measures it there (`DEPLOYMENT.md`,
+  "Checking a host and making the measurement"; not run on such a host yet).
 - `tools/popoto_12km_study.py`, `tools/fjord_rehearsal.py`, `tools/design_report.py`: the
   studies behind the design documents.
 

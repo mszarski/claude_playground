@@ -1088,6 +1088,76 @@ On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock em
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network
 cards.
 
+### Checking a host and making the measurement
+
+**Not measured yet (issue sonar-02c):** whether Sensor Bridge's own setup (`rmem_max` 31,326,208, an
+isolated receiver core) keeps a Popoto build's stream lossless through the socket receiver. It needs a
+real host; the containers used cannot set either. `tools/hsb_host_check.py` checks a host for that
+measurement and prints the commands that make it. The check reads the host and changes nothing. It
+does not measure the receiver.
+
+On the host, from the repository root, as the user who will run the study (root, or with the
+patched emulator: see the raw socket line), with the suite built and Sensor Bridge's environment
+loaded (`eval "$(tools/build_hsb.sh /opt/hsb | tail -1)"`):
+
+```bash
+python3 tools/hsb_host_check.py --receiver-core 2 --json-out hsb_host_check.json
+```
+
+Leave out `--receiver-core` to take the first isolated CPU. `--socket-buffer` sets the buffer to try
+(default 31,326,208, the guide's `rmem_max`). Exit status 0: ready to measure. 1: not ready. 2: a usage
+error. Each line of the table is one item, with its verdict (`ok`, `not as asked`, `unknown`, or `info`
+for items that do not decide readiness), what was found and what is wanted:
+
+- `net.core.rmem_max`: against 31,326,208 (Sensor Bridge 2.7.0 `setup.mdx:784-793`, as
+  `HOLOSCAN_NOTES.md` section 7.5 cites it). When it is lower, the fix printed is the guide's two lines
+  (`/etc/sysctl.d/52-hololink-rmem_max.conf`, then `sysctl -p`).
+- `socket buffer granted`: what the kernel gave a throwaway UDP socket that asked for `--socket-buffer`
+  bytes. The kernel doubles the request, up to twice `rmem_max`; both numbers are shown. The notes
+  give what the buffer holds of each Popoto stream (32, 64, 96 channels at 102.4 kHz in 400-sample
+  frames, from `docs/handoff/hardware_builds.json` and `sources/hsb.py`). That figure counts payload
+  bytes only. The kernel charges each datagram more (2,304 B for a 1,408-B datagram on loopback), so
+  the real figure is lower.
+- `isolated CPUs` and `receiver core`: `/sys/devices/system/cpu/isolated`, and whether the core is
+  isolated, online and allowed by the cgroup's cpuset. An isolated core is normally outside a process's
+  default affinity; `receive --receiver-core` moves the receiver thread onto it. The fix printed is
+  `isolcpus=K` on the kernel command line, which the guide shows for a Jetson's
+  `/boot/extlinux/extlinux.conf` (`setup.mdx:262-296`).
+- `CPUs for the chain` (info): the affinity capped by a cgroup CPU quota (D-173). The study runs the
+  chain's OpenMP on half of that.
+- `real-time priority` (info): read from `RLIMIT_RTPRIO` and `CAP_SYS_NICE`. The check does not try to
+  set a priority. The guide does not ask for one, and `receive` has no option for it.
+- `raw socket (emulator)`: the stock emulator's data socket needs CAP_NET_RAW. Without it, use
+  `HSB_UDP_PATCH=1` for the build and `HSB_EMULATOR_UDP_SOCKET=1` (D-79). Only the loopback's
+  emulated board needs this, not the receiver.
+- `Sensor Bridge (hololink)`, `Holoscan`, `gpusonar`, `CUDA device`: these are what the loopback needs.
+  The imports run in a child process.
+- `RDMA devices (RoCE)` (info): `/sys/class/infiniband`, and whether `RoceReceiverOp` imports.
+
+When the host is ready, the tool prints the measurement: the opt-in study
+`test_hsb.py::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`). It makes 10 real-time runs of
+each Popoto build's trial with the C++ engine, once with Sensor Bridge's default buffer and once with
+`--socket-buffer` 31,326,208 (`GPUSONAR_HSB_STUDY_CONFIGS="400:def:4 400:31326208:4"`), with the
+receiver on the checked core (`GPUSONAR_HSB_STUDY_RECEIVER_CORE`, new). It then prints the suite's own
+Popoto-rate test as it runs by default. Send back:
+
+- `hsb_host_check.json`;
+- the study's lines that start with `cpus:` (affinity, usable CPUs, `rmem`, isolated CPUs, the receiver
+  core), `POPOTO_STUDY` (one per run: frames lost and damaged, the socket's buffer and drops, receive
+  delays, the chain's time a ping) and `POPOTO_LOSS` (where the missing frames fell);
+- the last lines of the default test's output (passed, or the expected failure with its numbers).
+
+Losses only in the first 0.25 s of stream are the start-up loss of D-187 and D-188. Loss later on would
+show that the guide's setup is not enough at that rate.
+
+**The RoCE receiver is untested and none of this covers it.** It needs a ConnectX network card (x86 with
+ConnectX, DGX Spark or IGX Thor with CX7; not Jetson AGX Orin or Thor: `HOLOSCAN_NOTES.md` section 7.3).
+It also needs a Sensor Bridge build with RoCE (`tools/build_hsb.sh` builds without it,
+`-DHOLOLINK_BUILD_ROCE=OFF`) and `RoceReceiverOp` in place of `LinuxReceiverOp`. `sources/hsb.py` uses only
+`LinuxReceiverOp`, so that receiver would be new code. Sensor Bridge's documentation says its
+accelerated receivers need a physical link and network isolation even for a loopback: a cable between
+two ports (`HOLOSCAN_NOTES.md` section 7.4). The check only lists the RDMA devices.
+
 ## What `snr_db` is, and how it relates to the link budget
 
 A detection's `snr_db` is 10 log10 of **its strongest sample over the detector's background there**, on the beamformed,

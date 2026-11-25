@@ -55,7 +55,7 @@ Run one pytest process at a time. The program tests need `build/bin/sonar_live` 
 | the Holoscan SDK (Python wheel) | `test_holoscan.py`, parts of `test_hsb.py` | skip |
 | `-DSONAR_BUILD_HOLOSCAN=ON` | `test_holoscan_cpp.py` (needs `build/bin/sonar_live_holoscan`) | skip |
 | Sensor Bridge built (`tools/build_hsb.sh`) and a CUDA device | the loopback tests of `test_hsb.py` | skip |
-| `GPUSONAR_HSB_STUDY=1` | two measurements in `test_hsb.py` that are not tests (`test_loopback_loss_study`; `test_popoto_rate_loopback_study`, with `GPUSONAR_HSB_STUDY_RUNS`, `_ROWS`, `_ENGINES`, `_CONFIGS`, `_BUDGET_S`) | skip, always, in the suite |
+| `GPUSONAR_HSB_STUDY=1` | two measurements in `test_hsb.py` that are not tests (`test_loopback_loss_study`; `test_popoto_rate_loopback_study`, with `GPUSONAR_HSB_STUDY_RUNS`, `_ROWS`, `_ENGINES`, `_CONFIGS`, `_BUDGET_S`, `_RECEIVER_CORE`) | skip, always, in the suite |
 | `GPUSONAR_PICMUS_DIR`, `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN`, `GPUSONAR_SMARTOCEAN_CACHE` | tests on public data sets, never committed (`tools/fetch_picmus.py`, `tools/fetch_channels.py`) | skip |
 | `GPUSONAR_NVUS_PYTHON`, `GPUSONAR_NVUS_DIR` | the NVIDIA ultrasound reference's module and checkout (`tools/build_nvus_reference.sh`) | skip |
 | `arlpy` installed | independent checks of medium and noise formulas | skip |
@@ -221,6 +221,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_board_streams.py` | 23 | per-board streams merged into the whole-array stream (D-184): the block's board field (whole-array blocks unchanged), the whole-array receivers refusing a board block, merged pings equal to the whole-array pings, loss, restarts, a silent board, a late start, refusals by name, the options, the program and `--emulate --per-board` over UDP, the relay tool | the program for one test; loopback tests skip if data was dropped | minutes | **parity** |
 | `test_board_clock.py` | 20 | a board clock's rate against true time (D-185): the stamp's drift an hour in and the pose it moves, `clock_ppm` in both engines and the program, boards at their own rates aligned by them, the estimate from arrival times and its opt-in discipline | the program for one test | fast | **parity** |
 | `test_hsb_receive.py` | 24 | what the receiver and assembler count when frames go missing, repeat or arrive out of order, with no network (D-161, D-177) | | fast | **parity** |
+| `test_hsb_host_check.py` | 12 | `tools/hsb_host_check.py` on injected readings (a container like the ones used, a host set up as Sensor Bridge's guide asks), its stream arithmetic from `hardware_builds.json`, its exit statuses, and one run on the machine itself (sonar-02c) | | fast | |
 | `test_hsb.py` | 24 (35 collected; 26 before D-186) | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173); a Popoto build's trial at 32, 64 and 96 channels and 102.4 kHz, framed and through the loopback in both engines (D-186) | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
 | `test_holoscan.py` | 5 | stages as Holoscan operators, fed by the simulator and by replay | Holoscan SDK | minutes | |
 | `test_holoscan_cpp.py` | 3 | the C++ Holoscan application against the standalone program; an operator's error ends it with status 1 and the reason, not an abort (D-186) | built with `-DSONAR_BUILD_HOLOSCAN=ON` | minutes | **parity** |
@@ -309,7 +310,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-188)
+## 3. Tests that pin a decision (D-155 to D-189)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -345,6 +346,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| D-189 (sonar-02c) | the host check for the Sensor Bridge measurement; the quota rule in one place | `test_hsb_host_check.py` (the whole file); `test_hsb.py::test_usable_cpus_honours_a_cgroup_quota` |
 | D-188 (sonar-h0e) | the receiver names its damaged frames (`damaged_frames`); a damaged frame in the first 0.25 s of stream is start-up loss, one later or of unknown number is not | `test_hsb.py::test_a_damaged_frames_number_is_reported_wherever_it_lies`, `::test_damaged_frames_keep_the_first_sixteen`, `::test_start_up_loss_is_accepted_only_where_every_index_confirms_it` |
 
 The option round trip that every chain key must pass, whatever decision added it:
