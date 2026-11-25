@@ -775,8 +775,8 @@ commit 78153dc. That difference shows only on a GPU, where
 whole-array stream (every channel on one counter) that the assembler takes. Each board sends its own stream instead:
 `GSFB` version 1 blocks with flag bit 1 set and the board's id (u16) at header offset 44, holding that board's channels.
 Whole-array blocks leave both zero and are read as before; a whole-array receiver refuses a per-board block. **This use
-of two reserved header fields is ours and waits on the owner** (it is a change to a wire format that is a contract once
-boards use it).
+of two reserved header fields is ours; the owner accepted it (D-184).** It is a wire format: a contract once boards
+use it.
 
 ```bash
 tools/sonar_live.py DEPLOY                         # with source.boards: {} (or a map): the Python source merges
@@ -804,7 +804,7 @@ whole-array stream (D-161, D-177) hold as they were. Its own rules, all ours:
   Without a correction a capture must restart, or the clocks be disciplined, more often than that.
   `source.boards.clock_ppm` gives each board's rate: a rate known to 0.1 ppm keeps two boards within 2 ms for 5.6 hours.
 - **Waiting and missing.** A board's part of a span is given up `wait_s` (0.05 s) after the reference, or that board,
-  has passed it. `missing: drop` (default; an owner's question) leaves the span out and the ping it falls in is dropped;
+  has passed it. `missing: drop` (default; the owner's choice, D-184) leaves the span out and the ping it falls in is dropped;
   `zero` keeps it with zeros in that board's channels.
 - **Restarts.** A board's new capture start re-aligns it; a capture left is never returned to. A restart of the
   reference is a restart of the merged stream. A board must stamp its capture start: one whose counter goes back under

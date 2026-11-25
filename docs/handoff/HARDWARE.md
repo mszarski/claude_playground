@@ -925,7 +925,7 @@ item. Decisions wait on the owner; work items wait on a decision or on hardware.
 | The navigation unit's documents; the test AUV's unit; a tilt sensor on the frame | pose and attitude | S-5, S-6, VA-10 to VA-15 | `sonar-o7m` |
 | The computer and the storage volume; raw or decimated recording | real time, 45 to 138 GB an hour | S-10 | `sonar-3s7` (in progress: performance model and Jetson) |
 | A header field for the sample word length (a format change) | the block format before boards use it | S-13 | none |
-| The per-board block's board id (flag bit 1, u16 at offset 44, D-184): keep, or tell boards apart otherwise; and the default for a board's missing part, `drop` (the ping is lost) or `zero` (kept with that board silent) | the forwarders; how a dead board costs pings | VA-3, VA-8 | none |
+| Answered 2026-11-25 (D-184): the per-board block's board id (flag bit 1, u16 at offset 44) is kept, and a board's missing part drops the ping by default (`zero` on request) | the forwarders; how a dead board costs pings | VA-3, VA-8 | none |
 | How the boards' capture starts are stamped (PTP, 1PPS, NTP) and whether their sample clocks are disciplined | per-board streams need starts within about 0.8 ms; free-running clocks drift apart (D-185) | VA-4, VA-11 | none |
 | Receive windows, where the boards sit, the 7 m zone | harness lengths, ping interval | S-11 | none |
 | May confirmed hardware facts and real captures' derived numbers be committed | where confirmed values live | VA-16, VA-17, RD-8, RD-9 | `sonar-o7m`, `sonar-sul` |

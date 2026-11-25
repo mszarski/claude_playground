@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-183); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-186); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -638,11 +638,25 @@ Grouped; within a group the most consequential first.
     6b04bedcc97b8ed4fcd6969f); without the cap 12 of 20 at the default buffer and 20 of 20 at a
     halved buffer lost frames. Not yet repeated on L4 under the new count (unchanged there). Deployed hosts: Sensor Bridge's own advice (`rmem_max` 31,326,208,
     an isolated receiver core) in `DEPLOYMENT.md`.
+    **At a Popoto build's rate it loses frames (D-186).** At 32, 64 and 96 channels and 102.4 kHz
+    (78.6 to 236 Mbit/s) the real-time loopback lost frames in 12, 20 and 20 of 20 C++ runs on
+    a10g-large containers (median 1, 11 and 11.5 frames a run), every lost datagram refused by the
+    socket buffer that `rmem_max` caps, about 3 frames a ping; a larger buffer (as far as the
+    container allows), smaller frames and fewer OpenMP threads did not cure it and the cause is not
+    located. The chain keeps up (C++ 0.13, 1.4, 2.2 s a ping against 3 s); the Python engine is not
+    real time at 96 channels. The test records the loss as an expected failure (xfail) with its
+    numbers. Untested: an L4 for the study, a host with Sensor Bridge's socket setup, the RoCE
+    receiver.
 35. **Wire format**: the sample word length is configuration on both ends because the
     block header has no field for it; an over-long report is split into parts; the
     Holoscan report sink cannot split and refuses an over-long line (questions for the
     owner below).
-36. The board forwarder is not written. The navigation mapping for the vehicle's unit is
+36. The board forwarder is not written. What it must send is now one stream per board: the
+    receivers merge per-board streams (D-184; not the Holoscan application, `sonar_live_hsb.py
+    receive` or `--listen`, which need the relay `tools/board_merge.py`), provided the boards'
+    capture starts agree with true time to about 0.8 ms; a board clock's rate can be configured or
+    estimated (D-185; default none, ranges not corrected). Neither has met a real board or
+    network. The navigation mapping for the vehicle's unit is
     a template with every vendor entry to fill in.
 
 ### Files behind the detector recount (D-134)

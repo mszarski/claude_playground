@@ -3272,3 +3272,111 @@ ranges 0.2 % long (1001.5 m for 999.5 m).
 - Tests: `tests/python/test_emulate.py` (15; five fail without the fix; the program case pins the
   message and exit status), `tests/python/test_build_diagrams_layout.py` (8). Full GPU suite 2102
   passed, 95 skipped (L4, HF job 6b060a4b1460ffe1d5e93111), which also covers the merge of D-182.
+
+### D-184 One stream per capture board, merged in front of the assembler (issue sonar-6f9; no default result moves)
+
+Until now every receiver took one whole-array stream, which no hardware in the plan produces: each
+board (8 channels) streams on its own counter. What it costs, first:
+- A wire-format change, ours: a per-board `GSFB` version 1 block sets flag bit 1 and carries its
+  board id (u16) at header offset 44, both reserved until now. Whole-array blocks leave them zero
+  and are read bit for bit as before; a whole-array receiver now refuses a per-board block by name
+  instead of taking it for a block of the wrong channel count. **The owner accepted the field
+  (2026-11-25).**
+- A span lacking any board's part is left out and the ping it falls in is dropped (`missing: drop`,
+  **the owner's choice of default**); `zero` keeps the ping with that board's channels silent. One
+  dead board therefore costs every ping until `zero` is set.
+- Boards are aligned by their capture starts (and their rates when configured, D-185); everything
+  finer is the synchronisation stage's, which searches 2 ms. So the capture starts must agree with
+  true time to about 0.8 ms (2 ms less 0.3 ms of simulated board offset and 0.9 ms of drift between
+  two boards 50 ppm apart over the face's 17.9 s window). PTP time does that; NTP may not. Two
+  free-running boards 50 ppm apart leave the search in 40 s unless their rates are configured.
+  Unconfirmed: how the boards stamp their capture start.
+- Not merged: `build/bin/sonar_live --listen` (passive), the Holoscan application and
+  `sonar_live_hsb.py receive` refuse `stream_boards`; the relay `tools/board_merge.py` goes in
+  front of them. Never run against a real board or a real network.
+
+What was built: `BoardMerger` in both engines (`python/gpusonar/sources/board_merge.py`,
+`libs/live` `board_merge.hpp/.cpp`, bound as `BoardMergerCpp`), in front of the unchanged
+`PingAssembler`, so D-161 and D-177's rules for order, holes, lost pings and restarts hold as they
+were. Keys `source.boards` (`stream_boards=1`, `stream_board_channels`, `stream_board_missing`,
+`wait_s` 0.05 s, `reference`): the map defaults to the sonar file's `receive.boards` in order; the
+merged stream runs on the reference board's counter, capture start, transmit marks and gain code.
+Per-board statistics end a run (`sonar_live: boards {...}`). `tools/sonar_live.py --emulate
+SCENARIO --per-board` rehearses it over UDP. Rules and statistics: `DEPLOYMENT.md`, "One stream
+per board".
+- Tests: `tests/python/test_board_streams.py` (23: merged pings equal the whole-array pings in both
+  engines, loss, restarts, a silent board, a late start, refusals, the program and the relay).
+
+### D-185 A board clock's rate: configured, estimated, never assumed (issue sonar-ubg; defaults unchanged)
+
+`transmit.time_ns` is capture start plus the transmit's sample index over the nominal rate, so a
+board clock fast by 25 ppm stamps a ping 90.0 ms late after an hour, and navigation interpolated
+there gives the pose of 90 ms later: 0.18 m at 2 m/s, 0.18° at 2°/s of roll (both engines). What
+is still wrong, first:
+- Nothing is corrected by default (`clock_ppm` 0: the stamp as before, bit for bit). The rates are
+  unconfirmed hardware facts and live in config.
+- Ranges are not corrected: a board fast by e reads every range e × R long (25 ppm: 5 cm at 2 km,
+  0.32 m at 12.7 km). The record's sample rate stays the nominal one.
+- The estimate from arrival times takes the host clock's steering and any drift of the network's
+  latency whole: a latency wandering 1 ms over 300 s biased it by 1.6 ppm (10 minutes of stream) to
+  16 ppm (1 minute) without raising its sigma. It was tried on synthetic delays only (shaped like
+  D-162's L4 loopback: within 0.013 ppm after 10 minutes, 0.4 ppm after 1), never on a real network.
+  Its discipline is therefore opt-in.
+
+What was built: `source.clock_ppm` (`stream_clock_ppm`) for a whole-array stream and
+`source.boards.clock_ppm` (`stream_board_ppm`) per board: the stamp becomes capture start +
+tx / (fs (1 + ppm × 1e-6)), and the merge of D-184 aligns boards with their rates (a rate known to
+0.1 ppm holds two boards inside the 2 ms search for 5.6 hours). `source.clock: {}`
+(`stream_clock_estimate=1`): `ClockEstimator`, per second of stream the earliest arrival, a
+least-squares line over the last 600 s, reported at the end of a run (`ppm`, `sigma_ppm`, `span_s`,
+`bins`); `discipline: true` stamps with it once it spans 300 s with sigma at most 0.5 ppm. The
+report's `sync.drift_ppm` already gives each board against the first; the first board's own rate
+needs a reference time (1PPS) or this estimate.
+- Tests: `tests/python/test_board_clock.py` (20, both engines and the program).
+
+### D-186 The Sensor Bridge loopback at Popoto rates loses frames; `UdpSourceOp` joins its threads in its destructor (issues sonar-x8v, sonar-ogg)
+
+Every Sensor Bridge loopback so far ran `flank_32` (32 channels, 64 kHz, 49 Mbit/s). At a Popoto
+build's 32, 64 and 96 channels and 102.4 kHz (78.6, 157.3, 235.9 Mbit/s) it is not lossless here:
+- Real time, default socket buffer, C++ engine, 20 runs each on Hugging Face a10g-large (12-CPU
+  quota, `rmem_max` 212,992 B; no L4 could be had for the study): frames were lost in 12, 20 and
+  20 runs (median 1, 11 and 11.5 frames a run; at most 8, 57 and 66), and a ping was dropped in 2,
+  1 and 3 runs. Python engine, 10 runs each: 6, 10 and 10 runs with loss; at 96 channels its
+  receiver queue overflows (median 368 frames lost), so it is not real time there and is not tested.
+- Every datagram lost was refused by the receiver's full socket buffer: the socket's kernel drop
+  count equals `RcvbufErrors` in all 210 study runs. The chain keeps up (C++: 0.13, 1.40 and 2.17 s
+  a ping, median, against the 3 s interval).
+- Not cured by the largest buffer the container allows (425,984 B), by 200-sample frames (worse:
+  every run lossy, up to 286 frames), or by the chain's OpenMP on 2 threads.
+- The cause is not located. The loss is regular, about 3 frames a ping (16 of 20 C++ runs at 64 and
+  96 channels lost 9 to 13 frames), which points at something the receiving side does once a ping.
+  The emulated sender was itself 10 to 34 ms late at worst in every run.
+- Untested: an L4 for the study; a host with Sensor Bridge's own setup (`net.core.rmem_max`
+  31,326,208, an isolated receiver core), which these containers cannot set; the RoCE receiver; a
+  full 12.7 km window (same stream rate, 17 s and about 1.7 M samples a channel per ping).
+- On the same a10g-large machines 2 of 12 runs of the existing `flank_32` loopback tests missed
+  their 5 ms worst-delay bound (6.7 and 6.3 ms); those tests are unchanged and L4 stays the
+  reference flavour.
+
+The new loopback test (`tests/python/test_hsb.py`, C++ at 1, 2 and 3 rows, Python at 1 and 2)
+asserts what held in every run: losses only as counted refusals of the socket buffer, every ping
+accounted for, no malformed frame, the chain inside the ping interval, and the reports and the
+recording of the pings that came through equal to the direct chain's on the same pings. It then
+**ends as an expected failure (xfail) carrying its numbers when frames were lost or the worst
+receive delay reached 5 ms**; a run with neither passes. A CPU-only test checks that each trial is
+framed at its build's rate (`docs/handoff/hardware_builds.json`) and assembles back. The study is
+opt-in (`GPUSONAR_HSB_STUDY=1`). The receiver's queue is set to 4 s of stream in these tests; the
+tool's default 256 frames is 1.0 s at these rates (kept; changing it is the owner's).
+
+`UdpSourceOp` (sonar-ogg) now sets its stop flag and joins its two threads in its destructor as
+well as in `stop()`, and `sonar_live_holoscan` returns 1 on an exception that is not a
+`std::exception`. **No failure was shown before the fix**: with the old operator, Holoscan 4.6
+deactivates the graph after another operator's exception, calls `stop()` on every operator, and
+`run()` rethrows; the application exited 1 with its reason (also when an operator's `start()`
+throws). The destructor guards a path no run produced. The new test
+(`tests/python/test_holoscan_cpp.py`) pins the exit status and the reason and passed before the
+fix too.
+- Jobs (a10g-large): 6b063a21d0582cfbbefd60a3, 6b0641ce1460ffe1d5e98956 (study),
+  6b064e8e1460ffe1d5e9a072 (3 repetitions; its recording comparison was then corrected to compare
+  with the direct chain's recording, the two differing from the assembled samples by float32
+  rounding with or without transport). SUITE_LINE

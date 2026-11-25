@@ -98,7 +98,7 @@ Facts about these that an adapter must respect:
   for `build/bin/sonar_live`, or the relay `tools/board_merge.py`; rules in
   `python/gpusonar/sources/board_merge.py`). The board -> channel map and each board's
   clock-rate error (`source.boards.clock_ppm`, D-185) are configuration. The header field is
-  ours and waits on the owner (questions 3 and 9). Tests: `tests/python/test_board_streams.py`,
+  ours; the owner accepted it and the `drop` default (D-184). Tests: `tests/python/test_board_streams.py`,
   `test_board_clock.py`.
 - **`PingAssembler` needs the transmit's sample index** in the block header to cut a ping:
   each transmit opens the sonar config's receive window. A board stream that does not say
