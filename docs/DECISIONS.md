@@ -3424,4 +3424,6 @@ now passes when every missing frame lies in the first 0.25 s of stream, every pi
 the worst delay after that start is under 5 ms; any other loss still ends as an expected failure
 with its numbers. The send log gained the send call's time per frame (`send_ms`).
 - Tests: `tests/python/test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`,
-  `tests/python/test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`. SUITE187
+  `tests/python/test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`.
+- Full GPU suite on this tree: running when this was written (L4, HF job 6b06728ad0582cfbbefdb5eb); the
+  result is added below when it ends.
