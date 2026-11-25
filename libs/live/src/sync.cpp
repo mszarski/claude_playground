@@ -157,8 +157,9 @@ void estimate(const PingRecord& record, const Reference& r, std::vector<double>&
 // Values of a board's real series (`rows`, each `n` samples) at fractional sample positions (Hann-windowed sinc,
 // 16 taps), in place. A board's rows share their positions, so the weights are computed once a block of samples for
 // all of them (sonar-drc: this stage, one row at a time with a sine and a cosine a tap, was most of the C++ engine's
-// time at 64 and 96 channels). Every sample is the one the row-by-row loop gave, to the bit: the same weight
-// (sinc x window, in double) times the same input, added in the same tap order (tests/cpp/test_stage2.cpp holds it).
+// time at 64 and 96 channels), each sample's from three trig calls (resample_weights, sonar-fy6). Every sample is the
+// one a row-by-row loop with the same weights gives, to the bit: the same double weight times the same input, added
+// in the same tap order (tests/cpp/test_stage2.cpp holds it, and the samples against the direct formula).
 void resample_rows(const std::vector<float*>& rows, std::int64_t n, double offset, double drift, double fs) {
   constexpr int taps = 16, half = taps / 2;
   // Samples whose weights are held at once (32 KiB of them): small, so a window splits into enough blocks for
@@ -179,12 +180,7 @@ void resample_rows(const std::vector<float*>& rows, std::int64_t n, double offse
         const auto b = static_cast<std::int64_t>(std::floor(pos));
         const double frac = pos - static_cast<double>(b);
         base[static_cast<std::size_t>(m - m0)] = b;
-        double* w = weight.data() + (m - m0) * taps;
-        for (int k = -half + 1; k <= half; ++k) {
-          const double d = static_cast<double>(k) - frac;
-          const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
-          w[k + half - 1] = sinc * (0.5 + 0.5 * std::cos(kPi * d / half));
-        }
+        resample_weights(frac, weight.data() + (m - m0) * taps);
       }
       for (std::size_t r = 0; r < n_rows; ++r) {
         const float* x = rows[g + r];
@@ -209,7 +205,33 @@ void resample_rows(const std::vector<float*>& rows, std::int64_t n, double offse
   }
 }
 
+// cos(pi k / 8) and sin(pi k / 8) for the resampler's taps k = -7..8 (resample_weights).
+struct TapTable {
+  double c[16], s[16];
+  TapTable() {
+    for (int k = -7; k <= 8; ++k) {
+      c[k + 7] = std::cos(kPi * k / 8);
+      s[k + 7] = std::sin(kPi * k / 8);
+    }
+  }
+};
+const TapTable kTapTable;
+
 }  // namespace
+
+void resample_weights(double frac, double* w) {
+  constexpr int half = 8;
+  // sin(pi frac) from the nearer whole number, so that it keeps its relative accuracy next to 1 (frac - 1 is exact
+  // there): the k = 1 tap's weight, near 1 there, is this over pi (1 - frac).
+  const double s = frac <= 0.5 ? std::sin(kPi * frac) : -std::sin(kPi * (frac - 1.0));
+  const double cf = std::cos(kPi * frac / half), sf = std::sin(kPi * frac / half);
+  for (int k = -half + 1; k <= half; ++k) {
+    const double d = static_cast<double>(k) - frac;
+    // sin(pi d) = -(-1)^k sin(pi frac); cos(pi d / half) = cos(pi k / half) cos(pi frac / half) + sin(pi k / half) sin(pi frac / half).
+    const double sinc = std::abs(d) < 1e-12 ? 1.0 : ((k & 1) != 0 ? s : -s) / (kPi * d);
+    w[k + half - 1] = sinc * (0.5 + 0.5 * (kTapTable.c[k + half - 1] * cf + kTapTable.s[k + half - 1] * sf));
+  }
+}
 
 BurstWindows burst_windows(const Reference& r, double fs, std::int64_t n_samples, std::size_t n_boards) {
   // The search of synchronise() reaches `search` either side of a burst; the check after the
@@ -250,13 +272,13 @@ SyncResult estimate_from_bursts(const BurstWindows& w, const Reference& r, doubl
       const double pos = (static_cast<double>(m) / fs - offset) * fs * (1.0 + drift);
       const auto base = static_cast<std::int64_t>(std::floor(pos));
       const double frac = pos - static_cast<double>(base);
+      double weight[taps];
+      resample_weights(frac, weight);
       double acc = 0.0;
       for (int k = -half + 1; k <= half; ++k) {
         const std::int64_t idx = base + k;
         if (idx < 0 || idx >= n_samples || idx - first < 0 || idx - first >= w.length) continue;
-        const double d = static_cast<double>(k) - frac;
-        const double sinc = std::abs(d) < 1e-12 ? 1.0 : std::sin(kPi * d) / (kPi * d);
-        acc += sinc * (0.5 + 0.5 * std::cos(kPi * d / half)) * static_cast<double>(kept[static_cast<std::size_t>(idx - first)]);
+        acc += weight[k + half - 1] * static_cast<double>(kept[static_cast<std::size_t>(idx - first)]);
       }
       seg[static_cast<std::size_t>(m - lo)] = static_cast<float>(acc);
     }

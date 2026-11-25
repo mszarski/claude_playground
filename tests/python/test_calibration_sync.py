@@ -180,37 +180,101 @@ def test_beam_pattern_after_sync_matches_a_single_clock_array(bearing):
     assert np.abs(diff_db).max() < 1.0, np.abs(diff_db).max()
 
 
-def _resample_row_by_row(x, positions, taps=16):
-    """The board resampler's arithmetic until sonar-h1f, one channel row at a time (the reference for the test below)."""
+def _direct_weights(frac, taps=16):
+    """The resampler's weights from the formula, a sine and a cosine a tap (sync.py until sonar-fy6): [taps, len(frac)]."""
+    half = taps // 2
+    d = np.arange(-half + 1, half + 1)[:, None] - np.asarray(frac, dtype=np.float64)[None, :]
+    return np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / half))
+
+
+def _resample_row_by_row(x, positions, taps=16, direct=False):
+    """The board resampler's arithmetic until sonar-h1f, one channel row at a time (the reference for the tests below),
+    with the weights from the formula (`direct`) or from sync._sinc_weights (three trig calls a sample, sonar-fy6)."""
     base = np.floor(positions).astype(np.int64)
     frac = positions - base
     half = taps // 2
+    weights = _direct_weights(frac, taps) if direct else sync._sinc_weights(frac, taps)
     out = np.zeros(len(positions), dtype=np.float64)
     for k in range(-half + 1, half + 1):
         idx = base + k
-        d = k - frac
-        wgt = np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / half))
+        wgt = weights[k + half - 1]
         ok = (idx >= 0) & (idx < len(x))
         out[ok] += wgt[ok] * x[idx[ok]]
     return out
 
 
+# The largest difference between a weight from three trig calls and the formula's (measured 2.5e-16 with numpy, 2.8e-16 in
+# libs/live; the weights are at most 1): a weight's last bit or two.
+WEIGHT_BOUND = 4.5e-16
+
+
+def _chain_fractions():
+    """Fractions the chain makes: (m / fs - offset) fs (1 + drift) for boards late and early, with and without drift."""
+    fs, m = 102400.0, np.arange(0, 200000, 7)
+    out = []
+    for offset in (3.1e-4, -1.7e-4, 2.1e-3, 1.234567e-5):
+        for drift in (0.0, 12e-6, -55.5e-6):
+            pos = (m / fs - offset) * fs * (1.0 + drift)
+            out.append(pos - np.floor(pos))
+    return np.concatenate(out)
+
+
+def test_sinc_weights_from_three_trig_calls_are_the_formulas_tap_by_tap():
+    """sonar-fy6: sync._sinc_weights makes a position's 16 weights from sin(pi frac), cos(pi frac / 8) and
+    sin(pi frac / 8), with sin(pi (k - frac)) = -(-1)^k sin(pi frac) and cos(pi (k - frac) / 8) = cos(pi k / 8)
+    cos(pi frac / 8) + sin(pi k / 8) sin(pi frac / 8). Tap by tap against the formula over a dense set of fractions, the
+    ones at the ends and the ones the chain makes; both against the formula in long double, where the platform has it."""
+    tiny = np.finfo(np.float64).smallest_subnormal
+    frac = np.concatenate([np.arange(200000) / 200000.0, _chain_fractions(),
+                           [0.0, tiny, 1e-300, 1e-13, 1e-12, 1e-9, 0.5, np.nextafter(0.5, 0.0), np.nextafter(0.5, 1.0),
+                            np.nextafter(1.0, 0.0), 1.0 - 1e-12, 1.0 - 1e-9, 1.0 - 1e-15]])
+    assert frac.min() >= 0.0 and frac.max() < 1.0
+    got, want = sync._sinc_weights(frac), _direct_weights(frac)
+    assert np.isfinite(got).all()
+    assert np.abs(got - want).max() <= WEIGHT_BOUND, np.abs(got - want).max()
+    # On a sample the k = 0 tap is 1 and every other tap 0, exactly; next to the following sample its tap is 1 to a bit
+    # or two (sin(pi frac) is taken from frac - 1 there: as it is, it would be wrong in its leading digits at 1 - 2^-53).
+    on = sync._sinc_weights(np.array([0.0]))[:, 0]
+    assert np.array_equal(on, (np.arange(-7, 9) == 0).astype(float))
+    assert np.abs(sync._sinc_weights(np.array([np.nextafter(1.0, 0.0), 1.0 - 1e-9]))[8] - 1.0).max() <= WEIGHT_BOUND
+    if np.finfo(np.longdouble).eps < np.finfo(np.float64).eps:
+        L = np.longdouble
+        d = np.arange(-7, 9).astype(L)[:, None] - frac.astype(L)[None, :]
+        pi = L(4) * np.arctan(L(1))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            exact = np.where(d == 0, L(1), np.sin(pi * d) / (pi * d)) * (L(0.5) + L(0.5) * np.cos(pi * d / 8))
+        assert float(np.abs(got - exact).max()) <= WEIGHT_BOUND and float(np.abs(want - exact).max()) <= WEIGHT_BOUND
+
+
+def test_whole_sample_positions_pass_the_samples_on_as_they_are():
+    """frac = 0 (sonar-fy6): the samples themselves, to the bit, and 0 where the position is off either end."""
+    x = np.random.default_rng(5).standard_normal((3, 50))
+    positions = np.arange(-4, 54).astype(np.float64)
+    got = sync._sinc_resample(x, positions)
+    want = np.zeros((3, len(positions)))
+    want[:, 4:54] = x
+    assert np.array_equal(got, want)
+
+
 def test_resampling_the_boards_gives_the_row_by_row_resamplers_samples_to_the_bit():
     """sonar-h1f: resample_boards computes a board's sinc weights once for all its rows and resamples the rows
-    together; every sample is the one the row-by-row resampler gave, to the bit, with offsets that run the taps
-    past both ends of the window, either sign, with drift, and a board left as it is."""
+    together; every sample is the one the row-by-row resampler with the same weights gives, to the bit, with offsets
+    that run the taps past both ends of the window, either sign, with drift, and a board left as it is.
+    sonar-fy6: the weights come from three trig calls a sample, not a sine and a cosine a tap; against the formula's
+    weights every sample is within one float32 spacing of its value plus 16 x WEIGHT_BOUND x the largest input."""
     _, rec, _, _ = four_board_ping()
     est = sync.ClockEstimate(offset=np.array([0.0, 3.1e-4, -2.27e-4, 1.3e-5]), drift_ppm=np.array([0.0, 40.0, -55.5, 0.0]),
                              method="test", quality=np.ones(4))
     x = rec.samples.array.astype(np.float64)
     fs, n = rec.samples.sample_rate, rec.samples.n_samples
     m = np.arange(n)
-    want = x.copy()
+    want, formula = x.copy(), x.copy()
     for b in range(1, 4):
         positions = (m / fs - est.offset[b]) * fs * (1.0 + est.drift_ppm[b] * 1e-6)
         assert positions.min() < 8 or positions.max() > n - 8          # the taps run past an end
         for row in range(8 * b, 8 * b + 8):
             want[row] = _resample_row_by_row(x[row], positions)
+            formula[row] = _resample_row_by_row(x[row], positions, direct=True)
         np.testing.assert_array_equal(sync._sinc_resample(x[8 * b], positions), want[8 * b])
     jumbled = np.random.default_rng(3).permutation(positions)              # inside or outside the series by turns
     np.testing.assert_array_equal(sync._sinc_resample(x[9], jumbled), _resample_row_by_row(x[9], jumbled))
@@ -218,6 +282,10 @@ def test_resampling_the_boards_gives_the_row_by_row_resamplers_samples_to_the_bi
     got = rec.samples.array
     assert got.dtype == np.float32
     assert np.array_equal(got, want.astype(np.float32))
+    near = formula.astype(np.float32)
+    spacing = np.spacing(np.maximum(np.abs(got), np.abs(near)))
+    apart = np.abs(got.astype(np.float64) - near)
+    assert (apart <= spacing + 16 * WEIGHT_BOUND * np.abs(x).max()).all(), (apart - spacing).max()
     assert np.array_equal(got[:8], x[:8].astype(np.float32))          # the first board: not moved
     assert [b.clock_offset for b in rec.metadata.boards] == list(est.offset)
 

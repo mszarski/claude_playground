@@ -979,6 +979,21 @@ def test_program_counts_pings_whose_navigation_has_no_velocity_like_the_python_c
     assert "navigation sends no velocity" in err and f"0 pings without navigation, {want[-1]} pings without velocity" in err
 
 
+def test_both_engines_resample_with_the_same_weights():
+    """sonar-fy6: the resampler's weights from three trig calls a sample, in both engines (libs/live resample_weights,
+    sync._sinc_weights), over a dense set of fractions, the ones at the ends and the ones the chain makes: the same to
+    a bit or two (each engine's own sine and cosine), and each within a bit or two of the formula."""
+    from gpusonar import sync
+    from test_calibration_sync import WEIGHT_BOUND, _chain_fractions, _direct_weights
+    frac = np.concatenate([np.arange(100000) / 100000.0, _chain_fractions(),
+                           [0.0, 1e-300, 1e-12, 0.5, np.nextafter(0.5, 1.0), np.nextafter(1.0, 0.0), 1.0 - 1e-12]])
+    cpp, py = np.asarray(core.live_resample_weights(frac)), sync._sinc_weights(frac)
+    assert cpp.shape == py.shape == (16, len(frac))
+    assert np.abs(cpp - py).max() <= WEIGHT_BOUND, np.abs(cpp - py).max()
+    assert np.abs(cpp - _direct_weights(frac)).max() <= WEIGHT_BOUND
+    assert np.array_equal(cpp[:, len(frac) - 7], (np.arange(-7, 9) == 0).astype(float))      # frac = 0: the sample itself
+
+
 def test_cpp_sync_matches_python_and_focuses_the_four_board_array():
     from gpusonar import sync
     from test_calibration_sync import four_board_ping

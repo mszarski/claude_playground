@@ -44,6 +44,13 @@ struct SyncResult {
 /// channels. The record must hold raw real samples.
 SyncResult synchronise(PingRecord& record, const Reference& reference);
 
+/// The board resampler's 16 weights at fractional position `frac` in [0, 1): w[k + 7], for the tap k = -7..8 samples
+/// from the position's floor, is sinc(k - frac) (0.5 + 0.5 cos(pi (k - frac) / 8)), 1 where |k - frac| < 1e-12. Made
+/// from sin(pi frac), cos(pi frac / 8) and sin(pi frac / 8) (sonar-fy6): sin(pi (k - frac)) = -(-1)^k sin(pi frac) and
+/// cos(pi (k - frac) / 8) = cos(pi k / 8) cos(pi frac / 8) + sin(pi k / 8) sin(pi frac / 8). Within 3e-16 of the
+/// formula tap by tap (tests/cpp/test_stage2.cpp).
+void resample_weights(double frac, double* w);
+
 /// The raw samples of every board's reference input around the two bursts, and nothing else:
 /// what a stage that decimates the rest (decimate.hpp) keeps to synchronise from. `length`
 /// samples from raw index `first_a` and from `first_b`; samples outside the window are zero.

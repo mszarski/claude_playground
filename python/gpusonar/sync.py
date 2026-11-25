@@ -201,17 +201,37 @@ def estimate_clocks_direct_path(record, search_time: float = SEARCH_TIME) -> Clo
     return ClockEstimate(offsets - offsets[0], np.zeros(len(offsets)), "direct_path", np.array(quality))
 
 
+def _sinc_weights(frac: np.ndarray, taps: int = 16) -> np.ndarray:
+    """The resampler's weights [taps, len(frac)] at fractional positions `frac` in [0, 1): row k + half - 1, for the tap
+    k = -half + 1 .. half samples from the position's floor, is sinc(k - frac) (0.5 + 0.5 cos(pi (k - frac) / half)).
+    Made from sin(pi frac), cos(pi frac / half) and sin(pi frac / half) (sonar-fy6, as libs/live resample_weights):
+    sin(pi (k - frac)) = -(-1)^k sin(pi frac) and cos(pi (k - frac) / half) = cos(pi k / half) cos(pi frac / half)
+    + sin(pi k / half) sin(pi frac / half); within 3e-16 of the formula tap by tap (test_calibration_sync.py)."""
+    half = taps // 2
+    frac = np.asarray(frac, dtype=np.float64)
+    # sin(pi frac) from the nearer whole number, so that it keeps its relative accuracy next to 1 (frac - 1 is exact).
+    s = np.where(frac <= 0.5, np.sin(np.pi * frac), -np.sin(np.pi * (frac - 1.0)))
+    cf, sf = np.cos(np.pi * frac / half), np.sin(np.pi * frac / half)
+    out = np.empty((taps,) + frac.shape)
+    for k in range(-half + 1, half + 1):
+        d = k - frac
+        with np.errstate(divide="ignore", invalid="ignore"):
+            sinc = np.where(d == 0.0, 1.0, (s if k % 2 else -s) / (np.pi * d))
+        out[k + half - 1] = sinc * (0.5 + 0.5 * (np.cos(np.pi * k / half) * cf + np.sin(np.pi * k / half) * sf))
+    return out
+
+
 def _sinc_taps(positions: np.ndarray, n: int, taps: int = 16) -> list:
     """The Hann-windowed sinc at fractional sample `positions` of a series of `n` samples, tap by tap: (where the
     tap's sample lies inside the series, its weights there, its sample indices there)."""
     base = np.floor(positions).astype(np.int64)
     frac = positions - base
     half = taps // 2
+    weights = _sinc_weights(frac, taps)
     out = []
     for k in range(-half + 1, half + 1):
         idx = base + k
-        d = k - frac
-        wgt = np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / half))
+        wgt = weights[k + half - 1]
         ok = (idx >= 0) & (idx < n)
         out.append((ok, wgt[ok], idx[ok]))
     return out
