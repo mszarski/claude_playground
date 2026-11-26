@@ -676,7 +676,8 @@ scenes: `tools/gallery.py` does not run them, so there is no result figure, anim
 CPU time for them here, except the two validation figures below. They have no geometry
 diagram yet either: `tools/scenario_diagrams.py` has not been run since they were added
 (it draws every file in `configs/scenarios`; whether it handles the new item types,
-`type: target` and the `sst_asiaex` relay geometry, has not been tried).
+`type: target` and the `sources:` block that replaced the `sst_asiaex` relay geometry (D-123),
+has not been tried).
 
 | Scenario | Sonar | Scene | Physics in the run | Checked by |
 | --- | --- | --- | --- | --- |
@@ -685,8 +686,8 @@ diagram yet either: `tools/scenario_diagrams.py` has not been run since they wer
 | `fls_highlight_target_aspect` | `fls_120k`, 8 pings 2 s apart | a target in the SST manner: five highlights along a 20 m body that crosses ahead while turning, a table of strength against aspect, one highlight that answers late, a small position jitter | the strength follows the table ping by ping as the aspect changes. The table is illustrative, not a measured target | `test_scene_targets.py` |
 | `flank_sst_shallow` | `flank_32`, 4 pings 15 s apart | one target at 1 km in 100 m of isovelocity water | bounce paths time-spread by a wind-roughened surface; bottom reverberation from a rough fluid sediment; surface reverberation (Chapman–Harris); a volume-scattering layer. Sediment, volume strength and bubble loss are placeholders | `test_timespread.py`; added in the earlier part of the round (D-62, D-63) |
 | `flank_sst_spread` | `flank_32`, 4 pings 15 s apart | the same channel | every option beyond SST's time spreading: `angle_spread`, `doppler`, `decay_time: facet`, `multi_bounce: convolve` (the last is the default since D-82). Few taps and lines, because every bounce ray becomes 1 + taps × `doppler_lines` rays each way. Same placeholders | `test_timespread.py`, on both engines |
-| `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise (no one-way source). 7 s to run | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
-| `sst_asiaex` | `flank_32` hydrophones as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is made with a −20 dB relay 0.1 m from the projector. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`) | the same; figure below |
+| `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise: one-way sources exist (D-123) but TR 0702 gives no level for it, so the file has none. 15 s for one ping in the run behind the committed matrix (4 shared cores, CPU) | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
+| `sst_asiaex` | one `flank_32` hydrophone as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is a radiating source (`sources:`, D-123; until then a −20 dB relay 0.1 m from the projector) and the receiver does not transmit. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`) | the same; figure below |
 | `sst_echo_level` | `flank_32` hydrophones, omnidirectional, 1 ping, 2 kHz of band | one highlight of known target strength; a flat surface (coefficient −1) and a flat bottom (0.5), one bounce at most per leg, so six groups of eigenray pairs arrive as six separate pulses | a geometry for a calculation, not a sonar: the compressed echo against the sonar equation and TR 0702 eqs. 36–38, 66, 68. The tool also runs it free-field, and with a sampled m-sequence pulse and a moving target | `test_sst_validation.py`: 0.004 dB free field; 0.005 dB and 0.13 µs in the image medium |
 | `sst_sediment_reverb` | `popoto_8` hydrophones, omnidirectional, 20 m above a flat bed; a 2 ms tone at 20 kHz, 6 pings | a bed of `medium_sand` (`configs/sediments.yaml`) | scattering-function reverberation, direct path only, no absorption, against σ(grazing)·πcT/R³. The tool also runs the same sediment as point scatterers, and LFM pulses of three bandwidths with a point target | `test_sst_validation.py`: mean +0.27 dB, −0.17 to +0.59 dB |
 
@@ -696,14 +697,15 @@ closed forms for our own geometry (`RESULTS.md`, "Validation against TR 0702").
 
 ![sst_pursuit: spectrogram and level with the closed-form curves](figures/sst_pursuit.png)
 
-Pursuit: the target echo arrives at 2.7900 s at 10133.73 Hz, 25 Hz below the
-reverberation ridge. This figure is from the first validation run. That run showed a
+Pursuit: the target echo arrives at 2.7900 s at 10133.73 Hz, 30 Hz below the
+reverberation ridge (`figures/sst_validation.md`). The first validation run showed a
 defect in the bistatic reverberation's Doppler (with the bottom in, the spectrogram
 changed before any bottom path could arrive), which has since been fixed
-(`DECISIONS.md` D-80); the figure had not been regenerated when this was written. After
-the fix the ridge follows the closed form within 0.75 Hz in the median and the
-bottom-bounce streak starts at 1.750 s (2D/c = 1.700 s); with the first run's code the
-figures were 1.2 Hz and 1.725 s (`RESULTS.md`).
+(`DECISIONS.md` D-80); this figure was regenerated after the fix, with the matrix, on
+2026-11-19 (`26586a3`) and 2026-11-20 (`1debe6d`). After the fix the ridge follows the
+closed form within 0.75 Hz in the median and the bottom-bounce streak starts at 1.750 s
+(2D/c = 1.700 s); with the first run's code the figures were 1.2 Hz and 1.725 s
+(`RESULTS.md`).
 
 ![sst_asiaex: no time spreading, sum, convolve](figures/sst_asiaex.png)
 

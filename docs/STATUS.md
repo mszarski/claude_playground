@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-193); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-194); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -153,8 +153,9 @@ sections further down.
   model; Cox-Munk components; Cron-Sherman noise coherence.
 - **Validation against TR 0702** (`tools/sst_validation.py`,
   `docs/figures/sst_validation.md`): regenerated after the Doppler-bin fix (D-80) and with
-  ASIAEX by a one-way source. The figures `sst_pursuit.png` and `sst_asiaex.png` and the
-  prose around them in `SCENARIOS.md` were not checked against the regenerated matrix.
+  ASIAEX by a one-way source. The figures `sst_pursuit.png` and `sst_asiaex.png` were regenerated
+  after D-80 (commits 26586a3, 1debe6d); the prose around them in `SCENARIOS.md` was checked
+  against the matrix on 2026-11-26 and corrected (D-194); the PNGs themselves were not re-inspected.
 - **Validation against measured channels** (`tools/channel_validation.py`,
   `channel_watermark.py`, `channel_smartocean.py`; `PHYSICS_NOTES.md` Sec. 21): the
   Gaussian Doppler shape is confirmed at three sites; the decay-time rule is not settled
@@ -1145,11 +1146,14 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   - No ping-to-ping coherence: wrong for a still sonar over a still bottom.
   - The K texture is independent between pings and between neighbouring cells. Its
     `shape` has no default: there is no confirmed value for any seabed.
-  - Near-specular reverberation is not removed when time spreading is on, and there is
-    no near-specular surface scattering model.
+  - Near-specular reverberation is not removed by default when time spreading is on: the
+    removal exists, opt-in, on `geometry: bistatic` items only (`exclude_specular`, D-123;
+    `test_reverb_specular.py`). There is no near-specular surface scattering model.
   - The default generator's nearest-bin ripple (−1.4 to +1.7 dB between neighbouring 1 ms
     bins, right on average) is left as it is.
-  - Bistatic mode has not been exercised with Bellhop on a flat bed, and its cost grows
+  - Bistatic mode has been run with Bellhop on a flat bed only with transmitter and
+    receiver at one point (`test_reverb_relief.py::test_bellhop_over_a_level_bed_by_bearing_equals_the_flat_run`);
+    a truly bistatic geometry with Bellhop has not been exercised. Its cost grows
     with sectors × rings × eigenrays of each leg.
 - Boundary models: the bubble-loss law (`hall_novarini`) is an upper estimate above about
   10 kHz; the roughness interpolation and composite split are our own, not the published

@@ -372,3 +372,42 @@ def test_matrix_has_a_row_and_a_verdict_for_every_section(pursuit, asiaex, sedim
     assert "NOT a numerical reproduction" in text
     # Without running anything the matrix still lists every row.
     assert len(sv.matrix()) == len(rows)
+
+
+def test_matrix_names_only_tests_that_exist_and_does_not_deny_features_we_have():
+    """Every test the matrix (and its readings) names exists in the file it names, and the rows
+    for features that exist say so: Thorp absorption (`absorption: thorp`, D-132) and the
+    removal of near-specular reverberation (`exclude_specular`, D-123). Runs nothing."""
+    import re
+    rows = sv.matrix()
+    tests = Path(__file__).resolve().parent
+    defined = {}
+
+    def names_in(filename):
+        if filename not in defined:
+            path = tests / filename
+            assert path.is_file(), filename
+            defined[filename] = set(re.findall(r"^def (test_\w+)", path.read_text(encoding="utf-8"), flags=re.M))
+        return defined[filename]
+
+    cited = [r["check"] for r in rows] + [r["pinned_by"] for r in sv.readings()]
+    found = 0
+    for text in cited:
+        current = None
+        for filename, name in re.findall(r"(?:tests/python/(test_\w+\.py))?(?:::(test_\w+))?", text):
+            if filename:
+                current = filename
+                names_in(filename)
+            if name:
+                assert current is not None, text
+                assert name in names_in(current), f"{current}::{name}"
+                found += 1
+    assert found > 40
+    by_where = {r["where"]: r for r in rows}
+    thorp = by_where["Sec. 6.3, eq. (42)"]
+    assert "test_medium_models.py::test_thorp_absorption" in thorp["check"]
+    assert "not implemented" not in thorp["check"] + thorp["result"]
+    specular = next(r for r in rows if r["where"] == "Sec. 12.4" and "Near-specular" in r["states"])
+    assert "test_reverb_specular.py::" in specular["check"] and "exclude_specular" in specular["ours"]
+    for r in rows:
+        assert "Feature we lack" not in r["result"] and "no removal of it" not in r["result"], r["where"]

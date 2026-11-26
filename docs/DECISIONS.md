@@ -3681,3 +3681,42 @@ reverberation, the site was dominated by the towing ship's wake, and the one win
 - Tests (characterisations: the bound is what we get plus a small margin; nothing tuned):
   `tests/python/test_gallaudet_boundaries.py` (10). CPU. The full GPU suite was not rerun for this
   (documents and one new CPU test file).
+
+### D-194 Stale simulator statements corrected: the TR 0702 matrix, RESULTS, SCENARIOS, SIMULATION, REFERENCES (issues sonar-nyn, sonar-kob; no result changed)
+
+What was wrong first: documents denied things that exist. Found by the audit of the M12 and SST
+issues (2026-11-25).
+
+- The TR 0702 matrix (`tools/sst_validation.py`, `docs/figures/sst_validation.md`): the Thorp row said
+  "not implemented" (`acoustics.absorption_thorp`, key `absorption: thorp`, D-132, held by
+  `test_medium_models.py::test_thorp_absorption`); two rows said near-specular removal is lacking
+  (`exclude_specular`, D-123, opt-in, bistatic items only, held by `test_reverb_specular.py`). What
+  still cannot be checked stays said: TR 0702's own near-specular surface model is McDaniel's, which
+  we do not have. The matrix was regenerated (203 s on the CPU): it differs from the committed one in
+  those three rows and in its run-time row only (not taken: the machine was loaded); the JSON is
+  equal but for two timing keys.
+- New test: `test_sst_validation.py::test_matrix_names_only_tests_that_exist_and_does_not_deny_features_we_have`
+  (every test a row names exists; the rows above name their tests).
+- `SCENARIOS.md`, the two SST scenarios, against the matrix and the scenario files: Pursuit's
+  "25 Hz below the ridge" is 30 Hz (30.27); "figure from the first run" was stale (both figures were
+  regenerated after D-80); `sst_asiaex` uses a one-way source (D-123), not a "-20 dB relay", and one
+  hydrophone. The figures themselves were not looked at again.
+- `RESULTS.md`: the 2026-11-16 passage listing a flat boundary, bubble absorption, a high-frequency
+  surface model, a Jackson-type bottom, volume scattering, time spreading and the RAM cross-check as
+  missing is kept and dated, with what superseded each (D-73, D-68/D-123, D-87/D-132,
+  D-63/D-66/D-86/D-132, D-62 and later, D-149).
+- `STATUS.md`: near-specular reverberation is not removed by default (it can be, D-123); the bistatic
+  mode has run with Bellhop on a flat bed only with both platforms at one point.
+- `handoff/SIMULATION.md`: the scattering-function generator is ours; TR 0702 Sec. 11.3's algorithm is
+  not what it does (the matrix was right).
+- `configs/sediments.yaml` and `REFERENCES.md`: the YAML's `status: confirmed` (the loader's word: read
+  in the cited open document or computed by a relation it prints) is not REFERENCES' "confirmed"; the
+  tabulated values are "via secondary" there. Said in both; no data changed. For the owner: renaming
+  the YAML's status would need a loader and a test change.
+- `REFERENCES.md` gains rows for BELLHOP3D and PyRAM (test oracles, D-149).
+- The KRAKEN 0.21 dB, wherever quoted: Bellhop's own rays against KRAKEN, not our provider, and
+  recorded, not asserted (the test bounds it at 0.5 dB, 0.1 dB from 2 km; the provider with 80 arrivals
+  within 0.5 dB).
+- A comment in `sim/timespread.py` named only `hall_novarini`; `apl_1994` is adopted (D-123).
+- Checked on the CPU: `test_sst_validation.py` 24 passed, with the neighbouring files (the agent's
+  run); the full GPU suite was not rerun for this.

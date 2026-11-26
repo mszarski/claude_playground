@@ -1337,7 +1337,9 @@ def matrix(results: dict | None = None) -> list[dict]:
     row("Sec. 5.5-5.7", "CASS / GSM eigenrays, interpolation, ray identity heuristics", "Bellhop provider (`sim/bellhop.py`)",
         "cannot be checked against TR 0702", "No formulas in TR 0702; ours is tested against Bellhop itself (" + t + "test_propagation.py)")
     # ---- Sec. 6 --------------------------------------------------------------------------------
-    row("Sec. 6.3, eq. (42)", "Thorp absorption", "Francois-Garrison (default), Ainslie-McColm", "not implemented",
+    row("Sec. 6.3, eq. (42)", "Thorp absorption",
+        "`absorption: thorp` (`acoustics.absorption_thorp`, D-132); Francois-Garrison is the default, Ainslie-McColm also there",
+        t + "test_medium_models.py::test_thorp_absorption, ::test_scenario_takes_thorp_by_name",
         m(C, lambda c: "For scale, at 4 C and 1 km: " + "; ".join(
             f"{k.replace('_', ' ')}: Thorp {v['thorp_eq42_db_per_km']:.2f}, Francois-Garrison {v['francois_garrison_db_per_km']:.2f} dB/km"
             for k, v in c["absorption"].items())))
@@ -1422,9 +1424,16 @@ def matrix(results: dict | None = None) -> list[dict]:
                        f"would give {a['surface_doppler_spread']['p101_rule_hz']:.1f} Hz: also under 10"))
     row("Sec. 12.4", "Coherent / incoherent split; stochastic FIR filter with Gaussian taps; AR(1) evolution", "`sim/timespread.py`",
         t + "test_timespread.py", "Structure as stated; the three formulas are in TR 9407 (not available), ours are substitutes")
-    row("Sec. 12.4", "Near-specular reverberation is removed when time spreading is on", "-", "cannot be checked",
-        "Feature we lack: reverberation takes the flat-boundary paths and is not reduced. No double counting with Lambert / "
-        "Chapman-Harris (no specular lobe); there could be with a Kirchhoff bottom (not measured)")
+    row("Sec. 12.4", "Near-specular reverberation is removed when time spreading is on",
+        "`exclude_specular` on a `geometry: bistatic` reverberation item (`sim/reverb_specular.py`, D-123): opt-in, never automatic",
+        t + "test_reverb_specular.py::test_removed_reverberation_is_the_tail_of_the_bounce_eigenray, "
+        "::test_bookkeeping_with_and_without_the_removal, ::test_kirchhoff_bottom_model_against_the_tail_it_would_double_count, "
+        "::test_scenario_key_is_opt_in_and_monostatic_items_are_left_alone",
+        "Not removed by default: reverberation takes the flat-boundary paths unless the item sets `exclude_specular` "
+        "(monostatic items refuse it). TR 0702 does not say how the near-specular part is delimited; ours is the facet lobe of "
+        "the time-spreading slopes: removed strength over the boundary = tail energy within 2.5 % at steep grazing, 9 to 65 % "
+        "more at 9 degrees (the tests' bounds). No double counting with Lambert / Chapman-Harris (no specular lobe); with a "
+        "Kirchhoff bottom the removal is bounded by the tail")
     row("Sec. 12.4, rmsHeight", "Mostly incoherent if rmsHeight > wavelength / sin(grazing), mostly coherent if smaller",
         "coherent intensity exp(-(4 pi h sin(g) / wavelength)^2)", t + "test_timespread.py::test_coherent_part_is_the_rayleigh_parameter_factor",
         m(A, lambda a: f"consistent at both ends; ours is half coherent at h = 0.066 wavelength / sin(g). ASIAEX: surface {a['tails']['surface']['coherent_fraction']:.2f}, "
@@ -1450,7 +1459,8 @@ def matrix(results: dict | None = None) -> list[dict]:
                        f"first half of the pulse, {a['two_rough_bounces']['sum_over_convolve_2_to_5_ms_after_pulse_db']:+.1f} dB 2-5 ms after it - "
                        f"the defect as TR 0702 describes it"))
     row("Sec. 12.2-12.5, Figs. 3-4 panels 3-5", "Scattering function at 1.5 and 0.1 ms updates; forward-scatter reverberation; total",
-        "-", "cannot be checked", "No near-specular surface scattering model here (TR 0702's is McDaniel's) and no removal of it; only figures, no numbers")
+        "-", "cannot be checked", "No near-specular surface scattering model here (TR 0702's is McDaniel's); the removal exists (`exclude_specular`, Sec. 12.4 row) "
+        "but `sst_asiaex` has no reverberation item; only figures, no numbers")
     row("Sec. 12.2, Fig. 3 panel 1", "Measured ASIAEX data", "-", "cannot be checked", "Data of Dahl (2002) not used; no numbers in TR 0702")
     return rows
 

@@ -236,12 +236,15 @@ def boundary_parameters(cfg: dict | None, *, surface: bool, frequency: float | N
             raise ValueError("time_spread: height_scale must not be negative")
         out["rms_height"] *= float(cfg["height_scale"])
     # Energy absorbed by near-surface bubbles at each bounce: a number in dB, a table
-    # {grazing_deg: [...], loss_db: [...]}, or a wind-speed law {model: hall_novarini} built from
-    # open sources (sim/surface.py; the APL-UW law is in a handbook that was not available).
+    # {grazing_deg: [...], loss_db: [...]}, or a named wind-speed law {model: ...} of
+    # sim/surface.py (BUBBLE_LOSS_MODELS): `apl_1994`, the recommended one (D-123; the APL-UW
+    # formula as arlpy and UnderwaterAcoustics.jl implement it, via secondary: TR 9407 itself
+    # was not read), or `hall_novarini`, `hall_novarini_layer`, `hall_novarini_screened`
+    # (D-68, from open sources).
     loss = cfg.get("bubble_loss_db", 0.0)
     if isinstance(loss, dict) and "model" in loss:
-        # {model: hall_novarini, wind_speed}: a wind-speed law (sim/surface.py). The wind defaults
-        # to the section's `wind_speed`; the frequency is the wrapper's.
+        # {model: apl_1994 | hall_novarini | ..., wind_speed}: a wind-speed law (sim/surface.py).
+        # The wind defaults to the section's `wind_speed`; the frequency is the wrapper's.
         from . import surface as surface_model
         if not surface or frequency is None or "wind_speed" not in {**cfg, **loss}:
             raise ValueError("time_spread: a bubble loss model needs the surface section, a wind_speed and the frequency")

@@ -14,7 +14,12 @@
 # A spectral strength quoted in cm^4 (1 cm reference length) must be converted first:
 # bottom.w2_from_cm4.
 #
-# status: confirmed   - every number in the entry was read from the cited public document.
+# status: confirmed   - every number in the entry was read in the open documents the entry cites
+#                       (`source`, `provenance`), or computed by a relation they print; the loader
+#                       (bottom._warn_status) then raises no warning. This is NOT the `confirmed` of
+#                       docs/REFERENCES.md ("read in the source itself"): those documents attribute
+#                       the values to APL-UW TR 9407 or other originals that were not read, so in
+#                       REFERENCES.md's words the tabulated values are `via secondary` (its Sec. 3.1).
 # status: unconfirmed - illustrative; a warning is raised when it is used.
 #
 # One convention in this file: the model takes RATIOS to the water above the sediment (rho, nu).

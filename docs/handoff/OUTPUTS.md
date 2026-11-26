@@ -662,10 +662,9 @@ example of TR 0702 is a numerical reproduction of its figures (the report does n
 the parameters; ours are marked `unconfirmed`). TR 9407 is distribution-limited and
 unread. The measured-channel data sets state no sea state, so every sea parameter is
 fitted or assumed. Our Bellhop 2-D runs and Bellhop3D differ by up to 1 to 2.5 dB (issue
-`sonar-6c8`). `RESULTS.md` says the committed `sst_validation` matrix and figures were made
-before the reverberation Doppler fix (D-80) and not regenerated; that sentence is stale:
-`git log -1 -- docs/figures/sst_validation.md` gives 2026-11-20 (commit `1debe6d`), after
-the fix.
+`sonar-6c8`). The committed `sst_validation` matrix and figures were first made before the
+reverberation Doppler fix (D-80); they were regenerated after it on 2026-11-19 (`26586a3`)
+and 2026-11-20 (`1debe6d`), as `RESULTS.md` now records.
 
 Against Bellhop and KRAKEN (run as separate programs). Source: `RESULTS.md`, "Propagation,
 reverberation and noise" and "Rays against normal modes at 8 kHz"
@@ -676,7 +675,7 @@ reverberation and noise" and "Rays against normal modes at 8 kHz"
 | Image-source provider against Bellhop, Pekeris waveguide, 1 kHz, coherent loss 0.1 to 3 km | 0.06 dB median, 0.4 dB worst |
 | Same, incoherent loss at 1 and 8 kHz | 0.1 dB median, 0.7 dB worst |
 | Same, delays of the first four arrivals | within 2 microseconds |
-| Bellhop rays minus KRAKEN modes, 8 kHz, 1 to 10 km | at most 0.21 dB |
+| Bellhop's own rays (`run_bellhop`, not our provider) minus KRAKEN modes, 8 kHz, 1 to 10 km | at most 0.21 dB as measured when RES was written; no test asserts 0.21: the test bounds it at 0.5 dB, and 0.1 dB from 2 km |
 | Eigenray provider with 80 arrivals against modes | within 0.5 dB at every range (with 8 arrivals: 4.9 dB too much loss at 10 km, a fault this check found) |
 | Bottom and surface reverberation level against the analytic prediction | within 2 dB in every range bin |
 | Generated ambient noise against the requested spectrum, 0.5 to 30 kHz | within 1 dB |

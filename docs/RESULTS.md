@@ -500,6 +500,16 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
   400–6400 Hz fit), a Jackson-type bottom model, volume scattering, time spreading, the
   RAM cross-check. TR 0702 has no fully specified worked example to
   reproduce (`PHYSICS_NOTES.md` section 9).
+- **Since then** (the two sentences above on the flat boundary and on what is not done are
+  the state of 2026-11-16 and are kept as the record of it; what each decision measured is
+  in `DECISIONS.md` and the sections named): reverberation over relief, opt-in on a
+  `geometry: bistatic` item, so a ridge now returns an echo (D-73; `test_reverb_relief.py`);
+  bubble loss per surface bounce (D-68; `apl_1994` adopted, D-123); a high-frequency surface
+  model, the bubble-layer model for 12–70 kHz (D-87, D-132); a rough fluid-sediment bottom
+  from the open literature, which is not the published Jackson model (D-63, D-66, D-86,
+  D-132); volume layers ("Time spreading of bounce paths and volume layers" below); time
+  spreading (D-62 and later); the cross-check against PyRAM (D-149; "Rays against normal
+  modes at 8 kHz" below).
 - The ambient-noise coefficients (four-term fit to the Wenz curves) were checked against
   two independent copies of the formulas, not against the original book.
 
@@ -517,6 +527,12 @@ centimetres and is not a useful comparison).
 | Rays minus modes, 2–10 km | below 0.1 dB (−0.01 dB at 10 km, where the loss is 66.2 dB) |
 | Eigenray provider with 80 arrivals kept, against modes | within 0.5 dB at every range |
 | Eigenray provider with 8 arrivals kept, at 10 km | 4.9 dB too much loss one way |
+
+"Rays" in the first two rows are Bellhop's own arrivals (`run_bellhop`), not our eigenray
+provider; 0.21 dB is the value measured when this was written, and no test asserts it:
+`test_incoherent_loss_of_rays_and_modes_agree` bounds the difference at 0.5 dB over 1 to
+10 km and 0.1 dB from 2 km. Our provider is the third row, held by
+`test_arrival_cap_of_the_provider` (80 arrivals within 0.5 dB at every range).
 
 - **A fault this check found.** The long-range scenarios first shipped with 8 arrivals per
   leg. That keeps the strongest paths, so the peak of the compressed echo was right, but
@@ -1399,7 +1415,8 @@ not the first run's; where this section's prose and the matrix differ, the matri
 later run (`git log -- docs/figures/sst_validation.md`). The Pursuit rows on reverberation below carry the numbers after the fix, from
 `PYTHONPATH=python python3 tools/sst_validation.py --only pursuit --json <file>`; all other
 numbers in this section are from the first full run. The figure of the Pursuit example is
-the one from before the fix.
+the one from before the fix. (Since: both figures were regenerated with the matrix on
+2026-11-19, `26586a3`, and 2026-11-20, `1debe6d`, after the fix.)
 
 Command (matrix, numbers and figures, about 2 minutes):
 `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
@@ -1555,6 +1572,14 @@ outstanding.
 - Possible but not done: the Lloyd's-mirror correlation of eigenray pairs, end to end.
 - Not run: the full existing suite alongside the new file (only it and
   `test_architecture.py`), and nothing on a GPU.
+
+Since then (the list above is the state of 2026-11-17 and is kept as the record of it):
+one-way sources (`sources:`, SST's `DirectSignal`), K-distributed noise and opt-in removal of
+near-specular reverberation (`exclude_specular`, bistatic items only) exist (D-123); Thorp
+absorption is selectable as `absorption: thorp` (D-132). Still missing: a near-specular
+surface scattering model (TR 0702's is McDaniel's), so Figs. 3–4 panels 3–5 still cannot be
+checked; the Pursuit scenario still has no noisy target. The matrix rows say which tests hold
+each (`figures/sst_validation.md`).
 
 ## Sensor Bridge loopback (emulator to `LinuxReceiverOp` to the chain)
 
