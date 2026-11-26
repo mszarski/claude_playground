@@ -1036,12 +1036,12 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `pool_fls_p4_2v` | Gallery. Phase 2 pool or dock, 5 to 10 m: wall, steps, ladder, lane floats. |
 | `harbour_fls_750k` | Gallery. Phase 3 harbour: sandy floor, quay wall, six pilings, mooring block, rocks. |
 | `seafloor_objects_fls` | Gallery. A sphere, a box and rocks on a flat seafloor, with shadows. |
-| `fls_120k_transit` | Gallery. The 120 kHz design under way at 2 m/s: boat under way, boat at anchor, buoy, pinnacle; reverberation with ownship Doppler; 10 pings. |
-| `fls_170k_transit` | Gallery. The same objects with the 170 kHz design out to 450 m. |
-| `fls_330k_transit` | Gallery. The same with the 330 kHz design out to 300 m. |
-| `fls_120k_cluttered_seabed` | Gallery. Boat with keel, propeller and wake over sand, boulders, debris and a pipeline. |
+| `fls_120k_transit` | Gallery. The 120 kHz design under way at 2 m/s: boat under way, boat at anchor, buoy, pinnacle; reverberation with ownship Doppler; 10 pings. Its surface reverberation is Chapman-Harris at 120 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_170k_transit` | Gallery. The same objects with the 170 kHz design out to 450 m. Its surface reverberation is Chapman-Harris at 170 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_330k_transit` | Gallery. The same with the 330 kHz design out to 300 m. Its surface reverberation is Chapman-Harris at 330 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_120k_cluttered_seabed` | Gallery. Boat with keel, propeller and wake over sand, boulders, debris and a pipeline. Its surface reverberation is Chapman-Harris at 120 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
 | `fls_120k_rough_surface` | Gallery. A wind sea of wave facets at 10 m/s, boat with wake, kayak, buoy. |
-| `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). |
+| `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). Its surface reverberation is Chapman-Harris at 170 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
 | `fls_glints_on_sediment` | A smooth sphere and cylinder that glint, on a seabed whose scatterers follow the bottom scattering model. |
 | `fls_highlight_target_aspect` | A five-highlight target crossing ahead while turning, strength against aspect from an illustrative table. |
 | `fls_120k_quay_multipath` | The 120 kHz design along a quay wall over a bed sloping 5 degrees across the look direction (image sources off the wall and the tilted bed, `sonar-0nsi`): a moored sphere and its ghosts, a block on the bed; truth entries for the ghosts. |
