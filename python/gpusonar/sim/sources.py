@@ -735,7 +735,7 @@ def direct_arrival(record, sonar, provider, options: dict | None = None, *, envi
     c = record.environment.sound_speed
     backend = core.Backend.Host if backend is None else backend
     if not options.get("boundaries", True):
-        provider = make_provider("free_field", c)
+        provider = make_provider("free_field", c, engine=engine)      # the run's engine (a-engarg; before: the default's)
     h = 1e-4
     tx_position = np.asarray(record.tx_position(0.0), dtype=float)
     tx_velocity = (np.asarray(record.tx_position(h), dtype=float) - np.asarray(record.tx_position(-h), dtype=float)) / (2.0 * h)

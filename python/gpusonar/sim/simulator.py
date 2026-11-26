@@ -61,7 +61,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
 
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
     path pairing, of reverberation and of echo synthesis for a sampled pulse (analytic pulses
-    have the C++ kernel only); a provider has its own `engine`.
+    have the C++ kernel only), and of the eigenray providers this function builds itself (the
+    free field when no `provider` is given, the direct arrival without boundaries, a basin's
+    own-ping pulse; a-engarg). A `provider` passed in keeps its own `engine`; when that is not
+    the engine an explicit `engine` argument names, a RuntimeWarning names both (the provider
+    is not changed). GPUSONAR_SIM_ENGINE is a default: a provider's own engine wins over it
+    without a word.
 
     `sources` (sim/sources.py `build_sources`): radiating sources heard one way, added to
     the same record. `transmit=False`: the sonar does not ping (a passive capture): no
@@ -83,7 +88,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
                                time_ns=time_ns, environment=env, tx_pose=tx_pose)
     c = record.environment.sound_speed
-    provider = provider or make_provider("free_field", c)
+    if provider is None:
+        provider = make_provider("free_field", c, engine=engine)
+    else:
+        _engine.check_provider(provider, engine, "simulate_ping")
     if hasattr(provider, "set_ping"):
         # Time-spread bounce paths fade with time and with the sonar's own speed.
         v = pose.velocity
@@ -588,7 +596,8 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
 
     With `output`, records and ground truth are written to that container file.
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
-    eigenray providers, the path pairing and reverberation.
+    eigenray providers (it takes the place of `propagation.engine`), the path pairing,
+    reverberation and echo synthesis of a sampled pulse: one engine for every stage of the run.
     """
     if isinstance(name_or_config, dict):
         cfg = name_or_config
@@ -603,9 +612,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     env = site.resolve(cfg.get("environment"), strict=True)
     cfg = site.apply_to_scenario(cfg, env, sonar)
     tier = cfg.get("fidelity", "free_field")
-    provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
-    if engine is not None and hasattr(provider, "engine"):
-        provider.engine = engine
+    provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"), engine=engine)
     if any(getattr(provider, "bottom_slope", None) or ()):
         # The scattering-function reverberation lies on a flat boundary at its boundary_z; under a tilted bottom
         # it would be laid on the wrong plane. A sloping bed is put in the scene instead (a `seafloor` with `slope`).

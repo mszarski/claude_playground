@@ -138,10 +138,12 @@ def test_the_cuda_backend_is_recorded(clean_env):
 
 @needs_cpp
 def test_a_provider_on_another_engine_than_the_pairing_is_recorded_as_it_ran(clean_env):
-    """The provider has its own `engine`: eigenrays in NumPy, pairing in C++."""
+    """The provider has its own `engine`: eigenrays in NumPy, pairing in C++ (and, since a-engarg, a warning naming
+    both)."""
     sonar = sonar_with("sas_auv", {"type": "lfm", "duration": 0.002}, 18.0, 22.0, omni=True)
-    rec = simulate_ping(sonar, make_pose(), _five_targets(sonar, 20.0), environment={"sound_speed": C}, adc=False,
-                        provider=FreeFieldProvider(C, engine="numpy"), engine="cpp")
+    with pytest.warns(RuntimeWarning, match="provider passed in"):
+        rec = simulate_ping(sonar, make_pose(), _five_targets(sonar, 20.0), environment={"sound_speed": C}, adc=False,
+                            provider=FreeFieldProvider(C, engine="numpy"), engine="cpp")
     assert note(rec) == {"eigenrays": "numpy", "pairing": "cpp", "synthesis": "cpp_host"}
 
 

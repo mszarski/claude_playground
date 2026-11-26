@@ -958,7 +958,14 @@ def fluid_transmission(grazing, c_water: float, speed: float, density: float,
     return 1.0 + rayleigh_reflection(grazing, c_water, speed, density, attenuation, water_density)
 
 
-def make_provider(tier: str, sound_speed: float, options: dict | None = None) -> EigenrayProvider:
+def _with_engine(provider: EigenrayProvider, engine: str | None) -> EigenrayProvider:
+    if engine is not None:
+        provider.engine = engine
+    return provider
+
+
+def make_provider(tier: str, sound_speed: float, options: dict | None = None,
+                  engine: str | None = None) -> EigenrayProvider:
     """The eigenray provider of a fidelity tier, with `sound_speed` in m/s and the tier's
     `options` passed as keyword arguments:
 
@@ -973,15 +980,20 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
       `bathymetry`), the same `environment` and the provider's keywords; an unknown key is
       refused with the nearest known one.
 
+    `engine` ("cpp" or "numpy"): the engine of the free_field, image_source and sediment
+    providers, in place of an `engine` key of `options` (a-engarg: the caller's engine choice
+    reaches the providers the simulator builds for itself); None (the default) leaves it to
+    the options, else to sim/engine.py's default. Bellhop has one implementation: ignored.
+
     Any other tier raises ValueError."""
     options = options or {}
     if tier == "free_field":
-        return FreeFieldProvider(sound_speed)
+        return FreeFieldProvider(sound_speed, engine=engine)
     if tier == "image_source":
-        return ImageSourceProvider(sound_speed, **options)
+        return _with_engine(ImageSourceProvider(sound_speed, **options), engine)
     if tier == "sediment":
         _refuse_unknown(options, _SEDIMENT_KEYS, "sediment: ")
-        return SedimentProvider(sound_speed, **options)
+        return _with_engine(SedimentProvider(sound_speed, **options), engine)
     if tier == "eigenray":
         from .bellhop import BellhopProvider, OceanEnvironment
         opts = dict(options)
