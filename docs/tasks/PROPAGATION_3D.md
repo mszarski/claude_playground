@@ -553,8 +553,8 @@ in NumPy and C++ (`libs/sim` `paths.cpp`). No shipped scene uses it.
   C++ provider keeps axis walls and a flat bottom. New scenes, nothing shipped changed:
   `fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath` and `sas_auv_multipath_free`
   (`SCENARIOS.md`). Not done: a wall's coefficient from a material (each is a constant, a placeholder);
-  roughness (time spreading) on these paths; reverberation over a tilted bed; the arrival direction of
-  the old `{axis, position}` walls, which is wrong in the horizontal (follow-up).
+  roughness (time spreading) on these paths; reverberation over a tilted bed. The arrival direction of
+  the old `{axis, position}` walls, wrong in the horizontal until then, was fixed by `sonar-8qn9`.
 
 ### Recommendation
 

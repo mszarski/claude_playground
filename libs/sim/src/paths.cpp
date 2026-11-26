@@ -259,10 +259,14 @@ EigenraySet image_source_eigenrays(const ImageSourceConfig& config, const Vec3d&
       }
       out.amplitude[e] = divide(coef, r);
       const bool odd = ((ray.n_surface + ray.n_bottom) % 2) == 1;
+      const int wall_axis = ray.wall >= 0 ? config.walls[static_cast<std::size_t>(ray.wall)].axis : -1;
       for (int a = 0; a < 3; ++a) {
         out.launch[3 * e + a] = u[a];
-        // Direction of travel at the real point: the vertical part mirrors once per bounce.
-        out.arrival[3 * e + a] = (a == 2 && odd) ? -u[a] : u[a];
+        // Direction of travel at the real point: the direction to the image mirrored in every plane met, the
+        // vertical part once per surface or bottom bounce and the wall's horizontal part at its bounce (before
+        // sonar-8qn9 the wall's was left out).
+        const bool flip = (a == 2 && odd) || a == wall_axis;
+        out.arrival[3 * e + a] = flip ? -u[a] : u[a];
       }
       out.n_surface[e] = ray.n_surface;
       out.n_bottom[e] = ray.n_bottom;

@@ -153,28 +153,48 @@ def test_a_rotated_wall_is_the_same_wall_in_rotated_coordinates(deg):
     np.testing.assert_allclose(b.arrival, a.arrival @ rot.T, atol=1e-11)
 
 
-def test_an_axis_aligned_plane_wall_gives_the_images_of_the_axis_wall():
-    """The same wall in both forms: the {axis, position} form adds the wall to every image of the surface and bottom
-    series without checks; the general form finds the one order of bounces that is valid for each. Same delays and
-    amplitudes. The arrival directions differ: the axis form mirrors only the vertical part of the direction (both
-    engines, `paths.cpp` and `_eigenrays_numpy`), so a wall path arrives with the wrong horizontal direction there;
-    the general form mirrors it in every plane (a finding of sonar-0nsi, left as it is: no shipped scene has walls)."""
-    kw = dict(surface_z=0.0, bottom_z=30.0, bottom=SAND, max_order=2)
+# Axis-aligned walls of a box -30 < x < 40, -30 < y < 35 (water inside), each in both forms.
+AXIS_WALLS = {"x40": ({"axis": 0, "position": 40.0, "coefficient": 0.7},
+                      {"point": [40.0, 0.0, 0.0], "normal": [-1.0, 0.0, 0.0], "coefficient": 0.7}),
+              "y-30": ({"axis": 1, "position": -30.0, "coefficient": 0.6 + 0.2j},
+                       {"point": [0.0, -30.0, 0.0], "normal": [0.0, 1.0, 0.0], "coefficient": 0.6 + 0.2j}),
+              "x-30": ({"axis": 0, "position": -30.0, "coefficient": -0.5j},
+                       {"point": [-30.0, 0.0, 0.0], "normal": [1.0, 0.0, 0.0], "coefficient": -0.5j})}
+
+
+@pytest.mark.parametrize("engine", ["cpp", "numpy"])
+@pytest.mark.parametrize("walls", [("x40",), ("x40", "y-30"), ("x40", "x-30")])
+@pytest.mark.parametrize("options", [dict(surface_z=0.0, bottom_z=30.0, bottom=SAND, max_order=2),
+                                     dict(surface_z=0.0, bottom_z=30.0, bottom_coefficient=0.5 - 0.2j, max_order=3),
+                                     dict(surface_z=0.0, bottom_z=30.0, bottom=SAND),
+                                     dict(surface_z=None, bottom_z=30.0, bottom_coefficient=0.4, max_order=1),
+                                     dict(surface_z=None)])
+def test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane(engine, walls, options):
+    """sonar-8qn9 (D-201's finding): the same axis-aligned walls in both forms. The {axis, position} form adds each
+    wall once to every image of the surface and bottom series without checks; the general form finds the one order of
+    bounces that is valid for each. In a box with the points and the source inside, every ray of the axis form is a
+    valid ray of the general form and the general form has no other valid ray: delays, launch and ARRIVAL directions
+    and bounce counts to the bit, amplitudes to rounding (a product over the bounces in path order where the axis form
+    raises each coefficient to its count). Before sonar-8qn9 the axis form mirrored only the vertical part of the
+    arrival direction (both engines), so a wall path arrived with the wrong horizontal direction. Wall-only paths
+    (`surface_z: None` and no bottom), paths mixing walls with surface and bottom bounces, one and two walls (at a
+    right angle, and parallel)."""
     source = np.array([0.0, 3.0, 8.0])
-    pts = water_points(6, depth=30.0, x=(-30.0, 39.0))
-    old = ImageSourceProvider(C, walls=[{"axis": 0, "position": 40.0, "coefficient": 0.7}], **kw).eigenrays(source, pts)
-    new = ImageSourceProvider(C, walls=[{"point": [40.0, 0.0, 0.0], "normal": [-1.0, 0.0, 0.0], "coefficient": 0.7}],
-                              **kw).eigenrays(source, pts)
-    assert old.valid.sum() == new.valid.sum()
+    pts = water_points(6, depth=30.0, x=(-29.0, 39.0))
+    pts[:, 1] = np.clip(pts[:, 1], -29.0, 34.0)
+    old = ImageSourceProvider(C, engine=engine, walls=[AXIS_WALLS[w][0] for w in walls], **options)
+    new = ImageSourceProvider(C, engine=engine, walls=[AXIS_WALLS[w][1] for w in walls], wall_order=1, **options)
+    a, b = old.eigenrays(source, pts), new.eigenrays(source, pts)
+    assert new.general and not old.general and old.order_used == new.order_used
+    assert a.valid.all() and b.valid.sum() == a.valid.size
+    n_walled = 0
     for i in range(len(pts)):
-        ro, rn = sorted_rays(old, i), sorted_rays(new, i)
-        np.testing.assert_allclose(rn[0], ro[0], rtol=1e-14)
-        np.testing.assert_allclose(rn[1], ro[1], rtol=1e-12)
-        np.testing.assert_allclose(rn[2], ro[2], atol=1e-14)
-        walled = np.abs(rn[3][:, 0] + ro[3][:, 0]) < 1e-12           # x-component reversed: the wall paths
-        np.testing.assert_allclose(rn[3][~walled], ro[3][~walled], atol=1e-14)
-        np.testing.assert_allclose(rn[3][walled][:, 1:], ro[3][walled][:, 1:], atol=1e-14)
-        assert walled.sum() == len(ro[0]) // 2
+        ro, rn = sorted_rays(a, i), sorted_rays(b, i)
+        for k in (0, 2, 3, 4, 5):
+            np.testing.assert_array_equal(rn[k], ro[k])
+        np.testing.assert_allclose(rn[1], ro[1], rtol=1e-14, atol=0.0)
+        n_walled += int(np.sum(ro[3][:, 0] != ro[2][:, 0]) + np.sum(ro[3][:, 1] != ro[2][:, 1]))
+    assert n_walled >= len(pts) * len(walls)                       # wall paths are among them, reversed horizontally
 
 
 # --- (iv) a corner and a wedge ---------------------------------------------------------------------------------

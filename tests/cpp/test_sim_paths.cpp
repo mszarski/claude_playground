@@ -91,6 +91,32 @@ TEST(Paths, ImageSeriesWithoutABottomStopsAtTheSurface) {
   EXPECT_NEAR(e.amplitude[1].real(), 0.8 / std::hypot(40.0, 80.0), 1e-15);
 }
 
+TEST(Paths, AWallPathArrivesMirroredInTheWall) {
+  // sonar-8qn9: a path off a wall y = 50 then the surface leaves towards the image (40, 80, -10) and arrives with
+  // both the vertical part and the part across the wall (y) turned around; the part along the wall (x) is kept.
+  sim::ImageSourceConfig cfg;
+  cfg.sound_speed = kC;
+  cfg.max_order = 1;
+  cfg.walls.push_back({1, 50.0, {0.8, 0.0}});
+  const Vec3d source{0.0, 0.0, 10.0};
+  const std::vector<double> point{40.0, 20.0, 10.0};
+  const auto e = sim::image_source_eigenrays(cfg, source, point.data(), 1);
+  ASSERT_EQ(e.n_rays, 4);  // direct, wall, surface, surface + wall
+  for (int j = 0; j < 4; ++j) {
+    const bool wall = j % 2 == 1, surface = j >= 2;
+    EXPECT_EQ(e.arrival[3 * j], e.launch[3 * j]) << j;
+    EXPECT_EQ(e.arrival[3 * j + 1], wall ? -e.launch[3 * j + 1] : e.launch[3 * j + 1]) << j;
+    EXPECT_EQ(e.arrival[3 * j + 2], surface ? -e.launch[3 * j + 2] : e.launch[3 * j + 2]) << j;
+  }
+  // The last leg of the wall-and-surface path, from the geometry: the line from the source to the image
+  // (40, 80, -10) meets the wall at y = 50 (t = 5/8, z = -2.5: above the surface, so the surface comes first, at
+  // t = 1/2, (20, 40, 0)), then the wall at (25, 50, -2.5) mirrored to (25, 50, 2.5); the leg to the point is
+  // (15, -30, 7.5) / |..|.
+  const double leg[3] = {15.0, -30.0, 7.5};
+  const double length = std::sqrt(15.0 * 15.0 + 30.0 * 30.0 + 7.5 * 7.5);
+  for (int a = 0; a < 3; ++a) EXPECT_NEAR(e.arrival[3 * 3 + a], leg[a] / length, 1e-15) << a;
+}
+
 TEST(Paths, RayleighCoefficientLimits) {
   const sim::FluidBottom sand{1700.0, 1.9, 0.0, 1.0};
   // Normal incidence: (Z2 - Z1) / (Z2 + Z1).

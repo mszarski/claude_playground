@@ -307,20 +307,20 @@ class ImageSourceProvider(EigenrayProvider):
             img = points.copy()
             img[:, 2] = img_z
             coef = self.surface_coefficient**ns * self.bottom_coefficient**nb
-            rays.append((img, coef, ns, nb, 1.0))
+            rays.append((img, coef, ns, nb, 1.0, None))
             for wall in self.walls if walls else []:
                 wimg = img.copy()
                 axis = int(wall["axis"])
                 wimg[:, axis] = 2.0 * float(wall["position"]) - wimg[:, axis]
                 wall_coef = complex(wall["coefficient"])
-                rays.append((wimg, coef * wall_coef, ns, nb, wall_coef))
+                rays.append((wimg, coef * wall_coef, ns, nb, wall_coef, axis))
         s, k = points.shape[0], len(rays)
         out = EigenraySet(
             delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
             launch=np.zeros((s, k, 3)), arrival=np.zeros((s, k, 3)),
             n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int),
             valid=np.ones((s, k), dtype=bool), sound_speed=c)
-        for j, (img, coef, ns, nb, wall_coef) in enumerate(rays):
+        for j, (img, coef, ns, nb, wall_coef, wall_axis) in enumerate(rays):
             r, u = _direct(source, img, c)
             out.delay[:, j] = r / c
             if self.bottom is not None and nb > 0:
@@ -331,10 +331,14 @@ class ImageSourceProvider(EigenrayProvider):
                         * rayleigh_reflection(grazing, c, **self.bottom) ** nb) * wall_coef
             out.amplitude[:, j] = coef / r
             out.launch[:, j] = u
-            # Direction of travel at the real point: mirror the vertical component once per bounce.
+            # Direction of travel at the real point: the direction to the image mirrored in every plane met, the
+            # vertical component once per surface or bottom bounce and the wall's horizontal one at its bounce
+            # (before sonar-8qn9 the wall's was left out).
             arr = u.copy()
             if (ns + nb) % 2 == 1:
                 arr[:, 2] = -arr[:, 2]
+            if wall_axis is not None:
+                arr[:, wall_axis] = -arr[:, wall_axis]
             out.arrival[:, j] = arr
             out.n_surface[:, j] = ns
             out.n_bottom[:, j] = nb

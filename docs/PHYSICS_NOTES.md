@@ -3929,13 +3929,22 @@ returns along its own line reversed in the horizontal (the corner reflector).
 **Checked against closed forms** (`test_image_planes.py`): one tilted bed (image position, delay, launch, arrival,
 specular point, Rayleigh coefficient at the local grazing angle); zero tilt against the flat bottom with both
 engines (every ray found and no other); a wall turned about z equals the same wall in turned coordinates; the
-axis-aligned wall in both forms gives the same delays and amplitudes; reciprocity over a tilted bed, a turned wall
+axis-aligned wall in both forms gives the same rays (delays, amplitudes, launch and arrival directions; since
+`sonar-8qn9`); reciprocity over a tilted bed, a turned wall
 and a bounded wall (two bounces a leg); bounded walls reflect only on their face and block only there; points outside
 the water get no path; the energy rule picks the same order as the flat series at zero tilt, warns at its cap; the
 pairing of masked rays agrees between the engines.
 
-**Found on the way.** The `{axis, position}` walls of both engines (`_eigenrays_numpy`, `paths.cpp`) mirror only
-the vertical part of the arrival direction, so a wall path arrives at the scatterer with its horizontal direction
-unreflected. Delays, amplitudes and launch directions are right; Lambert weights of scatterers with normals and
-anything else that reads `arrival` are not, on wall paths. No shipped scenario has walls; left as it is (an
-existing default) and proposed as a follow-up. The general form mirrors the whole direction.
+**Found on the way, fixed by `sonar-8qn9`.** Until `sonar-8qn9` the `{axis, position}` walls of both engines
+(`_eigenrays_numpy`, `paths.cpp`) mirrored only the vertical part of the arrival direction, so a wall path arrived at
+the scatterer with the component across the wall unreflected (the sign of x for an `axis: 0` wall, of y for
+`axis: 1`). Delays, amplitudes, launch directions, bounce counts and validity were right. What read the wrong
+component: the Lambert weight of a scatterer with its own normal (`two_way_paths`, both engines: the cosine between
+the arrival and the normal), the Lambert facets of `reverb_relief.py` (the same cosine, and the apparent origin of
+its shadow test), the Doppler of a moving source (`sources.py`, the range rate `arrival . v`) and the angle-spread
+taps of `timespread.py` (turned about the arrival). Not affected: Lambert weights without a normal (`|arrival_z|`),
+the scattering-function reverberation (`arrival_z` and the horizontal magnitude), and element and beam patterns,
+which see the apparent position along the launch direction. Now the wall's horizontal component is mirrored too, and
+an axis wall gives the same rays as the same wall as a plane, on both engines (`test_image_planes.py`,
+`test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane`: delays, directions and bounce counts to the bit,
+amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no shipped record moved.
