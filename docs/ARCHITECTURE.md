@@ -3,7 +3,7 @@
 How the pieces fit, where each runs, and how to get at the data between them.
 Diagrams are drawn by `tools/architecture_diagrams.py`.
 
-**Since D-160.** This file was written before decisions D-161 to D-181 and is kept as the
+**Since D-160.** This file was written before decisions D-161 to D-201 and is kept as the
 overview. The current stage-by-stage description of the live chain, with every default, its
 config key and the decision behind it, is [`handoff/SOFTWARE.md`](handoff/SOFTWARE.md)
 (section 5; sections 2 to 4 for the layers, the repository map and the two engines). Where
@@ -105,7 +105,8 @@ the two differ, that file and the code are right.
   on CPU threads or on the device, selected by the chain's `backend`. On an L4 the whole
   chain takes 18 ms a ping with bearings from the map and 0.48 s with SBL (`RESULTS.md`).
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
-  objects per ping. Whitening, median TVG, DRC, board synchronisation and motion
+  objects per ping. Whitening, median TVG, DRC, board synchronisation (threaded over boards and
+  blocks since D-191; 0.027 to 0.039 s of a ping at 64 and 96 channels on an L4 host, D-192) and motion
   estimation are CPU code (the far-field and MVDR beamformers have a device path, `libs/live/src/beamform_cuda.cu`, D-122;
   so has motion estimation's delay measurement, `libs/motion/src/delay_cuda.cu`, opt-in by `MotionOptions.delay_backend`
   and slower than the host on an L4, D-148 and `STATUS.md`, "Motion estimation limits so far"; its solve is CPU only); none is the bottleneck of a chain that uses them. In the simulator,
@@ -133,8 +134,19 @@ The long-range array's live chain exists twice, on purpose.
 Everywhere else the split is: kernels and file format in C++ (CUDA where listed above);
 far-field and MVDR beamforming, array calibration, the simulator's path geometry and its
 reverberation sum in C++ with the NumPy versions kept as references (D-61); the
-simulator's scene description, the Bellhop interface, noise, SAS motion estimation glue,
-simulator calibration and all tools in Python. Holoscan operators exist in both: Python wrappers of the stages
+simulator's scene description, the Bellhop and Bellhop3D interfaces, noise, SAS motion estimation glue,
+simulator calibration and all tools in Python.
+
+Propagation in the simulator is chosen per scenario by `fidelity` (`sim/propagation.py`
+`make_provider`; `handoff/SIMULATION.md` has the models and their checks): `free_field`,
+`image_source` (flat surface and bottom and axis walls; opt-in a tilted bottom and walls as any plane,
+D-201), `sediment` (one refracted ray into the bed), `eigenray` (Bellhop, 2-D along each bearing) and,
+opt-in since 2026-11-26, `eigenray3d` (Bellhop3D over a 3-D bed, `sim/bellhop3d.py`; only the
+illustrative `flank_seamount_3d` uses it). Bellhop and Bellhop3D are GPL-3 programs run as separate
+processes: input files written, the program run, its output read; nothing of them is linked
+(`OPEN_SOURCE.md`). Every tier returns eigenrays of one form (`EigenrayProvider.eigenrays`: delays,
+amplitudes, launch and arrival directions, bounce counts), and path pairing and synthesis take them
+whatever the tier. Holoscan operators exist in both: Python wrappers of the stages
 (`holoscan_ops.py`) and C++ operators around the live library (`libs/holoscan_ops`,
 program `build/bin/sonar_live_holoscan`), built and run on a GPU machine with Holoscan 4.6.
 

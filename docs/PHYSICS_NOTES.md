@@ -2893,7 +2893,7 @@ Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_
 with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
 `hall_novarini`), because the handbook's law for it is not printed anywhere open; without the
 small-scale roughness term (its empirical function is not printed), so between about 30 and
-70 degrees it is a lower bound.
+70 degrees it is a lower bound on the model with that term, not on data (D-193; below).
 
 *Bubble loss per bounce: is there data to arbitrate between `apl_1994` and our population
 model?* Not in anything we could open. The one measurement paper found by title (attenuation
