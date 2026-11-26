@@ -5,6 +5,9 @@
 #   - surface reverberation (Chapman-Harris) and a volume-scattering layer (SST's sheet).
 # The sediment numbers are PLACEHOLDERS (bottom.PLACEHOLDER_SAND), the volume strength and the
 # bubble loss are illustrative: none is a measurement. Frame: z = 0 is the sea surface.
+# The surface's slope for time spreading is the Cox-Munk total from the 6 m/s wind (0.0337);
+# Dahl 1996 and 2004 use the long-wave slope for forward scatter (eq. (A7): 0.0199)
+# (docs/references/CONFORMANCE.md). Chapman-Harris at 6-10 kHz is just above its 0.4-6.4 kHz.
 name: flank_sst_shallow
 sonar: flank_32
 fidelity: image_source

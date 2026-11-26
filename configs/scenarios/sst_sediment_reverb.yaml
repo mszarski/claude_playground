@@ -1,7 +1,8 @@
 # Closed-form check through the whole simulator (tools/sst_validation.py, "checks"): bottom
 # reverberation from a named sediment against the integral of its scattering strength.
 # An omnidirectional sonar 20 m above a flat bottom of `medium_sand` (configs/sediments.yaml:
-# the row read from arXiv:1809.08459 Table 1), a 2 ms tone at 20 kHz, the direct path only,
+# the row read from arXiv:1809.08459 Table 1, which is also Jackson and Richardson 2007 Fig. 13.2's
+# "typical medium sand"), a 2 ms tone at 20 kHz, the direct path only,
 # no absorption: the mean intensity at two-way time t is then
 #     sigma(grazing) x pi c T / R^3,   R = c (t - T / 2) / 2,  sin(grazing) = 20 m / R
 # (ring of the bottom of width c T / 2 along the slant range, two-way spreading 1 / R^4).
