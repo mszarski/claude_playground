@@ -180,7 +180,7 @@ def test_scenario_takes_thorp_by_name():
     cfg = load_scenario_config("point_grid_fls_300k")
     base = run_scenario(cfg).records[0].samples.array
     cfg["absorption"] = "thorp"
-    with pytest.warns(UserWarning, match="pure-water term"):          # a 300 kHz sonar: outside Thorp's range
+    with pytest.warns(UserWarning, match="pure-water term"):          # a 300 kHz sonar: above our 100 kHz warning limit (TR 0702 states none)
         assert not np.array_equal(run_scenario(cfg).records[0].samples.array, base)
 
 
