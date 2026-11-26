@@ -3834,3 +3834,51 @@ fjord bed. The owner's to decide (question 9 of `docs/tasks/PROPAGATION_3D.md`).
   beams, a bed grid of 12.5 m or finer in a summit's shadow, never arrivals summed over an 'L' bed.
 - Not run on a GPU job yet: the oracle tests skip here without the oracles' variables; the next full
   suite runs them.
+
+### D-198 Why `flank_patrol`'s small vehicle is never detected: the scene's reverberation, not a defect (issue sonar-80b; no default, scenario or result changed)
+
+What is wrong first: the repository's link-budget models (`SonarEquation`, the coverage model) have no
+reverberation term. For this target they predict about 30 dB of signal over noise where the simulated
+data give about 4 dB over the background. Follow-up filed.
+
+- The echo is in the data at the right place (alone and without noise it peaks at 2200 to 2220 m and
+  23.9 to 24.0 degrees; truth 2193 m, 24.2 degrees). It is lost at the first stage: bottom
+  reverberation (Lambert -27 dB) is 21.9 dB above the noise at 2.2 km, and the vehicle's 4 m cell is
+  3.8 to 5.1 dB above its local background (median 4.4 dB; 28 full-size pings, seeds 17 to 26: all six
+  pings of seeds 17 and 18, pings 0 and 1 of the others), against the gallery detector's threshold
+  factor of 11.6 dB and its 12 dB cut. No cell is flagged within 150 m and 2 degrees on any of the 28
+  pings; the "nearest track" of the gallery is the wreck's.
+- The three targets agree with each other: reverberation falls with range about as the echoes do, so
+  each target's margin is roughly its target strength plus 5 dB (vehicle -3 dB: about 4; wreck +12: 17;
+  submarine +16: 17).
+- Against noise alone the vehicle is 23.8 dB up and is detected.
+- The quick settings (8 arrivals) read about 6 dB optimistic for this target (10.2 dB against 3.8 at
+  the scenario's 32; 64 gives the same as 32).
+- The scoring is right, and both engines agree. The live chain's defaults miss the vehicle by 0.8 dB
+  (cell mean 5.0 against its 5.8 dB threshold).
+- Options measured, none applied (each the owner's): (A) a stronger vehicle in the scene: detected by
+  the live chain at target strength 0 dB, by the gallery detector from +9 dB (one ping, one seed; the
+  gallery numbers by adding the scaled echo, not re-simulated); (B) a lower gallery cut: a working
+  margin under 1 dB (at 4.5 dB the vehicle on 12 of 28 pings with no false detection, at 4.0 dB 24 with
+  9), not recommended: it leans on the simulator's Gaussian reverberation; (C) the live chain's existing
+  opt-in `cfar.integrate_cells: [1, 4, 16]` (D-97) detects it on both pings tried (10.6 and 10.3 dB)
+  at the cost of one extra detection a ping near 4150 m.
+- Test: `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` now also asserts that the small
+  vehicle is not tracked, so a change that starts detecting it is noticed. The whole file: 28 passed
+  on the CPU with Bellhop (32 min).
+- Not verified: the reverberation level against an independent model; tracks and classes under any
+  option; a GPU run.
+
+### D-199 Correction to D-197's account of the fjord beds (amends D-197; nothing changed)
+
+D-197 leads with the fjord trials moving by +5.1, +0.2 and +3.6 dB if their bed were written as
+Bellhop's curvilinear form, which reads as if the shipped levels were that uncertain. They are not. On
+the bed as shipped (piecewise linear), one-way loss at the target (`docs/tasks/PROPAGATION_3D.md`,
+section 2): shipped 58.29, 40.03, 50.63 dB; every arrival summed 55.77, 40.03, 50.48; Bellhop's own
+loss run 55.57, 39.71, 49.38 (2-row, 3-row, 1-row). So the arrivals agree with the loss run within
+0.2, 0.3 and 1.1 dB. The 2-row scenario's 2.7 dB against the loss run is its limit of 12 arrivals (an
+existing choice; issue sonar-9b8's subject), not the bed. The bed's form is worth 1.5, 0.1 and 1.1 dB
+(the loss run itself between the two forms). The large numbers under the curvilinear form are that
+form's arrivals disagreeing with its own loss run. Recommendation: keep the beds; the owner decides
+whether the 2-row scenario keeps its 12-arrival limit. Bellhop3D cannot referee this: the scenarios
+are axisymmetric and the arrivals machinery is the same.

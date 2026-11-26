@@ -310,7 +310,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-197)
+## 3. Tests that pin a decision (D-155 to D-199)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -346,6 +346,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| D-198 (sonar-80b) | `flank_patrol`'s small vehicle is not tracked (below the scene's reverberation) | `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
 | D-197 (sonar-6c8) | Bellhop 2-D and Bellhop3D N x 2-D agree over a level bed; beam counts; arrivals over a piecewise-linear bed (characterisations) | `test_bellhop_nx2d_agreement.py` (the whole file; oracles) |
 | D-196 (sonar-6fc) | the K shape from a density per cell; our shape is the paper's alpha; its worked example | `test_reverb_statistics.py` (`test_our_shape_is_the_papers_alpha`, `test_the_papers_worked_example`, `test_the_shape_follows_the_cell`, `test_density_statistics_in_a_ping` and the rest of the new cases) |
 | D-195 (sonar-59u) | the decimate-first correction by board, the samples to the bit | `tests/cpp/test_stage2.cpp`: `Decimate.BoardsCorrectedTogetherGiveTheChannelByChannelSamplesToTheBit` |

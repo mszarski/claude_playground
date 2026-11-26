@@ -120,6 +120,11 @@ def test_flank_patrol_detects_and_tracks():
     # Classified and scored as the other world-frame scenes (sonar-a98: the tracker's (x, y) seen as (y, x)).
     cls = m["classification"]["targets"]
     assert cls["submarine"]["kind"] == "mover" and cls["wreck"]["kind"] == "static"
+    # sonar-80b: the -3 dB small vehicle is below this detector's 12 dB cut, as the scene is written (not a defect of
+    # placement, chain or scoring). It is bottom-reverberation-limited: in the quick settings (8 arrivals) its 4 m cell
+    # is about 10 dB over the background, at full size (32 arrivals, which add reverberation more than echo) about 4 dB.
+    # Pinned so that a change that makes it detected is noticed and documented.
+    assert not m["targets"]["small_vehicle"]["tracked"]
 
 
 # --- the owner's designs: moving ownship, world-fixed boundaries -----------------------------
