@@ -224,6 +224,58 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   (`test_realistic_scenes.py`, `test_scene_objects.py` name the scenes).
 - Must not: change the `transmission` default silently; claim sub-critical correctness (G-13).
 
+#### G-3 done (opt-in code; the scene switch NOT made, see below)
+
+- What exists: `propagation.penetration: fluid` on the `sediment` tier, both engines (`SedimentProvider`,
+  C++ `sediment_eigenrays`; no CUDA copy: eigenrays are host-side for every backend), default `constant` = the tier
+  before, bit-identical (sha256 of the default eigenrays on both engines and of one ping of `buried_cylinder`,
+  `buried_objects`, `sst_echo_level`, `rail_objects`, before and after). Per leg V_wp(theta_w) / sqrt(a_rho)
+  exp(-k_p'' L); the sediment from `bottom` (`{speed, density, attenuation}` or `{sediment: name}`, or the
+  environment's bottom), an unstated attenuation refused; frequency = the sonar's band centre. Sub-critical points
+  (straight line below arccos(c_w/c_s)): the evanescent field (15.1) by default (`subcritical: evanescent`), `ray`,
+  or `refuse`; a warning once per provider. `docs/PHYSICS_NOTES.md` section 31, `docs/CONFIGURATION.md`.
+- Disagreement with [N3 §3.5]: the two-way interface factor |V_wp(90)|^2 / a_rho = 1.017 is a PRESSURE factor,
+  +0.146 dB, not the note's "+0.07 dB" (10 log10 of it). The worked case is otherwise reproduced: attenuation
+  3.00 dB one way at 20 kHz, 6.00 / 9.00 dB two-way at 20 / 30 kHz; total against the old tier -5.85 / -8.85 dB.
+  The evanescent rates 145 / 364 / 728 / 2183 dB/m (10 deg) are reproduced within 0.5 %.
+- Owner's table (CPU, host backend; `tools/gallery.py` `run_buried` processing; noise-free scenes, so the figure of
+  merit is the target over the median sediment clutter of the refraction-corrected volume, not an SNR; no detector
+  runs on these scenes). "On" = `penetration: fluid, bottom: {sediment: medium_sand, speed: 1700}` (the scene's
+  speed kept; medium sand's density ratio 1.845 and loss 0.884 dB/wavelength = 10.4 dB/m at 20 kHz at 1700 m/s).
+  No point of either scene is sub-critical with it.
+
+| Scene (raster) | Quantity | Off (today) | On | Change |
+|---|---|---|---|---|
+| `buried_objects` full (0.075 m, 625 pings, gallery) | cylinder peak voxel | ref | -5.18 dB | -5.18 dB |
+| | sphere (0.22 m) peak voxel | ref | -3.63 dB | -3.63 dB |
+| | median sediment clutter | ref | -4.38 dB | -4.38 dB |
+| | `cylinder_over_clutter_db` | 21.12 | 20.32 | -0.80 dB |
+| | sphere over clutter | 33.77 | 34.52 | +0.75 dB |
+| | cylinder top depth (refraction on) | 0.26 m | 0.26 m | none |
+| | sphere top depth | 0.14 m | 0.14 m | none |
+| | nadir ping, record peak | 0.0656 | 0.0381 | -4.7 dB |
+| `buried_objects` quick (0.15 m, 169 pings, the test) | cylinder peak voxel | ref | -5.85 dB | |
+| | sphere peak voxel | ref | -3.62 dB | |
+| | `cylinder_over_clutter_db` (test: > 12) | 17.53 | 16.16 | -1.37 dB |
+| | cylinder / sphere top, refraction on (test: 0.24-0.31 / 0.14 +- 0.02) | 0.28 / 0.14 | 0.28 / 0.14 | none |
+| | cylinder / sphere top, refraction off (test: cyl off < on) | 0.24 / 0.13 | 0.24 / 0.13 | none |
+| `buried_cylinder` quick (169 pings) | cylinder peak voxel | ref | -6.50 dB | |
+| | cylinder over clutter | 28.99 | 29.26 | +0.27 dB |
+| | cylinder top depth | 0.30 m | 0.30 m | none |
+
+  The interface's own (proud) scatterers give bit-identical records with the option on
+  (`test_proud_scatterers_of_a_buried_scene_do_not_move`). Every assertion of `test_buried_objects_volume` still
+  holds with the option on; `test_scene_objects.py`'s buried-cylinder check asserts only counts and positions.
+  If switched, these would be stale until regenerated: `docs/figures/gallery.json` `buried_objects`
+  (`cylinder_over_clutter_db` 21.12 -> about 20.3), `docs/figures/buried_objects.png` and `.gif` (drawn in dB re the
+  sediment clutter, which drops with the targets: the cylinder moves -0.8 dB, the sphere +0.75 dB on that scale), the
+  `docs/RESULTS.md` "3D near-field imaging of a buried object" bullet "Not modelled: transmission loss and attenuation
+  in the sediment", the scene headers, and `docs/handoff/SIMULATION.md`'s sediment-tier row. With medium sand by
+  name at 1767 m/s instead (quick): cylinder -6.39 dB, sphere -3.59 dB, `cylinder_over_clutter_db` 15.03, depths
+  unchanged; 8 points sub-critical (measured with the earlier keep-the-ray policy).
+- Not done: switching the two scenes (the owner's later instruction to switch them was refused by this session's
+  permission system; the YAML lines to apply are in the G-3 report).
+
 ### G-4 Elastic flat-interface reflection (rock, optionally gravel) — OPT-IN, S-M
 - Gap W3. Merges [N1 WP-C] and [N3 WP4]; formulas [N3 §2.3] (9.34)-(9.40), losses (9.23)-(9.24).
 - Files: `python/gpusonar/sim/bottom.py` (`reflection`), `propagation.rayleigh_reflection`,

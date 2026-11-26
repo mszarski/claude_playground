@@ -210,11 +210,28 @@ struct SedimentConfig {
   double sound_speed = kUnset;     ///< m/s in the water; no default
   double sediment_speed = kUnset;  ///< m/s; no default
   double interface_z = 0.0;
-  std::complex<double> transmission{1.0, 0.0};
+  std::complex<double> transmission{1.0, 0.0};  ///< used when `fluid` is false (the default tier)
+  /// Opt-in (G-3): the flat-interface fluid field above the critical angle instead of `transmission`.
+  bool fluid = false;
+  /// The sediment of `fluid`: every field stated (speed equal to `sediment_speed`; the
+  /// attenuation in dB per wavelength has no default here: no loss is assumed).
+  FluidBottom bottom{kUnset, kUnset, kUnset, 1.0};
+  double frequency = kUnset;       ///< Hz, for the attenuation of `fluid`; no default
+  /// With `fluid`: a point whose straight line from the source meets the interface below the
+  /// critical angle arccos(c_w / c_s) gets the evanescent plane-wave field (15.1) at that line's
+  /// grazing angle theta_d, V_wp(theta_d) / sqrt(a_rho) exp(-k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} d),
+  /// d its depth under the interface, instead of the least-time ray's leg. False: the ray's.
+  bool evanescent = false;
 };
 
 /// One refracted eigenray per point. Amplitude: spreading over the travel-time distance
-/// times `transmission` for points below the interface.
+/// times, for points below the interface, `transmission` (the default) or, with `fluid`,
+/// V_wp(theta_w) / sqrt(a_rho) exp(-k_p'' L): V_wp = 1 + V the pressure transmission
+/// coefficient at the grazing angle of the water leg (Jackson and Richardson 2007, (8.47),
+/// (8.55)), a_rho = density / water_density (the 1 / a_rho of the return leg, (8.68), split
+/// evenly between the two legs of an echo), L the length of the sediment leg and
+/// k_p'' = k_w delta / nu ((8.18), (8.26)). The same operations in the same order as
+/// propagation.SedimentProvider (penetration: fluid), which also says what is still approximate.
 EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source, const double* points,
                                std::int64_t n_points);
 
