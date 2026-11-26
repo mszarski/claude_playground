@@ -598,8 +598,12 @@ def test_default_prior_bounds_of_a_row_are_its_grain_sizes_scattering_priors():
     for name in ("placeholder_sand", "rock", "pebbles"):
         none, why = sediment_fit.row_prior_bounds(name)
         assert none is None and why == f"the row {name!r} carries no mean_grain_size_phi"
+    from test_sediment_table import SITE_ROWS
     table = bottom.sediment_table()
-    rows = [n for n, e in table.items() if isinstance(e, dict) and e.get("mean_grain_size_phi") is not None]
+    with_phi = [n for n, e in table.items() if isinstance(e, dict) and e.get("mean_grain_size_phi") is not None]
+    # The 20 class rows; the named site rows (one measured site each) are counted apart. (This read 20 for all rows
+    # with a grain size and failed once gallaudet_2001_site, 6.36 phi, joined the table: 21 == 20.)
+    rows = [n for n in with_phi if n not in SITE_ROWS]
     assert len(rows) == 20
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -607,6 +611,16 @@ def test_default_prior_bounds_of_a_row_are_its_grain_sizes_scattering_priors():
             b, _ = sediment_fit.row_prior_bounds(name)
             p = bottom.sediment(name)
             assert all(b[k][0] <= p[k] <= b[k][1] for k in b), (name, p, b)
+        # A site's own printed fit need not lie inside the class prior of its grain size, and two do not (recorded,
+        # not changed here): Jackson and Briggs (1992) Table V's Arafura sigma2 0.005 is above the prior's 0.004 (J&R's
+        # typical upper end), and Quinault's across-strike w2 (0.00422 cm^4 at gamma2 3.67, 9.23e-4 m^0.33) is above
+        # the sand class's w2 band at 2.97 phi (a w2 at another exponent is in other units: compare spectra instead).
+        outside = set()
+        for name in (n for n in with_phi if n in SITE_ROWS):
+            b, _ = sediment_fit.row_prior_bounds(name)
+            p = bottom.sediment(name)
+            outside |= {(name, k) for k in b if not b[k][0] <= p[k] <= b[k][1]}
+    assert outside == {("jackson_briggs_1992_arafura", "sigma2"), ("jackson_briggs_1992_quinault", "w2")}
     with pytest.raises(ValueError, match="unknown sediment"):
         sediment_fit.row_prior_bounds("very_fine_slit")
 
