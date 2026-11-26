@@ -161,9 +161,7 @@ SCHEMA = {
                       "laid under `operation.chain`. Stacked rows there also need a cast for their depth: `sound_speed.rung: profile` with the site's profile, which is site data and "
                       "has no default (a warning says so)", "the trial plan", "open: nothing changes"),
         "coverage": ("map", "", False, "{environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see "
-                     "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default. Optional "
-                     "`reverberation_rows_gain`: none (the default: the rows gain nothing against reverberation), incoherent, or a number of dB "
-                     "(depthplan.rows_gain_against_reverberation)", "the site the build is deployed at",
+                     "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default", "the site the build is deployed at",
                      "leave it out: no coverage picture"),
         "detection_probability": ("num", "", False, "the probability of detecting a steady point echo on one ping that the link budget's thresholds, margins and reaches are stated for "
                                   "(the threshold follows from the chain's detector for it: buildspec.detection)", "requirement", "0.5 (buildspec.DESIGN_DETECTION_PROBABILITY)"),
