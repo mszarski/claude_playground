@@ -122,3 +122,16 @@ def test_python_detector_plan_and_budget_refuse_an_unknown_chain_key(record):
     with pytest.raises(ValueError, match=refused("chain.", "range_cell", "range_cell_m")):
         live.budget_threshold_db(record, {"range_cell": 2.0})
     assert np.isfinite(live.budget_threshold_db(record, {"range_cell_m": 2.0}))
+
+
+def test_reverberation_statistics_name_the_nearest_key():
+    """sonar-6fc: a reverberation item's `statistics` refuses a key it does not read (before: passed over, so a
+    misspelt `cell_azimuth_deg` left the default cell), with the keys of the density form among those read."""
+    from gpusonar.sim import reverb
+    assert reverb.STATISTICS_KEYS == ("model", "shape", "scatterers_per_m2", "patches_per_m2", "cell_time",
+                                      "cell_azimuth_deg")
+    reverb.check_statistics({"model": "k", "patches_per_m2": 0.3, "cell_time": 1e-3, "cell_azimuth_deg": 2.0})
+    with pytest.raises(ValueError, match=refused("statistics.", "cell_azimuth", "cell_azimuth_deg")):
+        reverb.check_statistics({"model": "k", "shape": 2.0, "cell_azimuth": 2.0})
+    with pytest.raises(ValueError, match=refused("statistics.", "patches_per_m", "patches_per_m2")):
+        reverb.check_statistics({"model": "k", "patches_per_m": 0.3})

@@ -43,6 +43,11 @@ with its own direction and Doppler shift, instead of horizontal azimuth sectors.
 `statistics={"model": "k", "shape": nu}` makes the reverberation K-distributed: the power of
 each resolution cell (a cell of time and azimuth) is multiplied by a gamma variate of unit
 mean and shape nu before the Gaussian speckle is drawn, so the mean power is unchanged.
+`{"model": "k", "scatterers_per_m2": N}` (or `patches_per_m2`) gives each cell its own shape
+instead, N x cell area / 2 (or N x cell area), after Abraham and Lyons (2002) eqs. (15) and
+(19); the cell area grows with range (`k_cell_area`). The texture is drawn here, in Python,
+and multiplies the deviates handed to the C++ generator, so both engines and both backends
+(host and CUDA) apply the same texture.
 
 Limits that remain: the boundary is flat and the medium horizontally stratified; eigenray
 pairs add incoherently; there is no range walk within a ping; each ping draws new noise,
@@ -270,25 +275,108 @@ class CellTexture:
 
     Intensity = texture x exponential speckle has mean 1 x the cell's power, and
     E{I^2} / E{I}^2 = 2 (1 + 1 / shape): the K distribution's value, 2 (Rayleigh) as
-    shape -> infinity.
+    shape -> infinity. This `shape` is alpha of Abraham and Lyons (2002), eqs. (7), (12)
+    and (28) (tests/python/test_reverb_statistics.py::test_our_shape_is_the_papers_alpha).
+
+    `shape` is one number for every cell, or an array with one per cell in time (the same
+    for every group): then an infinite entry is a texture of exactly 1 (no boundary in that
+    cell). `start_time` and `rate` (the two-way time of the first sample and the rate of the
+    samples) are kept for reference only.
     """
 
-    def __init__(self, rng, shape: float, n_low: int, cell_samples: int, group_of_row):
-        if not shape > 0.0:
-            raise ValueError("K-distributed reverberation needs a positive shape")
+    def __init__(self, rng, shape, n_low: int, cell_samples: int, group_of_row, start_time=None, rate=None):
+        self.n_low, self.cell = int(n_low), max(int(cell_samples), 1)
+        if np.ndim(shape) == 0:
+            if not shape > 0.0:
+                raise ValueError("K-distributed reverberation needs a positive shape")
+            shape = float(shape)
+        else:
+            shape = np.asarray(shape, dtype=float)
+            if shape.shape != (-(-self.n_low // self.cell),):
+                raise ValueError(f"a shape per cell needs {-(-self.n_low // self.cell)} cells, not {shape.shape}")
+            if not np.all(shape > 0.0):
+                raise ValueError("K-distributed reverberation needs a positive shape in every cell")
         self.rng = np.random.default_rng(int(rng.integers(0, 2**63 - 1)))
-        self.shape, self.n_low, self.cell = float(shape), int(n_low), max(int(cell_samples), 1)
+        self.shape = shape
         self.group_of_row = np.asarray(group_of_row)
         self.group, self.row = None, None
+        self.start_time, self.rate = start_time, rate
 
     def __call__(self, row: int) -> np.ndarray:
         group = int(self.group_of_row[row])
         if group != self.group:
             n_cells = -(-self.n_low // self.cell)
-            tau = self.rng.gamma(self.shape, 1.0 / self.shape, n_cells)
+            if isinstance(self.shape, float):
+                tau = self.rng.gamma(self.shape, 1.0 / self.shape, n_cells)
+            else:
+                # One draw per cell, in order, at that cell's shape (NumPy's gamma is stable for
+                # shapes from far below 1 to 1e12 and more); a cell of infinite shape draws at
+                # shape 1, so the count of draws does not depend on the shapes, and is set to 1.
+                finite = np.isfinite(self.shape)
+                a = np.where(finite, self.shape, 1.0)
+                tau = np.where(finite, self.rng.gamma(a, 1.0 / a), 1.0)
             self.row = np.sqrt(np.repeat(tau, self.cell)[:self.n_low])
             self.group = group
         return self.row
+
+
+# The keys of a reverberation item's `statistics` (sonar-6fc refuses any other, D-177's rule).
+STATISTICS_KEYS = ("model", "shape", "scatterers_per_m2", "patches_per_m2", "cell_time", "cell_azimuth_deg")
+# The three ways of giving the K shape: exactly one with `model: k`.
+K_SHAPE_KEYS = ("shape", "scatterers_per_m2", "patches_per_m2")
+
+
+def k_shape_of_count(n, key: str):
+    """The K shape of a cell holding `n` scatterers (key "scatterers_per_m2": exponentially
+    distributed amplitudes, shape n / 2, Abraham and Lyons 2002 eq. 15) or `n` patches ("patches_per_m2":
+    exponentially distributed areas of diffuse scattering, shape n, eq. 19)."""
+    n = np.asarray(n, dtype=float)
+    return 0.5 * n if key == "scatterers_per_m2" else n
+
+
+def k_cell_area(t1, t2, sound_speed: float, width: float, height: float = 0.0):
+    """The area of flat boundary in a resolution cell: between the two-way times `t1` and `t2`
+    (slant ranges r = c t / 2 from the sonar) and inside the azimuth width `width` (radians), for
+    straight paths from a point `height` above (or below) the boundary:
+
+        width / 2 x (R2^2 - R1^2),   R^2 = max(r, height)^2 - height^2   (horizontal range)
+        = width x r_mid x (r2 - r1)  once r1 >= height,
+
+    the slant range times the slant-range extent: the ring on the boundary is 1 / cos(grazing)
+    wider than the slant extent and cos(grazing) nearer, and the two cancel. Zero before the
+    boundary is reached. Ours (geometry); refraction and paths with a bounce are not in it."""
+    r1 = np.maximum(0.5 * sound_speed * np.asarray(t1, dtype=float), abs(height))
+    r2 = np.maximum(0.5 * sound_speed * np.asarray(t2, dtype=float), abs(height))
+    return 0.5 * width * (r2**2 - r1**2)
+
+
+def check_statistics(statistics) -> dict:
+    """A reverberation item's `statistics`, checked: an unknown key is refused by name with the
+    nearest known one, `model: k` takes exactly one of shape, scatterers_per_m2 and patches_per_m2,
+    and a density must be positive and finite. Returns the mapping (model "rayleigh" when absent)."""
+    import difflib
+    statistics = dict(statistics or {})
+    for key in statistics:
+        if key not in STATISTICS_KEYS:
+            near = difflib.get_close_matches(str(key), STATISTICS_KEYS, n=1)
+            raise ValueError(f"statistics.{key}: unknown key" + (f"; did you mean {near[0]!r}?" if near
+                                                                 else f" (known: {', '.join(sorted(STATISTICS_KEYS))})"))
+    model = statistics.get("model", "rayleigh")
+    if model not in ("rayleigh", "gaussian", "k"):
+        raise ValueError(f"unknown reverberation statistics {model!r}: use 'rayleigh' or 'k'")
+    given = [k for k in K_SHAPE_KEYS if statistics.get(k) is not None]
+    if model != "k":
+        if set(given) - {"shape"}:
+            raise ValueError(f"statistics.{given[-1]} needs model: k")
+        return statistics
+    if not given:
+        raise ValueError("K-distributed reverberation needs statistics.shape, statistics.scatterers_per_m2 or "
+                         "statistics.patches_per_m2 (no default: the value must come from data)")
+    if len(given) > 1:
+        raise ValueError(f"K-distributed reverberation takes only one of statistics.{', statistics.'.join(given)}")
+    if given[0] != "shape" and not (np.isfinite(float(statistics[given[0]])) and float(statistics[given[0]]) > 0.0):
+        raise ValueError(f"statistics.{given[0]} must be positive and finite")
+    return statistics
 
 
 def cpp_has_components() -> bool:
@@ -466,7 +554,13 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     `statistics` = {"model": "k", "shape": nu, "cell_time": s, "cell_azimuth_deg": degrees}
     draws K-distributed reverberation with shape nu; a cell is by default 1 / bandwidth
     long and one nominal beamwidth (wavelength / array extent) wide. {"model": "rayleigh"}
-    or None is the Gaussian default.
+    or None is the Gaussian default. In place of `shape`, `scatterers_per_m2` (discrete
+    scatterers, shape = count / 2) or `patches_per_m2` (patches, shape = count) gives each cell
+    the shape of the count expected in its area of boundary, `k_cell_area` with the cell as
+    realised (its samples at the reduced rate, its whole sectors) and the height of the array
+    centre above a flat boundary (none with `bathymetry`); for `geometry="bistatic"` the range
+    is c t / 2 from the receiver, as if monostatic. No density has a default: it must come
+    from data. An unknown key is refused with the nearest known one.
 
     `bathymetry` (sim/bathymetry.py: a Bathymetry, a function depth(x, y) or a mapping) is a
     seabed with relief in place of the flat boundary at `boundary_z` (reverb_relief.py:
@@ -637,13 +731,10 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         pulse_low = taper_pulse(pulse_low, n_low)
     start = int(round((s.start_time - times[0]) * fs))
     texture = None
-    model = (statistics or {}).get("model", "rayleigh")
-    if model not in ("rayleigh", "gaussian", "k"):
-        raise ValueError(f"unknown reverberation statistics {model!r}: use 'rayleigh' or 'k'")
-    if model == "k":
-        if "shape" not in statistics:
-            raise ValueError("K-distributed reverberation needs statistics.shape")
-        shape = float(statistics["shape"])
+    statistics = check_statistics(statistics)
+    if statistics.get("model", "rayleigh") == "k":
+        density_key = next((k for k in K_SHAPE_KEYS[1:] if statistics.get(k) is not None), None)
+        shape = float(statistics["shape"]) if density_key is None else 1.0
         if np.isfinite(shape):                                             # infinite shape is Rayleigh
             cell_time = float(statistics.get("cell_time") or 1.0 / max(abs(wf.f_stop - wf.f_start), 1.0 / wf.duration))
             extent = float(np.linalg.norm(positions.max(axis=0) - positions.min(axis=0)))
@@ -653,7 +744,30 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                 cell_azimuth = (c / fc) / extent if extent > 0.0 else dphi
             per_cell = max(int(round(cell_azimuth / dphi)), 1)             # sectors in one azimuth cell
             sectors = np.arange(n_azimuth) if sector_of_row is None else sector_of_row
-            texture = CellTexture(rng, shape, n_low, int(round(cell_time * fs_low)), sectors // per_cell)
+            cell_samples = max(int(round(cell_time * fs_low)), 1)
+            if density_key is not None:
+                # sonar-6fc: the shape of each cell from a density of scatterers or patches and the
+                # cell's area (Abraham and Lyons 2002 eqs. 15, 19): cells of `cell_samples` at the
+                # reduced rate from times[0], as the texture is laid, and of the width the texture
+                # is shared over (per_cell sectors). The boundary's height above or below the array
+                # centre clips the first cells (flat boundary; none for a seabed with relief).
+                height = abs(boundary_z - centre[2]) if not bistatic or bed is None else 0.0
+                n_cells = -(-n_low // cell_samples)
+                t1 = times[0] + np.arange(n_cells) * cell_samples / fs_low
+                count = float(statistics[density_key]) * k_cell_area(t1, t1 + cell_samples / fs_low, c,
+                                                                     per_cell * dphi, height)
+                shape = np.where(count > 0.0, k_shape_of_count(count, density_key), np.inf)
+                # Cells with power, beyond the one the boundary is first reached in (whose share of
+                # the ring is cut by the grid, not by the seabed).
+                lit = np.interp(t1 + 0.5 * cell_samples / fs_low, coarse, mean_density, left=0.0, right=0.0) > 0.0
+                lit &= 0.5 * c * t1 >= height
+                if np.any(lit & (count < 1.0)):
+                    one = "scatterer" if density_key == "scatterers_per_m2" else "patch"
+                    warnings.warn(f"reverberation: fewer than one {one} expected in some resolution cells (least "
+                                  f"{count[lit].min():.3g}): the fixed-count model behind the K shape (Abraham and "
+                                  "Lyons 2002) does not describe such cells", RuntimeWarning, stacklevel=2)
+            texture = CellTexture(rng, shape, n_low, cell_samples, sectors // per_cell,
+                                  start_time=float(times[0]), rate=fs_low)
     chosen = _engine.resolve(engine)
     if chosen == "cpp" and components is not None and not cpp_has_components():
         warnings.warn("bistatic reverberation: this build of the C++ generator has azimuth sectors only; "

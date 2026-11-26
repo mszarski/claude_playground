@@ -3760,3 +3760,37 @@ has no clock entry is now refused (`std::invalid_argument`); before, the code re
   directly and never pass this stage.
 - Full GPU suite on this tree: **2183 passed, 101 skipped**, none failed (NVIDIA L4, HF job
   6b076d06d91f621b93092f13, 46 min 40 s).
+
+### D-196 The K shape of reverberation from a density of scatterers or patches per cell (issue sonar-6fc; the owner approved the opt-in input; no present result changed)
+
+What got stricter first: a reverberation item's `statistics` mapping now refuses a key it does not read,
+with the nearest known one (D-177's rule); before, such a key was ignored. No shipped file uses
+reverberation `statistics`.
+
+- What was wrong: the K shape was one number for every range and every sonar. Abraham and Lyons, IEEE J.
+  Oceanic Eng. 27, 800 (2002) (opened, the owner's copy; not kept in the repository) ties it to the
+  resolution cell: n scatterers of exponentially distributed amplitude in a cell give shape n / 2 (eq. 15);
+  n patches of exponentially distributed area give shape n (eq. 19). So the shape is proportional to the
+  cell's area.
+- New, opt-in: `statistics: {model: k, scatterers_per_m2: N}` or `{model: k, patches_per_m2: N}` in place
+  of `shape` (exactly one of the three). Each cell's shape is N x A / 2 or N x A, A the area of boundary
+  in the cell as the generator lays it: azimuth width x slant range x slant-range extent, clipped at the
+  array's height above a flat boundary (ours; the grazing angle cancels). No density has a default: the
+  paper gives none for any seabed and says it must be estimated from data.
+- Our `shape` is the paper's alpha: shown from its eqs. (7), (12)-(13) and (28) (moments of orders 1 to
+  6 to 1e-12; the exceedance to 1e-5 down to a probability of 1e-8). Its worked example recomputes: at a
+  false-alarm probability of 1e-6 the K threshold is 1.685 dB above Rayleigh's for alpha 10 (printed 1.7)
+  and 2.694 dB for alpha 5 (printed 2.7).
+- With `shape` given, the outputs are the same to the bit (12 outputs hashed before and after: both
+  engines, monostatic and bistatic). The texture is drawn in Python and multiplies the deviates handed to
+  the generator, so both engines and both backends take the same texture; no C++ or CUDA source changed.
+  The device path was not run for this (no device here): the full GPU suite's result is added below.
+- Limits: a cell with fewer than one scatterer or patch warns (the paper's fixed-count picture does not
+  describe it); refraction and bounces do not enter the area; a bistatic item uses the range c t / 2 from
+  the receiver as if monostatic (the true cell of separated platforms is larger); over relief the height
+  is taken as 0.
+- Still open (the paper says the second-order statistics are not established): correlation of the
+  texture between cells and between pings; none was invented. And a density for any seabed.
+- Tests: `tests/python/test_reverb_statistics.py` (19 new cases: the mapping, the worked example, the
+  cell area, the statistics and the mean level in a ping, both engines, the keys, the unchanged fixed
+  shape), `tests/python/test_dict_keys.py` (1). CPU: 51 passed in those two files.

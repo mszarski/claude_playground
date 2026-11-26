@@ -1382,6 +1382,59 @@ beamforming come out of the array structure, as the levels do. `shape` has no de
 (a property of the seabed to be measured or assumed). What is not modelled: correlation
 of the texture between pings (each ping draws its own) and between neighbouring cells.
 
+**The shape from a density (`scatterers_per_m2`, `patches_per_m2`; sonar-6fc).** What is
+unknown comes first: the density. Abraham and Lyons (2002, read; REFERENCES section 6) give
+the rule but no density for any seabed; they estimate the shape from reverberation data. So
+the key has no default and a value must come from data (a measured shape divided by the
+cell's area, for instance). The rule: n scatterers of exponentially distributed amplitude in
+a cell give a K envelope of shape alpha = n / 2 (their eq. 15); n patches of exponentially
+distributed area give alpha = n (eq. 19). Our `shape` is their alpha: their eq. (12)-(13) is
+the product of a gamma variate of shape alpha (unit scale) and complex Gaussian speckle of
+variance lambda, which is ours after dividing the gamma by its mean alpha; and their envelope
+moments, eq. (28), E{Y^i} = lambda^(i/2) Gamma(1 + i/2) Gamma(alpha + i/2) / Gamma(alpha), equal ours,
+E{tau^(i/2)} E{|Z|^i} with tau of shape nu, at alpha = nu for every i, so
+E{I^2} / E{I}^2 = 2 (1 + 1/alpha). The test also matches the exceedance of their eq. (7) with
+the integral over our texture to 1e-5 down to 1e-8, and recomputes their Sec. IV example:
+alpha = 10 puts the threshold at Pfa 1e-6 1.685 dB above Rayleigh's (printed 1.7), alpha = 5
+2.694 dB (printed 2.7).
+
+The cell (ours): the generator lays the texture in cells of `cell_time` (as realised: whole
+samples at the reduced rate) from the first two-way time, and over groups of whole azimuth
+sectors of width w (`cell_azimuth_deg`, by default wavelength / array extent of the receive
+hydrophones at the centre frequency: the receive array's nominal beamwidth, rounded to whole
+sectors). Cell k spans two-way times t1..t2, slant ranges r = c t / 2. For straight paths from
+a point a height h above a flat boundary, the horizontal range is R with R^2 = r^2 - h^2, so
+the boundary between r1 and r2 inside w has area
+
+```
+A = w / 2 (R2^2 - R1^2) = w / 2 (r2^2 - r1^2) = w r_mid (r2 - r1)      (r1 >= h)
+```
+
+with R clipped to 0 below h. The grazing angle cancels exactly: the ring is 1 / cos(grazing)
+wider than the slant extent c dt / 2 and cos(grazing) nearer than r. Each cell's shape is then
+density x A / 2 (scatterers) or density x A (patches): proportional to range, to the azimuth
+width and to the cell's length (1 / bandwidth by default), and the same in every azimuth
+group. Cells the boundary is not yet reached in (A = 0) have no texture (exactly 1). The mean
+power is unchanged in every cell (unit-mean gamma), and large shapes (thousands, up to 1e12
+tested) go smoothly to 1; small shapes are drawn as they are (unit mean; a shape of 0.02 has
+variance 50).
+
+Below one scatterer (shape 0.5) or one patch (shape 1) per cell the K distribution is still a
+distribution, but the paper's model, a fixed count n per cell, no longer describes the cell
+(most such cells would hold none): the simulator warns when a cell with power beyond the first
+one the boundary is reached in holds fewer than one, and makes the reverberation anyway.
+
+Limits: the height h is the array centre's above the flat `boundary_z`; with `bathymetry`
+(relief) h = 0 is used, the slant-range form. Refraction and bottom-bounce paths do not enter
+the area (a cell is defined by straight-path two-way time). `geometry: bistatic` uses the same
+monostatic-equivalent range c t / 2 from the receiver: for separated platforms the true
+iso-time locus is an ellipse and the cell is larger by roughly 1 / cos of half the bistatic
+angle, which this does not take in. The texture is independent from cell to cell and from
+ping to ping: the paper states that the second-order statistics (correlation between samples
+at two times) are not established, so no correlation model is adopted. Multipath makes the
+envelope more Rayleigh-like (their Sec. III-C); here every path pair arriving in a cell shares
+that cell's texture.
+
 ### 14.5 Leakage along a long record (`band_taper`, `guard`)
 
 See 14.1. `band_taper` multiplies the pulse's spectrum by 1 below a quarter of the
@@ -2916,8 +2969,10 @@ strength increases" (arXiv:2106.05909; 100 and 10 kHz). At 100 kHz and 3 cm reso
 seabed type measured, rock, gravel, sand and mud, has an index well above 1, falling towards
 1 as the resolution is reduced without reaching it (Lehman 2022); on rock a single K
 distribution fails and mixtures are needed (arXiv:1901.08023). So `statistics.shape` must
-stay a required input, tied to the sonar's cell; a rule from the number of scatterers per
-cell needs Abraham and Lyons (2002), which is on the wanted list.
+stay a required input, tied to the sonar's cell. Abraham and Lyons (2002) is now read (Sec. 14.4):
+it gives the rule from the number of scatterers per cell, which `statistics.scatterers_per_m2`
+and `patches_per_m2` implement, but no density for any seabed, so the density is a required
+input in the same way.
 
 ### 23.6 Targets, noise, medium
 

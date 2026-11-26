@@ -240,7 +240,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         # (the transmitter's and receiver's own positions and velocities, arrival elevation),
         # with it `n_elevation`, `azimuth_subsamples` and `strength_map: {range, offset_db,
         # azimuth_deg, origin}` (a boundary whose strength varies over it); `statistics:
-        # {model: k, shape, cell_time, cell_azimuth_deg}` (K-distributed reverberation);
+        # {model: k, shape | scatterers_per_m2 | patches_per_m2, cell_time, cell_azimuth_deg}`
+        # (K-distributed reverberation; a density gives each cell its own shape);
         # `band_taper` and `guard` (against leakage from the strong start of a long record
         # into its weak end).
         extra = {}
