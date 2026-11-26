@@ -192,6 +192,44 @@ def test_surface_models_lie_above_the_printed_band_means_at_3_m_s():
     assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) == pytest.approx(0.0024, abs=1e-4)
 
 
+def test_surface_with_the_published_extinction_law_at_3_m_s():
+    """`extinction: dahl_1997` (opt-in; Dahl et al. 1997, Table II, the beta_I fit at 17 degrees,
+    North Sea; docs/references/surface_papers_mcdaniel_dahl.md Sec. 2.8, 3.4). At 68 kHz, 3 m/s:
+      beta_I 5.8e-4 (log10 f interpolation between the 50 and 70 kHz fits; ours), 6.2 dB below
+      apl_1994's 2.4e-3;
+      SS2 (44-66 deg) -43.7 dB, 2.2 dB BELOW -41.5 (apl_1994: 3.4 dB above);
+      SS3 (27-38 deg) -44.4 dB, 6.9 dB above -51.3 (apl_1994: 13.0 dB above).
+    The note computed -43.4 and -44.1 dB (-1.9 / +7.2) with the 70 kHz fit scaled to 68 kHz as f^0.8
+    (beta_I 6.2e-4) instead; that construction is reproduced here too: the two differ by 0.3 dB. So the
+    published law removes 6.1 of the 13.0 dB at 27-38 degrees and all of the 3.4 dB at 44-66
+    degrees. What remains at 27-38 degrees (about 7 dB) is not explained by any law in hand; the
+    averaging of the printed means (dB or intensity: 3.4-4.5 dB under Dahl and Plant's statistics)
+    and the omitted roughness term are candidates, neither proven (the note Sec. 3.4)."""
+    def model(beta_i):
+        def fn(g):
+            b = beta_i / np.sin(g)
+            level = surface.BUBBLE_RERADIATION_DAMPING * np.sin(g) / (8 * np.pi * surface.bubble_damping_constant(FREQUENCY))
+            return level * (1 + 8 * b * np.exp(-2 * b) - np.exp(-4 * b)) + surface.facet_backscatter(g, WIND_SPEED)
+        return fn
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                       # 68 kHz and 3 m/s are inside both stated ranges
+        beta_i = surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="dahl_1997")
+        ours = lambda g: 10 ** (surface.bubble_layer_surface_db(g, WIND_SPEED, FREQUENCY, extinction="dahl_1997") / 10)  # noqa: E731
+        ss2 = _band_db(ours, "SS2") - BANDS["SS2"][2]
+        ss3 = _band_db(ours, "SS3") - BANDS["SS3"][2]
+    assert beta_i == pytest.approx(5.81e-4, rel=0.005)
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) / beta_i) == pytest.approx(6.2, abs=0.1)
+    assert _band_db(model(beta_i), "SS2") - BANDS["SS2"][2] == pytest.approx(ss2, abs=1e-9)   # the formula typed here
+    assert ss2 == pytest.approx(-2.2, abs=0.1), ss2          # measured -2.15 (band mean -43.65 dB)
+    assert ss3 == pytest.approx(+6.9, abs=0.1), ss3          # measured +6.88 (band mean -44.42 dB)
+    note_beta = 10 ** (-5.75 + 5.35 * math.log10(WIND_SPEED)) * (68.0 / 70.0) ** 0.8         # the note's construction
+    assert note_beta == pytest.approx(6.2e-4, rel=0.005)
+    assert _band_db(model(note_beta), "SS2") == pytest.approx(-43.4, abs=0.05)                 # measured -43.41
+    assert _band_db(model(note_beta), "SS3") == pytest.approx(-44.1, abs=0.05)                 # measured -44.13
+    assert ss2 < 0.0 < ss3                                   # below the printed mean at 44-66 deg, still above at 27-38
+
+
 def test_bubble_cloud_peaks_and_the_saturation_level():
     """[G01] p. 140: the cloud peaks of Table III "are within 1dB of those predicted by eqn (11)
     for saturation". Our eq. (11) at 68 kHz reaches each printed peak to within 1 dB at some
