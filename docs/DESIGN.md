@@ -649,32 +649,32 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 | Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -24 dB | 280 m | -11.6 dB (0.00) | none | 7.0 km |
 | Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | -3 dB | 245 m | +8.4 dB (1.00) | 65–500 m | 12.7 km |
 | Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -7.0 dB (0.00) | -16 dB | 225 m | -6.1 dB (0.00) | none | 7.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -27.0 dB (0.00) | -32 dB | 480 m | -27.1 dB (0.00) | none | 3.3 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -27.0 dB (0.00) | -32 dB | 480 m | -27.1 dB (0.00) | none | 2.7 km |
 | Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -7.0 dB (0.00) | -12 dB | 395 m | -7.1 dB (0.00) | none | 8.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +16 dB | 5 m | +22.7 dB (1.00) | 5–89 m | 12.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -4 dB | 65 m | -3.2 dB (0.02) | none | 9.6 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +16 dB | 65 m | +16.8 dB (1.00) | 5–89 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | — | 55 m | +10.3 dB (1.00) | 5–405 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | — | 55 m | -6.0 dB (0.00) | none | 3.3 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | — | 80 m | +10.6 dB (1.00) | 5–405 m | 12.0 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +32.0 dB (1.00) | 5–189 m | 12.7 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -16 dB | 101 m | -8.3 dB (0.00) | none | 7.2 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +4 dB | 101 m | +11.7 dB (1.00) | 5–189 m | 12.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +15 dB | 5 m | +21.3 dB (1.00) | 5–89 m | 12.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -6 dB | 65 m | -4.6 dB (0.00) | none | 2.6 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +14 dB | 65 m | +15.4 dB (1.00) | 5–89 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | — | 55 m | +10.2 dB (1.00) | 5–405 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | — | 55 m | -6.2 dB (0.00) | none | 1.0 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | — | 80 m | +10.5 dB (1.00) | 5–405 m | 12.0 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +16 dB | 5 m | +29.8 dB (1.00) | 5–189 m | 12.7 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -18 dB | 101 m | -10.5 dB (0.00) | none | 1.8 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +2 dB | 101 m | +9.5 dB (1.00) | 5–189 m | 12.7 km |
 | 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | -96 dB | 5 m | -96.1 dB (0.00) | none | 1.8 km |
 | 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -116 dB | 5 m | -116.1 dB (0.00) | none | 1.0 km |
 | 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | -96 dB | 41 m | -4.7 dB (0.00) | none | 7.2 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +31.7 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -15 dB | 85 m | -9.6 dB (0.00) | none | 7.2 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +5 dB | 85 m | +10.4 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +33.6 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -14 dB | 189 m (the deepest searched) | -7.4 dB (0.00) | none | 7.2 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +6 dB | 189 m (the deepest searched) | +13.9 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +32.3 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -12 dB | 149 m | -10.5 dB (0.00) | none | 5.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +8 dB | 149 m | +10.5 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +14 dB | 141 m | +20.5 dB (1.00) | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -12 dB | 133 m | -6.6 dB (0.00) | none | 6.5 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +8 dB | 5 m | +14.0 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +31.4 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -16 dB | 85 m | -10.0 dB (0.00) | none | 6.5 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +4 dB | 85 m | +10.0 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +33.3 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -15 dB | 189 m (the deepest searched) | -7.7 dB (0.00) | none | 5.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +5 dB | 189 m (the deepest searched) | +13.7 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +18 dB | 5 m | +32.0 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -13 dB | 149 m | -10.8 dB (0.00) | none | 4.1 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +7 dB | 149 m | +10.2 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +14 dB | 141 m | +20.2 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -12 dB | 133 m | -6.9 dB (0.00) | none | 5.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +8 dB | 5 m | +13.7 dB (1.00) | 5–189 m | 12.7 km |
 
 ![Detection margin against range and own depth](design/popoto_depth_planner.png)
 
@@ -689,7 +689,7 @@ Every best depth in the table is inside the platform's limit (30 of 30): the sea
 
 Rows only move the margin: 1x32: ship best +4.8 dB at 225 m; 2x32: ship best +7.4 dB at 225 m; 3x32: ship best +8.8 dB at 225 m (non-ducting water).
 
-**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+30 dB) / 33 m (+34 dB); `popoto_static_2x32` (3.0 km): 56 m (+27 dB) / 49 m (+31 dB); `popoto_static_3x32` (3.0 km): 56 m (+29 dB) / 49 m (+32 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
+**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+30 dB) / 33 m (+22 dB); `popoto_static_2x32` (3.0 km): 56 m (+27 dB) / 49 m (+22 dB); `popoto_static_3x32` (3.0 km): 56 m (+29 dB) / 49 m (+22 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
 
 **Target classes** (`targets:` in a build spec). The owner wants large subsurface movers as well as ships. Three classes are shipped as examples, each marked `assumed`:
 
@@ -752,7 +752,7 @@ For that to hold: a projector that delivers the source level in this band (none 
 well inside the 750 m blind range; noise, not reverberation, limiting at 12 km (below); for elevation, boards of different rows synchronised to 0.87 µs and the roll known as stated;
 for depth in metres, a sound-speed profile along the path. Spreading at least as kind as spherical (in shallow water it is kinder: below).
 
-**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.8 dB of one row's SNR with 3 rows added (13.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute). **The budget is noise-only**: the build gives no boundary scattering for its site, so the reverberation term (issue `sonar-w2w3`; `gpusonar.reverb_budget`, used wherever a scenario or `chain.coverage.reverberation` gives the scattering) is not in it, and its margins and reaches are optimistic wherever reverberation dominates (`flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only, 9.7 dB with the term, 6.6 dB in the simulated data).
+**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.8 dB of one row's SNR with 3 rows added (13.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute). **This free-field budget is noise-only** (no site: spherical spreading, nothing to scatter). At the build's site, the illustrative 100 m shelf over sand (`shelf_100m_sand`, its Lambert −27 dB bottom stated and Chapman-Harris at its 5 m/s wind: `gpusonar.environment.boundary_scattering`), the depth plan and the coverage picture below include the boundaries' reverberation (issue `sonar-w2w3`): it leaves the +25 dB classes noise-limited at 12 km (0.6 dB off their margin) and limits the +5 dB class to a few kilometres (*Surface interference, own depth, and target classes*). `flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only, 10.3 dB with the term, 6.9 dB in the simulated data (10.2 dB with the vehicle stopped).
 
 SNRs are one row's. *Needed* is what that option's own detector needs of it for a detection probability of 0.5 on one ping, its rows added (`buildspec.detection`, from the chain's settings in the build's deployment file; for 0.9 add 1.6 dB). It holds the aperture window (1.8 dB), where the echo falls between the map's samples (0.5 dB), the false-alarm budget (0.001 a ping over this window) and the rows; the budget holds the pulse's matched-filter gain and one row's gain against sea noise. Nothing is in both.
 
@@ -952,8 +952,8 @@ front end with digital down-conversion would deliver; the ADC rates above are fo
 ![Link budgets](design/link_budgets.png)
 
 Output SNR = SL − 2 TL + TS − NL + array gain + 10 log10(T), with spherical spreading plus Francois–Garrison
-absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_equation`). Noise only: no boundary scattering is given for
-these budgets, so reverberation is not in them (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, adds it where a scene gives the scattering).
+absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_equation`). Noise only: these are free-field budgets with no
+site, so there is no boundary to scatter (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, add it at a site; the Popoto builds' sites do: Sec. 3).
 
 | Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | `popoto_long_range` |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1016,8 +1016,8 @@ From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 15.8 dB at one row
   amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.
 
 - These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short
-  and medium range. With the scenarios' boundaries (Lambert −27 dB bottom, Chapman-Harris surface at 5 m/s) in 100 m of water over sand, the coverage
-  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m falls from 6.5 to 2.4 km; the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).
+  and medium range. At the builds' site (100 m over sand, its stated Lambert −27 dB bottom and Chapman-Harris at 5 m/s: the deployment files now carry it), the coverage
+  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m is 1.4 km (6.5 km on noise alone); the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).
 - Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.
 - For the Popoto array the simulation uses Bellhop multipath, which in shallow water carries more energy to long
   range than spherical spreading (see `RESULTS.md`).

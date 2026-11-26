@@ -181,7 +181,11 @@ def test_the_site_depth_is_used_when_a_ping_carries_none_and_the_ship_at_12_km_i
     says it cannot be, which is why both are now required. A depth the ping carries comes first."""
     spec = bs.load("popoto_face_1x32")
     d = bs.derive(spec)
-    sonar = {"f_centre": float(d["centre_hz"]), "bandwidth": float(d["band_hz"][1] - d["band_hz"][0]), "pulse": float(d["pulse_s"])}
+    # The deployment file now carries the site's reverberation (sonar-w2w3, the site rule): the picture then needs the beam's
+    # integral, which a chain has from its record; here, numbers only, the row's own (reverb_budget.line_beam_integral).
+    from gpusonar import reverb_budget
+    sonar = {"f_centre": float(d["centre_hz"]), "bandwidth": float(d["band_hz"][1] - d["band_hz"][0]), "pulse": float(d["pulse_s"]),
+             "beam_integral": reverb_budget.line_beam_integral(d["per_row"][0], d["pitch_m"], d["centre_hz"], d["sound_speed"])}
     cfg = bs.chain_config(spec)["coverage"]
     table = coverage.pd_table(SonarModel.from_config(bs.sonar_config(spec)).make_record(make_pose()), {})
     iso = coverage.water([0.0, 5000.0], [1500.0, 1500.0])

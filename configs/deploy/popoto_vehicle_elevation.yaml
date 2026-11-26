@@ -36,6 +36,14 @@ chain:
     water_depth_m: 100.0
     bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
     surface: {rms_height_m: 0.134}
+    reverberation:
+      items:
+      - {model: lambert, mu_db: -27.0, boundary: bottom}
+      - {model: chapman_harris, wind_speed: 5.0, boundary: surface}
+      frequency_hz: 5000.0
+      note: 'bottom: included, stated (bottom_scattering); surface: included, derived: Chapman-Harris at the wind of the site, 5 m/s'
+      steer_deg: 60.0
+      rows_gain_db: 3.99
     own_depth_limits_m: [5.0, 500.0]
     bottom_clearance_m: 10.0
 output:
@@ -44,4 +52,5 @@ output:
   report_udp: [127.0.0.1, 5701]
   taps: {dir: /data/sonar/taps, pings: 2}
 unconfirmed: [chain.sync, chain.elevation.roll_sigma_deg, chain.elevation.attitude_rate_sigma_deg_s, chain.elevation.water_depth_sigma_m, chain.elevation.gradient_per_s,
-  chain.elevation.gradient_sigma_per_s, chain.coverage.water_depth_m, chain.coverage.bottom, chain.coverage.surface, chain.coverage.classes, chain.coverage.budget]
+  chain.elevation.gradient_sigma_per_s, chain.coverage.water_depth_m, chain.coverage.bottom, chain.coverage.surface, chain.coverage.reverberation, chain.coverage.classes,
+  chain.coverage.budget]

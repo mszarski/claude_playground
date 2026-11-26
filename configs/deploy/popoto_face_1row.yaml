@@ -26,6 +26,13 @@ chain:
     water_depth_m: 100.0
     bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
     surface: {rms_height_m: 0.134}
+    reverberation:
+      items:
+      - {model: lambert, mu_db: -27.0, boundary: bottom}
+      - {model: chapman_harris, wind_speed: 5.0, boundary: surface}
+      frequency_hz: 5000.0
+      note: 'bottom: included, stated (bottom_scattering); surface: included, derived: Chapman-Harris at the wind of the site, 5 m/s'
+      steer_deg: 60.0
     own_depth_limits_m: [5.0, 500.0]
     bottom_clearance_m: 10.0
 output:
@@ -33,4 +40,4 @@ output:
   report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl
   report_udp: [127.0.0.1, 5701]
   taps: {dir: /data/sonar/taps, pings: 2}
-unconfirmed: [chain.sync, chain.coverage.water_depth_m, chain.coverage.bottom, chain.coverage.surface, chain.coverage.classes, chain.coverage.budget]
+unconfirmed: [chain.sync, chain.coverage.water_depth_m, chain.coverage.bottom, chain.coverage.surface, chain.coverage.reverberation, chain.coverage.classes, chain.coverage.budget]
