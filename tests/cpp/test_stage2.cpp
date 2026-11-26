@@ -104,6 +104,44 @@ void resample_row_by_row(float* x, std::int64_t n, double offset, double drift, 
   std::copy(out.begin(), out.end(), x);
 }
 
+// The decimate-first stage's baseband correction one channel at a time (decimate.cpp correct_baseband until sonar-59u;
+// the reference for the test below): every sample's weights and carrier turn computed again for every channel, the
+// weights from the formula (`direct`) or from resample_weights.
+void correct_channel_by_channel(PingRecord& record, const std::vector<double>& offset, const std::vector<double>& drift_ppm, bool direct) {
+  Samples& s = record.samples;
+  const std::int64_t n = s.n_samples;
+  const double fs = s.sample_rate, fc = s.center_frequency;
+  constexpr int taps = 16, half = taps / 2;
+  for (std::int64_t c = 0; c < s.n_channels; ++c) {
+    const auto b = static_cast<std::size_t>(record.metadata.channel_board[static_cast<std::size_t>(c)]);
+    const double o = offset[b], d = drift_ppm[b] * 1e-6;
+    if (o == 0.0 && d == 0.0) continue;
+    std::complex<float>* x = s.channel_complex(c);
+    std::vector<std::complex<float>> y(static_cast<std::size_t>(n));
+    for (std::int64_t m = 0; m < n; ++m) {
+      const double pos = (static_cast<double>(m) / fs - o) * fs * (1.0 + d);
+      const auto base = static_cast<std::int64_t>(std::floor(pos));
+      const double frac = pos - static_cast<double>(base);
+      double w[taps];
+      if (direct) {
+        direct_weights(frac, w);
+      } else {
+        resample_weights(frac, w);
+      }
+      std::complex<double> acc = 0.0;
+      for (int k = -half + 1; k <= half; ++k) {
+        const std::int64_t idx = base + k;
+        if (idx < 0 || idx >= n) continue;
+        acc += w[k + half - 1] * std::complex<double>(x[idx]);
+      }
+      const double cycles = fc * (static_cast<double>(m) - pos) / fs;
+      const double ph = -2.0 * kPi * (cycles - std::floor(cycles));
+      y[static_cast<std::size_t>(m)] = std::complex<float>(acc * std::complex<double>(std::cos(ph), std::sin(ph)));
+    }
+    std::copy(y.begin(), y.end(), x);
+  }
+}
+
 // The largest difference between a weight from three trig calls and the formula's, over every tap and position below
 // (measured 2.8e-16 with this C++ library's sine and cosine, 2.5e-16 with numpy's; the weights are at most 1): a weight's
 // last bit or two.
@@ -338,6 +376,81 @@ TEST(Decimate, ClocksComeFromTheKeptStretchesAndTheBasebandIsCorrected) {
   SyncResult none;
   PingRecord plain = uncorrected;
   EXPECT_FALSE(decimated_sync_facts(plain, none));
+}
+
+TEST(Decimate, BoardsCorrectedTogetherGiveTheChannelByChannelSamplesToTheBit) {
+  // sonar-59u: correct_baseband computes a board's weights and carrier turns once a block of samples for up to 8 of its
+  // channels, every board's blocks in parallel. Its samples must be the channel-by-channel loop's with the same
+  // weights, to the bit: five boards of 4, 11 (more than one group), 1, 3 and 2 channels whose channels are
+  // interleaved in the record, one on the first board's clock (left as it is), one 2.1 ms late (taps past the start),
+  // one early (taps past the end), one with drift alone; a window that is not a whole number of blocks.
+  // The weights come from three trig calls a sample (resample_weights), not a sine and a cosine a tap: against the
+  // formula's weights (the loop before sonar-59u) every part of every sample is within one float spacing of its value
+  // plus 16 x kWeightBound x the largest input.
+  const std::int64_t n = 3 * 256 + 117;
+  const double fs = 512000.0 / 17.0, fc = 43000.0;
+  const std::vector<std::int32_t> board_of = {0, 1, 1, 2, 1, 1, 3, 1, 4, 1, 0, 1, 1, 3, 1, 0, 1, 4, 1, 0, 3};
+  const std::vector<double> offset = {0.0, 2.1e-3, -1.3e-3, 0.0, 7.7e-5}, drift_ppm = {0.0, 35.0, -20.0, 12.5, 0.0};
+  PingRecord r;
+  const auto n_ch = static_cast<std::int64_t>(board_of.size());
+  r.samples.resize(n_ch, n, SampleKind::ComplexBaseband);
+  r.samples.sample_rate = fs;
+  r.samples.center_frequency = fc;
+  r.metadata.channel_board = board_of;
+  r.metadata.boards.assign(offset.size(), Board{});
+  std::uint64_t state = 2718281U;
+  auto noise = [&state] {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<double>(state >> 11) / 9007199254740992.0 - 0.5;
+  };
+  for (std::int64_t c = 0; c < n_ch; ++c) {
+    for (std::int64_t i = 0; i < n; ++i) {
+      const double ph = 2.0 * kPi * (0.013 + 0.002 * static_cast<double>(c)) * static_cast<double>(i);
+      r.samples.channel_complex(c)[i] = std::complex<float>(static_cast<float>(1e-3 * std::cos(ph) + 1e-4 * noise()),
+                                                            static_cast<float>(1e-3 * std::sin(ph) + 1e-4 * noise()));
+    }
+  }
+  PingRecord got = r, want = r, formula = r;
+  correct_baseband(got, offset, drift_ppm);
+  correct_channel_by_channel(want, offset, drift_ppm, false);
+  correct_channel_by_channel(formula, offset, drift_ppm, true);
+  double largest = 0.0;
+  for (const float v : r.samples.data) largest = std::max(largest, static_cast<double>(std::abs(v)));
+  largest *= std::sqrt(2.0);              // the largest complex input's magnitude, at most
+  std::size_t moved = 0, ulps[4] = {0, 0, 0, 0};
+  const auto spacing = [](float a, float b) {
+    const float big = std::max(std::abs(a), std::abs(b));
+    return static_cast<double>(std::nextafter(big, std::numeric_limits<float>::infinity()) - big);
+  };
+  for (std::int64_t c = 0; c < n_ch; ++c) {
+    for (std::int64_t i = 0; i < n; ++i) {
+      const std::complex<float> g = got.samples.channel_complex(c)[i], w = want.samples.channel_complex(c)[i];
+      ASSERT_EQ(g.real(), w.real()) << c << " " << i;   // exact: the same float, not a near one
+      ASSERT_EQ(g.imag(), w.imag()) << c << " " << i;
+      moved += g != r.samples.channel_complex(c)[i] ? 1 : 0;
+      const std::complex<float> f = formula.samples.channel_complex(c)[i];
+      for (const auto& [gp, fp] : {std::pair{g.real(), f.real()}, std::pair{g.imag(), f.imag()}}) {
+        ASSERT_LE(std::abs(static_cast<double>(gp) - fp), spacing(gp, fp) + 16.0 * kWeightBound * largest) << c << " " << i;
+        float step = fp;
+        std::size_t apart = 0;
+        while (step != gp && apart < 3) {
+          step = std::nextafter(step, gp);
+          ++apart;
+        }
+        ++ulps[apart];
+      }
+    }
+    if (board_of[static_cast<std::size_t>(c)] == 0) {
+      EXPECT_TRUE(std::equal(got.samples.channel_complex(c), got.samples.channel_complex(c) + n, r.samples.channel_complex(c))) << c;
+    }
+  }
+  std::printf("against the formula's weights: %zu parts equal, %zu one float apart, %zu two, %zu more\n", ulps[0], ulps[1], ulps[2],
+              ulps[3]);
+  EXPECT_GT(moved, static_cast<std::size_t>((n_ch - 4) * n) * 9 / 10);   // every channel of a board that moves was resampled
+  // A channel whose board has no clock is refused.
+  PingRecord bad = r;
+  bad.metadata.channel_board[3] = 5;
+  EXPECT_THROW(correct_baseband(bad, offset, drift_ppm), std::invalid_argument);
 }
 
 TEST(Blanking, ZeroesFromTheTransmitWithARaisedCosineReturn) {

@@ -3,6 +3,7 @@
 
     tools/live_chain_timing.py                                  # 1, 2 and 3 rows, both engines, 3 repeats
     tools/live_chain_timing.py --rows 3 --engine cpp --omp-threads 4 --repeats 5
+    tools/live_chain_timing.py --rows 2 3 --decimate                 # the 2- and 3-row trials decimated first
 
 The pings are the ones tests/python/test_hsb.py's direct chain processes: the trial (tools/hsb_frame_timing.py
 `popoto_stream`, the test's POPOTO table) framed as `serve` frames it and assembled again, then run through the
@@ -11,7 +12,11 @@ new chain takes the trial's pings in order. Measured per ping:
 - `chain_s`: `LiveChain.process`, the whole chain;
 - `sync_s`: the board synchronisation alone on a copy of the same ping (`core.live_synchronise` for the C++ engine,
   `sync.synchronise` for the Python engine), when the deployment synchronises at the full rate (no decimate-first
-  stage); the rest of the chain is `chain_s - sync_s`.
+  stage); the rest of the chain is `chain_s - sync_s`;
+- `stage_s`: the decimate-first stage alone on a copy of the same ping (`core.live_decimate_record` with the options
+  and reference the chain gives it: filter, board clocks from the bursts and the baseband correction; the same C++
+  code in both engines), when the deployment decimates first.
+`--decimate` switches the decimate-first stage on (`decimate: {}`) for every deployment (the one-row file has it).
 `--omp-threads` sets OpenMP's thread count for this thread (`receive --chain-omp-threads`). Prints one JSON line per
 (rows, engine): TIMING. Simulating the 3-row trial takes about 10 s; nothing is written to disk.
 """
@@ -53,8 +58,9 @@ def time_engine(pings, cfg: dict, engine: str, repeats: int) -> dict:
     from gpusonar import core
     from gpusonar import sync as pysync
     from gpusonar.live import LiveChain
-    chain_s, sync_s = [], []
+    chain_s, sync_s, stage_s = [], [], []
     full_rate_sync = cfg["chain"].get("sync") is not None and cfg["chain"].get("decimate") is None
+    decimating = cfg["chain"].get("decimate") is not None
     backend = None
     for _ in range(repeats):
         with LiveChain(dict(cfg["chain"], engine=engine)) as chain:
@@ -64,7 +70,15 @@ def time_engine(pings, cfg: dict, engine: str, repeats: int) -> dict:
                 t = time.perf_counter()
                 chain.process(rec)
                 chain_s.append(time.perf_counter() - t)
-            ref = chain._reference
+            ref, dec, bl = chain._reference, chain._decimate, chain._blanking
+        if decimating:
+            for p in pings:
+                rec = p.copy()
+                blank = ({"blank_until_s": rec.transmit.waveform.duration + bl["recovery_s"], "blank_taper_s": bl["taper_s"]}
+                         if bl and bl["mode"] == "zero" else {})
+                t = time.perf_counter()
+                core.live_decimate_record(rec, dict(dec, **blank), ref)
+                stage_s.append(time.perf_counter() - t)
         if full_rate_sync:
             for p in pings:
                 rec = p.copy()
@@ -81,6 +95,8 @@ def time_engine(pings, cfg: dict, engine: str, repeats: int) -> dict:
     if sync_s:
         out["sync_s"] = _spread(sync_s)
         out["rest_s_after_first"] = round(float(np.median(after_first)) - float(np.median(sync_s)), 4)
+    if stage_s:
+        out["stage_s"] = _spread(stage_s)
     return out
 
 
@@ -89,6 +105,7 @@ def main(argv=None) -> int:
     ap.add_argument("--rows", type=int, nargs="+", choices=[1, 2, 3], default=[1, 2, 3])
     ap.add_argument("--engine", nargs="+", choices=["python", "cpp"], default=["cpp", "python"])
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--decimate", action="store_true", help="switch the decimate-first stage on (decimate: {}) for every deployment")
     ap.add_argument("--omp-threads", type=int, help="OpenMP threads for the chain (receive --chain-omp-threads); unset: as it is")
     args = ap.parse_args(argv)
     from gpusonar.sources import hsb
@@ -96,6 +113,8 @@ def main(argv=None) -> int:
     for rows in args.rows:
         t = time.perf_counter()
         pings, cfg = assembled_pings(rows)
+        if args.decimate and cfg["chain"].get("decimate") is None:
+            cfg["chain"] = dict(cfg["chain"], decimate={})
         made = time.perf_counter() - t
         for engine in args.engine:
             row = time_engine(pings, cfg, engine, args.repeats)
