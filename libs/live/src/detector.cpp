@@ -1,4 +1,5 @@
 #include "sonar/live/detector.hpp"
+#include "sonar/live/doppler.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -182,6 +183,12 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
   };
   add(0, p.resolution_m, {1.0});
   for (std::int64_t m : kept) add(m, p.cell_m * static_cast<double>(m), detect::mean_power_weights(corr, m * samples_per_cell));
+  if (options.threshold_offset_db != 0.0) {
+    // Every test's threshold moved by the same factor (the Doppler bank's shift, doppler.hpp): 0 dB leaves the plan as it was.
+    if (!std::isfinite(options.threshold_offset_db)) throw std::invalid_argument("plan_detector: threshold_offset_db is not finite");
+    const double scale = std::pow(10.0, options.threshold_offset_db / 10.0);
+    for (DetectorScale& s : p.scales) s.factor *= scale;
+  }
   p.train_looks_per_cell = static_cast<double>(rows) * detect::equivalent_looks(detect::mean_power_weights(corr, samples_per_cell));
 
   // Range sidelobes of the compressed pulse, by whole cells between two cells' nearest edges.
@@ -190,6 +197,16 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
   for (std::int64_t d = 2; d <= n_cells; ++d) {
     const double x = static_cast<double>(d - 1) * p.cell_m / p.resolution_m;
     p.range_envelope[static_cast<std::size_t>(d)] = x < 1.0 ? 1.0 : (swept ? std::min(1.0, 1.0 / (kPi * kPi * x * x)) : 1e-12);
+  }
+  if (options.pedestal_m > 0.0 && swept) {
+    // The Doppler bank's pedestal (doppler.hpp): the mismatch delta spreads an echo over +-delta T, at the peak loss
+    // sweep_mismatch(pi B T delta / c)^2; at x m that is delta = x / T, independent of T: sweep_mismatch(pi x / (2 res))^2.
+    for (std::int64_t d = 2; d <= n_cells; ++d) {
+      const double x = static_cast<double>(d - 1) * p.cell_m;
+      if (x > options.pedestal_m) break;
+      const double m = sweep_mismatch(kPi * x / (2.0 * p.resolution_m));
+      p.range_envelope[static_cast<std::size_t>(d)] = std::max(p.range_envelope[static_cast<std::size_t>(d)], std::min(1.0, m * m));
+    }
   }
   // Bearing sidelobes: the pattern of each line of hydrophones as the record has them (a dead board is a gap), with the
   // map's aperture window laid as the map lays it, averaged over the band (which fills the nulls) and over the lines

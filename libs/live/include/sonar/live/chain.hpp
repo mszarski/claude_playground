@@ -29,6 +29,7 @@
 #include "sonar/live/detector.hpp"
 #include "sonar/live/multipath_depth.hpp"
 #include "sonar/live/doa.hpp"
+#include "sonar/live/doppler.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
 #include "sonar/live/tonal.hpp"
@@ -122,6 +123,9 @@ struct ChainOptions {
   /// reports and is timed at the elevation's own range, the one it is placed at.
   std::optional<RangeEstimate> range_estimate;
   RangeDoppler range_doppler = RangeDoppler::Off;   ///< the LFM coupling correction (sonar-fyj), off by default
+  /// The sweep's Doppler bank (doppler.hpp; D4), off by default. With it on, range_doppler corrects nothing more (the
+  /// bank's replica matched each detection's range rate already).
+  DopplerOptions doppler;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -183,6 +187,8 @@ struct ReportDetection {
   std::string path{};
   std::string profile_source{};                      ///< the rung of the sound-speed ladder this depth came by (ladder on)
   std::string extra{};                               ///< further JSON members from opt-in stages (multipath_depth.hpp), verbatim
+  bool has_range_rate = false;                       ///< the Doppler bank's range rate is reported (doppler.report)
+  double range_rate_m_s = 0.0, range_rate_step_m_s = 0.0;
 };
 struct ReportTrack {
   std::int64_t id, parent;
@@ -267,6 +273,11 @@ class LiveChain {
   /// The multiscale detector's plan for the last map (detector.hpp): lengths, looks, thresholds; "{}" when it is not in use.
   std::string detector_json() const { return planned_ ? plan_.json() : "{}"; }
   const DetectorPlan& detector_plan() const { return plan_; }
+  /// The Doppler bank of the last ping (doppler.hpp): its hypotheses and their use; mode off when not on.
+  const DopplerPlan& doppler_plan() const { return doppler_; }
+  /// The hypothesis (index into doppler_plan().rates) that holds each sample of the last fine map [n_bearing][n]; empty
+  /// unless the bank had more than one hypothesis.
+  const std::vector<std::int32_t>& last_hypotheses() const { return which_; }
   bool resolved() const { return resolved_; }
   SoundSpeedLadder& ladder() { return ladder_; }
   Coverage& coverage() { return coverage_; }
@@ -290,6 +301,9 @@ class LiveChain {
   DetectorPlan plan_;
   bool planned_ = false;
   std::int64_t plan_cells_ = 0, plan_train_ = 0, plan_rows_ = 0;
+  double plan_offset_db_ = 0.0;     ///< the threshold offset the plan was made with (the Doppler bank's)
+  DopplerPlan doppler_;
+  std::vector<std::int32_t> which_;
   bool have_origin_ = false;
   Vec3d origin_;
   std::int64_t t0_ns_ = 0;

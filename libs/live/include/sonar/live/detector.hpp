@@ -85,6 +85,14 @@ struct DetectorOptions {
   /// A detection's range: the centroid of its samples (default) or its leading edge (RangeEstimate). It places the
   /// detection and gives its time, transmit + range / c (D-156).
   RangeEstimate range_estimate = RangeEstimate::Centroid;
+  /// dB every test's threshold is raised by (each scale's factor times 10^(x / 10)): the live chain's Doppler bank sets
+  /// it to the shift that keeps the false-alarm rate on the maximum over its hypotheses (doppler.hpp). 0: the plan as
+  /// it was, bit for bit.
+  double threshold_offset_db = 0.0;
+  /// m: the live chain's Doppler bank (doppler.hpp) leaves a strong echo a pedestal along range, its mismatched hypotheses
+  /// spread over +-|mismatch| x T: out to this distance the range sidelobe envelope is raised to the sweep's mismatch
+  /// loss at the mismatch that reaches it, sweep_mismatch(pi B x / c)^2 (x m from the stronger cell). 0: as it was.
+  double pedestal_m = 0.0;
 };
 
 /// How many separate false detections a map of noise gives: the measured part.
