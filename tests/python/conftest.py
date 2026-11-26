@@ -1,8 +1,40 @@
+import os
+import warnings
+
 import numpy as np
 import pytest
 
 import gpusonar as gs
+from gpusonar.sim import engine as sim_engine
 from oracle_gate import pytest_runtest_makereport, pytest_terminal_summary  # noqa: F401  (hooks: oracle skips, GPUSONAR_REQUIRE_ORACLES)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    """A test that asks for the C++ simulator engine (engine="cpp", GPUSONAR_SIM_ENGINE=cpp) on a module built
+    without it skips, naming why (a-engine: before, it ran NumPy and passed by comparing NumPy with itself).
+    With the C++ simulator built, `sim/engine.py` never raises EngineUnavailable and this changes nothing."""
+    try:
+        return (yield)
+    except sim_engine.EngineUnavailable as e:
+        pytest.skip(f"needs the C++ simulator engine, which this extension module lacks: {e}")
+
+
+def pytest_sessionstart(session):
+    """Without the C++ simulator the default engine runs NumPy with one warning per process (sim/engine.py). It is
+    given once here, in the run's header (`pytest_report_header`), and not inside whichever test first runs the
+    simulator, where a test that turns warnings into errors would fail on it in an order-dependent way."""
+    if not sim_engine.HAVE_CPP and not os.environ.get("GPUSONAR_SIM_ENGINE"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sim_engine.resolve()
+
+
+def pytest_report_header(config):
+    if not sim_engine.HAVE_CPP:
+        return ("simulator engine: NumPy only (the extension module lacks the C++ simulator); tests that ask for "
+                "the C++ engine skip")
+    return None
 
 
 def make_record(channels=4, samples=128, complex_data=True, seed=0):

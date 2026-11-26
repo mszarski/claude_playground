@@ -406,11 +406,11 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
     if components is not None:
         extra = dict(direction=np.ascontiguousarray(components[0], dtype=float),
                      doppler=np.ascontiguousarray(components[1], dtype=float))
-        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low, components=True)
+        active = _engine.call("sim_reverb_active", coarse, density, fs, time0, n_azimuth, decim, n_low, components=True)
         rows = np.flatnonzero(active)
     else:
         # A sector without power draws nothing (as in `_series_numpy`).
-        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low)
+        active = _engine.call("sim_reverb_active", coarse, density, fs, time0, n_azimuth, decim, n_low)
         rows = (np.arange(n_azimuth) if active[0] else np.arange(0)) if len(active) == 1 else np.flatnonzero(active)
     n_active = len(rows)
     offsets = np.ascontiguousarray(offsets, dtype=float)
@@ -446,10 +446,11 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
             # The accumulated spectrum stays on the backend between the runs: to it with the
             # first, back with the last.
             extra["total_from_host"], extra["total_to_host"] = first == 0, first + count >= n_active
-        core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
-                                   n_azimuth, decim, velocity=velocity, backend=backend, **extra)
+        _engine.call("sim_reverb_accumulate", total, coarse, density, first, normals, pulse_low, offsets, fs, time0,
+                     fc, c, n_azimuth, decim, velocity=velocity, backend=backend, **extra)
     finish = dict(backend=backend, batched=BATCHED_ON_HOST) if getattr(core, "SIM_REVERB_BATCHED", False) else {}
-    return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real, **finish)
+    return _engine.call("sim_reverb_finish", total, fs, n, start_time, time0, fc, decim, carrier=carrier,
+                        real_output=real, **finish)
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,

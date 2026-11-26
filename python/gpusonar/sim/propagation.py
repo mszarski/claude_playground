@@ -39,7 +39,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .. import _gpusonar as core
 from . import engine as _engine
 
 
@@ -117,7 +116,7 @@ class FreeFieldProvider(EigenrayProvider):
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         if _cpp_points(self.engine, points):
-            return EigenraySet(**core.sim_free_field_eigenrays(self.sound_speed, _source3(source), points))
+            return EigenraySet(**_engine.call("sim_free_field_eigenrays", self.sound_speed, _source3(source), points))
         r, u = _direct(source, points, self.sound_speed)
         s = points.shape[0]
         return EigenraySet(
@@ -302,7 +301,7 @@ class ImageSourceProvider(EigenrayProvider):
         # another axis sent it to NumPy without a word.
         if _cpp_points(self.engine, points):
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
-            return EigenraySet(**core.sim_image_source_eigenrays(
+            return EigenraySet(**_engine.call("sim_image_source_eigenrays",
                 self.sound_speed, _source3(source), points,
                 surface_z=None if self.surface_z is None else float(self.surface_z),
                 bottom_z=None if self.bottom_z is None else float(self.bottom_z),
@@ -533,7 +532,7 @@ class _PlaneImages:
         planes = [(pl.kind, _source3(pl.point), _source3(pl.normal),
                    None if pl.kind == "bottom" else complex(pl.coefficient),
                    [(int(axis), float(lo), float(hi)) for axis, lo, hi in pl.bounds or []]) for pl in self.planes]
-        return EigenraySet(**core.sim_plane_image_eigenrays(
+        return EigenraySet(**_engine.call("sim_plane_image_eigenrays",
             p.sound_speed, _source3(source), np.asarray(points, dtype=float), planes, int(order), int(wall_order),
             complex(p.bottom_coefficient), None if p.bottom is None else _fluid_bottom(**p.bottom)))
 
@@ -603,7 +602,8 @@ def snell_crossing(source, points, c_water: float, c_sediment: float, interface_
     source = np.asarray(source, dtype=float)
     points = np.atleast_2d(np.asarray(points, dtype=float))
     if _cpp_points(engine, points):
-        return core.sim_snell_crossing(_source3(source), points, float(c_water), float(c_sediment), float(interface_z))
+        return _engine.call("sim_snell_crossing", _source3(source), points, float(c_water), float(c_sediment),
+                            float(interface_z))
     a = interface_z - source[2]
     b = points[:, 2] - interface_z
     h = points[:, :2] - source[:2]
@@ -647,8 +647,8 @@ class SedimentProvider(EigenrayProvider):
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         if _cpp_points(self.engine, points):
-            return EigenraySet(**core.sim_sediment_eigenrays(self.sound_speed, self.sediment_speed, self.interface_z,
-                                                             self.transmission, _source3(source), points))
+            return EigenraySet(**_engine.call("sim_sediment_eigenrays", self.sound_speed, self.sediment_speed,
+                                              self.interface_z, self.transmission, _source3(source), points))
         t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,
                                   engine="numpy")
         launch = cross - source
@@ -758,8 +758,9 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
                       lambert=np.asarray(lambert, dtype=bool) if weighted else None,
                       normals=np.asarray(normals, dtype=float) if weighted and normals is not None else None)
         if doppler:
-            return core.sim_two_way_paths(*args, **kwargs, out_range_rate=rates[0], back_range_rate=rates[1])
-        q, p, amp, vq = core.sim_two_way_paths(*args, **kwargs)
+            return _engine.call("sim_two_way_paths", *args, **kwargs, out_range_rate=rates[0],
+                                back_range_rate=rates[1])
+        q, p, amp, vq = _engine.call("sim_two_way_paths", *args, **kwargs)
         return q, p, amp, vq, (None if vq is None else vq.copy())
     q_all = out.apparent_positions(tx_position)       # [S, Ko, 3]
     p_all = back.apparent_positions(rx_reference)     # [S, Kb, 3]

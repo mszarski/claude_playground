@@ -743,6 +743,13 @@ The simulator uses its C++ path and reverberation code by default; `GPUSONAR_SIM
 (or `engine="numpy"` on `run_scenario`, `simulate_ping` and the providers) selects NumPy.
 For a sampled transmit pulse the same switch also selects the echo synthesiser (C++ kernel
 by default, NumPy reference); analytic pulses are synthesised by the C++ kernel only.
+When the extension module was built without the C++ simulator (`sim/engine.py`, a-engine):
+`cpp` asked for (`engine="cpp"` or `GPUSONAR_SIM_ENGINE=cpp`) is refused with `EngineUnavailable`
+naming what is missing (build with `SONAR_BUILD_PYTHON=ON`, or choose `numpy`); with nothing asked
+for, NumPy runs with one warning per process (before: NumPy in both cases, without a word). Only a
+sampled pulse's record says which engine ran (`extra_json` `{"gpusonar": {"echo_synthesis":
+"numpy_sampled"}}`). Any other value of either is refused with the nearest valid name. A module
+older than the sources fails with `StaleModuleError` naming the binding it lacks.
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.
 
