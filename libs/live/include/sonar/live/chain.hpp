@@ -189,6 +189,7 @@ struct ReportDetection {
   std::string extra{};                               ///< further JSON members from opt-in stages (multipath_depth.hpp), verbatim
   bool has_range_rate = false;                       ///< the Doppler bank's range rate is reported (doppler.report)
   double range_rate_m_s = 0.0, range_rate_step_m_s = 0.0;
+  int doppler_path = -1;                             ///< >= 0 with the tone path and report on (D3): 0 sweep, 1 tone, 2 both
 };
 struct ReportTrack {
   std::int64_t id, parent;
@@ -275,6 +276,8 @@ class LiveChain {
   const DetectorPlan& detector_plan() const { return plan_; }
   /// The Doppler bank of the last ping (doppler.hpp): its hypotheses and their use; mode off when not on.
   const DopplerPlan& doppler_plan() const { return doppler_; }
+  /// The tone path of the last ping (doppler.hpp tone_stage, D3): its plan and detections; plan.on false when not run.
+  const ToneStage& tone_stage_result() const { return tone_; }
   /// The hypothesis (index into doppler_plan().rates) that holds each sample of the last fine map [n_bearing][n]; empty
   /// unless the bank had more than one hypothesis.
   const std::vector<std::int32_t>& last_hypotheses() const { return which_; }
@@ -302,7 +305,9 @@ class LiveChain {
   bool planned_ = false;
   std::int64_t plan_cells_ = 0, plan_train_ = 0, plan_rows_ = 0;
   double plan_offset_db_ = 0.0;     ///< the threshold offset the plan was made with (the Doppler bank's)
+  double plan_divisor_ = 1.0;       ///< the budget divisor the plan was made with (the Doppler bank's, combine cfar)
   DopplerPlan doppler_;
+  ToneStage tone_;
   std::vector<std::int32_t> which_;
   bool have_origin_ = false;
   Vec3d origin_;

@@ -268,6 +268,12 @@ LiveChain::LiveChain(const ChainOptions& options)
   if (opt_.doppler.mode != DopplerMode::Off && !opt_.cell_multiscale) {
     throw std::invalid_argument("LiveChain: doppler sweep_bank needs cell_statistic multiscale (its thresholds carry the bank's shift)");
   }
+  if (opt_.doppler.tone.enabled && opt_.range_doppler != RangeDoppler::Off) {
+    throw std::invalid_argument("LiveChain: doppler tone needs range_doppler off (a tone detection's range has no sweep coupling to correct)");
+  }
+  if (opt_.doppler.tone.enabled && opt_.elevation.enabled) {
+    throw std::invalid_argument("LiveChain: doppler tone is not made for the elevation option yet (a tone detection's coarse range has no elevation search)");
+  }
   if (opt_.doppler.mode != DopplerMode::Off && opt_.beamformer != "backprojection") {
     throw std::invalid_argument("LiveChain: doppler sweep_bank needs beamformer backprojection (its hypotheses' maps share one range grid)");
   }
@@ -338,7 +344,11 @@ Report LiveChain::process(PingRecord& record) {
     drop_channels(record, opt_.dead_channels);
   }
   if (opt_.sound_speed > 0.0) record.environment.sound_speed = opt_.sound_speed;
-  if (!resolved_) {
+  // D3: a ping whose pulse is the tone alone does not size the chain (its band is 1 / T): the sizes come from the first
+  // sweep ping, and a tone-only ping before it is reported but not tracked (live.py the same).
+  const bool tone_only_ping = opt_.doppler.tone.enabled && record.transmit.waveform.type != WaveformType::Lfm &&
+                              plan_tone(record, bearings, opt_.doppler, opt_.detector.false_alarms_per_ping).tone_only;
+  if (!resolved_ && !tone_only_ping) {
     // Every size the configuration left out, from this sonar's band, pulse and array (derive.hpp): once, at the first ping.
     defaults_ = resolve(opt_, record);
     tracker_ = Tracker(opt_.tracker);
@@ -346,22 +356,44 @@ Report LiveChain::process(PingRecord& record) {
   }
   // The sweep's Doppler bank (doppler.hpp; D4), opt-in: its plan from this record, the baseband with the room its
   // hypotheses need, and the baseband record kept before compression for the other hypotheses.
-  const bool bank_on = opt_.doppler.mode == DopplerMode::SweepBank;
+  const bool tone_on = opt_.doppler.tone.enabled;       // the tone's Doppler filter bank (D3), opt-in
+  // With the tone path on, the sweep bank runs on the pings that are sweeps (the other ping of an alternating pair, or a
+  // train's tone-only ping, has none to bank); without it a pulse that is not a sweep is refused as before (plan_doppler).
+  const bool bank_on = opt_.doppler.mode == DopplerMode::SweepBank && !(tone_on && record.transmit.waveform.type != WaveformType::Lfm);
   doppler_ = DopplerPlan{};
+  tone_ = ToneStage{};
   which_.clear();
   PingRecord base;
-  if (bank_on) {
-    if (record.metadata.extra_json.find("\"compressed\": true") != std::string::npos) {
-      throw std::invalid_argument("LiveChain: doppler sweep_bank needs the record before pulse compression");
-    }
-    doppler_ = plan_doppler(record, bearings, opt_.doppler);
+  TonePlan tone_plan;
+  if ((bank_on || tone_on) && record.metadata.extra_json.find("\"compressed\": true") != std::string::npos) {
+    throw std::invalid_argument(std::string("LiveChain: doppler ") + (bank_on ? "sweep_bank" : "tone") + " needs the record before pulse compression");
+  }
+  if (tone_on) tone_plan = plan_tone(record, bearings, opt_.doppler, opt_.detector.false_alarms_per_ping);
+  if (bank_on || tone_plan.on) {
+    if (bank_on) doppler_ = plan_doppler(record, bearings, opt_.doppler);
     if (!record.samples.is_complex()) {
       dsp::BasebandOptions bo;
-      bo.max_range_rate = doppler_.baseband_max_range_rate;     // 0 (the default band) unless the shifts need more
+      // 0 (the default band) unless the bank's shifts or the tone and its shifts need more
+      bo.max_range_rate = std::max(doppler_.baseband_max_range_rate, tone_plan.baseband_max_range_rate);
       dsp::to_baseband(record, bo, opt_.backend, opt_.device);
     }
     base = record;
+    // The tone's bank on the baseband record before compression (doppler.hpp tone_stage): its detections join the sweep's below.
+    if (tone_plan.on) tone_ = tone_stage(base, bearings, opt_.doppler, opt_.hann, opt_.detector.false_alarms_per_ping, opt_.backend, opt_.device);
+    // A train: the sweep path compresses with the sweep part of the replica alone (doppler.hpp sweep_only_replica).
+    sweep_only_replica(record.transmit.waveform, tone_.plan);
   }
+  // A ping whose pulse is the tone alone (D3): the sweep path makes no map (a tone's zero-Doppler map is its reverberation
+  // at c T / 2); its detections are the tone path's alone (live.py the same).
+  const bool tone_only = tone_.plan.on && tone_.plan.tone_only;
+  const auto n_b = static_cast<std::int64_t>(bearings.size());
+  std::int64_t n_cells = 0;
+  std::vector<std::vector<std::int64_t>> rows;
+  bool stacked = false;
+  const bool multiscale = opt_.cell_multiscale;
+  std::vector<float> ratio;
+  std::vector<Detection> hits;
+  if (!tone_only) {   // --- the sweep path: compression, map, detector, SBL (not re-indented: as before D3) ---
   prepare(record, opt_.backend, opt_.device);
 
   // Range grid: finer than the range resolution, then averaged into cells.
@@ -369,15 +401,11 @@ Report LiveChain::process(PingRecord& record) {
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
   const double band = std::abs(w.f_stop - w.f_start) > 0.0 ? std::abs(w.f_stop - w.f_start) : 1.0 / w.duration;
-  const auto n_b = static_cast<std::int64_t>(bearings.size());
-  std::int64_t n_cells = 0;
-  std::vector<std::vector<std::int64_t>> rows;
   if (opt_.elevation.enabled) {
     rows = find_rows(record, opt_.elevation.row_tolerance_m, opt_.elevation.min_row_elements);
     if (rows.size() < 2) rows.clear();           // one row: exactly the chain without the option
   }
-  const bool stacked = !rows.empty();
-  const bool multiscale = opt_.cell_multiscale;
+  stacked = !rows.empty();
   if (multiscale && opt_.cell_peak) throw std::invalid_argument("LiveChain: cell_statistic is one of mean, peak, multiscale");
   const double grid_start = record.samples.start_time;
   const auto map_of = [&](const PingRecord& prepared) {
@@ -403,8 +431,47 @@ Report LiveChain::process(PingRecord& record) {
   };
   // One hypothesis, the zero one: the map without the bank, the same calls.
   const bool banked = bank_on && !(doppler_.rates.size() == 1 && doppler_.zero == 0);
+  const bool normalised = banked && doppler_.combine == DopplerCombine::Cfar;
+  std::vector<double> given_level;           // combine cfar: the background the detector tests against (doppler.hpp)
   if (!banked) {
     map_of(record);
+  } else if (normalised) {
+    // D3, combine cfar: each hypothesis' map normalised by its own background (the detector's estimate on its own cell
+    // means, over the cells the detector will keep), the largest normalised value per sample over the beam's hypotheses
+    // (fold_normalised); the detector is handed that maximum times the beam's centre hypothesis' background, and that
+    // background as its own (live.py the same).
+    NormalisedFold fold;
+    std::int64_t guard_n = 0, train_n = 0;
+    for (std::size_t h = 0; h < doppler_.rates.size(); ++h) {
+      if (static_cast<std::int64_t>(h) == doppler_.zero) {
+        map_of(record);
+      } else {
+        PingRecord trial = base;
+        dsp::PulseCompressionOptions pc;
+        pc.doppler_scale = doppler_.scales[h];
+        dsp::pulse_compress(trial, pc, opt_.backend, opt_.device);
+        trial.samples.start_time += doppler_.shifts[h];
+        map_of(trial);
+      }
+      if (h == 0) {
+        // The cells the detector keeps (blanking, as below) and its window (cfar_window, as below).
+        std::int64_t skip = 0;
+        if (bl.enabled) {
+          const double min_range = 0.5 * c * blank_edge;
+          while (skip < n_cells - 3 && last_ranges[static_cast<std::size_t>(skip)] < min_range) ++skip;
+        }
+        detect::CfarWindow win;
+        win.guard_m = opt_.cfar_guard_m;
+        win.train_m = opt_.cfar_train_m;
+        const detect::CfarOptions cw = detect::cfar_window(last_ranges[1] - last_ranges[0], c / (2.0 * band), win, opt_.cfar_pfa);
+        guard_n = cw.guard;
+        train_n = cw.train;
+        normalised_start(n_b, n_cells, cell_samples_, skip, fold);
+      }
+      fold_normalised(doppler_, static_cast<std::int64_t>(h), fine_.data(), guard_n, train_n, fold);
+    }
+    normalised_map(fold, fine_, last_power, given_level);
+    which_ = std::move(fold.which);
   } else {
     // Each hypothesis compressed from the same baseband record (the zero one is `record` itself, compressed by
     // prepare with doppler_scale exactly 1) and mapped by the chain's beamformer; each beam keeps the largest power
@@ -451,6 +518,13 @@ Report LiveChain::process(PingRecord& record) {
         std::copy_n(last_power.begin() + b * n_cells + skip, n_cells - skip, kept.begin() + b * (n_cells - skip));
       }
       last_power = std::move(kept);
+      if (normalised) {
+        std::vector<double> level_kept(static_cast<std::size_t>(n_b * (n_cells - skip)));
+        for (std::int64_t b = 0; b < n_b; ++b) {
+          std::copy_n(given_level.begin() + b * n_cells + skip, n_cells - skip, level_kept.begin() + b * (n_cells - skip));
+        }
+        given_level = std::move(level_kept);
+      }
       last_ranges.erase(last_ranges.begin(), last_ranges.begin() + skip);
       n_cells -= skip;
       fine_offset = skip * cell_samples_;
@@ -464,14 +538,15 @@ Report LiveChain::process(PingRecord& record) {
   window.train_m = opt_.cfar_train_m;
   const detect::CfarOptions co = detect::cfar_window(cell, c / (2.0 * band), window, opt_.cfar_pfa);
   std::vector<unsigned char> det;
-  std::vector<float> ratio;
   std::vector<Detection> found;
   if (multiscale) {
     // Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
     // statistics; sidelobes of a stronger cell dropped; touching cells one detection (detector.hpp).
     const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
-    if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows || plan_offset_db_ != doppler_.threshold_db) {
+    if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows || plan_offset_db_ != doppler_.threshold_db ||
+        plan_divisor_ != doppler_.budget_divisor) {
       DetectorOptions detector = opt_.detector;
+      detector.false_alarms_per_ping /= doppler_.budget_divisor;   // combine cfar: the union bound over the hypotheses; 1 otherwise
       detector.range_estimate = chain_range_estimate(opt_);
       detector.threshold_offset_db = doppler_.threshold_db;        // the Doppler bank's shift (doppler.hpp); 0 without it
       detector.pedestal_m = doppler_.pedestal_m;                   // and its pedestal along range; 0 without it
@@ -483,10 +558,11 @@ Report LiveChain::process(PingRecord& record) {
       plan_train_ = co.train;
       plan_rows_ = n_rows;
       plan_offset_db_ = doppler_.threshold_db;
+      plan_divisor_ = doppler_.budget_divisor;
     }
     // The statistic on the chain's backend (the device gives the host's flags: detector.hpp, multiscale_cells).
     found = multiscale_detect(fine_.data(), fine_stride, fine_offset, last_power.data(), n_b, n_cells, fine_ranges_, last_ranges, bearings,
-                              co.guard, co.train, plan_, background_, opt_.backend, opt_.device);
+                              co.guard, co.train, plan_, background_, opt_.backend, opt_.device, normalised ? given_level.data() : nullptr);
     if (bank_on) {
       // Each detection's coarse range rate: the hypothesis of the strongest sample of the maximum map along its nearest
       // bearing, over the range it covers (doppler.hpp detection_hypothesis; live.py the same).
@@ -511,7 +587,6 @@ Report LiveChain::process(PingRecord& record) {
     detect::cfar(opt_.backend, last_power.data(), n_b, n_cells, co, det.data(), ratio.data(), opt_.device);
     found = cluster(det.data(), last_power.data(), ratio.data(), n_b, n_cells, last_ranges, bearings);
   }
-  std::vector<Detection> hits;
   for (const Detection& h : found) {
     // Both filters judge a detection by its centroid, whichever range it reports (D-158): their limits were set for it,
     // and with the leading edge a detection would pass the far limit up to the echo's spread later than before.
@@ -598,6 +673,16 @@ Report LiveChain::process(PingRecord& record) {
       }
     }
     hits = std::move(resolved);
+  }
+  }   // --- the sweep path ---
+  if (tone_.plan.on) {
+    // D3: the tone path's detections join the sweep's (doppler.hpp merge_tone). On a ping whose pulse is the tone alone
+    // the zero-Doppler map is the tone's reverberation at c T / 2: its detections are not reported.
+    for (const Detection& t : merge_tone(hits, tone_)) {
+      if (bl.enabled && t.range < 0.5 * record.environment.sound_speed * blank_edge) continue;
+      if (burst_lo >= 0.0 && (t.range <= burst_lo || t.range >= burst_hi)) continue;
+      hits.push_back(t);
+    }
   }
 
   // World position of each detection, from the array's own position and heading in the record.
@@ -806,10 +891,11 @@ Report LiveChain::process(PingRecord& record) {
     double px = f.origin.x - origin_.x + h_range * lx;
     double py = f.origin.y - origin_.y + h_range * ly;
     ReportDetection d{h_range, h.bearing / kDeg, h.snr_db};
-    if (opt_.doppler.report && bank_on) {                  // opt-in: the report line is a contract (DOPPLER.md question 6)
+    if (opt_.doppler.report && (bank_on || tone_on)) {     // opt-in: the report line is a contract (DOPPLER.md question 6)
       d.has_range_rate = true;
       d.range_rate_m_s = h.range_rate;
       d.range_rate_step_m_s = h.range_rate_step;
+      if (tone_on) d.doppler_path = h.doppler_path;        // which path found it (D3)
     }
     if (std::isfinite(h.extent)) {
       d.extent_m = h.extent;
@@ -818,6 +904,7 @@ Report LiveChain::process(PingRecord& record) {
     }
     Detection m{0.0, 0.0, h.snr_db, h.cells};
     m.time = t + h_range / c_range;
+    m.range_sigma = h.range_sigma;                         // a tone's coarse range (D3); NaN: the tracker's
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
       const Vec3d& u = e.world;
@@ -889,7 +976,7 @@ Report LiveChain::process(PingRecord& record) {
     local.push_back(m);
     rep.detections.push_back(d);
   }
-  const auto confirmed = tracker_.update(t, local);
+  const auto confirmed = resolved_ ? tracker_.update(t, local) : std::vector<const Track*>{};   // D3: see tone_only_ping
   ClassifyOptions co2 = opt_.classify;
   co2.origin_x = f.origin.y - origin_.y;
   co2.origin_y = f.origin.x - origin_.x;
@@ -1039,6 +1126,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
       num(s, d.range_rate_m_s);
       s << ", \"range_rate_step_m_s\": ";
       num(s, d.range_rate_step_m_s);
+      if (d.doppler_path >= 0) s << ", \"doppler_path\": \"" << (d.doppler_path == 1 ? "tone" : d.doppler_path == 2 ? "both" : "sweep") << "\"";
     }
     if (!d.extra.empty()) s << ", " << d.extra;
     s << "}";

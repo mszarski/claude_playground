@@ -419,10 +419,10 @@ void multiscale_cells_kernels_on_host(const float* fine, std::int64_t fine_strid
 
 void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
                       std::int64_t n_b, std::int64_t n_cells, std::int64_t guard, std::int64_t train, const DetectorPlan& plan,
-                      DetectorCells& out, int device) {
+                      DetectorCells& out, int device, const double* given_level) {
   (void)device;  // used by the CUDA backend only
   check_plan(plan);
-  if (backend == Backend::Cuda) {
+  if (backend == Backend::Cuda && given_level == nullptr) {
 #if SONAR_HAVE_CUDA
     std::vector<double> threshold;
     std::vector<std::int64_t> cells;
@@ -446,6 +446,7 @@ void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stri
   std::vector<double>& level = out.level;
   std::vector<double> worth;
   detector_background(cell_mean, n_b, n_cells, guard, train, level, worth);
+  if (given_level != nullptr) std::copy_n(given_level, static_cast<std::size_t>(n_b * n_cells), level.begin());   // the Doppler bank's (cfar)
   std::vector<float>& background = out.background;
   background.assign(n, 0.0F);
   std::vector<float>& peak = out.peak;
@@ -486,10 +487,10 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
                                          std::int64_t n_b, std::int64_t n_cells, const std::vector<double>& fine_ranges,
                                          const std::vector<double>& cell_ranges, const std::vector<double>& bearings,
                                          std::int64_t guard, std::int64_t train, const DetectorPlan& plan, std::vector<float>& background,
-                                         Backend backend, int device) {
+                                         Backend backend, int device, const double* given_level) {
   DetectorCells statistic;
   statistic.with_level = false;
-  multiscale_cells(backend, fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, plan, statistic, device);
+  multiscale_cells(backend, fine, fine_stride, fine_offset, cell_mean, n_b, n_cells, guard, train, plan, statistic, device, given_level);
   return multiscale_group(fine, fine_stride, fine_offset, n_b, n_cells, fine_ranges, cell_ranges, bearings, plan, statistic, background);
 }
 
