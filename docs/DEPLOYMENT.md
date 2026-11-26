@@ -480,11 +480,19 @@ conversion the chain did per ping by FFT, done once, early.
 241 bearings, a 1.4 km window). The first run (tree `15f1121`, before the multiscale detector and the 1.5 m row
 geometry; kept as `gpu_benchmark_all_l4_15f1121.md`) gave 0.010 / 0.021 / 0.031 s; with the multiscale statistic on
 the device (D-150) the chain as deployed takes 12.73 / 25.92 / 37.52 ms
-(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`).
+(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`). **These pings have ideal clocks**: the
+benchmark and the ablation leave the board synchronisation stage out, and so does the full-rate
+measurement below. With board synchronisation, on the Popoto trials' pings (boards on their own
+clocks; L4, 4 OpenMP threads, after the first ping, median), the C++ chain takes 0.048 / 0.054 /
+0.065 s at 32 / 64 / 96 channels and the Python chain 0.084 / 0.18 / 0.25 s (D-192, D-195;
+`tools/live_chain_timing.py`); before D-191 resampled a board's rows together, the C++ chain took
+1.05 to 1.83 s at 64 and 96 channels there. D-190 to D-195 changed only board synchronisation, the
+decimate-first correction and the receive path, every output to the bit, so the benchmark files
+were not re-measured.
 
 - What a GPU gives: the map, which is the part option (i) cannot shrink, and the elevation
   search (the same kernel).
-- **A full-length ping at the boards' rate on a GPU is measured, on a loaded machine**: one ping of
+- **A full-length ping at the boards' rate on a GPU is measured, on a loaded machine, with ideal clocks**: one ping of
   0.5 to 13 km at 102.4 kHz through the C++ chain took 0.479 / 1.028 / 1.495 s for 1 / 2 / 3 rows on an
   L4 against the 17.9 s ping interval, and 0.783 / 1.308 / 1.777 s when decimating first
   (`docs/design/popoto_stage2.json`, `decimation.timing.cuda`; load average 11 to 16 on 8 threads while
@@ -1082,15 +1090,18 @@ rates"):
   of 6 (8, 10 and 10 of 10, with either buffer).
 - Every datagram lost was refused by the receiver's full socket buffer: the socket's kernel drop count
   equals `RcvbufErrors` in all 210 runs. The chain keeps up (C++: 0.13, 1.4 and 2.2 s a ping after the
-  first, against the trials' 3 s interval). The worst receive delay over the frames that arrived
+  first, against the trials' 3 s interval; on a10g-large before D-191. On an L4 since D-192 through
+  Sensor Bridge: C++ 0.06 to 0.07 s at 64 channels and 0.08 to 0.11 s at 96, Python 0.18 to 0.22 s and
+  0.28 to 0.32 s). The worst receive delay over the frames that arrived
   was 1.2 to 99 ms (3.6 to 7.9 ms in the 21 runs that lost nothing, all at 32 channels) against 0.8
   to 3.5 ms for `flank_32` on the same machines, and the emulated board itself ran 10 to 34 ms late in
   every run (its Python sender at 256 frames a second, then catching up at twice the rate).
 - The reports of the pings that did come through equal the direct chain's on the same pings (largest
   difference 0.0), and every ping is accounted for (reported, or dropped and counted).
-- The loss is regular: about 3 frames a ping at 64 and 96 channels (9 to 13 frames in 16 of 20 C++
-  runs; exactly 12 in each of the last job's three 96-channel runs). Something the receiving side does
-  once a ping is the lead; it was not located.
+- (Wrong, as the next item shows: it divided a run's loss by its pings.) The loss is regular: about 3
+  frames a ping at 64 and 96 channels (9 to 13 frames in 16 of 20 C++ runs; exactly 12 in each of the
+  last job's three 96-channel runs). Something the receiving side does once a ping is the lead; it was
+  not located.
 - **Located since (D-187): the loss is at the start of the run, not once a ping.** In 52 located runs
   (L4 and a10g-large) every frame that never arrived was among the first frames after the receiver
   connected: frames 1 to 5 on an L4 (12 to 20 ms of stream), 1 to 13 on a10g-large (51 ms), with the
@@ -1103,7 +1114,7 @@ rates"):
   at least 0.25 s before the first transmit that matters** (the tests lead by 1 s). A queue shorter
   than the chain's time on a ping loses far more, later and silently between windows: with the old
   default of 256 frames (1.0 s) an L4 lost 73 to 81 frames a run at 64 channels and 588 to 618 at 96
-  (chain 1.1 and 1.7 s a ping); they fell outside these trials' short windows, so no ping was lost,
+  (chain 1.1 and 1.7 s a ping then, before D-191); they fell outside these trials' short windows, so no ping was lost,
   but a long window would have lost them. The default is now 4 s of stream.
 
 `test_hsb.py::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports`
@@ -1214,6 +1225,14 @@ computed separately):
 | aperture window | 1.76 dB | 1.76 dB | Hann weighting against noise that is uncorrelated between hydrophones: N Σw² / (Σw)². It buys −31 dB bearing sidelobes where an unweighted row has −13 dB |
 | range cell | 0.5 dB | 7.7 dB | the map is computed every 0.25 m for a 0.375 m resolution (4–6 kHz). `multiscale` reads the sample nearest the echo's peak; `mean` averaged it with the other seven samples of a 2 m cell |
 | total | 2.3 dB (measured 2.4) | 9.4 dB (measured 9.4) | |
+
+**The link budget and the coverage model have no reverberation term** (`sonar_equation.SonarEquation`, `coverage.py`;
+D-198, issue `sonar-w2w3`). They compare an echo with noise only; `snr_db` is measured against the detector's
+background, which reverberation sets wherever it is above the noise. Where it is, the budget's prediction is
+noise-limited and optimistic, and `snr_db` can sit tens of dB below it. Example (D-198): `flank_patrol`'s −3 dB
+small vehicle at 2.2 km over a −27 dB Lambert seabed has about 30 dB by the budget; bottom reverberation is
+21.9 dB above the noise there, the vehicle's cell stands 3.8 to 5.1 dB over its background, and the live
+chain's defaults miss it by 0.8 dB. The table above accounts for the budget against `snr_db` in noise only.
 
 ### The detector
 
@@ -1451,7 +1470,7 @@ reports a single line that is too long, where `build/bin/sonar_live` splits it.
 
 - **Refraction in operation: what is still missing.** The coverage picture, the profile ensemble and rays through the
   ladder's profile are built (sections above). Not there: rays through water that changes with range; reverberation as
-  a limit in the coverage picture; a useful depth from two rows among unresolved boundary echoes (the sigma now owns up to them and all six
+  a limit in the coverage picture and the link budget (D-198, `sonar-w2w3`); a useful depth from two rows among unresolved boundary echoes (the sigma now owns up to them and all six
   builds pass their self-tests, 42 of 42 on both engines, D-142 and D-143: the `popoto_face_2x32` rehearsal failed
   on the judge, not the chain; the depths are honest, not useful, `STATUS.md` open item 38); a multipath depth for the test AUV in 30 m of water (the ray
   mode answers `window`). `STATUS.md`, "Open and known wrong", has the list.

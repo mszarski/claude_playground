@@ -322,7 +322,9 @@ def twelve_km() -> list:
     # link budget
     noise = p3["noise_spectrum_db"]
     L.append(f"**Link budget at 12 km.** {p3['assumptions']}; noise spectrum level {noise:.1f} dB re 1 µPa²/Hz at {d3['centre_hz'] / 1e3:g} kHz. Blind inside {d3['blind_range_m']:g} m (the pulse); a ping every {d3['ping_interval_s']:.1f} s "
-             f"for the {d3['window_m'][0]:g}–{d3['window_m'][1]:g} m window ({60.0 / d3['ping_interval_s']:.1f} a minute).\n")
+             f"for the {d3['window_m'][0]:g}–{d3['window_m'][1]:g} m window ({60.0 / d3['ping_interval_s']:.1f} a minute). "
+             "**The budget has no reverberation term** (D-198, issue `sonar-w2w3`): its margins and reaches are noise-limited and optimistic wherever "
+             "reverberation dominates (for `flank_patrol`'s −3 dB small vehicle at 2.2 km it gives about 30 dB where the simulated data give about 4 dB over the background).\n")
     L.append(f"SNRs are one row's. *Needed* is what that option's own detector needs of it for a detection probability of {p3['detection']['probability']:g} on one ping, its rows added "
              f"(`buildspec.detection`, from the chain's settings in the build's deployment file; for {p3['detection']['probability_high']:g} add {p3['detection']['threshold_high_db'] - p3['detection']['threshold_db']:.1f} dB). "
              f"It holds the aperture window ({p3['detection']['window_loss_db']:.1f} dB), where the echo falls between the map's samples ({p3['detection']['straddle_loss_db']:.1f} dB), the false-alarm budget "
@@ -462,7 +464,7 @@ def twelve_km() -> list:
                  "option slower than the ping interval). Over the full window " + parts_list.gpu_full_rate_text(T) + "; the other L4 numbers below are for scenario-size decimated pings.")
     if cpu and gpu:
         L.append(f"- **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes {cpu['seconds']['1']:.2f} / {cpu['seconds']['2']:.2f} / {cpu['seconds']['3']:.2f} s a ping for 1 / 2 / 3 rows on {cpu['threads']} shared CPU threads, "
-                 f"and {gpu['seconds']['1']:.3f} / {gpu['seconds']['2']:.3f} / {gpu['seconds']['3']:.3f} s on an {gpu['header']['gpus'][0]} ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times its own host's {gpu['header']['host_threads']} threads for one row). "
+                 f"and {gpu['seconds']['1']:.3f} / {gpu['seconds']['2']:.3f} / {gpu['seconds']['3']:.3f} s on an {gpu['header']['gpus'][0]} ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times its own host's {gpu['header']['host_threads']} threads for one row), with ideal clocks (no board synchronisation stage; D-192 and D-195 give the trials' times with it). "
                  + (f"A full-length raw ping at the boards' rate took {T['cpu_full_rate']['seconds']['1']:.0f} / {T['cpu_full_rate']['seconds']['2']:.0f} / {T['cpu_full_rate']['seconds']['3']:.0f} s on the CPU: not real time against {d3['ping_interval_s']:.1f} s without decimating first. " if T.get("cpu_full_rate") else "")
                  + ("Decimate-first timings: `docs/design/popoto_stage2.json`." if T.get("stage2") else "Timings with the decimate-first stage: **pending** (`popoto_stage2.json`). Raw full-rate pings have not been run on a GPU."))
     L.append("\n**What the earlier builds reach instead** (noise-limited, ship / small): " + "; ".join(

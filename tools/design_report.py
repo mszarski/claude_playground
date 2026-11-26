@@ -553,7 +553,8 @@ def _compute_options_text() -> str:
         h = gpu["header"]
         out += (f"Measured on an {h['gpus'][0]} (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes {gpu['seconds']['1']:.3f}, {gpu['seconds']['2']:.3f} and {gpu['seconds']['3']:.3f} s a ping for one, two and three rows "
                 f"against {gpu['host_seconds']['1']:.2f}, {gpu['host_seconds']['2']:.2f} and {gpu['host_seconds']['3']:.2f} s on that machine's {h['host_threads']} CPU threads ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times for one row), on pings of scenario size "
-                f"({gpu['samples']:,} baseband samples a channel). " + full_rate[0].upper() + full_rate[1:] + ". ")
+                f"({gpu['samples']:,} baseband samples a channel) with ideal clocks: the benchmark leaves the board synchronisation stage out "
+                f"(with it, on the Popoto trials' pings, D-192 and D-195 in `DECISIONS.md`). " + full_rate[0].upper() + full_rate[1:] + ". ")
     out += ("Decimate-first timings: `design/popoto_stage2.json`." if t.get("stage2") else "The decimate-first stage is being built separately: **its timing is pending** (`design/popoto_stage2.json` does not exist yet).")
     return out
 
