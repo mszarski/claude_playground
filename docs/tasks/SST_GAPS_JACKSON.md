@@ -236,6 +236,11 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   fines, Mz >= 5.5 at 10 / 100 / 300 kHz).
 - List which tests pin the present values (`test_gallaudet_boundaries.py`: `fine_silt` 5.0 / 0.8 dB low).
 - Engines: none. Must not: change `sediments.yaml` or the 0.001/0.002 step without the owner [N2 §5].
+- **Done 2026-11-26 (branch `g-mud`): `docs/tasks/SEDIMENT_DEFAULTS_DECISION.md`, the owner's table; nothing changed.**
+  Found: no shipped scenario uses a row of 3 phi or finer (all 80 expanded); 0.002 / 0.003 move the seven rows
+  by +3.0 / +4.8 dB at 5-60 deg, 8-330 kHz; the class-median roughness moves them by under 0.45 dB below 60 deg
+  (volume dominates by at least 14.3 dB) and 1.3-2.5 dB at 75 deg; the five Table 14.1 values reproduce (C5: one
+  table, agents' computations); 4 to 7 test functions pin values a volume change would move.
 
 ### G-6 Grain-size relations as printed formulas — OPT-IN, S
 - Gap U6; closes the `REFERENCES.md` Sec. 10 "wanted" row. Merges [N1 WP-A] and [N3 WP5]; formulas (11.1)-(11.3)
