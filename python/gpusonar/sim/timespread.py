@@ -47,11 +47,16 @@ Against the forward-scatter papers read since (Dahl, JASA 100, 748-758, 1996; 10
 115, 589-599, 2004; docs/references/surface_forward_scatter_dahl_1996_2004.md and
 surface_bistatic_dahl_1999_mcdaniel_1986.md): the geometry of the facet model below is theirs. Its
 across-path angular spread sqrt(2 mss) sin(g) r1 / (r1 + r2) is Dahl 1996 eq. (15) with q = sqrt(2)
-against the fitted 1.348, and its coherence lengths scale as Dahl 2004 eqs. (7)-(9). The slope is
-not: `wind_speed` gives the Cox-Munk TOTAL mean-square slope, where the papers use that of the long
-waves (Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2): 1.4 to 2.2 times smaller at 1.5 to 10 m/s). With the
-total, the angular spread is 1.2 to 1.5 times too wide and the facet tail 1.6 to 1.9 times too long
-at the papers' conditions. A slope given as `mean_square_slope` replaces the wind law's.
+against the fitted 1.348, and its coherence lengths scale as Dahl 2004 eqs. (7)-(9). So is the
+slope since docs/references/CONFORMANCE.md A4: `wind_speed` gives the mean-square slope of the long
+waves, Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2) (`acoustics.large_scale_mean_square_slope`), which
+the papers use. Before A4 it gave the Cox-Munk TOTAL slope, 1.4 to 2.2 times larger at 1.5 to
+10 m/s; with it the angular spread was 1.2 to 1.5 times too wide and the facet tail 1.6 to 1.9 times
+too long at the papers' conditions. That law stays selectable as `surface.slope_law:
+cox_munk_total`. A slope given as `mean_square_slope` replaces either. What still does not fit: the
+SPACE'08 tails steeper than 12 degrees decay 1.9 times as slowly as the model's with the
+long-wave slope (1.3 times with the total; PHYSICS_NOTES Sec. 21.4 item 5), and Dahl 1999's angle spreads imply a slope half
+of (A7)'s at 4 m/s (recorded, not followed).
 
 Options beyond SST (all off by default; with them off the output is what it was)
 ---------------------------------------------------------------------------------
@@ -225,19 +230,49 @@ def _uniform(key: np.ndarray, stream: int) -> np.ndarray:
     return ((h >> np.uint64(11)).astype(np.float64) + 0.5) / float(1 << 53)
 
 
+# How the sea surface's mean-square slope follows from `wind_speed` (`surface.slope_law`):
+#   large_scale     (default) the long-wave slope of Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2), the slope the
+#                   forward-scatter papers use (acoustics.large_scale_mean_square_slope; CONFORMANCE.md A4);
+#   cox_munk_total  the total Cox-Munk slope 0.003 + 0.00512 U (acoustics.mean_square_slope), the default
+#                   until CONFORMANCE.md A4: 1.4 to 2.2 times larger at 1.5 to 10 m/s.
+SLOPE_LAWS = ("large_scale", "cox_munk_total")
+
+
+def surface_slope_from_wind(wind_speed: float, slope_law: str = "large_scale") -> float:
+    """The surface's mean-square slope for time spreading from the wind (`SLOPE_LAWS`)."""
+    if slope_law == "large_scale":
+        u = float(wind_speed)
+        # No wind: no rough surface (the height is zero too); the law's hold below 1.5 m/s warns only for a real wind.
+        return acoustics.large_scale_mean_square_slope(u, warn=u > 0.0)
+    if slope_law == "cox_munk_total":
+        return acoustics.mean_square_slope(wind_speed)
+    import difflib
+    near = difflib.get_close_matches(str(slope_law), SLOPE_LAWS, n=1, cutoff=0.0)
+    raise ValueError(f"time_spread.surface.slope_law: unknown {slope_law!r}; known: {', '.join(SLOPE_LAWS)}"
+                     + (f" (did you mean {near[0]!r}?)" if near else ""))
+
+
 def boundary_parameters(cfg: dict | None, *, surface: bool, frequency: float | None = None) -> dict | None:
     """{rms_height, mean_square_slope, rms_vertical_speed} from a config section: given
     directly, or for the sea surface from `wind_speed` (Pierson-Moskowitz height and vertical
-    speed, Cox-Munk slope). None or all zero: no spreading at that boundary."""
+    speed; the slope by `slope_law`, by default the long-wave slope of Dahl 1996 eq. (A7), with
+    `slope_law: cox_munk_total` the Cox-Munk total used before). A value given explicitly
+    (`mean_square_slope`, `rms_height`, `rms_vertical_speed`) replaces the wind law's. None or all
+    zero: no spreading at that boundary."""
     if not cfg:
         return None
     out = {"rms_height": 0.0, "mean_square_slope": 0.0, "rms_vertical_speed": 0.0}
+    law = str(cfg.get("slope_law", "large_scale"))
+    if "slope_law" in cfg and not surface:
+        raise ValueError("time_spread: slope_law describes the sea surface's wind law, not the bottom")
     if "wind_speed" in cfg:
         if not surface:
             raise ValueError("time_spread: wind_speed describes the surface, not the bottom")
         u = float(cfg["wind_speed"])
-        out = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": acoustics.mean_square_slope(u),
+        out = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": surface_slope_from_wind(u, law),
                "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u)}
+    elif "slope_law" in cfg:
+        surface_slope_from_wind(1.5, law)                # an unknown name is refused even without a wind
     for key in out:
         if key in cfg:
             out[key] = float(cfg[key])
@@ -859,7 +894,8 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
      taps, min_spacing, coherence_length, seed, incoherent,
      angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce, tap_shape, texture_rate,
      tail_quantile, coherent_phase: {...}};
-    the surface section also takes `rms_height` beside `wind_speed`, and `height_scale`."""
+    the surface section also takes `rms_height` beside `wind_speed`, `height_scale`, and `slope_law`
+    (`large_scale`, the default, or `cox_munk_total`: `SLOPE_LAWS`)."""
     if getattr(provider, "general", False):
         raise ValueError("time_spread: not with an image_source provider that has bottom_slope or a {point, normal} wall: the "
                          "spreading places each bounce on a flat surface and bottom")

@@ -9,8 +9,8 @@
 # NOT given in TR 0702, and chosen here (every block under `unconfirmed`): the water depth, the
 # depths of source and receiver, the sound speed, the time between pings, the sediment under
 # the name FineSand, and the laws that turn a wind speed into the surface's rms height, slope
-# and vertical speed (SST: McDanielSurface; here: Pierson-Moskowitz and Cox-Munk,
-# gpusonar/acoustics.py). Depths were chosen only so that the five arrivals are separate
+# and vertical speed (SST: McDanielSurface; here: Pierson-Moskowitz, and Dahl 1996 eq. (A7) for
+# the slope, gpusonar/acoustics.py). Depths were chosen only so that the five arrivals are separate
 # pulses inside the 35 ms of the figures (direct 0, surface 4.0, bottom 9.2, surface-bottom
 # 20.7, bottom-surface 30.6 ms). This is not a numerical reproduction of Figs. 3-5 and must
 # not be presented as one; the data in those figures (Dahl 2002) were not used.
@@ -21,8 +21,9 @@
 # direct one and the two two-bounce arrivals overlap; at 52 m the bottom-surface arrival comes at
 # 37 ms). This file stays TR 0702's example with its quoted winds; the paper's case is a scenario
 # of its own (docs/references/CONFORMANCE.md).
-# The surface slope from the wind is the Cox-Munk total (0.0184 at 3 m/s); Dahl 1996 eq. (A7)
-# gives the long-wave slope the papers use, 0.0135 (docs/references/CONFORMANCE.md).
+# The surface slope from the wind is the long-wave slope of Dahl 1996 eq. (A7), 0.0135 at 3 m/s, the
+# one the papers use (docs/references/CONFORMANCE.md A4); it was the Cox-Munk total, 0.0184
+# (`slope_law: cox_munk_total`). TR 0702's rule-of-thumb time for the surface bounce: 2.91 -> 2.14 ms.
 #
 # The one-way path: the projector is a radiating source (`sources:`, gpusonar/sim/sources.py)
 # 500 m from the receiver, emitting the pulse of `transmit.waveform` at its source level at

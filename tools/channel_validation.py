@@ -58,7 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 from gpusonar import acoustics  # noqa: E402
 from gpusonar.sim import ImageSourceProvider  # noqa: E402
 from gpusonar.sim import channel_replay as cr  # noqa: E402
-from gpusonar.sim.timespread import wrap  # noqa: E402
+from gpusonar.sim.timespread import surface_slope_from_wind, wrap  # noqa: E402
 
 # -- the experiment ---------------------------------------------------------------------------------
 
@@ -241,7 +241,7 @@ def closed_forms(group: dict, wind: float, fc: float, c: float) -> dict:
     if m is None:
         return {}
     g = m["grazing"]
-    h, mss, v = acoustics.rms_wave_height(wind), acoustics.mean_square_slope(wind), acoustics.rms_surface_vertical_speed(wind)
+    h, v = acoustics.rms_wave_height(wind), acoustics.rms_surface_vertical_speed(wind)
     gamma2 = (4.0 * np.pi * fc / c * h * np.sin(g)) ** 2
     return {"grazing_deg": float(np.degrees(g)), "rayleigh_gamma2": float(gamma2), "coherent": float(np.exp(-gamma2)),
             "doppler_gaussian_rms": float(2.0 * fc * v * np.sin(g) / c / np.sqrt(max(1.0 - np.exp(-gamma2), 1e-12))),
@@ -328,7 +328,9 @@ def run(sites: list, seeds: int = 3, log=print, extra: bool = True) -> dict:
         u = wind[recording]
         h = height.get(recording)
         site["wind_speed"] = u
-        site["surface"] = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": acoustics.mean_square_slope(u),
+        # The slope the model runs with: time spreading's wind law (the long-wave slope of Dahl 1996 eq. (A7) since
+        # CONFORMANCE.md A4; the Cox-Munk total before, which PHYSICS_NOTES Sec. 21.3-21.4's runs used).
+        site["surface"] = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": surface_slope_from_wind(u),
                            "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u)}
         if h is not None:
             site["fitted_rms_height"] = h

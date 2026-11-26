@@ -1613,6 +1613,10 @@ the ASIAEX surface Doppler spread was "less than 10 Hz" (p. 98), as a sanity bou
 Model: the boundary is a set of tilted mirrors (facets) with Gaussian slopes, variance mss/2
 per axis; one bounce, r1 and r2 the path lengths before and after it, g the grazing angle,
 q = 1/r1 + 1/r2, (x, y) a facet's position from the specular point, x along the path.
+For the sea surface, mss from the wind is the slope of the long waves, Dahl 1996 eq. (A7),
+0.0046 ln(2.1 U^2) (since docs/references/CONFORMANCE.md A4; the Cox-Munk total 0.003 + 0.00512 U
+before, `slope_law: cox_munk_total`): everything below that scales with mss shrinks by 1.4 to 2.2
+at 1.5 to 10 m/s, the angles by the root of that.
 
 **16.1 Geometry.** To second order the path through (x, y) is longer by
 `c tau = (x^2 sin^2 g + y^2) q / 2`: ellipses of equal delay, 1/sin g longer along the path.
@@ -2349,6 +2353,28 @@ rule_of_thumb, sum.
    Measured over model: facet median 0.99 with a scatter of a factor 5; rule of thumb 0.47
    with a factor 3. Above 12 degrees (Gamma^2 over 7): facet 1.28, rule of thumb 0.75. Below
    (Gamma^2 of order 1): facet 0.59, rule of thumb 0.28.
+   *With the long-wave slope (Dahl 1996 eq. (A7), the default since
+   docs/references/CONFORMANCE.md A4), worse above 12 degrees.* The numbers above were made
+   with the Cox-Munk total slope. Re-run of the model side (2026-11-26): option set A
+   simulated again on each file's grid and through the same estimator, with both slope laws
+   (3 seeds each; the measured decays read from the saved run's JSON, since the UACR files
+   are not on the machine), each arrival's saved model decay scaled by the re-simulated
+   ratio. Measured over model, facet, the eight files behind the numbers above (21
+   arrivals): overall 1.00 -> **1.68**; above 12 degrees 1.28 -> **1.89** (n = 13); below
+   12 degrees 0.76 -> 0.96 (n = 8). Simply scaling by the slope ratio (0.70, 0.69, 0.48 at
+   the fitted 3.70, 3.96, 9.14 m/s) gives 1.66 / 2.06 / 1.13: the estimators under-read the
+   shortened tails a little (a 0.19 ms decay at 60 m reads 0.135 ms, tests/python/
+   test_channel_replay.py). That saved run gives 0.76 below 12 degrees, not the 0.59 printed
+   above; the 0.59 was not reproduced. Over the nine files of
+   `docs/figures/channel_validation_sites.md` (with the 1 km paths up to 12 bounces): 1.72 ->
+   1.81 overall (n = 30 of 36: the re-run gives no decay for six), 1.26 -> 1.87 above 12
+   degrees; below 12 degrees 2.52 -> 1.15, but that row is dominated by 1 km arrivals whose
+   re-simulated ratios run from 0.24 to 149 over three seeds: not to be relied on. So: the
+   steep SPACE'08 tails (21-32 degrees at 60 m, 15 at 200 m; Gamma^2 over 7) decay 1.9 times more
+   slowly than the facet model with the long-wave slope, where with the Cox-Munk total they
+   were 1.3 times; the low-angle ones are now nearer (0.96). Dahl's measurements, which back
+   the slope law, are at 6-20 degrees. Kept as the residual of A4: nothing was tuned
+   (`slope_law: cox_munk_total` reproduces the earlier numbers).
 6. **Complex Gaussian taps: contradicted at steep angles.** Scintillation index of fully rough
    arrivals: median 1.43 (one bounce, n = 4), 1.31 (two, n = 7), 1.72 (three, n = 6), up to 4.8
    in the rough recording; the model gives 0.6 after the same windowing and cannot exceed 1.
@@ -2983,6 +3009,11 @@ images (`docs/references/surface_forward_scatter_dahl_1996_2004.md`,
   about 2 times short; Dahl's small-slope model fits.
 - Bubble attenuation per bounce: Dahl 1996 eq. (17) prints twice our exponent; Dahl 1999 eq. (12) has
   ours and calls the 1996 equation misprinted.
+- Applied (docs/references/CONFORMANCE.md A4): time spreading takes the large-scale slope of eq. (A7)
+  from the wind by default (`acoustics.large_scale_mean_square_slope`; the Cox-Munk total stays as
+  `time_spread.surface.slope_law: cox_munk_total`). Dahl 1999's smaller implied slope is recorded, not
+  followed (an expected failure in `tests/python/test_forward_scatter_dahl.py`). Against SPACE'08 it
+  makes the steep arrivals' tails fit worse: Sec. 21.4 item 5.
 
 ### 23.5 Reverberation statistics
 
