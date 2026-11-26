@@ -236,7 +236,12 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
 
     `reverberation_rows_gain` (opt-in; default None, bound A, the plan exactly as before): what the rows gain against the
     reverberation, g dB added to SRR (`rows_gain_against_reverberation`: "none", "incoherent" or a number of dB);
-    `reverberation.rows_gain_against_reverberation_db` states the g used."""
+    `reverberation.rows_gain_against_reverberation_db` states the g used.
+
+    With the term included, each class's `recommended.limited_by` is judged at the range of interest (the reverberation
+    costs more than 3 dB there: its power above the noise's), and `recommended.reach_limited_by` by the same rule at the
+    reported reach `reach_m` (at the first range when nothing is held): what limits the reach. The first can read
+    "noise" for a class whose reach shrank to reverberation (D-227)."""
     from . import buildspec as bs
     env, ranged = _local_water(env)
     wind = wind_of(env)
@@ -336,6 +341,9 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
             held_n = (worst_f + free[None, :] + ts_lo)[best] >= 0.0
             entry["recommended"].update(margin_noise_only_db=float(noise_at), reach_noise_only_m=float(rr[np.flatnonzero(held_n)[-1]]) if held_n.any() else 0.0,
                                         limited_by="reverberation" if noise_at - at[best] > 3.0 else "noise")
+            k_reach = int(np.flatnonzero(held[best])[-1]) if held[best].any() else 0          # the reach's range (the first when none)
+            noise_reach = worst_f[best, k_reach] + free[k_reach] + ts_lo
+            entry["recommended"]["reach_limited_by"] = "reverberation" if noise_reach - worst[best, k_reach] > 3.0 else "noise"
         for z in (own[0], 10.0, 30.0, 100.0):
             if own[0] <= z <= own[-1]:
                 k = int(np.argmin(np.abs(own - z)))

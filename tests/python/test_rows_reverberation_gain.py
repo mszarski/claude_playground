@@ -168,3 +168,24 @@ def test_a_builds_coverage_block_writes_the_setting_only_when_asked():
         coverage.of_build(spec, {"environment": SHELF, "reverberation_rows_gain": "coherent"})
     with pytest.raises(ValueError, match="environment"):
         coverage.of_build(spec, {"environment": SHELF, "rows_gain": 3.0})
+
+
+def test_reach_limited_by_says_what_limits_the_reach(shelf3):
+    """D-227's defect: `limited_by` is judged at the range of interest (12 km), so it reads "noise" for the +5 dB class over
+    the shelf although reverberation cut its reach from 9.58 km (noise only) to 2.56 km. `reach_limited_by` judges the
+    same rule (the term costs more than 3 dB) at the reported reach. The existing fields are as before (the test above)."""
+    d, env, classes, P, _ = shelf3
+    xl = P["default"]["classes"]["xl_auv"]["recommended"]
+    assert xl["limited_by"] == "noise" and xl["reach_limited_by"] == "reverberation"
+    assert xl["reach_m"] == 2560.0 and xl["reach_noise_only_m"] == 9580.0
+    assert P["default"]["classes"]["ship"]["recommended"]["reach_limited_by"] == "noise"      # 12.7 km, the grid's end
+    noise = depthplan.plan(d, env, classes, cache={}, reverberation=False)
+    assert all("reach_limited_by" not in c["recommended"] and "limited_by" not in c["recommended"] for c in noise["classes"].values())
+    rr = np.asarray(P["default"]["ranges_m"])
+    for key in ("default", "measured"):
+        for name, c in P[key]["classes"].items():
+            r = c["recommended"]
+            k_own = P[key]["own_depths_m"].index(r["own_depth_m"])
+            k = int(np.argmin(np.abs(rr - r["reach_m"]))) if r["reach_m"] > 0 else 0
+            cost = noise["classes"][name]["margin_worst_db"][k_own][k] - c["margin_worst_db"][k_own][k]
+            assert r["reach_limited_by"] == ("reverberation" if cost > 3.0 else "noise"), (key, name, cost)
