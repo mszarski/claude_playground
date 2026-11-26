@@ -160,17 +160,19 @@ def test_urick_hoover_readings_at_60_khz():
     """Characterisation only (figure readings, +-1.5 dB; +-2 dB at the curve ends): Urick and Hoover (1956),
     60 kHz, open ocean, as McDaniel (1993) Fig. 18 shows them (the note Sec. 2.7). Ours (bubble + facet)
     minus the reading, dB, at the grazing angles listed:
-        wind 9.0 m/s, 15/30/45/60 deg:  apl_1994 +1.2 / +3.4 / +2.6 / +1.1    dahl_1997 +0.8 / +4.0 / +3.6 / +1.9
-             6.4                        +9.0 / +9.8 / +8.0 / +3.0              +6.5 / +6.5 / +4.4 / -0.3
+        wind 9.0 m/s, 15/30/45/60 deg:  apl_1994 +1.2 / +3.4 / +2.6 / +0.6    dahl_1997 +0.8 / +4.0 / +3.6 / +1.4
+             6.4                        +9.0 / +9.8 / +8.0 / +2.9              +6.5 / +6.5 / +4.4 / -0.4
              3.9                       +12.2 / +10.5 / +7.1 / +0.1             +7.0 / +5.2 / +1.7 / -5.2
              2.6, 32/45/60 deg          +9.3 / +5.8 / +2.3                     +0.5 / -3.0 / -6.5
     With dahl_1997 every point is within +8 dB (apl_1994 reaches +12.2). The note's own "with [D97]
     beta_I" column (+7.9 / +6.2 / +2.7 / -4.2 at 3.9 m/s; +2.3 / -1.2 / -4.7 at 2.6 m/s) scaled the 70 kHz
-    fit by f^0.8 instead of interpolating between 50 and 70 kHz: up to 1.8 dB apart at 2.6 m/s."""
+    fit by f^0.8 instead of interpolating between 50 and 70 kHz: up to 1.8 dB apart at 2.6 m/s.
+    The facet term attenuated by the layer (A2) moves only the 60 degree points: before A2
+    (`facet_attenuation=False`) 9.0 m/s +1.1 / +1.9 and 6.4 m/s +3.0 / -0.3 (apl_1994 / dahl_1997)."""
     readings = {9.0: {15: -26.0, 30: -26.0, 45: -24.5, 60: -21.0}, 6.4: {15: -34.3, 30: -33.8, 45: -31.5, 60: -26.0},
                 3.9: {15: -46.3, 30: -44.5, 45: -41.0, 60: -34.0}, 2.6: {32: -50.0, 45: -46.5, 60: -43.0}}
-    ours = {9.0: (0.8, 4.0, 3.6, 1.9), 6.4: (6.5, 6.5, 4.4, -0.3), 3.9: (7.0, 5.2, 1.7, -5.2), 2.6: (0.5, -3.0, -6.5)}
-    apl = {9.0: (1.2, 3.4, 2.6, 1.1), 6.4: (9.0, 9.8, 8.0, 3.0), 3.9: (12.2, 10.5, 7.1, 0.1), 2.6: (9.3, 5.8, 2.3)}
+    ours = {9.0: (0.8, 4.0, 3.6, 1.4), 6.4: (6.5, 6.5, 4.4, -0.37), 3.9: (7.0, 5.2, 1.7, -5.2), 2.6: (0.5, -3.0, -6.5)}
+    apl = {9.0: (1.2, 3.4, 2.6, 0.63), 6.4: (9.0, 9.8, 8.0, 2.92), 3.9: (12.2, 10.5, 7.1, 0.1), 2.6: (9.3, 5.8, 2.3)}
     for u, points in readings.items():
         g = np.radians(list(points))
         read = np.array(list(points.values()))
@@ -197,14 +199,15 @@ BEFORE = {
 def test_apl_1994_path_is_bit_identical_when_named():
     """`apl_1994` (the default until A1) and `hall_novarini`, when named, give exactly the values the
     default and `hall_novarini` gave before `dahl_1997` was added, bit for bit, through
-    `bubble_layer_surface_db` and `bubble_layer_optical_depth`. (Until A1 this test also held the
-    unnamed default to these values; the default is now `dahl_1997`:
-    `test_dahl_1997_is_the_default_extinction`.)"""
+    `bubble_layer_surface_db` (with `facet_attenuation=False`, the model before A2) and
+    `bubble_layer_optical_depth`. (Until A1 this test also held the unnamed default to these values;
+    the default is now `dahl_1997`: `test_dahl_1997_is_the_default_extinction`.)"""
     g = np.radians([5.0, 17.0, 30.0, 45.0, 60.0, 85.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for (u, f), (levels, apl, hn) in BEFORE.items():
-            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994")] == list(levels)
+            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994",
+                                                                              facet_attenuation=False)] == list(levels)
             assert float(surface.bubble_layer_optical_depth(u, f, extinction="apl_1994")).hex() == apl
             assert float(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini")).hex() == hn
 

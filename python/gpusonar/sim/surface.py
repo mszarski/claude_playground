@@ -451,8 +451,10 @@ def searay_bottom_strength(frequency: float, bottom_type):
 #     2155-2169 (1999), eq. (12), prints exp(-(beta_I / sin t_i + beta_I / sin t_s)) and says the 1996
 #     equation was printed with an error; [D97] Sec. VI agrees. Ours is the single exponent.
 #   - [D97] Sec. VI and [D99] eqs. (11)-(12) attenuate the roughness (facet) term by that factor;
-#     `bubble_layer_surface_db` does not (0 dB at 45 degrees, -0.6 to -3.2 dB at 80-89 degrees,
-#     8-15 m/s, 30-68 kHz, with our beta_I).
+#     `bubble_layer_surface_db` does too since A2 (docs/references/CONFORMANCE.md Sec. 1.1;
+#     `facet_attenuation=False` is the model before: 0 dB at 45 degrees, -0.6 to -3.2 dB at 80-89
+#     degrees, 8-15 m/s, 30-68 kHz with `apl_1994`'s beta_I; -2.2 to -9.2 dB at 80 degrees, 10-12 m/s
+#     with the default `dahl_1997`'s, tests/python/test_literature_models.py).
 #   - For a bistatic pair the strength functions here take the arithmetic mean grazing angle. [D99]
 #     eq. (13) is a published bistatic bubble term; TR 0702 Sec. 6.4.2 makes monostatic laws bistatic
 #     by the geometric mean of the two backscattering strengths. Neither is implemented.
@@ -544,24 +546,33 @@ def facet_backscatter(grazing, wind_speed: float):
 
 
 def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                            extinction: str = "dahl_1997"):
+                            extinction: str = "dahl_1997", facet_attenuation: bool = True):
     """Sea-surface backscattering strength, dB, from the bubble layer plus the wave facets
     (model `bubble_layer`; comment above): the two terms of the published high-frequency model
     whose formulas could be read. Stated range of the published model: 12 to 70 kHz, 3 to
-    15 m/s; a warning is raised outside it."""
+    15 m/s; a warning is raised outside it.
+
+    The facet term is attenuated by the layer, exp(-2 beta_I / sin(t)) with the bubble term's
+    beta_I ([D97] Sec. VI; [D99] eqs. (11)-(12): one crossing per leg; the default since A2,
+    docs/references/CONFORMANCE.md Sec. 1.1). `facet_attenuation=False` gives the model before A2."""
     if not 12e3 <= float(frequency) <= 70e3 or not 3.0 <= float(wind_speed) <= 15.0:
         warnings.warn(f"bubble_layer_surface_db: {frequency / 1e3:g} kHz, {wind_speed:g} m/s is outside the range the "
                       "published model was compared with data in (12-70 kHz, 3-15 m/s)", stacklevel=2)
-    total = bubble_backscatter(grazing, wind_speed, frequency, sound_speed, extinction) + facet_backscatter(grazing, wind_speed)
+    facets = facet_backscatter(grazing, wind_speed)
+    if facet_attenuation:
+        t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
+        beta_i = bubble_layer_optical_depth(wind_speed, frequency, sound_speed, extinction)
+        facets = facets * np.exp(-2.0 * beta_i / np.sin(t))
+    total = bubble_backscatter(grazing, wind_speed, frequency, sound_speed, extinction) + facets
     return 10.0 * np.log10(np.maximum(total, 1e-300))
 
 
 def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                                  extinction: str = "dahl_1997"):
+                                  extinction: str = "dahl_1997", facet_attenuation: bool = True):
     """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
     code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
     return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,
-                                                               sound_speed, extinction) / 10.0)
+                                                               sound_speed, extinction, facet_attenuation) / 10.0)
 
 
 # --- The empirical surface laws against the bubble layer's saturation level (D-87) ----------------

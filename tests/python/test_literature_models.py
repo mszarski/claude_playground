@@ -176,7 +176,16 @@ def test_facet_term_and_the_whole_model():
         total = surface.bubble_layer_surface_db(g, 10.0, 30e3)
     # Bubbles at low angles (the saturation level is -29.3 dB at 10 degrees and the bracket of eq. (10)
     # adds at most 3.7 dB: -27.2 dB with the default dahl_1997, -25.5 with apl_1994), facets near the normal.
-    assert -28.0 < total[0] < -24.0 and total[-1] == pytest.approx(10 * math.log10(1 / (4 * np.pi * s2)), abs=0.05)
+    # At normal incidence the facets, attenuated by the layer (A2): exp(-2 beta_I), beta_I 0.257 (dahl_1997), -2.23 dB,
+    # plus the bubble term (0.06 dB there).
+    beta = surface.bubble_layer_optical_depth(10.0, 30e3)
+    normal = np.exp(-2 * beta) / (4 * np.pi * s2) + float(surface.bubble_backscatter(0.5 * np.pi, 10.0, 30e3))
+    assert -28.0 < total[0] < -24.0 and total[-1] == pytest.approx(10 * math.log10(normal), abs=1e-9)
+    assert total[-1] - 10 * math.log10(1 / (4 * np.pi * s2)) == pytest.approx(-2.17, abs=0.01)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        plain = surface.bubble_layer_surface_db(g, 10.0, 30e3, facet_attenuation=False)
+    assert plain[-1] == pytest.approx(10 * math.log10(1 / (4 * np.pi * s2)), abs=0.05)       # the model before A2
     assert np.all(np.diff(total) > 0.0)
     with pytest.warns(UserWarning, match="outside the range"):
         surface.bubble_layer_surface_db(g, 10.0, 300e3)
@@ -184,6 +193,59 @@ def test_facet_term_and_the_whole_model():
         surface.bubble_layer_surface_db(g, 20.0, 30e3)
     fn = surface.bubble_layer_surface_strength(10.0, 30e3)
     assert float(fn(g[1], g[1])) == pytest.approx(10 ** (total[1] / 10), rel=1e-12)
+
+
+def test_facet_term_is_attenuated_by_the_bubble_layer():
+    """A2 (docs/references/CONFORMANCE.md Sec. 1.1): the facet (roughness) term crosses the bubble
+    layer on the way in and out, so it is attenuated by exp(-2 beta_I / sin(t)) with the same beta_I
+    as the bubble term: Dahl et al. (1997) Sec. VI and Dahl (1999) eqs. (11)-(12), alpha_b =
+    exp(-(beta_I / sin t_i + beta_I / sin t_s)), one crossing per leg (Dahl 1996 eq. (17) prints twice
+    the exponent; Dahl 1999 calls that a misprint): docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md
+    Sec. 2.3. `facet_attenuation=False` (scenario key `facet_attenuation: false`) is the model before A2.
+    The note's table (its Sec. 3.2), with apl_1994's beta_I, dB added at 45 / 60 / 80 / 89 degrees:
+        30 kHz,  8 m/s: 0 / -0.16 / -0.60 / -0.59      68 kHz, 15 m/s: 0 / -2.34 / -3.17 / -3.14
+    reproduced to its 0.01 dB."""
+    g = np.radians([45.0, 60.0, 80.0, 89.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for u, f, name in ((8.0, 30e3, "apl_1994"), (12.0, 68e3, "dahl_1997"), (3.0, 68e3, "dahl_1997")):
+            beta = surface.bubble_layer_optical_depth(u, f, extinction=name)
+            bubbles = surface.bubble_backscatter(g, u, f, extinction=name)
+            facets = surface.facet_backscatter(g, u)
+            want = 10 * np.log10(bubbles + facets * np.exp(-2 * beta / np.sin(g)))
+            np.testing.assert_allclose(surface.bubble_layer_surface_db(g, u, f, extinction=name), want, rtol=0, atol=1e-12)
+            np.testing.assert_allclose(surface.bubble_layer_surface_db(g, u, f, extinction=name, facet_attenuation=False),
+                                       10 * np.log10(bubbles + facets), rtol=0, atol=1e-12)
+            fn = surface.bubble_layer_surface_strength(u, f, extinction=name)
+            assert np.allclose(fn(g, g), 10 ** (want / 10), rtol=1e-12)
+        for u, f, table in ((8.0, 30e3, (0.0, -0.16, -0.60, -0.59)), (15.0, 68e3, (0.0, -2.34, -3.17, -3.14))):
+            moved = (surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994")
+                     - surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994", facet_attenuation=False))
+            np.testing.assert_allclose(moved, table, atol=0.006)
+        # With the default beta_I (dahl_1997, larger at high wind): 80 degrees, 10 / 12 m/s, 30 / 68 kHz
+        # (computed; the note Sec. 3.2 gives "-2 to -9 dB at 80 degrees, 10-12 m/s").
+        t80 = math.radians(80.0)
+        for (u, f), want in {(10.0, 30e3): -2.23, (12.0, 30e3): -6.12, (10.0, 68e3): -3.51, (12.0, 68e3): -9.24}.items():
+            moved = float(surface.bubble_layer_surface_db(t80, u, f) - surface.bubble_layer_surface_db(t80, u, f, facet_attenuation=False))
+            assert moved == pytest.approx(want, abs=0.01), (u, f, moved)
+
+
+def test_scenario_key_facet_attenuation():
+    """`facet_attenuation` reaches the model through `run_scenario`: absent is `true` (A2), `false` is
+    the model before A2."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("point_grid_fls_300k")
+    cfg["n_pings"] = 1
+    item = {"model": "bubble_layer_surface", "boundary_z": 0.0, "wind_speed": 12.0}
+    out = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                      # 300 kHz is outside the model's stated range
+        for key in (None, True, False):
+            cfg["reverberation"] = [dict(item) if key is None else dict(item, facet_attenuation=key)]
+            out[key] = run_scenario(cfg).records[0].samples.array.copy()
+    assert np.array_equal(out[None], out[True])
+    assert not np.array_equal(out[None], out[False])
 
 
 def test_scenario_key_for_the_bubble_layer_surface_model():

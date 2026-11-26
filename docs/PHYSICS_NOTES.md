@@ -2887,7 +2887,8 @@ follow that we did not have:
   10 degrees for 12, 30 and 68 kHz, at most 3.7 dB more on the way there. The empirical
   laws in the tree have no ceiling: at 68 kHz, 15 m/s and 10 degrees Chapman-Harris gives
   -19.1 dB and the Kraus law -23.0 dB, 7 to 11 dB above it. At 30 kHz and 10 m/s the three
-  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees).
+  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees; the first with `extinction: apl_1994`,
+the default before A1; -27.2 dB with the default `dahl_1997`).
 - a consistency check of two sources. The module's bubble dynamics (Commander-Prosperetti,
   from arXiv:2410.14415) gives a total damping constant at resonance of 0.0544, 0.0797,
   0.1051, 0.1187 at 10, 30, 68, 100 kHz; the printed `2.55e-2 f^(1/3)` with f in kHz gives
@@ -2898,7 +2899,8 @@ Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_
 with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
 `hall_novarini`), because the handbook's law for it is not printed anywhere open, or, the default
 since A1 (`docs/references/CONFORMANCE.md` Sec. 1.1), from the published fit of Dahl et al. (1997)
-(`extinction: dahl_1997`, Sec. 23.7); without the
+(`extinction: dahl_1997`, Sec. 23.7); the facet term attenuated by the layer, exp(-2 beta_I / sin(t)) (Dahl et al. 1997 Sec. VI,
+Dahl 1999 eqs. (11)-(12); the default since A2, `facet_attenuation: false` the model before); without the
 small-scale roughness term (its empirical function is not printed), so between about 30 and
 70 degrees it is a lower bound on the model with that term, not on data (D-193; below).
 

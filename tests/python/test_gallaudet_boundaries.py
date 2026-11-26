@@ -211,7 +211,8 @@ def test_surface_with_the_published_extinction_law_at_3_m_s():
         def fn(g):
             b = beta_i / np.sin(g)
             level = surface.BUBBLE_RERADIATION_DAMPING * np.sin(g) / (8 * np.pi * surface.bubble_damping_constant(FREQUENCY))
-            return level * (1 + 8 * b * np.exp(-2 * b) - np.exp(-4 * b)) + surface.facet_backscatter(g, WIND_SPEED)
+            # the facets attenuated by the layer, exp(-2 b) (A2; 0.001 dB in these bands at 3 m/s)
+            return level * (1 + 8 * b * np.exp(-2 * b) - np.exp(-4 * b)) + surface.facet_backscatter(g, WIND_SPEED) * np.exp(-2 * b)
         return fn
 
     with warnings.catch_warnings():
