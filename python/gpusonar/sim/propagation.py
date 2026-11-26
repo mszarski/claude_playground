@@ -39,7 +39,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .. import _gpusonar as core
 from . import engine as _engine
 
 
@@ -117,7 +116,7 @@ class FreeFieldProvider(EigenrayProvider):
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         if _cpp_points(self.engine, points):
-            return EigenraySet(**core.sim_free_field_eigenrays(self.sound_speed, _source3(source), points))
+            return EigenraySet(**_engine.call("sim_free_field_eigenrays", self.sound_speed, _source3(source), points))
         r, u = _direct(source, points, self.sound_speed)
         s = points.shape[0]
         return EigenraySet(
@@ -148,7 +147,9 @@ class ImageSourceProvider(EigenrayProvider):
 
     Walls, two forms. {axis: 0 | 1, position, coefficient}: a vertical plane x or y = position, applied once on top
     of every image of the surface and bottom series, with no check that the path meets the wall or stays in the
-    water (the form before sonar-0nsi; since sonar-8qn9 its arrival direction is mirrored in the wall as well).
+    water (the form before sonar-0nsi; since sonar-8qn9 its arrival direction is mirrored in the wall as well). The
+    axis is the integer 0 or 1 and the position a finite number; anything else (2, a negative value, a float, a
+    bool, a string) is refused on both engines (a-wallaxis): the horizontal planes are `surface_z` and `bottom_z`.
     {point: [x, y, z], normal: [nx, ny, nz], coefficient[, bounds: {x: [lo, hi], y: [..], z: [..]}]}: any plane,
     `normal` pointing into the water. Opt-in with it (or with `bottom_slope`), every plane becomes a mirror of
     one general construction (`_PlaneImages`): the surface, the bottom (tilted by `bottom_slope` = [dz/dx, dz/dy],
@@ -208,7 +209,7 @@ class ImageSourceProvider(EigenrayProvider):
             raise ValueError("image_source: an elastic bottom needs shear_speed (m/s, 0 = a fluid) and shear_attenuation "
                              "(dB per wavelength) >= 0")
         self.bottom = bottom
-        # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
+        # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex} (another axis is refused).
         # Walls are applied to first order only, on top of the vertical image series.
         self.walls = walls or []
         for i, wall in enumerate(self.walls):
@@ -293,14 +294,20 @@ class ImageSourceProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        # Field points are [S, 3] (or one point [3]) on both engines. Before a-wallaxis any other shape sent the C++
+        # engine to the NumPy code without a word (`_cpp_points`), which then failed with an IndexError.
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise ValueError(f"image_source: field points [S, 3] (or one point [3]) are needed, not shape {points.shape}")
         order = self._order_for(source, points)
         if self.general:
             if _cpp_points(self.engine, points):
                 return self._planes.eigenrays_cpp(source, points, order, self.wall_order)
             return self._planes.eigenrays(source, points, order, self.wall_order)
-        if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
+        # Every wall is axis 0 or 1 (`_check_wall`), so the C++ engine, when selected, always runs; before a-wallaxis
+        # another axis sent it to NumPy without a word.
+        if _cpp_points(self.engine, points):
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
-            return EigenraySet(**core.sim_image_source_eigenrays(
+            return EigenraySet(**_engine.call("sim_image_source_eigenrays",
                 self.sound_speed, _source3(source), points,
                 surface_z=None if self.surface_z is None else float(self.surface_z),
                 bottom_z=None if self.bottom_z is None else float(self.bottom_z),
@@ -393,6 +400,24 @@ def _check_wall(wall: dict, i: int) -> None:
                     raise ValueError(f"{where}bounds.{key}: [low, high] needed")
     else:
         _refuse_unknown(wall, _AXIS_WALL_KEYS, where)
+        # The old form is a vertical plane, x = position (axis 0) or y = position (axis 1), and nothing else (a-wallaxis).
+        # Axis 2 would be a horizontal plane laid once over every image of the surface and bottom series: the images
+        # of a plane at the surface or bottom again under another coefficient and with no bounce counted, and no valid
+        # path for a plane between them; the horizontal planes are `surface_z` and `bottom_z`, and any other plane is
+        # the {point, normal} form. Before, 2 and -1 to -3 ran in NumPy on both engines as an array index (2 and -1: z,
+        # -2: y, -3: x), 3 and -4 raised an IndexError, and a float, bool or string was cut by int() (0.7 -> 0, "1" -> 1).
+        axis = wall.get("axis")
+        if isinstance(axis, (bool, np.bool_)) or not isinstance(axis, (int, np.integer)) or int(axis) not in (0, 1):
+            raise ValueError(f"{where}axis: {axis!r} is not a wall axis; give 0 (a wall x = position) or 1 (a wall y = position). "
+                             "The horizontal planes are surface_z and bottom_z; any other plane is a wall given as "
+                             "{point, normal, coefficient}")
+        try:
+            position = float(wall["position"])
+        except (KeyError, TypeError, ValueError):
+            position = None
+        if position is None or not np.isfinite(position):
+            raise ValueError(f"{where}position: {wall.get('position')!r}; a wall {{axis, position, coefficient}} needs its "
+                             "position (metres) as a finite number")
 
 
 PLANE_TOLERANCE_M = 1e-6     # a point this close to a plane is on it (scatterers laid on a boundary are)
@@ -516,7 +541,7 @@ class _PlaneImages:
         planes = [(pl.kind, _source3(pl.point), _source3(pl.normal),
                    None if pl.kind == "bottom" else complex(pl.coefficient),
                    [(int(axis), float(lo), float(hi)) for axis, lo, hi in pl.bounds or []]) for pl in self.planes]
-        return EigenraySet(**core.sim_plane_image_eigenrays(
+        return EigenraySet(**_engine.call("sim_plane_image_eigenrays",
             p.sound_speed, _source3(source), np.asarray(points, dtype=float), planes, int(order), int(wall_order),
             complex(p.bottom_coefficient), None if p.bottom is None else _fluid_bottom(**p.bottom)))
 
@@ -586,7 +611,8 @@ def snell_crossing(source, points, c_water: float, c_sediment: float, interface_
     source = np.asarray(source, dtype=float)
     points = np.atleast_2d(np.asarray(points, dtype=float))
     if _cpp_points(engine, points):
-        return core.sim_snell_crossing(_source3(source), points, float(c_water), float(c_sediment), float(interface_z))
+        return _engine.call("sim_snell_crossing", _source3(source), points, float(c_water), float(c_sediment),
+                            float(interface_z))
     a = interface_z - source[2]
     b = points[:, 2] - interface_z
     h = points[:, :2] - source[:2]
@@ -795,13 +821,14 @@ class SedimentProvider(EigenrayProvider):
             self._check_subcritical(source, points)
         if _cpp_points(self.engine, points):
             if fluid:
-                return EigenraySet(**core.sim_sediment_eigenrays(
+                return EigenraySet(**_engine.call(
+                    "sim_sediment_eigenrays",
                     self.sound_speed, self.sediment_speed, self.interface_z, self.transmission, _source3(source), points,
                     bottom=_fluid_bottom(**self.bottom), frequency=self.frequency,
                     evanescent=self.subcritical == "evanescent",
                     roughness=None if self.rough is None else self.rough.cpp_args()))
-            return EigenraySet(**core.sim_sediment_eigenrays(self.sound_speed, self.sediment_speed, self.interface_z,
-                                                             self.transmission, _source3(source), points))
+            return EigenraySet(**_engine.call("sim_sediment_eigenrays", self.sound_speed, self.sediment_speed,
+                                              self.interface_z, self.transmission, _source3(source), points))
         t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,
                                   engine="numpy")
         launch = cross - source
@@ -997,8 +1024,9 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
                       lambert=np.asarray(lambert, dtype=bool) if weighted else None,
                       normals=np.asarray(normals, dtype=float) if weighted and normals is not None else None)
         if doppler:
-            return core.sim_two_way_paths(*args, **kwargs, out_range_rate=rates[0], back_range_rate=rates[1])
-        q, p, amp, vq = core.sim_two_way_paths(*args, **kwargs)
+            return _engine.call("sim_two_way_paths", *args, **kwargs, out_range_rate=rates[0],
+                                back_range_rate=rates[1])
+        q, p, amp, vq = _engine.call("sim_two_way_paths", *args, **kwargs)
         return q, p, amp, vq, (None if vq is None else vq.copy())
     q_all = out.apparent_positions(tx_position)       # [S, Ko, 3]
     p_all = back.apparent_positions(rx_reference)     # [S, Kb, 3]

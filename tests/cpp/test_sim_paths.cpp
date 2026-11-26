@@ -6,6 +6,7 @@
 #include <cmath>
 #include <complex>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
 #include "sonar/sim/paths.hpp"
@@ -90,6 +91,28 @@ TEST(Paths, ImageSeriesWithoutABottomStopsAtTheSurface) {
   // The wall image of the direct path is at y = 2 * 50 - 20 = 80.
   EXPECT_NEAR(e.delay[1], std::hypot(40.0, 80.0) / kC, 1e-15);
   EXPECT_NEAR(e.amplitude[1].real(), 0.8 / std::hypot(40.0, 80.0), 1e-15);
+}
+
+TEST(Paths, AnAxisWallOtherThanXOrYIsRefused) {
+  // An {axis, position} wall is a vertical plane x = position (axis 0) or y = position (axis 1). Any other axis is
+  // refused, never mirrored: axis 2 would be a third horizontal plane laid over the surface and bottom series (the
+  // Python provider refuses it as well, so neither engine runs it; a-wallaxis).
+  const Vec3d source{0.0, 0.0, 10.0};
+  const std::vector<double> point{40.0, 20.0, 10.0};
+  for (const int axis : {2, -1, 3}) {
+    sim::ImageSourceConfig cfg;
+    cfg.sound_speed = kC;
+    cfg.max_order = 1;
+    cfg.walls.push_back({axis, 5.0, {0.8, 0.0}});
+    EXPECT_THROW(sim::image_source_eigenrays(cfg, source, point.data(), 1), std::invalid_argument) << axis;
+  }
+  for (const int axis : {0, 1}) {
+    sim::ImageSourceConfig cfg;
+    cfg.sound_speed = kC;
+    cfg.max_order = 1;
+    cfg.walls.push_back({axis, 5.0, {0.8, 0.0}});
+    EXPECT_NO_THROW(sim::image_source_eigenrays(cfg, source, point.data(), 1)) << axis;
+  }
 }
 
 TEST(Paths, AWallPathArrivesMirroredInTheWall) {

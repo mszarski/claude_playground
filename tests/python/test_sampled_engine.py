@@ -28,6 +28,7 @@ import pytest
 
 import gpusonar as gs
 from gpusonar.sim import Scene, make_pose, run_scenario, simulate_ping
+from gpusonar.sim import engine as sim_engine
 from gpusonar.sim import waveform as wfm
 from gpusonar.sim.bellhop import find_bellhop
 from gpusonar.sonar import SonarModel
@@ -177,6 +178,8 @@ def test_cpp_is_the_default_for_sampled_pulses_and_leaves_no_note(monkeypatch):
     assert_same(a.samples.array, b.samples.array, "image source with reverberation")
 
 
+@pytest.mark.skipif(not sim_engine.HAVE_CPP, reason="about the C++ kernel refusing a waveform: needs the C++ "
+                    "simulator engine (a-engine: without it the default runs NumPy with its own warning, once)")
 def test_a_waveform_without_a_fine_table_runs_in_numpy_and_says_so(monkeypatch):
     """`table_factor: 0` asks for the windowed sinc at every output sample, which the kernel
     does not do (it reads the fine table): NumPy runs, with a warning and the note."""
