@@ -152,6 +152,38 @@ def test_sediment_refraction_matches():
         np.testing.assert_array_equal(x, pts)
 
 
+def test_sediment_fluid_penetration_matches():
+    """The opt-in `penetration: fluid` (G-3): transmission coefficient, reciprocity factor and attenuation (and
+    the evanescent field of the sub-critical points, most of these 300), on both engines, to the tolerance of the
+    default tier above; and every point above the interface as before."""
+    source = np.array([2.0, -1.0, -12.0])
+    rng = np.random.default_rng(3)
+    pts = np.column_stack([rng.uniform(-40, 40, 300), rng.uniform(-40, 40, 300), rng.uniform(-8.0, 6.0, 300)])
+    pts[0] = [10.0, 3.0, 0.0]
+    pts[1] = [2.0, -1.0, 3.0]
+    for bottom in ({"speed": 1700.0, "density": 1.845, "attenuation": 0.886}, {"speed": 1450.0, "density": 1.4,
+                                                                                "attenuation": 0.2, "water_density": 1.03}):
+        for f, policy in ((12e3, "evanescent"), (30e3, "evanescent"), (30e3, "ray")):
+            kw = dict(penetration="fluid", bottom=bottom, frequency=f, subcritical=policy)
+            with pytest.warns(RuntimeWarning, match="below the critical angle") if bottom["speed"] > C else _nothing():
+                a = SedimentProvider(C, bottom["speed"], 0.0, engine="cpp", **kw).eigenrays(source, pts)
+                b = SedimentProvider(C, bottom["speed"], 0.0, engine="numpy", **kw).eigenrays(source, pts)
+            np.testing.assert_allclose(a.delay, b.delay, rtol=RTOL)
+            # The evanescent field is exp(-x) with x up to about 60 here: its relative rounding is x times that of
+            # x (measured 1.6e-13 at 2e-24 of the 1/(c t) level), so these points get 1e-12.
+            np.testing.assert_allclose(a.amplitude, b.amplitude, rtol=RTOL if policy == "ray" else 1e-12)
+            np.testing.assert_allclose(a.launch, b.launch, rtol=0.0, atol=1e-12)
+            np.testing.assert_allclose(a.arrival, b.arrival, rtol=0.0, atol=1e-10)
+            above = pts[:, 2] <= 0.0
+            plain = SedimentProvider(C, bottom["speed"], 0.0, engine="cpp").eigenrays(source, pts)
+            np.testing.assert_array_equal(a.amplitude[above], plain.amplitude[above])
+
+
+def _nothing():
+    import contextlib
+    return contextlib.nullcontext()
+
+
 class MaskedProvider(EigenrayProvider):
     """Image-source eigenrays with some rays marked invalid, as a ray tracer returns them."""
 

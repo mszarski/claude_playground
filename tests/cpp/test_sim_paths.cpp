@@ -185,6 +185,54 @@ TEST(Paths, SnellCrossingObeysSnellsLaw) {
   EXPECT_NEAR(e.amplitude[1].real(), 1.0 / std::hypot(8.0, 7.0), 1e-15);
 }
 
+// Opt-in fluid penetration (G-3): straight down through 0.3 m of medium sand (a_rho 1.845, nu 1.178,
+// 10 dB/m at 20 kHz). Closed forms of Jackson and Richardson (2007): z_wp = a_rho a_p at normal incidence
+// (8.58), a_p = nu / (1 + i delta) (8.25), V_wp = 2 z / (z + 1) (8.55); attenuation 40 pi f delta /
+// (nu c_w ln 10) dB/m (8.26); the leg carries V_wp / sqrt(a_rho) (8.68, split between the legs).
+TEST(Paths, SedimentFluidPenetrationAtNormalIncidence) {
+  const double c_s = 1767.0, rho = 1.845, f = 20e3, h = 1.5, d = 0.3;
+  const double delta = 10.0 * c_s * std::log(10.0) / (40.0 * kPi * f);  // 10 dB/m at 20 kHz in 1767 m/s
+  sim::SedimentConfig cfg;
+  cfg.sound_speed = kC;
+  cfg.sediment_speed = c_s;
+  cfg.interface_z = 0.0;
+  cfg.fluid = true;
+  cfg.bottom = {c_s, rho, delta * 40.0 * kPi / std::log(10.0), 1.0};
+  cfg.frequency = f;
+  const Vec3d source{0.0, 0.0, -h};
+  const std::vector<double> point{0.0, 0.0, d};
+  const auto e = sim::sediment_eigenrays(cfg, source, point.data(), 1);
+  const double t = h / kC + d / c_s;
+  EXPECT_NEAR(e.delay[0], t, 1e-18);
+  const std::complex<double> z = rho * (c_s / kC) / std::complex<double>(1.0, delta);
+  const std::complex<double> v_wp = 2.0 * z / (z + 1.0);
+  const double att_db = 40.0 * kPi * f * delta / ((c_s / kC) * kC * std::log(10.0)) * d;
+  EXPECT_NEAR(att_db, 3.0, 1e-12);  // the note's 3.0 dB one way
+  const std::complex<double> expected = v_wp / std::sqrt(rho) * std::pow(10.0, -att_db / 20.0) / (kC * t);
+  EXPECT_NEAR(std::abs(e.amplitude[0] - expected), 0.0, 1e-13 * std::abs(expected));
+  EXPECT_NEAR(std::norm(v_wp) / rho, 1.017, 5e-4);  // the note's two-way interface factor
+
+  // The default tier is untouched by the new fields, and a lossless sediment equal to the water is today's.
+  sim::SedimentConfig plain{kC, c_s, 0.0, {1.0, 0.0}};
+  EXPECT_EQ(sim::sediment_eigenrays(plain, source, point.data(), 1).amplitude[0], std::complex<double>(1.0 / (kC * t), 0.0));
+  sim::SedimentConfig matched = cfg;
+  matched.sediment_speed = kC;
+  matched.bottom = {kC, 1.0, 0.0, 1.0};
+  const auto m = sim::sediment_eigenrays(matched, source, point.data(), 1);
+  EXPECT_NEAR(std::abs(m.amplitude[0] - 1.0 / (kC * m.delay[0])), 0.0, 1e-15 / (kC * m.delay[0]));
+
+  // Nothing is assumed: no attenuation, no frequency, a speed that is not the sediment's.
+  sim::SedimentConfig no_loss = cfg;
+  no_loss.bottom.attenuation = sim::kUnset;
+  EXPECT_THROW(sim::sediment_eigenrays(no_loss, source, point.data(), 1), std::invalid_argument);
+  sim::SedimentConfig no_f = cfg;
+  no_f.frequency = sim::kUnset;
+  EXPECT_THROW(sim::sediment_eigenrays(no_f, source, point.data(), 1), std::invalid_argument);
+  sim::SedimentConfig other = cfg;
+  other.sediment_speed = 1700.0;
+  EXPECT_THROW(sim::sediment_eigenrays(other, source, point.data(), 1), std::invalid_argument);
+}
+
 TEST(Paths, TwoWayPathsPairEveryOutboundAndReturnRay) {
   sim::ImageSourceConfig cfg;  // direct and surface image
   cfg.sound_speed = kC;

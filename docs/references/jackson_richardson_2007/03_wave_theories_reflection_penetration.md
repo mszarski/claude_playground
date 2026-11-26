@@ -645,7 +645,7 @@ What the book says, and what it means for us:
 1. Above the critical angle (our two scenarios): field = V_wp(K) exp(-i k_p beta_p z) (15.1),
    with sediment attenuation k_p''. Missing: medium sand at 20 kHz is 10 dB/m, so 6 dB two-way at
    0.30 m depth, 9 dB at 30 kHz; the two-way interface factor at normal incidence is
-   |V_wp|^2 / a_rho = 1.017 (+0.07 dB), so transmission matters little near vertical but grows
+   |V_wp|^2 / a_rho = 1.017 (+0.146 dB as a pressure factor, 20 log10; an earlier version of this note said +0.07 dB, which was 10 log10; corrected 2026-11-26, G-3), so transmission matters little near vertical but grows
    toward the critical angle (|1 + V| = 1.78 at 25 deg, 1.53 at 40 deg, one way).
 2. Below the critical angle: no geometric ray exists. Our provider still finds one, entering at
    the critical angle and running horizontally through the sediment (checked: source 10 m up,

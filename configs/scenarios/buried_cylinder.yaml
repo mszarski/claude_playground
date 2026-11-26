@@ -3,10 +3,15 @@
 # over a 1.8 m square 1.5 m above the bed. Sound refracts at the interface (1500 m/s in
 # water, 1700 m/s in sediment). Image it with recon.image_volume(..., interface_z=0.0,
 # sediment_speed=1700.0).
+# Sediment: the scene states only a sound speed (1700 m/s, kept). `penetration: fluid` also needs a
+# density and a loss, so the scene names the medium sand class: density ratio 1.845 and loss
+# 0.884 dB per wavelength (10.4 dB/m at 20 kHz at 1700 m/s) are that class's published values in
+# configs/sediments.yaml, not a site survey. Against the tier without the option the cylinder's echo
+# is about 6 dB lower (owner's decision 2026-11-26; docs/PHYSICS_NOTES.md section 31).
 name: buried_cylinder
 sonar: subbottom
 fidelity: sediment
-propagation: {sediment_speed: 1700.0, interface_z: 0.0}
+propagation: {sediment_speed: 1700.0, interface_z: 0.0, penetration: fluid, bottom: {sediment: medium_sand, speed: 1700.0}}
 environment: {sound_speed_m_s: 1500.0, absorption: none}
 platform:
   position: [0, 0, -1.5]
