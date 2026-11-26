@@ -1,4 +1,4 @@
-set(_sim_sources src/synth.cpp src/reverb.cpp src/paths.cpp)
+set(_sim_sources src/synth.cpp src/reverb.cpp src/paths.cpp src/penetration.cpp)
 if(SONAR_HAVE_CUDA)
   list(APPEND _sim_sources src/synth_cuda.cu src/reverb_cuda.cu)
 endif()
@@ -6,3 +6,7 @@ add_library(sonar_sim ${_sim_sources})
 add_library(sonar::sim ALIAS sonar_sim)
 target_include_directories(sonar_sim PUBLIC include)
 target_link_libraries(sonar_sim PUBLIC sonar::core PRIVATE sonar::dsp sonar_warnings)
+# penetration.cpp follows NumPy's operation order (G-13 engine parity): no fused multiply-adds.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties(src/penetration.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()

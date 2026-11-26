@@ -275,7 +275,8 @@ void bind_simcpp(py::module_& m) {
   m.def(
       "sim_sediment_eigenrays",
       [](double sound_speed, double sediment_speed, double interface_z, cd transmission, const Vec3d& source,
-         const ArrD& points, const py::object& bottom, const py::object& frequency, bool evanescent) {
+         const ArrD& points, const py::object& bottom, const py::object& frequency, bool evanescent,
+         const py::object& roughness) {
         require_points(points, "points");
         sim::SedimentConfig cfg;
         cfg.sound_speed = sound_speed;
@@ -290,6 +291,13 @@ void bind_simcpp(py::module_& m) {
           if (!frequency.is_none()) cfg.frequency = frequency.cast<double>();
           cfg.evanescent = evanescent;
         }
+        if (!roughness.is_none()) {
+          // (w2, gamma2, K0, seed, patch, refine, floor_db, bin): G-13's penetration: rough, every field stated
+          const auto r = roughness.cast<std::tuple<double, double, double, std::uint64_t, double, double, double, double>>();
+          cfg.rough = true;
+          cfg.roughness = {std::get<0>(r), std::get<1>(r), std::get<2>(r), std::get<3>(r),
+                           std::get<4>(r), std::get<5>(r), std::get<6>(r), std::get<7>(r)};
+        }
         sim::EigenraySet e;
         {
           py::gil_scoped_release release;
@@ -299,9 +307,60 @@ void bind_simcpp(py::module_& m) {
       },
       py::arg("sound_speed"), py::arg("sediment_speed"), py::arg("interface_z"), py::arg("transmission"),
       py::arg("source"), py::arg("points"), py::arg("bottom") = py::none(), py::arg("frequency") = py::none(), py::arg("evanescent") = false,
+      py::arg("roughness") = py::none(),
       "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields. With "
       "`bottom` (speed, density, attenuation dB/wavelength, water_density) and `frequency` (Hz): the opt-in fluid "
-      "penetration (transmission coefficient, reciprocity factor, attenuation in the sediment; `evanescent`: the evanescent field below the critical angle).");
+      "penetration (transmission coefficient, reciprocity factor, attenuation in the sediment; `evanescent`: the evanescent field below the critical angle). "
+      "With `roughness` (w2, gamma2, K0, seed, patch, refine, floor_db, bin) as well: penetration: rough (G-13), the "
+      "roughness-scattered bins of the sub-critical points as further rays (sonar/sim/penetration.hpp).");
+
+  m.def(
+      "sim_rough_patch_coefficients",
+      [](std::uint64_t seed, const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& level,
+         const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& i,
+         const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& j) {
+        if (level.size() != i.size() || level.size() != j.size()) throw std::invalid_argument("level, i, j: one size");
+        py::array_t<cd> out(level.size());
+        for (py::ssize_t k = 0; k < level.size(); ++k) {
+          out.mutable_data()[k] = sim::rough_patch_coefficient(seed, level.data()[k], i.data()[k], j.data()[k]);
+        }
+        return out;
+      },
+      py::arg("seed"), py::arg("level"), py::arg("i"), py::arg("j"),
+      "The complex Gaussian deviates of interface cells (level, i, j) for `seed` (penetration.patch_coefficients).");
+
+  m.def(
+      "sim_rough_quadtree_cells",
+      [](double px, double py, double radius, double finest, double refine) {
+        sim::QuadtreeCells c = sim::rough_quadtree_cells(px, py, radius, finest, refine);
+        const auto n = static_cast<py::ssize_t>(c.cx.size());
+        return py::make_tuple(to_array(std::move(c.level), {n}), to_array(std::move(c.i), {n}),
+                              to_array(std::move(c.j), {n}), to_array(std::move(c.cx), {n}),
+                              to_array(std::move(c.cy), {n}), to_array(std::move(c.side), {n}));
+      },
+      py::arg("px"), py::arg("py"), py::arg("radius"), py::arg("finest"), py::arg("refine"),
+      "Interface cells of the global quadtree about a point: (level, i, j, cx, cy, side) (penetration.quadtree_cells).");
+
+  m.def("sim_rough_sediment_radius", &sim::rough_sediment_radius, py::arg("depth"), py::arg("k_loss"),
+        py::arg("floor_db"), "Horizontal reach of the cells about a buried point (penetration._sediment_radius).");
+
+  m.def(
+      "sim_rough_sigma_wp",
+      [](const ArrD& K_s, const ArrD& K_i, double k_w, double a_rho, double nu, double delta, double w2, double gamma2,
+         double K0) {
+        if (K_s.ndim() != 2 || K_s.shape(1) != 2 || K_i.ndim() != 2 || K_i.shape(1) != 2 || K_s.shape(0) != K_i.shape(0)) {
+          throw std::invalid_argument("K_s and K_i must have shape [n, 2]");
+        }
+        py::array_t<double> out(K_s.shape(0));
+        for (py::ssize_t k = 0; k < K_s.shape(0); ++k) {
+          out.mutable_data()[k] = sim::rough_sigma_wp(K_s.data()[2 * k], K_s.data()[2 * k + 1], K_i.data()[2 * k],
+                                                      K_i.data()[2 * k + 1], k_w, a_rho, nu, delta, w2, gamma2, K0);
+        }
+        return out;
+      },
+      py::arg("K_s"), py::arg("K_i"), py::arg("k_w"), py::arg("a_rho"), py::arg("nu"), py::arg("delta"), py::arg("w2"),
+      py::arg("gamma2"), py::arg("K0"),
+      "The water-to-sediment cross section of penetration.sigma_wp (obliquity=True) for wave vectors [n, 2].");
 
   m.def(
       "sim_two_way_paths",

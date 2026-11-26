@@ -2,6 +2,7 @@
 // generator (sonar/sim/reverb.hpp).
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <random>
@@ -277,6 +278,143 @@ TEST(Paths, SedimentFluidPenetrationAtNormalIncidence) {
   sim::SedimentConfig other = cfg;
   other.sediment_speed = 1700.0;
   EXPECT_THROW(sim::sediment_eigenrays(other, source, point.data(), 1), std::invalid_argument);
+}
+
+// Opt-in roughness-scattered penetration (G-13, penetration: rough; sonar/sim/penetration.hpp). SAX99 of
+// Jackson and Richardson (2007) Table 13.1 (a_rho 2.00, nu 1.16, delta 0.010, gamma2 3.04, w2 0.0000433) with
+// Fig. 15.8's K0 = 10 1/m and c_w = 1530 m/s; source 10 m up.
+namespace {
+constexpr double kCSax = 1530.0;
+constexpr double kFSax = 20e3;
+
+sim::SedimentConfig sax99(double w2) {
+  sim::SedimentConfig cfg;
+  cfg.sound_speed = kCSax;
+  cfg.sediment_speed = 1.16 * kCSax;
+  cfg.interface_z = 0.0;
+  cfg.fluid = true;
+  cfg.bottom = {1.16 * kCSax, 2.0, 0.010 * 40.0 * kPi / std::log(10.0), 1.0};
+  cfg.frequency = kFSax;
+  cfg.evanescent = true;
+  cfg.rough = true;
+  cfg.roughness = {w2, 3.04, 10.0, 0, kCSax / (2.0 * kFSax), 3.0, 30.0, 1.0 / (4.0 * kFSax)};
+  return cfg;
+}
+
+// 15 degrees grazing on the straight line from (0, 0, -10) at 0.3 m depth (below the 30.5 deg critical angle),
+// a steep point at 0.3 m, one in the water.
+const std::vector<double> kRoughPoints{10.3 / std::tan(15.0 * kPi / 180.0), 0.0, 0.3, 0.0, 0.0, 0.3, 3.0, 0.0, -2.0};
+}  // namespace
+
+TEST(Paths, SedimentRoughZeroReliefIsFluidExactly) {
+  const Vec3d source{0.0, 0.0, -10.0};
+  sim::SedimentConfig fluid = sax99(0.0);
+  fluid.rough = false;
+  const auto f = sim::sediment_eigenrays(fluid, source, kRoughPoints.data(), 3);
+  const auto r = sim::sediment_eigenrays(sax99(0.0), source, kRoughPoints.data(), 3);
+  ASSERT_EQ(f.n_rays, 1);
+  ASSERT_GT(r.n_rays, 6);
+  for (std::int64_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(r.delay[i * r.n_rays], f.delay[i]);
+    EXPECT_EQ(r.amplitude[i * r.n_rays], f.amplitude[i]);
+    for (int a = 0; a < 3; ++a) {
+      EXPECT_EQ(r.launch[3 * i * r.n_rays + a], f.launch[3 * i + a]);
+      EXPECT_EQ(r.arrival[3 * i * r.n_rays + a], f.arrival[3 * i + a]);
+    }
+    for (std::int64_t c = 1; c < r.n_rays; ++c) {
+      EXPECT_EQ(r.amplitude[i * r.n_rays + c], std::complex<double>(0.0, 0.0));
+      EXPECT_EQ(r.valid[i * r.n_rays + c] != 0, i == 0);  // only the sub-critical point has scattered rays
+    }
+  }
+  // The scattered amplitude grows as sqrt(w2) on a fixed interface; the delays do not move.
+  const auto a = sim::sediment_eigenrays(sax99(1e-5), source, kRoughPoints.data(), 1);
+  const auto b = sim::sediment_eigenrays(sax99(4e-5), source, kRoughPoints.data(), 1);
+  ASSERT_EQ(a.n_rays, b.n_rays);
+  for (std::int64_t c = 1; c < a.n_rays; ++c) {
+    EXPECT_EQ(a.delay[c], b.delay[c]);
+    EXPECT_NEAR(std::abs(b.amplitude[c] - 2.0 * a.amplitude[c]), 0.0, 1e-12 * std::abs(b.amplitude[c]));
+  }
+  // Only points above the critical angle: the fluid set itself.
+  const auto steep = sim::sediment_eigenrays(sax99(4e-5), source, kRoughPoints.data() + 3, 2);
+  EXPECT_EQ(steep.n_rays, 1);
+}
+
+TEST(Paths, SedimentRoughInterfaceIsFrozen) {
+  // SplitMix64 from state 0 gives 0xE220A8397B1DCDAF first; the deviates are pinned to the NumPy engine's
+  // (python/gpusonar/sim/penetration.py patch_coefficients(7, ...), printed to 17 digits).
+  const std::complex<double> pinned[3] = {{1.2738938647889613, 0.37280599145994403},
+                                          {-0.10251434325005225, 0.18294236090321442},
+                                          {-0.35553435631839508, -0.053878402205691768}};
+  const std::int64_t cells[3][3] = {{0, 0, 0}, {3, -5, 11}, {-2, 9, -1}};
+  for (int k = 0; k < 3; ++k) {
+    const auto c = sim::rough_patch_coefficient(7, cells[k][0], cells[k][1], cells[k][2]);
+    EXPECT_NEAR(std::abs(c - pinned[k]), 0.0, 4e-16 * std::abs(pinned[k]));
+    EXPECT_EQ(c, sim::rough_patch_coefficient(7, cells[k][0], cells[k][1], cells[k][2]));
+    EXPECT_NE(c, sim::rough_patch_coefficient(8, cells[k][0], cells[k][1], cells[k][2]));
+  }
+  double mean_power = 0.0;
+  std::complex<double> mean{};
+  constexpr int kN = 200000;
+  for (int k = 0; k < kN; ++k) {
+    const auto c = sim::rough_patch_coefficient(1, 0, k, -k);
+    mean_power += std::norm(c) / kN;
+    mean += c / static_cast<double>(kN);
+  }
+  EXPECT_NEAR(mean_power, 1.0, 0.01);
+  EXPECT_LT(std::abs(mean), 0.01);
+  // Cells are global squares: neighbouring points share most of them; they tile the reach.
+  const auto a = sim::rough_quadtree_cells(10.0, 0.0, 1.5, 0.04, 3.0);
+  const auto b = sim::rough_quadtree_cells(10.05, 0.0, 1.5, 0.04, 3.0);
+  std::size_t shared = 0;
+  double area = 0.0, largest = 0.0;
+  for (std::size_t p = 0; p < a.cx.size(); ++p) {
+    area += a.side[p] * a.side[p];
+    largest = std::max(largest, a.side[p]);
+    for (std::size_t q = 0; q < b.cx.size(); ++q) {
+      if (a.level[p] == b.level[q] && a.i[p] == b.i[q] && a.j[p] == b.j[q]) {
+        ++shared;
+        break;
+      }
+    }
+  }
+  EXPECT_GT(shared, a.cx.size() / 2);
+  EXPECT_GT(area, kPi * 1.5 * 1.5);
+  EXPECT_LT(area, std::pow(2.0 * 1.5 + 2.0 * largest, 2.0));
+  // The same interface on every call.
+  const Vec3d source{0.0, 0.0, -10.0};
+  const auto e1 = sim::sediment_eigenrays(sax99(0.0000433), source, kRoughPoints.data(), 1);
+  const auto e2 = sim::sediment_eigenrays(sax99(0.0000433), source, kRoughPoints.data(), 1);
+  EXPECT_EQ(e1.amplitude, e2.amplitude);
+  EXPECT_EQ(e1.delay, e2.delay);
+}
+
+TEST(Paths, SedimentRoughRefusals) {
+  const Vec3d source{0.0, 0.0, -10.0};
+  const auto refused = [&](const sim::SedimentConfig& cfg) {
+    EXPECT_THROW(sim::sediment_eigenrays(cfg, source, kRoughPoints.data(), 3), std::invalid_argument);
+  };
+  sim::SedimentConfig cfg = sax99(1e-5);
+  cfg.evanescent = false;  // rough is added to the evanescent zeroth order only
+  refused(cfg);
+  cfg = sax99(1e-5);
+  cfg.fluid = false;
+  refused(cfg);
+  cfg = sax99(sim::kUnset);
+  refused(cfg);
+  cfg = sax99(1e-5);
+  cfg.roughness.gamma2 = 4.5;
+  refused(cfg);
+  cfg = sax99(1e-5);
+  cfg.roughness.K0 = sim::kUnset;
+  refused(cfg);
+  for (double sim::SedimentRoughness::*knob : {&sim::SedimentRoughness::patch, &sim::SedimentRoughness::refine,
+                                               &sim::SedimentRoughness::floor_db, &sim::SedimentRoughness::bin}) {
+    cfg = sax99(1e-5);
+    cfg.roughness.*knob = sim::kUnset;
+    refused(cfg);
+    cfg.roughness.*knob = 0.0;
+    refused(cfg);
+  }
 }
 
 TEST(Paths, TwoWayPathsPairEveryOutboundAndReturnRay) {
