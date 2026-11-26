@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from . import engine as _engine
 from .propagation import EigenrayProvider
 
 
@@ -477,6 +478,7 @@ class Bellhop3DProvider(EigenrayProvider):
     def eigenrays(self, source, points):
         from .propagation import EigenraySet
         from .. import acoustics
+        _engine.ran("eigenrays", "bellhop3d")        # one implementation; the record says which (sim/engine.py)
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         key = self._key(source)

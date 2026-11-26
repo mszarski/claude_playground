@@ -116,7 +116,9 @@ class FreeFieldProvider(EigenrayProvider):
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         if _cpp_points(self.engine, points):
+            _engine.ran("eigenrays", "cpp")
             return EigenraySet(**_engine.call("sim_free_field_eigenrays", self.sound_speed, _source3(source), points))
+        _engine.ran("eigenrays", "numpy")
         r, u = _direct(source, points, self.sound_speed)
         s = points.shape[0]
         return EigenraySet(
@@ -301,11 +303,14 @@ class ImageSourceProvider(EigenrayProvider):
         order = self._order_for(source, points)
         if self.general:
             if _cpp_points(self.engine, points):
+                _engine.ran("eigenrays", "cpp")
                 return self._planes.eigenrays_cpp(source, points, order, self.wall_order)
+            _engine.ran("eigenrays", "numpy")
             return self._planes.eigenrays(source, points, order, self.wall_order)
         # Every wall is axis 0 or 1 (`_check_wall`), so the C++ engine, when selected, always runs; before a-wallaxis
         # another axis sent it to NumPy without a word.
         if _cpp_points(self.engine, points):
+            _engine.ran("eigenrays", "cpp")
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
             return EigenraySet(**_engine.call("sim_image_source_eigenrays",
                 self.sound_speed, _source3(source), points,
@@ -314,6 +319,7 @@ class ImageSourceProvider(EigenrayProvider):
                 surface_coefficient=self.surface_coefficient, bottom_coefficient=self.bottom_coefficient,
                 max_order=order, walls=walls,
                 bottom=None if self.bottom is None else _fluid_bottom(**self.bottom)))
+        _engine.ran("eigenrays", "numpy")
         return self._eigenrays_numpy(source, points, order)
 
     def _eigenrays_numpy(self, source, points, order: int, walls: bool = True) -> EigenraySet:
@@ -820,6 +826,7 @@ class SedimentProvider(EigenrayProvider):
         if fluid:
             self._check_subcritical(source, points)
         if _cpp_points(self.engine, points):
+            _engine.ran("eigenrays", "cpp")
             if fluid:
                 return EigenraySet(**_engine.call(
                     "sim_sediment_eigenrays",
@@ -829,6 +836,7 @@ class SedimentProvider(EigenrayProvider):
                     roughness=None if self.rough is None else self.rough.cpp_args()))
             return EigenraySet(**_engine.call("sim_sediment_eigenrays", self.sound_speed, self.sediment_speed,
                                               self.interface_z, self.transmission, _source3(source), points))
+        _engine.ran("eigenrays", "numpy")
         t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,
                                   engine="numpy")
         launch = cross - source
@@ -1015,6 +1023,7 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
     rates = [None if e.range_rate is None or not np.any(e.range_rate) else e.range_rate for e in (out, back)]
     doppler = rates[0] is not None or rates[1] is not None
     if _engine.resolve(engine) == "cpp":
+        _engine.ran("pairing", "cpp")
         weighted = lambert is not None and bool(np.any(lambert))
         moving = velocities is not None and bool(np.any(velocities))
         args = (out.delay, out.amplitude, out.launch, out.arrival, out.valid, float(out.sound_speed),
@@ -1028,6 +1037,7 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
                                 back_range_rate=rates[1])
         q, p, amp, vq = _engine.call("sim_two_way_paths", *args, **kwargs)
         return q, p, amp, vq, (None if vq is None else vq.copy())
+    _engine.ran("pairing", "numpy")
     q_all = out.apparent_positions(tx_position)       # [S, Ko, 3]
     p_all = back.apparent_positions(rx_reference)     # [S, Kb, 3]
     a_out = out.excess_amplitude()

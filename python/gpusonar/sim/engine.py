@@ -13,10 +13,25 @@ What happens when the C++ simulator is not in the loaded module (a-engine; befor
 case below ran NumPy without a word):
 - `cpp` asked for by argument or by GPUSONAR_SIM_ENGINE: `EngineUnavailable`, naming the
   missing functions; build the module with SONAR_BUILD_PYTHON=ON or select `numpy`.
-- nothing asked for: NumPy, with one RuntimeWarning per process. Of the records, only a
-  sampled pulse's says which engine ran (extra_json {"gpusonar": {"echo_synthesis":
-  "numpy_sampled"}}, waveform.py); nothing else in a record names the engine.
+- nothing asked for: NumPy, with one RuntimeWarning per process; the record says so (below).
 - an unknown name: ValueError naming the nearest engine.
+
+Every record simulate_ping makes says what ran (a-engrec; the owner, 2026-11-26), in its free-form
+metadata, not in the schema (docs/RECORD_FORMAT.md):
+    extra_json {"gpusonar": {"engine": {"eigenrays": "cpp", "pairing": "cpp",
+                                        "synthesis": "cpp_host", "reverberation": "cpp_host"}}}
+- eigenrays: "cpp" | "numpy" (free_field, image_source, sediment); "bellhop" | "bellhop3d" (the
+  eigenray and eigenray3d tiers, one implementation each). Every provider call in the ping counts
+  (the echoes', reverberation's, one-way sources');
+- pairing (`two_way_paths`): "cpp" | "numpy";
+- synthesis (the two-way echoes): "cpp_host" | "cpp_cuda" | "numpy" (a sampled pulse on the NumPy
+  engine, asked for or fallen back to; analytic pulses have the C++ kernel only);
+- reverberation (reverb.py): "cpp_host" | "cpp_cuda" | "numpy".
+A stage that did not run in the ping is absent (a passive capture's note is {}); one that ran on both
+engines in one ping says "cpp+numpy" (first one first). Stages with one implementation shared by both
+engines (time-spread taps, basin tail, noise, front end, ADC, board clocks) are not listed. The older
+note of a sampled pulse on NumPy, {"gpusonar": {"echo_synthesis": "numpy_sampled"}} (waveform.py),
+is kept as it was.
 A module that has the C++ simulator but is older than the sources (a binding missing, or one
 without a keyword the Python passes) fails at the call with `StaleModuleError` naming the
 binding (`call`), not with a bare AttributeError or TypeError.
@@ -27,7 +42,9 @@ random numbers of reverberation are drawn by the NumPy generator on both.
 
 from __future__ import annotations
 
+import contextvars
 import difflib
+import json
 import os
 import warnings
 
@@ -121,3 +138,45 @@ def call(name: str, *args, **kwargs):
                                    f"engine (engine=\"numpy\" or GPUSONAR_SIM_ENGINE=numpy)") from e
         e.add_note(f"if {_module_file()} was built from older sources than python/gpusonar, rebuild it")
         raise
+
+
+# --- what ran, into the record (a-engrec) ---------------------------------------------------------------------------
+
+STAGES = ("eigenrays", "pairing", "synthesis", "reverberation")
+# The stages that ran in the ping being simulated: {stage: [what, ...]}; None outside simulate_ping (then `ran` keeps
+# nothing; after a ping that raised, its unread collection until the next ping). A context variable, so that pings
+# simulated in other threads keep their own.
+_ran: contextvars.ContextVar = contextvars.ContextVar("gpusonar_sim_ran", default=None)
+
+
+def ran(stage: str, what: str) -> None:
+    """Say that `stage` (one of STAGES) ran on `what` in the ping being simulated; nothing outside a ping."""
+    seen = _ran.get()
+    if seen is not None:
+        got = seen.setdefault(stage, [])
+        if what not in got:
+            got.append(what)
+
+
+def on_backend(backend) -> str:
+    """'cpp_host' or 'cpp_cuda': the C++ code on the backend it was given (it has no silent fallback: a CUDA
+    backend on a build without CUDA raises)."""
+    return "cpp_cuda" if backend == core.Backend.Cuda else "cpp_host"
+
+
+def begin_ping() -> contextvars.Token:
+    """Start collecting what runs in one ping (simulate_ping). A ping that raises leaves its collection behind
+    until the next ping replaces it; nothing reads it."""
+    return _ran.set({})
+
+
+def end_ping(record: "core.PingRecord", token: contextvars.Token) -> None:
+    """Write what ran in this ping into record.metadata.extra_json under gpusonar.engine (a few short strings; the
+    other keys are kept as they were) and stop collecting."""
+    seen = _ran.get() or {}
+    _ran.reset(token)
+    extra = json.loads(record.metadata.extra_json or "{}")
+    extra.setdefault("gpusonar", {})["engine"] = {k: "+".join(seen[k]) for k in STAGES if k in seen}
+    meta = record.metadata
+    meta.extra_json = json.dumps(extra)
+    record.metadata = meta

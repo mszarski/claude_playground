@@ -98,8 +98,8 @@ def test_numpy_asked_for_without_the_module_is_silent(no_cpp, monkeypatch):
 
 
 def test_the_default_fallback_is_recorded_where_a_record_names_its_engine(no_cpp):
-    """The only place a record names the simulator engine is the sampled pulse's note (waveform.py); the default
-    fallback writes it, as a NumPy run asked for does."""
+    """The sampled pulse's note (waveform.py) is written by the default fallback, as by a NumPy run asked for. (Since
+    a-engrec every record also says what each stage ran on, under gpusonar.engine: test_sim_engine_record.py.)"""
     wave = {"type": "sampled", "source": "lfm", "duration": 0.002, "window_alpha": 0.2}
     sonar = sonar_with("sas_auv", wave, 18.0, 22.0, omni=True)
     with pytest.warns(RuntimeWarning, match="NumPy engine"):

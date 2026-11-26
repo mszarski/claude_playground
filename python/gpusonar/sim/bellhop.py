@@ -31,6 +31,7 @@ import numpy as np
 from ..acoustics import NOMINAL_SOUND_SPEED
 
 from .. import acoustics
+from . import engine as _engine
 from .propagation import EigenrayProvider, EigenraySet
 
 
@@ -421,6 +422,7 @@ class BellhopProvider(EigenrayProvider):
         return self._cache[key]
 
     def eigenrays(self, source, points) -> EigenraySet:
+        _engine.ran("eigenrays", "bellhop")          # one implementation; the record says which (sim/engine.py)
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         arr = self.arrivals_for(source[2])
