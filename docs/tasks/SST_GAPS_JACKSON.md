@@ -1074,3 +1074,51 @@ section 5 is the ordered list.
 | G-27 (anisotropic roughness) | lower priority: mean backscatter isotropic within 1-2 dB at three sites with ripples ([JB] Sec. 2.2) |
 | Decision 12 (papers to obtain) | Williams and Jackson (1998) read. Mourad and Jackson (1989) and Wagner (1967): another agent, in parallel |
 | CONFORMANCE rows "`combined`", "Interpolation Kirchhoff/composite", "Volume term isotropic in bistatic angle" | change of status proposed in the reports of [WJ] and [JB] (CONFORMANCE.md not edited here) |
+
+## State after the 2026-11-26 merge (added 2026-11-26)
+
+The packages below were merged in `b88c458` (full GPU suite 2763 passed, 102 skipped, 4 xfailed; D-225). The
+sections above are kept as written; where one says "not done" or "opt-in" and this list says otherwise, this
+list is later. Several defaults changed under the owner's instruction "apply every alignment without asking"
+(`docs/references/CONFORMANCE.md`, D-208), so some packages marked OPT-IN above are now defaults. The second
+batch of the day (the Williams-Jackson model and spectral volume term, the boundary-scattering design, the
+Doppler scoping) is in progress on its own branch and is not counted here as done.
+
+| Package | State | Decision |
+| --- | --- | --- |
+| G-1 bottom equalities as tests | done | D-206 |
+| G-2 surface papers' equalities | done | D-206 |
+| G-3 sediment transmission and attenuation | done; `penetration: fluid`, and both buried scenes use it (the owner; the "scene switch NOT made" in the G-3 section above is superseded) | D-212 |
+| G-4 elastic reflection for rock | done (simulator, Bellhop, live chain; shear unconfirmed; gravel not done) | D-214, D-215 |
+| G-5 mud volume parameter and silt roughness | done as the owner's table; the decision is open; the soft rows' range since [0.0008, 0.005] | D-206, D-209, D-224 |
+| G-6 grain-size relations | done, and the default since A5; seven-digit constants since C5 | D-206, D-209, D-223 |
+| G-7 `extinction: dahl_1997` | done, and the default since A1 | D-206, D-216 |
+| G-8 FLS surface model decision | done in part: the five FLS scenes run with each alternative (CONFORMANCE A13); Chapman-Harris kept | D-208 |
+| G-9 estimators, error bars, fit priors | done; the fit tool's small-slope and prior defaults followed | D-207, D-210, D-211 |
+| G-10 EDFM | open | - |
+| G-11 Wagner shadowing, validity warning | done in part: shadowing in `composite` and `combined`; the validity warning and `slope_average="book_1d"` open | D-223 |
+| G-12 McDaniel 1996 texture | open | - |
+| G-13 sub-critical penetration | done (`penetration: rough`, both engines, opt-in) | D-213 |
+| G-14 layered seafloor | open | - |
+| G-15 volume from heterogeneity spectra | open (in progress in the second batch) | - |
+| G-16 slope-averaged volume term | done in part: the Mourad-Jackson (1989) recipe opt-in, monostatic; a bistatic term open | D-223 |
+| G-17 elastic rough interface for rock | open | - |
+| G-18 1-D to 2-D roughness helper | open | - |
+| G-19 to G-24 | open | - |
+| G-25 validation cases from the test sites | done in part: five named site rows and their figure tests | D-209, D-224 |
+| G-26 to G-30 | open | - |
+| G-31 forward-scatter and bistatic identities | done in part: `test_forward_scatter_dahl.py` (Table I, the slope law, an xfail); `test_surface_bistatic_papers.py` not written | D-217 |
+| G-32 large-scale slope law | done, and the default (A4) | D-217 |
+| G-33 exact Kirchhoff tail | done, opt-in; it does not mend the steep SPACE'08 tails | D-218 |
+| G-34 bubble attenuation of the facet term | done (A2), on by default | D-216 |
+| G-35 bistatic bubble surface term | open (the geometric-mean rule of A3 applies to `bubble_layer_surface`) | D-216 |
+| G-36 ASIAEX scenario's facts | done: `asiaex_dahl_2004` added; `sst_asiaex` stays TR 0702's | D-217 |
+| G-37 SSA(2) surface, vertical coherence | open; the vertical coherence is recorded as a strict xfail | D-217 |
+| G-38 `sst_validation` matrix wording | open (CONFORMANCE A11 not applied; row "Sec. 6.4.2" is false since A3) | D-225 |
+
+Owner questions of section 3 answered on 2026-11-26: 13 (the fit switched to small-slope, D-210; prior bounds by
+default, D-211), 14 (the large-scale slope as the default, D-217; one of the reasons given was later removed by
+D-218, and the owner was told), 15 (`asiaex_dahl_2004` added, `sst_asiaex` kept, D-217), 16 (the facet
+attenuation applied, D-216); the buried scenes' switch (D-212); small-slope kept as the bottom default against the
+published bistatic join (D-222). Wagner (1967), Mourad and Jackson (1989) and Williams and Jackson (1998) of
+question 12 are read (D-222).
