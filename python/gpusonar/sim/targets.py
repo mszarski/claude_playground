@@ -756,7 +756,12 @@ class SedimentScatterers:
             # A name in configs/sediments.yaml (or `sediment_file`); the item's own values win.
             from . import bottom
             item = dict(bottom.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
-        missing = [k for k in SEDIMENT_KEYS if k not in item]
+        # volume_model williams_jackson_1998: w3, gamma3, mu from the item or the named sediment's `volume_spectral:`
+        # block (sim/bottom.py item_volume_spectral); sigma2 is then not needed.
+        from . import bottom
+        spectral = bottom.item_volume_spectral(item)
+        keys = tuple(k for k in SEDIMENT_KEYS if k != "sigma2" or not spectral or k in item)
+        missing = [k for k in keys if k not in item]
         if missing:
             raise ValueError(f"a fluid_sediment seafloor needs {missing}")
         # `roughness_model`, `small_scale_kh`, `shadowing` and `volume_model` as for the reverberation item (sim/bottom.py);
@@ -764,4 +769,4 @@ class SedimentScatterers:
         # gives the earlier amplitudes).
         extra = {k: (str(item[k]) if k in ("roughness_model", "shadowing", "volume_model") else float(item[k]))
                  for k in ("roughness_model", "small_scale_kh", "shadowing", "volume_model") if k in item}
-        return cls({**{k: float(item[k]) for k in SEDIMENT_KEYS}, **extra}, float(item.get("offset_db", 0.0)))
+        return cls({**{k: float(item[k]) for k in keys}, **extra, **spectral}, float(item.get("offset_db", 0.0)))

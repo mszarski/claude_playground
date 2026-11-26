@@ -796,35 +796,143 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
                      + f"; one of {known}")
 
 
-VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989")
+VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989", "williams_jackson_1998")
 """`volume_model`: "stockhausen" (the default: the flat-interface volume term below, Stockhausen (1963) as
-generalised for absorption; J&R (14.7)-(14.9); [MJ89] (39) corrected) or "mourad_jackson_1989" (that term
-averaged over the large-scale slope and shadowed, [MJ89] (38); backscatter only, opt-in)."""
+generalised for absorption; J&R (14.7)-(14.9); [MJ89] (39) corrected), "mourad_jackson_1989" (that term
+averaged over the large-scale slope and shadowed, [MJ89] (38); backscatter only, opt-in) or
+"williams_jackson_1998" (opt-in, any geometry: the same transmission through the interface with a volume cross
+section from a 3-D heterogeneity spectrum that depends on the bistatic angles, [WJ] (20)-(22);
+`williams_jackson_1998_volume`). The last is named after its paper, like the 1989 pair, rather than "spectral":
+it is (21) with the paper's signed mu, i.e. J&R (14.10) with rho_rk = -1 and an isotropic power law (no L_c, no
+Lambda), not the general (14.10) the plan's G-15 lists."""
+
+VOLUME_SPECTRAL_KEYS = ("w3", "gamma3", "mu")
+"""The parameters of `volume_model="williams_jackson_1998"` ([WJ] (7)-(9)): w3 the volume spectral strength in
+m^(3 - gamma3) (`w3_from_cm3` from the paper's cm^3), gamma3 its exponent, mu the ratio of the compressibility
+to the density fluctuation, SIGNED as the paper prints it (Table I: -0.69, -2.44). No class values exist."""
+
+
+def w3_from_cm3(strength_cm3: float, gamma3: float) -> float:
+    """Volume spectral strength in m^(3 - gamma3) (wavenumbers in rad/m) from the form with a 1 cm reference length,
+    W_rr(k) = w3 (h0 k)^(-gamma3), h0 = 1 cm, w3 in cm^3 ([WJ] (7) and Table I, "at 2 pi / lambda = 1 cm^-1"):
+    W [m^3] = 1e-6 w3 (0.01 k [1/m])^(-gamma3), so w3 [m^(3 - gamma3)] = w3 [cm^3] x 10^(2 gamma3 - 6) (ours, the
+    argument of `w2_from_cm4`; the note Sec. 2: 1.3e-4 cm^3 -> 0.013 m^-1 at gamma3 = 4)."""
+    return float(strength_cm3) * 10.0 ** (2.0 * float(gamma3) - 6.0)
+
+
+def williams_jackson_1998_volume_cross_section(grazing_in, grazing_out, frequency: float, sound_speed: float, *, nu: float,
+                                               delta: float, w3: float, gamma3: float, mu: float, azimuth=np.pi, **_ignored):
+    """[WJ] (21)-(22): the volume scattering cross section per unit volume (1/m) of weak density and compressibility
+    fluctuations with an isotropic power-law spectrum W_rr(k) = w3 / k^gamma3 (w3 in m^(3 - gamma3)), first order (Born):
+
+        sigma_v = (pi / 2) k^4 |mu kappa^2 + cos ti cos ts cos phi - P(ti) P(ts)|^2 W_rr(Delta k),
+        Delta k = k |4 Delta_t^2 + {Re[P(ti) + P(ts)]}^2|^(1/2),   kappa = (1 + i delta) / nu,  P = (kappa^2 - cos^2)^(1/2)
+
+    (Im P > 0: not stated, ours as `_vertical`). mu signed as printed (negative: anti-correlated); this is J&R (2007)
+    (14.10) with rho_rk = -1 and mu' = -mu (ours, algebra; the note Sec. 2; tests). The bracket (monopole plus dipole)
+    vanishes near one azimuth: a null the isotropic term has not (Eckernfoerde 10/10 deg: phi 39.3 deg)."""
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    kappa2 = ((1.0 + 1j * delta) / nu) ** 2
+    p_i, p_s = _vertical(kappa2, np.cos(ti)), _vertical(kappa2, np.cos(ts))
+    dt2 = 0.25 * np.maximum(np.cos(ti) ** 2 + np.cos(ts) ** 2 - 2.0 * np.cos(ti) * np.cos(ts) * np.cos(phi), 0.0)
+    dk = k * np.sqrt(np.abs(4.0 * dt2 + (p_i + p_s).real ** 2))
+    bracket = mu * kappa2 + np.cos(ti) * np.cos(ts) * np.cos(phi) - p_i * p_s
+    with np.errstate(divide="ignore"):
+        return 0.5 * np.pi * k**4 * np.abs(bracket) ** 2 * _power_law(dk, w3, gamma3)
+
+
+def _through_interface(ti, ts, k: float, rho: float, nu: float, delta: float, sigma_vol):
+    """sigma_vol |T(ti)|^2 |T(ts)|^2 / (rho^2 2 (Im b2i + Im b2s)): the flat-interface volume term (module docstring;
+    [WJ] (20); J&R (14.8)) for a volume cross section per unit volume `sigma_vol` (1/m, a number or an array)."""
+    k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
+    b2i, b2s = _vertical(k2sq, k * np.cos(ti)), _vertical(k2sq, k * np.cos(ts))
+    t_in = 1.0 + reflection(ti, rho, nu, delta)
+    t_out = 1.0 + reflection(ts, rho, nu, delta)
+    decay = 2.0 * (b2i.imag + b2s.imag)
+    return np.where(decay > 0.0, sigma_vol * np.abs(t_in) ** 2 * np.abs(t_out) ** 2 / (rho**2 * np.maximum(decay, 1e-300)), 0.0)
+
+
+def williams_jackson_1998_volume(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                                 delta: float, w3: float | None = None, gamma3: float | None = None, mu: float | None = None,
+                                 azimuth=np.pi, **_ignored):
+    """[WJ] (20) with (21)-(22): `williams_jackson_1998_volume_cross_section` through the flat interface, our
+    transmission form (equal to the print to 1.1e-14 dB, the note Sec. 4 item 5). Any geometry. For a sigma_v that
+    does not depend on angle it is our default term with sigma2 = sigma_v / (attenuation in dB/m) (tests). Needs
+    w3, gamma3, mu (`VOLUME_SPECTRAL_KEYS`); a named site row's `volume_spectral:` block gives them
+    (`volume_spectral`); no class values exist. Stated scope as for the roughness term (10-100 kHz; weak
+    inhomogeneities; the paper treats volume scattering as an interface cross section, slight penetration)."""
+    missing = [n for n, v in (("w3", w3), ("gamma3", gamma3), ("mu", mu)) if v is None]
+    if missing:
+        raise ValueError(f"volume_model 'williams_jackson_1998' needs w3, gamma3 and mu (missing {missing}): the volume "
+                         "spectrum of Williams and Jackson (1998) (7)-(9); no class values exist for them (the paper prints "
+                         "two sites, Table I): give them, or name a site row with a `volume_spectral:` block "
+                         "(williams_jackson_1998_panama_city; bottom.volume_spectral)")
+    _wj98_warn_range(frequency)
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    sigma_vol = williams_jackson_1998_volume_cross_section(ti, ts, frequency, sound_speed, nu=nu, delta=delta, w3=float(w3),
+                                                           gamma3=float(gamma3), mu=float(mu), azimuth=phi)
+    return _through_interface(ti, ts, k, rho, nu, delta, sigma_vol)
+
+
+def volume_spectral(name: str, path=None) -> dict:
+    """{w3 (m^(3 - gamma3)), gamma3, mu} of a named row's `volume_spectral: {w3_cm3, gamma3, mu}` block (configs/
+    sediments.yaml; today only williams_jackson_1998_panama_city, [WJ] Table I): the parameters of
+    `volume_model="williams_jackson_1998"`. A row without the block is refused: no class values exist for them."""
+    entry = _entry(name, path)
+    if "volume_spectral" not in entry:
+        raise ValueError(f"sediment {name!r} has no `volume_spectral:` block: no class values exist for w3, gamma3 and mu "
+                         "(Williams and Jackson 1998 print two sites; J&R 2007 Table 14.1 sites only), so volume_model "
+                         "'williams_jackson_1998' needs them given, or a site row that has them "
+                         "(williams_jackson_1998_panama_city)")
+    block = {k: float(v) for k, v in entry["volume_spectral"].items()}
+    return {"w3": w3_from_cm3(block["w3_cm3"], block["gamma3"]) if "w3_cm3" in block else block["w3"],
+            "gamma3": block["gamma3"], "mu": block["mu"]}
+
+
+def item_volume_spectral(item: dict) -> dict:
+    """For a scenario item (`reverberation` `fluid_sediment`, `seafloor` `fluid_sediment`): {w3, gamma3, mu} as floats
+    when its `volume_model` is "williams_jackson_1998", the item's own values completed from its named `sediment`'s
+    `volume_spectral:` block (`volume_spectral`); {} for any other volume model. Refused, naming the reason, when the
+    three cannot all be found (no class values exist)."""
+    if item.get("volume_model") != WILLIAMS_JACKSON_1998:
+        return {}
+    given = {k: float(item[k]) for k in VOLUME_SPECTRAL_KEYS if k in item}
+    if len(given) < len(VOLUME_SPECTRAL_KEYS):
+        if "sediment" not in item:
+            raise ValueError(f"volume_model 'williams_jackson_1998' needs w3, gamma3 and mu (missing "
+                             f"{[k for k in VOLUME_SPECTRAL_KEYS if k not in given]}): no class values exist for them "
+                             "(Williams and Jackson 1998 print two sites); give them, or name a site row with a "
+                             "`volume_spectral:` block (sediment: williams_jackson_1998_panama_city)")
+        given = dict(volume_spectral(item["sediment"], item.get("sediment_file")), **given)
+    return given
 
 
 def volume_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
-                    delta: float, sigma2: float, volume_model: str | None = None, **_ignored):
+                    delta: float, sigma2: float | None = None, volume_model: str | None = None, **_ignored):
     """Cross section per unit area and solid angle from scatterers inside the sediment
     (equal to Jackson and Richardson 2007, eqs. (14.7)-(14.9), with (8.26) for the attenuation).
     `volume_model` (`VOLUME_MODELS`): None or "stockhausen" is this term; "mourad_jackson_1989" is
-    `mourad_jackson_1989_volume` (backscatter only; needs w2 and gamma2, which `strength` passes)."""
+    `mourad_jackson_1989_volume` (backscatter only; needs w2 and gamma2, which `strength` passes);
+    "williams_jackson_1998" is `williams_jackson_1998_volume` (any geometry; needs w3, gamma3, mu; `sigma2` unused)."""
+    if sigma2 is None and volume_model != WILLIAMS_JACKSON_1998:
+        raise ValueError(f"volume_model {volume_model or 'stockhausen'!r} needs sigma2")
     if volume_model is not None and volume_model != "stockhausen":
         if volume_model == MOURAD_JACKSON_1989:
             return mourad_jackson_1989_volume(grazing_in, grazing_out, frequency, sound_speed, rho=rho, nu=nu, delta=delta,
                                               sigma2=sigma2, **_ignored)
+        if volume_model == WILLIAMS_JACKSON_1998:
+            return williams_jackson_1998_volume(grazing_in, grazing_out, frequency, sound_speed, rho=rho, nu=nu, delta=delta,
+                                                **_ignored)
         import difflib
         near = difflib.get_close_matches(str(volume_model), VOLUME_MODELS, n=1)
         raise ValueError(f"unknown volume_model {volume_model!r}" + (f"; did you mean {near[0]!r}?" if near else "")
                          + f" (one of {VOLUME_MODELS})")
     ti, ts = np.broadcast_arrays(np.asarray(grazing_in, dtype=float), np.asarray(grazing_out, dtype=float))
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
-    k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
-    b2i, b2s = _vertical(k2sq, k * np.cos(ti)), _vertical(k2sq, k * np.cos(ts))
-    t_in = 1.0 + reflection(ti, rho, nu, delta)
-    t_out = 1.0 + reflection(ts, rho, nu, delta)
     sigma_vol = sigma2 * (20.0 / np.log(10.0)) * k * delta / nu   # 1/m
-    decay = 2.0 * (b2i.imag + b2s.imag)
-    return np.where(decay > 0.0, sigma_vol * np.abs(t_in) ** 2 * np.abs(t_out) ** 2 / (rho**2 * np.maximum(decay, 1e-300)), 0.0)
+    return _through_interface(ti, ts, k, rho, nu, delta, sigma_vol)
 
 
 def strength(grazing_in, grazing_out, frequency: float, sound_speed: float, azimuth=np.pi, **params):
@@ -1335,4 +1443,6 @@ def named_backscattering_strength_db(name: str, grazing, frequency: float, sound
     Lambert law for rock and pebbles (which has no frequency dependence)."""
     if "empirical_backscatter" in _entry(name, path):
         return lambert_backscatter_db(grazing, empirical_backscatter(name, path)["mu_db"])
+    if model.get("volume_model") == WILLIAMS_JACKSON_1998 and any(k not in model for k in VOLUME_SPECTRAL_KEYS):
+        model = dict(volume_spectral(name, path), **model)          # the row's `volume_spectral:` block; refused without
     return backscattering_strength_db(grazing, frequency, sound_speed, **dict(sediment(name, path), **model))

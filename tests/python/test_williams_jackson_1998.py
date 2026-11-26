@@ -286,3 +286,254 @@ def test_the_simulators_point_scatterer_seabed_takes_the_model_at_bistatic_geome
             / bottom.strength(g_in, g_out, F, C, azimuth=az, **sand))
     assert np.allclose(np.abs(published) ** 2 / np.abs(default) ** 2, want, rtol=1e-6)
     assert want.min() < 0.5 and np.ptp(np.degrees(az)) > 90.0                  # a real bistatic spread, a real change
+
+
+# --- [WJ] 5.3 / plan G-15: the spectral, non-isotropic volume term, opt-in ------------------------------------
+
+# [WJ] Table I volume spectra (confirmed): w3 in cm^3 at k = 1 rad/cm (h0 = 1 cm), gamma3, mu (signed: the paper's
+# mu is negative, density and compressibility fluctuations anti-correlated; the note Sec. 2).
+ECKERNFOERDE_VOLUME = dict(w3=bottom.w3_from_cm3(0.00013, 4.0), gamma3=4.0, mu=-0.69)
+PANAMA_CITY_VOLUME = dict(w3=bottom.w3_from_cm3(0.0000161, 4.0), gamma3=4.0, mu=-2.44)
+
+
+def volume_retyped(ti, ts, phi, k, rho, nu, delta, w3, gamma3, mu, **_):
+    """[WJ] (20)-(22) typed again here from the note, independent of bottom.py. Returns (sigma_bv, sigma_v)."""
+    kappa = (1 + 1j * delta) / nu
+
+    def p_(th):
+        p = cmath.sqrt(kappa * kappa - math.cos(th) ** 2)
+        return -p if p.imag < 0 else p
+
+    def r_(th):
+        y = rho * math.sin(th) / p_(th)
+        return (y - 1) / (y + 1)
+    dt2 = 0.25 * (math.cos(ti) ** 2 - 2 * math.cos(ti) * math.cos(ts) * math.cos(phi) + math.cos(ts) ** 2)      # (2)^2
+    dk = k * abs(4 * dt2 + ((p_(ti) + p_(ts)).real) ** 2) ** 0.5                                                 # (22)
+    bracket = mu * kappa ** 2 + math.cos(ti) * math.cos(ts) * math.cos(phi) - p_(ti) * p_(ts)
+    sigma_v = math.pi / 2 * k ** 4 * abs(bracket) ** 2 * w3 / dk ** gamma3                                       # (21), (7)
+    return (abs(1 + r_(ti)) ** 2 * abs(1 + r_(ts)) ** 2 * sigma_v / (2 * k * rho ** 2 * (p_(ti) + p_(ts)).imag),  # (20)
+            sigma_v)
+
+
+def wjv(ti, ts, phi, f=F, par=ECKERNFOERDE, vol=None, **kw):
+    vol = ECKERNFOERDE_VOLUME if vol is None else vol
+    return bottom.volume_strength(ti, ts, f, C, azimuth=phi, volume_model=WJ, **par, **vol, **kw)
+
+
+def test_the_volume_units_follow_the_spectrum_convention():
+    """W_rr(k) = w3 / (h0 k)^gamma3 with h0 = 1 cm, w3 in cm^3 (Table I): w3 [m^(3 - gamma3)] = w3 [cm^3] x
+    10^(2 gamma3 - 6) (ours, as `w2_from_cm4`): Panama City 1.61e-5 cm^3 -> 1.61e-3 m^-1, Eckernfoerde 1.3e-4 -> 0.013."""
+    assert bottom.w3_from_cm3(0.0000161, 4.0) == pytest.approx(1.61e-3, rel=1e-12)
+    assert bottom.w3_from_cm3(0.00013, 4.0) == pytest.approx(0.013, rel=1e-12)
+    k_cm = 3.0                                                                          # rad/cm: the same W either way
+    w_cm3 = 0.00013 / k_cm ** 3.3
+    assert bottom.w3_from_cm3(0.00013, 3.3) / (100.0 * k_cm) ** 3.3 == pytest.approx(w_cm3 * 1e-6, rel=1e-12)
+
+
+def test_the_spectral_volume_term_gives_the_notes_eckernfoerde_vectors():
+    """Eckernfoerde (Table I), 40 kHz, c 1500 m/s, the volume term alone: -39.139 / -34.068 / -30.412 dB at 5 / 10 /
+    20 deg backscatter, -35.653 at (10, 10, phi 90), -34.038 at (20, 20, phi 60) (ours, `vectors.py`; recomputed in
+    scratch `a-wj/recompute_vol.py`; 0.01 dB), and equal to the re-typing above to 1e-9 dB."""
+    k = 2 * math.pi * F / C
+    for (ti, ts, phi), want in (((5, 5, 180), -39.139), ((10, 10, 180), -34.068), ((20, 20, 180), -30.412),
+                                ((10, 10, 90), -35.653), ((20, 20, 60), -34.038)):
+        got = float(wjv(D(ti), D(ts), D(phi)))
+        assert db(got) == pytest.approx(want, abs=0.01), (ti, ts, phi)
+        assert db(got) == pytest.approx(db(volume_retyped(D(ti), D(ts), D(phi), k, **ECKERNFOERDE, **ECKERNFOERDE_VOLUME)[0]), abs=1e-9)
+    for (ti, ts, phi) in ((7, 33, 20), (33, 7, 140), (60, 15, 0)):
+        for par, vol in ((ECKERNFOERDE, ECKERNFOERDE_VOLUME), (PANAMA_CITY, PANAMA_CITY_VOLUME)):
+            assert db(float(wjv(D(ti), D(ts), D(phi), par=par, vol=vol))) == pytest.approx(
+                db(volume_retyped(D(ti), D(ts), D(phi), k, **par, **vol)[0]), abs=1e-9)
+
+
+def test_the_volume_null_lies_at_the_notes_azimuths():
+    """The bracket of (21) (dipole + monopole) vanishes near one azimuth: at Eckernfoerde 42.8 / 39.3 / 32.4 / 18.4
+    deg for theta_i = theta_s = 5 / 10 / 15 / 20 deg (ours, `vectors.py`; within 0.5 deg). The isotropic sigma2 term
+    has no null."""
+    for theta, want in ((5.0, 42.8), (10.0, 39.3), (15.0, 32.4), (20.0, 18.4)):
+        g = D(theta)
+        r = optimize.minimize_scalar(lambda ph: float(wjv(g, g, D(ph))), bounds=(1.0, 90.0), method="bounded",
+                                     options={"xatol": 1e-6})
+        assert r.x == pytest.approx(want, abs=0.5), (theta, r.x)
+        assert db(r.fun / float(wjv(g, g, np.pi))) < -30.0
+    phis = D(np.linspace(1.0, 180.0, 50))
+    ten = np.full(phis.shape, D(10.0))
+    iso = bottom.volume_strength(ten, ten, F, C, azimuth=phis, sigma2=0.001, **ECKERNFOERDE)
+    assert iso.shape == phis.shape and np.all(iso == iso[0])
+
+
+def test_it_is_j_and_r_14_10_with_rho_rk_minus_one_and_mu_prime_minus_mu():
+    """J&R (2007) (14.10), as the note Sec. 2 types it: sigma_v = (pi/2)[mu'^2 |k_p|^4 + 2 rho_rk mu'
+    Re{(k_ps . k_pi) conj(k_p^2)} + |k_ps . k_pi|^2] W_rr(Delta k), with k_ps . k_pi = k^2 (cos cos cos phi - P P)
+    and k_p^2 = k^2 kappa^2. With rho_rk = -1 and mu' = -mu it is (21) (ours, algebra; to 1e-12 relative)."""
+    k = 2 * math.pi * F / C
+    for par, vol in ((ECKERNFOERDE, ECKERNFOERDE_VOLUME), (PANAMA_CITY, PANAMA_CITY_VOLUME)):
+        kappa = (1 + 1j * par["delta"]) / par["nu"]
+        for ti, ts, phi in ((5, 5, 180), (10, 30, 90), (20, 20, 39), (45, 12, 10)):
+            a, b, c = D(ti), D(ts), D(phi)
+            pi_, ps = (bottom._vertical(kappa ** 2, np.cos(x)) for x in (a, b))
+            dot = k * k * (math.cos(a) * math.cos(b) * math.cos(c) - pi_ * ps)
+            kp2 = k * k * kappa ** 2
+            mup, rho_rk = -vol["mu"], -1.0
+            dt2 = 0.25 * (math.cos(a) ** 2 - 2 * math.cos(a) * math.cos(b) * math.cos(c) + math.cos(b) ** 2)
+            dk = k * abs(4 * dt2 + ((pi_ + ps).real) ** 2) ** 0.5
+            jr = math.pi / 2 * (mup ** 2 * abs(kp2) ** 2 + 2 * rho_rk * mup * (dot * np.conj(kp2)).real + abs(dot) ** 2) \
+                * vol["w3"] / dk ** vol["gamma3"]
+            ours = float(bottom.williams_jackson_1998_volume_cross_section(a, b, F, C, azimuth=c, nu=par["nu"], delta=par["delta"], **vol))
+            assert ours == pytest.approx(float(jr), rel=1e-12)
+            # In backscatter the bracket is kappa^2 (mu - 1): |...|^2 = |kappa|^4 (mu' + 1)^2.
+            if (ti, ts, phi) == (5, 5, 180):
+                assert ours == pytest.approx(math.pi / 2 * k ** 4 * abs(kappa) ** 4 * (mup + 1) ** 2 * vol["w3"] / dk ** vol["gamma3"],
+                                             rel=1e-12)
+
+
+def test_the_transmission_is_our_flat_interface_term_and_reciprocal():
+    """(20) is our existing transmission form ([WJ] Sec. 4 item 5, 1.1e-14 dB): with sigma2 = sigma_v / (amplitude
+    attenuation in dB/m), point by point, the default `volume_strength` gives the same number. That is the limit in
+    which the spectral term reduces to ours: a sigma_v that does not depend on angle. Reciprocal in the two angles."""
+    ti, ts, phi = _grid()
+    for par, vol in ((ECKERNFOERDE, ECKERNFOERDE_VOLUME), (PANAMA_CITY, PANAMA_CITY_VOLUME)):
+        k = 2 * math.pi * F / C
+        sv = bottom.williams_jackson_1998_volume_cross_section(ti, ts, F, C, azimuth=phi, nu=par["nu"], delta=par["delta"], **vol)
+        alpha_db = 20 / math.log(10) * k * par["delta"] / par["nu"]
+        spectral = wjv(ti, ts, phi, par=par, vol=vol)
+        flat = np.array([float(bottom.volume_strength(a, b, F, C, sigma2=s / alpha_db, **par)) for a, b, s in zip(ti, ts, sv)])
+        assert np.allclose(spectral, flat, rtol=1e-13, atol=0.0)
+        assert np.allclose(spectral, wjv(ts, ti, phi, par=par, vol=vol), rtol=1e-12, atol=0.0)
+
+
+def test_the_volume_model_needs_its_parameters_and_class_rows_have_none():
+    """No class value exists for w3, gamma3, mu ([WJ] prints two sites; J&R Table 14.1 sites only): without them the
+    model is refused with that reason; a site row's `volume_spectral:` block gives them (`bottom.volume_spectral`),
+    and `named_backscattering_strength_db` uses it. The default volume term is untouched."""
+    g = D([10.0, 20.0])
+    with pytest.raises(ValueError, match="needs w3, gamma3 and mu.*no class values"):
+        bottom.volume_strength(g, g, F, C, volume_model=WJ, sigma2=0.001, **ECKERNFOERDE)
+    with pytest.raises(ValueError, match="needs w3, gamma3 and mu"):
+        bottom.strength(g, g, F, C, volume_model=WJ, sigma2=0.001, **ECKERNFOERDE, w3=0.01, gamma3=4.0)
+    block = bottom.volume_spectral("williams_jackson_1998_panama_city")
+    assert block == pytest.approx(PANAMA_CITY_VOLUME, rel=1e-12) and set(block) == {"w3", "gamma3", "mu"}
+    for name in ("medium_sand", "very_fine_silt", "jackson_briggs_1992_arafura", "placeholder_sand"):
+        with pytest.raises(ValueError, match="no class values"):
+            bottom.volume_spectral(name)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                                  # the row's sigma2 is unconfirmed (ours)
+        named = bottom.named_backscattering_strength_db("williams_jackson_1998_panama_city", g, F, C, volume_model=WJ)
+        row = bottom.sediment("williams_jackson_1998_panama_city")
+    assert np.array_equal(named, bottom.backscattering_strength_db(g, F, C, volume_model=WJ, **row, **PANAMA_CITY_VOLUME))
+    with pytest.raises(ValueError, match="no class values"):
+        bottom.named_backscattering_strength_db("medium_sand", g, F, C, volume_model=WJ)
+    with pytest.raises(ValueError, match="did you mean 'williams_jackson_1998'"):
+        bottom.volume_strength(g, g, F, C, volume_model="williams_jackson", sigma2=0.001, **ECKERNFOERDE)
+    par = bottom.sediment("medium_sand")
+    assert np.array_equal(bottom.volume_strength(g, g, F, C, **par), bottom.volume_strength(g, g, F, C, volume_model="stockhausen", **par))
+
+
+# --- [WJ] 5.2: the full model (both terms) against the paper's Figs. 7-8 and Table AII ------------------------
+
+# The note Sec. 3: readings of the printed model curves (figure, +-0.5 dB on a 5-dB grid; a test bound never tighter
+# than +-1 dB) for theta_i = theta_s, and the note's re-typed model (ours, 0.1 dB as printed, so +-0.051 dB).
+# (label, site, theta, phi, reading, ours)
+FIGURE_READINGS = [
+    ("7a 10 deg", "panama_city", 10, 180, -31.6, -31.9), ("7a 10 deg", "panama_city", 10, 100, -31.9, -32.1),
+    ("7a 10 deg", "panama_city", 10, 50, -31.2, -31.2),
+    ("7a 5 deg", "panama_city", 5, 180, -40.0, -40.1), ("7a 5 deg", "panama_city", 5, 100, -40.8, -40.8),
+    ("7a 5 deg", "panama_city", 5, 50, -41.2, -41.3),
+    ("7b 20 deg", "panama_city", 20, 180, -29.5, -29.7), ("7b 20 deg", "panama_city", 20, 100, -29.1, -29.3),
+    ("7b 20 deg", "panama_city", 20, 50, -25.3, -25.6),
+    ("7b 10 deg", "panama_city", 10, 180, -31.8, -31.9), ("7b 10 deg", "panama_city", 10, 100, -32.0, -32.1),
+    ("7b 10 deg", "panama_city", 10, 50, -31.0, -31.2),
+    ("7c 35 deg", "panama_city", 35, 180, -27.6, -27.9), ("7c 35 deg", "panama_city", 35, 100, -26.7, -26.6),
+    ("7d 60 deg", "panama_city", 60, 180, -21.9, -22.1), ("7d 60 deg", "panama_city", 60, 100, -20.1, -19.6),
+    ("8a 10 deg", "eckernfoerde", 10, 180, -34.0, -34.0), ("8a 5 deg", "eckernfoerde", 5, 180, -39.0, -39.1),
+    ("8b 15 deg", "eckernfoerde", 15, 180, -31.7, -31.8), ("8c 20 deg", "eckernfoerde", 20, 180, -30.6, -30.4),
+    ("8d 20 deg", "eckernfoerde", 20, 180, -30.3, -30.4), ("8d 10 deg", "eckernfoerde", 10, 180, -33.9, -34.0),
+]
+
+
+def full_model(ti, ts, phi, site, f=F):
+    par, vol = {"panama_city": (PANAMA_CITY, PANAMA_CITY_VOLUME), "eckernfoerde": (ECKERNFOERDE, ECKERNFOERDE_VOLUME)}[site]
+    return bottom.strength(ti, ts, f, C, azimuth=phi, roughness_model=WJ, volume_model=WJ, **par, **vol)
+
+
+def test_the_full_model_reproduces_the_papers_figures_7_and_8():
+    """[WJ] 5.2: Table I inputs, both terms of the paper: within +-1 dB of every reading of the note Sec. 3 (figure)
+    and equal to the note's re-typed values (ours, 0.051 dB): e.g. backscatter at Panama City 5 / 10 / 20 / 35 / 60
+    deg against -40.0 / -31.6 / -29.5 / -27.6 / -21.9 read, Eckernfoerde 5 / 10 / 15 / 20 deg against -39.0 / -34.0 /
+    -31.7 / -30.6. Figure readings: label, never tighten."""
+    for label, site, theta, phi, reading, ours in FIGURE_READINGS:
+        got = float(db(full_model(D(theta), D(theta), D(phi), site)))
+        assert got == pytest.approx(ours, abs=0.051), (label, phi, got)
+        assert abs(got - reading) <= 1.0, (label, phi, got, reading)
+
+
+def test_the_eckernfoerde_curves_dip_where_the_figure_shows_the_volume_null():
+    """Fig. 8a (figure): the 10-deg model curve falls below -45 dB between about phi 35 and 50 deg, the 5-deg one
+    between about 35 and 60; the 20-deg curve (8c) dips near 20 deg. The full model's minimum over phi lies there
+    and below -45 dB at 5 and 10 deg (the roughness term fills the null; ours)."""
+    for theta, lo, hi in ((10.0, 35.0, 50.0), (5.0, 35.0, 60.0), (20.0, 15.0, 25.0)):
+        g = D(theta)
+        phis = np.linspace(1.0, 90.0, 891)
+        total = db(full_model(g, g, D(phis), "eckernfoerde"))
+        assert lo <= phis[np.argmin(total)] <= hi, (theta, phis[np.argmin(total)])
+        if theta < 15.0:
+            assert total.min() < -45.0 and np.all(total[(phis >= lo + 2.0) & (phis <= lo + 6.0)] < -40.0), theta
+
+
+# Table AII (Panama City, 40 kHz), the part the note prints (Sec. 2.2; the full 142 values are on p. 180 and not in
+# the repository): the backscatter means per angle (ours, mean of intensity of the repeats) and ten bistatic
+# entries as printed (confirmed). (theta_i, theta_s, phi, dB)
+TABLE_AII_BACKSCATTER = {5: -39.1, 6: -37.4, 7: -36.0, 8: -34.5, 9: -33.5, 10: -32.2, 11: -31.6, 12: -30.2, 13: -28.9,
+                         14: -28.2, 15: -28.3}
+TABLE_AII_BISTATIC = [(16.8, 15.3, 138.3, -30.7), (21.5, 17.6, 121.7, -31.2), (25.0, 21.5, 95.0, -29.3),
+                      (17.8, 12.7, 93.1, -32.0), (13.8, 22.2, 58.0, -31.4), (23.3, 33.1, 58.9, -21.7),
+                      (57.6, 35.6, 63.3, -20.4), (20.5, 16.8, 26.0, -20.5), (13.7, 20.6, 21.0, -20.7), (9.9, 16.7, 14.3, -36.3)]
+
+
+def test_against_the_panama_city_data_the_published_model_is_closer_than_our_default():
+    """[WJ] Sec. 4 item 2, a recorded characterisation (one site; not a reason to change the default, [WJ] 5.4: the
+    fluid model is known to overpredict at Panama City, J&R p. 351). Model minus data, with the paper's volume term
+    in both, on the part of Table AII the note prints (ours; bounds +-0.05 dB around the values measured here):
+      backscatter means 5-15 deg (11): published mean -0.46 / rms 1.21 dB, small-slope +1.31 / 1.62 dB;
+      ten bistatic entries:             published mean +2.33 / rms 5.73 dB, small-slope +5.49 / 7.30 dB
+    (the rms of the ten is dominated by the entry nearest forward, (9.9, 16.7, 14.3), -36.3 dB, which both models put
+    17-18 dB higher; without it the published model is +0.69 / 2.00 dB, small-slope +4.10 / 4.80).
+    The note's full-table numbers (142 values, scratch `ref-b/wj_data.py`): -0.45 / 1.31 and +3.34 / 4.85 against
+    +1.36 / 1.73 and +6.08 / 7.11 dB. Either way the published model is closer, in backscatter and bistatic."""
+    def stats(model):
+        back = np.array([float(db(bottom.strength(D(t), D(t), F, C, roughness_model=model, volume_model=WJ, **PANAMA_CITY,
+                                                  **PANAMA_CITY_VOLUME))) - s for t, s in TABLE_AII_BACKSCATTER.items()])
+        bist = np.array([float(db(bottom.strength(D(a), D(b), F, C, azimuth=D(c), roughness_model=model, volume_model=WJ,
+                                                  **PANAMA_CITY, **PANAMA_CITY_VOLUME))) - s for a, b, c, s in TABLE_AII_BISTATIC])
+        return [(float(x.mean()), float(np.sqrt((x ** 2).mean()))) for x in (back, bist, bist[:-1])]
+    (pb, pb_rms), (pi_, pi_rms), without_p = stats(WJ)
+    (sb, sb_rms), (si, si_rms), without_s = stats("small_slope")
+    assert without_p == pytest.approx((0.69, 2.00), abs=0.05) and without_s == pytest.approx((4.10, 4.80), abs=0.05)
+    measured = {"published back": (pb, pb_rms), "published bistatic": (pi_, pi_rms), "default back": (sb, sb_rms),
+                "default bistatic": (si, si_rms)}
+    want = {"published back": (-0.46, 1.21), "published bistatic": (2.33, 5.73), "default back": (1.31, 1.62),
+            "default bistatic": (5.49, 7.30)}
+    for key, (mean, rms) in want.items():
+        assert measured[key][0] == pytest.approx(mean, abs=0.05) and measured[key][1] == pytest.approx(rms, abs=0.05), (key, measured[key])
+    assert abs(pb) < abs(sb) and pb_rms < sb_rms and abs(pi_) < abs(si) and pi_rms < si_rms
+
+
+def test_the_point_scatterer_seabed_takes_the_spectral_volume_from_a_site_row_and_refuses_a_class_row():
+    """`seafloor` `model: fluid_sediment` with `volume_model: williams_jackson_1998` (`sim/targets.py`): the site row's
+    `volume_spectral:` block is used (the same amplitudes as with the three given); a class row is refused."""
+    from gpusonar.sim import build_scene
+    item = {"type": "seafloor", "x_range": [2.0, 30.0], "y_range": [-8.0, 8.0], "density": 2.0, "model": "fluid_sediment",
+            "volume_model": WJ}
+    tx, rx = np.array([0.0, 0.0, -6.0]), np.array([12.0, 5.0, -3.0])
+
+    def amplitudes(**extra):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")                               # the row's equivalent sigma2 is unconfirmed
+            scene = build_scene([dict(item, **extra)], np.random.default_rng(4))
+            return scene.evaluate(0.0, tx, rx, frequency=F, sound_speed=C)[1]
+    named = amplitudes(sediment="williams_jackson_1998_panama_city")
+    assert np.all(np.isfinite(named)) and np.abs(named).max() > 0.0
+    assert np.array_equal(named, amplitudes(sediment="williams_jackson_1998_panama_city", **PANAMA_CITY_VOLUME))
+    assert not np.array_equal(named, amplitudes(sediment="williams_jackson_1998_panama_city", volume_model="stockhausen"))
+    with pytest.raises(ValueError, match="no class values"):
+        amplitudes(sediment="medium_sand")

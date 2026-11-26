@@ -674,3 +674,37 @@ def test_williams_jackson_1998_roughness_in_a_bistatic_fluid_sediment_item():
     published, default = run({"roughness_model": "williams_jackson_1998"}), run({})
     assert np.all(np.isfinite(published)) and np.abs(published).max() > 0.0 and not np.array_equal(published, default)
     assert (np.abs(published) ** 2).mean() < (np.abs(default) ** 2).mean()
+
+
+def test_williams_jackson_1998_volume_in_a_bistatic_fluid_sediment_item():
+    """[WJ] 5.3: a `geometry: bistatic` `fluid_sediment` item with both "williams_jackson_1998" keys on the Panama City
+    site row becomes `bottom.strength` at each cell's angles and azimuth with the row's `volume_spectral:` block (the
+    volume term depends on the azimuth, unlike the default one), and a ping with it runs on the engine in force."""
+    import warnings
+
+    from gpusonar.sim import bottom
+    from gpusonar.sim.simulator import reverberation_item_strength
+    both = {"roughness_model": "williams_jackson_1998", "volume_model": "williams_jackson_1998"}
+    item = dict({"model": "fluid_sediment", "boundary_z": 0.0, "geometry": "bistatic", "sediment": "williams_jackson_1998_panama_city"},
+                **both)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                           # the row's equivalent sigma2 is unconfirmed (ours)
+        _, law, _ = reverberation_item_strength(item, F, {"sound_speed": C})
+        row = bottom.sediment("williams_jackson_1998_panama_city")
+    block = bottom.volume_spectral("williams_jackson_1998_panama_city")
+    g1, g2, az = np.radians([8.0, 20.0, 35.0]), np.radians([12.0, 20.0, 10.0]), np.radians([30.0, 90.0, 170.0])
+    assert np.array_equal(law(g1, g2, az), bottom.strength(g1, g2, F, C, azimuth=az, **row, **both, **block))
+    vol = bottom.volume_strength(g1[:1], g2[:1], F, C, azimuth=np.radians([30.0, 120.0]), volume_model="williams_jackson_1998",
+                                 **row, **block)
+    assert abs(10 * np.log10(vol[0] / vol[1])) > 0.5                   # depends on the azimuth
+    sonar = SonarModel.load("popoto_8", {
+        "receive": {"kind": "baseband", "sample_rate": 20e3, "window": {"range": [25.0, 230.0]}, "sensitivity_db": None},
+        "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": F, "f_stop": F, "duration": 2e-3,
+                                                          "window_alpha": 0.0, "source_level_db_rms": None,
+                                                          "amplitude": 1.0}}})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        rec = simulate_ping(sonar, make_pose(position=RX), Scene(), environment={"sound_speed": C}, adc=False,
+                            absorption_model="none", tx_pose=make_pose(position=TX),
+                            reverberation=[dict(item, n_azimuth=36)], rng=np.random.default_rng(6))
+    assert np.all(np.isfinite(rec.samples.array)) and np.abs(rec.samples.array).max() > 0.0

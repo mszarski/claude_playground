@@ -84,16 +84,22 @@ def reverberation_item_strength(item: dict, fc: float, env: dict, provider=None)
         # composite | combined | williams_jackson_1998: the published bistatic model, opt-in | mourad_jackson_1989:
         # backscatter only, opt-in),
         # small_scale_kh, shadowing (wagner | none: composite and combined, default wagner),
-        # volume_model (stockhausen, the default | mourad_jackson_1989: backscatter only).
+        # volume_model (stockhausen, the default | mourad_jackson_1989: backscatter only | williams_jackson_1998: the
+        # spectral bistatic volume term, opt-in, with w3, gamma3, mu from the item or from the named sediment's
+        # `volume_spectral:` block; sigma2 is then not needed).
         from . import bottom as bottom_model
         keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
         if "sediment" in item:
             item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
+        spectral = bottom_model.item_volume_spectral(item)
+        if spectral:
+            keys = tuple(k for k in keys if k != "sigma2" or k in item)
         missing = [k for k in keys if k not in item]
         if missing:
             raise ValueError(f"fluid_sediment reverberation needs {missing}")
         extra = {k: (item[k] if k in ("roughness_model", "shadowing", "volume_model") else float(item[k]))
                  for k in ("roughness_model", "small_scale_kh", "shadowing", "volume_model") if k in item}
+        extra.update(spectral)
         if item.get("geometry", "monostatic") == "bistatic":
             # The model at the true bistatic azimuth of each cell (pi is backscatter).
             strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731

@@ -307,3 +307,33 @@ def test_mourad_jackson_1989_item_runs_monostatic_and_is_refused_where_angles_di
     assert gap.min() < ratio_db < gap.max() and abs(ratio_db) < 1.0, (ratio_db, gap.min(), gap.max())
     with pytest.raises(ValueError, match="backscatter model"):
         bottom.reverberation_strength(27.5e3, C, **dict(par, **item))(np.radians([10.0]), np.radians([12.0]))
+
+
+def test_williams_jackson_1998_models_in_a_fluid_sediment_item_take_the_site_rows_volume_spectrum():
+    """[WJ] 5.1 and 5.3 of docs/references/bottom_bistatic_williams_jackson_1998.md: a monostatic `fluid_sediment`
+    item naming the Panama City site row with `roughness_model` and `volume_model` "williams_jackson_1998" runs on the
+    engine in force (GPUSONAR_SIM_ENGINE); the spectral volume term takes w3, gamma3, mu from the row's
+    `volume_spectral:` block (the same ping as with the three given in the item); a class row has no such block and is
+    refused, saying that no class values exist."""
+    import warnings
+
+    from gpusonar.sim import bottom
+    sonar, _ = empty_baseband_ping()
+
+    def ping(**item):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")                       # the row's equivalent sigma2 is unconfirmed (ours)
+            rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, -HEIGHT)), Scene(), environment={"sound_speed": C},
+                                adc=False, reverberation=[dict({"model": "fluid_sediment", "boundary_z": 0.0}, **item)],
+                                rng=np.random.default_rng(3))
+        return rec.samples.array.copy()
+    both = {"roughness_model": "williams_jackson_1998", "volume_model": "williams_jackson_1998"}
+    published = ping(sediment="williams_jackson_1998_panama_city", **both)
+    default = ping(sediment="williams_jackson_1998_panama_city")
+    assert np.all(np.isfinite(published)) and np.abs(published).max() > 0.0 and not np.array_equal(published, default)
+    block = bottom.volume_spectral("williams_jackson_1998_panama_city")
+    assert np.array_equal(published, ping(sediment="williams_jackson_1998_panama_city", **both, **block))
+    with pytest.raises(ValueError, match="no class values"):
+        ping(sediment="medium_sand", volume_model="williams_jackson_1998")
+    with pytest.raises(ValueError, match="no class values"):
+        ping(**bottom.sediment("medium_sand"), volume_model="williams_jackson_1998")
