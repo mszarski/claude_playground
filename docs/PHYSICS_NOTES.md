@@ -3874,7 +3874,8 @@ samples per 2 m cell, Hann aperture, 15 m merge): another map needs the tool run
 
 ## 30. Image sources off tilted planes and walls [OURS]
 
-Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages`; tests `tests/python/test_image_planes.py` (closed forms) and
+Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages` and, since `sonar-k9v7`, libs/sim `paths.cpp`
+`plane_image_eigenrays`; tests `tests/python/test_image_planes.py` (closed forms) and
 `tests/python/test_multipath_scenes.py` (the three scenes). Opt-in: `propagation.bottom_slope` or a wall given as
 `{point, normal, coefficient[, bounds]}`. Without either, nothing in this section runs.
 
@@ -3894,8 +3895,12 @@ Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages`; tests `tests/python/tes
   weight along it is zero when the scatterer has the plane's normal (the path arrives from the wrong side), so a scene
   `seafloor` with `slope` (even `[0, 0]`) does not count it. A point target (no normal) on a plane does: its echo
   rises by |1 + R|^2 both ways together.
-- The C++ provider has none of this (axis-aligned walls and a flat bottom only): the general construction is NumPy
-  for both engines; the pairing and synthesis after it run in C++ or CUDA as before.
+- Both engines have the construction (`sonar-k9v7`: libs/sim `paths.cpp` `plane_image_eigenrays`, the NumPy
+  arithmetic step by step). They agree to rounding, not to the bit: NumPy hands its dot products to BLAS, which sums
+  in another order (and with fused multiply-adds on some machines). Measured bounds are in
+  `test_image_planes.py` (`PARITY`). The energy rule's order (D-105) is worked out in NumPy for both engines, as for
+  the flat series, so both use the same order. The pairing and synthesis after it run in C++ or CUDA as before; the
+  CUDA path takes its eigenrays from the host provider.
 
 **Construction.** A plane is a point Q and a unit normal n into the water; its mirror is R(x) = x - 2 ((x - Q).n) n
 (on an axis normal, 2 Q_i - x_i: the flat series' arithmetic, so `bottom_slope: [0, 0]` gives the flat bottom's
@@ -3926,7 +3931,9 @@ theta = 20, 30 and 45 degrees (surface and a bed sloping along x, 24 bounces all
 three images; the one off both is P turned 180 degrees about the corner's edge, and a monostatic path off both
 returns along its own line reversed in the horizontal (the corner reflector).
 
-**Checked against closed forms** (`test_image_planes.py`): one tilted bed (image position, delay, launch, arrival,
+**Checked against closed forms** (`test_image_planes.py`, every test on both engines since `sonar-k9v7`, which also
+compares the engines over 200 random sets of planes, bounds and points, and over the scattering points of
+`fls_120k_quay_multipath` and `pool_fls_p4_2v_walls`): one tilted bed (image position, delay, launch, arrival,
 specular point, Rayleigh coefficient at the local grazing angle); zero tilt against the flat bottom with both
 engines (every ray found and no other); a wall turned about z equals the same wall in turned coordinates; the
 axis-aligned wall in both forms gives the same rays (delays, amplitudes, launch and arrival directions; since

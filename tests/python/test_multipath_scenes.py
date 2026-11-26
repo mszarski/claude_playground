@@ -224,3 +224,31 @@ def test_sas_multipath_copies_land_where_the_images_say():
             assert abs(yg - t[key]) < 0.03 and abs(xg - t["x_m"]) < 0.1, (k, key, xg, yg)
             assert 10.0 * np.log10(pg / p0) > -20.0, (k, key)
             assert at(free, t[key])[2] < 1e-3 * at(free, t["direct_y_m"])[2], (k, key)
+
+
+# --- both engines (sonar-k9v7) ---------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("name, labels", [("fls_120k_quay_multipath", ("moored_sphere", "block")),
+                                          ("pool_fls_p4_2v_walls", ("float_1", "float_3", "ladder_rail_a"))])
+def test_a_ping_is_the_same_on_both_engines(name, labels):
+    """The scenes with planes compute their eigenrays in C++ on the C++ engine since sonar-k9v7 (in NumPy for both
+    before). One ping with the objects as 0 dB points at their centres agrees between the engines to the tolerance of
+    the engine-parity test of an image_source scenario (`test_sim_cpp.py` REVERB_TOL, 5e-6 of the largest sample and
+    of the rms). The full scenes are compared in the hand-back of sonar-k9v7 (one ping each)."""
+    cfg = load_scenario_config(name)
+    centres = {}
+    for item in cfg["scene"]:
+        if item.get("label") in labels:
+            ends = ("min", "max") if "min" in item else ("start", "end")
+            centres[item["label"]] = item["centre"] if "centre" in item else list(
+                0.5 * (np.asarray(item[ends[0]], dtype=float) + np.asarray(item[ends[1]], dtype=float)))
+    assert set(centres) == set(labels)
+    sim = as_points(cfg, centres)
+    sim["pings"]["count"] = 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        a = run_scenario(sim, backend=HOST, engine="cpp").records[0].samples.array.astype(np.complex128)
+        b = run_scenario(sim, backend=HOST, engine="numpy").records[0].samples.array.astype(np.complex128)
+    d = np.abs(a - b)
+    assert np.abs(b).max() > 0.0
+    assert d.max() / np.abs(b).max() < 5e-6 and np.sqrt(np.mean(d**2) / np.mean(np.abs(b) ** 2)) < 5e-6
