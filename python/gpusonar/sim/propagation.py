@@ -148,7 +148,9 @@ class ImageSourceProvider(EigenrayProvider):
 
     Walls, two forms. {axis: 0 | 1, position, coefficient}: a vertical plane x or y = position, applied once on top
     of every image of the surface and bottom series, with no check that the path meets the wall or stays in the
-    water (the form before sonar-0nsi; since sonar-8qn9 its arrival direction is mirrored in the wall as well).
+    water (the form before sonar-0nsi; since sonar-8qn9 its arrival direction is mirrored in the wall as well). The
+    axis is the integer 0 or 1 and the position a finite number; anything else (2, a negative value, a float, a
+    bool, a string) is refused on both engines (a-wallaxis): the horizontal planes are `surface_z` and `bottom_z`.
     {point: [x, y, z], normal: [nx, ny, nz], coefficient[, bounds: {x: [lo, hi], y: [..], z: [..]}]}: any plane,
     `normal` pointing into the water. Opt-in with it (or with `bottom_slope`), every plane becomes a mirror of
     one general construction (`_PlaneImages`): the surface, the bottom (tilted by `bottom_slope` = [dz/dx, dz/dy],
@@ -202,7 +204,7 @@ class ImageSourceProvider(EigenrayProvider):
             rest = {k: v for k, v in bottom.items() if k not in ("sediment", "sediment_file")}
             bottom = dict(bottom_model.fluid_halfspace(bottom["sediment"], self.sound_speed, bottom.get("sediment_file")), **rest)
         self.bottom = bottom
-        # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
+        # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex} (another axis is refused).
         # Walls are applied to first order only, on top of the vertical image series.
         self.walls = walls or []
         for i, wall in enumerate(self.walls):
@@ -287,12 +289,18 @@ class ImageSourceProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        # Field points are [S, 3] (or one point [3]) on both engines. Before a-wallaxis any other shape sent the C++
+        # engine to the NumPy code without a word (`_cpp_points`), which then failed with an IndexError.
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise ValueError(f"image_source: field points [S, 3] (or one point [3]) are needed, not shape {points.shape}")
         order = self._order_for(source, points)
         if self.general:
             if _cpp_points(self.engine, points):
                 return self._planes.eigenrays_cpp(source, points, order, self.wall_order)
             return self._planes.eigenrays(source, points, order, self.wall_order)
-        if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
+        # Every wall is axis 0 or 1 (`_check_wall`), so the C++ engine, when selected, always runs; before a-wallaxis
+        # another axis sent it to NumPy without a word.
+        if _cpp_points(self.engine, points):
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
             return EigenraySet(**core.sim_image_source_eigenrays(
                 self.sound_speed, _source3(source), points,
@@ -384,6 +392,24 @@ def _check_wall(wall: dict, i: int) -> None:
                     raise ValueError(f"{where}bounds.{key}: [low, high] needed")
     else:
         _refuse_unknown(wall, _AXIS_WALL_KEYS, where)
+        # The old form is a vertical plane, x = position (axis 0) or y = position (axis 1), and nothing else (a-wallaxis).
+        # Axis 2 would be a horizontal plane laid once over every image of the surface and bottom series: the images
+        # of a plane at the surface or bottom again under another coefficient and with no bounce counted, and no valid
+        # path for a plane between them; the horizontal planes are `surface_z` and `bottom_z`, and any other plane is
+        # the {point, normal} form. Before, 2 and -1 to -3 ran in NumPy on both engines as an array index (2 and -1: z,
+        # -2: y, -3: x), 3 and -4 raised an IndexError, and a float, bool or string was cut by int() (0.7 -> 0, "1" -> 1).
+        axis = wall.get("axis")
+        if isinstance(axis, (bool, np.bool_)) or not isinstance(axis, (int, np.integer)) or int(axis) not in (0, 1):
+            raise ValueError(f"{where}axis: {axis!r} is not a wall axis; give 0 (a wall x = position) or 1 (a wall y = position). "
+                             "The horizontal planes are surface_z and bottom_z; any other plane is a wall given as "
+                             "{point, normal, coefficient}")
+        try:
+            position = float(wall["position"])
+        except (KeyError, TypeError, ValueError):
+            position = None
+        if position is None or not np.isfinite(position):
+            raise ValueError(f"{where}position: {wall.get('position')!r}; a wall {{axis, position, coefficient}} needs its "
+                             "position (metres) as a finite number")
 
 
 PLANE_TOLERANCE_M = 1e-6     # a point this close to a plane is on it (scatterers laid on a boundary are)

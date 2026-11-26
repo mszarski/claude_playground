@@ -106,6 +106,59 @@ def test_image_source_paths_match(options):
     assert_same_eigenrays(a, b)
 
 
+AXIS_WALL_OPTIONS = dict(surface_z=0.0, bottom_z=80.0, max_order=2, bottom=dict(speed=1700.0, density=2.0, attenuation=0.5))
+
+
+@pytest.mark.parametrize("axis", [0, 1, np.int64(0), np.int64(1)])
+def test_each_wall_axis_runs_in_cpp_and_matches_numpy(axis, monkeypatch):
+    """An {axis, position} wall of each valid axis (0: x = position, 1: y = position) runs in C++ when C++ is
+    selected, never in NumPy (the NumPy series is made to raise), and agrees with NumPy to the tolerance of the
+    neighbouring tests. NumPy integers are axes too."""
+    source = np.array([0.0, 5.0, 20.0])
+    pts = field_points(seed=2)
+    walls = [dict(axis=axis, position=-120.0, coefficient=0.7 - 0.1j)]
+    b = ImageSourceProvider(C, engine="numpy", walls=walls, **AXIS_WALL_OPTIONS).eigenrays(source, pts)
+    calls = []
+    real = core.sim_image_source_eigenrays
+    monkeypatch.setattr(core, "sim_image_source_eigenrays", lambda *a, **k: calls.append(1) or real(*a, **k))
+    monkeypatch.setattr(ImageSourceProvider, "_eigenrays_numpy", lambda *a, **k: pytest.fail("the NumPy series ran"))
+    a = ImageSourceProvider(C, engine="cpp", walls=walls, **AXIS_WALL_OPTIONS).eigenrays(source, pts)
+    assert calls == [1]
+    assert_same_eigenrays(a, b)
+    assert np.any(a.arrival[..., int(axis)] != a.launch[..., int(axis)])      # the wall rays are there
+
+
+# Not a wall axis. 2 would be a horizontal plane laid once over every image of the surface and bottom series:
+# it duplicates the surface or bottom image where it lies on one, and is no valid path elsewhere (before a-wallaxis
+# NumPy mirrored in z and the C++ engine silently ran NumPy for it). Negative values were NumPy indices (-1 = z,
+# -2 = y, -3 = x), 3 and -4 an IndexError, a float was cut to an integer (0.7 -> 0), a string was read ("1").
+@pytest.mark.parametrize("axis", [2, -1, -2, -3, 3, 0.7, 1.5, 1.0, True, "1", None])
+@pytest.mark.parametrize("eng", ["cpp", "numpy"])
+def test_a_wall_axis_that_is_not_0_or_1_is_refused_in_both_engines(axis, eng):
+    with pytest.raises(ValueError, match=r"walls\[0\]\.axis: .* give 0 \(a wall x = position\) or 1 \(a wall y = position\)"):
+        ImageSourceProvider(C, engine=eng, walls=[dict(axis=axis, position=5.0, coefficient=0.8)], **AXIS_WALL_OPTIONS)
+
+
+@pytest.mark.parametrize("wall, missing", [(dict(position=5.0, coefficient=0.8), "axis"),
+                                           (dict(axis=0, coefficient=0.8), "position"),
+                                           (dict(axis=0, position=float("nan"), coefficient=0.8), "position")])
+@pytest.mark.parametrize("eng", ["cpp", "numpy"])
+def test_an_axis_wall_needs_its_axis_and_a_finite_position(wall, missing, eng):
+    with pytest.raises(ValueError, match=rf"walls\[0\]\.{missing}: "):
+        ImageSourceProvider(C, engine=eng, walls=[wall], **AXIS_WALL_OPTIONS)
+
+
+@pytest.mark.parametrize("shape", [(4, 2), (2, 2, 3)])
+@pytest.mark.parametrize("eng", ["cpp", "numpy"])
+@pytest.mark.parametrize("walls", [[], [dict(point=[0.0, 50.0, 0.0], normal=[0.0, -1.0, 0.0], coefficient=0.8)]])
+def test_image_source_field_points_must_be_s_by_3(shape, eng, walls):
+    """Field points other than [S, 3] (or one point [3]) are refused in both engines: before a-wallaxis the C++
+    engine silently ran NumPy for them, which then failed with an IndexError."""
+    provider = ImageSourceProvider(C, engine=eng, walls=walls, **AXIS_WALL_OPTIONS)
+    with pytest.raises(ValueError, match=r"field points \[S, 3\]"):
+        provider.eigenrays(np.zeros(3), np.ones(shape))
+
+
 def test_image_path_lengths_are_those_of_the_images():
     source = np.array([0.0, 0.0, 20.0])
     e = ImageSourceProvider(C, surface_z=0.0, bottom_z=100.0, bottom_coefficient=0.5, max_order=2, engine="cpp").eigenrays(
