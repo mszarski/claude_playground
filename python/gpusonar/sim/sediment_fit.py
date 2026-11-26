@@ -30,8 +30,8 @@ bit (tests/python/test_sediment_fit.py). Cost: every step with a new gamma2 buil
 of one (7.5 s against 0.2 s for 42 values, 12 starts, one core). What got worse: on volume-dominated
 data at one frequency (very fine silt, 100 kHz, 0.5 dB noise) an unbounded small-slope fit can explain
 part of the noise with a relief about 100 times rougher, flag nothing and put sigma2 at 0.65-0.78 of the
-truth (5 of 10 noise draws; perturbation: none); `bounds=row_prior_bounds(name)[0]` (the tool's default
-since 2026-11-26) removes it in all ten draws 0-9 (sigma2 0.85-1.05 of the truth), w2 or gamma2 then on a
+truth (5 of 10 noise draws; perturbation: none); the row's default prior (`sediment=name`, or
+`bounds=row_prior_bounds(name)[0]`; the tool's default since 2026-11-26) removes it in all ten draws 0-9 (sigma2 0.85-1.05 of the truth), w2 or gamma2 then on a
 prior bound in eight (tests/python/test_sediment_fit.py `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
 
 Why the coverage matters (first-order perturbation theory, bottom.py; the same for small-slope away
@@ -69,10 +69,18 @@ the fit is bit-identical to before them, held by tests/python/test_sediment_fit.
   spreads the reference notes give per sediment class: `PRIOR_BOUNDS`) or `site_bounds(...)` (the
   within-site coefficients of variation of App. C about measured values). A fit that ends on a
   prior bound is set by the prior, not by the data, and is listed as unconstrained; every parameter
-  that ends on a bound or a search limit is in `SedimentFit.on_bound`. `fit` itself applies no
-  prior unless given `bounds`: it takes neither a sediment row nor a grain size. The tool
-  (tools/fit_sediment.py) applies `row_prior_bounds(name)` by default when its `--sediment` row
-  carries a grain size (the owner, 2026-11-26), with `--no-prior-bounds` to turn it off.
+  that ends on a bound or a search limit is in `SedimentFit.on_bound`. `fit` applies no prior
+  unless given `bounds` or a sediment row (next item).
+- `sediment` (the owner, 2026-11-26: "Library taking a row: yes"): the name of a row of
+  configs/sediments.yaml (or of `sediment_file`). The fit then does what tools/fit_sediment.py does
+  with `--sediment` (the tool calls `fit` with its row: one implementation): rho, nu, delta not given
+  are the row's (`bottom.sediment_reflection(..., shear=False)`, the fluid model); unless `bounds` are
+  given (they win, as the tool's `--prior-bounds PHI`), the row's default prior
+  `row_prior_bounds(name)` is applied (w2, gamma2, sigma2 of its grain size; rho, nu, delta never: the
+  owner's decision of the same day) and its source recorded in `bounds_source`; a row without a grain
+  size gets none and `bounds_source` says why, in the words the tool prints after "bounds used: ".
+  `row_prior=False` names the row but applies no prior (the tool's `--no-prior-bounds`). Without
+  `sediment` every call is what it was, bit for bit (tests/python/test_sediment_fit.py).
 - `hold`: parameters held at given values instead of fitted (e.g. gamma2 when the data are at
   one frequency and too few for three parameters).
 With any of them the result also carries the extended report: the covariance of the fitted
@@ -168,15 +176,19 @@ def prior_bounds(phi: float) -> dict:
     return {k: (max(lo, BOUNDS[k][0]), min(hi, BOUNDS[k][1])) for k, (lo, hi) in out.items()}
 
 
+SEARCH_LIMITS_ONLY = "the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: "
+"""The start of what `SedimentFit.bounds_source` (and the tool's "bounds used:" line) says when a row was named and
+no prior applied; the reason follows."""
+
 DEFAULT_PRIOR_KEYS = SCATTER_KEYS
-"""The keys of `prior_bounds` that `row_prior_bounds` (the tool's default) applies: the scattering parameters.
+"""The keys of `prior_bounds` that `row_prior_bounds` (the default of the tool and of `fit(sediment=...)`) applies: the scattering parameters.
 Not rho, nu, delta: the TR 9407 rows coarser than about 1 phi lie outside the rho and nu priors (the note on
 `PRIOR_BOUNDS`), and without --fit-geoacoustic they are held anyway (ours)."""
 
 
 def row_prior_bounds(name: str, path=None) -> tuple:
-    """The default prior of tools/fit_sediment.py for the sediment row `name` (of configs/sediments.yaml or
-    `path`): `(bounds, source)` with `bounds` the `DEFAULT_PRIOR_KEYS` of `prior_bounds(phi)`, phi the row's
+    """The default prior for the sediment row `name` (of configs/sediments.yaml or `path`) that `fit(sediment=name)`
+    applies, and so tools/fit_sediment.py --sediment name: `(bounds, source)` with `bounds` the `DEFAULT_PRIOR_KEYS` of `prior_bounds(phi)`, phi the row's
     `mean_grain_size_phi`, and `source` saying so; `(None, reason)` when the row carries no grain size. The
     owner's decision (2026-11-26): "yes apply prior bounds by default" when the row named has a grain size.
     Where the bounds come from: `PRIOR_BOUNDS` (sigma2's lower end and gamma2's lower end from J&R, confirmed in
@@ -267,7 +279,8 @@ class SedimentFit:
     independent_samples: tuple | None = None     # (min, max) of N over the data
     sample_error: str | None = None              # "book" or "gamma", with independent_samples
     bounds: dict | None = None                   # the search limits used, when other than BOUNDS
-    bounds_source: str | None = None             # what they are, for the row
+    bounds_source: str | None = None             # what they are, for the row; with a `sediment` row and no
+                                                 # bounds, why none (SEARCH_LIMITS_ONLY + the reason)
     held: dict | None = None                     # parameters held by `hold`
     # Fitted parameters that ended on a bound: {key: {"bound": value, "side": "low" | "high", "kind": "prior bound"
     # | "search limit"}}. Such a value is set by the bound, not measured (also in `unconstrained` and `notes`).
@@ -371,10 +384,40 @@ def _unpack(x, keys, held: dict) -> dict:
     return out
 
 
-def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: float, sound_speed: float = NOMINAL_SOUND_SPEED,
+def _row(sediment, sediment_file, row_prior: bool, geo: dict, bounds, bounds_source):
+    """What naming a row adds to a fit (the tool's --sediment, the module docstring): the held rho, nu, delta not
+    given, and the default prior unless `bounds` are given. Returns (geo, bounds, bounds_source)."""
+    if sediment is None:
+        if sediment_file is not None:
+            raise ValueError("fit: sediment_file given without a sediment row to read from it")
+        return geo, bounds, bounds_source
+    table = bottom.sediment_table(sediment_file)
+    if sediment not in table:
+        import difflib
+        near = difflib.get_close_matches(str(sediment), [str(n) for n in table], n=1)
+        raise ValueError(f"fit: sediment {sediment!r}: unknown row" + (f"; did you mean {near[0]!r}?" if near else
+                         f" (known: {', '.join(sorted(map(str, table)))})"))
+    if any(v is None for v in geo.values()):
+        row = bottom.sediment_reflection(sediment, sediment_file, shear=False)      # the fluid model is fitted
+        geo = {k: row[k] if v is None else v for k, v in geo.items()}
+    if bounds is None:
+        if not row_prior:
+            bounds_source = SEARCH_LIMITS_ONLY + "the row's prior turned off (row_prior=False; the tool's --no-prior-bounds)"
+        else:
+            bounds, why = row_prior_bounds(sediment, sediment_file)
+            if bounds is None:
+                bounds_source = SEARCH_LIMITS_ONLY + why
+            elif bounds_source is None:
+                bounds_source = why
+    return geo, bounds, bounds_source
+
+
+def fit(grazing_deg, frequency, strength_db, *, rho: float | None = None, nu: float | None = None, delta: float | None = None,
+        sound_speed: float = NOMINAL_SOUND_SPEED,
         sigma_db=None, fit_geoacoustic: bool = False, roughness_model: str = DEFAULT_ROUGHNESS_MODEL, start: dict | None = None,
         n_starts: int = 12, seed: int = 0, independent_samples=None, bounds: dict | None = None,
-        bounds_source: str | None = None, hold: dict | None = None, sample_error: str = "book") -> SedimentFit:
+        bounds_source: str | None = None, hold: dict | None = None, sample_error: str = "book",
+        sediment: str | None = None, sediment_file=None, row_prior: bool = True) -> SedimentFit:
     """Fit w2, gamma2 and sigma2 (and rho, nu, delta with `fit_geoacoustic`) to measured
     backscattering strength `strength_db` (dB re 1 m^2 per m^2: 10 log10 of the cross section
     per unit area and solid angle) at grazing angles `grazing_deg` and frequencies `frequency`
@@ -396,7 +439,18 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
     `bounds` {key: (low, high)} replaces the search limits of the keys named (`prior_bounds`,
     `site_bounds`; `bounds_source` says what they are, for the row); `hold` {key: value} holds
     parameters instead of fitting them. With any of them the result's notes also say whether the
-    roughness models can be told apart on these data, and which held values lie outside the bounds."""
+    roughness models can be told apart on these data, and which held values lie outside the bounds.
+
+    Opt-in (the owner, 2026-11-26): `sediment` names a row (of configs/sediments.yaml, or of
+    `sediment_file`), e.g. `fit(g, f, y, sigma_db=0.5, sediment="very_fine_silt")`: rho, nu, delta not
+    given are the row's, and unless `bounds` are given the row's default prior (`row_prior_bounds`) is
+    applied, as by tools/fit_sediment.py --sediment; `row_prior=False` applies none (--no-prior-bounds).
+    rho, nu, delta are required unless a row is named."""
+    geo, bounds, bounds_source = _row(sediment, sediment_file, row_prior, {"rho": rho, "nu": nu, "delta": delta},
+                                      bounds, bounds_source)
+    if any(v is None for v in geo.values()):
+        raise TypeError("fit: give rho, nu and delta, or name a sediment row (sediment=...)")
+    rho, nu, delta = geo["rho"], geo["nu"], geo["delta"]
     g = np.radians(np.asarray(grazing_deg, dtype=float).ravel())
     y = np.asarray(strength_db, dtype=float).ravel()
     f = np.broadcast_to(np.asarray(frequency, dtype=float).ravel(), g.shape).copy()
