@@ -525,7 +525,7 @@ def _slope_average(fn, ti, ts, phi, slope: float, nodes: int):
 # extracted in docs/references/shadowing_wagner_1967.md (read on the page images; status words there).
 # Geometric optics, one-dimensional in the plane of incidence, a Gaussian height process; diffraction
 # ignored ([W67] p. 145). Used by `composite_strength` and `combined_strength` (default "wagner" inside
-# those two opt-in models).
+# those two opt-in models) and by the Mourad-Jackson (1989) opt-in below.
 
 SHADOWING_MODELS = ("wagner", "none")
 
@@ -643,6 +643,10 @@ def combined_strength(grazing_in, grazing_out, frequency: float, sound_speed: fl
 
 
 ROUGHNESS_MODELS = ("perturbation", "kirchhoff", "small_slope", "composite", "combined")
+"""The roughness models for any geometry (bistatic). The fit (`sediment_fit`) and its model spread use these."""
+
+BACKSCATTER_ROUGHNESS_MODELS = ("mourad_jackson_1989",)
+"""Roughness models for backscatter only (opt-in): Mourad and Jackson (1989), whose paper is monostatic."""
 
 DEFAULT_ROUGHNESS_MODEL = "small_slope"
 """The roughness model used when none is named (D-86; "perturbation" before). Reasons: the
@@ -663,11 +667,12 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
     angle between the horizontal directions of the incident and scattered waves: pi for
     backscatter, 0 for forward scatter. `roughness_model`: "small_slope" (the default,
     `DEFAULT_ROUGHNESS_MODEL`), "perturbation" (first order; the default before D-86),
-    "kirchhoff", "composite" or "combined" (module docstring). The small-slope result needs a
+    "kirchhoff", "composite" or "combined" (module docstring), or for backscatter only
+    "mourad_jackson_1989" (the 1989 model's roughness term, opt-in). The small-slope result needs a
     structure function, i.e. 2 < gamma2 < 4: outside that range, when no model is named, the
     perturbation result is used and a warning says so once (naming "small_slope" raises).
     `shadowing` ("wagner" | "none"; None = the model's own default): Wagner's shadow function, carried by
-    "composite" and "combined" (default "wagner" there); the other models have
+    "composite" and "combined" (default "wagner" there) and by "mourad_jackson_1989"; the other models have
     none, so naming "wagner" with them is an error."""
     global _warned_no_small_slope
     if roughness_model is None:
@@ -682,7 +687,7 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
             roughness_model = "perturbation"
     if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope"):
         raise ValueError(f"shadowing {shadowing!r}: roughness_model {roughness_model!r} has no shadowing (it is carried by "
-                         "'composite' and 'combined')")
+                         "'composite', 'combined' and 'mourad_jackson_1989')")
     args = (grazing_in, grazing_out, frequency, sound_speed)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=azimuth)
     if roughness_model == "perturbation":
@@ -696,13 +701,31 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
         return composite_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
     if roughness_model == "combined":
         return combined_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
-    raise ValueError(f"unknown roughness_model {roughness_model!r}; one of {ROUGHNESS_MODELS}")
+    if roughness_model == MOURAD_JACKSON_1989:
+        return mourad_jackson_1989_roughness(*args, **shade, **par)
+    raise ValueError(f"unknown roughness_model {roughness_model!r}; one of {ROUGHNESS_MODELS + BACKSCATTER_ROUGHNESS_MODELS}")
+
+
+VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989")
+"""`volume_model`: "stockhausen" (the default: the flat-interface volume term below, Stockhausen (1963) as
+generalised for absorption; J&R (14.7)-(14.9); [MJ89] (39) corrected) or "mourad_jackson_1989" (that term
+averaged over the large-scale slope and shadowed, [MJ89] (38); backscatter only, opt-in)."""
 
 
 def volume_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
-                    delta: float, sigma2: float, **_ignored):
+                    delta: float, sigma2: float, volume_model: str | None = None, **_ignored):
     """Cross section per unit area and solid angle from scatterers inside the sediment
-    (equal to Jackson and Richardson 2007, eqs. (14.7)-(14.9), with (8.26) for the attenuation)."""
+    (equal to Jackson and Richardson 2007, eqs. (14.7)-(14.9), with (8.26) for the attenuation).
+    `volume_model` (`VOLUME_MODELS`): None or "stockhausen" is this term; "mourad_jackson_1989" is
+    `mourad_jackson_1989_volume` (backscatter only; needs w2 and gamma2, which `strength` passes)."""
+    if volume_model is not None and volume_model != "stockhausen":
+        if volume_model == MOURAD_JACKSON_1989:
+            return mourad_jackson_1989_volume(grazing_in, grazing_out, frequency, sound_speed, rho=rho, nu=nu, delta=delta,
+                                              sigma2=sigma2, **_ignored)
+        import difflib
+        near = difflib.get_close_matches(str(volume_model), VOLUME_MODELS, n=1)
+        raise ValueError(f"unknown volume_model {volume_model!r}" + (f"; did you mean {near[0]!r}?" if near else "")
+                         + f" (one of {VOLUME_MODELS})")
     ti, ts = np.broadcast_arrays(np.asarray(grazing_in, dtype=float), np.asarray(grazing_out, dtype=float))
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
@@ -717,7 +740,7 @@ def volume_strength(grazing_in, grazing_out, frequency: float, sound_speed: floa
 def strength(grazing_in, grazing_out, frequency: float, sound_speed: float, azimuth=np.pi, **params):
     """Roughness plus volume."""
     return (roughness_strength(grazing_in, grazing_out, frequency, sound_speed, azimuth=azimuth, **params)
-            + volume_strength(grazing_in, grazing_out, frequency, sound_speed, **params))
+            + volume_strength(grazing_in, grazing_out, frequency, sound_speed, azimuth=azimuth, **params))
 
 
 def backscattering_strength_db(grazing, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, **params):
@@ -735,6 +758,230 @@ def equivalent_lambert_mu_db(grazing: float, frequency: float, sound_speed: floa
     angle: for scenes whose seabed is point scatterers with Lambert's law (set their `mu_db`
     to this at the middle of the swath)."""
     return float(backscattering_strength_db(grazing, frequency, sound_speed, **params) - 20.0 * np.log10(np.sin(grazing)))
+
+
+# --- Mourad and Jackson (1989): the published 1989 backscatter model (opt-in) --------------------
+#
+# P. D. Mourad and D. R. Jackson, "High Frequency Sonar Equation Models for Bottom Backscatter and
+# Forward Loss", OCEANS '89 Proceedings, pp. 1168-1175 [MJ89], extracted equation by equation in
+# docs/references/bottom_mourad_jackson_1989.md (read on the page images; "confirmed" there = printed).
+# Selected by `roughness_model="mourad_jackson_1989"` and `volume_model="mourad_jackson_1989"` (the
+# paper's model is both together); neither is a default (D-86's small-slope model stays: J&R 2007, the
+# later print, recommend small-slope, p. 336). Implemented as printed:
+#   roughness  sigma_r = f(x) sigma_kr + [1 - f(x)] sigma_cr                                      (33)
+#              sigma_kr: the paper's closed-form Kirchhoff approximation (19)-(22), NOT our exact
+#                        Kirchhoff integral (`kirchhoff_strength`; equal at gamma2 = 3 and at 90 deg)
+#              sigma_cr = S(theta, s) F(theta, sigma_pr, s): Wagner's R times the slope average   (23)-(26)
+#              F = pi^(-1/2) sum a_n sigma(theta - theta_n), three-point Gauss-Hermite              (27)-(29)
+#              (arguments <= 0 set to 1 deg, above 90 deg to 90 deg; in-plane slope only)
+#              sigma_pr: first-order perturbation with K = [4 k^2 cos^2 theta + (k/10)^2]^(1/2)  (30)-(32)
+#              f(x) = 1 / (1 + e^x), x = 80 (cos theta - cos theta_kdB),
+#              cos theta_kdB = (1/C4 + 4)^(-1/4), C4 = 1000^(1/(1 + alpha)) (a q_c^2)^(1/alpha) (34)-(37)
+#   volume     sigma_v = S(theta, s) F(theta, sigma_pv, s)                                         (38)
+#              sigma_pv = 5 delta sigma2 |1 - R^2|^2 sin^2 theta / (nu ln 10 |P|^2 Im P)          (39)
+#              with |1 - R^2|^2: the page prints |1 - R|^2, a misprint (the paper's own figures
+#              reproduce only with the square; J&R (14.8); tests/python/test_mourad_jackson_1989.py)
+#   slope      s^2 = (2 pi w2)^(1/alpha) / (2 (1 - alpha)) (k^2 / alpha)^((1 - alpha)/alpha)       (18)
+#              the TOTAL (both-axes) rms slope of the relief below the K at which the small-scale
+#              relief has k h_s = 1/sqrt(2) (ours, algebra: sqrt(2) x `large_scale_slope` with
+#              small_scale_kh = 2^(-1/2)); J&R and our `composite` use k h_s = 1/2.
+#   S          Wagner's R with t = tan(theta) / s, set to 1 for t > 2 (p. 1173).
+# Backscatter only: the paper is monostatic, so grazing_in != grazing_out or azimuth != pi is refused.
+# Stated range: 10-100 kHz, sands to clays, relations for 1 <= Mz <= 9 phi (p. 1169); outside it a
+# warning (the parameters themselves are what the model takes; `mourad_jackson_1989_sediment` refuses a
+# grain size outside 1-9 phi).
+
+MOURAD_JACKSON_1989 = "mourad_jackson_1989"
+
+MJ89_GAUSS_HERMITE_PRINTED = ((0.295410, 1.224745), (1.181636, 0.0), (0.295410, -1.224745))
+"""[MJ89] (28)-(29) as printed: (a_n, theta_n / arctan(s)) for n = -1, 0, 1 (confirmed). They are the
+three-point Gauss-Hermite weights sqrt(pi)/6, 2 sqrt(pi)/3 and nodes -+sqrt(3/2) (ours: 0.2954090,
+1.1816359, 1.2247449) rounded to six decimals; the printed 0.295410 is one unit of the sixth decimal
+above sqrt(pi)/6 = 0.29540898 (the effect: 5e-6 dB). The model below uses the exact quadrature
+(`numpy.polynomial.hermite.hermgauss(3)`), which is what (27) cites (Carnahan et al. 1969)."""
+
+MJ89_FREQUENCY_RANGE = (10e3, 100e3)
+"""[MJ89] abstract: 10-100 kHz (confirmed)."""
+
+
+def mourad_jackson_1989_relations(phi: float) -> dict:
+    """[MJ89] (1), (2), (4)-(7) at a mean grain size Mz in phi (confirmed; "defined for 1 <= Mz <= 9", p. 1169:
+    outside that a ValueError): {rho, nu, sigma2, gamma2, w2_cm4, h_cm}. rho and nu with the paper's seven-digit
+    constants; h the rms relief of a 100 cm track (6); w2 in cm^4 with h0 = 1 cm (7), for `w2_from_cm4`. The
+    step of sigma2 (4) and of h (6) is at 5.0 phi as printed; our class rule (`grain_size_sigma2`, Snellen et
+    al.) steps sigma2 at 5.5 phi and stays (the note Sec. 0 item 5). delta (3) needs Hamilton's (1972)
+    attenuation, which [MJ89] does not print: `apl_grain_size_relations` has it (J&R (11.3))."""
+    mz = float(phi)
+    if not 1.0 <= mz <= 9.0:
+        raise ValueError(f"mean grain size {mz:g} phi: the Mourad-Jackson (1989) relations are defined for 1 <= Mz <= 9 only")
+    if mz <= 5.3:
+        rho = -0.0165406 * mz**3 + 0.2290201 * mz**2 - 1.1069031 * mz + 3.0455234
+        nu = -0.0014881 * mz**3 + 0.0213937 * mz**2 - 0.1382798 * mz + 1.3424740
+    else:
+        rho = -0.0012973 * mz + 1.1564755
+        nu = -0.0024324 * mz + 1.0018916
+    h = (2.03846 - 0.26923 * mz) / (1.0 + 0.076923 * mz) if mz < 5.0 else 0.5
+    return {"rho": rho, "nu": nu, "sigma2": 0.002 if mz < 5.0 else 0.001, "gamma2": 3.25, "w2_cm4": 0.00207 * h * h,
+            "h_cm": h}
+
+
+_MJ89_RHO_SPAN = (mourad_jackson_1989_relations(9.0)["rho"], mourad_jackson_1989_relations(1.0)["rho"])
+_MJ89_NU_SPAN = (mourad_jackson_1989_relations(9.0)["nu"], mourad_jackson_1989_relations(1.0)["nu"])
+
+
+def _mj89_check_geometry(grazing_in, grazing_out, azimuth, what: str):
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    if np.any(ti != ts) or np.any(np.abs(np.cos(phi) + 1.0) > 1e-12):
+        raise ValueError(f"{what} 'mourad_jackson_1989' is a backscatter model (the paper is monostatic): grazing_in must "
+                         "equal grazing_out and azimuth be pi; for other geometries use the default (small_slope) or "
+                         "'composite' / 'combined' with the default volume model")
+    return ti
+
+
+def _mj89_warn_range(frequency: float, rho: float, nu: float) -> None:
+    import warnings
+    lo, hi = MJ89_FREQUENCY_RANGE
+    if not lo <= float(frequency) <= hi:
+        warnings.warn(f"mourad_jackson_1989: {float(frequency) / 1e3:g} kHz is outside the paper's 10-100 kHz", stacklevel=3)
+    if not (_MJ89_RHO_SPAN[0] - 1e-9 <= rho <= _MJ89_RHO_SPAN[1] + 1e-9 and _MJ89_NU_SPAN[0] - 1e-9 <= nu <= _MJ89_NU_SPAN[1] + 1e-9):
+        warnings.warn(f"mourad_jackson_1989: rho {rho:.4g}, nu {nu:.4g} lie outside what the paper's grain-size relations "
+                      f"span for 1-9 phi (rho {_MJ89_RHO_SPAN[0]:.4f}-{_MJ89_RHO_SPAN[1]:.4f}, nu {_MJ89_NU_SPAN[0]:.4f}-"
+                      f"{_MJ89_NU_SPAN[1]:.4f}): the model was stated for sands to clays", stacklevel=3)
+
+
+def mourad_jackson_1989_slope(frequency: float, sound_speed: float, *, w2: float, gamma2: float, **_ignored) -> float:
+    """[MJ89] (18): the large-scale rms slope s (total, both axes) of the 1989 model, w2 in m^(4 - gamma2)."""
+    if not 2.0 < gamma2 < 4.0:
+        raise ValueError("the Mourad-Jackson (1989) model needs 2 < gamma2 < 4 ((15))")
+    alpha = 0.5 * gamma2 - 1.0
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    return float(np.sqrt((2.0 * np.pi * w2) ** (1.0 / alpha) / (2.0 * (1.0 - alpha)) * (k * k / alpha) ** ((1.0 - alpha) / alpha)))
+
+
+def _mj89_kirchhoff_constants(k: float, w2: float, gamma2: float):
+    """(a, b, q_c, alpha) of [MJ89] (20)-(22); C_h^2 of (17) is `structure_constant`."""
+    ch2, alpha = structure_constant(w2, gamma2)
+    q_c = ch2 * 2.0 ** (1.0 - 2.0 * alpha) * k ** (2.0 * (1.0 - alpha))
+    a = (8.0 * alpha**2 * math.gamma(0.5 / alpha + 0.5) / (math.gamma(0.5) * math.gamma(1.0 / alpha) * math.gamma(0.5 / alpha))) ** (2.0 * alpha)
+    b = a ** (0.5 + 0.5 / alpha) * math.gamma(1.0 / alpha) / (2.0 * alpha)
+    return a, b, q_c, alpha
+
+
+def mourad_jackson_1989_kirchhoff(grazing, frequency: float, sound_speed: float, *, rho: float, nu: float, delta: float,
+                                  w2: float, gamma2: float, **_ignored):
+    """[MJ89] (19)-(22): the paper's closed-form approximation to the Kirchhoff backscatter,
+        sigma_kr = b q_c |R(90)|^2 / (8 pi [cos^(4 alpha) theta + a q_c^2 sin^4 theta]^((1 + alpha)/(2 alpha))),
+    exact at alpha = 1/2 (gamma2 = 3) and at 90 deg; elsewhere it differs from our exact `kirchhoff_strength`
+    (e.g. +3.7 dB at gamma2 3.67, 60 deg: the note Sec. 4 D6)."""
+    theta = np.asarray(grazing, dtype=float)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    a, b, q_c, alpha = _mj89_kirchhoff_constants(k, w2, gamma2)
+    r90 = abs(complex(reflection(0.5 * np.pi, rho, nu, delta))) ** 2
+    base = np.abs(np.cos(theta)) ** (4.0 * alpha) + a * q_c**2 * np.sin(theta) ** 4
+    return b * q_c * r90 / (8.0 * np.pi * base ** ((1.0 + alpha) / (2.0 * alpha)))
+
+
+def mourad_jackson_1989_kirchhoff_angle(frequency: float, sound_speed: float, *, w2: float, gamma2: float, **_ignored) -> float:
+    """theta_kdB of [MJ89] (36)-(37), radians: the centre of the interpolation, where the Kirchhoff result has
+    fallen about 15 dB below its peak (exactly so as theta_kdB -> 90 deg; never below 45 deg, the "+4")."""
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    a, _, q_c, alpha = _mj89_kirchhoff_constants(k, w2, gamma2)
+    c4 = 1000.0 ** (1.0 / (1.0 + alpha)) * (a * q_c**2) ** (1.0 / alpha)
+    return float(np.arccos((1.0 / c4 + 4.0) ** -0.25))
+
+
+def _mj89_p(theta, nu: float, delta: float):
+    kappa = (1.0 + 1j * delta) / nu
+    return kappa, _vertical(kappa**2, np.cos(theta))                   # (11)-(12); the root that decays into the sediment
+
+
+def mourad_jackson_1989_perturbation(grazing, frequency: float, sound_speed: float, *, rho: float, nu: float, delta: float,
+                                     w2: float, gamma2: float, low_wavenumber: bool = True, **_ignored):
+    """[MJ89] (30)-(32): sigma_pr = 4 k^4 sin^4 theta |Y|^2 W(K_theta),
+    Y = [(rho - 1)^2 cos^2 theta + rho^2 - kappa^2] / [rho sin theta + P]^2 ("a modified version of Kuo's
+    expression"), K_theta = [4 k^2 cos^2 theta + (k/10)^2]^(1/2); `low_wavenumber=False` drops the (k/10)^2
+    term, and then this equals our `perturbation_strength` in backscatter."""
+    theta = np.asarray(grazing, dtype=float)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    kappa, p = _mj89_p(theta, nu, delta)
+    y = ((rho - 1.0) ** 2 * np.cos(theta) ** 2 + rho**2 - kappa**2) / (rho * np.sin(theta) + p) ** 2
+    big_k = np.sqrt(4.0 * k * k * np.cos(theta) ** 2 + ((0.1 * k) ** 2 if low_wavenumber else 0.0))
+    return 4.0 * k**4 * np.sin(theta) ** 4 * np.abs(y) ** 2 * _power_law(big_k, w2, gamma2)
+
+
+def mourad_jackson_1989_volume_unaveraged(grazing, *, rho: float, nu: float, delta: float, sigma2: float, **_ignored):
+    """[MJ89] (39) with |1 - R^2|^2 (the page prints |1 - R|^2: a misprint, module comment above). Equal to our
+    `volume_strength` in backscatter (to 1e-12 relative, tests/python/test_mourad_jackson_1989.py)."""
+    theta = np.asarray(grazing, dtype=float)
+    _, p = _mj89_p(theta, nu, delta)
+    r = reflection(theta, rho, nu, delta)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = 5.0 * delta * sigma2 * np.abs(1.0 - r**2) ** 2 * np.sin(theta) ** 2 / (nu * math.log(10.0) * np.abs(p) ** 2 * p.imag)
+    return np.where(p.imag > 0.0, out, 0.0)
+
+
+def _mj89_average(fn, theta, s: float):
+    """[MJ89] (27)-(29): F = pi^(-1/2) sum_n a_n fn(theta - theta_n), theta_n = x_n arctan(s), three-point
+    Gauss-Hermite (exact weights and nodes, `MJ89_GAUSS_HERMITE_PRINTED`); an argument <= 0 is set to 1 deg,
+    one above 90 deg to 90 deg (text after (29))."""
+    x, w = np.polynomial.hermite.hermgauss(3)
+    total = 0.0
+    for xn, an in zip(x, w):
+        arg = theta - xn * math.atan(s)
+        arg = np.where(arg <= 0.0, np.radians(1.0), np.minimum(arg, 0.5 * np.pi))
+        total = total + an * fn(arg)
+    return total / math.sqrt(math.pi)
+
+
+def _mj89_shadow(theta, s: float, shadowing: str):
+    if _check_shadowing(shadowing) == "none":
+        return 1.0
+    return wagner_backscatter_shadowing(theta, s, cutoff=2.0)            # (24)-(26), S = 1 for t > 2
+
+
+def mourad_jackson_1989_roughness(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                                  delta: float, w2: float, gamma2: float, azimuth=np.pi, shadowing: str = "wagner",
+                                  **_ignored):
+    """The roughness term of [MJ89], (13)-(37) (module comment above): backscatter only. `shadowing="none"`
+    drops Wagner's factor S (the paper's model has it)."""
+    theta = _mj89_check_geometry(grazing_in, grazing_out, azimuth, "roughness_model")
+    _mj89_warn_range(frequency, rho, nu)
+    par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2)
+    s = mourad_jackson_1989_slope(frequency, sound_speed, **par)
+    composite = _mj89_shadow(theta, s, shadowing) * _mj89_average(
+        lambda x: mourad_jackson_1989_perturbation(x, frequency, sound_speed, **par), theta, s)
+    kirch = mourad_jackson_1989_kirchhoff(theta, frequency, sound_speed, **par)
+    from scipy.special import expit
+    f = expit(-80.0 * (np.cos(theta) - math.cos(mourad_jackson_1989_kirchhoff_angle(frequency, sound_speed, **par))))
+    return f * kirch + (1.0 - f) * composite
+
+
+def mourad_jackson_1989_volume(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                               delta: float, sigma2: float, w2: float, gamma2: float, azimuth=np.pi, shadowing: str = "wagner",
+                               **_ignored):
+    """The volume term of [MJ89], (38) with (39) corrected: the unaveraged term averaged over the large-scale slope
+    (18) by (27)-(29) and multiplied by Wagner's S, "in analogy with" the roughness term. Backscatter only.
+    This is the printed recipe for the slope and shadow corrections of the volume term (G-16; J&R Sect. 14.1.2
+    describes it without a formula)."""
+    theta = _mj89_check_geometry(grazing_in, grazing_out, azimuth, "volume_model")
+    _mj89_warn_range(frequency, rho, nu)
+    s = mourad_jackson_1989_slope(frequency, sound_speed, w2=w2, gamma2=gamma2)
+    return _mj89_shadow(theta, s, shadowing) * _mj89_average(
+        lambda x: mourad_jackson_1989_volume_unaveraged(x, rho=rho, nu=nu, delta=delta, sigma2=sigma2), theta, s)
+
+
+def mourad_jackson_1989_sediment(phi: float, water_sound_speed: float | None = None) -> dict:
+    """The six parameters of the paper's "surface" set for a mean grain size (1-9 phi; refused outside):
+    rho, nu, sigma2, gamma2, w2 from [MJ89] (1)-(2), (4)-(7) (`mourad_jackson_1989_relations`), delta by (3) with
+    Hamilton's attenuation as J&R (11.3) prints it (`apl_grain_size_relations`; [MJ89] gives c1 = 1.528 m/ms
+    for (3); `water_sound_speed` None is `GRAIN_SIZE_WATER_SOUND_SPEED`, 1528 m/s). Reproduces the printed inset
+    values of the paper's Figs. 3-9 (tests)."""
+    water_sound_speed = GRAIN_SIZE_WATER_SOUND_SPEED if water_sound_speed is None else water_sound_speed
+    rel = mourad_jackson_1989_relations(phi)
+    k = apl_grain_size_relations(phi)["k_db_per_m_khz"]
+    delta = k * rel["nu"] * float(water_sound_speed) * math.log(10.0) / (40000.0 * math.pi)
+    return {"rho": rel["rho"], "nu": rel["nu"], "delta": delta, "w2": w2_from_cm4(rel["w2_cm4"], rel["gamma2"]),
+            "gamma2": rel["gamma2"], "sigma2": rel["sigma2"]}
 
 
 # --- Scattering parameters from the mean grain size -------------------------------------------

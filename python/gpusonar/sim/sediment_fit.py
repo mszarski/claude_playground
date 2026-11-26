@@ -405,6 +405,12 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
             y = y - measure.intensity_mean_db_bias(n_used)
         else:
             raise ValueError(f"fit: sample_error {sample_error!r}: use 'book' or 'gamma'")
+    if roughness_model in bottom.BACKSCATTER_ROUGHNESS_MODELS:
+        raise ValueError(f"fit: roughness_model {roughness_model!r} is not fitted here: the Mourad-Jackson (1989) model pairs its "
+                         "roughness term with a slope-averaged volume term (volume_model 'mourad_jackson_1989') that this fit does "
+                         "not use, and it is defined for backscatter only. Fit with "
+                         f"{', '.join(repr(m) for m in bottom.ROUGHNESS_MODELS)} and evaluate the 1989 model at the fitted "
+                         "parameters if wanted")
     if roughness_model not in bottom.ROUGHNESS_MODELS:
         import difflib
         near = difflib.get_close_matches(str(roughness_model), bottom.ROUGHNESS_MODELS, n=1)

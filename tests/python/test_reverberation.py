@@ -287,3 +287,23 @@ def test_composite_item_carries_wagner_shadowing_and_shadowing_none_turns_it_off
         _fluid_sediment_ping({"shadowing": "wagner"})
     with pytest.raises(ValueError, match="did you mean 'none'"):
         _fluid_sediment_ping({"roughness_model": "composite", "shadowing": "non"})
+
+
+def test_mourad_jackson_1989_item_runs_monostatic_and_is_refused_where_angles_differ():
+    """C4 of docs/references/bottom_mourad_jackson_1989.md: the 1989 model (both keys) in a monostatic reverberation
+    item over a direct path: it runs (both engines) and differs from the default by no more than the two models
+    differ over the item's grazing angles (5 to 53 deg here: medium sand at 27.5 kHz, bottom.strength; the record's
+    mean power is weighted to the steep, near ranges, where the two agree within tenths of a dB). A strength called
+    with two different grazing angles (a bistatic or multipath pair) is refused, not evaluated silently."""
+    from gpusonar.sim import bottom
+    item = {"roughness_model": "mourad_jackson_1989", "volume_model": "mourad_jackson_1989"}
+    mj = _fluid_sediment_ping(item)
+    default = _fluid_sediment_ping({})
+    assert np.all(np.isfinite(mj)) and not np.array_equal(mj, default)
+    ratio_db = 10 * np.log10((np.abs(mj) ** 2).mean() / (np.abs(default) ** 2).mean())
+    par = bottom.sediment("medium_sand")
+    g = np.arcsin(HEIGHT / np.linspace(25.0, 230.0, 200))
+    gap = 10 * np.log10(bottom.strength(g, g, 27.5e3, C, **dict(par, **item)) / bottom.strength(g, g, 27.5e3, C, **par))
+    assert gap.min() < ratio_db < gap.max() and abs(ratio_db) < 1.0, (ratio_db, gap.min(), gap.max())
+    with pytest.raises(ValueError, match="backscatter model"):
+        bottom.reverberation_strength(27.5e3, C, **dict(par, **item))(np.radians([10.0]), np.radians([12.0]))

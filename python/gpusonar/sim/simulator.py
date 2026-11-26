@@ -188,7 +188,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
             # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
             # composite | combined),
-            # small_scale_kh, shadowing (wagner | none: composite and combined, default wagner).
+            # small_scale_kh, shadowing (wagner | none: composite and combined, default wagner),
+            # volume_model (stockhausen, the default | mourad_jackson_1989: backscatter only).
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
             if "sediment" in item:
@@ -196,8 +197,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             missing = [k for k in keys if k not in item]
             if missing:
                 raise ValueError(f"fluid_sediment reverberation needs {missing}")
-            extra = {k: (item[k] if k in ("roughness_model", "shadowing") else float(item[k]))
-                     for k in ("roughness_model", "small_scale_kh", "shadowing") if k in item}
+            extra = {k: (item[k] if k in ("roughness_model", "shadowing", "volume_model") else float(item[k]))
+                     for k in ("roughness_model", "small_scale_kh", "shadowing", "volume_model") if k in item}
             if item.get("geometry", "monostatic") == "bistatic":
                 # The model at the true bistatic azimuth of each cell (pi is backscatter).
                 strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
