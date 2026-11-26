@@ -158,3 +158,247 @@ def test_tool_end_to_end(tmp_path):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         assert bottom.sediment("my_site", out)["w2"] == row["w2"]
+
+
+# --- G-9 (docs/tasks/SST_GAPS_JACKSON.md): error bars from the number of independent samples, the
+# covariance and its propagation, prior bounds, held parameters. All opt-in: the default fit and the
+# tool's default output are the same, bit for bit, as at c1d2b8f (the tree before G-9).
+
+def test_default_fit_and_tool_output_are_bit_identical_to_before_the_opt_in_options():
+    """Values computed on the tree at c1d2b8f (before G-9) with the inputs of the tests above: the
+    unweighted fit (no sigma_db), the volume-dominated silt fit and the tool's whole output (stdout and
+    stderr, sha256) on the end-to-end CSV without a sigma_db column."""
+    import hashlib
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.5, 1)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, **geo(truth))
+    assert {k: fit.params[k].hex() for k in fit.fitted} == {
+        "w2": "0x1.56e2e07737bcfp-13", "gamma2": "0x1.a2bc47bb29a05p+1", "sigma2": "0x1.e68f1ab1f1277p-11"}
+    assert {k: v.hex() for k, v in fit.std.items()} == {
+        "gamma2": "0x1.76a46b398e70ap-6", "sigma2": "0x1.4c0393afd9249p-5", "w2": "0x1.1ada5aa9b3966p-4"}
+    assert fit.rms_residual_db.hex() == fit.sigma_db.hex() == "0x1.e94118ef4fa2ap-2"
+    assert fit.notes == ["w2 and gamma2 trade off against each other (correlation +0.987): their errors are not independent"]
+    assert (fit.independent_samples, fit.bounds, fit.held, fit.sample_error) == (None, None, None, None)
+    silt = bottom.sediment("very_fine_silt")
+    g, f, y = synthetic(silt, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(silt))
+    assert {k: fit.params[k].hex() for k in fit.fitted} == {
+        "w2": "0x1.c998d9c703ed3p-24", "gamma2": "0x1.06666666666cap+1", "sigma2": "0x1.e0c9e2f663b66p-11"}
+    assert {k: v.hex() for k, v in fit.std.items()} == {
+        "gamma2": "0x1.77a088d0592a5p+2", "sigma2": "0x1.ae04859ae6d0fp-4", "w2": "0x1.1daf48cd8002fp+4"}
+    assert fit.rms_residual_db.hex() == "0x1.3dfe2f6991b72p-2" and fit.unconstrained == ["w2", "gamma2"]
+    assert len(fit.notes) == 6 and not any("roughness models" in n for n in fit.notes)
+    held = bottom.sediment_reflection("fine_sand")
+    g, f, y = synthetic(dict(held, w2=3.0e-5, gamma2=3.1, sigma2=2.0e-3), np.arange(5.0, 56.0, 2.5), [30e3, 300e3], 0.4, 5)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        data = Path(tmp) / "tool_no_sigma.csv"
+        data.write_text("# synthetic\ngrazing_deg,frequency_hz,bs_db\n" + "".join(f"{a},{b},{c}\n" for a, b, c in zip(g, f, y)))
+        run = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--sediment", "fine_sand",
+                              "--name", "my_site", "--source", "synthetic test data", "--starts", "6"],
+                             capture_output=True, text=True, env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"})
+    assert run.returncode == 0, run.stderr
+    assert hashlib.sha256((run.stdout + run.stderr).encode()).hexdigest() == \
+        "f33aca24c3ace4080b380ffdb37029b7676c864b8db602a25add258b9c52d901", run.stdout + run.stderr
+
+
+def test_independent_samples_set_the_error_bars_of_a_weighted_fit():
+    """N = 16 gives every value the book's 0.969 dB (App. G.2.3) and the fit is the one with that
+    sigma_db given directly; per-value N weights each value; N and sigma_db together are refused;
+    the row records N and the rule."""
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 5.0), [20e3, 200e3], 0.5, 3)
+    by_n = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, n_starts=4, **geo(truth))
+    by_sigma = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=10 * np.log10(1.25), n_starts=4, **geo(truth))
+    assert by_n.sigma_db == pytest.approx(0.9691, abs=1e-4)
+    assert by_n.params == by_sigma.params and by_n.std == by_sigma.std
+    assert by_n.independent_samples == (16.0, 16.0) and by_n.sample_error == "book"
+    row = yaml.safe_load(by_n.yaml_row("site", "synthetic"))["site"]["fit"]
+    assert row["independent_samples"] == 16 and row["sample_error"] == "book"
+    n = np.where(f > 100e3, 67.0, 16.0)
+    mixed = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=n, n_starts=4, **geo(truth))
+    assert mixed.independent_samples == (16.0, 67.0)
+    assert mixed.sigma_db == pytest.approx(np.mean(np.where(f > 100e3, 0.5006, 0.9691)), abs=1e-3)
+    with pytest.raises(ValueError, match="not both"):
+        sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, independent_samples=16, **geo(truth))
+    with pytest.raises(ValueError, match="sample_error"):
+        sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, sample_error="exact", **geo(truth))
+
+
+def _speckled(truth, n_looks, seed):
+    """Medium-sand strengths at 5-55 degrees, 20 and 200 kHz, each the dB of an average of `n_looks`
+    exponential (Rayleigh-intensity) samples about the model: 10 log10(Gamma(N, 1/N))."""
+    g, f, clean = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.0, 0)
+    return g, f, clean + 10 * np.log10(np.random.default_rng(seed).gamma(n_looks, 1.0 / n_looks, len(g)))
+
+
+@pytest.mark.parametrize("rule, low, high", [("gamma", 0.50, 0.85), ("book", 0.40, 0.80)])
+def test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_rate(rule, low, high):
+    """Coverage. 40 synthetic data sets of 42 values (seeds 2000-2039), N = 16 looks each, fitted with
+    the errors from N; for a correct error the share of the fitted parameters (w2, gamma2, sigma2) found
+    within 1 sigma of the truth is 0.68, and of the predicted strength at 30 degrees, 100 kHz (between
+    the data's frequencies) likewise. Measured (these seeds; seeds 2000-2099 in brackets):
+      gamma (ours: the dB statistics of a gamma-distributed mean, its -0.14 dB bias removed):
+        parameters 0.600 (0.61: w2 0.59, gamma2 0.59, sigma2 0.65), prediction 0.725 (0.75);
+      book (App. G.2.3's +1 sigma, 0.97 dB, as the error of a dB value; no bias correction; the default
+        of `independent_samples`): parameters 0.567 (0.55: 0.53, 0.53, 0.59), prediction 0.625 (0.58).
+    The book's rule under-covers: every value is 0.14 dB low on average (about one standard error of
+    the fitted level with 42 values) and 0.97 dB is 12 % below the dB standard deviation, 1.10 dB. The
+    gamma rule is close to the nominal rate; its w2 and gamma2 (correlation about 0.99) stay a little
+    below it, which we put down to the linearised errors of a strongly correlated pair (not shown).
+    Bounds: 0.50-0.85 (gamma) and 0.40-0.80 (book) for the parameters, the same widened by 0.2 below for
+    the prediction (40 draws): blocks of 40 seeds varied by up to 0.15 about the 100-seed means."""
+    truth = bottom.sediment("medium_sand")
+    inside, total, pred_inside, z = 0, 0, 0, []
+    trials = 40
+    for seed in range(2000, 2000 + trials):
+        g, f, y = _speckled(truth, 16, seed)
+        fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, sample_error=rule, n_starts=4, **geo(truth))
+        assert fit.unconstrained == [], fit.notes
+        for k in fit.fitted:
+            err = np.log10(fit.params[k] / truth[k]) if k in sediment_fit.LOG_KEYS else fit.params[k] - truth[k]
+            z.append(err / fit.std[k])
+            inside += abs(err) < fit.std[k]
+            total += 1
+        true_db = bottom.backscattering_strength_db(np.radians([30.0]), 100e3, C, roughness_model="perturbation", **truth)[0]
+        pred_inside += abs(fit.model_db([30.0], [100e3])[0] - true_db) < fit.prediction_std_db([30.0], [100e3])[0]
+    assert low < inside / total < high, (rule, inside / total)
+    assert low - 0.2 < pred_inside / trials < high, (rule, pred_inside / trials)
+    assert 0.7 < np.std(z) < 1.4, np.std(z)                  # the spread of the errors is the reported one
+
+
+def test_covariance_and_the_error_of_the_predicted_strength():
+    """The covariance is the one behind `std` (sqrt of its diagonal) and `correlation`; the prediction
+    error at the data is below the error of one value (the fit averages) and grows away from the data
+    (an untouched frequency and angle)."""
+    truth = bottom.sediment("medium_sand")
+    g, f, y = _speckled(truth, 67, 11)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=67, n_starts=4, **geo(truth))
+    cov = fit.covariance
+    assert np.sqrt(np.diag(cov)) == pytest.approx([fit.std[k] for k in fit.fitted], rel=1e-12)
+    assert cov / np.outer(np.sqrt(np.diag(cov)), np.sqrt(np.diag(cov))) == pytest.approx(fit.correlation, abs=1e-12)
+    at_data = fit.prediction_std_db(g, f)
+    assert np.all(at_data < fit.sigma_db) and np.all(at_data > fit.sigma_db / np.sqrt(len(y)) / 2)
+    far = fit.prediction_std_db([30.0], [2e6])[0]          # ten times the highest frequency
+    assert far > 1.5 * at_data.max(), (far, at_data.max())   # measured 0.30 dB against 0.09-0.17 at the data
+
+
+def test_prior_bounds_come_from_the_notes_and_keep_the_fit_inside():
+    """`prior_bounds(phi)`: rho 1.1-2.2, nu 0.97-1.2, sigma2 1e-4 to 4e-3 ([N1] Sec. 4, J&R p. 382), gamma2
+    from 2.33 (Table 6.1's lowest) to our limit 3.95, w2 the rule's value -15.3 / +9.9 dB for sands and
+    -7.1 / +14.5 dB for Mz >= 5.5 ([N2] Sec. 3.2); `site_bounds` the App. C within-site CVs. A bound that
+    binds is reported as setting the value; unknown keys are refused with the nearest one."""
+    sand = sediment_fit.prior_bounds(1.5)
+    assert (sand["rho"], sand["nu"], sand["sigma2"], sand["gamma2"], sand["delta"]) == \
+        ((1.1, 2.2), (0.97, 1.2), (1e-4, 4e-3), (2.33, 3.95), sediment_fit.BOUNDS["delta"])
+    w2 = bottom.grain_size_scattering(1.5)["w2"]
+    assert sand["w2"] == pytest.approx((w2 * 10 ** -1.53, w2 * 10 ** 0.99), rel=1e-12)
+    mud = sediment_fit.prior_bounds(6.36)
+    w2 = bottom.grain_size_scattering(6.36)["w2"]
+    assert mud["w2"] == pytest.approx((w2 * 10 ** -0.71, w2 * 10 ** 1.45), rel=1e-12)
+    site = sediment_fit.site_bounds(1.845, 1.1782, 0.01624, 1.5, n_sigma=2.0)
+    assert site["rho"] == pytest.approx((1.845 * 0.94, 1.845 * 1.06)) and site["delta"] == pytest.approx((0.01624 * 0.04, 0.01624 * 1.96))
+    assert sediment_fit.site_bounds(1.15, 0.99, 0.003, 7.0)["rho"] == pytest.approx((1.15 * 0.88, 1.15 * 1.12))
+    with pytest.raises(ValueError):
+        sediment_fit.prior_bounds(12.0)
+    # Data whose volume parameter (0.001) lies below a bound of 0.002: the fit ends on the bound and says so.
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 5.0), [20e3, 200e3], 0.3, 4)
+    bounds = dict(sand, sigma2=(2e-3, 4e-3))
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.3, bounds=bounds, bounds_source="test", n_starts=4, **geo(truth))
+    for k in fit.fitted:
+        lo, hi = bounds[k]
+        assert lo <= fit.params[k] <= hi
+    assert fit.params["sigma2"] == pytest.approx(2e-3, rel=1e-5) and "sigma2" in fit.unconstrained
+    assert any("sigma2: the fit ran to the prior bound 0.002" in n for n in fit.notes)
+    assert yaml.safe_load(fit.yaml_row("s", "x"))["s"]["fit"]["bounds"] == "test"
+    # A held value outside the bounds is pointed out (the TR 9407 gravel row has rho 2.49, nu 1.34).
+    gravel = bottom.sediment_from_grain_size(-1.0)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.3, bounds=sediment_fit.prior_bounds(-1.0), n_starts=2, **geo(gravel))
+    assert any(n.startswith("rho is held at 2.49") for n in fit.notes) and any(n.startswith("nu is held at 1.337") for n in fit.notes)
+    with pytest.raises(ValueError, match=r"bounds\.sigma_2: unknown key; did you mean 'sigma2'\?"):
+        sediment_fit.fit(g, f, y, sound_speed=C, bounds={"sigma_2": (1e-4, 1e-3)}, **geo(truth))
+    with pytest.raises(ValueError, match=r"hold\.gama2: unknown key; did you mean 'gamma2'\?"):
+        sediment_fit.fit(g, f, y, sound_speed=C, hold={"gama2": 3.0}, **geo(truth))
+    with pytest.raises(ValueError, match="low < high"):
+        sediment_fit.fit(g, f, y, sound_speed=C, bounds={"w2": (1e-3, 1e-4)}, **geo(truth))
+
+
+# The band means and the site's fitted inputs as printed by Gallaudet (2001), typed in that test file.
+from test_gallaudet_boundaries import BANDS, BOTTOM_FIT, FREQUENCY  # noqa: E402
+
+
+def _gallaudet_points():
+    """The two band means D-193 compares (SF2 48-66 deg -22.6 dB, SF3 29-37 deg -28.7 dB), each at its
+    band's middle angle (a band mean is not a point value: an approximation of this test)."""
+    bands = [BANDS["SF2"], BANDS["SF3"]]
+    return [0.5 * (lo + hi) for lo, hi, _ in bands], [v for _, _, v in bands]
+
+
+@pytest.mark.parametrize("n", [16, 67, 260])
+def test_gallaudet_band_means_cannot_fix_the_roughness_or_tell_the_roughness_models_apart(n):
+    """D-193: at this site the roughness term is 21-28 dB below the volume term, so the data cannot tell
+    the roughness models apart. Fitting the roughness (w2, gamma2) to the two printed band means with the
+    site's own geoacoustic and volume inputs (Table VI, sigma2 0.003 held; N is not given by the source:
+    16, 67 and 260 all give the same verdict) leaves both roughness parameters with errors beyond any
+    use (w2: more than a factor 1e10, gamma2: more than 1e6) and listed as unconstrained, with the
+    reason; the five roughness models with Table VI's own w2 differ by under 0.05 dB over 29-66 degrees.
+    The model misses the SF3 band by about 4 dB (D-193's +3.9 dB): the fit says so too."""
+    angles, levels = _gallaudet_points()
+    geo_site = {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
+    fit = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=n,
+                           hold={"sigma2": BOTTOM_FIT["sigma2"]}, **geo_site)
+    assert fit.fitted == ("w2", "gamma2") and set(fit.unconstrained) == {"w2", "gamma2"}
+    assert fit.std["w2"] > 10.0 and fit.std["gamma2"] > 1e6
+    assert fit.roughness_share[1] < 0.01
+    assert any("mostly volume scattering and do not fix w2 or gamma2" in x for x in fit.notes)
+    assert any("cannot tell the roughness models apart" in x for x in fit.notes)
+    assert any("more than twice the stated measurement error" in x for x in fit.notes)
+    assert 3.0 < fit.rms_residual_db < 5.0
+    spread = sediment_fit.roughness_model_spread_db(BOTTOM_FIT, np.linspace(29.0, 66.0, 38), FREQUENCY)
+    assert spread < 0.05, spread
+
+
+def test_gallaudet_band_means_cannot_tell_volume_from_roughness_and_a_prior_bound_says_so():
+    """With only gamma2 held (3.00, Table VI) and w2, sigma2 free, the two band means are fitted better
+    by roughness alone (w2 about 1.5e-3, 280 times Table VI's 5.18e-6, sigma2 at its search limit; rms
+    0.37 dB) than by the site's volume-dominated model: two values cannot tell the mechanisms apart.
+    The prior for 6.36 phi (w2 at most +14.5 dB above our rule, Table 6.1's muds) excludes that
+    explanation: w2 then ends on the prior bound and is listed as set by it."""
+    angles, levels = _gallaudet_points()
+    geo_site = {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
+    free = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
+                            hold={"gamma2": BOTTOM_FIT["gamma2"]}, **geo_site)
+    assert free.params["w2"] > 100 * BOTTOM_FIT["w2"] and "sigma2" in free.unconstrained
+    assert free.roughness_share[0] > 0.99 and free.rms_residual_db < 1.0
+    prior = sediment_fit.prior_bounds(6.36)
+    bounded = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
+                               hold={"gamma2": BOTTOM_FIT["gamma2"]}, bounds=prior, **geo_site)
+    assert bounded.params["w2"] == pytest.approx(prior["w2"][1], rel=1e-5) and "w2" in bounded.unconstrained
+    assert any(x.startswith("w2: the fit ran to the prior bound") for x in bounded.notes)
+
+
+def test_tool_options_for_error_bars_bounds_and_holds(tmp_path):
+    """The tool with --independent-samples (a number and `column`), --hold, --prior-bounds: the extended
+    report is printed, the Gallaudet case is reported unconstrained with the reason."""
+    angles, levels = _gallaudet_points()
+    data = tmp_path / "bands.csv"
+    data.write_text("grazing_deg,frequency_hz,bs_db,n_samples\n" + "".join(f"{a},{FREQUENCY},{v},67\n" for a, v in zip(angles, levels)))
+    base = [sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--source", "Gallaudet 2001 band means",
+            "--name", "gulf_site"] + [f"--{k}={BOTTOM_FIT[k]}" for k in ("rho", "nu", "delta")]
+    env = {"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"}
+    run = subprocess.run(base + ["--hold", f"sigma2={BOTTOM_FIT['sigma2']}", "--independent-samples", "column"],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stderr
+    assert "w2      1e-09  (x/ inf, 1 sigma)   UNCONSTRAINED" in run.stderr and "UNCONSTRAINED" in run.stderr.split("gamma2", 1)[1]
+    assert "cannot tell the roughness models apart" in run.stderr and "do not fix w2 or gamma2" in run.stderr
+    assert "independent samples per value: 67 (book error rule)" in run.stderr and "held: sigma2 = 0.003" in run.stderr
+    assert "covariance of the fitted variables (log10 w2, gamma2):" in run.stderr
+    row = yaml.safe_load(run.stdout)["gulf_site"]
+    assert set(row["unconfirmed_fields"]) == {"w2", "gamma2"} and row["fit"]["independent_samples"] == 67
+    run = subprocess.run(base + ["--hold", "gamma2=3.0", "--independent-samples", "67", "--prior-bounds", "6.36"],
+                         capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stderr
+    assert "w2: the fit ran to the prior bound" in run.stderr and "bounds (prior, mean grain size 6.36 phi" in run.stderr
+    run = subprocess.run(base + ["--sigma-db", "0.5", "--independent-samples", "67"], capture_output=True, text=True, env=env)
+    assert run.returncode != 0 and "not both" in run.stderr

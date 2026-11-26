@@ -327,6 +327,21 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Tests first: N = 16 gives 0.97 dB; simulated Rayleigh speckle over N cells gives the stated spread; (G.13)
   inverts our own simulated reverberation to S_b within 0.3 dB [N3 WP6]; bounds keep the fit inside.
 - Default moves: none unless bounds are made default (fit results where a bound binds: tell the owner).
+- **Done (branch `g-fit`, 2026-11-26), opt-in; the default fit and the tool's default output are
+  bit-identical to before (test with values from `c1d2b8f`).** New `python/gpusonar/measure.py` (G.2.3
+  error, gamma-distribution bias and spread of an N-sample mean (ours), dB-mean bias -2.507 dB and
+  5.57/sqrt(N), N from resolution/beams/pings and (16.26) effective looks, (G.13) with the absorption
+  misprint corrected, (G.28)-(G.29)); `sediment_fit.fit(independent_samples=, sample_error=, bounds=,
+  hold=)`, `prior_bounds(phi)`, `site_bounds(...)`, `roughness_model_spread_db`,
+  `SedimentFit.covariance` and `prediction_std_db`; tool options `--independent-samples`,
+  `--sample-error`, `--prior-bounds`, `--site-spread`, `--hold`, `--report-covariance`. Found:
+  (G.13) inverts our own simulated reverberation to S_b within 0.20 dB at 10-50 deg (Psi ~ Psi_3: up
+  to 1.6 dB); the book's +1 sigma used as a dB error under-covers (55 % within 1 sigma against 68 %
+  nominal, N = 16; 61 % with the gamma rule); the note's "0.25 dB at N = 260" is 0.261; two Gallaudet
+  band means fix neither w2 nor gamma2 (D-193 reproduced) and, with sigma2 free, are fitted better by
+  roughness alone (w2 280 times the site's) than by the site's volume model: two values cannot tell
+  the mechanisms apart; the prior for 6.36 phi excludes that. Not done: the near-vertical fit model
+  (G.43)/(G.54); a fit of a full Rayleigh-statistics likelihood instead of weighted dB least squares.
 
 ### G-10 Effective-density fluid (EDFM) for sand — OPT-IN, S (simple) / M (full)
 - Gap U4. From [N3 WP3]; formulas (10.82) simple; (10.70), (10.75)-(10.76), (10.81) with (10.13)-(10.16) full;
