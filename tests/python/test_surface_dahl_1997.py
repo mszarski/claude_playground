@@ -1,5 +1,6 @@
 """`extinction: dahl_1997` for the bubble-layer surface model (docs/tasks/SST_GAPS_JACKSON.md G-7;
-issues sonar-64sm, sonar-9le). Opt-in: `apl_1994` stays the default and its values are held
+issues sonar-64sm, sonar-9le). Added opt-in; the default since A1 (docs/references/CONFORMANCE.md
+Sec. 1.1). `apl_1994`, the default before, stays selectable by name and its values are held
 bit-identical below.
 
   [D97] P. H. Dahl, W. J. Plant, B. Nuetzel, A. Schmidt, H. Herwig and E. A. Terray, "Simultaneous
@@ -193,16 +194,18 @@ BEFORE = {
 }
 
 
-def test_default_path_is_bit_identical_to_before():
-    """The default (`apl_1994`) and `hall_novarini` give exactly the values they gave before the option
-    was added, bit for bit, through `bubble_layer_surface_db` and `bubble_layer_optical_depth`."""
+def test_apl_1994_path_is_bit_identical_when_named():
+    """`apl_1994` (the default until A1) and `hall_novarini`, when named, give exactly the values the
+    default and `hall_novarini` gave before `dahl_1997` was added, bit for bit, through
+    `bubble_layer_surface_db` and `bubble_layer_optical_depth`. (Until A1 this test also held the
+    unnamed default to these values; the default is now `dahl_1997`:
+    `test_dahl_1997_is_the_default_extinction`.)"""
     g = np.radians([5.0, 17.0, 30.0, 45.0, 60.0, 85.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for (u, f), (levels, apl, hn) in BEFORE.items():
-            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f)] == list(levels)
             assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994")] == list(levels)
-            assert float(surface.bubble_layer_optical_depth(u, f)).hex() == apl
+            assert float(surface.bubble_layer_optical_depth(u, f, extinction="apl_1994")).hex() == apl
             assert float(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini")).hex() == hn
 
 
@@ -224,3 +227,44 @@ def test_scenario_item_takes_dahl_1997():
         records = run_scenario(cfg).records
     assert len(records) == 1 and np.all(np.isfinite(records[0].samples.array))
     assert any("dahl_1997" in str(w.message) and "26.5-70 kHz" in str(w.message) for w in caught)
+
+
+def test_dahl_1997_is_the_default_extinction():
+    """A1 (docs/references/CONFORMANCE.md Sec. 1.1): `dahl_1997` is the default extinction of the
+    bubble-layer surface model, in every function that takes the keyword and in the scenario item
+    (`{model: bubble_layer_surface}` without `extinction`). The printed [D97] Table II fit wins over
+    `apl_1994` (a secondary's loss law, 5.2 dB above [D99]'s beta_I <= 0.0012 at 30 kHz, 4 m/s, where
+    `dahl_1997` is 0.7 dB above: [NB] Sec. 3.2). `apl_1994` stays selectable by name."""
+    import inspect
+    for fn in (surface.bubble_layer_optical_depth, surface.bubble_backscatter, surface.bubble_layer_surface_db,
+               surface.bubble_layer_surface_strength):
+        assert inspect.signature(fn).parameters["extinction"].default == "dahl_1997", fn.__name__
+    g = np.radians([5.0, 17.0, 45.0, 80.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                       # inside both stated ranges: no warning
+        for u, f in ((3.0, 68e3), (5.0, 30e3), (10.0, 50e3)):
+            assert surface.bubble_layer_optical_depth(u, f) == surface.dahl_1997_optical_depth(u, f)
+            assert np.array_equal(surface.bubble_layer_surface_db(g, u, f), surface.bubble_layer_surface_db(g, u, f, extinction="dahl_1997"))
+            assert not np.array_equal(surface.bubble_layer_surface_db(g, u, f), surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994"))
+    # [D99] p. 2161: beta_I <= 0.0012 at 30 kHz, about 4 m/s (an upper bound): the default is 0.7 dB above it,
+    # apl_1994 5.2 dB ([NB] Sec. 3.2).
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(4.0, 30e3) / 0.0012) == pytest.approx(0.7, abs=0.05)
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(4.0, 30e3, extinction="apl_1994") / 0.0012) == pytest.approx(5.2, abs=0.05)
+
+
+def test_scenario_item_defaults_to_dahl_1997():
+    """The scenario item without `extinction` is the item with `extinction: dahl_1997`, bit for bit,
+    and not the one with `extinction: apl_1994` (A1)."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("point_grid_fls_300k")
+    cfg["n_pings"] = 1
+    item = {"model": "bubble_layer_surface", "boundary_z": 0.0, "wind_speed": 8.0}
+    out = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                      # 300 kHz is outside both stated ranges
+        for name in (None, "dahl_1997", "apl_1994"):
+            cfg["reverberation"] = [dict(item) if name is None else dict(item, extinction=name)]
+            out[name] = run_scenario(cfg).records[0].samples.array.copy()
+    assert np.array_equal(out[None], out["dahl_1997"])
+    assert not np.array_equal(out[None], out["apl_1994"])

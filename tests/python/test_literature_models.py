@@ -120,12 +120,16 @@ def test_bubble_backscatter_limits_as_printed():
         low = t[:3]                                          # up to 20 degrees: beta_I / sin(t) above 6.9
         got = surface.bubble_backscatter(low, 15.0, f, extinction="hall_novarini")
         assert got == pytest.approx(delta_r * np.sin(low) / (8.0 * np.pi * delta), rel=0.02)
-        # In between, eq. (10) itself by hand at 10 m/s and 10 degrees with the adopted loss law.
-        beta = surface.bubble_layer_optical_depth(10.0, f)
-        b = beta / math.sin(math.radians(10.0))
-        want = delta_r * math.sin(math.radians(10.0)) / (8 * math.pi * delta) * (1 + 8 * b * math.exp(-2 * b) - math.exp(-4 * b))
-        assert float(surface.bubble_backscatter(math.radians(10.0), 10.0, f)) == pytest.approx(want, rel=1e-12)
-        assert 10 * math.log10(want) == pytest.approx(-25.5, abs=0.1)
+        # In between, eq. (10) itself by hand at 10 m/s and 10 degrees with each extinction law:
+        # the default `dahl_1997` (beta_I 0.257, -27.2 dB) and `apl_1994` (the default before A1, -25.5 dB).
+        for name, level in (("dahl_1997", -27.2), ("apl_1994", -25.5)):
+            beta = surface.bubble_layer_optical_depth(10.0, f, extinction=name)
+            b = beta / math.sin(math.radians(10.0))
+            want = delta_r * math.sin(math.radians(10.0)) / (8 * math.pi * delta) * (1 + 8 * b * math.exp(-2 * b) - math.exp(-4 * b))
+            assert float(surface.bubble_backscatter(math.radians(10.0), 10.0, f, extinction=name)) == pytest.approx(want, rel=1e-12)
+            assert 10 * math.log10(want) == pytest.approx(level, abs=0.1), name
+        assert surface.bubble_backscatter(math.radians(10.0), 10.0, f) == surface.bubble_backscatter(
+            math.radians(10.0), 10.0, f, extinction="dahl_1997")
     # The level never exceeds 2.36 times the saturation level (the maximum of 1 + 8 b e^-2b - e^-4b).
     b = np.linspace(0.0, 20.0, 20001)
     assert np.max(1 + 8 * b * np.exp(-2 * b) - np.exp(-4 * b)) == pytest.approx(2.357, abs=0.002)
@@ -133,9 +137,10 @@ def test_bubble_backscatter_limits_as_printed():
 
 def test_optical_depth_is_the_one_of_the_loss_law():
     """beta_I is one vertical crossing: a bounce at grazing angle t loses 2 beta_I / sin(t) nepers
-    of intensity, which is the per-bounce loss of the law it is taken from."""
+    of intensity, which is the per-bounce loss of the law it is taken from (`apl_1994`, the default
+    until A1, and `hall_novarini`; the default `dahl_1997` is a fit of beta_I itself)."""
     for u, f in ((6.0, 12e3), (10.0, 30e3), (15.0, 70e3)):
-        beta = surface.bubble_layer_optical_depth(u, f)
+        beta = surface.bubble_layer_optical_depth(u, f, extinction="apl_1994")
         for deg in (5.0, 20.0, 60.0):
             t = math.radians(deg)
             assert (10 / math.log(10)) * 2 * beta / math.sin(t) == pytest.approx(
@@ -169,8 +174,9 @@ def test_facet_term_and_the_whole_model():
     with warnings.catch_warnings():
         warnings.simplefilter("error")                       # inside the stated range: no warning
         total = surface.bubble_layer_surface_db(g, 10.0, 30e3)
-    # Bubbles at low angles (saturation gives about -25 dB at 10 degrees), facets near the normal.
-    assert -27.0 < total[0] < -24.0 and total[-1] == pytest.approx(10 * math.log10(1 / (4 * np.pi * s2)), abs=0.05)
+    # Bubbles at low angles (the saturation level is -29.3 dB at 10 degrees and the bracket of eq. (10)
+    # adds at most 3.7 dB: -27.2 dB with the default dahl_1997, -25.5 with apl_1994), facets near the normal.
+    assert -28.0 < total[0] < -24.0 and total[-1] == pytest.approx(10 * math.log10(1 / (4 * np.pi * s2)), abs=0.05)
     assert np.all(np.diff(total) > 0.0)
     with pytest.warns(UserWarning, match="outside the range"):
         surface.bubble_layer_surface_db(g, 10.0, 300e3)

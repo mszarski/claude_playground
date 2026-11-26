@@ -413,18 +413,23 @@ def searay_bottom_strength(frequency: float, bottom_type):
 #   - the empirical law for beta_I against wind speed and frequency. beta_I is the optical depth
 #     of one vertical crossing of the layer, so a surface bounce loses 2 beta_I / sin(t) nepers
 #     of intensity: exactly what the bubble loss laws of this module give. It is taken from one
-#     of them (`extinction`): "apl_1994" (default; beta_I = loss in dB x sin(t) ln(10) / 20, which
-#     for that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`); or,
-#     opt-in, from the published fit of [D97] Table II, "dahl_1997" (`dahl_1997_optical_depth`).
-#     Whether Table II is the handbook's law is not stated in [D97].
+#     of them (`extinction`): "apl_1994" (beta_I = loss in dB x sin(t) ln(10) / 20, which for
+#     that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`); or, the
+#     default since A1 (docs/references/CONFORMANCE.md Sec. 1.1; "apl_1994" before), from the
+#     published fit of [D97] Table II, "dahl_1997" (`dahl_1997_optical_depth`): a printed fit wins
+#     over a secondary's loss law, and [D99]'s independent beta_I <= 0.0012 (30 kHz, about 4 m/s)
+#     lies 0.7 dB below it and 5.2 dB below "apl_1994" (surface_bistatic_dahl_1999_mcdaniel_1986.md
+#     Sec. 3.2). Whether Table II is the handbook's law is not stated in [D97]; it is one site
+#     (North Sea) and one angle (17 degrees).
 #   - the small-scale roughness term sigma_sc = G(U10) tan^4(t) (their eq. (9); G is "an empirical
 #     function" not printed) and the bubble extinction applied to the roughness terms. They are
 #     left out. Below about 30 degrees bubbles dominate at these frequencies and winds, and above
 #     about 70 degrees the facets do; between, where the source says sigma_sc is fitted, the
 #     model lacks a positive term. That makes it a lower bound on the full published model, NOT
-#     on the sea: at 2.6 to 6.4 m/s, 5 to 45 degrees, with the default `apl_1994` it lies 6 to 12 dB
-#     ABOVE every open-ocean data set McDaniel (1993) shows, and 3.4 to 13 dB above Gallaudet's
-#     68 kHz, 3 m/s band means (docs/references/surface_papers_mcdaniel_dahl.md Sec. 3.3-3.5;
+#     on the sea: at 2.6 to 6.4 m/s, 5 to 45 degrees, with `apl_1994` (the default before A1) it lies
+#     6 to 12 dB ABOVE every open-ocean data set McDaniel (1993) shows, and 3.4 to 13 dB above
+#     Gallaudet's 68 kHz, 3 m/s band means (with `dahl_1997`: -2.2 and +6.9 dB)
+#     (docs/references/surface_papers_mcdaniel_dahl.md Sec. 3.3-3.5;
 #     tests/python/test_gallaudet_boundaries.py). The omitted term computed from McDaniel's
 #     spectrum is at most about 3 dB at 8 m/s and above, so "lower bound" holds at high wind only.
 #   - delta_r = 0.0136 is k a at resonance for a bubble near the surface (2 pi f a_R / c with
@@ -502,10 +507,10 @@ def dahl_1997_optical_depth(wind_speed: float, frequency: float) -> float:
 
 
 def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                               extinction: str = "apl_1994") -> float:
-    """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from a
-    bubble loss law of this module, "apl_1994" (default) or "hall_novarini", or from the published
-    fit of Dahl et al. (1997), "dahl_1997" (`dahl_1997_optical_depth`)."""
+                               extinction: str = "dahl_1997") -> float:
+    """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from the
+    published fit of Dahl et al. (1997), "dahl_1997" (default since A1; `dahl_1997_optical_depth`),
+    or from a bubble loss law of this module, "apl_1994" (the default before A1) or "hall_novarini"."""
     if extinction == "apl_1994":
         t = np.radians(30.0)                              # the law is exactly 1 / sin(t): any angle gives the same
         return float(apl_1994_bubble_loss_db(t, wind_speed, frequency)) * math.sin(t) * math.log(10.0) / 20.0
@@ -517,7 +522,7 @@ def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed:
 
 
 def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                       extinction: str = "apl_1994"):
+                       extinction: str = "dahl_1997"):
     """Backscattering cross section per unit area and solid angle of the near-surface bubble
     layer, eq. (10) of the comment above, at grazing angles in radians."""
     t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
@@ -539,7 +544,7 @@ def facet_backscatter(grazing, wind_speed: float):
 
 
 def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                            extinction: str = "apl_1994"):
+                            extinction: str = "dahl_1997"):
     """Sea-surface backscattering strength, dB, from the bubble layer plus the wave facets
     (model `bubble_layer`; comment above): the two terms of the published high-frequency model
     whose formulas could be read. Stated range of the published model: 12 to 70 kHz, 3 to
@@ -552,7 +557,7 @@ def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_
 
 
 def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                                  extinction: str = "apl_1994"):
+                                  extinction: str = "dahl_1997"):
     """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
     code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
     return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,

@@ -2896,7 +2896,9 @@ follow that we did not have:
 
 Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_surface`),
 with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
-`hall_novarini`), because the handbook's law for it is not printed anywhere open; without the
+`hall_novarini`), because the handbook's law for it is not printed anywhere open, or, the default
+since A1 (`docs/references/CONFORMANCE.md` Sec. 1.1), from the published fit of Dahl et al. (1997)
+(`extinction: dahl_1997`, Sec. 23.7); without the
 small-scale roughness term (its empirical function is not printed), so between about 30 and
 70 degrees it is a lower bound on the model with that term, not on data (D-193; below).
 
@@ -2924,7 +2926,9 @@ wake, and the one wind reading was 4.5 hours old. The source's own statement (p.
 its run-1 mean curve (Fig. 10, a figure) is within +-5 dB of the published model at 30-60
 degrees of incidence. Bubble clouds from breaking ship waves peak at -23.1 to -25.2 dB
 (Table III, p. 158), "within 1dB" of the saturation level (eq. (11)); ours reaches each within
-1 dB between 27.5 and 48.4 degrees of grazing, 13 dB above the ambient model at 3 m/s.
+1 dB between 27.5 and 48.4 degrees of grazing, 13 dB above the ambient model at 3 m/s with
+`apl_1994` (19 dB with the default `dahl_1997` since A1, which also brings the two band means to
+-43.7 / -44.4 dB: 2.2 dB below and 6.9 dB above the printed values, Sec. 23.7).
 
 *Forward loss, coherent reflection.* `exp(-Gamma^2 / 2)` is the Gaussian-height result;
 no opened document gives measured coherent loss against the Rayleigh parameter (22.4).
@@ -3023,11 +3027,14 @@ input in the same way.
   were not read.
 - Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
 
-### 23.7 The bubble layer's optical depth from a published fit (`extinction: dahl_1997`, opt-in)
+### 23.7 The bubble layer's optical depth from a published fit (`extinction: dahl_1997`, the default since A1)
 
 Sources: Dahl, Plant, Nuetzel, Schmidt, Herwig and Terray, JASA 101, 2583-2595 (1997) [D97], and
 McDaniel, JASA 94, 1905-1922 (1993) [McD93], as `docs/references/surface_papers_mcdaniel_dahl.md`
-extracts them. Default unchanged (`apl_1994`); tests `test_surface_dahl_1997.py`,
+extracts them. Added opt-in; the default since A1 (`docs/references/CONFORMANCE.md` Sec. 1.1:
+a printed fit wins over a secondary's loss law, and Dahl (1999)'s beta_I <= 0.0012 at 30 kHz,
+about 4 m/s, lies 0.7 dB below it and 5.2 dB below `apl_1994`); `apl_1994`, the default before,
+stays selectable. No shipped scenario uses `bubble_layer_surface`. Tests `test_surface_dahl_1997.py`,
 `test_gallaudet_boundaries.py`.
 
 What is still wrong or unknown, first:
@@ -3058,7 +3065,7 @@ linearly in `log10 f` (ours; it is the table exactly at its frequencies and cont
 outside their ranges; the value is still the fit's. beta_I is one vertical crossing in nepers of
 intensity, [D97] Sec. VI's convention and ours.
 
-What it changes (the default does not move; computed):
+What it changes against `apl_1994` (the default before A1; computed):
 - beta_I of `apl_1994` over that of `dahl_1997`, dB, at 2 / 3 / 5 / 10 / 15 m/s: +10.1 / +5.7 / +3.9 /
   -4.0 / -10.9 at 26.5 kHz; +15.2 / +9.1 / +5.3 / -0.6 (8 m/s) / -13.8 at 50 kHz. Above about 8 m/s
   backscatter barely depends on beta_I (saturation): `apl_1994` gives up to 15.1 dB more backscatter

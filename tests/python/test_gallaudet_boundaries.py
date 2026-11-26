@@ -156,8 +156,10 @@ def test_class_default_against_the_site():
 
 def test_surface_models_lie_above_the_printed_band_means_at_3_m_s():
     """FINDING. At 68 kHz and 3 m/s the bubble-layer model (bubbles plus facets, no small-scale
-    roughness term) is ABOVE the printed band means, not below them:
-      default (extinction apl_1994):  SS2 (44-66 deg) -38.1 dB, 3.4 dB above -41.5;
+    roughness term) is ABOVE the printed band means, not below them, with the two extinction laws
+    taken from loss laws (the default since A1, `dahl_1997`, is not: next test):
+      extinction apl_1994 (the default before A1):
+                                      SS2 (44-66 deg) -38.1 dB, 3.4 dB above -41.5;
                                       SS3 (27-38 deg) -38.3 dB, 13.0 dB above -51.3.
       extinction hall_novarini:       -28.9 and -29.1 dB, 12.6 and 22.2 dB above.
     At this wind the bubble term is in its sparse limit (eq. (12)), proportional to the optical
@@ -189,11 +191,11 @@ def test_surface_models_lie_above_the_printed_band_means_at_3_m_s():
         assert got2 == pytest.approx(ss2, abs=0.3), (model, ext, got2)
         assert got3 == pytest.approx(ss3, abs=0.3), (model, ext, got3)
         assert got2 > 0.0 and got3 > 0.0                    # every model above the printed means
-    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) == pytest.approx(0.0024, abs=1e-4)
+    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="apl_1994") == pytest.approx(0.0024, abs=1e-4)
 
 
 def test_surface_with_the_published_extinction_law_at_3_m_s():
-    """`extinction: dahl_1997` (opt-in; Dahl et al. 1997, Table II, the beta_I fit at 17 degrees,
+    """`extinction: dahl_1997` (the default since A1; Dahl et al. 1997, Table II, the beta_I fit at 17 degrees,
     North Sea; docs/references/surface_papers_mcdaniel_dahl.md Sec. 2.8, 3.4). At 68 kHz, 3 m/s:
       beta_I 5.8e-4 (log10 f interpolation between the 50 and 70 kHz fits; ours), 6.2 dB below
       apl_1994's 2.4e-3;
@@ -219,7 +221,8 @@ def test_surface_with_the_published_extinction_law_at_3_m_s():
         ss2 = _band_db(ours, "SS2") - BANDS["SS2"][2]
         ss3 = _band_db(ours, "SS3") - BANDS["SS3"][2]
     assert beta_i == pytest.approx(5.81e-4, rel=0.005)
-    assert 10 * math.log10(surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) / beta_i) == pytest.approx(6.2, abs=0.1)
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="apl_1994") / beta_i) == pytest.approx(6.2, abs=0.1)
+    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) == beta_i               # the default (A1)
     assert _band_db(model(beta_i), "SS2") - BANDS["SS2"][2] == pytest.approx(ss2, abs=1e-9)   # the formula typed here
     assert ss2 == pytest.approx(-2.2, abs=0.1), ss2          # measured -2.15 (band mean -43.65 dB)
     assert ss3 == pytest.approx(+6.9, abs=0.1), ss3          # measured +6.88 (band mean -44.42 dB)
@@ -235,8 +238,9 @@ def test_bubble_cloud_peaks_and_the_saturation_level():
     for saturation". Our eq. (11) at 68 kHz reaches each printed peak to within 1 dB at some
     grazing angle (from 27.5 deg for -25.2 dB to 48.4 deg for -23.1 dB; the clouds lie outside
     the wake, below 72 deg of grazing), so the statement holds for our saturation level as it
-    is written. Our model with the ambient 3 m/s wind stays 13 to 15 dB below the clouds:
-    clouds from breaking ship waves are not in it, by design."""
+    is written. Our model with the ambient 3 m/s wind stays 19 to 21 dB below the clouds with the
+    default extinction `dahl_1997` (13 to 15 dB with `apl_1994`, the default before A1): clouds
+    from breaking ship waves are not in it, by design."""
     g = np.radians(np.linspace(1.0, 72.0, 7101))
     sat = surface.bubble_saturation_db(g, FREQUENCY)
     first = []
@@ -246,5 +250,8 @@ def test_bubble_cloud_peaks_and_the_saturation_level():
         first.append(float(np.degrees(g[near][0])))
     assert first == pytest.approx([37.5, 27.5, 43.0, 48.4], abs=0.1)
     ambient = surface.bubble_layer_surface_db(np.radians([30.0, 45.0, 60.0]), WIND_SPEED, FREQUENCY)
+    gap = min(CLOUD_PEAKS_DB) - float(np.max(ambient))
+    assert 18.7 < gap < 19.7, gap                            # measured 19.2 (to the lowest peak)
+    ambient = surface.bubble_layer_surface_db(np.radians([30.0, 45.0, 60.0]), WIND_SPEED, FREQUENCY, extinction="apl_1994")
     gap = min(CLOUD_PEAKS_DB) - float(np.max(ambient))
     assert 12.5 < gap < 13.5, gap                            # measured 13.1 (to the lowest peak)
