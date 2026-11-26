@@ -126,6 +126,7 @@ def test_a_builds_coverage_block_carries_the_rule_and_says_what_is_not_included(
     rev = block["reverberation"]
     assert rev["items"] == [{"model": "lambert", "mu_db": -27.0, "boundary": "bottom"}, {"model": "chapman_harris", "wind_speed": 5.0, "boundary": "surface"}]
     assert rev["frequency_hz"] == pytest.approx(5000.0) and "stated (bottom_scattering)" in rev["note"]
+    assert rev["steer_deg"] == 60.0                       # the beam's integral at the sector's edge (C(d))
     deep = coverage.site_reverberation({"wind_speed_m_s": 5.0}, 5000.0)
     assert deep["items"][0]["boundary"] == "surface" and "bottom: not included" in deep["note"]
     none = coverage.site_reverberation({"water_depth_m": 50.0, "bottom": SAND}, 5000.0)
@@ -133,3 +134,25 @@ def test_a_builds_coverage_block_carries_the_rule_and_says_what_is_not_included(
     o = coverage.cpp_options({"reverberation": none})
     assert o["reverb"] == 2 and o["reverb_note"].startswith("not included")
 
+
+def test_stacked_rows_gain_nothing_against_reverberation():
+    """The coverage picture's table holds the rows' gain against noise; with the term, one row's SNR is
+    combine(SNR + G, SRR) - G (coverage.hpp reverb_rows_gain_db), the planner's rule (depthplan.plan): reverberation comes
+    in by the echo's own multipath. A three-row build's deployment block states its G."""
+    from gpusonar import buildspec
+    spec = buildspec.load("popoto_face_3x32")
+    block = coverage.of_build(spec, {"environment": "shelf_100m_sand"})
+    gain = buildspec.detection(buildspec.derive(spec))["rows_gain_db"]
+    assert block["reverberation"]["rows_gain_db"] == pytest.approx(gain, abs=0.01) and gain > 3.0
+    assert "rows_gain_db" not in coverage.of_build(buildspec.load("popoto_face_1x32"), {"environment": "shelf_100m_sand"})["reverberation"]
+    cfg = {"budget": {"source_level_db": 197.0, "noise_spectrum_db": 51.5, "array_gain_db": 15.0, "absorption_db_per_km": 0.32},
+           "bottom": SAND, "reverberation": {"items": [{"mu_db": -27.0}], "frequency_hz": 5000.0}}
+    sonar = {"f_centre": 5000.0, "bandwidth": 2000.0, "pulse": 1.0, "beam_integral": 0.05}
+    w, r = coverage.water([0.0, 100.0], [1500.0, 1500.0]), [2000.0, 6000.0, 12000.0]
+    f0 = coverage.field(w, 100.0, 50.0, [40.0], r, cfg, sonar)
+    cfg["reverberation"]["rows_gain_db"] = 4.0
+    f4 = coverage.field(w, 100.0, 50.0, [40.0], r, cfg, sonar)
+    n, s0 = f0["snr_noise_only_0db_target_db"][0], f0["snr_0db_target_db"][0]
+    srr = -10.0 * np.log10(10.0 ** (-s0 / 10.0) - 10.0 ** (-n / 10.0))
+    assert np.allclose(f4["snr_0db_target_db"][0], rb.with_reverberation(n + 4.0, srr) - 4.0, atol=1e-6)
+    assert np.all(f4["snr_0db_target_db"][0] < s0)

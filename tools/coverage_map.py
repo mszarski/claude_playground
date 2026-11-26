@@ -90,6 +90,12 @@ def chain_block(spec: dict, env: dict, pd: float) -> dict:
     block["bottom_clearance_m"] = float(env.get("bottom_clearance_m", depthplan.DEFAULT_CLEARANCE))
     # the site's boundary scattering by the one rule (gpusonar.environment.boundary_scattering), as coverage.of_build writes it
     block["reverberation"] = coverage.site_reverberation(env, float(d["centre_hz"]), f"environment {env.get('name')!r}")
+    if "items" in block["reverberation"]:
+        bearings = (spec.get("operation") or {}).get("bearings_deg") or bs.DEFAULT_CHAIN["bearings_deg"]
+        block["reverberation"]["steer_deg"] = float(max(abs(float(v)) for v in bearings[:2]))
+        gain = float(bs.detection(d)["rows_gain_db"])
+        if gain > 0.0:
+            block["reverberation"]["rows_gain_db"] = round(gain, 2)
     return block
 
 
@@ -103,8 +109,9 @@ def run(build: str, environment: str | None, own_depth: float, source: str = "en
         raise SystemExit(f"--environment: {environment!r} is not one of {[e['name'] for e in envs]}")
     block = chain_block(spec, env, pd)
     record = SonarModel.from_config(bs.sonar_config(spec)).make_record(make_pose())
+    steer = np.radians(float((block.get("reverberation") or {}).get("steer_deg", 0.0)))
     sonar = {"f_centre": float(d["centre_hz"]), "bandwidth": float(d["band_hz"][1] - d["band_hz"][0]), "pulse": float(d["pulse_s"]),
-             "beam_integral": float(gs.core.coverage_beam_integral_of(record))}       # the record's, as the chain has it
+             "beam_integral": float(gs.core.coverage_beam_integral_of(record, steer))}       # the record's, as the chain has it
     chain_cfg = bs.chain_config(spec)
     table = coverage.pd_table(record, chain_cfg)
     water = water_of(env, own_depth, source, sensor_sigma, gradient_sigma, ensemble, extent)

@@ -75,7 +75,7 @@ DEFAULTS = {
     "surface_z": 0.0,
     "reverberation": None,
 }
-REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces", "note")
+REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces", "note", "steer_deg", "rows_gain_db")
 PD_SNR_DB = np.arange(-20.0, 60.01, 0.5)          # the table's grid: one row's link-budget SNR, dB
 
 
@@ -136,7 +136,10 @@ def cpp_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
          "bottom_clearance": float(c["bottom_clearance_m"]), "n_own": int(c["n_own"]), "refresh_depth": float(q["depth_m"]),
          "refresh_water_depth": float(q["water_depth_m"]), "refresh_speed": float(q["speed_m_s"]), "surface_coefficient": float(s["coefficient"]),
          "surface_rms_height": float(s["rms_height_m"]), "surface_loss_db": float(s["loss_db"]), "ray_fan": int(r["fan"]),
-         "max_bounces": int(r["max_bounces"]), "max_arrivals": int(r["max_arrivals"]), "null_db": float(c["null_db"]), "surface_z": float(c["surface_z"])}
+         "max_bounces": int(r["max_bounces"]), "max_arrivals": int(r["max_arrivals"]), "null_db": float(c["null_db"]), "surface_z": float(c["surface_z"]),
+         # every arrival of the echo adds as a pressure (coverage.hpp `echo_coherent`, as lloyd.py sums its images), except with
+         # `reverberation: false`, which is the picture exactly as before the reverberation term and this change (sonar-w2w3)
+         "echo_coherent": int(c["reverberation"] is not False)}
     if c["classes"]:
         o["classes"] = ";".join(f"{i['name']}:{float(i['ts_db'])!r}:{float(i['depth_m'][0])!r}:{float(i['depth_m'][1])!r}" for i in c["classes"])
     for key, value in b.items():
@@ -186,6 +189,10 @@ def reverberation_options(block, sound_speed: float = 1500.0) -> dict:
         o["reverb_beam_integral"] = float(np.radians(float(block["beam_integral_deg"])))
     if block.get("max_bounces") is not None:
         o["reverb_max_bounces"] = int(block["max_bounces"])
+    if block.get("steer_deg") is not None:
+        o["reverb_steer"] = float(np.radians(float(block["steer_deg"])))
+    if block.get("rows_gain_db") is not None:
+        o["reverb_rows_gain_db"] = float(block["rows_gain_db"])
     return o
 
 
@@ -253,6 +260,12 @@ def of_build(spec: dict, site: dict) -> dict:
     block = {"classes": classes, "budget": {k: round(v, 2) for k, v in budget_of(d, facts["wind_speed_m_s"]).items()},       # a file is read by people: 0.01 dB
              "water_depth_m": facts["water_depth_m"], "bottom": facts["bottom"], "surface": {"rms_height_m": round(float(surf.height()), 3)},
              "reverberation": site_reverberation(env, float(d["centre_hz"]), f"{where}.environment")}
+    if "items" in block["reverberation"]:          # the beam's integral at the sector's edge: the worst bearing the chain forms (coverage.hpp reverb_steer)
+        bearings = (spec.get("operation") or {}).get("bearings_deg") or buildspec.DEFAULT_CHAIN["bearings_deg"]
+        block["reverberation"]["steer_deg"] = float(max(abs(float(v)) for v in bearings[:2]))
+        gain = float(buildspec.detection(d)["rows_gain_db"])          # the rows gain against noise only (coverage.hpp reverb_rows_gain_db)
+        if gain > 0.0:
+            block["reverberation"]["rows_gain_db"] = round(gain, 2)
     if surf.bubble_model:
         block["surface"].update(bubble_model=surf.bubble_model, wind_speed_m_s=float(surf.wind_speed), frequency_hz=float(d["centre_hz"]))
     limit = (spec.get("platform") or {}).get("max_depth_m")

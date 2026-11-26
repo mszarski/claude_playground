@@ -57,7 +57,11 @@ void leg(const RayFan& fan, std::size_t i_range, double z, const CoverageOptions
       coh *= std::pow(r, q.n_bottom);
       power *= std::pow(std::norm(r), q.n_bottom);
     }
-    out.push_back({q.time, coh, power, q.n_bottom == 0 && q.n_surface <= 1, q.n_bottom == 0 && q.n_surface == 0});
+    // Which arrivals add as pressures (CoverageOptions::echo_coherent): the four images about the target, at most one
+    // surface and one bottom reflection (their coherent part; what roughness scatters out stays power), or, as before,
+    // only the direct and the once-surface-reflected path.
+    const bool pair = q.n_surface <= 1 && q.n_bottom <= (o.echo_coherent ? 1 : 0);
+    out.push_back({q.time, coh, power, pair, q.n_bottom == 0 && q.n_surface == 0});
   }
   std::stable_sort(out.begin(), out.end(), [](const Leg& a, const Leg& b) { return a.power > b.power; });
   if (static_cast<std::int64_t>(out.size()) > o.max_arrivals) out.resize(static_cast<std::size_t>(std::max<std::int64_t>(o.max_arrivals, 1)));
@@ -74,29 +78,6 @@ std::vector<double> launches(double rise, double r_first, double r_last, std::in
   for (std::int64_t i = 0; i < 2 * inner; ++i) out.push_back(-flat + flat * (static_cast<double>(i) + 0.5) / static_cast<double>(inner));
   for (std::int64_t i = 0; i < outer; ++i) out.push_back(flat + (steep - flat) * static_cast<double>(i + 1) / static_cast<double>(outer));
   return out;
-}
-
-// A scattering-strength table of the configuration (linear, [g_in][g_out] on the grazing grid), bilinear, clamped.
-double strength_at(const std::vector<double>& grid, const std::vector<double>& table, double g_in, double g_out) {
-  const std::size_t n = grid.size();
-  auto locate = [&](double g, std::size_t& i, double& u) {
-    if (!(g > grid.front())) {
-      i = 0;
-      u = 0.0;
-    } else if (g >= grid.back()) {
-      i = n - 2;
-      u = 1.0;
-    } else {
-      i = static_cast<std::size_t>(std::upper_bound(grid.begin(), grid.end(), g) - grid.begin()) - 1;
-      u = (g - grid[i]) / (grid[i + 1] - grid[i]);
-    }
-  };
-  std::size_t i = 0, j = 0;
-  double u = 0.0, v = 0.0;
-  locate(g_in, i, u);
-  locate(g_out, j, v);
-  const double a = table[i * n + j], b = table[i * n + j + 1], c = table[(i + 1) * n + j], d = table[(i + 1) * n + j + 1];
-  return (1.0 - u) * ((1.0 - v) * a + v * b) + u * ((1.0 - v) * c + v * d);
 }
 
 // Int_0^y sinc^2(v) dv, sinc(v) = sin(pi v) / (pi v): (Si(2 pi y) - sin^2(pi y) / (pi y)) / pi; odd in y.
@@ -205,6 +186,13 @@ std::vector<ClassResult> evaluate(const CoverageOptions& o, const CoverageSonar&
 
 }  // namespace
 
+struct CoverageCandidates {
+  double water_depth = 0.0, offset = 0.0, f_centre = 0.0, bandwidth = 0.0, pulse = 0.0, beam_integral = 0.0;
+  std::string rung;
+  std::vector<double> depth, speed, ranges, own;
+  std::vector<std::vector<ClassResult>> results;   ///< [own depth][class]
+};
+
 double sine_integral(double x) {
   if (x < 0.0) return -sine_integral(-x);
   if (x < 4.0) {                       // the series: sum (-1)^n x^(2n+1) / ((2n+1) (2n+1)!)
@@ -227,7 +215,20 @@ double sine_integral(double x) {
   return 0.5 * kPi - f * std::cos(x) - g * std::sin(x);
 }
 
-double compressed_power_average(double x, double width, double bandwidth) {
+double compressed_power_average(double x, double width, double bandwidth, double cw_length) {
+  if (cw_length > 0.0) {
+    // Int_0^y (1 - |u| / T)^2 du = T / 3 (1 - (1 - y / T)^3) for 0 <= y <= T, T / 3 beyond; odd in y.
+    const double T = cw_length;
+    auto F = [T](double y) {
+      const double a = std::min(std::abs(y), T) / T;
+      return std::copysign(T / 3.0 * (1.0 - (1.0 - a) * (1.0 - a) * (1.0 - a)), y);
+    };
+    if (!(width > 1e-3 * T)) {
+      const double v = std::max(0.0, 1.0 - std::abs(x) / T);
+      return v * v;
+    }
+    return (F(x + 0.5 * width) - F(x - 0.5 * width)) / width;
+  }
   if (!(width * bandwidth > 1e-3)) {
     const double v = sinc(bandwidth * x);
     return v * v;
@@ -256,7 +257,7 @@ double coverage_beam_integral(const std::vector<double>& x, const std::vector<do
   return total * (2.0 * kPi / static_cast<double>(count)) / (static_cast<double>(m) * static_cast<double>(m));
 }
 
-double coverage_beam_integral(const PingRecord& record) {
+double coverage_beam_integral(const PingRecord& record, double steer_from_boresight) {
   std::vector<double> x, y;
   for (const Element& e : record.geometry.rx) {
     x.push_back(e.lever_arm.x);
@@ -268,7 +269,7 @@ double coverage_beam_integral(const PingRecord& record) {
     const Vec3d& b = record.geometry.rx.front().boresight;
     if (std::isfinite(b.x) && std::isfinite(b.y) && std::hypot(b.x, b.y) > 1e-9) steer = std::atan2(b.y, b.x);
   }
-  return coverage_beam_integral(x, y, 0.5 * (w.f_start + w.f_stop), record.environment.sound_speed, steer);
+  return coverage_beam_integral(x, y, 0.5 * (w.f_start + w.f_stop), record.environment.sound_speed, steer - steer_from_boresight);
 }
 
 std::vector<double> coverage_reverberation_db(const MultipathProfile& water, double water_depth, double array_depth, double projector_depth,
@@ -291,24 +292,38 @@ std::vector<double> coverage_reverberation_db(const MultipathProfile& water, dou
   std::vector<double> rings(static_cast<std::size_t>(n_rings));
   for (std::size_t k = 0; k < rings.size(); ++k) rings[k] = (static_cast<double>(k) + 0.5) * d_rho;
   const double bin = 2.0 * d_rho / c_min;
-  std::vector<double> energy(static_cast<std::size_t>(std::ceil((t_max + 2.0 * tail) / bin)) + 2, 0.0);
-  const auto bounces = static_cast<int>(o.reverb_max_bounces > 0 ? static_cast<double>(o.reverb_max_bounces)
-                                       : water_depth > 0.0 ? std::clamp(std::ceil(0.4 * rho_max / water_depth), 3.0, 40.0) : 3.0);
+  const std::size_t n_bins = static_cast<std::size_t>(std::ceil((t_max + 2.0 * tail) / bin)) + 2;
   const double own = std::max(array_depth, projector_depth);
-  const double rise = own + (water_depth > 0.0 ? 2.0 * water_depth * bounces + water_depth : 2.0 * own);
-  const std::vector<double> fan_angles = launches(rise, rings.front(), rings.back(), o.ray_fan);
-  const RayFan rx(prof, array_depth, rings, fan_angles, bounces);
   const bool one = std::abs(projector_depth - array_depth) < 1e-6;
-  const RayFan tx_own = one ? RayFan(prof, array_depth, {rings.front()}, std::vector<double>{-0.1, 0.1}, 0) : RayFan(prof, projector_depth, rings, fan_angles, bounces);
-  const RayFan& tx = one ? rx : tx_own;
   const double alpha = std::isfinite(o.absorption_db_per_km) ? o.absorption_db_per_km / 1000.0 : 0.0;   // dB per metre of path
   const double c_path = 0.5 * (c_min + c_max);
   MultipathOptions loss;                         // the bubble law's table, as leg() reads it
   loss.surface_loss_db = o.surface_loss_db;
   loss.surface_loss_grazing = o.surface_loss_grazing;
   loss.surface_loss_table_db = o.surface_loss_table_db;
+  // A path to a ring: its delay, its power with the absorption over its own delay already applied (the pair's
+  // 10^(-alpha c (t_a + t_b) / 10) is the product of the two legs': the same number, made once a path instead of once a
+  // pair), where its grazing angle falls on the tables' grid (index and fraction), found once a path, and its boundary
+  // reflections before the ring.
   struct Path {
     double t, power, grazing;
+    std::size_t cell = 0;
+    double frac = 0.0;
+    int n = 0;
+  };
+  const std::size_t n_grid = o.reverb_grazing.size();
+  auto locate = [&](double g, std::size_t& i, double& u) {
+    const std::vector<double>& grid = o.reverb_grazing;
+    if (!(g > grid.front())) {
+      i = 0;
+      u = 0.0;
+    } else if (g >= grid.back()) {
+      i = n_grid - 2;
+      u = 1.0;
+    } else {
+      i = static_cast<std::size_t>(std::upper_bound(grid.begin(), grid.end(), g) - grid.begin()) - 1;
+      u = (g - grid[i]) / (grid[i + 1] - grid[i]);
+    }
   };
   std::vector<RayArrival> raw;
   std::vector<Path> a, b;
@@ -332,38 +347,92 @@ std::vector<double> coverage_reverberation_db(const MultipathProfile& water, dou
                                          o.bottom_shear_attenuation);
         power *= std::pow(std::norm(r), q.n_bottom);
       }
-      got.push_back({q.time, power, on_bottom ? q.grazing_bottom : q.grazing_surface});
+      Path path{q.time, power * std::pow(10.0, -alpha * c_path * q.time / 10.0), on_bottom ? q.grazing_bottom : q.grazing_surface};
+      locate(path.grazing, path.cell, path.frac);
+      path.n = q.n_surface + q.n_bottom;
+      got.push_back(path);
     }
   };
-  for (int side = 0; side < 2; ++side) {
-    const bool on_bottom = side == 0;
-    if (on_bottom ? !bottom : !surface) continue;
-    const std::vector<double>& table = on_bottom ? o.reverb_bottom_strength : o.reverb_surface_strength;
-    for (std::size_t k = 0; k < rings.size(); ++k) {
-      paths(rx, k, on_bottom, b);
-      if (b.empty()) continue;
-      if (one) a = b; else paths(tx, k, on_bottom, a);
-      const double area = rings[k] * d_rho;      // per radian of azimuth
-      for (const Path& p : a) {
-        for (const Path& q : b) {
-          const double t = p.t + q.t;
-          const auto at = static_cast<std::size_t>(t / bin);
-          if (at >= energy.size()) continue;
-          energy[at] += p.power * q.power * strength_at(o.reverb_grazing, table, p.grazing, q.grazing) * area * std::pow(10.0, -alpha * c_path * t / 10.0);
+  // The scattered energy against delay of every pair of paths with at most `cap` boundary reflections each way: into
+  // `low` the pairs with at most `split` each way, into `high` the rest.
+  auto accumulate = [&](int cap, int split, std::vector<double>& low, std::vector<double>& high) {
+    low.assign(n_bins, 0.0);
+    high.assign(n_bins, 0.0);
+    const double rise = own + (water_depth > 0.0 ? 2.0 * water_depth * cap + water_depth : 2.0 * own);
+    const std::vector<double> fan_angles = launches(rise, rings.front(), rings.back(), o.ray_fan);
+    const RayFan rx(prof, array_depth, rings, fan_angles, cap);
+    const RayFan tx_own = one ? RayFan(prof, array_depth, {rings.front()}, std::vector<double>{-0.1, 0.1}, 0) : RayFan(prof, projector_depth, rings, fan_angles, cap);
+    const RayFan& tx = one ? rx : tx_own;
+    for (int side = 0; side < 2; ++side) {
+      const bool on_bottom = side == 0;
+      if (on_bottom ? !bottom : !surface) continue;
+      const std::vector<double>& table = on_bottom ? o.reverb_bottom_strength : o.reverb_surface_strength;
+      for (std::size_t k = 0; k < rings.size(); ++k) {
+        paths(rx, k, on_bottom, b);
+        if (b.empty()) continue;
+        if (one) a = b; else paths(tx, k, on_bottom, a);
+        const double area = rings[k] * d_rho;      // per radian of azimuth
+        for (const Path& p : a) {
+          // The table's two rows about this path's grazing angle, blended once (bilinear, clamped at the grid's ends): then
+          // each pair is a blend of two numbers of that row.
+          const double* r0 = table.data() + p.cell * n_grid;
+          const double* r1 = r0 + n_grid;
+          const double pw = p.power * area;
+          for (const Path& q : b) {
+            const double t = p.t + q.t;
+            const auto at = static_cast<std::size_t>(t / bin);
+            if (at >= n_bins) continue;
+            const std::size_t j = q.cell;
+            const double v = q.frac;
+            const double strength = (1.0 - p.frac) * ((1.0 - v) * r0[j] + v * r0[j + 1]) + p.frac * ((1.0 - v) * r1[j] + v * r1[j + 1]);
+            (std::max(p.n, q.n) > split ? high : low)[at] += pw * q.power * strength;
+          }
         }
       }
     }
-  }
-  for (std::size_t i = 0; i < delays.size(); ++i) {
-    const double t = delays[i];
-    if (!std::isfinite(t)) continue;
-    const auto lo = static_cast<std::size_t>(std::max(0.0, std::floor((t - tail) / bin - 1.0)));
-    const auto hi = std::min(energy.size(), static_cast<std::size_t>(std::ceil((t + tail) / bin + 1.0)));
-    double sum = 0.0;
-    for (std::size_t k = lo; k < hi; ++k) {
-      if (energy[k] > 0.0) sum += energy[k] * compressed_power_average(t - (static_cast<double>(k) + 0.5) * bin, bin, sonar.bandwidth);
+  };
+  // The energy through the compressed pulse at each delay, times the beam's integral.
+  auto levels = [&](const std::vector<double>& energy) {
+    std::vector<double> got(delays.size(), -kInf);
+    for (std::size_t i = 0; i < delays.size(); ++i) {
+      const double t = delays[i];
+      if (!std::isfinite(t)) continue;
+      const auto lo = static_cast<std::size_t>(std::max(0.0, std::floor((t - tail) / bin - 1.0)));
+      const auto hi = std::min(energy.size(), static_cast<std::size_t>(std::ceil((t + tail) / bin + 1.0)));
+      double sum = 0.0;
+      for (std::size_t k = lo; k < hi; ++k) {
+        if (energy[k] > 0.0) sum += energy[k] * compressed_power_average(t - (static_cast<double>(k) + 0.5) * bin, bin, sonar.bandwidth, sonar.cw ? sonar.pulse : 0.0);
+      }
+      got[i] = sum > 0.0 ? 10.0 * std::log10(psi * sum) : -kInf;
     }
-    out[i] = sum > 0.0 ? 10.0 * std::log10(psi * sum) : -kInf;
+    return got;
+  };
+  std::vector<double> low, high;
+  if (o.reverb_max_bounces > 0) {                  // as many as configured
+    const int cap = static_cast<int>(o.reverb_max_bounces);
+    accumulate(cap, cap, low, high);
+    return levels(low);
+  }
+  // Converged (CoverageOptions::reverb_max_bounces): from the rule's count B, trace to B + max(2, B / 4) and keep the
+  // count once the reflections above B change no level by more than reverb_converge_db; else start again from twice as many.
+  const int ceiling = static_cast<int>(std::max<std::int64_t>(o.reverb_bounce_cap, 3));
+  int start = static_cast<int>(water_depth > 0.0 ? std::clamp(std::ceil(0.4 * rho_max / water_depth), 3.0, 40.0) : 3.0);
+  start = std::min(start, ceiling);
+  for (;;) {
+    const int cap = std::min(start + std::max(2, (start + 3) / 4), ceiling);
+    accumulate(cap, start, low, high);
+    const std::vector<double> without = levels(low);
+    for (std::size_t k = 0; k < low.size(); ++k) low[k] += high[k];
+    std::vector<double> with = levels(low);
+    double change = 0.0;
+    for (std::size_t i = 0; i < with.size(); ++i) {
+      if (std::isfinite(with[i])) change = std::max(change, std::isfinite(without[i]) ? with[i] - without[i] : kInf);
+    }
+    if (change <= o.reverb_converge_db || cap >= ceiling) {
+      out = with;
+      break;
+    }
+    start = std::min(2 * cap, ceiling);
   }
   return out;
 }
@@ -496,6 +565,11 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
   else if (k == "reverb_rings") o.reverb_rings = i();
   else if (k == "reverb_max_bounces") o.reverb_max_bounces = i();
   else if (k == "reverb_note") o.reverb_note = value;
+  else if (k == "reverb_steer") o.reverb_steer = v();
+  else if (k == "reverb_converge_db") o.reverb_converge_db = option_nonnegative(key, value);
+  else if (k == "reverb_bounce_cap") o.reverb_bounce_cap = i();
+  else if (k == "reverb_rows_gain_db") o.reverb_rows_gain_db = option_nonnegative(key, value);
+  else if (k == "echo_coherent") o.echo_coherent = on();
   else return false;
   return true;
 }
@@ -608,7 +682,8 @@ double coverage_snr_db(const CoverageOptions& o, const CoverageSonar& sonar, dou
   const double tl = 20.0 * std::log10(std::max(slant, 1.0)) + o.absorption_db_per_km * slant / 1000.0;
   const double echo = o.source_level_db - 2.0 * tl + ts_db + factor_db;
   const double noise = echo - noise_only;          // the noise after processing, in the echo's units
-  return noise_only - 10.0 * std::log10(1.0 + std::pow(10.0, (o.source_level_db + reverb_db - noise) / 10.0));
+  // combine(SNR + G, SRR) - G with G the rows' gain against noise (CoverageOptions::reverb_rows_gain_db; 0: as one row)
+  return noise_only - 10.0 * std::log10(1.0 + std::pow(10.0, (o.source_level_db + reverb_db - noise + o.reverb_rows_gain_db) / 10.0));
 }
 
 double coverage_pd(const CoverageOptions& o, double snr_db) {
@@ -628,11 +703,12 @@ const std::string& Coverage::update(const PingRecord& record, const Vec3d& origi
   sonar.f_centre = 0.5 * (f_lo + f_hi);
   sonar.bandwidth = f_hi > f_lo ? f_hi - f_lo : 1.0 / w.duration;
   sonar.pulse = w.duration;
+  sonar.cw = !(f_hi > f_lo);
   const double c = record.environment.sound_speed;
   const double r0 = 0.5 * c * s.start_time, r1 = 0.5 * c * (s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
   const double projector = world_position(record.geometry.tx_pose, record.geometry.tx.lever_arm).z - opt_.surface_z;
   if (opt_.reverb == 1 && !(opt_.reverb_beam_integral > 0.0)) {     // the array's beam, once (the geometry does not change)
-    if (!(psi_ > 0.0)) psi_ = coverage_beam_integral(record);
+    if (!(psi_ > 0.0)) psi_ = coverage_beam_integral(record, opt_.reverb_steer);
     sonar.beam_integral = psi_;
   }
   MultipathProfile through = water;
@@ -720,10 +796,34 @@ const std::string& Coverage::update(const CoverageSonar& sonar, double range_fir
   double deepest = opt_.own_depth_max;
   if (water_now > 0.0) deepest = std::min(deepest, water_now - opt_.bottom_clearance - std::max(offset, 0.0));
   if (opt_.recommend && opt_.n_own > 1 && deepest > opt_.own_depth_min) {
+    const CoverageCandidates* c = candidates_.get();
+    const bool reuse = c != nullptr && c->water_depth == water_now && c->offset == offset && c->f_centre == sonar.f_centre && c->bandwidth == sonar.bandwidth &&
+                       c->pulse == sonar.pulse && c->beam_integral == sonar.beam_integral && c->rung == water.rung && c->depth == water.depth &&
+                       c->speed == water.speed && c->ranges == ranges_;
+    if (!reuse) {
+      auto made = std::make_shared<CoverageCandidates>();
+      made->water_depth = water_now;
+      made->offset = offset;
+      made->f_centre = sonar.f_centre;
+      made->bandwidth = sonar.bandwidth;
+      made->pulse = sonar.pulse;
+      made->beam_integral = sonar.beam_integral;
+      made->rung = water.rung;
+      made->depth = water.depth;
+      made->speed = water.speed;
+      made->ranges = ranges_;
+      candidates_ = made;
+    }
     for (std::int64_t i = 0; i < opt_.n_own; ++i) {
       const double z = opt_.own_depth_min + (deepest - opt_.own_depth_min) * static_cast<double>(i) / static_cast<double>(opt_.n_own - 1);
       if (!(z + offset > 0.0)) continue;
-      const std::vector<ClassResult> there = evaluate(opt_, sonar, ranges_, water, water_now, z, z + offset, false);
+      std::size_t slot = 0;
+      while (slot < candidates_->own.size() && candidates_->own[slot] != z) ++slot;
+      if (slot == candidates_->own.size()) {
+        candidates_->own.push_back(z);
+        candidates_->results.push_back(evaluate(opt_, sonar, ranges_, water, water_now, z, z + offset, false));
+      }
+      const std::vector<ClassResult>& there = candidates_->results[slot];
       const auto a = reach(there), b = reach(best);
       const double step = (r1 - r0) / static_cast<double>(n_r - 1);
       if (a.first > b.first + 0.5 * step || (std::abs(a.first - b.first) <= 0.5 * step && a.second > b.second + 0.5 * step)) {
@@ -803,6 +903,7 @@ const std::string& Coverage::update(const CoverageSonar& sonar, double range_fir
   if (opt_.reverb == 1) {
     const double psi = opt_.reverb_beam_integral > 0.0 ? opt_.reverb_beam_integral : sonar.beam_integral;
     s << ", \"reverberation\": \"included\", \"beam_integral_deg\": " << std::round(psi * 180.0 / kPi * 100.0) / 100.0;
+    if (opt_.reverb_steer != 0.0 && !(opt_.reverb_beam_integral > 0.0)) s << ", \"beam_steer_deg\": " << std::round(opt_.reverb_steer * 180.0 / kPi * 10.0) / 10.0;
     if (!opt_.reverb_note.empty()) s << ", \"reverberation_note\": \"" << quoted(opt_.reverb_note) << "\"";
   } else if (opt_.reverb == 2) {
     if (!opt_.reverb_note.empty()) {

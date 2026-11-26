@@ -117,6 +117,19 @@ def scenario_parts(cfg: dict) -> dict:
             "note": None if items else "not included: the scenario gives no reverberation (its `reverberation:` list is empty)"}
 
 
+def triangle2_average(x, width: float, length: float):
+    """A CW pulse's matched-filter power response (1 - |u| / T)^2 (|u| < T), averaged over u in [x - width/2, x + width/2]:
+    Int_0^y = T / 3 (1 - (1 - y / T)^3) for 0 <= y <= T (C(e), sonar-w2w3; the C++ compressed_power_average with cw_length)."""
+    x, T = np.asarray(x, dtype=float), float(length)
+    if not width > 1e-3 * T:
+        return np.maximum(0.0, 1.0 - np.abs(x) / T) ** 2
+
+    def F(y):
+        a = np.minimum(np.abs(y), T) / T
+        return np.sign(y) * T / 3.0 * (1.0 - (1.0 - a) ** 3)
+    return (F(x + 0.5 * width) - F(x - 0.5 * width)) / width
+
+
 def sinc2_average(x, width: float, bandwidth: float):
     """<|sinc(B u)|^2> over u in [x - width/2, x + width/2] (s): Int sinc^2 = (Si(2 pi y) - sin^2(pi y) / (pi y)) / pi."""
     from scipy.special import sici
@@ -155,11 +168,12 @@ def beam_integral(positions, frequency: float, sound_speed: float, steer_azimuth
 
 
 def level_db(provider, source, boundaries, delays, bandwidth: float, psi: float, absorption_db_per_m: float = 0.0,
-             step: float = 2e-3, tail: float | None = None):
+             step: float = 2e-3, tail: float | None = None, cw_length: float | None = None):
     """Reverberation level re the source level (dB; -inf: none) at two-way `delays` (s), by the simulator's own integral
     (sim/reverb.py `reverberation_power`, monostatic: one eigenray set from `source` serves both legs, as there).
     `boundaries`: [(boundary_z, strength function), ...]; `step`: the time bins (s; rings 0.25 c step wide);
-    `psi`: the beam's integral (`beam_integral`)."""
+    `psi`: the beam's integral (`beam_integral`). `cw_length` (s): a CW pulse of that length, through its own matched filter's
+    triangle (`triangle2_average`) in place of the sinc of the band."""
     from .sim.reverb import reverberation_power
     d = np.atleast_1d(np.asarray(delays, dtype=float))
     tail = 8.0 / bandwidth if tail is None else float(tail)
@@ -173,7 +187,8 @@ def level_db(provider, source, boundaries, delays, bandwidth: float, psi: float,
         if not np.isfinite(t):
             continue
         near = np.abs(times - t) <= tail + step
-        s = float(np.sum(power[near] * sinc2_average(t - times[near], step, bandwidth)))
+        shape = triangle2_average(t - times[near], step, cw_length) if cw_length else sinc2_average(t - times[near], step, bandwidth)
+        s = float(np.sum(power[near] * shape))
         out[i] = 10.0 * np.log10(psi * s) if s > 0.0 else -np.inf
     return out
 

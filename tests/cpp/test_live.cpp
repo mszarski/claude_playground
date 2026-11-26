@@ -1288,6 +1288,42 @@ TEST(CoverageReverb, LimitsOfTheTerm) {
   EXPECT_THROW(set_coverage_option(v, "coverage_reverb", "3"), std::invalid_argument);
 }
 
+TEST(CoverageReverb, CwTriangleConvergedBouncesNoteAndCandidates) {
+  // C(e): a CW pulse's matched-filter power response (1 - |u| / T)^2: 1 at 0, 0 beyond T, integral 2 T / 3 whatever the bin.
+  const double T = 0.01;
+  EXPECT_DOUBLE_EQ(compressed_power_average(0.0, 0.0, 1.0 / T, T), 1.0);
+  EXPECT_DOUBLE_EQ(compressed_power_average(1.01 * T, 0.0, 1.0 / T, T), 0.0);
+  for (double width : {1e-5, 1e-4, 1e-3}) {
+    double sum = 0.0;
+    for (double x = -2.0 * T; x < 2.0 * T; x += width) sum += compressed_power_average(x + 0.5 * width, width, 1.0 / T, T) * width;
+    EXPECT_NEAR(sum, 2.0 * T / 3.0, 1e-3 * T) << width;
+  }
+  // C(c): the converged count is a 160-reflection run's within 0.1 dB in 30 m of water at 0.8 to 12.7 km.
+  const double c = 1500.0;
+  CoverageOptions o = lambert_reverb(std::pow(10.0, -2.7));
+  o.absorption_db_per_km = 0.32;
+  CoverageSonar sonar;
+  sonar.f_centre = 5000.0;
+  sonar.bandwidth = 2000.0;
+  sonar.pulse = 1.0;
+  std::vector<double> delays;
+  for (double r = 800.0; r <= 12700.0; r += 1700.0) delays.push_back(2.0 * r / c);
+  CoverageOptions fixed = o;
+  fixed.reverb_max_bounces = 160;
+  const std::vector<double> got = coverage_reverberation_db(isovelocity(c), 30.0, 15.0, 15.0, delays, o, sonar, 0.05);
+  const std::vector<double> ref = coverage_reverberation_db(isovelocity(c), 30.0, 15.0, 15.0, delays, fixed, sonar, 0.05);
+  for (std::size_t i = 0; i < delays.size(); ++i) EXPECT_NEAR(got[i], ref[i], 0.1) << delays[i];
+  // The note, the steering and the echo's rule by name; the echo's rule is the old one unless asked for.
+  CoverageOptions v;
+  EXPECT_FALSE(v.echo_coherent);
+  ASSERT_TRUE(set_coverage_option(v, "coverage_reverb_note", "not included: no wind"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_echo_coherent", "1"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_reverb_steer", "1.0471975512"));
+  EXPECT_EQ(v.reverb_note, "not included: no wind");
+  EXPECT_TRUE(v.echo_coherent);
+  EXPECT_NEAR(v.reverb_steer, kPi / 3.0, 1e-9);
+}
+
 TEST(CoverageReverb, BeamIntegralOfALineIsTwiceLambdaOverItsLength) {
   // An unweighted line of N hydrophones at half a wavelength, broadside: Int |AF|^2 dphi / N^2 = 2 pi / N exactly
   // (the cross terms integrate to J0(k d) = J0(m pi), small; both sides of the line count). One hydrophone: 2 pi.

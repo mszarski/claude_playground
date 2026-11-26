@@ -337,6 +337,7 @@ void bind_refraction(py::module_& m) {
     s.bandwidth = d["bandwidth"].cast<double>();
     s.pulse = d["pulse"].cast<double>();
     if (d.contains("beam_integral")) s.beam_integral = d["beam_integral"].cast<double>();
+    if (d.contains("cw")) s.cw = d["cw"].cast<bool>();
     return s;
   };
   m.def(
@@ -384,10 +385,10 @@ void bind_refraction(py::module_& m) {
   m.def("coverage_beam_integral", py::overload_cast<const std::vector<double>&, const std::vector<double>&, double, double, double, std::int64_t>(&live::coverage_beam_integral),
         py::arg("x"), py::arg("y"), py::arg("frequency"), py::arg("sound_speed"), py::arg("steer"), py::arg("n") = 8192,
         "Psi (rad): an unweighted beam's integral of |AF|^2 over azimuth re its axis (coverage.hpp).");
-  m.def("coverage_beam_integral_of", py::overload_cast<const PingRecord&>(&live::coverage_beam_integral), py::arg("record"),
-        "Psi (rad) of a record's array at broadside, at the band centre (what the chain's coverage picture uses).");
+  m.def("coverage_beam_integral_of", py::overload_cast<const PingRecord&, double>(&live::coverage_beam_integral), py::arg("record"), py::arg("steer_from_boresight") = 0.0,
+        "Psi (rad) of a record's array steered `steer_from_boresight` (rad) off its boresight, at the band centre (what the chain's coverage picture uses).");
   m.def("sine_integral", &live::sine_integral, py::arg("x"));
-  m.def("compressed_power_average", &live::compressed_power_average, py::arg("x"), py::arg("width"), py::arg("bandwidth"));
+  m.def("compressed_power_average", &live::compressed_power_average, py::arg("x"), py::arg("width"), py::arg("bandwidth"), py::arg("cw_length") = 0.0);
   m.def(
       "coverage_reverberation_db",
       [coverage_options, coverage_sonar](const py::dict& water, double water_depth, double array_depth, double projector_depth, const std::vector<double>& delays,

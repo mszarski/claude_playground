@@ -173,6 +173,96 @@ def test_level_against_the_simulated_fluid_sediment_reverberation():
     assert np.sqrt(np.mean(d**2)) < 0.6 and np.max(np.abs(d)) < 1.0, d
 
 
+def test_cw_reverberation_goes_through_the_triangle_not_the_sinc():
+    """C(e) (sonar-w2w3's follow-up). sst_sediment_reverb as shipped is a CW pulse (20 kHz, 2 ms) over medium sand 20 m
+    below the sonar: the mean compressed reverberation of 16 pings x 8 channels over a +20 dB target's peak at 50 m,
+    against the prediction with the matched filter's own triangle (1 - |u| / T)^2 and with the sinc of the band 1 / T
+    (what stood for it), from just before the first bottom return (20 m) to 50 m. Measured: 2.1, 5.1, 4.6, 2.8, -2.5, -7.3,
+    -11.1, -16.2, -23.4 dB at 19.5, 20, 20.4, 20.75, 21.5, 23, 26, 35, 50 m; the triangle within 0.7 dB of each, the
+    sinc 0.9 to 1.9 dB high from 20 m on (1.5 on average) (its integral is T, the triangle's 2 T / 3: 1.76 dB). The C++ term (CoverageSonar
+    cw) gives the Python reference's triangle within 0.2 dB from 23 m on; nearer, the first return comes in steeper than
+    its fan's 75 degrees and is missing (-12 dB at 20 m; nothing the coverage picture's kilometres need)."""
+    sst = _tool("sst_validation")
+    parts = rb.scenario_parts("sst_sediment_reverb")
+    c, fc, T, slant, ts = 1500.0, 20000.0, 0.002, 50.0, 20.0
+    win = {"receive": {"window": {"range": [5.0, 80.0]}}}
+    rev = sst._quiet_run(sst.SEDIMENT, {"sonar_overrides": win, "pings": {"count": 16}})
+    echo = sst._quiet_run(sst.SEDIMENT, {"sonar_overrides": win, "pings": {"count": 1}, "reverberation": [],
+                                         "scene": [{"type": "points", "label": "t", "positions": [[0.0, slant, 0.0]], "target_strength_db": ts}]})
+    z, t0, fs = sst._compressed(rev)
+    ze, _, _ = sst._compressed(echo)
+    t = t0 + np.arange(z.shape[-1]) / fs
+    peak = float(np.mean([sst._peak_near(ze[0, ch], t0, fs, 2.0 * slant / c, 3.0 / fs)[0] for ch in range(ze.shape[1])]))
+    r_eval = np.array([19.5, 20.0, 20.4, 20.75, 21.5, 23.0, 26.0, 35.0, 50.0])
+    delays, echo_db = 2.0 * r_eval / c, ts - 40.0 * np.log10(slant)
+    law = rb.item_law(parts["items"][0], fc, c)[1]
+    tri = rb.level_db(FreeFieldProvider(c), np.zeros(3), [(20.0, law)], delays, 1.0 / T, 2.0 * np.pi, 0.0, step=2.5e-5, cw_length=T) - echo_db
+    snc = rb.level_db(FreeFieldProvider(c), np.zeros(3), [(20.0, law)], delays, 1.0 / T, 2.0 * np.pi, 0.0, step=2.5e-5) - echo_db
+    power = np.abs(z) ** 2
+    measured = np.array([10.0 * np.log10(power[:, :, np.abs(t - d) <= 0.5 / fs + 1e-12].mean() / peak**2) for d in delays])
+    o = coverage.cpp_options({"reverberation": {"items": [dict(parts["items"][0], boundary="bottom")], "frequency_hz": fc, "max_bounces": 1},
+                              "surface": {"coefficient": 0.0}, "rays": {"fan": 2880}})
+    o["reverb_rings"] = 4000
+    cpp = np.array(core.coverage_reverberation_db(coverage.water([0.0, 20.0], [c, c]), 20.0, 1e-3, 1e-3, list(delays), o,
+                                                  {"f_centre": fc, "bandwidth": 1.0 / T, "pulse": T, "cw": True}, 2.0 * np.pi)) - echo_db
+    print("CW onset, measured / triangle / sinc / C++ (dB):", [tuple(round(float(v), 2) for v in row) for row in zip(measured, tri, snc, cpp)])
+    assert np.max(np.abs(measured - tri)) < 0.7, measured - tri
+    assert np.all(snc[1:] - measured[1:] > 0.8) and np.mean(snc[1:] - measured[1:]) > 1.4, snc - measured
+    assert np.max(np.abs(cpp - tri)[5:]) < 0.2, cpp - tri
+    assert core.compressed_power_average(0.0, 0.0, 1.0 / T, T) == pytest.approx(1.0) and core.compressed_power_average(1.01 * T, 0.0, 1.0 / T, T) == 0.0
+    assert rb.triangle2_average(0.3 * T, 0.2 * T, T) == pytest.approx(core.compressed_power_average(0.3 * T, 0.2 * T, 1.0 / T, T), rel=1e-12)
+
+
+def test_the_bounce_count_is_found_by_convergence():
+    """C(c). The paths' boundary reflections are added until those above the count change no level by more than 0.1 dB
+    (coverage.hpp reverb_max_bounces 0). Lambert -27 dB and Chapman-Harris over sand, 4-6 kHz, 0.8 to 12.7 km, the array at
+    mid-depth: the converged levels are a 160-reflection run's within 0.1 dB in 30 and 100 m of water, where the fixed rule
+    it replaces (0.4 x range / depth, at most 40) was 1.2 dB low in 30 m (0.07 dB in 100 m)."""
+    r = np.linspace(800.0, 12700.0, 48)
+
+    def level(depth, bounces=None):
+        block = {"items": [LAMBERT, {"model": "chapman_harris", "wind_speed": 5.0}], "frequency_hz": 5000.0}
+        if bounces:
+            block["max_bounces"] = bounces
+        o = coverage.cpp_options({"reverberation": block, "bottom": {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}, "surface": {"rms_height_m": 0.134},
+                                  "budget": {"absorption_db_per_km": 0.32}})
+        return np.array(core.coverage_reverberation_db(coverage.water([0.0, depth], [1500.0, 1500.0]), depth, 0.5 * depth, 0.5 * depth, list(2.0 * r / 1500.0), o,
+                                                       {"f_centre": 5000.0, "bandwidth": 2000.0, "pulse": 1.0}, 0.05))
+    for depth, old in ((30.0, 40), (100.0, 40)):
+        ref, got, rule = level(depth, 160), level(depth), level(depth, old)
+        assert np.max(np.abs(got - ref)) < 0.1, (depth, got - ref)
+        if depth == 30.0:
+            assert np.max(ref - rule) > 1.0, ref - rule
+
+
+def test_off_broadside_the_beam_integral_is_the_patterns_own():
+    """C(d). Psi of a line steered off broadside, the C++ term's (`coverage_beam_integral`, and the record's with
+    `steer_from_boresight`, what the chain uses with coverage.reverberation.steer_deg) against a direct numerical integral
+    of the array's |AF|^2 over azimuth on a fine grid, at 0, 15, 30, 45 and 60 degrees: within 1e-4. It widens as about
+    1 / cos (32 hydrophones at half a wavelength: +0.16, +0.63, +1.56, +3.09 dB; 1 / cos: +0.15, +0.62, +1.51, +3.01)."""
+    from gpusonar.sonar import SonarModel
+    rec = SonarModel.load("flank_32").make_record(make_pose())
+    pos = rec.rx_positions()
+    c = rec.environment.sound_speed
+    w = rec.transmit.waveform
+    f = 0.5 * (w.f_start + w.f_stop)
+    k = 2.0 * np.pi * f / c
+    phi = 2.0 * np.pi * (np.arange(200000) + 0.5) / 200000
+    broadside = None
+    for deg in (0.0, 15.0, 30.0, 45.0, 60.0):
+        steer = np.pi / 2.0 - np.radians(deg)
+        af = np.abs(np.exp(1j * k * (np.outer(np.cos(phi) - np.cos(steer), pos[:, 0]) + np.outer(np.sin(phi) - np.sin(steer), pos[:, 1]))).sum(axis=1)) ** 2 / len(pos) ** 2
+        direct = float(af.mean() * 2.0 * np.pi)
+        got = core.coverage_beam_integral([float(v) for v in pos[:, 0]], [float(v) for v in pos[:, 1]], f, c, steer)
+        assert got == pytest.approx(direct, rel=1e-4), deg
+        assert core.coverage_beam_integral_of(rec, np.radians(deg)) == pytest.approx(direct, rel=1e-4), deg
+        assert rb.beam_integral(pos, f, c, steer) == pytest.approx(direct, rel=1e-4), deg
+        broadside = direct if broadside is None else broadside
+        assert 10.0 * np.log10(direct / broadside) == pytest.approx(-10.0 * np.log10(np.cos(np.radians(deg))), abs=0.12), deg
+    o = coverage.cpp_options({"reverberation": {"items": [LAMBERT], "frequency_hz": FC, "steer_deg": 60.0}})
+    assert o["reverb_steer"] == pytest.approx(np.radians(60.0))
+
+
 # --- flank_patrol: the issue's case (D-198), and a noise-limited flank scene -----------------------------------------
 
 FLANK_TARGETS = {"submarine": ((-600.0, 2900.0, 60.0), 16.0), "small_vehicle": ((900.0, 2000.0, 40.0), -3.0), "wreck": ((1500.0, 3270.0, 98.0), 12.0)}
@@ -212,9 +302,12 @@ def flank_prediction(name, point, ts, items=None):
     return {"sinr_db": s, "snr_noise_db": n, "r_over_n_db": float(10.0 * np.log10(max(10.0 ** ((n - s) / 10.0) - 1.0, 1e-30)))}
 
 
-def flank_map(name, seed=17, scene=True, reverberation=True, noise=True):
-    """One ping of a flank scenario at full size, beamformed with Hann weights as tools/gallery.py does: fine-sample power."""
+def flank_map(name, seed=17, scene=True, reverberation=True, noise=True, edit=None):
+    """One ping of a flank scenario at full size, beamformed with Hann weights as tools/gallery.py does: fine-sample power.
+    `edit`: a function that changes the loaded configuration first."""
     cfg = load_scenario_config(name)
+    if edit is not None:
+        cfg = edit(cfg)
     cfg["pings"]["count"], cfg["seed"] = 1, seed
     if not scene:
         cfg["scene"] = []
@@ -231,6 +324,17 @@ def _ring(ranges, centre):
     return (np.abs(ranges - centre) > 75.0) & (np.abs(ranges - centre) < 315.0)        # the gallery's CFAR training cells, m
 
 
+def _stationary_points(cfg):
+    """flank_patrol's targets as stationary points at their full strength: the submarine one +16 dB point at its centre, the
+    small vehicle stopped (what the coverage picture models: a class has neither a speed nor an extent)."""
+    for item in cfg["scene"]:
+        if item["label"] == "submarine":
+            item.update(positions=[[-600.0, 2900.0, 60.0]], target_strength_db=16.0, velocity=[0.0, 0.0, 0.0])
+        elif item.get("velocity") is not None:
+            item["velocity"] = [0.0, 0.0, 0.0]
+    return cfg
+
+
 @pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
 def test_flank_patrol_margins_predicted_against_the_simulated_data():
     """The issue's acceptance (sonar-w2w3). flank_patrol at full size (Bellhop, 32 arrivals), seed 17, one ping: each
@@ -239,14 +343,20 @@ def test_flank_patrol_margins_predicted_against_the_simulated_data():
     background in the gallery's training ring (75 to 315 m from the peak), and reverberation over noise there.
     Predicted: the coverage picture with the scene's own inputs, nothing tuned per target.
 
-    Measured / predicted (dB): reverberation over noise 20.0 / 20.2 (submarine, 3.0 km), 24.7 / 24.6 (small vehicle,
-    2.2 km), 16.9 / 17.7 (wreck, 3.6 km); peak over background 26.3 / 26.3, 6.6 / 9.7, 29.1 / 24.4; before this term the
-    prediction was the noise-only 46.5, 34.3, 42.2. Held: the reverberation within 1 dB of the data, each margin
-    within 5 dB, rms 3.5 dB (3.3). What is left is the echo, not the reverberation: the coverage picture's peak of six
-    rays against Bellhop's 32 arrivals (signal over noise alone: measured 46.3, 31.3, 46.1; predicted 46.5, 34.3, 42.2).
-    The submarine is its eight highlights' total (+16 dB, the issue's figure); the gallery's 4 m cells (D-198's measure,
-    the echo spread by multipath over tens of metres) read 19.3, 2.0 and 19.9 dB, 7, 5 and 9 dB below the peak."""
+    Measured / predicted (dB): reverberation over noise 19.7 / 19.9 (submarine, 3.0 km), 24.5 / 24.3 (small vehicle,
+    2.2 km), 16.7 / 17.4 (wreck, 3.6 km). Peak over background, the scene as shipped: 26.6 / 28.8, 6.9 / 10.3, 29.4 /
+    28.6 (before C(a), sonar-w2w3's follow-up: predicted 26.5, 10.0, 24.7, worst 4.7 dB, rms 3.3; noise-only 46.5, 34.3,
+    42.2). The same targets as stationary points (the submarine one +16 dB point, the vehicle stopped; what the coverage
+    picture models): 28.3 / 28.8, 10.2 / 10.3, 29.4 / 28.6 (worst 0.9 dB, rms 0.6). Held (tightened by C(a), from 5 dB
+    each and 3.5 dB rms): the reverberation within 1 dB of the data; the stationary points each within 1 dB, rms 0.8 dB;
+    the scene as shipped each within 4 dB, rms 3.0 dB. What C(a) changed: the four images about the target (one surface and one bottom
+    reflection at most) add as pressures (coverage.hpp `echo_coherent`): the wreck 2 m above the bed is 4.7 dB under the
+    data when its bottom-reflected paths add as power. More arrivals do not matter: 6 to 1000 arrivals and 3 to 40 bounces move the
+    three predictions by under 0.15 dB. What is left in the scene as shipped is the targets, not the budget: the vehicle's
+    2 m/s opening costs its 1 s LFM 3.4 dB of peak (Doppler mismatch), the submarine's eight highlights 1.7 dB against
+    one point; neither is in a class of the coverage picture (follow-up)."""
     clean, r, b = flank_map("flank_patrol", reverberation=False, noise=False)
+    still = flank_map("flank_patrol", reverberation=False, noise=False, edit=_stationary_points)[0]
     bg, _, _ = flank_map("flank_patrol", scene=False)
     noise, _, _ = flank_map("flank_patrol", scene=False, reverberation=False)
     rows = {}
@@ -256,14 +366,17 @@ def test_flank_patrol_margins_predicted_against_the_simulated_data():
         k = np.flatnonzero(gate)[np.argmax(clean[ib, gate])]
         ring = _ring(r, r[k])
         n = noise[ib, ring].mean()
-        measured = {"margin_db": 10.0 * np.log10(clean[ib, k] / bg[ib, ring].mean()), "r_over_n_db": 10.0 * np.log10((bg[ib, ring].mean() - n) / n)}
+        measured = {"margin_db": 10.0 * np.log10(clean[ib, k] / bg[ib, ring].mean()), "margin_stationary_db": 10.0 * np.log10(still[ib, gate].max() / bg[ib, ring].mean()),
+                    "r_over_n_db": 10.0 * np.log10((bg[ib, ring].mean() - n) / n)}
         rows[name] = (measured, flank_prediction("flank_patrol", p, ts))
     print("\nflank_patrol", {k: {"measured": {a: round(float(v), 2) for a, v in m.items()}, "predicted": {a: round(v, 2) for a, v in q.items()}} for k, (m, q) in rows.items()})
     for name, (m, q) in rows.items():
         assert abs(m["r_over_n_db"] - q["r_over_n_db"]) < 1.0, name
-        assert abs(m["margin_db"] - q["sinr_db"]) < 5.0, name
+        assert abs(m["margin_stationary_db"] - q["sinr_db"]) < 1.0, name
+        assert abs(m["margin_db"] - q["sinr_db"]) < 4.0, name
         assert q["snr_noise_db"] - q["sinr_db"] > 10.0, name                       # reverberation-limited, all three
-    assert np.sqrt(np.mean([(m["margin_db"] - q["sinr_db"]) ** 2 for m, q in rows.values()])) < 3.5
+    assert np.sqrt(np.mean([(m["margin_stationary_db"] - q["sinr_db"]) ** 2 for m, q in rows.values()])) < 0.8
+    assert np.sqrt(np.mean([(m["margin_db"] - q["sinr_db"]) ** 2 for m, q in rows.values()])) < 3.0
 
 
 def _measured_r_over_n(name, range_m, bearing=0.0):
