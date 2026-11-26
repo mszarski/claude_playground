@@ -785,3 +785,31 @@ Not applied here. "J&R" = Jackson and Richardson (2007), confirmed on the page i
 | Whether TR 0702's "McDaniel" near-specular model is McDaniel (1986) | G-22 | [NS §6] |
 | How Gallaudet's band means were averaged (dB or intensity: 3.4-4.5 dB) | G-7, decision 7 | [NS §3.4], D-193 |
 | Not read by any note: J&R App. J beyond [N4]'s pages, L.1-L.2 by [N3]; App. C Table C.1 by [N2]; nothing of TR 9407 | all | [N2 §1], [N3 §6] |
+
+---
+
+## Unblocked by Mourad and Jackson (1989) and Wagner (1967)
+
+Added 2026-11-26 from `docs/references/bottom_mourad_jackson_1989.md` ([MJ89]) and
+`docs/references/shadowing_wagner_1967.md` ([W67]); both papers read in full on the page images. Earlier text
+above is unchanged; where it disagrees, this section is the later reading.
+
+| Package / row | Was | Now | Note |
+|---|---|---|---|
+| G-11 Wagner shadowing | blocked on the sign of pi^(1/2) in J&R (13.82) | **unblocked**: pi^(-1/2) printed in [W67] (22) and [MJ89] (25); J&R (13.82) is a misprint. The composite needs R (= [W67] (49) with (20)), not S | G-11's "before -> after" used the misprint. Corrected (composite roughness, 5 deg): medium sand 30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8). [MJ89] C1, [W67] C-W1, C-W2 (bistatic form, ours) |
+| G-16 Volume slope average | recipe only (J&R Sect. 14.1.2), not quantified | printed recipe [MJ89] (38) with corrected (39): three-point in-plane Gauss-Hermite average and R | quantified: volume +3.9 / +9.6 dB at 5 deg for medium sand 20 / 100 kHz, +7.9 / +12.2 for sandy gravel, under 0.3 dB for silts; part of [MJ89] C4 (opt-in) |
+| G-6 grain-size relations | 1.0091 judged a misprint by continuity | confirmed: [MJ89] (2) prints 1.0018916; 0.4566 / 0.4556 NOT settled ([MJ89] prints no k(Mz)) | [MJ89] C5 (optional: the original's seven digits, rho/nu move by under 3e-5) |
+| G-5 / decision 1 (volume parameter) | step at 5.5 phi (Snellen, via secondary) | [MJ89] (4) steps at 5.0 phi; its own Fig. 8 used 0.002 at 5.3 phi | kept at 5.5 (later prints of the same model); `sandy_silt` would lose 3.0 dB under (4). No change |
+| G-10 EDFM | must not apply to the TR 9407 rows (double count) | supported: [MJ89] fitted the relations' density to acoustic data, below bulk values (p. 1170) | no change |
+| G-8, G-12 | - | nothing in either paper | - |
+| G-36 | named in the brief for this work | no package G-36 exists in this file | - |
+| New: [MJ89] model as an opt-in (`roughness_model` / `volume_model` "mourad_jackson_1989") | interpolation "not printed" (0.3) | printed: Kirchhoff approximation (19)-(22), interpolation (33)-(37), slope (18) | [MJ89] C4; tests reproduce the paper's Figs. 6-10 within the readings. Default unchanged (D-86); vs our default the model is +1.6 to +11.5 dB at 5 deg for sands and gravel, within 0.4 dB for silts |
+| Section 0.3 "Kirchhoff / composite interpolation function" | not printed | printed in [MJ89] (33)-(37) (the 1989 model; TR 9407's not known) | |
+| Section 0.4 row "(13.82) Wagner Q" | "pi^(-1/2)?" | settled: pi^(-1/2) | |
+| Section 0.4, new row | - | [MJ89] (39) prints abs(1 - R)^2; abs(1 - R^2)^2 meant (the paper's figures reproduce only with it; J&R (14.8); ours) | our `volume_strength` is right; [MJ89] C3 pins it |
+| Section 4 "Shadowing function sign" and "Kirchhoff/composite interpolation" rows | wanted | found ([W67]; [MJ89]) | gravel/rock law, bistatic model, TR 9407 versions stay wanted |
+| CONFORMANCE A13 first bullet; rows "Composite shadowing", "(13.82) pi^(+1/2)", "Interpolation Kirchhoff/composite", "Volume slope and shadow corrections", "(11.2) constant 1.0091", "Gamma2 3.25 for all" | blocked / suspected / NO SOURCE READ / not quantified | see the proposed row changes in the extraction report (CONFORMANCE.md is another agent's file) | |
+
+Still blocked after these two papers: the empirical gravel/rock law (not in [MJ89]: 1-9 phi only), the bistatic
+model (Williams and Jackson 1998, another note), out-of-plane bistatic shadowing (not printed; the rule in [W67]
+C-W2 is ours), the -1 <= Mz < 0 constant of (11.3), and anything TR 9407 changed.
