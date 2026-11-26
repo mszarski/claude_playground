@@ -276,7 +276,9 @@ The whole report is committed as `examples/live_popoto_12km_report.jsonl`. Its l
   time its hull spans x = 143 to 263 m. The track says x = 184.7 m, y = 12000.6 m, vx −6.32 m/s
   (−6.03, −6.05, −6.02 on the three pings before: the last ping's fit is the worst of the four).
 - `sync` is `null`: this sonar config has one board. `coverage` is there because the deployment
-  file switches it on (`docs/DEPLOYMENT.md`, "The coverage picture").
+  file switches it on (`docs/DEPLOYMENT.md`, "The coverage picture"). Its ranges are noise-only: the
+  file gives no boundary scattering (`coverage.reverberation`), and the member says
+  `"reverberation": "not included: ..."`; they are optimistic wherever reverberation limits.
 - **End-of-run summary.** `tools/sonar_live.py` prints one only when a counter is not zero
   (`sonar_live: {"dropped_blocks": ..., "overrun_pings": ..., "bad_blocks": ..., "reports_split": ...}`
   on stderr); nothing was printed here. The C++ program's summary line is in example 7.

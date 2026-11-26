@@ -4,6 +4,7 @@
   "pulse_s": 1.0,
   "snr_db": 15.770873754660299,
   "snr_is": "what the chain's detector needs of one row on `popoto_face_1x32` for a detection probability of 0.5 on one ping; 17.4 dB for 0.9; stacked rows need less of each row",
+  "reverberation": "not included: noise only (no boundary scattering is given for this study; the term exists, issue sonar-w2w3, gpusonar.reverb_budget); the source levels are optimistic wherever reverberation limits",
   "fixed_count": {
     "8": {
       "best_frequency_hz": 4161.823844826959,
