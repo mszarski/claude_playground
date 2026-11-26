@@ -3644,3 +3644,40 @@ other way on other data.
   inside the start window). It is the first test of the job to use the device. Follow-up sonar-6rs.
 - Full GPU suite on this tree: **2183 passed, 101 skipped**, none failed (NVIDIA L4, HF job
   6b07608ed91f621b930918b0, 46 min 30 s): 3 more passed, the new Python tests.
+
+### D-193 The boundary models against Gallaudet 2001's printed values at 68 kHz; "a lower bound" no longer said of the surface model against data (issue sonar-5wa; amends the wording of D-87 and D-132; no model, default or value changed)
+
+What is wrong first: at 68 kHz and 3 m/s wind `bubble_layer_surface` (with `apl_1994`) lies ABOVE the
+dissertation's printed band means, by 3.4 dB at 44-66 degrees grazing (-38.1 against -41.5 dB) and by
+13.0 dB at 27-38 degrees (-38.3 against -51.3 dB). D-87 and D-132 call the model a lower bound between
+30 and 70 degrees because it omits a positive term; that is true of the omitted term and not of the
+model against data at low wind, where its level follows our optical-depth law. It is not shown to be a
+defect of the model: the printed values are raw sonar-equation numbers with up to -9 dB of
+transmit-pattern bias, the averaging (dB or intensity) is not stated, the lower band includes bottom
+reverberation, the site was dominated by the towing ship's wake, and the one wind reading was taken
+4.5 hours before the runs.
+
+- The document: Gallaudet, dissertation (2001), opened (the handle's host was refused by this
+  session's network proxy; read from the hosting repository's own copy of the same handle); only values
+  it prints as numbers were used (Ch. 6 Tables I and II, pp. 196-198; Table VI, p. 60; Ch. 5 Table III,
+  p. 158). Its curves exist only as figures and bound nothing here. The download is not kept.
+- Bottom (`fluid_sediment` with the dissertation's fitted inputs, Table VI): 0.2 dB below its printed
+  mean at 48-66 degrees (-22.8 against -22.6 dB) and 3.9 dB above at 29-37 degrees (-24.8 against
+  -28.7 dB), inside its own stated systematic error. All five roughness models give the same numbers
+  to 0.001 dB: at this site the roughness term is 21 to 28 dB below the volume term away from the
+  specular direction, so these data cannot tell the roughness models apart. No defect found.
+- The site is a silt-sand mixture (grain size 6.36 phi, estimated from porosity), not the "silty clay"
+  our documents said. Table VI's density, sound-speed and loss ratios equal
+  `sediment_from_grain_size(6.36)` within 4e-5. Our class default `fine_silt` is 5.0 dB low at 48-66
+  degrees and 0.8 dB low at 29-37: the volume parameter (0.001 in the class, 0.003 in the fit, worth
+  4.8 dB).
+- Surface, the other models at 3 m/s: `hall_novarini` extinction 12.6 and 22.2 dB above the printed
+  means, `chapman_harris` 15.1 and 19.9 dB (outside its range, as it warns), `kraus_surface` 10.7 and
+  15.8 dB. The four printed bubble-cloud peaks (-23.1 to -25.2 dB) are within 1 dB of our saturation
+  level.
+- Volume: printed values (-65.5 to -76.3 dB) and no model of ours predicts them; nothing compared.
+- Not verified: how the band means were averaged and whether they were corrected for the transmit
+  pattern; the grazing angles of the bubble clouds (figures only).
+- Tests (characterisations: the bound is what we get plus a small margin; nothing tuned):
+  `tests/python/test_gallaudet_boundaries.py` (10). CPU. The full GPU suite was not rerun for this
+  (documents and one new CPU test file).

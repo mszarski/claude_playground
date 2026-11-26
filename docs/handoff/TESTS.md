@@ -310,7 +310,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-192)
+## 3. Tests that pin a decision (D-155 to D-193)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -346,6 +346,7 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| D-193 (sonar-5wa) | the bottom and surface models against Gallaudet 2001's printed values at 68 kHz (characterisations) | `test_gallaudet_boundaries.py` (the whole file) |
 | D-192 (sonar-fy6) | the resampler's weights from three trig calls, both engines; rows together against row by row to the bit, against the formula within a stated bound | `test_stage2.cpp`: `Sync.ResampleWeightsFromThreeTrigCallsAreTheFormulasTapByTap`; `test_calibration_sync.py` (the weights, whole-sample positions, the re-pinned resampler test); `test_live_cpp.py::test_both_engines_resample_with_the_same_weights` |
 | D-191 (sonar-drc) | the C++ engine resamples a board's rows together, the samples to the bit | `tests/cpp/test_stage2.cpp`: `Sync.BoardsResampledTogetherGiveTheRowByRowSamplesToTheBit` |
 | D-190 (sonar-h1f) | the frame path decodes only the rows a window takes; a board's rows resampled together; outputs to the bit | `test_flank_stream.py` (the decoder, the assembled samples, the held block); `test_calibration_sync.py` (the resampler against row by row); the (3, python) Popoto loopback case |

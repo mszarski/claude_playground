@@ -2773,7 +2773,8 @@ Reading, honestly:
   to 5.5 dB high and rising where the data are flat; sandy mud and muddy very fine sand about
   -22 dB, ours -28.3 (`sandy_mud`) and -24.5 dB (`very_fine_sand`), so 2.5 to 6 dB low.
   Snellen et al. (2013) found at 300 kHz fitted `w2` twice and `sigma2` half the defaults;
-  Gallaudet fitted `sigma2` = 0.003 and exponent 3.00 on a silty clay at 68 kHz. Class
+  Gallaudet fitted `sigma2` = 0.003 and exponent 3.00 at 68 kHz on a silt-sand bottom
+  (78 % fines, Mz 6.36 estimated from porosity; 23.2 has the comparison). Class
   defaults are good to about +-3 to 6 dB; above 100 kHz they overstate sand.
 
 ### 23.2 Bottom scattering models
@@ -2789,6 +2790,30 @@ Reading, honestly:
 
 Recommendation: none needed for the formulas. A default change is the owner's: `small_slope`
 is what the current literature uses and it is valid wherever `perturbation` is.
+
+*Against one printed measurement at 68 kHz (Gallaudet 2001; `test_gallaudet_boundaries.py`).*
+What it cannot do first: the measurement does not tell the roughness models apart, and its
+angular curves (data and the fitted model) are only figures (Fig. 15a), so the comparison is
+with band means. The site is a silt-sand bottom (78 % fines, Mz 6.36 from porosity; the
+source does not call it silty clay), 190-205 m deep. Printed numbers used: Table VI (p. 60),
+the fitted model inputs rho 1.1483, nu 0.9864, delta 0.0033, sigma2 0.003, gamma 3.00,
+w2 0.000518 cm^4; Ch. 6 Tables I-II (pp. 196-198), mean backscattering strength -22.6 dB at
+48-66 degrees grazing and -28.7 dB at 29-37 degrees, raw values of the sonar equation (the
+source puts the transmit-pattern bias at up to -9 dB, and both bands carry reverberation).
+- With Table VI as the six inputs, `fluid_sediment` gives -22.8 dB (0.2 dB low) and
+  -24.8 dB (3.9 dB high), the same for all five roughness models: for this slow (nu < 1),
+  light sediment the roughness term is 20 to 30 dB below the volume term off the specular
+  direction. The near-normal band (72-90 degrees, -19.4 dB printed) is not compared: our band
+  mean there is -14.5 dB as a mean of intensity and -19.3 dB as a mean of dB, and the source
+  does not say which it printed.
+- Table VI's rho, nu and delta are what `sediment_from_grain_size(6.36)` gives (within
+  4e-5), and w2 is our grain-size rule (0.0005175 cm^4): an independent second print of the
+  class regressions. The fit differs from the class in gamma (3.00 against 3.25, no effect
+  here) and sigma2 (0.003 against 0.001).
+- The class row `fine_silt` (6-7 phi) gives -27.6 and -29.5 dB: 5.0 and 0.8 dB low, 4.8 dB
+  below the site fit in both bands (the volume parameter). Inside the +-3 to 6 dB of 23.1.
+Nothing here points to a defect in the bottom model; the 3.9 dB at 29-37 degrees is inside the
+source's own systematic uncertainty.
 
 ### 23.3 Sea surface
 
@@ -2824,6 +2849,24 @@ page. The backscatter model cannot arbitrate either: at 10 m/s and above both lo
 the layer near saturation, and at 5 m/s they differ by 3.6 dB (30 kHz) and 4.5 dB (68 kHz) in
 predicted backscatter at 30 degrees, inside the model's stated +-5 dB. Patchiness: no opened source
 quantifies it. The adopted law stays.
+
+*Against one printed measurement at 68 kHz and 3 m/s (Gallaudet 2001, Ch. 6 Tables I-II,
+pp. 196-198; `test_gallaudet_boundaries.py`).* The "lower bound between 30 and 70 degrees" is
+not supported by it: `bubble_layer_surface_db` is ABOVE the printed band means, -38.1 dB
+against -41.5 dB at 44-66 degrees grazing (3.4 dB) and -38.3 against -51.3 dB at 27-38
+degrees (13.0 dB); with `extinction: hall_novarini` 12.6 and 22.2 dB above; chapman_harris
+15.1 and 19.9 dB above, kraus_surface 10.7 and 15.8. At 3 m/s the bubble term is in its
+sparse limit, proportional to the optical depth, which is our loss law's (0.0024 for
+`apl_1994`), so this is the part of the model that the source does not print. Whether the
+model or the measurement is off cannot be told from this data: the levels are raw sonar-
+equation values with a transmit-pattern bias of up to -9 dB (which makes them low), the
+averaging is not stated and the statistics are heavy-tailed (scintillation index 3.7 and 14),
+the 27-38 degree band carries bottom reverberation, the site was dominated by the towship's
+wake, and the one wind reading was 4.5 hours old. The source's own statement (p. 140) is that
+its run-1 mean curve (Fig. 10, a figure) is within +-5 dB of the published model at 30-60
+degrees of incidence. Bubble clouds from breaking ship waves peak at -23.1 to -25.2 dB
+(Table III, p. 158), "within 1dB" of the saturation level (eq. (11)); ours reaches each within
+1 dB between 27.5 and 48.4 degrees of grazing, 13 dB above the ambient model at 3 m/s.
 
 *Forward loss, coherent reflection.* `exp(-Gamma^2 / 2)` is the Gaussian-height result;
 no opened document gives measured coherent loss against the Rayleigh parameter (22.4).
