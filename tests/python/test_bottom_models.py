@@ -165,11 +165,15 @@ def test_composite_roughness():
     low, mid = np.radians(2.0), np.radians(25.0)
     assert rough("composite", low, low) > 3.0 * rough("perturbation", low, low)
     assert rough("composite", mid, mid) == pytest.approx(rough("perturbation", mid, mid), rel=0.05)
-    # It is the plain average of the perturbation result over the in-plane slope (backscatter).
+    # It is the plain average of the perturbation result over the in-plane slope (backscatter), times
+    # Wagner's backscatter shadow function R since C1 of docs/references/bottom_mourad_jackson_1989.md
+    # (before C1 the first comparison was made with the default; `shadowing="none"` is that model).
     x, w = np.polynomial.hermite_e.hermegauss(40)
     local = low + np.arctan(slope * x)
     want = (w / w.sum() * np.where(local > 0, old_perturbation(np.clip(local, 1e-6, None), np.clip(local, 1e-6, None), np.pi, **SAND), 0.0)).sum()
-    assert rough("composite", low, low) == pytest.approx(want, rel=2e-2)
+    assert rough("composite", low, low, shadowing="none") == pytest.approx(want, rel=2e-2)
+    shade = float(bottom.wagner_backscatter_shadowing(low, math.sqrt(2.0) * slope))
+    assert rough("composite", low, low) == pytest.approx(want * shade, rel=2e-2) and shade < 0.98
 
 
 def test_combined_model_covers_all_three_regimes():
@@ -292,3 +296,139 @@ def test_scenario_item_takes_a_named_sediment_and_a_roughness_model():
     combined = ping(dict(SAND, roughness_model="combined"))
     ratio = (np.abs(combined) ** 2).mean() / (np.abs(explicit) ** 2).mean()
     assert 0.8 < ratio < 2.0 and not np.array_equal(combined, explicit)           # same order, not the same model
+
+
+# --- Wagner (1967) shadowing in the composite models -----------------------------------------------
+# docs/references/shadowing_wagner_1967.md [W67] C-W1, C-W2 and docs/references/bottom_mourad_jackson_1989.md
+# [MJ89] C1. The function is Wagner's backscatter shadow function R (his eq. (49) with (20)-(22)):
+# R = (1 - exp(-2B)) / (2B), B = [pi^(-1/2) exp(-v^2) - v erfc v] / (4v), v = tan(grazing) / s, s the
+# TOTAL (both-axes) rms slope = sqrt(2) x the per-axis slope `large_scale_slope` returns. pi^(-1/2) is
+# printed in [W67] (22) and [MJ89] (25) (confirmed); Jackson and Richardson (2007) (13.82) print pi^(+1/2),
+# a misprint.
+
+
+def wagner_r(v):
+    """R typed again here from [W67] (22) and (49) with (20), independent of bottom.py."""
+    b = (math.exp(-v * v) - math.sqrt(math.pi) * v * math.erfc(v)) / (4.0 * math.sqrt(math.pi) * v)
+    return (1.0 - math.exp(-2.0 * b)) / (2.0 * b)
+
+
+def test_wagner_backscatter_shadowing_values_and_limits():
+    """The note's values (ours, [W67] Sec. 2.3), recomputed from the retyped formula: R = 0.385059,
+    0.719744, 0.906503, 0.987541, 0.998564, 0.999878 at v = 0.1, 0.25, 0.5, 1, 1.5, 2."""
+    v = np.array([0.1, 0.25, 0.5, 1.0, 1.5, 2.0])
+    want = np.array([0.385059, 0.719744, 0.906503, 0.987541, 0.998564, 0.999878])
+    assert np.allclose([wagner_r(x) for x in v], want, atol=1e-6)                       # the retyped formula gives the note's values
+    got = bottom.wagner_backscatter_shadowing(np.arctan(v * 0.3), 0.3)                     # v = tan(grazing) / s
+    assert np.allclose(got, want, atol=1e-6)
+    assert np.allclose(got, [wagner_r(x) for x in v], rtol=1e-12)
+    # Limits ([W67] Sec. 2.3, ours): R -> 2 sqrt(pi) v as v -> 0 (2 % at v = 0.01); R = 1 at normal incidence; 0 at grazing.
+    small = float(bottom.wagner_backscatter_shadowing(np.arctan(0.01), 1.0))
+    assert small / (2.0 * math.sqrt(math.pi) * 0.01) == pytest.approx(1.0, abs=0.02)
+    assert float(bottom.wagner_backscatter_shadowing(0.5 * np.pi, 0.4)) == 1.0               # no shadowing at normal incidence
+    assert float(bottom.wagner_backscatter_shadowing(0.0, 0.4)) == 0.0
+    g = np.radians(np.linspace(0.1, 90.0, 900))
+    r = bottom.wagner_backscatter_shadowing(g, 0.25)
+    assert np.all(np.diff(r) >= 0.0) and np.all((r > 0.0) & (r <= 1.0))                     # monotonic in grazing
+    # Large v: no cancellation (erfcx), and the [MJ89] rule "S = 1 for t > 2" (cutoff=2) is within 1.3e-4.
+    big = bottom.wagner_backscatter_shadowing(np.arctan(np.array([2.5, 5.0, 30.0, 1e6])), 1.0)
+    assert np.all(big <= 1.0) and np.all(1.0 - big < 1.3e-4) and big[-1] == 1.0
+    cut = bottom.wagner_backscatter_shadowing(np.arctan([1.9, 2.1]), 1.0, cutoff=2.0)
+    assert cut[1] == 1.0 and cut[0] == pytest.approx(wagner_r(1.9), rel=1e-12)
+
+
+def test_jackson_richardson_shadowing_table_with_the_corrected_sign():
+    """J&R's own table of 10 log R (our note 04, with pi^(-1/2)): -0.44 / -1.45 / -3.37 / -5.59 dB at 2 deg for
+    per-axis slopes 0.05 / 0.1 / 0.2 / 0.35, and -0.26 dB at 5 deg for 0.1 (+-0.01 dB)."""
+    for slope, want in ((0.05, -0.44), (0.1, -1.45), (0.2, -3.37), (0.35, -5.59)):
+        got = 10 * np.log10(bottom.wagner_backscatter_shadowing(np.radians(2.0), math.sqrt(2.0) * slope))
+        assert got == pytest.approx(want, abs=0.01), slope
+    assert 10 * np.log10(bottom.wagner_backscatter_shadowing(np.radians(5.0), math.sqrt(2.0) * 0.1)) == pytest.approx(-0.26, abs=0.01)
+
+
+def old_composite(ti, ts, phi, par=SAND, f=F, small_scale_kh=0.5, slope_nodes=12):
+    """`composite_strength` exactly as it computed before shadowing was added."""
+    k = 2.0 * np.pi * f / C
+    slope, kc = bottom.large_scale_slope(f, C, w2=par["w2"], gamma2=par["gamma2"], small_scale_kh=small_scale_kh)
+    ti, ts, phi = bottom._angles(ti, ts, phi)
+
+    def small_scale(li, ls, ph):
+        factor, q = bottom._perturbation_factor(li, ls, ph, k, par["rho"], par["nu"], par["delta"])
+        return factor * np.where(q >= kc, bottom._power_law(q, par["w2"], par["gamma2"]), 0.0)
+    return bottom._slope_average(small_scale, ti, ts, phi, slope, slope_nodes)
+
+
+def test_shadowing_none_is_the_composite_and_combined_before_bit_for_bit():
+    ti, ts, phi = np.radians([2.0, 5.0, 20.0, 60.0, 85.0]), np.radians([2.0, 15.0, 3.0, 60.0, 40.0]), np.radians([180.0, 60.0, 120.0, 0.0, 180.0])
+    assert np.array_equal(rough("composite", ti, ts, phi, shadowing="none"), old_composite(ti, ts, phi))
+    slope, _ = bottom.large_scale_slope(F, C, **SAND)
+    par = {k: SAND[k] for k in ("rho", "nu", "delta", "w2", "gamma2")}
+    before = bottom._slope_average(lambda li, ls, ph: bottom.small_slope_strength(li, ls, F, C, azimuth=ph, **par),
+                                   *bottom._angles(ti, ts, phi), slope, 12)
+    assert np.array_equal(rough("combined", ti, ts, phi, shadowing="none"), before)
+    # With Wagner's factor (the default inside these two models) the result is the same average times it.
+    shade = bottom.wagner_bistatic_shadowing(ti, ts, phi, math.sqrt(2.0) * slope)
+    assert np.allclose(rough("composite", ti, ts, phi), old_composite(ti, ts, phi) * shade, rtol=1e-14)
+    assert np.allclose(rough("combined", ti, ts, phi), before * shade, rtol=1e-14)
+    # The other models carry no shadowing: "none" is accepted, "wagner" refused; unknown values name the nearest.
+    for model in ("perturbation", "kirchhoff", "small_slope"):
+        assert np.array_equal(rough(model, ti, ts, phi, shadowing="none"), rough(model, ti, ts, phi))
+        with pytest.raises(ValueError, match="shadowing"):
+            rough(model, ti, ts, phi, shadowing="wagner")
+    with pytest.raises(ValueError, match="did you mean 'wagner'"):
+        rough("composite", ti, ts, phi, shadowing="wagnr")
+
+
+def test_bistatic_shadowing_is_symmetric_and_reduces_to_r_in_backscatter():
+    """[W67] C-W2 (ours, derived from [W67] (33), (35)-(36), (46)-(47); out of plane not printed): backward half
+    (cos phi < 0) R(min(ti, ts)); forward half R_b = (1 - exp[-2(B_i + B_s)]) / [2(B_i + B_s)]."""
+    s = 0.3
+    g = np.radians([1.0, 3.0, 7.0, 15.0, 40.0, 90.0])
+    assert np.array_equal(bottom.wagner_bistatic_shadowing(g, g, np.pi, s), bottom.wagner_backscatter_shadowing(g, s))   # exactly R
+    ti, ts = np.meshgrid(g, g, indexing="ij")
+    for phi in np.radians([0.0, 45.0, 89.0, 91.0, 150.0, 180.0]):
+        a, b = bottom.wagner_bistatic_shadowing(ti, ts, phi, s), bottom.wagner_bistatic_shadowing(ts, ti, phi, s)
+        assert np.array_equal(a, b)                                                       # reciprocity
+        r_min = np.minimum(bottom.wagner_backscatter_shadowing(ti, s), bottom.wagner_backscatter_shadowing(ts, s))
+        if np.cos(phi) < 0.0:
+            assert np.array_equal(a, bottom.wagner_backscatter_shadowing(np.minimum(ti, ts), s))
+        else:
+            assert np.all(a <= r_min + 1e-15)                                             # both rays must see the facet
+    assert float(bottom.wagner_bistatic_shadowing(0.5 * np.pi, 0.5 * np.pi, 0.0, s)) == 1.0
+
+
+def test_composite_shadowing_moves_the_opt_in_models_as_the_note_computes():
+    """[MJ89] C1 "Moves" (computed by the extraction with c = 1500 m/s; backscatter roughness term, dB):
+    medium sand 30 kHz 5 deg -41.58 -> -41.69; 100 kHz 5 deg -32.88 -> -33.56, 10 deg -29.70 -> -29.82;
+    sandy gravel 30 kHz 5 deg -29.03 -> -29.89; 100 kHz 5 / 10 / 20 deg -21.37 -> -23.75 / -19.85 -> -20.73 /
+    -18.00 -> -18.18; `combined` moves by the same amounts; very fine silt 0.00. These replace G-11's earlier
+    numbers (-41.6 -> -42.5, -32.9 -> -35.9, -21.4 -> -27.8), which used the misprinted pi^(+1/2)."""
+    cases = (("medium_sand", 30e3, 5.0, -41.58, -41.69), ("medium_sand", 100e3, 5.0, -32.88, -33.56),
+             ("medium_sand", 100e3, 10.0, -29.70, -29.82), ("sandy_gravel", 30e3, 5.0, -29.03, -29.89),
+             ("sandy_gravel", 100e3, 5.0, -21.37, -23.75), ("sandy_gravel", 100e3, 10.0, -19.85, -20.73),
+             ("sandy_gravel", 100e3, 20.0, -18.00, -18.18))
+    db = lambda x: 10 * np.log10(float(x))                                                # noqa: E731
+    for name, f, deg, before, after in cases:
+        par = bottom.sediment(name)
+        g = np.radians(deg)
+        off, on = rough("composite", g, g, par=par, f=f, shadowing="none"), rough("composite", g, g, par=par, f=f)
+        assert db(off) == pytest.approx(before, abs=0.006) and db(on) == pytest.approx(after, abs=0.006), (name, f, deg)
+        c_off, c_on = rough("combined", g, g, par=par, f=f, shadowing="none"), rough("combined", g, g, par=par, f=f)
+        assert db(c_on) - db(c_off) == pytest.approx(after - before, abs=0.011), (name, f, deg)      # two 2-decimal roundings
+    silt = bottom.sediment("very_fine_silt")
+    g = np.radians([5.0, 10.0, 20.0])
+    assert np.allclose(10 * np.log10(rough("composite", g, g, par=silt, f=100e3) / rough("composite", g, g, par=silt, f=100e3, shadowing="none")),
+                       0.0, atol=0.005)
+
+
+def test_wagner_shadowing_would_not_change_the_surface_facet_term():
+    """[W67] C-W3: the sea-surface facet term (surface.facet_backscatter) carries no shadowing, because R with the
+    total Cox-Munk slope is 1 to 1e-6 dB wherever that term is within 30 dB of its peak (3-20 m/s)."""
+    from gpusonar.acoustics import mean_square_slope
+    from gpusonar.sim import surface
+    g = np.radians(np.linspace(1.0, 90.0, 8901))
+    for wind in (3.0, 5.0, 10.0, 15.0, 20.0):
+        facet = surface.facet_backscatter(g, wind)
+        near = 10 * np.log10(np.maximum(facet, 1e-300) / facet.max()) > -30.0
+        shade = bottom.wagner_backscatter_shadowing(g[near], math.sqrt(mean_square_slope(wind)))
+        assert np.all(np.abs(10 * np.log10(shade)) < 1e-6), wind

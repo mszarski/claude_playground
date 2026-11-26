@@ -114,14 +114,18 @@ def test_delta_follows_from_k_by_2_6_with_the_tables_water():
 
 
 def test_density_and_speed_are_continuous_at_the_joins_and_1_0091_is_not_used():
-    """(11.1), (11.2) at 1 and 5.3 phi: the pieces meet to 1e-4 (measured: rho 5.1e-5 and 5.1e-5, nu 6.9e-5
-    and 1.4e-5). The printed 1.0091 would jump by 0.0072 at 5.3 phi (0.99621 against 0.98902) and miss
-    every row from 5.5 to 9 phi by 0.0072."""
+    """(11.1), (11.2) at 1 and 5.3 phi: the pieces meet to 1e-4 (measured with J&R's four-decimal constants: rho
+    5.1e-5 and 5.1e-5, nu 6.9e-5 and 1.4e-5; since C5, with the seven-digit constants of Mourad and Jackson
+    (1989) (1)-(2): rho 2.7e-5 and 3.1e-6, nu 4.3e-5 and 3.7e-6; the 1e-4 held is unchanged). The printed 1.0091
+    would jump by 0.0072 at 5.3 phi (0.99621 against 0.98902) and miss every row from 5.5 to 9 phi by 0.0072;
+    [MJ89] (2) prints 1.0018916, so 1.0091 is a misprint (confirmed in the original)."""
     eps = 1e-9
     for join in (1.0, 5.3):
         below, at = bottom.apl_grain_size_relations(join - eps), bottom.apl_grain_size_relations(join)
         assert at["rho"] == pytest.approx(below["rho"], abs=1e-4) and at["nu"] == pytest.approx(below["nu"], abs=1e-4), join
-    assert bottom.apl_grain_size_relations(5.3)["nu"] == pytest.approx(0.98901, abs=1e-5)
+    # 0.98901 with J&R's 1.0019 (the value pinned before C5, at the same 1e-5); 0.989000 with [MJ89]'s 1.0018916.
+    assert bottom.apl_grain_size_relations(5.3)["nu"] == pytest.approx(0.98900, abs=1e-5)
+    assert -0.0024324 * 5.3 + 1.0019 == pytest.approx(0.98901, abs=1e-5)                     # J&R's digits, for the record
     assert -0.0024324 * 5.3 + 1.0091 == pytest.approx(0.99621, abs=1e-5)                   # the printed piece, for the record
     assert bottom.apl_grain_size_relations(9.0)["nu"] == pytest.approx(0.9800, abs=1e-4)     # the table's clay; 1.0091 gives 0.9872
 
@@ -184,3 +188,38 @@ def test_difference_from_todays_interpolation():
     assert worst["nu"][0] == pytest.approx(0.0041, abs=5e-5) and worst["nu"][1] == pytest.approx(5.3, abs=0.002)
     assert worst["rho"][0] == pytest.approx(0.0106, abs=5e-5) and worst["rho"][1] == pytest.approx(1.25, abs=0.002)
     assert worst["delta"][0] == pytest.approx(0.076, abs=0.001) and 5.7 < worst["delta"][1] < 5.9
+
+
+# J&R's four-decimal constants of (11.1)-(11.2) (pp. 313-314), the relations' digits before C5.
+def jr_rho_nu(mz):
+    if mz < 5.3:
+        return (-0.0165406 * mz**3 + 0.2290201 * mz**2 - 1.1069031 * mz + 3.0455,
+                -0.0014881 * mz**3 + 0.0213937 * mz**2 - 0.1382798 * mz + 1.3425)
+    return -0.0012973 * mz + 1.1565, -0.0024324 * mz + 1.0019
+
+
+def test_the_original_seven_digit_constants_c5():
+    """C5 of docs/references/bottom_mourad_jackson_1989.md: Mourad and Jackson (1989) (1)-(2), the first print of
+    these relations, give the constants 3.0455234, 1.3424740, 1.1564755 and 1.0018916 (confirmed there; "for
+    internal consistency to four decimal places", p. 1170); J&R (11.1)-(11.2) print them rounded to four decimals.
+    The relations use the original's digits. Fails before: rho(3.0) was 1.339375 and nu(3.0) 1.080025.
+    Evidence besides the print: the two pieces now meet at 5.3 phi to 4e-6 (5.1e-5 in rho before).
+    What moves (1-9 phi; the -1 to 1 phi pieces are not in [MJ89] and do not move): rho by -2.45e-5 to
+    +2.34e-5, nu by -2.6e-5 to 0, delta by 5.5e-7 relative; the normal-incidence loss by at most 0.0023 dB.
+    Gallaudet's 6.36 phi row moves further from his print (test_gallaudet_boundaries.py)."""
+    r = bottom.apl_grain_size_relations(3.0)
+    assert r["rho"] == pytest.approx(1.339399, abs=1e-6) and r["nu"] == pytest.approx(1.079999, abs=1e-6)
+    below, at = bottom.apl_grain_size_relations(5.3 - 1e-9), bottom.apl_grain_size_relations(5.3)
+    assert abs(at["rho"] - below["rho"]) < 1e-5 and abs(at["nu"] - below["nu"]) < 1e-5
+    grid = np.linspace(-1.0, 9.0, 2001)
+    d_rho, d_nu = [], []
+    for mz in grid:
+        rel = bottom.apl_grain_size_relations(float(mz))
+        if mz < 1.0:
+            continue
+        jr = jr_rho_nu(float(mz))
+        d_rho.append(rel["rho"] - jr[0])
+        d_nu.append(rel["nu"] - jr[1])
+    assert min(d_rho) == pytest.approx(-2.45e-5, abs=1e-7) and max(d_rho) == pytest.approx(2.34e-5, abs=1e-7)
+    assert min(d_nu) == pytest.approx(-2.60e-5, abs=1e-7) and max(d_nu) <= 0.0
+    assert bottom.apl_grain_size_relations(0.5)["rho"] == 0.007797 * 0.25 - 0.17057 * 0.5 + 2.3139      # unchanged piece

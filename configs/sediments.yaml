@@ -59,16 +59,26 @@
 #   uuid:b635a0a8-2ca1-44ae-8fbc-0866b3304827) tabulates the same quantity at whole phi from -1
 #   to 9 (0.0129 ... 0.0005 cm^4); the regression reproduces it to the printed digits, and it
 #   reproduces the two rows of arXiv:1809.08459 (printed in m^(4 - gamma)) within 0.3 %, which
-#   also checks the unit conversion.
+#   also checks the unit conversion. The original print (2026-11-26): Mourad and Jackson, "High
+#   Frequency Sonar Equation Models for Bottom Backscatter and Forward Loss", OCEANS '89 Proceedings,
+#   pp. 1168-1175, eqs. (6)-(7) print this relief rule and w2 = 0.00207 h^2 h0^2 for gamma = 3.25,
+#   "defined for 1 <= Mz <= 9" (confirmed; docs/references/bottom_mourad_jackson_1989.md Sec. 2.2).
+#   Our rows from -1 to 1 phi extend it as Snellen et al. do.
 # - Spectral exponent: 3.25 for every sediment (Snellen et al. 2011, Sec. II.A: "a value of 3.25
 #   for the exponent of the bottom relief spectrum is found to work well for many types of
-#   sediments", citing the handbook).
+#   sediments", citing the handbook). Printed as "3.25 for all grain sizes" in Mourad and Jackson
+#   (1989), eq. (5) (confirmed); the measured exponents they cite average 3.23 (sd 0.44), via secondary.
 # - Volume parameter (volume scattering cross section / attenuation in dB/m): 0.002 for
 #   -1 <= Mz < 5.5 and 0.001 for 5.5 <= Mz <= 9 (Snellen et al. 2013, text after eq. (5); Snellen
 #   et al. 2011, Table II). It is the least certain of the three: the GeoHab report says it "has
 #   to be adjusted empirically", and Snellen et al. (2013) found values half the rule at 300 kHz.
 #   The row `medium_sand` (from arXiv:1809.08459) holds 0.001 where this rule gives 0.002: see
-#   its note.
+#   its note. Mourad and Jackson (1989), eq. (4), the original, step it at 5.0 phi (0.002 for
+#   1 <= Mz < 5.0, 0.001 for 5.0 <= Mz <= 9; confirmed), but their own Fig. 8 used 0.002 at 5.3 phi
+#   and the later prints of the model (Snellen et al. 2011, 2013) step at 5.5: the step stays at
+#   5.5. Only `sandy_silt` (5.0 phi) would differ: 0.001 by eq. (4), -3.0 dB on its volume term.
+#   The density and speed relations of the same paper (eqs. (1)-(2)) are those of
+#   `bottom.apl_grain_size_relations` (seven-digit constants since C5 of the note above).
 # - Rock and pebbles are not fluid sediments. The open literature describes rock by Lambert's
 #   law fitted to measurements, or by an elastic small-slope model with measured roughness; the
 #   handbook's own curves for rock exceed the largest Lambert law energy conservation allows
