@@ -3794,3 +3794,43 @@ reverberation `statistics`.
 - Tests: `tests/python/test_reverb_statistics.py` (19 new cases: the mapping, the worked example, the
   cell area, the statistics and the mean level in a ping, both engines, the keys, the unchanged fixed
   shape), `tests/python/test_dict_keys.py` (1). CPU: 51 passed in those two files.
+
+### D-197 The 1 to 2.5 dB between our eigenray tier and Bellhop3D's N x 2-D mode, explained (issue sonar-6c8; the first package of sonar-rcq; no default, scenario or record changed)
+
+What is wrong first: over relief, Bellhop's arrivals output, which our provider reads, depends on how
+the bed file is written. With our piecewise-linear bed ('L') the summed arrivals are 1.2 to 1.7 dB
+louder than Bellhop's own transmission-loss run on gentle bearings beside the D-149 seamount, and a
+parabolic-equation run (PyRAM) sides with the transmission-loss run there (within 0.03 to 0.29 dB).
+Three shipped scenarios have such a bed (the fjord trials: 100 m nodes, slopes to about 9 degrees).
+Written as Bellhop's curvilinear bed ('C') their one-way loss at the target would move by +5.1, +0.2
+and +3.6 dB (2-row, 3-row, 1-row), but 'C' does not make arrivals and the loss run agree there either
+and on so coarse and steep a profile it is another bed. Not changed: there is no referee for the
+fjord bed. The owner's to decide (question 9 of `docs/tasks/PROPAGATION_3D.md`).
+
+- Level bed (200 m, 1500 over 1700 m/s, 8 kHz): Bellhop 2-D and Bellhop3D's N x 2-D mode agree to
+  0.001 dB at equal beam type and count, and its 3-D mode to 0.003 dB. The 1.0 dB at 7 km recorded with
+  D-149 was the oracle's 121 Gaussian elevation beams, not converged: against the image-source closed
+  form 1.12 dB too quiet at 121 beams, 0.26 at 241, 0.00 at 481. Hat beams (ours) are within 0.08 dB at
+  121. Our provider is within 0.19 dB of the image sources from 2 to 7 km.
+- The seamount, ours minus the oracle, by step (3.5 to 6.5 km means; -20, -4, 6, 16, 32 degrees): the
+  oracle's beams -0.47, -0.57, -1.23, -0.62, -0.66 dB; the oracle's 25 m bed grid against Bellhop's
+  loss run on our profile -0.14, -0.06, -1.15, -0.04, +0.02; the loss run against summed arrivals
+  -1.16, -0.47, -0.15, -0.36, -1.72; arrivals to our provider (floor, cap, lookup) at most 0.10.
+  Unexplained: about 0.3 dB over the summit.
+- The 3-D effect of D-149 stands at converged beams (481 x 361 Gaussian): 3-D minus N x 2-D +3.49 and
+  +3.60 dB over the flanks, +0.81 over the summit, -1.10 and -1.12 beside; ours minus 3-D -3.99, -4.01,
+  -2.17, +0.01 and -0.62.
+- The 19 level-bed eigenray scenarios: summed arrivals and Bellhop's own loss run agree within 0.14 dB
+  at each target. The three `ssp_*` scenarios show 0.2 to 1.3 dB at single receivers, not looked into.
+- KRAKEN's incoherent mode sum is not a reference with the receiver at the source's depth: it is 1.68
+  to 1.75 dB above the ray sum there (a factor 3/2, ours; PyRAM shows the same 1.5 dB); 20 m off that
+  depth it is within 0.07 dB. `test_kraken_crosscheck.py` uses different depths.
+- The likely mechanism in Bellhop (read, not traced): the bed's normal jumps at every 'L' node and the
+  arrival merge adds the folded contributions in amplitude.
+- New: `tests/python/test_bellhop_nx2d_agreement.py` (6 tests, each needs its oracle: Bellhop,
+  Bellhop3D, KRAKEN, PyRAM; about 45 s in all), `tools/eigenray_tl_check.py` (the target's loss by
+  each route for every eigenray scenario). `docs/tasks/PROPAGATION_3D.md` section 2 holds the tables
+  and what the Bellhop3D provider packages take from this: at least 481 Gaussian or 241 hat elevation
+  beams, a bed grid of 12.5 m or finer in a summit's shadow, never arrivals summed over an 'L' bed.
+- Not run on a GPU job yet: the oracle tests skip here without the oracles' variables; the next full
+  suite runs them.

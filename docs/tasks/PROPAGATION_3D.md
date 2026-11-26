@@ -63,21 +63,26 @@ across the bearing, beyond a few water depths.** Measured against Bellhop3D (D-1
 (the three `fjord_*`) one range profile used on every bearing. Both are axisymmetric about the
 sonar, so the bed has no slope across any bearing, and N × 2-D is the full answer in the
 simulator's own world. A 3-D provider would move no shipped record through physics. Run in place
-of Bellhop it would move records only through the differences between the two programs. Those
-differences are `sonar-6c8`: up to 1.0 dB over a level bed.
+of Bellhop it would move records only through the differences between the two programs. Over a
+level bed there are none: the 1.0 dB first reported as `sonar-6c8` was the oracle's beam count
+(section 2, measured 2026-11-26).
 
 **The scope therefore depends on the owner's waters.** If the operating areas have steep relief
 across the look direction (banks, seamounts, canyons, fjord walls), the gap is 3 to 4 dB at a few
 km, and an opt-in Bellhop3D provider is the right fix. It is about 4 to 6 weeks of work
-(packages P2 to P6 in section 5), and the owner's yes on its licence is needed first. If the waters
+(packages P2 to P6 in section 5); the owner has since approved its licence use (question 1). If the waters
 are shelf-like (slopes of a degree or less), the effect is small. The first-principles estimate is
 that φ is 0.2° per bounce at 5° grazing over a 1° cross-slope, against a 3.6° array beam. In that
-case the right move is: fix `sonar-6c8`, add a warning where the cross-bearing slope is large,
-and keep the characterisation test.
+case the right move is: add a warning where the cross-bearing slope is large, and keep the
+characterisation test (`sonar-6c8` is explained in section 2 and needs no change to shipped runs
+over a level bed).
 
 **Recommended:**
 
-1. Do `sonar-6c8` now (P0, size M). It affects all 22 eigenray scenarios.
+1. `sonar-6c8` (P0) is done as an investigation (section 2): the 1.0 to 2.5 dB is mostly the
+   oracle's beam count (Bellhop3D, 121 Gaussian elevation beams) and, over relief, Bellhop's
+   arrivals output over a piecewise-linear bed. The 19 level-bed eigenray scenarios need no
+   change; the three fjord scenarios' bed representation is owner question 9.
 2. Add the cross-slope warning (P1, size S). It changes no record.
 3. Build option A, Bellhop3D as an opt-in external provider, only after the owner answers
    questions 1 to 3 in section 6 with "yes" and "steep".
@@ -88,10 +93,13 @@ and keep the characterisation test.
    bottoms") and 12 (the coverage site is the illustrative `shelf_100m_sand`). The whole case for
    3-D propagation rests on cross-bearing slopes nobody has given us.
 2. **Our 2-D tier and Bellhop3D's N × 2-D mode disagree by 1.0 to 2.5 dB on the seamount bearings,
-   and by up to 1.0 dB over a level 200 m bed at 7 km** (`sonar-6c8`, open, cause not found). This
-   is in the test docstring of `test_our_n_by_2d_tier_over_the_seamount`. Until it is explained,
-   nobody knows which program is right over a level bed. Any agreement bound between our tier and
-   Bellhop3D carries this 1 dB.
+   and by up to 1.0 dB over a level 200 m bed at 7 km** (`sonar-6c8`; the test docstring of
+   `test_our_n_by_2d_tier_over_the_seamount`). Explained since (section 2): over a level bed it is
+   all the oracle's beam count, and the two programs agree to 0.001 dB at equal beams. Over relief
+   0.4 to 1.7 dB of it is Bellhop's arrivals output over our piecewise-linear (`'L'`) bed, which a
+   parabolic equation does not support on the gentle bearings where it can referee. What remains
+   risky: which bed representation is right for the fjord profiles (steep, coarse), where neither
+   `'L'` nor `'C'` makes Bellhop's arrivals agree with its TL run.
 3. **Bellhop3D's arrivals are not eigenrays.** Measured here: a 3-D arrivals run on the seamount
    with the test's fan returns up to 1,207 to 1,272 arrivals per receiver, and about 360 on
    average. Bellhop 2-D on one bearing returns at most 106. These are beam contributions that the
@@ -111,11 +119,13 @@ and keep the characterisation test.
 6. **Bellhop3D is GPL-3.** `docs/OPEN_SOURCE.md` rule 2 allows GPL code as a separate-process test
    oracle "or an optional external tool". Rule 3 requires the owner's sign-off for any copyleft
    item in a build, image or CI. Bellhop already runs this way as the eigenray tier's tracer.
-   Bellhop3D is today an oracle only (D-149). Its use as a provider is the owner's decision.
+   Bellhop3D is today an oracle only (D-149). The owner has approved it as an opt-in provider
+   run as a separate process (2026-11-26, question 1); nothing ships it yet.
 7. **Bellhop3D is "not independently re-validated"** (`OPEN_SOURCE.md`, Acoustics Toolbox row).
    Its own beam convergence on the seamount was measured: going from 121 × 361 to 241 × 721
    beams, the 3-D range averages move by up to 1.1 dB and the 3-D minus N × 2-D difference by
-   0.6 dB (test docstring).
+   0.6 dB (test docstring). Most of that is the elevation count: Gaussian beams need 481 over ±30°
+   (section 2, `sonar-6c8`).
 
 ## 2. What exists
 
@@ -138,17 +148,184 @@ against Bellhop3D 3-D, incoherent TL averaged over 3.5 to 6.5 km, source and rec
 | 32° | beside | −0.7 dB [−1.2] |
 | all, 0.2 to 1.8 km | before the seamount | 3-D and N × 2-D within 0.07 dB |
 
-**`sonar-6c8`** (open, P3): "ours is 1.0 to 2.5 dB louder than Bellhop3D's N×2-D on the seamount
-bearings, up to 1.0 dB over a level 200 m bed at 7 km. Candidates: beam type G vs B, bed
-interpolation. Also: a scenario YAML using {seamount: ...}." Other candidates seen while scoping
-this task (ours, none tested):
+**`sonar-6c8`**: "ours is 1.0 to 2.5 dB louder than Bellhop3D's N×2-D on the seamount
+bearings, up to 1.0 dB over a level 200 m bed at 7 km." Investigated 2026-11-26 (package 1 of
+this thread); what follows is measured here (ours) unless a source is named, with the commands in
+section 2.1.
 
-- Our provider runs Bellhop in arrivals mode (`'A'`) with Bellhop's automatic beam count. On one
-  seamount bearing it chose 10,400 beams over ±30° (its `.prt`, measured here). The oracle runs in
-  TL mode (`'I'`) with 121 beams in elevation.
-- Our incoherent level is a sum over arrivals after the 20 dB floor of D-105.
-- Our `.bty` is `'L'` (piecewise linear along range). Bellhop3D's is `'R'` (a rectilinear grid,
-  interpolated in 2-D).
+**Answer.** Most of it is the oracle, not our runs. Over a level bed none of it is ours.
+
+1. **Over a level bed Bellhop 2-D and Bellhop3D's N × 2-D mode are the same program.** At the
+   same beam type and count they agree to 0.001 dB at every range; Bellhop3D's 3-D mode agrees
+   with both to 0.003 dB beyond 2 km. The 1.0 dB at 7 km was the **oracle's beam count**: Gaussian
+   beams (`'B'`) with 121 elevation beams over ±30° are not converged. Against the image-source
+   closed form they are 1.12 dB too quiet at 7 km (0.67 at 5 km); 241 beams 0.26 dB, 481 beams
+   0.00 dB. Hat beams (`'G'`, Bellhop's default and what our provider uses) are within 0.08 dB at
+   121 and converged at 241. The 3-D mode behaves the same in elevation (121 × 121: 1.14 dB at
+   7 km; 481 × 61: 0.04 dB); 21 to 61 azimuth beams over ±10° are enough on a level bed.
+2. **Our provider is right over a level bed.** Its lookup (the seamount test's 100 m × 20 m grid,
+   ±30°, default arrival selection) summed in power is within 0.19 dB of the image sources from 2
+   to 7 km (mean +0.03 dB), 0.13 dB at 1 km. Nearer than 0.5 km the ±30° fan the test chose leaves
+   out steep bottom paths (1.87 dB at 100 m); the provider's default fan is ±80°.
+3. **KRAKEN is not a reference at the source's depth.** Its incoherent mode sum with the receiver
+   at the source depth (50 m) is 1.68 to 1.75 dB louder than the image sources and every Bellhop
+   run from 3 km; 20 m off the source depth it agrees with the image sources within 0.07 dB. The
+   cause (ours): an incoherent mode sum weights each mode by φ(z_s)²φ(z_r)², whose mean over the
+   modes at z_r = z_s is 3/8 against (1/2)² = 1/4 off it: 3/2, 1.76 dB. A range-averaged coherent
+   field (PyRAM) shows the same 1.5 dB at z_r = z_s. `test_kraken_crosscheck.py` has z_r ≠ z_s and
+   is not affected.
+4. **Over relief, Bellhop's arrivals output depends on how the bed is written; its TL output does
+   not.** On the bearings beside the seamount, Bellhop's own incoherent TL run (`'I'`) gives the
+   same range average within 0.06 dB for hat or Gaussian beams from 481 up and the automatic
+   count, and within 0.01 dB for the profile written `'L'` every 5, 25 or 100 m, or `'C'`. The arrivals (`'A'`, what the provider reads) summed in power
+   are 1.2 to 1.7 dB louder than that TL run on the gently sloping bearings beside the seamount
+   (−20 and 32°) with the provider's `'L'` bed, at 50, 90 and 130 m, and within 0.06 dB with `'C'`
+   (Bellhop's curvilinear bed, same points). A parabolic equation (PyRAM 1.3.0, the inputs of
+   `test_ram_crosscheck.py`) on the 32° profile sides with the TL run: within 0.07 to 0.29 dB at
+   the three depths, the arrivals 1.6 to 1.7 dB louder. Bellhop's coherent field over `'L'` is
+   also 1.9 to 2.5 dB louder than the PE there, over `'C'` within 0.05 to 0.5 dB; over the level
+   bed the coherent field and the PE agree within 0.3 dB off the source depth. Over the steep flanks and
+   summit (−4, 6, 16°: slopes to 12°) `'C'` does not bring the arrivals onto the TL run (they
+   are then 0.1 to 0.8 dB quieter); the PE is not a referee there (one-way, stair-stepped bed;
+   `test_ram_crosscheck.py` stays at 0.8°). The beam count matters only to the arrivals: arrivals
+   minus TL run on the 32° bearing at 90 m over `'L'` is +0.88, −0.22, −0.95, −1.28, −1.46, −1.50 dB
+   with 481, 1001, 2001, 4001, automatic (about 10,400) and 20,001 beams; over `'C'` +1.15, +0.58,
+   +0.24, +0.08, +0.05, +0.04 dB; over the level bed +0.05 and +0.03 dB at 4001 and 20,001. A
+   likely mechanism (ours, not traced in the source): a piecewise-linear bed's normal jumps at
+   every node, the reflected beams fold there, and Bellhop's arrival merge (`ArrMod.f90`
+   `AddArr`, opened: a contribution joins the previous arrival when its phase and its delay times
+   ω are within 0.05 rad) adds folded contributions by amplitude.
+5. **The floor, cap and lookup grid of the provider explain at most 0.10 dB** on the seamount
+   bearings (provider against the same Bellhop arrivals at one receiver: −0.02 to +0.10 dB).
+
+**How much each candidate explains on the seamount** (our tier minus Bellhop3D N × 2-D with the
+test's beams, incoherent TL averaged over 3.5 to 6.5 km, 50 m; each column is one step, from the
+oracle as the test runs it to our provider, and the steps add up to the total):
+
+| Bearing | Total | 1. Oracle beams (B 121 → B 1921) | 2. Bellhop3D `'R'` 25 m grid → Bellhop 2-D TL run on our `'L'` profile | 3. TL run → arrivals summed in power | 4. Arrivals → provider (lookup, floor, cap) |
+| --- | --- | --- | --- | --- | --- |
+| −20° (beside) | −1.67 | −0.47 | −0.14 | −1.16 | +0.10 |
+| −4° (flank) | −1.11 | −0.57 | −0.06 | −0.47 | −0.02 |
+| 6° (summit) | −2.45 | −1.23 | −1.15 | −0.15 | +0.08 |
+| 16° (flank) | −1.00 | −0.62 | −0.04 | −0.36 | +0.03 |
+| 32° (beside) | −2.34 | −0.66 | +0.02 | −1.72 | +0.03 |
+
+Negative: ours louder. Bellhop3D N × 2-D at 481 or 1921 Gaussian or 481 hat beams agree within
+0.15 dB of each other on every bearing, so column 1 is the oracle's non-convergence. Column 2 is
+small except over the summit, where the receivers are in the summit's shadow: there Bellhop3D's
+own bed grid matters (its N × 2-D range average moves from 71.59 to 70.76 and 70.89 dB with a
+25, 12.5 and 6.25 m grid; Bellhop 2-D's TL run on the `'L'` profile gives 69.99 to 70.72 dB by
+beam type and count), so about 0.8 dB of the 1.15 is the oracle's 25 m grid and the rest is the
+scatter of a shadow zone. Column 3 is item 4 above. Column 4 is the provider.
+
+**So, against the questions of the issue:** (i) Bellhop3D's N × 2-D mode is not the cause: it
+equals Bellhop 2-D. (ii) Non-convergence explains the level-bed 1 dB entirely and 0.5 to 1.2 dB
+on the seamount: in **the oracle** (Bellhop3D, Gaussian beams, 121 in elevation), which needs 481
+(seconds in N × 2-D mode; 3-D timings in section 2.1). Our provider's automatic count (about
+10,400 over ±30° to 6.6 km) is converged for TL. (iii) Our provider's floor, cap and lookup: at
+most 0.10 dB. What our provider does that matters is to read Bellhop's **arrivals** over a bed
+written `'L'`: 0.4 to 1.7 dB over relief, none over a level bed. (iv) Unexplained: over the summit
+about 0.3 dB (shadow-zone scatter), elsewhere under 0.15 dB.
+
+**What this means for the shipped records.** 19 of the 22 `eigenray` scenarios have a level bed
+(rings about the sonar, no `bathymetry`); for them the arrivals and Bellhop's own TL run agree at
+the target within 0.14 dB (table below), and the provider is within 0.19 dB of the image sources
+on the case above: nothing to change. The three `fjord_*` scenarios have a bathymetry profile
+written `'L'` (100 m nodes, slopes to about 9°). There, writing the same points as `'C'` moves the
+target's one-way loss by +5.1, +0.2 and +3.6 dB, but `'C'` does not make the arrivals agree with
+the TL run either (they are then 1.8, 0.4 and 3.6 dB quieter than it), and on a coarse, steep
+profile `'C'` is a different bed, not a smoother copy of the same one. **No change is
+recommended until a referee exists for the fjord profile** (owner question 9, section 6).
+`reverb_relief.py` (`along_profile`) also writes `'L'`; no shipped scenario uses it.
+
+One-way incoherent loss at each scenario's target (dB re 1 m; the grid node the provider looks
+the target up at; `tools/eigenray_tl_check.py`, 2 min for all 22). "Shipped" is the provider as
+the scenario uses it; "all arrivals" keeps every arrival (no floor, cap or `max_arrivals`); "TL run"
+is Bellhop's incoherent TL at the same receiver; the last three columns write the fjord beds `'C'`.
+These are point values (one receiver), not range averages:
+
+| Scenario | Range m | Depth m | Shipped | All arrivals | TL run | `'C'` shipped | `'C'` all | `'C'` TL run |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fjord_static_trial_2row | 2600 | 60 | 58.29 | 55.77 | 55.57 | 63.38 | 58.82 | 57.04 |
+| fjord_static_trial_3row | 150 | 18 | 40.03 | 40.03 | 39.71 | 40.20 | 40.19 | 39.80 |
+| fjord_testauv_trial_1row | 500 | 15 | 50.63 | 50.48 | 49.38 | 54.18 | 54.09 | 50.47 |
+| flank_patrol | 2961 | 60 | 58.26 | 58.26 | 58.26 | | | |
+| flank_target_10km | 10000 | 50 | 66.06 | 66.06 | 66.06 | | | |
+| flank_target_1km | 1000 | 50 | 52.09 | 52.09 | 52.09 | | | |
+| flank_target_5km | 5000 | 50 | 61.50 | 61.50 | 61.50 | | | |
+| popoto_12km (also `_2row`, `_3row`) | 12027 | 4 | 67.23 | 67.17 | 67.17 | | | |
+| popoto_12km_two_ships | 12027 | 4 | 67.23 | 67.17 | 67.17 | | | |
+| popoto_env_deep_silt_1000m | 10032 | 4 | 72.62 | 72.62 | 72.62 | | | |
+| popoto_env_gravel_30m | 3105 | 3 | 53.51 | 52.87 | 52.76 | | | |
+| popoto_env_summer_mud_60m | 4079 | 4 | 88.97 | 88.85 | 88.73 | | | |
+| popoto_env_winter_sand_200m | 8040 | 4 | 64.19 | 64.19 | 64.05 | | | |
+| popoto_far_mover | 6053 | 4 | 62.94 | 62.74 | 62.73 | | | |
+| popoto_trial_1000m | 1000 | 15 | 48.52 | 48.52 | 48.52 | | | |
+| popoto_trial_100m | 100 | 15 | 35.69 | 35.69 | 35.68 | | | |
+| popoto_trial_2000m | 2000 | 15 | 52.92 | 52.91 | 52.91 | | | |
+| ssp_front_static_trial_2row | 2600 | 60 | 59.16 | 57.97 | 57.78 | | | |
+| ssp_front_testauv_trial_1row | 500 | 15 | 46.50 | 45.89 | 44.59 | | | |
+| ssp_thermocline_static_trial_3row | 2600 | 60 | 58.72 | 57.81 | 57.06 | | | |
+
+Read with care: "shipped" minus "all arrivals" is the stated selection (`max_arrivals: 12` in the
+fjord and `ssp_*` scenarios: up to 2.5 dB at `fjord_static_trial_2row`; the cap of 64 at
+`popoto_env_gravel_30m`: 0.64 dB, the 14 % of `sonar-9b8`). It is a scenario choice of D-105, not
+part of `sonar-6c8`, and is not proposed for change here. The three `ssp_*` scenarios (water that
+changes with range, no bathymetry) show arrivals 0.2 to 1.3 dB quieter than the TL run at their
+targets: one receiver each, not investigated further (follow-up).
+
+**What the later packages should take from this.**
+
+- **The oracle's fan.** Bellhop3D runs used as references need at least 481 elevation beams with
+  Gaussian beams (or 241 hat beams) over ±30°; the seamount test's 121 is 0.5 to 1.2 dB short of
+  converged. Its bed grid needs 12.5 m or finer where receivers sit in a summit's shadow. The
+  "1.1 dB between 121 × 361 and 241 × 721" quoted in section 1 item 7 and in the acceptance bound
+  of section 5 is mostly this elevation count.
+  With the elevation fan raised (seamount, 361 azimuth beams kept, 3.5 to 6.5 km, 50 m), the
+  3-D effect stands: 3-D minus N × 2-D is +3.49 and +3.60 dB over the flanks (−4, 16°), +0.81
+  over the summit, −1.10 and −1.12 beside (−20, 32°) with 481 Gaussian beams (208 s for both
+  modes); +3.23, +3.95, +0.29, −1.18, −1.14 with 241 hat beams (105 s); the test's 121 gives
+  +3.35, +3.51, +0.90, −1.11, −1.16 (66 s). Ours minus the 481-beam 3-D field: −3.99, −4.01 dB
+  over the flanks, −2.17 over the summit, +0.01 and −0.62 beside; ours minus its N × 2-D: −0.51,
+  −0.41, −1.36, −1.09, −1.73 (the last two are item 4). The azimuth count was not varied.
+- **Package 2 (the cross-slope warning)** is not affected: it reads the bed, not the field.
+- **An opt-in Bellhop3D provider (A):** compare it with our tier through Bellhop's TL output or
+  with a `'C'` bed for smooth relief, never with arrivals summed over an `'L'` bed; over a level
+  bed the two must agree within 0.2 dB at converged fans (they agree to 0.003 dB at equal beams).
+  Its own arrivals need the same check against its own TL run before any merge is trusted: the
+  arrival output is where the 2-D program goes wrong over relief, and Bellhop3D's 3-D arrivals
+  were not checked (section 1 item 3).
+- **The acceptance bound of section 5** loses the `sonar-6c8` allowance over a level bed. Over
+  relief, "ours" must be produced with a bed representation whose arrivals agree with Bellhop's TL
+  run (`'C'` for a smooth sampled bed such as the seamount), or the bound must carry the 1.7 dB of
+  item 4.
+- **The seamount test** (`test_our_n_by_2d_tier_over_the_seamount`, bound `abs(...) < 3.5` dB
+  against N × 2-D) is explained, and could be tightened by the owner once the oracle's fan is
+  raised; this package does not change it.
+
+### 2.1 Commands and run times for `sonar-6c8`
+
+All on 2026-11-26, Acoustics Toolbox 8b4682b built by `tools/build_oracles.sh` (the session's
+scratch directory), PyRAM 1.3.0, on the shared 4-core machine. Scripts in the scratch directory;
+all output files were deleted after reading, none larger than 2 MB.
+
+- The pinned results: `tests/python/test_bellhop_nx2d_agreement.py` (six tests, 51 s in all;
+  each skips without its oracle). Environment: `GPUSONAR_BELLHOP`, `GPUSONAR_BELLHOP3D`,
+  `GPUSONAR_KRAKEN_DIR`, and `pyram` for the PE test.
+- Level bed (200 m, 1500 m/s over 1700 m/s, 1.9 g/cm³, 0.5 dB/λ; 8 kHz; source and receiver
+  50 m; 0.1 to 7 km every 100 m): `write_env` with run types `'I'`, `'IG'`, `'IB'` at 61 to 3841
+  beams (0.0 to 1.5 s each); `run_bellhop3d` modes `2` (one bearing, 0.2 to 0.3 s) and `3` (121 ×
+  61 over ±10°: 3 s; 481 × 61: 12 s); `run_kraken` incoherent at 50, 70 and 120 m (2 s);
+  `ImageSourceProvider(..., max_order=400, engine="numpy")` summed in power; the provider as in
+  `test_our_n_by_2d_tier_over_the_seamount`.
+- Seamount (the case of `test_seamount_3d.py`): on −20, −4, 6, 16, 32° the provider through
+  `along_profile` (7 to 9 s per bearing), `run_bellhop` arrivals at one receiver depth, Bellhop
+  TL runs `'I'`, `'IG'` 481, `'IB'` 121, 481, 1921, Bellhop3D mode `2` with B 121, 481, 1921 and
+  G 481 (one bearing each): 2 min 30 s for all. The bed-representation runs (`'L'` every 5, 25,
+  100 m; `'C'` every 25 m; receivers every 10 m from 3.5 to 6.5 km at 50, 90, 130 m): 10 to 90 s
+  per bed. PyRAM on 32°, 6° and −4° and the level bed: 13 to 16 s each.
+- The scenario table: `GPUSONAR_BELLHOP=... tools/eigenray_tl_check.py` (1 min 58 s, four
+  receivers per scenario, files of kilobytes).
 
 Related open issue: `sonar-pup` (water that changes with range per bearing, a front across the
 map). It is horizontal refraction by the water, not the bed, and it is small (section 3).
@@ -280,7 +457,8 @@ Estimates from these numbers (not measured):
 **Accuracy to expect.** The 3-D field is what Bellhop3D gives. Its beam convergence moves range
 averages by up to 1.1 dB between 121 × 361 and 241 × 721 beams (measured, D-149). The plumbing
 (merging, the floor, nearest-node lookup) adds an error to be measured in P3. Over a level bed the
-tier would equal Bellhop3D, which differs from our Bellhop tier by up to 1.0 dB (`sonar-6c8`).
+tier would equal our Bellhop tier: the two programs agree to 0.001 dB at the same beams, and the
+1.0 dB first reported was the oracle's beam count (`sonar-6c8`, section 2).
 
 **Risks.**
 
@@ -295,7 +473,7 @@ tier would equal Bellhop3D, which differs from our Bellhop tier by up to 1.0 dB 
 - The Bellhop3D bed is single-valued in (x, y): no walls, overhangs or caves.
 
 **Tests that would hold it.** P2 to P5 below: reader fixtures; level-bed agreement with Bellhop3D
-mode 2 and with our tier (within the `sonar-6c8` bound once fixed); a mirror test of the
+mode 2 and with our tier (within 0.2 dB at converged fans, section 2); a mirror test of the
 seamount; unit 3-D vectors with out-of-plane azimuth on the flanks; the acceptance bound (section 5).
 
 ### B. Stay N × 2-D, with a warning or a first-order correction (ours)
@@ -383,7 +561,7 @@ Sizes: S is up to 2 days, M up to a week, L up to two weeks (ours).
 
 | # | Package | Goal | Files | Tests first | Default that could move (owner first) | Oracle or GPU | Size |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0 | **`sonar-6c8`** | Explain the 1.0 to 2.5 dB between our 2-D runs and Bellhop3D mode 2 (1.0 dB on a level bed). Isolate, one at a time, on a level 200 m bed and then the seamount bearings: (1) beam type `G`/`B`; (2) beam count (automatic 10,400 against 121); (3) arrivals `'A'` summed against TL `'I'`; (4) the 20 dB floor of D-105 on the incoherent sum; (5) `.bty` `'L'` against `'R'`. Record which explains what | `tests/python/test_seamount_3d.py` (a level-bed test), possibly `sim/bellhop.py` | `test_level_bed_our_tier_against_bellhop3d_n_by_2d`: with matched beams and run type, within 0.3 dB (the two modes' near-range agreement); first written as the 1.0 dB characterisation | **Yes if** the fix changes `BellhopProvider`'s run type, beam type or beam count by default. That moves all 22 eigenray scenarios and the gallery (by up to about 1 dB, estimate) | Bellhop and Bellhop3D on the CPU, seconds per run; then the full GPU suite (`tools/gpu_job.sh`) for no regression | M |
+| P0 | **`sonar-6c8`** (done 2026-11-26 as an investigation: section 2) | Explain the 1.0 to 2.5 dB between our 2-D runs and Bellhop3D mode 2 (1.0 dB on a level bed). Outcome: the oracle's elevation beam count (Gaussian, 121; needs 481) and, over relief, Bellhop's arrivals over our `'L'` bed; the provider's floor, cap and lookup at most 0.1 dB | `tests/python/test_bellhop_nx2d_agreement.py`, `tools/eigenray_tl_check.py` (opt-in diagnostic); no library change | Six characterisations (section 2.1): Bellhop 2-D and Bellhop3D N × 2-D within 0.05 dB at equal beams; the provider within 0.3 dB of the image sources from 2 km; arrivals over `'L'` louder than the TL run by more than 1 dB, over `'C'` within 0.2 dB | No: nothing shipped moved. A change to the fjord bed would move three scenarios (owner question 9) | Bellhop, Bellhop3D, KRAKEN, PyRAM on the CPU, 51 s for the tests | M |
 | P1 | Cross-slope warning (option B) | Say where N × 2-D is suspect | `sim/reverb_relief.py`, `sim/bathymetry.py` (a cross-bearing slope helper), `docs/CONFIGURATION.md` if a threshold key is added | Warns on the seamount flanks, not beside; never on a level bed or the fjord profile; records the largest φ | None (a warning only) | none | S |
 | P2 | Reader and merger (option A starts here: owner questions 1 to 3 answered) | Read Bellhop3D 3-D arrivals (ASCII, then binary `'a'`) and merge beam contributions into eigenrays | new `sim/bellhop3d.py` (reader); the `.bty` and `.env` writers move from `tests/python/bellhop3d_oracle.py` (the oracle then imports them) | A hand-written fixture file read back exactly. Merging keeps total energy to 1e-6 and reduces the seamount's counts (up to 1,272) to below the cap of 64 with less than 1 % energy left out (target, ours) | None | Bellhop3D, CPU, about a minute; mind disk (1.1 GB ASCII at 18,850 receivers) | M |
 | P3 | `Bellhop3DProvider` | `eigenrays(source, points)` with 3-D vectors, per-position cache, irregular grid, the D-105 rule and its warning | `sim/bellhop3d.py`, `sim/propagation.py` (`make_provider`: tier `eigenray3d`) | (a) Level bed: equals Bellhop3D mode 2 TL within 0.3 dB. (b) Mirror: the seamount mirrored about the source's bearing gives mirrored azimuths. (c) Unit `launch`/`arrival`; out-of-plane azimuth on the flanks above 0.5° (formula: 0.8–4° at 2–10° grazing over 12°). (d) Delay of the node correction within 20 µs, as the 2-D lookup | None (new tier) | Bellhop3D, CPU, minutes | L |
@@ -407,14 +585,18 @@ on the five bearings −20, −4, 6, 16 and 32°:
 
 A plumbing-only variant with the provider and the oracle at the **same** fan should be within
 0.5 dB (ours). It shows that merging loses nothing. Neither bound includes `sonar-6c8`, because
-the oracle and the provider are the same program. The level-bed test of P0 holds the comparison
+the oracle and the provider are the same program. Two findings of `sonar-6c8` apply to both
+bounds (section 2): the oracle must run at least 481 Gaussian elevation beams (121 is 0.5 to
+1.2 dB short), and "ours", if it sums arrivals, must not be read over a bed written `'L'`, or
+the bound must carry up to 1.7 dB. The level-bed test of P0 holds the comparison
 with our 2-D tier. If the owner chooses B + E only, the test stays a characterisation and gains
 an assertion that P1's warning fires on the flank bearings.
 
 ## 6. Questions for the owner
 
 1. May Bellhop3D (GPL-3, Acoustics Toolbox, run as a separate process as Bellhop is) be an
-   **opt-in provider** of the simulator, not only a test oracle?
+   **opt-in provider** of the simulator, not only a test oracle? Answered 2026-11-26: yes, as a
+   separate process, opt-in, for the later packages.
 2. Do the operating waters have **steep relief across the look direction**: banks, seamounts,
    canyon or fjord walls? This is STATUS question 8, waters and bottoms, and 12, the coverage site.
 3. Which **ranges and cross-bearing sea-floor slopes** matter for the long-range array? For
@@ -422,14 +604,20 @@ an assertion that P1's warning fires on the flank bearings.
 4. How much **run time and disk** is acceptable for one long-range scenario at the 3-D tier?
    About a minute of tracing per source position was measured. A moving platform multiplies it.
    Arrival files run to gigabytes unless the grid is restricted.
-5. If `sonar-6c8` shows that our Bellhop runs should change (beam type, count or run type), may
-   the levels of the 22 eigenray scenarios and the gallery move by up to about 1 dB?
+5. Answered by `sonar-6c8` (section 2): no change to beam type, count or run type is needed; the
+   level-bed scenarios' levels stay.
 6. Should the simulator warn where the bed slopes steeply across a bearing (P1)? It changes no
    record.
 7. For FLS and SAS: are harbours, pools with walls, canyons or sloping banks part of the use? If
    so, wall and tilted-plane multipath by image sources (option F) would be filed as its own issue.
 8. If A goes ahead: the Fortran `bellhop3d.exe`, or bellhopcxx3d (also GPL-3, faster, its 3-D
    accuracy not checked here)?
+9. **The fjord bed** (`fjord_static_trial_2row`, `_3row`, `fjord_testauv_trial_1row`): its profile
+   is written to Bellhop as piecewise linear (`'L'`), over which Bellhop's arrivals disagree with
+   its own TL run. Writing the same points as curvilinear (`'C'`) would move the target's one-way
+   loss by +5.1, +0.2 and +3.6 dB, and does not settle it. Should the fjord profile be read as
+   linear between its points (keep), as a smooth bed (`'C'`), or be referred to a wave model before
+   anything changes? Nothing is changed until you say.
 
 ## 7. What was not verified
 
@@ -450,7 +638,12 @@ an assertion that P1's warning fires on the flank bearings.
   repeatable benchmarks.
 - The licences of CAMBALA, SMPE and the WHOI 3-D PE beyond what their pages show. The DTIC
   report was not opened.
-- The candidates listed under `sonar-6c8`: none was tested.
+- `sonar-6c8`: the five candidates of section 2 were tested (section 2.1). Not verified: the
+  mechanism of the `'L'`-bed excess in Bellhop's arrivals (read from `ArrMod.f90`, not traced);
+  which representation is right for the fjord profiles (no wave model was run on them: their
+  slopes, to 9°, are beyond what PyRAM's stair-stepped bed is trusted for here); Bellhop3D's own
+  arrivals against its TL run; the three `ssp_*` scenarios' 0.2 to 1.3 dB between arrivals and
+  TL run at their targets (single receivers).
 - The 0.4 dB merging allowance and the 0.5 dB same-fan bound: ours, to be measured in P3.
 - No Bellhop3D publication was read. Its user guide is in the oracle build tree
   (`Bellhop/Bellhop3D User Guide 2024_8_28.pdf`) and was not opened. Only `doc/bellhop3d.htm` and
@@ -478,4 +671,10 @@ were deleted after reading.
 
 - FLS and SAS multipath off walls and tilted planes through `image_source` (option F), if the
   owner answers question 7 with yes.
-- `sonar-6c8`: add the five candidates of section 2 to its description.
+- `sonar-6c8`: close as explained (section 2), with the fjord bed as owner question 9.
+- Raise the seamount oracle's elevation fan to 481 (`test_seamount_3d.py` FAN), then tighten
+  `test_our_n_by_2d_tier_over_the_seamount` (its 3.5 dB bound held the 1 dB level-bed allowance);
+  an owner decision, as it changes a test's numbers.
+- Range-dependent water (`ssp_*`): Bellhop's arrivals against its TL run at the targets differ by
+  0.2 to 1.3 dB at single receivers; check with range averages and a PE (water fronts are gentle
+  enough for one).
