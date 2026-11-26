@@ -47,7 +47,13 @@ Examples (CPU, Bellhop for the eigenray scenes: GPUSONAR_BELLHOP):
   python3 tools/doppler_study.py margin flank_patrol --waveform cw --pings 6 --json out.json
   python3 tools/doppler_study.py margin flank_patrol --waveform cw --target small_vehicle --radial 0.25 0.5 1 2
   python3 tools/doppler_study.py margin flank_patrol_doppler --target small_vehicle --bearing 23.5
+  python3 tools/doppler_study.py fade flank_patrol_doppler --target small_vehicle --ranges 1800 2200 2600 --depths 20 40 60
 
+  fade SCENARIO     The single-frequency fade (DOPPLER.md section 0 item 3): for a train scene, a target-only ping per
+                    geometry (the target moved along its bearing to each range and depth, its velocity kept) and per
+                    segment sent alone; the echo's energy (mean over the hydrophones) over the segment's transmitted
+                    energy, in dB, and each tone's against the sweep's. `--comb N` adds a comb of N tones across the
+                    sweep's band in place of the tone, with the tone's energy (option E).
 """
 from __future__ import annotations
 
@@ -209,8 +215,27 @@ def scene_config(name, args):
     cfg = load_scenario_config(name, expand=False)
     if args.platform_speed is not None:
         cfg.setdefault("platform", {})["velocity"] = [float(args.platform_speed), 0.0, 0.0]
+    if getattr(args, "mute", None):
+        cfg = mute_segments(cfg, args.mute)
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
     cfg = set_waveform(cfg, args.waveform, sonar.config)
+    return cfg
+
+
+def mute_segments(cfg, indices):
+    """A train scene with segments `indices` replaced by silence of the same length: the others keep their timing and
+    their energy (with `energy_share`, the train's `source_energy_db` falls by the muted shares). The control for
+    what one segment does to another's background."""
+    wf = cfg["sonar_overrides"]["transmit"]["waveform"]
+    segs = [dict(sg) for sg in wf["segments"]]
+    shares = [float(sg.get("energy_share", 0.0)) for sg in segs]
+    for i in indices:
+        segs[i] = {"kind": "gap", "duration": segs[i]["duration"]}
+    wf = dict(wf, segments=segs)
+    if wf.get("source_energy_db") is not None and sum(shares) > 0.0:
+        kept = sum(sh for i, sh in enumerate(shares) if i not in indices)
+        wf["source_energy_db"] = float(wf["source_energy_db"]) + 10.0 * np.log10(kept / sum(shares))
+    cfg["sonar_overrides"]["transmit"]["waveform"] = wf
     return cfg
 
 
@@ -454,6 +479,103 @@ def cmd_reverb_spectrum(args):
     return out
 
 
+def _echo_over_transmit_db(record, sonar):
+    """10 log10(echo energy / transmitted energy) of a target-only record, in the record's own units: the echo's energy
+    averaged over the hydrophones (real passband: integral x^2; baseband: half of integral |x|^2) over the pulse's
+    (amplitude^2 / 2) integral |b|^2."""
+    from gpusonar import _gpusonar as core
+    s = record.samples
+    x = np.asarray(s.array)
+    e = (np.sum(np.abs(x) ** 2, axis=1) * (0.5 if s.kind == core.SampleKind.ComplexBaseband else 1.0)).mean() / s.sample_rate
+    a = float(record.transmit.waveform.amplitude)
+    return float(10.0 * np.log10(e / (0.5 * a * a * sonar.sampled_waveform.envelope_energy())))
+
+
+def cmd_fade(args):
+    """The tone's fade against the sweep, per geometry (docs/tasks/DOPPLER.md section 0 item 3), on a train scene."""
+    from gpusonar.sonar import SonarModel
+    cfg = scene_config(args.scenario, args)
+    if args.fidelity:
+        cfg["fidelity"] = args.fidelity
+        if args.fidelity == "free_field":
+            cfg.pop("propagation", None)
+    if args.channels:
+        # The energy is a mean over hydrophones: fewer of them change it by the array's own spread only.
+        cfg.setdefault("sonar_overrides", {}).setdefault("array", {})["count"] = int(args.channels)
+    sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
+    wf = sonar.waveform_config
+    train = getattr(sonar.sampled_waveform, "segments", None)
+    if not train:
+        raise SystemExit("fade: the scene must send a train (source: train)")
+    sounding = [sg for sg in train if sg.kind != "gap"]
+    sweep = next(sg for sg in sounding if sg.kind != "cw")
+    variants = {}
+    for sg in sounding:
+        segs = [{"kind": "gap", "duration": o.duration} for o in train]
+        if sg.kind == "cw":
+            segs[sg.index] = {"kind": "cw", "frequencies": list(sg.frequencies), "duration": sg.duration, "window_alpha": sg.window_alpha}
+        else:
+            segs[sg.index] = {"kind": sg.kind, "f_start": sg.f_start, "f_stop": sg.f_stop, "duration": sg.duration,
+                              "window_alpha": sg.window_alpha}
+        variants[f"{sg.index}:{sg.kind}" + (f"x{len(sg.frequencies)}" if len(sg.frequencies) > 1 else "")] = segs
+    tone = next((sg for sg in sounding if sg.kind == "cw"), None)
+    for n in (args.comb or []):
+        # Option E: N tones at once, at the centres of N equal parts of the sweep's band, in the tone's place.
+        lo, hi = sorted((sweep.f_start, sweep.f_stop))
+        freqs = [lo + (k + 0.5) * (hi - lo) / n for k in range(n)]
+        segs = [{"kind": "gap", "duration": o.duration} for o in train]
+        segs[tone.index] = {"kind": "cw", "frequencies": freqs, "duration": tone.duration, "window_alpha": tone.window_alpha}
+        variants[f"comb{n}"] = segs
+    item = target_items(cfg, args.target)[0]
+    plat = np.asarray(cfg.get("platform", {}).get("position", [0, 0, 0]), dtype=float)
+    centre = item_centre(item)
+    d = centre - plat
+    d[2] = 0.0
+    d /= np.linalg.norm(d)
+    rows = []
+    for r in (args.ranges or [float(np.hypot(*(centre - plat)[:2]))]):
+        for z in (args.depths or [float(centre[2])]):
+            pos = plat + d * float(r)
+            pos[2] = float(z)
+            it = copy.deepcopy(item)
+            it.pop("origin", None)
+            it["positions"] = [list(map(float, pos))]
+            row = dict(range_m=float(r), depth_m=float(z))
+            for name, segs in variants.items():
+                tcfg = copy.deepcopy(cfg)
+                tcfg["scene"] = [it]
+                tcfg["reverberation"] = []
+                rx = dict(tcfg.get("receiver", {}))
+                rx.pop("ambient_noise", None)
+                rx["noise_rms"] = 0.0
+                tcfg["receiver"] = rx
+                tx = {k: v for k, v in wf.items() if k not in ("segments", "source_energy_db")}
+                tx.update(segments=segs, f_start=float(wf["f_start"]), f_stop=float(wf["f_stop"]), normalise="none",
+                          source_energy_db=None, source_level_db_rms=float(wf["source_level_db_rms"]))
+                over = copy.deepcopy(tcfg.get("sonar_overrides", {}))
+                over.setdefault("transmit", {})["waveform"] = tx
+                tcfg["sonar_overrides"] = over
+                vs = SonarModel.load(tcfg["sonar"], over)
+                row[name] = _echo_over_transmit_db(run(tcfg, 1)[0], vs)
+            sweep_name = next(k for k in variants if k.endswith(sweep.kind))
+            for name in variants:
+                if name != sweep_name:
+                    row[f"{name}_minus_sweep_db"] = row[name] - row[sweep_name]
+            rows.append(row)
+            print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in row.items()}), flush=True)
+    out = dict(scenario=args.scenario, target=args.target, fidelity=cfg.get("fidelity"), rows=rows)
+    for key in rows[0]:
+        if key.endswith("_minus_sweep_db"):
+            vals = np.array([r[key] for r in rows])
+            out[key] = dict(mean=float(vals.mean()), min=float(vals.min()), max=float(vals.max()), spread=float(np.ptp(vals)),
+                            std=float(vals.std()))
+            print(key, json.dumps({k: round(v, 2) for k, v in out[key].items()}), flush=True)
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(out, f, indent=1)
+    return out
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__.split("\n\n", 1)[1])
@@ -474,17 +596,28 @@ def main(argv=None):
     m.add_argument("--pings", type=int, default=4, help="background pings, each a new draw (4)")
     m.add_argument("--window", type=float, default=0.5, help="background window, +- this many pulse lengths (CW; 0.5)")
     m.add_argument("--vmax", type=float, default=4.0, help="the bank's largest range rate, m/s (4)")
+    m.add_argument("--mute", type=int, nargs="*", help="a train's segments to replace by silence (a control; energies of the rest kept)")
     m.add_argument("--bearing", type=float, help="the target's beam, degrees from broadside (default: searched)")
     m.add_argument("--segments", type=int, nargs="*", help="a train's segments to measure, by index (default: every tone and sweep)")
     m.add_argument("--comb", choices=("whole", "tones"), default="whole",
                    help="a comb segment: correlate with it as sent (whole), or with each tone and sum the powers (tones)")
     m.add_argument("--json", help="write the results here")
+    fd = sub.add_parser("fade", help="a train's tone against its sweep: echo energy over transmitted energy per geometry")
+    fd.add_argument("scenario")
+    fd.add_argument("--target", required=True, help="the scene label to move")
+    fd.add_argument("--ranges", type=float, nargs="*", help="horizontal ranges from the platform along the target's bearing, m")
+    fd.add_argument("--depths", type=float, nargs="*", help="target depths, m")
+    fd.add_argument("--comb", type=int, nargs="*", help="also a comb of N tones across the sweep's band in the tone's place")
+    fd.add_argument("--channels", type=int, help="hydrophones to simulate (default: the scene's)")
+    fd.add_argument("--fidelity", help="replace the scene's propagation tier (e.g. free_field, the check that nothing fades)")
+    fd.add_argument("--json", help="write the results here")
     args = p.parse_args(argv)
     args.waveform = getattr(args, "waveform", "scene")
     args.platform_speed = getattr(args, "platform_speed", None)
+    args.mute = getattr(args, "mute", None)
     global MAX_RANGE_RATE
     MAX_RANGE_RATE = float(getattr(args, "vmax", 5.0)) + 1.0
-    return {"reverb-spectrum": cmd_reverb_spectrum, "margin": cmd_margin}[args.cmd](args)
+    return {"reverb-spectrum": cmd_reverb_spectrum, "margin": cmd_margin, "fade": cmd_fade}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ train (a 1 s Hann tone at the band centre, then the scene's own sweep), the tota
   segment has half the energy, so a margin that noise sets falls by 3.0 dB and one that reverberation sets keeps its
   value. That holds for the sweep everywhere and for the tone where noise is the background (Popoto). It does NOT
   hold for the tone in flank_patrol: there the sweep's own reverberation fills the tone's Doppler cells (found by
-  this package; the test holds it).
+  this package; the test holds it, and a control with the sweep muted gives the tone its ceiling back).
 """
 
 import copy
@@ -153,7 +153,7 @@ def test_the_study_reproduces_the_baseline_on_the_train(scene, label, bearing, t
       its ceiling by leaving the bottom's reverberation behind in Doppler (flank_patrol), the TRAIN'S tone does not:
       it is 25 to 29 dB under its ceiling (measured 10.9 / 36.3 dB still, 7.8 / 36.8 dB under way), because the
       sweep's reverberation, from ranges c T / 2 nearer, is broadband and fills every Doppler cell of the tone at the
-      same delay. Held here as found."""
+      same delay (the control below mutes the sweep and the tone is back at its ceiling). Held here as found."""
     out = _study(["margin", scene, "--target", label, "--pings", "2", "--bearing", str(bearing), "--json",
                   str(tmp_path / "m.json"), *extra] + (["--radial", "2"] if rate is not None else []))
     got = {m["segment"].split(":")[1]: m for m in out["targets"]}
@@ -179,3 +179,14 @@ def test_the_study_reproduces_the_baseline_on_the_train(scene, label, bearing, t
     else:
         assert tone["bank_margin_db"] == pytest.approx(tone_b["bank_margin_db"] - HALF, abs=TONE_TOL)
 
+
+@needs_bellhop
+@slow_study
+def test_muting_the_sweep_gives_the_tone_back_its_ceiling(tmp_path):
+    """The control for the finding above: flank_patrol_doppler with the sweep replaced by silence (`--mute 2`; the tone
+    keeps its half of the energy). The tone's bank margin returns to its ceiling, as the baseline's tone alone did."""
+    out = _study(["margin", "flank_patrol_doppler", "--target", "small_vehicle", "--pings", "2", "--bearing", "23.4",
+                  "--vmax", "3", "--mute", "2", "--json", str(tmp_path / "m.json")])
+    (tone,) = out["targets"]
+    print(f"tone alone: bank {tone['bank_margin_db']:.1f} / {tone['noise_only_bank_margin_db']:.1f} dB")
+    assert tone["noise_only_bank_margin_db"] - tone["bank_margin_db"] < 4.0     # measured 33.9 / 36.3 dB: 2.4 (25.4 with the sweep)
