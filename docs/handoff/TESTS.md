@@ -7,14 +7,16 @@ D-181; brought to D-201 and the opt-in 3-D tier on 2026-11-26 (counts per file c
 seventeen new test files in section 2, the decisions D-204 to D-224 in section 3, two pitfalls in
 section 4 (the new files' "Tests" are `def test_` functions counted with grep, not collected); and to
 D-229 (the merge `61cfb66` of the second batch) the same day: the counts in section 1, the three new
-test files and the changed counts in section 2, D-226 and D-227 in section 3. Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
+test files and the changed counts in section 2, D-226 and D-227 in section 3; and to D-234 (the merge
+`4057d65` of the third batch) the same day: the counts in section 1, `GPUSONAR_DOPPLER_STUDY`, the
+five new test files (one C++) and the changed counts in section 2, D-230 to D-233 in section 3. Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
 [README.md](README.md) (the set).
 
 **What is not known first.** No per-file run time is recorded anywhere in the repository; the
 "class" column in section 2 is a judgement from what each test does. The log of the last full
-GPU run (job `6b080457d91f621b930a652a`, D-229) was not read for this file: its 103 skips are
+GPU run (job `6b084a4cd91f621b930b6331`, D-234) was not read for this file: its 111 skips are
 D-225's 102 (derived in section 1 from the 93 of D-181's job and the decisions since, not read from a
-log) and the one D-229 names, and its four expected failures are presumably the four strict xfails of
+log), the one D-229 names and the eight D-234 names, and its four expected failures are presumably the four strict xfails of
 D-217 and D-218 (not checked).
 Of the earlier job of D-201 (`6b078a26d91f621b93096bc7`), which Popoto-rate loopback case was its one
 expected failure is not in its log.
@@ -65,6 +67,7 @@ Run one pytest process at a time. The program tests need `build/bin/sonar_live` 
 | `-DSONAR_BUILD_HOLOSCAN=ON` | `test_holoscan_cpp.py` (needs `build/bin/sonar_live_holoscan`) | skip |
 | Sensor Bridge built (`tools/build_hsb.sh`) and a CUDA device | the loopback tests of `test_hsb.py` | skip |
 | `GPUSONAR_HSB_STUDY=1` | two measurements in `test_hsb.py` that are not tests (`test_loopback_loss_study`; `test_popoto_rate_loopback_study`, with `GPUSONAR_HSB_STUDY_RUNS`, `_ROWS`, `_ENGINES`, `_CONFIGS`, `_BUDGET_S`, `_RECEIVER_CORE`) | skip, always, in the suite |
+| `GPUSONAR_DOPPLER_STUDY=1` | the five margin tests of `test_doppler_scenes.py` (`test_the_study_reproduces_the_baseline_on_the_train`, four scenes, and `test_muting_the_sweep_gives_the_tone_back_its_ceiling`; they also need Bellhop): 5 to 11 minutes a scene on one CPU core; the whole file with the switch, 13 passed in 49 minutes, run once on this machine by the orchestrator (D-231) | skip, always, in the suite (5 of D-234's skips) |
 | `GPUSONAR_HSB_TIMING=1` | a measurement in `test_hsb.py` (`test_frame_path_timing_study`: the receive path's cost a frame, D-190; `GPUSONAR_HSB_TIMING_ROWS`, `_ENGINES`) | skip, always, in the suite |
 | `GPUSONAR_PICMUS_DIR`, `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN`, `GPUSONAR_SMARTOCEAN_CACHE` | tests on public data sets, never committed (`tools/fetch_picmus.py`, `tools/fetch_channels.py`) | skip |
 | `GPUSONAR_NVUS_PYTHON`, `GPUSONAR_NVUS_DIR` | the NVIDIA ultrasound reference's module and checkout (`tools/build_nvus_reference.sh`) | skip |
@@ -122,12 +125,13 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
+| Full GPU suite, NVIDIA L4, the third 2026-11-26 batch's tree (D-230 to D-233; `batch3` at `0a8b477`, merged as `4057d65`) | **2886 passed, 111 skipped, 4 xfailed**, none failed, job exit 0 (job `6b084a4cd91f621b930b6331`; the same switches as D-229). The eight more skips: the five margin tests of `test_doppler_scenes.py` (`GPUSONAR_DOPPLER_STUDY=1`) and three of `test_tools_help.py` ("not a git checkout", the three new tools). The CUDA train test passed in it. The merge had no conflict | D-234 |
 | Full GPU suite, NVIDIA L4, the second 2026-11-26 batch's tree (D-226 to D-228; `batch2` at `de3717b`, merged as `61cfb66`) | **2823 passed, 103 skipped, 4 xfailed**, none failed (job `6b080457d91f621b930a652a`; the same switches as D-225). The one more skip is `test_tools_help.py`'s "not a git checkout" for the new tool (`tools/doppler_study.py`). The session branch's later commits were documents and the tracker only | D-229 |
 | Full GPU suite, NVIDIA L4, the merged tree of D-204 to D-224 (`b88c458`) | **2763 passed, 102 skipped, 4 xfailed**, none failed (job `6b07ea74d91f621b930a343d`; Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators, Sensor Bridge, `GPUSONAR_REQUIRE_ORACLES=1`, `GPUSONAR_SLOW_ORACLES=1`). Before it, the tree of D-202: 2301 passed, 102 skipped (job `6b079ab0d91f621b93098915`). The batch's earlier suites and their six failures are in D-225 | D-225, D-202 |
 | Full GPU suite, NVIDIA L4, tree of D-201 | **2278 passed, 102 skipped, 1 xfailed**, none failed (job `6b078a26d91f621b93096bc7`; the xfail is one Popoto-rate loopback case, its reason not in the log). The 3-D work after D-201 is covered by a later job. Before it, D-200 over the tree of D-196: 2232 passed, 101 skipped (job `6b077ea0d91f621b930950a5`). Before it, D-195's tree: 2183 passed, 101 skipped (job `6b076d06d91f621b93092f13`). Before it, D-192's tree: 2183 passed, 101 skipped (job `6b07608ed91f621b930918b0`). Before it, D-191's tree: 2180 passed, 101 skipped (job `6b07440eb6a90bbe997e6027`). Before it, D-190's tree: 2180 passed, 100 skipped (job `6b06d64fd91f621b93079be0`). Before it, D-189's tree: 2171 passed, 98 skipped (job `6b06bbda1460ffe1d5ea75b5`). Before it, D-188's tree: 2159 passed, 97 skipped (job `6b0699f4d0582cfbbefe0373`). Before it, D-187's tree: 2155 passed, 97 skipped, 1 xfailed (job `6b06728ad0582cfbbefdb5eb`; the xfail was one Popoto-rate loopback case with a frame damaged at the start, accepted since D-188). Before it, D-186's tree: 2150 passed, 97 skipped, 4 xfailed (job `6b06553a1460ffe1d5e9aa10`). Before it, D-183's tree: 2102 passed, 95 skipped (job `6b060a4b1460ffe1d5e93111`). Before it, D-181's tree: 2078 passed, 93 skipped (job `6b055ee4c97b8ed4fcd799db`), which the skip groups below describe | each decision's entry in `docs/DECISIONS.md`, D-183 to D-201 |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
-| GoogleTest at this tree | 194 `TEST` cases in 15 binaries (D-229; counted 2026-11-26 at `61cfb66` as lines starting `TEST(` or `TEST_P(` in `tests/cpp/*.cpp`: 193 and 1; the same count gives 193 at D-225; 175 at D-203, 172 at D-181) | section 2 |
-| pytest at this tree | 1816 test functions in 148 files (D-229; counted as `def test_` lines in `tests/python/test_*.py`, 2026-11-26 at `61cfb66`; 1775 in 145 at D-225; the same count gives 1526 in 128 at `a64a26f`, as stated before; 1375 in 114 at D-181); parametrisation makes them 2930 outcomes on D-229's L4 job (2823 + 103 + 4; 2869 on D-225's) | counted |
+| GoogleTest at this tree | 202 cases in 16 binaries (D-234; counted 2026-11-26 at `76e01a5` as lines starting `TEST(` or `TEST_P(` in `tests/cpp/*.cpp`: 201 and 1; the new binary `test_doppler` has 8; 194 in 15 at D-229, 193 at D-225; 175 at D-203, 172 at D-181) | section 2 |
+| pytest at this tree | 1859 test functions in 152 files (D-234; counted as `def test_` lines in `tests/python/test_*.py`, 2026-11-26 at `76e01a5`; 1816 in 148 at D-229, 1775 in 145 at D-225; the same count gives 1526 in 128 at `a64a26f`, as stated before; 1375 in 114 at D-181); parametrisation makes them 3001 outcomes on D-234's L4 job (2886 + 111 + 4; 2930 on D-229's, 2869 on D-225's) | counted |
 
 No full CPU run of the tree is recorded since D-157 (`605a4e1`); `docs/STATUS.md` ("State of
 verification") records the CPU and GPU runs up to D-157 and the decisions record the GPU runs after.
@@ -162,7 +166,10 @@ and one D-186 says was not looked up); +1 at D-189 (`tools/hsb_host_check.py --h
 design (`GPUSONAR_SLOW_ORACLES`). D-225's job also reports 102 skips, with `GPUSONAR_SLOW_ORACLES=1` set and
 the batch's new tests (the tests that ask for the C++ engine skip only on a build without it, D-219); not
 itemised from its log. D-229's job reports 103: the one more is `test_tools_help.py`'s "not a git
-checkout" for `tools/doppler_study.py` (D-229).
+checkout" for `tools/doppler_study.py` (D-229). D-234's job reports 111: the five margin tests of
+`test_doppler_scenes.py` (`GPUSONAR_DOPPLER_STUDY=1`, a measurement switch) and three "not a git
+checkout" cases of `test_tools_help.py` for `tools/popoto_trade_study.py`, `tools/doppler_bank_eval.py`
+and `tools/doppler_bank_threshold.py` (D-234).
 
 On a CPU container without the oracles many more tests skip: every CUDA comparison, every
 Bellhop test, the Holoscan and Sensor Bridge tests, and motion estimation when Ceres is absent.
@@ -179,7 +186,7 @@ frozen expected output are marked **golden**.
 
 ### C++ (GoogleTest, `tests/cpp`)
 
-All are fast: the fifteen binaries together ran in under ten seconds in the saved log of an
+All are fast: the fifteen binaries of D-229 together ran in under ten seconds in the saved log of an
 earlier L4 job (not in the repository). `test_support.cpp` is a helper, not a suite. There is
 no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested from Python.
 
@@ -192,6 +199,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_sim_paths` | `Paths`, `Reverb` | 11 | eigenray providers and the reverberation generator on analytic cases | `libs/sim` |
 | `test_sim_synth` | `Synth`, `Paths` | 6 | the sampled-pulse branch and the arrival-time solve (D-81, D-83) | `libs/sim` |
 | `test_batched` | `Batched` | 8 | the device formulations run on the host through `HostExec`, against the reference host code | `libs/sim`, `libs/live` |
+| `test_doppler` | `Doppler`, `Detector`, `Options` | 8 (D-234 count; 6, 1, 1) | the sweep's Doppler bank (D-232): the mismatch closed form, the plan's hypothesis spacing, per-beam own-ship centring, the fold over hypotheses, one hypothesis is the chain without the bank line for line, a mover's peak and range rate back with its range kept, a zero offset and pedestal leave the detector's plan as it was, the bank's option keys; `test_doppler_bank.py` and `test_live_cpp.py` hold the engines equal | `libs/live` |
 | `test_hardcoded` | `Backproject`, `Baseband`, `CfarWindow`, `Defaults`, `ImageSeries`, `Resampler`, `SynthLimits`, `Tvg` | 14 | values with no physical default are refused; fixed capacities raise or report (D-131) | `libs/dsp`, `libs/recon`, `libs/detect` |
 | `test_live` | `Cluster`, `Tracker`, `Classify`, `Sbl`, `PingAssembler`, `StreamAssembler`, `Navigation`, `Options`, `Report`, `RangeDoppler`, `Rock`, `CoverageReverb` | 49 (D-229 count, `TEST(` lines; 48 at D-225 by the same count) | the live library alone: tracker, classifier and echo grouping, the assembler's counting, navigation, the key=value options, the report line, rock's elastic models (D-215), the coverage picture's reverberation term (D-221, D-227: the CW triangle, the converged bounce count, the candidate-depth cache) | `libs/live` |
 | `test_beamform` | `Beamform`, `Mvdr`, `Calib` | 9 | far-field and MVDR beamformers, array calibration, in closed form | `libs/live` |
@@ -205,7 +213,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 
 | File | Tests | Protects | Needs | Class | Marks |
 | --- | --- | --- | --- | --- | --- |
-| `test_live_cpp.py` | 60 (D-225 count) | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
+| `test_live_cpp.py` | 64 (D-234 count; 60 at D-225) | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words; since D-232 the Doppler bank in both engines and the program, off by default and off as before, and its interplay with `range_doppler` | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
 | `test_live.py` | 8 | one object on simulated pings, a replayed recording, UDP blocks, navigation datagrams, a watched directory | CUDA for one test | minutes | |
 | `test_detect.py` | 27 | MVDR, CFAR, clustering, the tracker (association, detection times, misses), the classes golden | CUDA for one test | minutes | **golden** |
 | `test_detector.py` | 24 | the multiscale detector on both engines: thresholds, false alarms by Monte Carlo, range estimate, resolution | | minutes | **parity**, **golden** |
@@ -231,6 +239,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_nav_lever_arm.py` | 6 | lever arm and mounting rotation in both engines (D-167) | | minutes | **parity** |
 | `test_tonal.py` | 19 | Goertzel lines and DEMON, Python against C++, the program | `sonar_live` for some; `arlpy` for one | minutes | **parity** |
 | `test_lfm_range_doppler.py` | 3 | the LFM coupling is f0 v T / B, and the correction removes it (D-169, D-181) | | minutes | |
+| `test_doppler_bank.py` | 14 | the sweep's Doppler bank (D-232): the mismatch closed form (11.7 dB for a point at 2 m/s on a 1 s, 4 kHz sweep, ours, derived in the file), hypothesis spacing and the baseband allowance, per-beam own-ship centring, refusals, a point target gets the mismatch back, one hypothesis is the chain without the bank byte for byte, the false-alarm rate held, off by default and unknown keys refused, the detector plan unchanged without offset or pedestal | CUDA for one (the device gives the host's detections) | minutes | **parity** |
 | `test_architecture.py` | 4 | stages drawn with a CUDA implementation take a backend; the documents' figures exist | | fast | |
 
 ### Sources, streams, Holoscan
@@ -277,6 +286,8 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_sim.py` | 21 | point targets on every sonar: delay and amplitude against analytic values; CPU against GPU | CUDA for the GPU half | minutes |
 | `test_sim_cpp.py` | 31 (D-225 count) | C++ paths and reverberation against the NumPy versions (D-61) | the C++ engine; CUDA for some | minutes |
 | `test_sampled_waveform.py`, `test_sampled_engine.py` | 17, 15 | sampled transmit pulses against TR 0702; the C++ kernel against the NumPy engine (D-74, D-75, D-81) | Bellhop for one each; CUDA for some | minutes |
+| `test_pulse_train.py` | 14 | pulse trains (D-231): a one-segment train is today's sampled sweep bit for bit; a one-tone train against the analytic CW; the envelope against its closed-form pieces; energy per segment and `source_energy_db`; the comb's Schroeder phases; refusals by name; C++ against NumPy and CUDA against host; Doppler on both segments; the record round-trips with no new field; both live chains read train records alike | CUDA for one | minutes |
+| `test_doppler_scenes.py` | 4 (13 collected) | the four Doppler scenes (D-231): each is its base scene with a train of the same energy; a ping on both engines; the margin study reproduces the baseline on the train and the sweep-muting control | Bellhop for most; `GPUSONAR_DOPPLER_STUDY=1` for the five margin tests | fast to long (49 minutes with the switch) |
 | `test_batched.py` | 28 | the batched device formulations against the reference host code (D-122) | CUDA for the device half | minutes |
 | `test_parallel_normal.py` | 8 | threaded normal deviates are bit for bit `rng.standard_normal` | | fast |
 | `test_scene_objects.py`, `test_scene_targets.py`, `test_scene_sediment.py` | 19, 17, 5 | extended objects, highlight targets against arXiv:1805.06945, sediment scatterers (D-41, D-64, D-65) | Ceres and CUDA for one each | minutes |
@@ -292,7 +303,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_3d_scenarios.py` | 22 | the five 3-D scenes and their N × 2-D twins of `sonar-d7sw`: the bed `bathymetry.ridge` and `profile_along`; every file loads and builds its provider; each twin differs only in the tier and its bed is the 3-D bed along the target's bearing; what the cross-slope warning says of each bed; with the oracles, each scene's headline level (3-D minus Bellhop3D's N × 2-D) and arrival direction (`docs/SCENARIOS.md`, "Flank array over 3-D relief") | Bellhop3D and Bellhop for 5 (the level control, about 40 s); 4 of those also `GPUSONAR_SLOW_ORACLES=1` (2 to 3 minutes each, about 10 minutes in all) | fast; slow with the switch |
 | `test_reverberation.py`, `test_reverb_statistics.py` | 13 (D-229 count), 27 (42 collected before D-227) | reverberation level within 2 dB of the sonar equation; K statistics (D-37, D-70), the shape from a density per cell (D-196) | | minutes |
 | `test_reverb_bistatic.py`, `test_reverb_motion.py`, `test_reverb_relief.py`, `test_reverb_specular.py` | 26 (D-229 count; the Williams-Jackson volume term, D-226), 10, 16, 6 | bistatic, moving scatterers, relief, near-specular removal (D-69, D-72, D-73, D-123) | CUDA for one; Bellhop for some | minutes |
-| `test_bottom.py`, `test_bottom_models.py`, `test_sediment_table.py`, `test_sediment_literature.py`, `test_sediment_fit.py` | 9, 22, 18, 9, 25 (D-225 counts; `test_sediment_table.py` 18 at D-229) | the bottom model, its regimes, the named sediments against open literature, the fit (D-63, D-66, D-67, D-132) | Bellhop for one | fast |
+| `test_bottom.py`, `test_bottom_models.py`, `test_sediment_table.py`, `test_sediment_literature.py`, `test_sediment_fit.py` | 9, 22, 18, 9, 29 (D-225 counts; `test_sediment_table.py` 18 at D-229; `test_sediment_fit.py` 29 at D-234, the library's row argument of D-230) | the bottom model, its regimes, the named sediments against open literature, the fit (D-63, D-66, D-67, D-132) | Bellhop for one | fast |
 | `test_surface.py`, `test_surface_models.py`, `test_bubble_layer.py` | 5, 13, 9 | surface backscatter, bubble loss (D-38, D-68, D-87) | Bellhop for one; `arlpy` for one | fast |
 | `test_timespread.py`, `test_coherent_phase.py` | 34, 10 | time, angle and frequency spreading after TR 0702; the coherent arrival's wander (D-62, D-76, D-108) | CUDA for one | minutes |
 | `test_noise.py`, `test_baseband_noise.py`, `test_noise_statistics.py`, `test_noise_fit.py` | 5, 7, 10, 27 | noise spectra, array coherence, K statistics, a fit to a recording (D-103, D-124) | `arlpy` for one; UACR noise for two | minutes |
@@ -324,6 +335,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_build_diagrams_layout.py` | 2 (8 collected) | the build diagrams' heading and row labels stay on the page (D-183) | `matplotlib` | fast | |
 | `test_yaml_numbers.py` | 3 | every tracked YAML's numbers load as numbers with plain PyYAML (D-180) | | fast | |
 | `test_design.py` | 7 | every owner requirement is met by the config files; `docs/DESIGN.md` is up to date (D-44) | `matplotlib` | minutes | reads committed files |
+| `test_popoto_trade_study.py` | 3 | the 12 km trade study (D-233): a variant changes only what it names and no shipped file; the bounds and credits are arithmetic on the planner's parts; one quick case runs and its bound A is the planner's figure | | minutes | |
 | `test_buildspec.py` | 21 | build specs validate; the generator's output is what is committed; a different build runs through both engines (D-127) | `matplotlib`; Bellhop for one | long | reads committed files |
 | `test_realistic_scenes.py` | 25 (28 collected) | every mode's scenario simulates and images end to end (`tools/gallery.py --quick`); `test_documented_full_size_classes` reads `docs/figures/gallery.json`; `flank_patrol`'s small vehicle is not tracked (D-198) | `matplotlib`; Bellhop for five; Ceres for one | long | **golden** (the gallery) |
 | `test_classify_rules_eval.py` | 15 | the scoring of `tools/classify_rules_eval.py` on a made-up case, no simulation | | fast | |
@@ -352,7 +364,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-227)
+## 3. Tests that pin a decision (D-155 to D-233)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -389,6 +401,10 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| D-233 (sonar-3983) | the 12 km trade study builds every variant in memory and changes no shipped file; bounds A and B and the credits are arithmetic on the planner's parts | `test_popoto_trade_study.py` (the whole file) |
+| D-232 (sonar-u1fu, D4) | the sweep's Doppler bank, opt-in, both engines; off is the chain as before, byte for byte | `test_doppler_bank.py` (the whole file; `::test_one_hypothesis_is_the_chain_without_the_bank_byte_for_byte`, `::test_the_false_alarm_rate_with_the_bank_is_held_and_the_measured_shift_restores_it`, `::test_off_by_default_said_only_when_on_and_unknown_keys_refused`); `test_live_cpp.py::test_the_doppler_bank_gives_the_same_report_in_both_engines`, `::test_program_runs_the_doppler_bank_like_the_python_chain`, `::test_with_the_bank_range_doppler_takes_the_banks_estimate_and_corrects_once`, `::test_the_doppler_bank_is_off_by_default_and_off_is_as_before`; `tests/cpp/test_doppler.cpp` |
+| D-231 (sonar-u1fu, D2) | pulse trains as one sampled envelope (no C++ change, no record field); a one-segment train is today's sweep; four Doppler scenes | `test_pulse_train.py` (the whole file; `::test_a_one_segment_train_is_todays_sampled_sweep_bit_for_bit`, `::test_the_record_of_a_train_validates_round_trips_and_needs_no_new_field`); `test_doppler_scenes.py` (its five margin tests with `GPUSONAR_DOPPLER_STUDY=1`, tolerances that carry the tone's ±3 dB scatter: `TONE_TOL` 3.5 dB) |
+| D-230 | the library sediment fit takes a row, as the tool does; without it every call is unchanged | `test_sediment_fit.py::test_fit_naming_a_row_is_the_tools_fit_of_that_row`, `::test_explicit_bounds_win_over_the_rows_prior_and_the_off_switch_is_the_unbounded_fit`, `::test_a_row_without_a_grain_size_gets_no_prior_and_the_result_says_why`, `::test_without_a_row_a_call_is_todays_bit_for_bit` |
 | D-227 (sonar-w2w3 follow-up) | the sites' boundary scattering by one rule, in the depth plan and the coverage picture; the echo's four images add as pressures; the bounce count by convergence; the beam integral at the steering angle; a CW pulse through its matched filter's triangle | `test_site_scattering.py` (the whole file, 21 collected); `test_reverb_budget.py` (`test_cw_reverberation_goes_through_the_triangle_not_the_sinc`, `test_the_bounce_count_is_found_by_convergence`, `test_off_broadside_the_beam_integral_is_the_patterns_own`; `test_flank_patrol_margins_predicted_against_the_simulated_data` with tolerances tightened: each margin within 4 dB and rms 3.0 dB, from 5 dB and 3.5 by the test's docstring; the stationary points each within 1.0 dB); `CoverageReverb.CwTriangleConvergedBouncesNoteAndCandidates`; `test_lloyd.py::test_deep_water_surface_reverberation_moves_the_ship_plan_by_nothing`. Fixture changed, stated, not a weakening: `test_lloyd.py`'s `deep_plan` passes `reverberation=False` because its tests hold the noise-only decomposition. `test_deployment_defaults.py` gives its numbers-only coverage picture the row's beam integral, which the term needs now that the file carries it |
 | D-226 | Williams-Jackson (1998) and Jackson-Briggs (1992) as opt-ins: the bistatic roughness join, the spectral volume term, the relief-exponent warning, the 1-D to 2-D relief helper; defaults unchanged | `test_williams_jackson_1998.py` (the whole file: Figs. 7 and 8 within 1 dB, the 1.505 dB rule at the crossing to 1e-6 dB, Table AII's printed part as a recorded characterisation), `test_jackson_briggs_1992.py` (the whole file); `test_reverb_bistatic.py::test_williams_jackson_1998_roughness_in_a_bistatic_fluid_sediment_item`, `::test_williams_jackson_1998_volume_in_a_bistatic_fluid_sediment_item`; `test_reverberation.py::test_williams_jackson_1998_models_in_a_fluid_sediment_item_take_the_site_rows_volume_spectrum`; `test_sediment_table.py::test_the_williams_jackson_panama_city_row_through_the_papers_own_model_reproduces_fig_7`; `test_gallaudet_boundaries.py::test_bottom_model_with_the_site_fit_against_the_printed_band_means` (now also over the opt-in model) |
 | D-225 (the merge) | three sediment-fit tests compared at a stated tolerance, not bit for bit (weakened: FIT_REL 2e-6, FLAT_REL 2e-5; w2 on its limit no longer asserted) | `test_sediment_fit.py::test_the_old_default_named_is_the_same_as_before_the_opt_in_options_and_a10`, `::test_tool_options_for_error_bars_bounds_and_holds`, `::test_a_parameter_on_a_bound_is_in_the_result_and_called_not_measured` |
@@ -475,6 +491,8 @@ navigation unit or Sensor Bridge hardware (`docs/STATUS.md`, first paragraph).
 | Receive fuzz | the cross-engine fuzz of D-161 and D-177 (1000 to 4000 streams per script) was run by reviewers and is not in `tests/`. Known miscounts remain | D-161, D-177; `sonar-thu` |
 | Detector false alarms | the three-row static count stopped at 40 000 pings; no scenario has non-Rayleigh reverberation at the detector; more than three rows take the three-row constants unmeasured | D-168; STATUS item 17; `sonar-4xn` |
 | LFM range-Doppler correction | the live chain is held by its tests only, not measured on the gallery scenes | D-181 |
+| The sweep's Doppler bank | measured on three scenes (`flank_patrol`, `popoto_far_mover`, `popoto_12km`) and the Popoto trial pings on a CPU only: its false-alarm rate at the default budget and its cost on a GPU are not measured; its sidelobe detections under echoes 80 to 90 dB over the noise are seen on a fixture and not explained; the margin tests of the Doppler scenes run only with `GPUSONAR_DOPPLER_STUDY=1` and their tolerances carry the tone's ±3 dB scatter | D-231, D-232; `sonar-094p`, `sonar-ef64`, `sonar-3in1` |
+| The trade study | its numbers are the planner's model on illustrative sites; the test runs one quick case; the rows measurement is one site, 3 pings; the chain cross-check is two grid points (ship at 12 km 4.8 dB low) | D-233; `sonar-b1p0` |
 | Leading edge | blanking and the burst filter judging by the centroid is untested (at most one cell) | D-160; `sonar-9hy` |
 | Bounce grouping | not measured on gallery captures with `multipath` on | D-175; `sonar-ome` |
 | The grown fit limit | false movers under it are not measured: no long-range clutter scene exists | D-159; `sonar-kal` |

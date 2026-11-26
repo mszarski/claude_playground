@@ -1006,6 +1006,9 @@ that may name a site in `configs/environments/`; a typed value that contradicts 
 is an error unless named under `environment_overrides`. Two kinds of inconsistency are
 kept as they were and are named in the files (D-101): 9 Bellhop scenarios reflect eigenrays
 from a flat surface in a windy sea, and 21 simulate a bottom the record does not mention.
+Those are D-101's counts; later scenes followed the same pattern, and counted in the tree at
+D-234, 20 files name `propagation.wind_speed` under `environment_overrides` (the four Doppler
+scenes of D-231 among them) and 37 state `water_depth_known: false`.
 The third is resolved: of the 47 scenarios that typed a sound speed disagreeing with their
 temperature, 44 now take the speed the water gives (1496.8 m/s at 12 deg C and 35 PSU,
 1489.8 at 10 deg C, 1482.4 in the fresh-water tank at 20 deg C) and three keep theirs on

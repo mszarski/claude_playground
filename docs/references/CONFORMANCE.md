@@ -15,6 +15,11 @@ unchanged, small-slope kept, D-229); the sites state their boundary scattering a
 pictures include it (D-227). The rows below that said "in progress, not merged" or "not done" for these carry a
 "D-226" or "D-227" note.
 
+**State 2026-11-26, after the merge `4057d65` of the third batch (D-230 to D-234; full GPU suite 2886 passed, 111
+skipped, 4 xfailed; job 6b084a4cd91f621b930b6331):** D-230 to D-233 name no matrix row and the batch did not edit this file. The library sediment fit takes a
+row as the tool does (D-230, opt-in; A10 carries a note); the rest of the batch (pulse trains, the sweep's Doppler bank,
+the 12 km trade study) touches no conformance item.
+
 Written 2026-11-26 on branch `conform` (issue `sonar-jbnm`), after the owner's instruction "make sure our code and
 examples and expectations match the references everywhere", amended the same day: "apply every alignment without
 asking using your judgment to calibrate to real parameters, scenes, references". This file has three parts:
@@ -281,7 +286,7 @@ perturbation for its own fits and shows the two overlap below about 70 degrees f
 fit angles below 70 degrees the fitted values move little; above, small-slope is the valid one. The error-bar
 default stays the book's rule (G.2.3: sigma_dB = 10 log10(1 + 1/sqrt(N))), with any corrected rule opt-in.
 Exposure: `tests/python/test_sediment_fit.py` (the G-9 agent's), `docs/CONFIGURATION.md` fit-tool rows.
-**Applied 2026-11-26: `a2e7fbe`, D-210;** the tool also applies the row's grain-size prior by default with sigma2 up to 0.005 (`e841add`, `1269be6`; D-211).
+**Applied 2026-11-26: `a2e7fbe`, D-210;** the tool also applies the row's grain-size prior by default with sigma2 up to 0.005 (`e841add`, `1269be6`; D-211). D-230: the library `sediment_fit.fit(..., sediment=NAME)` applies the same row and prior (opt-in; without the argument a call is unchanged), and the tool calls it (one implementation).
 
 **A11. TR 0702 matrix wording** (set S7, after S2; `tools/sst_validation.py` writes `docs/figures/sst_validation.md`).
 **Not applied (2026-11-26):** row "Sec. 6.4.2" of `docs/figures/sst_validation.md` still says "Chapman-Harris at the MEAN grazing angle", false since A3; it waits for a regeneration of that file.

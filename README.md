@@ -17,16 +17,22 @@ the CUDA backend has been run and benchmarked on rented GPUs. The long-range des
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the tree of the second 2026-11-26
-batch, decisions D-226 to D-228 (2823 passed, 103 skipped, 4 xfailed, none failed, on an NVIDIA L4;
-Hugging Face job 6b080457d91f621b930a652a; D-229), the opt-in 3-D propagation tier and the slow
+(the depth sigma now says so). The full GPU suite last ran on the tree of the third 2026-11-26
+batch, decisions D-230 to D-233 (2886 passed, 111 skipped, 4 xfailed, none failed, on an NVIDIA L4;
+Hugging Face job 6b084a4cd91f621b930b6331; D-234), the opt-in 3-D propagation tier and the slow
 Bellhop3D checks included; the
 whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
 entries). Since D-227 the shipped sites state their boundary scattering (illustrative values) and the
 depth plan and the coverage pictures include it: the +5 dB class over the 100 m shelf now reaches
 2.56 km in the plan (8.02 to 9.58 km before) and the +25 dB classes stay noise-limited at 12 km; the
-free-field link budgets have no site and stay noise-only, and say so. On 2026-11-26 the boundary models, the sediment tier and time
+free-field link budgets have no site and stay noise-only, and say so. A trade study per site and
+class (D-233; `docs/design/popoto_trade_study.md`, illustrative sites, assumed target strengths) finds
+the +5 dB class short of 12 km at every site with the shipped three rows of 32, and at three sites no
+variant tried reaches it; the +25 dB classes are met at four of six sites, not at sea state 5 or over summer
+mud; the requirement does not say which class 12 km is for (an owner question). The sweep's Doppler
+bank exists in the live chain as an option (D-232) and lowers every target's margin by 3.4 to 5.3 dB on
+the scenes measured, so it stays off. On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
 got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
 scenes, D-216). Every shipped SAS scene
@@ -204,7 +210,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 91 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 95 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |

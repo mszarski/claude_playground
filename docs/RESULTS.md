@@ -3460,16 +3460,32 @@ chain's backend. On the host the same variants are within the run-to-run spread 
 | The `eigenray3d` tier's cost, shared 4-core CPU | a level bed 3.3 s a run; the seamount 19 to 219 s a run; `flank_seamount_3d` 231 s (four runs of 57 s), arrival files under 1 kB; 3.6 to 4.8 kB a receiver binary | `docs/tasks/PROPAGATION_3D.md`, "Cost of the eigenray3d tier" |
 | `flank_patrol`'s small vehicle | 3.8 to 5.1 dB over its local background (median 4.4, 28 pings) against the 12 dB cut; bottom reverberation 21.9 dB over the noise at 2.2 km; the link budget's ~30 dB has no reverberation term | D-198 |
 
+## Measured in D-230 to D-233 (the third 2026-11-26 batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records or the planner's model; none is from real water.
+
+| What | Result | Source |
+| --- | --- | --- |
+| The sweep's Doppler bank through the live chain, both engines (equal to the printed digit), margin off → on | **every target loses**: `flank_patrol` wreck 14.63 → 9.33 dB, `popoto_12km` ship 9.11 → 5.57, `popoto_far_mover` ship 12.35 → 8.84, `flank_patrol` submarine 11.69 → 8.32; the background of the maximum over 17 to 35 hypotheses rises 4.8 to 5.6 dB, more than the mismatch recovered (a point: 11.1 of 11.7 dB on the map) | D-232; `docs/tasks/DOPPLER.md` 9.1, 9.4; `docs/tasks/doppler_bank_eval.json`, `doppler_bank_threshold.json` |
+| The bank's cost a ping, CPU of this machine, 1 thread | 22 to 51 times the chain a ping on the scenes (`popoto_12km` 22 to 25, `flank_patrol` 29 to 32, `popoto_far_mover` 44 to 51; `docs/tasks/DOPPLER.md` table 9.5 and `doppler_bank_eval.json`: D-232's "22 to 32" leaves out `popoto_far_mover`), 2.3 to 2.9 times on the Popoto trial pings; not measured on a GPU | D-232; `docs/tasks/DOPPLER.md` 9.5 |
+| A tone and the 6-10 kHz sweep in one ping, `flank_patrol_doppler`, small vehicle, tone with the bank over its background | **10.9 dB** (the tone alone, D-228: 39.8); sweep muted 33.9; sweep first 17.7 (the sweep's own margin 1.4); tone at 10.5 kHz, above the band, 37.7; a four-tone comb 3.9; under way 7.8. Noise-limited: `popoto_far_mover_doppler` 47.9, `popoto_12km_doppler` 33.2. The tone's margins scatter about ±3 dB (two background pings) | D-231; `docs/tasks/DOPPLER.md`, "D2 done" |
+| A single tone's fade against the sweep, 20 Bellhop geometries | worst 11.0 dB under the sweep, spread 18.7 dB; a four-tone comb lifts the worst case 1.3 to 1.7 dB at a mean cost of 1.3 to 1.7 dB | D-231; `docs/tasks/DOPPLER.md`, "D2 done" |
+| Pulse trains against references | a one-segment train is today's sampled sweep bit for bit; C++ against NumPy 6.0e-8 rms (worst sample 1.5e-7 of the peak); the train's envelope against its pieces 1.4e-12 on its grid; a target closing at 6 m/s: the echo is the train time-scaled to 5.7e-8 | D-231; `tests/python/test_pulse_train.py` |
+| The 12 km trade study, shipped 3 x 32, margin at 12 km, bound A | **`xl_auv` (+5 dB) not met at any of 6 sites**: −4.6 dB (shelf) to −27.1 (sea state 5), −116.1 (summer mud); `ship` −6.1 (sea state 5), −96.1 (summer mud), met at the other four (+8.8 deep, +21.3 shelf, +10.2 slope, +29.8 winter sand); `large_submerged` −7.1, −4.7, then +8.4, +15.4, +10.5, +9.5 | D-233; `docs/design/popoto_trade_study.md` |
+| Stacked rows against reverberation, shelf, bistatic generator, one site, 3 pings | today's chain gains 2.47 dB (2 rows) and 3.38 dB (3 rows); the planner assumes 0 | D-233; `docs/design/popoto_trade_study.md` section 5 |
+| The trade study against the chain (simulator and C++ chain) | `xl_auv` at 8 km within 0.7 dB; ship at 12 km 4.8 dB low | D-233; `docs/design/popoto_trade_study.md` section 6 |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
 rerun since, and each later package (D-158 to D-201 and the 3-D work) ran its affected test files.
-The full GPU suite last ran on the tree of D-201: 2278 passed, 102 skipped, 1 xfailed, none failed, on
-an NVIDIA L4 (Hugging Face job 6b078a26d91f621b93096bc7; a later job covers the 3-D work). Also not
+The full GPU suite last ran on the third 2026-11-26 batch's tree (`0a8b477`, D-234): 2886 passed, 111
+skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face job 6b084a4cd91f621b930b6331). Also not
 measured: Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
 (D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the
-link budget and coverage with reverberation (`sonar-w2w3`). Anything on real
+sweep's Doppler bank on a GPU and its false-alarm rate at the default budget (`sonar-094p`); the link
+budget and coverage against measured reverberation (every site value is illustrative). Anything on real
 hardware or in real water: every number in this file is from simulation, from analysis,
 or from other people's published channel soundings.
