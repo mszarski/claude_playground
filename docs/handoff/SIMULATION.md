@@ -30,7 +30,7 @@ placeholder or a class default until then.
 | --- | --- | --- |
 | Objects are clouds of point scatterers on their surfaces (`sim/scene.py`, D-41) | Highlights, shadows, layover and speckle are there; specular glints, diffraction and resonances are not. Smooth spheres, cylinders, plates and discs that glint exist (`sim/targets.py`, D-65) and no gallery scene uses them | `STATUS.md` "Simulator limits so far"; `SCENARIOS.md` "What no scenario has yet" |
 | Target strengths are assumed | The ship's +25 dB, every class in `configs/builds/targets/reference_classes.yaml`: placeholders. Detection ranges scale with them directly | `STATUS.md` open question 7 |
-| Four propagation tiers in the shipped scenarios, none with 3-D refraction | `free_field`, `image_source` (isovelocity; flat boundaries, and opt-in since `sonar-0nsi` a tilted bed and walls as any plane, exact for straight rays, no roughness or diffraction on those paths, NumPy only), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149). A fifth, opt-in tier `eigenray3d` (Bellhop3D, external, `sim/bellhop3d.py`) traces 3-D; only the illustrative `flank_seamount_3d` uses it | `sonar-6c8` explained (D-197); `sonar-rcq` packages in `docs/tasks/PROPAGATION_3D.md` |
+| Four propagation tiers in the shipped scenarios, none with 3-D refraction | `free_field`, `image_source` (isovelocity; flat boundaries, and opt-in since `sonar-0nsi` a tilted bed and walls as any plane, exact for straight rays, no roughness or diffraction on those paths, NumPy only), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149). A fifth, opt-in tier `eigenray3d` (Bellhop3D, external, `sim/bellhop3d.py`) traces 3-D; only six illustrative scenarios use it (`flank_seamount_3d` and the five of `sonar-d7sw`, section 4) | `sonar-6c8` explained (D-197); `sonar-rcq` packages in `docs/tasks/PROPAGATION_3D.md` |
 | Range-dependent water is rings about the sonar (D-110) | A front lying across a map, and horizontal refraction, are not modelled. Only the `eigenray` tier has it; the other tiers use the local speed and warn | item 26 |
 | Arrivals are cut by energy with a cap (D-105, D-137) | `popoto_12km` leaves out 1.4 % of a point's arrival energy at the cap of 64 (measured in `EXAMPLES.md` example 5; `SCENARIOS.md` says 1.5 %), `popoto_env_gravel_30m` 14 % | item 22; `sonar-9b8` (open): the rule lowers the gravel-water peak 3.3 dB |
 | 9 Bellhop scenarios reflect eigenrays from a flat surface in a windy sea; 21 simulate a bottom the record does not mention | Kept on purpose so records did not change; each is named under `environment_overrides` in its file (D-101) | item 21 |
@@ -98,7 +98,7 @@ Notes on the diagram, each checked in `simulator.py`:
 
 - **Bellhop is never linked.** It is an external program run as a separate process
   (`GPUSONAR_BELLHOP` names it; `tools/build_oracles.sh` builds it). It has two roles: the ray
-  tracer of the `eigenray` tier (22 of the 81 shipped scenarios; without it they and their tests skip; Bellhop3D runs the opt-in `eigenray3d` tier of one more, `flank_seamount_3d`), and
+  tracer of the `eigenray` tier (26 of the 90 shipped scenarios; without it they and their tests skip; Bellhop3D runs the opt-in `eigenray3d` tier of six more: `flank_seamount_3d` and the five 3-D scenes of `sonar-d7sw`), and
   the oracle the `image_source` tier is tested against. KRAKEN, Bellhop3D and PyRAM are oracles
   only (`tests/python/kraken_oracle.py`, `bellhop3d_oracle.py`, `test_ram_crosscheck.py`).
 - **Two engines.** Path pairing, reverberation and sampled-pulse synthesis exist in NumPy and in
@@ -151,9 +151,10 @@ checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in f
 
 ## 4. The scenario catalogue
 
-`configs/scenarios/` holds **81 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
-(`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`) and `flank_seamount_3d` (added 2026-11-26 with the `eigenray3d` tier).
-`docs/SCENARIOS.md` lists all 81.
+`configs/scenarios/` holds **90 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
+(`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`), `flank_seamount_3d` (added 2026-11-26 with the `eigenray3d` tier)
+and the nine 3-D scenes and twins of `sonar-d7sw` (2026-11-26; flank table below). `docs/SCENARIOS.md` lists all 90.
+(Corrected with `sonar-d7sw`: `flank_seamount_3d` was counted in the 81 but missing from the family tables, whose counts summed to 80.)
 
 Columns: **tier** is `fidelity`; **used by** names the tests under `tests/python/` (without the
 `test_` prefix and `.py`) and tools that load the file by name; **gallery** means
@@ -216,7 +217,7 @@ at the `eigenray` tier needs Bellhop.
 | `sas_auv_multipath` | `sas_auv` | image (flat, medium sand, energy rule: 3 bounces) | surface and bottom multipath of targets 1, 3 and 8 m above the bed; 90 pings | `multipath_scenes` | CPU 48 s to simulate with half the seabed (measured here) |
 | `sas_auv_multipath_free` | `sas_auv` | free | its free-field twin | `multipath_scenes` | CPU 10 s with half the seabed (measured here) |
 
-### Flank array, 32 hydrophones, 6 to 10 kHz (6)
+### Flank array, 32 hydrophones, 6 to 10 kHz (16)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -224,6 +225,11 @@ at the `eigenray` tier needs Bellhop.
 | `flank_patrol` | `flank_32` | eigenray | six pings, a 56 m mover, a small vehicle, a wreck; detection and tracking | gallery; `realistic_scenes`, `hsb`; `sonar_live_hsb.py` | CPU 11 min; L4 50.3 s |
 | `flank_sst_shallow` | `flank_32` | image | time-spread bounce paths, sediment and surface reverberation, a volume layer | `timespread`; `decay_time_sensitivity.py` | not recorded |
 | `flank_sst_spread` | `flank_32` | image | the same with angle and Doppler spreading, multi-bounce tails | `timespread` | not recorded |
+| `flank_seamount_3d` | `flank_32` | eigenray3d | a target 4 km out over a seamount's flank; one `bathymetry` for the scenario; no reverberation | `eigenray3d_scenario` | CPU 231 s (four Bellhop3D runs of 57 s; `PROPAGATION_3D.md` P5) |
+| `flank_seamount_3d_opening`, `_nx2d` | `flank_32` | eigenray3d; eigenray | the same seamount, a target opening 1.5 to 6 km along the flank bearing over four pings, and its N × 2-D twin: 3-D is 4.0 and 2.3 dB below N × 2-D behind the flank | `3d_scenarios`, `eigenray3d_scenario` | CPU 3-D 6.5 min (provider 363 s, synthesis 22 s), twin 38 s (measured here, `sonar-d7sw`) |
+| `flank_level_3d`, `flank_bank_3d`, `flank_level_nx2d` | `flank_32` | eigenray3d; eigenray | three targets at 5 km over a level bed (control) and a bed sloping 1° across the look, and their level twin | `3d_scenarios`, `eigenray3d_scenario` | CPU 3.2 and 6.8 min, twin 2.2 min (measured here) |
+| `flank_ridge_3d`, `_nx2d` | `flank_32` | eigenray3d; eigenray | a sill crossing the bearing at 45°; target behind it | `3d_scenarios`, `eigenray3d_scenario` | CPU 5.3 min, twin 62 s (measured here) |
+| `flank_canyon_3d`, `_nx2d` | `flank_32` | eigenray3d; eigenray | a canyon along the look direction; target down its axis: 3-D 6.2 dB louder than N × 2-D | `3d_scenarios`, `eigenray3d_scenario` | CPU 4.6 min, twin 23 s (measured here) |
 
 ### Validation against TR 0702 (4)
 

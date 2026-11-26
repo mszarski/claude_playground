@@ -596,10 +596,41 @@ seconds and bytes). Two Bellhop3D runs (arrivals and TL) per source position:
 | the same | 241 × 181 | 65 | 107 | 272 kB |
 | the same, 4 bearings × 13 ranges (P4 test) | 241 × 181 | 52 | 148 | 223 kB |
 | `flank_seamount_3d` (one target, two source positions) | 241 × 181 | 1 | 57 | 0.5 kB; scenario 231 s |
+| `flank_level_3d` (three targets on three bearings, level bed: 500 m bed grid) | 241 × 181 | 3 | 17.6 | 25 kB; provider 70 s, synthesis 119 s |
+| `flank_bank_3d` (the same over a 1° cross-slope) | 241 × 181 | 3 | 66 | 26 kB; provider 270 s, synthesis 138 s |
+| `flank_seamount_3d_opening` (one target at four ranges, to 6 km) | 241 × 181 | 4 | 90 | 5.4 kB; provider 363 s, synthesis 22 s |
+| `flank_ridge_3d` (one target, 5 km) | 241 × 181 | 1 | 68 to 81 | 6.9 kB; provider 308 s |
+| `flank_canyon_3d` (one target, 5 km) | 241 × 181 | 1 | 60 to 70 | 32 kB; provider 270 s |
 
 Bytes per receiver: 3.6 to 4.8 kB binary (52 bytes an arrival; ASCII would be 171). The provider refuses a run
 whose estimate (10 kB a receiver) exceeds `max_file_mb` (300 MB, about 30,000 receivers). Time grows with rays
 × range × the receivers' bearings, not with the file.
+
+**The 3-D scenarios (`sonar-d7sw`, 2026-11-26).** Five scenes at the tier, each with an `eigenray` twin over the 3-D
+bed's profile along the target's bearing (`docs/SCENARIOS.md`, "Flank array over 3-D relief";
+`tests/python/test_3d_scenarios.py`). Measured one-way at the target; "N × 2-D" is Bellhop3D's own N × 2-D mode at
+the same fan and bed grid, so 3-D minus N × 2-D is the bed's horizontal refraction alone:
+
+| Scenario | 3-D minus N × 2-D | 3-D minus our 2-D twin | Arrivals off the bearing (energy mean / largest strong) | Reading |
+| --- | --- | --- | --- | --- |
+| `flank_level_3d`, level 100 m | +0.002 dB | +0.002 dB | 0.0006° | the tier adds nothing over a level bed (D-197's 0.2 dB holds with room) |
+| `flank_bank_3d`, 1° across the look | −0.00 to +0.02 dB | broadside +0.01 dB | 0.41 to 0.48° up-slope / 3.3° | section 3's estimate holds in kind: turning of tenths of a degree, no level; beamformed peak moves 0.015° |
+| `flank_seamount_3d_opening`, 1.5 / 3 / 4.5 / 6 km | −0.00, −0.18, −3.98, −2.33 dB | +0.07, +0.71, −2.65, −2.06 dB | to 7.3° | the D-149 effect on a moving target; the peak bearing 0.67° off at 3 km |
+| `flank_ridge_3d`, sill at 45° | −0.20 dB | −1.86 dB | 0.20° / 0.65° | flagged by the P1 warning, yet 3-D adds 0.2 dB; the twin's 1.9 dB is section 2 item 4 |
+| `flank_canyon_3d`, along the axis | **+6.16 dB** | +6.17 dB | −0.10° / 13.9° | horizontal ducting by the walls; **not flagged** by the P1 warning (no slope across the axis bearing on it) |
+
+New findings, beyond the plan:
+
+- **The cross-slope warning (P1) misses a canyon along the bearing and flags a sill where the effect is
+  0.2 dB.** It reads the slope across each bearing on that bearing only. Walls beside a level axis are invisible to
+  it, although there the 3-D field is 6 dB louder.
+- **The per-receiver TL scaling (P3) reached 10.4 dB in the canyon** (3.3 dB at the sill, 1.4 dB on the seamount
+  track). The level is Bellhop3D's TL run, but how the energy is split between the merged arrivals is uncertain
+  there. The record's echo peak was 2.8 dB lower than the twin's although the energy is 6 dB higher: the energy
+  arrives spread over wall paths.
+- **Record peaks differ by up to 0.6 dB over a level bed** where eigenray energies agree to 0.003 dB (delays
+  differ by up to 8 µs between the programs, enough to move the interference of paths 0.4 ms apart). Compare
+  levels through the eigenrays or TL, not record peaks.
 
 **The acceptance bound (P4).** Today the test asserts `to_full[flanks] < -2.0` (ours at least
 2 dB too loud). It becomes three assertions, with the provider of P3 at its production fan

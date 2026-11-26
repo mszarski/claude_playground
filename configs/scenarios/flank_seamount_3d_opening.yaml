@@ -1,0 +1,28 @@
+# ILLUSTRATIVE (unconfirmed relief: no site was measured). The seamount of `flank_seamount_3d` (the same bed) with a
+# target OPENING along the flank bearing (94 degrees, 4 degrees from broadside towards south) from 1.5 km, before the
+# seamount, to 6 km, behind its southern flank: the level falls as the bed's horizontal refraction takes hold.
+# Compare with `flank_seamount_3d_opening_nx2d` (the same scene at `eigenray`, Bellhop 2-D over this bearing's depth
+# profile: N x 2-D, exact for a target on one bearing). A track ACROSS bearings would need a profile per ping, which
+# the 2-D tier cannot take (one profile on every bearing), so the target opens along one bearing.
+# Opt-in `eigenray3d` tier (Bellhop3D, external: GPUSONAR_BELLHOP3D; docs/tasks/PROPAGATION_3D.md). Target in
+# noise only: no reverberation (the tier cannot give it over relief: a receiver per scattering cell is refused by its
+# disk cap), as `flank_seamount_3d`. Measured numbers: docs/SCENARIOS.md and docs/tasks/PROPAGATION_3D.md.
+name: flank_seamount_3d_opening
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [1300, 6300]}}      # every ping's target range (1.5 to 6 km)
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 200.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {seamount: {depth: 200.0, height: 180.0, center: [300.0, 2500.0], sigma: 500.0}}   # flank_seamount_3d's bed
+propagation:
+  range_step: 25.0
+  depth_step: 4.0             # puts a node at the target's 50 m (the twin has the same grid)
+  n_beta: 181                 # 0.67 degree over the default 120 degrees of azimuth, as flank_seamount_3d
+platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 4, interval: 150.0}      # a time-lapse: 1.5 km between pings at 10 m/s
+scene:
+  - {type: points, label: target, positions: [[-104.6, 1496.3, 50.0]], target_strength_db: 10.0, velocity: [-0.6976, 9.9756, 0.0]}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz, as flank_target_5km
+seed: 1

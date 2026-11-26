@@ -79,6 +79,41 @@ def seamount(depth: float, height: float, center, sigma: float) -> Bathymetry:
     return Bathymetry(lambda x, y: d0 - bump(x, y), gradient, flat_depth=d0 if h == 0.0 else None)
 
 
+def ridge(depth: float, height: float, point, azimuth_deg: float, sigma: float) -> Bathymetry:
+    """A straight Gaussian ridge (`height` > 0) or trough (`height` < 0) on a level bed, with its analytic gradient:
+    depth(x, y) = `depth` - `height` exp(-d^2 / (2 sigma^2)), d the horizontal distance from the line through the
+    horizontal `point` along `azimuth_deg` (degrees from x = north towards y = east). Ours: a closed-form 3-D feature
+    for scenarios whose relief crosses or runs along a bearing (a sill crossing obliquely, a canyon along the look
+    direction), in the manner of `seamount`. The crest of a ridge is `depth` - `height` deep (`height` >= `depth` is
+    refused); a trough's axis is `depth` + |`height`| deep."""
+    d0, h, (px, py), s = float(depth), float(height), (float(v) for v in point), float(sigma)
+    if h >= d0 or s <= 0.0:
+        raise ValueError("ridge: need height < depth (the crest stays under water) and sigma > 0")
+    a = np.radians(float(azimuth_deg))
+    nx, ny = -np.sin(a), np.cos(a)                    # the horizontal unit normal to the line
+
+    def across(x, y):
+        return (x - px) * nx + (y - py) * ny
+
+    def gradient(x, y):
+        d = across(x, y)
+        g = h * np.exp(-d * d / (2.0 * s * s)) * d / (s * s)
+        return g * nx, g * ny
+
+    return Bathymetry(lambda x, y: d0 - h * np.exp(-across(x, y) ** 2 / (2.0 * s * s)), gradient,
+                      flat_depth=d0 if h == 0.0 else None)
+
+
+def profile_along(bed: Bathymetry, origin, azimuth_deg: float, ranges) -> list:
+    """The bed's depth profile along one bearing from the horizontal `origin`, as [[range_m, depth_m], ...]: the
+    one-profile bed (`propagation.environment.bathymetry`) of the 2-D eigenray tier, i.e. what an N x 2-D run sees on
+    that bearing. Depths rounded to 0.1 m (scenario files carry them)."""
+    r = np.asarray(ranges, dtype=float)
+    a = np.radians(float(azimuth_deg))
+    d = bed.depth(float(origin[0]) + r * np.cos(a), float(origin[1]) + r * np.sin(a))
+    return [[float(ri), round(float(di), 1)] for ri, di in zip(r, d)]
+
+
 def cross_bearing_slope(bed: Bathymetry, origin, azimuth, ranges) -> np.ndarray:
     """The bed's slope across a bearing: dD/dn at the points `ranges` (m) from the horizontal `origin` along the
     bearing `azimuth` (radians from x = north towards y = east), n the horizontal unit vector to the bearing's right
@@ -170,6 +205,7 @@ def make_bathymetry(spec) -> Bathymetry:
 
         {plane: {depth, slope: [dD/dx, dD/dy], point: [x, y]}}
         {seamount: {depth, height, center: [x, y], sigma}}        a Gaussian seamount on a level bed
+        {ridge: {depth, height, point: [x, y], azimuth_deg, sigma}}  a straight Gaussian ridge (height < 0: a trough)
         {x: [...], y: [...], depth: [[...]]}                      depth[len(x)][len(y)]
         {range: [...], depth: [...], azimuth_deg: [...], origin: [x, y]}
 
@@ -184,8 +220,11 @@ def make_bathymetry(spec) -> Bathymetry:
     if "seamount" in spec:
         m = spec["seamount"]
         return seamount(m["depth"], m["height"], m["center"], m["sigma"])
+    if "ridge" in spec:
+        m = spec["ridge"]
+        return ridge(m["depth"], m["height"], m["point"], m["azimuth_deg"], m["sigma"])
     if "x" in spec and "y" in spec:
         return grid(spec["x"], spec["y"], spec["depth"], spec.get("step"))
     if "range" in spec:
         return polar(spec["range"], spec["depth"], spec.get("azimuth_deg"), spec.get("origin", (0.0, 0.0)), spec.get("step"))
-    raise ValueError("bathymetry: give `plane`, `seamount`, `x`/`y`/`depth`, or `range`/`depth`")
+    raise ValueError("bathymetry: give `plane`, `seamount`, `ridge`, `x`/`y`/`depth`, or `range`/`depth`")

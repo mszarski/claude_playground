@@ -1,0 +1,31 @@
+# ILLUSTRATIVE. The N x 2-D twin of `flank_seamount_3d_opening`: the same sonar, target track, pings, noise and seed
+# at the `eigenray` tier (Bellhop 2-D), over the seamount's depth profile along the target's bearing (94 degrees from
+# the sonar; sim/bathymetry.py `profile_along`, 100 m steps, written as Bellhop's piecewise-linear bed). On that
+# bearing this is exactly what an N x 2-D run sees; the difference from the 3-D scenario is the bed's horizontal
+# refraction (plus the 2-D tier's own arrivals over a piecewise-linear bed: docs/tasks/PROPAGATION_3D.md section 2).
+# Needs Bellhop (GPUSONAR_BELLHOP).
+name: flank_seamount_3d_opening_nx2d
+sonar: flank_32
+fidelity: eigenray
+sonar_overrides:
+  receive: {window: {range: [1300, 6300]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 200.0, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  environment:
+    depth: 200.0
+    bathymetry: [[0, 200], [500, 200], [600, 199.9], [700, 199.8], [800, 199.6], [900, 199.2], [1000, 198.5], [1100, 197.4],
+                 [1200, 195.5], [1300, 192.7], [1400, 188.5], [1500, 182.7], [1600, 175], [1700, 165.2], [1800, 153.5],
+                 [1900, 140.4], [2000, 126.5], [2100, 113], [2200, 101], [2300, 91.8], [2400, 86.3], [2500, 85.2],
+                 [2600, 88.7], [2700, 96.3], [2800, 107.2], [2900, 120.2], [3000, 134.1], [3100, 147.7], [3200, 160.1],
+                 [3300, 170.7], [3400, 179.4], [3500, 186.1], [3600, 190.9], [3700, 194.3], [3800, 196.6], [3900, 198],
+                 [4000, 198.9], [4100, 199.4], [4200, 199.7], [4300, 199.9], [4400, 199.9], [4500, 200], [9000, 200]]
+  range_step: 25.0
+  depth_step: 4.0
+platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 4, interval: 150.0}
+scene:
+  - {type: points, label: target, positions: [[-104.6, 1496.3, 50.0]], target_strength_db: 10.0, velocity: [-0.6976, 9.9756, 0.0]}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}
+seed: 1
