@@ -523,6 +523,18 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   Francisco 40 kHz 0.0037 (ours, labelled so); Fig. 14.3's forward null for mu 1, rho_rk -1.
 - Must not: replace sigma_2 as default; present a Table 14.1 site value as a class default.
 
+#### G-15 in part (2026-11-26): the Williams-Jackson (1998) form, opt-in
+
+- What exists: `volume_model="williams_jackson_1998"` ([WJ] (20)-(22): (14.10) with rho_rk = -1, the paper's signed
+  mu = -mu', isotropic power law; through our flat-interface transmission, which is [WJ] (20)). Any geometry; the
+  three parameters from the item or a site row's `volume_spectral:` block (`bottom.volume_spectral`; only
+  `williams_jackson_1998_panama_city`); class rows refused (no class values). Tests:
+  `tests/python/test_williams_jackson_1998.py` (Eckernfoerde -39.139 / -34.068 / -30.412 dB at 5 / 10 / 20 deg,
+  nulls at phi 42.8 / 39.3 / 32.4 / 18.4 deg; equal to (14.10) at rho_rk = -1 to 1e-12; the Fig. 7-8 readings
+  within 1 dB with the roughness model of [WJ] 5.1). Default unchanged (bit for bit).
+- Still open: rho_rk other than -1, finite L_c and Lambda ((14.13)-(14.19), (7.14)-(7.17)), Table 14.1 site rows,
+  the equivalent-sigma2 numbers of [N4], gamma3 = 3 frequency independence as a test; no class values anywhere.
+
 ### G-16 Volume term averaged over large-scale slopes — OPT-IN, M
 - Gap (`sonar-3k1` "slope and shadow corrections of the volume term"). From [N4 WP-3]; recipe Sect. 14.1.2
   (p. 383) via (13.80) and R from G-11.
@@ -555,6 +567,14 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Tests first: quadrature of the 2-D law over Ky equals W1 (1e-8); Phi1 integrates to h^2 (von Karman); SAX99
   c-c row by hand: gamma2 3.54, w2 7.54e-3 cm^(4 - gamma2) (ours).
 - Must not: use (D.19), (D.23) or 7.1e-5 as printed; ship Table 6.1.
+
+#### G-18 in part (2026-11-26): Jackson and Briggs (1992) eq. (4)
+
+- What exists: `bottom.roughness_2d_from_1d(intercept_cm3, slope)` -> {gamma2 = 1 - slope, w2_cm4} by [JB] (4) (the
+  corrected (D.19)/(D.23)). Tests (`tests/python/test_jackson_briggs_1992.py`): Table III -> Table V within 0.11 % for
+  six rows; San Francisco pre-storm along strike 0.000885 against the printed 0.000846 recorded (probable misprint,
+  not changed); the 2-D law integrated over Ky is the 1-D law (quadrature, 1e-8).
+- Still open: the von Karman forms (D.7)-(D.8), the SAX99 test, a `units` argument.
 
 ### G-19 Surface reverberation statistics from [DP97] — OPT-IN, M
 - From [NS WP5]; lognormal mean with sigma_T = -0.18 U10 + 4.85 dB (3.8-11.6 m/s; clamp and warn), held about
@@ -864,3 +884,15 @@ section 5 is the ordered list.
 | G-27 (anisotropic roughness) | lower priority: mean backscatter isotropic within 1-2 dB at three sites with ripples ([JB] Sec. 2.2) |
 | Decision 12 (papers to obtain) | Williams and Jackson (1998) read. Mourad and Jackson (1989) and Wagner (1967): another agent, in parallel |
 | CONFORMANCE rows "`combined`", "Interpolation Kirchhoff/composite", "Volume term isotropic in bistatic angle" | change of status proposed in the reports of [WJ] and [JB] (CONFORMANCE.md not edited here) |
+
+### 7.1 Applied 2026-11-26 (branch `a-wj`)
+
+| Item | Done | Where |
+|---|---|---|
+| [WJ] 5.1 `roughness_model="williams_jackson_1998"` | yes, opt-in; kept out of `ROUGHNESS_MODELS` (new `OPT_IN_ROUGHNESS_MODELS`) so the fit's model spread does not move; offered by the fit | `sim/bottom.py`, `tests/python/test_williams_jackson_1998.py` |
+| [WJ] 5.2 figure test of the full model | yes: every Fig. 7-8 reading of the note within 1 dB; Table AII (printed part) as a recorded characterisation; the Panama City row through the paper's model as a Fig. 7 test | same, `test_sediment_table.py` |
+| [WJ] 5.3 / G-15 | in part (G-15 above) | `sim/bottom.py` |
+| [WJ] 5.4 default roughness model | NOT applied: the owner's decision (D-86 stands) | - |
+| [WJ] 5.6, [JB] 5.4 documents | docstrings; `docs/PHYSICS_NOTES.md` Sec. 33.1; `docs/CONFIGURATION.md`; REFERENCES / CONFORMANCE / DECISIONS text proposed in the report | |
+| [JB] 5.3 gamma2 > 3.7 warning | yes (small_slope, composite, combined, williams_jackson_1998; once per model; values unchanged) | `sim/bottom.py`, `tests/python/test_jackson_briggs_1992.py` |
+| [JB] 5.5 / G-18 | in part (G-18 above) | same |

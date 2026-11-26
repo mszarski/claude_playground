@@ -134,7 +134,12 @@ the large-scale rms slope angle, shadowing below it. The handbook's own split an
 interpolation between the Kirchhoff and composite results were not found in an open
 document; the 1989 model they grew from prints both (Mourad and Jackson 1989, eqs. (18) and
 (33)-(37), read since: the opt-in `mourad_jackson_1989`, section comment below; its split is
-k h_s = 1/sqrt(2), not our 1/2). The composite result describes Bragg scattering only: towards the specular
+k h_s = 1/sqrt(2), not our 1/2). The split is printed three ways: J&R (13.72)-(13.75) k h_s = 1/2 (ours),
+Jackson and Briggs (1992) eq. (A8) k h_s = 2^(-1/2) (`small_scale_kh=0.7071` reproduces (A8) to 5 digits) and
+their text (p. 976) k h_s = 1; on our composite at 5 degrees the two others are 1.2-1.4 and 2.0-2.8 dB lower for
+sands (docs/references/bottom_backscatter_jackson_briggs_1992.md Sec. 0 item 2). The published monostatic scheme's
+switch is printed there too (p. 977): Kirchhoff from 90 degrees down to where it has fallen 15 dB below its peak,
+composite below. The composite result describes Bragg scattering only: towards the specular
 direction, where Q falls below Kc, it goes to zero and the Kirchhoff term is the right one.
 
 Validity of the lowest-order small-slope result (`small_slope`), from a comparison with
@@ -159,6 +164,19 @@ degrees at most. (A smooth minimum of the Kirchhoff and composite results was tr
 rejected: for a sediment the Kirchhoff result is BELOW the perturbation one at 20-30 degrees,
 because it carries the normal-incidence reflection coefficient, so a minimum pulls the
 valid perturbation result down by up to 6 dB.)
+
+"williams_jackson_1998" (opt-in, any geometry): the PUBLISHED smooth minimum, read since. Williams and Jackson
+(1998), J. Acoust. Soc. Am. 103, 169-181, eq. (10), join the Kirchhoff result (11)-(15) and first-order
+perturbation theory (16)-(19), not the composite result, by sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), "the
+smaller cross section takes precedence", and compare it with bistatic data at 40 kHz
+(docs/references/bottom_bistatic_williams_jackson_1998.md). Its two terms are ours (`kirchhoff_strength`,
+`perturbation_strength`, equal to the print to 1e-13 dB). The effect the paragraph above describes is real and
+is what the published model does: for sands it lies below our default small-slope result by up to 6.1 dB at 20
+degrees backscatter (Panama City, 40 kHz) and 6.8 dB at 30 degrees (medium sand, 30 kHz), out of plane by up
+to 5.3 dB, and where the two terms are equal (very fine silt) 1.5 dB below both. Against the paper's own
+bistatic data (one site, Table AII, 74 values) it is closer than ours (mean +3.3 against +6.1 dB), but the
+fluid model is known to overpredict at that site (J&R p. 351), so this does not settle which approximation is
+right; the default stays small-slope (D-86; the choice is the owner's, [WJ] 5.4).
 """
 from __future__ import annotations
 
@@ -189,6 +207,29 @@ def w2_from_cm4(strength_cm4: float, gamma2: float) -> float:
     W [m^4] = 1e-8 beta (0.01 K [1/m])^(-gamma2), so w2 = beta 10^(2 gamma2 - 8). A second print:
     Jackson and Richardson (2007), App. D.1.3, p. 479."""
     return float(strength_cm4) * 10.0 ** (2.0 * float(gamma2) - 8.0)
+
+
+def roughness_2d_from_1d(intercept_cm3: float, slope: float) -> dict:
+    """{gamma2, w2_cm4} of the isotropic 2-D relief spectrum W(K) = w2 (h0 K)^-gamma2 (h0 = 1 cm, K in rad/cm: the
+    convention of `w2_from_cm4`) from a 1-D spectrum measured along a line and fitted as a power law in spatial
+    frequency, Phi_1(f) = intercept x f^slope, f in cycles/cm, intercept in cm^3 at 1 cycle/cm, two-sided (as Jackson
+    and Briggs 1992 Table III prints it). Their eq. (4) (confirmed, docs/references/
+    bottom_backscatter_jackson_briggs_1992.md Sec. 2):
+
+        gamma2 = 1 - slope,   w2 = (2 pi)^(gamma2 - 2) intercept h0 Gamma(gamma2 / 2) / [pi^(1/2) Gamma((gamma2 - 1) / 2)].
+
+    It reproduces their Table V from Table III for six of seven rows within 0.11 %; the seventh (San Francisco
+    pre-storm along strike) gives 0.000885 against the printed 0.000846, a probable misprint of one of the two
+    (recorded, tests/python/test_jackson_briggs_1992.py). This is J&R (2007) (D.19) and (D.23) in their corrected
+    forms (plan G-18; the printed (D.19) would give 14-37 % less). The 1-D law has an integral over the cross
+    wavenumber only for gamma2 > 1 (slope < 0); a 2-D model needs 2 < gamma2 < 4 besides (checked by the models)."""
+    slope = float(slope)
+    if not slope < 0.0:
+        raise ValueError(f"roughness_2d_from_1d: slope {slope:g} must be negative (gamma2 = 1 - slope > 1)")
+    gamma2 = 1.0 - slope
+    w2 = (2.0 * math.pi) ** (gamma2 - 2.0) * float(intercept_cm3) * math.gamma(0.5 * gamma2) / (
+        math.sqrt(math.pi) * math.gamma(0.5 * (gamma2 - 1.0)))
+    return {"gamma2": gamma2, "w2_cm4": w2}
 
 
 def parameters_from_physical(*, density: float, sound_speed: float, attenuation_db_per_m: float,
@@ -647,8 +688,72 @@ def combined_strength(grazing_in, grazing_out, frequency: float, sound_speed: fl
                                     ti, ts, phi, slope, slope_nodes), ti, ts, phi, slope, shadowing)
 
 
+# --- Williams and Jackson (1998): the published bistatic roughness model (opt-in) -----------------
+#
+# K. L. Williams and D. R. Jackson, "Bistatic bottom scattering: Model, experiments, and model/data comparison",
+# J. Acoust. Soc. Am. 103 (1), 169-181 (1998) [WJ], extracted in docs/references/bottom_bistatic_williams_jackson_1998.md
+# (read on the page images; "confirmed" there = printed). The roughness cross section, any geometry:
+#   sigma_br = [sigma_kr^eta + sigma_pr^eta]^(1/eta),  eta = -2: "the smaller cross section takes precedence"  (10)
+#   sigma_kr  the Kirchhoff approximation (11)-(15), R at the facet angle arcsin(Delta): `kirchhoff_strength`
+#   sigma_pr  first-order perturbation theory (16)-(19): `perturbation_strength`
+# Both terms are ours, unchanged: they equal the print to 2.8e-14 and 5.7e-14 dB (the note Sec. 4 items 3-4). The
+# printed reason for the join: with a power-law spectrum perturbation theory overpredicts near specular (W(K)
+# diverges at K = 0) and Kirchhoff overpredicts elsewhere (Thorsos 1990, via secondary). No slope averaging, no
+# shadowing. Stated scope (pp. 169-170): 10-100 kHz; a lossy fluid sediment (no elasticity, no porosity), no
+# gradients; isotropic Gaussian relief with a power-law spectrum, 2 <= gamma2 <= 4 ((6); the structure function
+# needs 2 < gamma2 < 4, so the end points are refused); transverse isotropy (only the azimuth difference counts).
+# Where the two terms are equal (smooth relief: very fine silt everywhere; Panama City at about 10 deg backscatter)
+# (10) lies 10 log10(2) / 2 = 1.5 dB below both: that is the printed rule, not an error.
+# Against our default (small-slope, D-86; both printed, so neither wins by the owner's rule: [WJ] 5.4 is the
+# owner's decision): -6.1 dB at 20 deg backscatter (Panama City, 40 kHz), -6.8 dB at 30 deg (medium sand, 30 kHz),
+# within 0.2 dB at 5 deg and at specular for sands (the note Sec. 4 item 1).
+
+WILLIAMS_JACKSON_1998 = "williams_jackson_1998"
+
+WJ98_FREQUENCY_RANGE = (10e3, 100e3)
+"""[WJ] title and p. 169: "10-100 kHz" (confirmed)."""
+
+_warned_wj98_range = False
+
+
+def _wj98_warn_range(frequency: float) -> None:
+    global _warned_wj98_range
+    lo, hi = WJ98_FREQUENCY_RANGE
+    if not lo <= float(frequency) <= hi and not _warned_wj98_range:
+        _warned_wj98_range = True
+        import warnings
+        warnings.warn(f"williams_jackson_1998: {float(frequency) / 1e3:g} kHz is outside the paper's 10-100 kHz (Williams and "
+                      "Jackson 1998, p. 169); the model is evaluated as printed. This warning is given once.", stacklevel=3)
+
+
+def williams_jackson_1998_roughness(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                                    delta: float, w2: float, gamma2: float, azimuth=np.pi, **_ignored):
+    """[WJ] (10) with eta = -2: (sigma_kr^-2 + sigma_pr^-2)^(-1/2), the Kirchhoff (`kirchhoff_strength`, [WJ] (11)-(15))
+    and first-order perturbation (`perturbation_strength`, (16)-(19)) cross sections joined so that the smaller takes
+    precedence. Any geometry: `azimuth` pi is backscatter, 0 forward ([WJ] (2); our convention). In the exact
+    specular direction (horizontal wave-vector change zero) the perturbation term is infinite and (10) gives the
+    Kirchhoff term; at zero grazing both are zero and so is this. Module comment above for the scope; outside
+    10-100 kHz a warning (once)."""
+    _wj98_warn_range(frequency)
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=phi)
+    sk = np.asarray(kirchhoff_strength(ti, ts, frequency, sound_speed, **par), dtype=float)
+    sp = np.asarray(perturbation_strength(ti, ts, frequency, sound_speed, **par), dtype=float)
+    q_h, _ = _kirchhoff_geometry(ti, ts, phi, 2.0 * np.pi * float(frequency) / float(sound_speed))
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        joined = 1.0 / np.sqrt(1.0 / sk**2 + 1.0 / sp**2)
+    joined = np.where(q_h > 0.0, joined, sk)
+    return np.where((sk > 0.0) & ((sp > 0.0) | (q_h == 0.0)), joined, 0.0)
+
+
 ROUGHNESS_MODELS = ("perturbation", "kirchhoff", "small_slope", "composite", "combined")
 """The roughness models for any geometry (bistatic). The fit (`sediment_fit`) and its model spread use these."""
+
+OPT_IN_ROUGHNESS_MODELS = (WILLIAMS_JACKSON_1998,)
+"""Roughness models for any geometry (bistatic) that are opt-in: Williams and Jackson (1998), the published
+bistatic join of Kirchhoff and perturbation theory. Offered by the fit (`sediment_fit.fit`, tools/fit_sediment.py)
+but kept out of `ROUGHNESS_MODELS`, which the fit's model spread (`sediment_fit.roughness_model_spread_db`) and
+tools/boundary_models_study.py iterate over: their numbers stay what they were before it existed."""
 
 BACKSCATTER_ROUGHNESS_MODELS = ("mourad_jackson_1989",)
 """Roughness models for backscatter only (opt-in): Mourad and Jackson (1989), whose paper is monostatic."""
@@ -664,6 +769,34 @@ diverges. Evidence is the literature (PHYSICS_NOTES Sec. 23.2), not a measuremen
 
 _warned_no_small_slope = False
 
+LARGE_GAMMA2 = 3.7
+"""Above this relief spectral exponent `roughness_strength` warns (once per process per model) for the models in
+`LARGE_GAMMA2_MODELS`: Jackson and Briggs (1992), p. 974 (confirmed, docs/references/
+bottom_backscatter_jackson_briggs_1992.md Sec. 2.2): an exponent near 4 extrapolated below the measured wavenumbers
+gives an unrealistic large-scale slope (Quinault along strike, gamma2 3.92: 33 deg at 35 kHz) and too strong
+scattering, and past applications had exponents "generally less than 3.7". Values are not changed."""
+
+LARGE_GAMMA2_MODELS = ("small_slope", "composite", "combined", "williams_jackson_1998")
+"""The models whose result rests on the spectrum's extrapolation to low wavenumbers, through the structure function
+(small-slope, the Kirchhoff part of williams_jackson_1998) or the large-scale slope (composite, combined): the list
+of [JB] 5.3. First-order perturbation theory alone uses the spectrum at the Bragg wavenumber only (no warning);
+`kirchhoff` alone is a near-specular model (no warning); mourad_jackson_1989 has its own stated range."""
+
+_warned_large_gamma2: set = set()
+
+
+def _warn_large_gamma2(roughness_model: str, gamma2: float) -> None:
+    # From 4 on these models have no structure function and raise (structure_constant): nothing to warn about.
+    if roughness_model in LARGE_GAMMA2_MODELS and LARGE_GAMMA2 < gamma2 < 4.0 and roughness_model not in _warned_large_gamma2:
+        _warned_large_gamma2.add(roughness_model)
+        import warnings
+        warnings.warn(f"bottom roughness ({roughness_model}): gamma2 = {gamma2:g} is above 3.7. Jackson and Briggs (1992), "
+                      "p. 974: an exponent near 4 extrapolated below the measured wavenumbers gives an unrealistic "
+                      "large-scale slope (33 deg at 35 kHz for their gamma2 3.92) and too strong scattering; past fits had "
+                      "exponents generally below 3.7. With their along-strike Quinault inputs our small-slope result is "
+                      "5.6 dB (30 deg) and 10.3 dB (40 deg) above the across-strike one at 35 kHz, an anisotropy their data "
+                      "do not show. Evaluated as given; this warning is given once per model.", stacklevel=3)
+
 
 def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                        delta: float, w2: float, gamma2: float, azimuth=np.pi, roughness_model: str | None = None,
@@ -672,13 +805,15 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
     angle between the horizontal directions of the incident and scattered waves: pi for
     backscatter, 0 for forward scatter. `roughness_model`: "small_slope" (the default,
     `DEFAULT_ROUGHNESS_MODEL`), "perturbation" (first order; the default before D-86),
-    "kirchhoff", "composite" or "combined" (module docstring), or for backscatter only
-    "mourad_jackson_1989" (the 1989 model's roughness term, opt-in). The small-slope result needs a
+    "kirchhoff", "composite" or "combined" (module docstring), "williams_jackson_1998" (opt-in, any
+    geometry: the published bistatic join of Kirchhoff and perturbation theory, `williams_jackson_1998_roughness`),
+    or for backscatter only "mourad_jackson_1989" (the 1989 model's roughness term, opt-in). The small-slope result needs a
     structure function, i.e. 2 < gamma2 < 4: outside that range, when no model is named, the
     perturbation result is used and a warning says so once (naming "small_slope" raises).
     `shadowing` ("wagner" | "none"; None = the model's own default): Wagner's shadow function, carried by
     "composite" and "combined" (default "wagner" there) and by "mourad_jackson_1989"; the other models have
-    none, so naming "wagner" with them is an error."""
+    none, so naming "wagner" with them is an error. Above gamma2 = 3.7 the models of `LARGE_GAMMA2_MODELS` warn once
+    each (Jackson and Briggs 1992, p. 974; `LARGE_GAMMA2`); the values are unchanged."""
     global _warned_no_small_slope
     if roughness_model is None:
         roughness_model = DEFAULT_ROUGHNESS_MODEL
@@ -690,9 +825,11 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
                               "(name roughness_model to choose)", stacklevel=2)
                 _warned_no_small_slope = True
             roughness_model = "perturbation"
-    if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope"):
+    if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope",
+                                                                                                 WILLIAMS_JACKSON_1998):
         raise ValueError(f"shadowing {shadowing!r}: roughness_model {roughness_model!r} has no shadowing (it is carried by "
                          "'composite', 'combined' and 'mourad_jackson_1989')")
+    _warn_large_gamma2(roughness_model, gamma2)
     args = (grazing_in, grazing_out, frequency, sound_speed)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=azimuth)
     if roughness_model == "perturbation":
@@ -708,38 +845,152 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
         return combined_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
     if roughness_model == MOURAD_JACKSON_1989:
         return mourad_jackson_1989_roughness(*args, **shade, **par)
-    raise ValueError(f"unknown roughness_model {roughness_model!r}; one of {ROUGHNESS_MODELS + BACKSCATTER_ROUGHNESS_MODELS}")
+    if roughness_model == WILLIAMS_JACKSON_1998:
+        return williams_jackson_1998_roughness(*args, **par)
+    known = ROUGHNESS_MODELS + OPT_IN_ROUGHNESS_MODELS + BACKSCATTER_ROUGHNESS_MODELS
+    import difflib
+    near = difflib.get_close_matches(str(roughness_model), known, n=1)
+    raise ValueError(f"unknown roughness_model {roughness_model!r}" + (f"; did you mean {near[0]!r}?" if near else "")
+                     + f"; one of {known}")
 
 
-VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989")
+VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989", "williams_jackson_1998")
 """`volume_model`: "stockhausen" (the default: the flat-interface volume term below, Stockhausen (1963) as
-generalised for absorption; J&R (14.7)-(14.9); [MJ89] (39) corrected) or "mourad_jackson_1989" (that term
-averaged over the large-scale slope and shadowed, [MJ89] (38); backscatter only, opt-in)."""
+generalised for absorption; J&R (14.7)-(14.9); [MJ89] (39) corrected), "mourad_jackson_1989" (that term
+averaged over the large-scale slope and shadowed, [MJ89] (38); backscatter only, opt-in) or
+"williams_jackson_1998" (opt-in, any geometry: the same transmission through the interface with a volume cross
+section from a 3-D heterogeneity spectrum that depends on the bistatic angles, [WJ] (20)-(22);
+`williams_jackson_1998_volume`). The last is named after its paper, like the 1989 pair, rather than "spectral":
+it is (21) with the paper's signed mu, i.e. J&R (14.10) with rho_rk = -1 and an isotropic power law (no L_c, no
+Lambda), not the general (14.10) the plan's G-15 lists."""
+
+VOLUME_SPECTRAL_KEYS = ("w3", "gamma3", "mu")
+"""The parameters of `volume_model="williams_jackson_1998"` ([WJ] (7)-(9)): w3 the volume spectral strength in
+m^(3 - gamma3) (`w3_from_cm3` from the paper's cm^3), gamma3 its exponent, mu the ratio of the compressibility
+to the density fluctuation, SIGNED as the paper prints it (Table I: -0.69, -2.44). No class values exist."""
+
+
+def w3_from_cm3(strength_cm3: float, gamma3: float) -> float:
+    """Volume spectral strength in m^(3 - gamma3) (wavenumbers in rad/m) from the form with a 1 cm reference length,
+    W_rr(k) = w3 (h0 k)^(-gamma3), h0 = 1 cm, w3 in cm^3 ([WJ] (7) and Table I, "at 2 pi / lambda = 1 cm^-1"):
+    W [m^3] = 1e-6 w3 (0.01 k [1/m])^(-gamma3), so w3 [m^(3 - gamma3)] = w3 [cm^3] x 10^(2 gamma3 - 6) (ours, the
+    argument of `w2_from_cm4`; the note Sec. 2: 1.3e-4 cm^3 -> 0.013 m^-1 at gamma3 = 4)."""
+    return float(strength_cm3) * 10.0 ** (2.0 * float(gamma3) - 6.0)
+
+
+def williams_jackson_1998_volume_cross_section(grazing_in, grazing_out, frequency: float, sound_speed: float, *, nu: float,
+                                               delta: float, w3: float, gamma3: float, mu: float, azimuth=np.pi, **_ignored):
+    """[WJ] (21)-(22): the volume scattering cross section per unit volume (1/m) of weak density and compressibility
+    fluctuations with an isotropic power-law spectrum W_rr(k) = w3 / k^gamma3 (w3 in m^(3 - gamma3)), first order (Born):
+
+        sigma_v = (pi / 2) k^4 |mu kappa^2 + cos ti cos ts cos phi - P(ti) P(ts)|^2 W_rr(Delta k),
+        Delta k = k |4 Delta_t^2 + {Re[P(ti) + P(ts)]}^2|^(1/2),   kappa = (1 + i delta) / nu,  P = (kappa^2 - cos^2)^(1/2)
+
+    (Im P > 0: not stated, ours as `_vertical`). mu signed as printed (negative: anti-correlated); this is J&R (2007)
+    (14.10) with rho_rk = -1 and mu' = -mu (ours, algebra; the note Sec. 2; tests). The bracket (monopole plus dipole)
+    vanishes near one azimuth: a null the isotropic term has not (Eckernfoerde 10/10 deg: phi 39.3 deg)."""
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    kappa2 = ((1.0 + 1j * delta) / nu) ** 2
+    p_i, p_s = _vertical(kappa2, np.cos(ti)), _vertical(kappa2, np.cos(ts))
+    dt2 = 0.25 * np.maximum(np.cos(ti) ** 2 + np.cos(ts) ** 2 - 2.0 * np.cos(ti) * np.cos(ts) * np.cos(phi), 0.0)
+    dk = k * np.sqrt(np.abs(4.0 * dt2 + (p_i + p_s).real ** 2))
+    bracket = mu * kappa2 + np.cos(ti) * np.cos(ts) * np.cos(phi) - p_i * p_s
+    with np.errstate(divide="ignore"):
+        return 0.5 * np.pi * k**4 * np.abs(bracket) ** 2 * _power_law(dk, w3, gamma3)
+
+
+def _through_interface(ti, ts, k: float, rho: float, nu: float, delta: float, sigma_vol):
+    """sigma_vol |T(ti)|^2 |T(ts)|^2 / (rho^2 2 (Im b2i + Im b2s)): the flat-interface volume term (module docstring;
+    [WJ] (20); J&R (14.8)) for a volume cross section per unit volume `sigma_vol` (1/m, a number or an array)."""
+    k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
+    b2i, b2s = _vertical(k2sq, k * np.cos(ti)), _vertical(k2sq, k * np.cos(ts))
+    t_in = 1.0 + reflection(ti, rho, nu, delta)
+    t_out = 1.0 + reflection(ts, rho, nu, delta)
+    decay = 2.0 * (b2i.imag + b2s.imag)
+    return np.where(decay > 0.0, sigma_vol * np.abs(t_in) ** 2 * np.abs(t_out) ** 2 / (rho**2 * np.maximum(decay, 1e-300)), 0.0)
+
+
+def williams_jackson_1998_volume(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                                 delta: float, w3: float | None = None, gamma3: float | None = None, mu: float | None = None,
+                                 azimuth=np.pi, **_ignored):
+    """[WJ] (20) with (21)-(22): `williams_jackson_1998_volume_cross_section` through the flat interface, our
+    transmission form (equal to the print to 1.1e-14 dB, the note Sec. 4 item 5). Any geometry. For a sigma_v that
+    does not depend on angle it is our default term with sigma2 = sigma_v / (attenuation in dB/m) (tests). Needs
+    w3, gamma3, mu (`VOLUME_SPECTRAL_KEYS`); a named site row's `volume_spectral:` block gives them
+    (`volume_spectral`); no class values exist. Stated scope as for the roughness term (10-100 kHz; weak
+    inhomogeneities; the paper treats volume scattering as an interface cross section, slight penetration)."""
+    missing = [n for n, v in (("w3", w3), ("gamma3", gamma3), ("mu", mu)) if v is None]
+    if missing:
+        raise ValueError(f"volume_model 'williams_jackson_1998' needs w3, gamma3 and mu (missing {missing}): the volume "
+                         "spectrum of Williams and Jackson (1998) (7)-(9); no class values exist for them (the paper prints "
+                         "two sites, Table I): give them, or name a site row with a `volume_spectral:` block "
+                         "(williams_jackson_1998_panama_city; bottom.volume_spectral)")
+    _wj98_warn_range(frequency)
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    sigma_vol = williams_jackson_1998_volume_cross_section(ti, ts, frequency, sound_speed, nu=nu, delta=delta, w3=float(w3),
+                                                           gamma3=float(gamma3), mu=float(mu), azimuth=phi)
+    return _through_interface(ti, ts, k, rho, nu, delta, sigma_vol)
+
+
+def volume_spectral(name: str, path=None) -> dict:
+    """{w3 (m^(3 - gamma3)), gamma3, mu} of a named row's `volume_spectral: {w3_cm3, gamma3, mu}` block (configs/
+    sediments.yaml; today only williams_jackson_1998_panama_city, [WJ] Table I): the parameters of
+    `volume_model="williams_jackson_1998"`. A row without the block is refused: no class values exist for them."""
+    entry = _entry(name, path)
+    if "volume_spectral" not in entry:
+        raise ValueError(f"sediment {name!r} has no `volume_spectral:` block: no class values exist for w3, gamma3 and mu "
+                         "(Williams and Jackson 1998 print two sites; J&R 2007 Table 14.1 sites only), so volume_model "
+                         "'williams_jackson_1998' needs them given, or a site row that has them "
+                         "(williams_jackson_1998_panama_city)")
+    block = {k: float(v) for k, v in entry["volume_spectral"].items()}
+    return {"w3": w3_from_cm3(block["w3_cm3"], block["gamma3"]) if "w3_cm3" in block else block["w3"],
+            "gamma3": block["gamma3"], "mu": block["mu"]}
+
+
+def item_volume_spectral(item: dict) -> dict:
+    """For a scenario item (`reverberation` `fluid_sediment`, `seafloor` `fluid_sediment`): {w3, gamma3, mu} as floats
+    when its `volume_model` is "williams_jackson_1998", the item's own values completed from its named `sediment`'s
+    `volume_spectral:` block (`volume_spectral`); {} for any other volume model. Refused, naming the reason, when the
+    three cannot all be found (no class values exist)."""
+    if item.get("volume_model") != WILLIAMS_JACKSON_1998:
+        return {}
+    given = {k: float(item[k]) for k in VOLUME_SPECTRAL_KEYS if k in item}
+    if len(given) < len(VOLUME_SPECTRAL_KEYS):
+        if "sediment" not in item:
+            raise ValueError(f"volume_model 'williams_jackson_1998' needs w3, gamma3 and mu (missing "
+                             f"{[k for k in VOLUME_SPECTRAL_KEYS if k not in given]}): no class values exist for them "
+                             "(Williams and Jackson 1998 print two sites); give them, or name a site row with a "
+                             "`volume_spectral:` block (sediment: williams_jackson_1998_panama_city)")
+        given = dict(volume_spectral(item["sediment"], item.get("sediment_file")), **given)
+    return given
 
 
 def volume_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
-                    delta: float, sigma2: float, volume_model: str | None = None, **_ignored):
+                    delta: float, sigma2: float | None = None, volume_model: str | None = None, **_ignored):
     """Cross section per unit area and solid angle from scatterers inside the sediment
     (equal to Jackson and Richardson 2007, eqs. (14.7)-(14.9), with (8.26) for the attenuation).
     `volume_model` (`VOLUME_MODELS`): None or "stockhausen" is this term; "mourad_jackson_1989" is
-    `mourad_jackson_1989_volume` (backscatter only; needs w2 and gamma2, which `strength` passes)."""
+    `mourad_jackson_1989_volume` (backscatter only; needs w2 and gamma2, which `strength` passes);
+    "williams_jackson_1998" is `williams_jackson_1998_volume` (any geometry; needs w3, gamma3, mu; `sigma2` unused)."""
+    if sigma2 is None and volume_model != WILLIAMS_JACKSON_1998:
+        raise ValueError(f"volume_model {volume_model or 'stockhausen'!r} needs sigma2")
     if volume_model is not None and volume_model != "stockhausen":
         if volume_model == MOURAD_JACKSON_1989:
             return mourad_jackson_1989_volume(grazing_in, grazing_out, frequency, sound_speed, rho=rho, nu=nu, delta=delta,
                                               sigma2=sigma2, **_ignored)
+        if volume_model == WILLIAMS_JACKSON_1998:
+            return williams_jackson_1998_volume(grazing_in, grazing_out, frequency, sound_speed, rho=rho, nu=nu, delta=delta,
+                                                **_ignored)
         import difflib
         near = difflib.get_close_matches(str(volume_model), VOLUME_MODELS, n=1)
         raise ValueError(f"unknown volume_model {volume_model!r}" + (f"; did you mean {near[0]!r}?" if near else "")
                          + f" (one of {VOLUME_MODELS})")
     ti, ts = np.broadcast_arrays(np.asarray(grazing_in, dtype=float), np.asarray(grazing_out, dtype=float))
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
-    k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
-    b2i, b2s = _vertical(k2sq, k * np.cos(ti)), _vertical(k2sq, k * np.cos(ts))
-    t_in = 1.0 + reflection(ti, rho, nu, delta)
-    t_out = 1.0 + reflection(ts, rho, nu, delta)
     sigma_vol = sigma2 * (20.0 / np.log(10.0)) * k * delta / nu   # 1/m
-    decay = 2.0 * (b2i.imag + b2s.imag)
-    return np.where(decay > 0.0, sigma_vol * np.abs(t_in) ** 2 * np.abs(t_out) ** 2 / (rho**2 * np.maximum(decay, 1e-300)), 0.0)
+    return _through_interface(ti, ts, k, rho, nu, delta, sigma_vol)
 
 
 def strength(grazing_in, grazing_out, frequency: float, sound_speed: float, azimuth=np.pi, **params):
@@ -1250,4 +1501,6 @@ def named_backscattering_strength_db(name: str, grazing, frequency: float, sound
     Lambert law for rock and pebbles (which has no frequency dependence)."""
     if "empirical_backscatter" in _entry(name, path):
         return lambert_backscatter_db(grazing, empirical_backscatter(name, path)["mu_db"])
+    if model.get("volume_model") == WILLIAMS_JACKSON_1998 and any(k not in model for k in VOLUME_SPECTRAL_KEYS):
+        model = dict(volume_spectral(name, path), **model)          # the row's `volume_spectral:` block; refused without
     return backscattering_strength_db(grazing, frequency, sound_speed, **dict(sediment(name, path), **model))

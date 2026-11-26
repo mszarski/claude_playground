@@ -4471,3 +4471,85 @@ ours to 1e-10 dB without the (k/10)^2 of (32); the corrected (39) equals our vol
 +2.34e-5, nu by -2.6e-5 to 0 (1-9 phi), the normal-incidence loss by at most 0.0023 dB; the pieces meet at
 5.3 phi to 4e-6 (5.1e-5 before). 1.0091 in J&R (11.2) is a misprint, now confirmed by the original;
 0.4566 / 0.4556 in (11.3) stays open ([MJ89] prints no k(Mz)).
+
+### 33.1 After Williams and Jackson (1998) and Jackson and Briggs (1992) ([WJ] 5.1-5.3, [JB] 5.3-5.5) [CONFIRMED formulas; OURS comparisons]
+
+Sources: `docs/references/bottom_bistatic_williams_jackson_1998.md` ([WJ], J. Acoust. Soc. Am. 103, 169-181) and
+`docs/references/bottom_backscatter_jackson_briggs_1992.md` ([JB], J. Acoust. Soc. Am. 92, 962-977), both read
+on the page images. Code: `python/gpusonar/sim/bottom.py`, Python only (still no C++ twin of any bottom
+scattering model: `grep` of `libs/` and `apps/` for the model names and `volume_strength` finds none; both
+reverberation engines take strengths from Python). Tests: `tests/python/test_williams_jackson_1998.py`,
+`test_jackson_briggs_1992.py`, `test_sediment_table.py`, `test_reverberation.py`, `test_reverb_bistatic.py`.
+
+**What is still wrong or unsettled (first).**
+- **Our default roughness model is not the published bistatic model, and it is further from the one bistatic
+  data set.** The default small-slope result lies above the published join of [WJ] (10) by 6-7 dB at 20-45 deg
+  backscatter for sands (Panama City, 40 kHz: -6.1 dB at 20 deg, -2.8 at 45; medium sand: -5.1 at 20, -6.8 at
+  30, -3.0 at 45, the same within 0.1 dB at 30, 40 and 100 kHz; sandy gravel -4.1 / -4.3 at 20 / 45 deg), out
+  of plane by up to 5.3 dB (20/20 deg, phi 90), and they agree within 0.2 dB at 5 deg and at specular for sands
+  (ours, roughness only). Against Table AII (Panama City, 142 values, the note's scratch `wj_data.py`, with the
+  paper's volume term) the published model is -0.45 / rms 1.31 dB in backscatter and +3.34 / 4.85 dB bistatic,
+  small-slope +1.36 / 1.73 and +6.08 / 7.11 dB (ours; bottom.py's new model equals the note's re-typing to
+  1.4e-13 dB, so these carry over). On the part of Table AII the note prints (in the test): published -0.46 /
+  1.21 and +2.33 / 5.73 dB, small-slope +1.31 / 1.62 and +5.49 / 7.30 dB. **One site, and J&R (2007) p. 351 say
+  the fluid model overpredicts at Panama City** (poroelastic effects, the same sign as our bias), so a lower
+  roughness term may be fitting a fluid-model error; J&R recommend small-slope (p. 336). The default stays
+  small-slope (D-86); the choice is the owner's ([WJ] 5.4).
+- Where the Kirchhoff and perturbation terms are equal, (10) with eta = -2 is 10 log10(2) / 2 = 1.5 dB below
+  both: very fine silt from 20 deg on and out of plane (1.2-1.9 dB below small-slope at 30 and 100 kHz; at 5 and
+  10 deg backscatter, where Kirchhoff is 7.5 and 2.5 dB above perturbation, only 0.1 and 0.6 dB; in the exact
+  specular direction 0, since the perturbation term is infinite there), Panama City near 10 deg backscatter (1.47
+  dB below the smaller term). That is the printed rule ("the smaller
+  cross section takes precedence"), with no physical basis beyond it.
+- The spectral volume term has no class values: w3, gamma3, mu exist for two sites ([WJ] Table I; Eckernfoerde,
+  a gassy mud whose parameters the paper calls phenomenological, with w3 adjusted, has no row). It is J&R (14.10)
+  with rho_rk = -1 only; the general (14.10) of plan G-15 (rho_rk, L_c, Lambda) is not implemented.
+- The intercept rule of [JB] (4) reproduces six of seven Table V rows; San Francisco pre-storm along strike
+  gives 0.000885 against the printed 0.000846 (+4.6 %): which is misprinted is not known (recorded, not changed).
+- The published monostatic scheme ([JB] p. 977: composite below about 80 deg, Kirchhoff above, switched where
+  Kirchhoff has fallen 15 dB below its peak, the volume term slope-averaged and shadowed) is the 1989 model of
+  Sec. 33 above; it is not our default either.
+
+**The published bistatic roughness model** ([WJ] 5.1): `roughness_model="williams_jackson_1998"`,
+sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), [WJ] (10) with eta = -2, sigma_k our `kirchhoff_strength` ([WJ]
+(11)-(15), R at the facet angle arcsin(Delta)), sigma_p our `perturbation_strength` ((16)-(19)); both equal the
+print to 1e-13 dB. Any geometry; at exact specular it is the Kirchhoff term; warns once outside 10-100 kHz; no
+shadowing, no slope average. Reproduces the note's ten test vectors to 1e-4 dB (Panama City, 40 kHz:
+-40.157 / -31.870 / -29.799 / -28.154 / -22.240 dB at 5 / 10 / 20 / 35 / 60 deg backscatter; the Kirchhoff
+integral by direct quadrature gives the same). The smooth minimum the `combined` paragraph of the module
+docstring rejected was Kirchhoff with *composite*; the published one is Kirchhoff with *perturbation*, and the
+"up to 6 dB" lowering that paragraph names is exactly what it does. Offered by the sediment fit and
+`tools/fit_sediment.py`, kept out of `ROUGHNESS_MODELS` so the fit's model spread does not change.
+
+**The spectral bistatic volume term** ([WJ] 5.3, plan G-15 in part): `volume_model="williams_jackson_1998"`,
+sigma_v = (pi/2) k^4 |mu kappa^2 + cos ti cos ts cos phi - P_i P_s|^2 W_rr(Delta k), Delta k = k |4 Delta_t^2 +
+{Re(P_i + P_s)}^2|^(1/2), W_rr = w3 / k^gamma3 ([WJ] (21)-(22)), through our flat-interface transmission, which is
+[WJ] (20). The paper's mu is signed (negative); with mu' = -mu and rho_rk = -1 it is J&R (14.10) (to 1e-12). The
+bracket vanishes near one azimuth: at Eckernfoerde 42.8 / 39.3 / 32.4 / 18.4 deg for 5 / 10 / 15 / 20 deg
+grazing; the isotropic sigma2 term has no null. For a sigma_v independent of angle it is our default term with
+sigma2 = sigma_v / (attenuation in dB/m). Parameters from the item, or from a site row's `volume_spectral:`
+block (`bottom.volume_spectral`; today `williams_jackson_1998_panama_city`); class rows are refused. With both
+keys and Table I the model reproduces every Fig. 7-8 reading of the note within 1 dB (figure) and the note's
+values to 0.05 dB; the Panama City row through it is within 0.3 dB of the Fig. 7 backscatter readings, where
+our default is 1.2-5.8 dB above them. Panama City's volume term at 20 deg is an equivalent sigma2 of 7e-5, 14.6
+dB below the grain-size rule's 0.002 (roughness dominates there, so the total moves 0.4 dB).
+
+**The large-exponent warning** ([JB] 5.3): for 3.7 < gamma2 < 4, `small_slope` (also as the default),
+`composite`, `combined` and `williams_jackson_1998` warn once each; values unchanged. [JB] p. 974: an exponent
+near 4 extrapolated below the measured wavenumbers gives an unrealistic large-scale slope (Quinault along
+strike, gamma2 3.92: 33 deg at 35 kHz; ours 33.06 with Table V's w2) and too strong scattering; past fits had
+exponents below 3.7. With those inputs our small-slope roughness is 5.6 / 10.3 dB above the across-strike
+(3.67) result at 30 / 40 deg, 35 kHz: the anisotropy the paper's model predicts and its data (isotropic within
++-1 dB) do not show.
+
+**The composite cut-off is printed three ways** ([JB] 5.4): J&R (13.72)-(13.75) k h_s = 1/2 (our
+`small_scale_kh` default), [JB] (A8) k h_s = 2^(-1/2) (`small_scale_kh=0.7071` reproduces (A8) to 5 digits, and
+it is [MJ89] (18)'s), [JB]'s text k h_s = 1. On our `composite` at 5 deg: -1.2 to -1.4 dB (0.707) and -2.0 to
+-2.8 dB (1.0) for medium sand and sandy gravel at 30 and 100 kHz, under 0.2 dB at 20 deg (the note, `kh.py`).
+`composite` is opt-in; the default split is unchanged.
+
+**1-D to 2-D strength** ([JB] 5.5, plan G-18 in part): `bottom.roughness_2d_from_1d(intercept_cm3, slope)`, [JB]
+(4), the corrected J&R (D.19)/(D.23); Table III -> Table V within 0.11 % for six rows.
+
+Sec. 23.2 (later, 2026-11-26): the published bistatic model ([WJ] (10)) is up to 6-7 dB below our default at
+20-45 deg backscatter for sands; see the first item above.

@@ -993,8 +993,8 @@ williams_jackson_1998_panama_city:
     gamma2: "printed (Table I, 3.12)"
     sigma2: >-
       ours: the paper's spectral volume term (21)-(22) at 20 degrees backscatter, 40 kHz, as an equivalent
-      (6.93e-5); the paper prints w3 1.61e-5 cm^3, gamma3 4, mu -2.44 instead (`volume_spectral`, read by no model
-      until the spectral volume option exists, [WJ] 5.3)
+      (6.93e-5); the paper prints w3 1.61e-5 cm^3, gamma3 4, mu -2.44 instead (`volume_spectral`, read by
+      `volume_model: williams_jackson_1998` only, [WJ] 5.3)
     volume_spectral: "printed (Table I: gamma3 4, w3 0.0000161 cm^3 at 1 cm^-1, mu -2.44)"
   note: >-
     ONE SITE, not a class: coarse sand off Panama City, roughness dominated, bistatic and backscatter data at 40
@@ -1003,7 +1003,9 @@ williams_jackson_1998_panama_city:
     m^0.88). Our default model (small-slope) with this row agrees with the paper's Fig. 7 model curve at 5
     degrees backscatter (-40.1 against -40.0 dB) and lies 1.2 to 5.8 dB above it at 10-60 degrees: the paper joins
     Kirchhoff and perturbation theory by its eq. (10), which is up to 6.1 dB below small-slope at 20 degrees for
-    this sand ([WJ] Sec. 4 item 1). The sigma2 is our equivalent and warns.
+    this sand ([WJ] Sec. 4 item 1). With `roughness_model` and `volume_model` williams_jackson_1998 (the paper's
+    model, opt-in, reading `volume_spectral`) the row reproduces the Fig. 7 backscatter readings within 0.3 dB
+    (tests/python/test_sediment_table.py). The sigma2 is our equivalent and warns.
   status: confirmed
   source: >-
     Williams and Jackson (1998): K. L. Williams and D. R. Jackson, "Bistatic bottom scattering: Model, experiments, and model/data comparison",
