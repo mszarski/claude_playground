@@ -328,6 +328,44 @@ def test_reciprocal_under_swapping_transmitter_and_receiver():
     np.testing.assert_allclose(h(a, b), h(b, a), rtol=1e-12)
 
 
+def test_cost_cap_raises_never_truncates():
+    """The cost cap (D-213's open question; the owner, D-229: "a cap that raises an error, never truncates"):
+    `roughness.max_pairs` (default penetration.DEFAULT_MAX_PAIRS) bounds the ray pairs an echo of a sub-critical point
+    may need, estimated as the square of its leg's rays. More raises before any pairing, on either engine with the same
+    words, naming the count, the cap and the two ways out; at the count itself the rays are the uncapped ones exactly."""
+    pts = np.array([[0.0, 0.0, 0.3], _sub_point(), _sub_point(18.0, 0.2) + np.array([0.0, 0.4, 0.0])])
+    engines = ["numpy"] + (["cpp"] if engine.HAVE_CPP else [])
+    said = {}
+    for eng in engines:
+        full = quiet(rough(engine=eng).eigenrays, SRC, pts)
+        counts = full.valid.sum(axis=1)
+        n, worst = int(counts.max()), int(np.argmax(counts))
+        assert n > 6 and worst > 0 and n * n < pen.DEFAULT_MAX_PAIRS
+        at = quiet(rough(engine=eng, rough_par=dict(SAX99_ROUGH, max_pairs=n * n)).eigenrays, SRC, pts)
+        for name in ("delay", "amplitude", "launch", "arrival", "valid"):
+            np.testing.assert_array_equal(getattr(at, name), getattr(full, name))
+        with pytest.raises(ValueError) as exc:
+            quiet(rough(engine=eng, rough_par=dict(SAX99_ROUGH, max_pairs=n * n - 1)).eigenrays, SRC, pts)
+        said[eng] = str(exc.value)
+        assert said[eng] == pen.rough_cost_message(n, worst, n * n - 1)
+        for part in (f"point {worst} has {n} rays a leg", f"about {n * n} ray pairs an echo", f"roughness.max_pairs {n * n - 1}",
+                     "raise roughness.max_pairs", "coarser roughness.bin", "Nothing is truncated"):
+            assert part in said[eng], part
+        # before any synthesis: the pairing of the two legs raises the same way
+        with pytest.raises(ValueError, match="ray pairs an echo"):
+            quiet(two_way_paths, rough(engine=eng, rough_par=dict(SAX99_ROUGH, max_pairs=100)), SRC, SRC + np.array([0.5, 0.0, 0.0]),
+                  pts, np.ones(len(pts)), engine=eng)
+        # the second way out: a coarser delay bin keeps fewer rays a leg
+        coarse = quiet(rough(engine=eng, rough_par=dict(SAX99_ROUGH, max_pairs=n * n - 1, bin=4.0 / 20e3)).eigenrays, SRC, pts)
+        assert coarse.valid.sum(axis=1).max() ** 2 <= n * n - 1
+    assert len(set(said.values())) == 1                      # the two engines say the same
+    for bad in (0, -5, 2.5, True, "many"):
+        with pytest.raises(ValueError, match="max_pairs"):
+            rough(rough_par=dict(SAX99_ROUGH, max_pairs=bad))
+    assert rough(rough_par=dict(SAX99_ROUGH, max_pairs=7.0)).rough.max_pairs == 7
+    assert rough().rough.max_pairs == pen.DEFAULT_MAX_PAIRS == 1_000_000
+
+
 def test_refusals_and_keys():
     b = sax99_bottom()
     base = dict(penetration="rough", bottom=b, frequency=2e4)

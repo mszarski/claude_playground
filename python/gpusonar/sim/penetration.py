@@ -48,7 +48,32 @@ import numpy as np
 
 from . import bottom as bottom_model
 
-ROUGHNESS_KEYS = ("sediment", "sediment_file", "w2", "gamma2", "K0", "seed", "patch", "refine", "floor_db", "bin")
+ROUGHNESS_KEYS = ("sediment", "sediment_file", "w2", "gamma2", "K0", "seed", "patch", "refine", "floor_db", "bin", "max_pairs")
+# The cost cap (D-213's question, the owner's answer in D-229: a cap that raises, never truncates): the most ray pairs one
+# echo of a sub-critical point may need, estimated as the square of the rays of its leg (`rough_cost_check`). Ours: 1000
+# rays a leg, about 8.5 times the most any existing test needs (342 rays a leg, 116 964 pairs: test_sim_cpp.py's finest
+# knobs; the 20 cases of test_rough_penetration_matches 127 to 145 rays a leg, measured 2026-11-26); no shipped scene
+# uses `rough`. libs/sim penetration.hpp has the same number (kRoughMaxPairs).
+DEFAULT_MAX_PAIRS = 1_000_000
+
+
+def rough_cost_message(rays: int, point: int, max_pairs: int) -> str:
+    """The refusal of `rough_cost_check`, word for word the C++ engine's (libs/sim/src/penetration.cpp)."""
+    return (f"sediment: penetration: rough: sub-critical point {point} has {rays} rays a leg, about {rays * rays} ray pairs an echo, "
+            f"more than roughness.max_pairs {max_pairs}. Nothing is truncated; either raise roughness.max_pairs (the synthesis "
+            f"then takes that many pairs an echo), or give a coarser roughness.bin (fewer delay bins: fewer rays a leg)")
+
+
+def rough_cost_check(counts, points, max_pairs: int) -> None:
+    """Raise (ValueError) before any pairing or synthesis when a sub-critical point's echo would need more than
+    `max_pairs` ray pairs. `counts[k]` is the number of rays of one leg of point `points[k]` (the `fluid` ray and its
+    delay bins); an echo pairs a transmit leg with a receive leg, each about as many rays when the two ends are near,
+    so the estimate is counts[k]^2. The first point with the most rays is named."""
+    if len(counts) == 0:
+        return
+    k = int(np.argmax(counts))
+    if int(counts[k]) ** 2 > int(max_pairs):
+        raise ValueError(rough_cost_message(int(counts[k]), int(points[k]), int(max_pairs)))
 
 
 def _branch(b):
@@ -307,7 +332,7 @@ class RoughPatches:
 
     def __init__(self, *, c_w: float, c_s: float, interface_z: float, a_rho: float, nu: float, delta: float,
                  frequency: float, w2: float, gamma2: float, K0: float, seed: int = 0, patch: float | None = None,
-                 refine: float = 3.0, floor_db: float = 30.0, bin: float | None = None):
+                 refine: float = 3.0, floor_db: float = 30.0, bin: float | None = None, max_pairs: int = DEFAULT_MAX_PAIRS):
         self.c_w, self.c_s, self.interface_z = float(c_w), float(c_s), float(interface_z)
         self.a_rho, self.nu, self.delta = float(a_rho), float(nu), float(delta)
         self.frequency, self.w2, self.gamma2, self.K0 = float(frequency), float(w2), float(gamma2), float(K0)
@@ -315,14 +340,15 @@ class RoughPatches:
         self.patch = float(patch) if patch is not None else c_w / (2.0 * frequency)     # half a water wavelength (ours)
         self.refine, self.floor_db = float(refine), float(floor_db)
         self.bin = float(bin) if bin is not None else 1.0 / (4.0 * frequency)           # a quarter period (ours)
+        self.max_pairs = int(max_pairs)                                                  # the cost cap: rough_cost_check
         self.k_w = 2.0 * np.pi * self.frequency / self.c_w
         self.k_loss = self.k_w * self.delta / self.nu
 
     def cpp_args(self) -> tuple:
-        """(w2, gamma2, K0, seed, patch, refine, floor_db, bin) for the C++ engine's `sim_sediment_eigenrays`
+        """(w2, gamma2, K0, seed, patch, refine, floor_db, bin, max_pairs) for the C++ engine's `sim_sediment_eigenrays`
         (libs/sim/src/penetration.cpp), every value stated; the seed as its 64-bit pattern, as the hash takes it."""
         return (self.w2, self.gamma2, self.K0, self.seed & 0xFFFFFFFFFFFFFFFF, self.patch, self.refine, self.floor_db,
-                self.bin)
+                self.bin, self.max_pairs)
 
     def point_rays(self, source, point):
         """(delay [B], amplitude [B] complex, launch [B, 3], arrival [B, 3]) of the delay bins for one point."""
@@ -390,8 +416,15 @@ def roughness_from_config(roughness: dict) -> dict:
             raise ValueError(f"sediment: roughness.{k} must be > 0")
     if "floor_db" in out and not float(out["floor_db"]) > 0.0:
         raise ValueError("sediment: roughness.floor_db must be > 0 dB")
+    if "max_pairs" in out:
+        m = out["max_pairs"]
+        if isinstance(m, bool) or not isinstance(m, (int, float, np.integer, np.floating)) or not np.isfinite(float(m)) \
+                or float(m) != int(m) or int(m) < 1:
+            raise ValueError(f"sediment: roughness.max_pairs {m!r}: a whole number >= 1 (ray pairs an echo; default {DEFAULT_MAX_PAIRS})")
     res = {"w2": w2, "gamma2": gamma2, "K0": K0, "seed": int(out.get("seed", 0))}
     for k in ("patch", "refine", "floor_db", "bin"):
         if k in out:
             res[k] = float(out[k])
+    if "max_pairs" in out:
+        res["max_pairs"] = int(out["max_pairs"])
     return res

@@ -7,6 +7,7 @@
 #include <complex>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "sonar/sim/paths.hpp"
@@ -438,6 +439,41 @@ TEST(Paths, SedimentRoughRefusals) {
     cfg.roughness.*knob = 0.0;
     refused(cfg);
   }
+}
+
+// The cost cap (D-213, D-229): a sub-critical point whose leg has n rays needs about n^2 pairs an echo; more than
+// roughness.max_pairs raises, naming the count, the cap and the two ways out, and nothing is truncated. At the
+// count itself the set is the uncapped one exactly.
+TEST(Paths, SedimentRoughCostCapRaisesNeverTruncates) {
+  const Vec3d source{0.0, 0.0, -10.0};
+  const auto full = sim::sediment_eigenrays(sax99(1e-5), source, kRoughPoints.data(), 3);
+  const std::int64_t n = full.n_rays;  // the sub-critical point's rays a leg: the fluid ray and its delay bins
+  ASSERT_GT(n, 6);
+  EXPECT_EQ(sax99(1e-5).roughness.max_pairs, sim::kRoughMaxPairs);
+  sim::SedimentConfig at = sax99(1e-5);
+  at.roughness.max_pairs = n * n;
+  const auto same = sim::sediment_eigenrays(at, source, kRoughPoints.data(), 3);
+  EXPECT_EQ(same.n_rays, n);
+  EXPECT_EQ(same.delay, full.delay);
+  EXPECT_EQ(same.amplitude, full.amplitude);
+  EXPECT_EQ(same.valid, full.valid);
+  sim::SedimentConfig under = sax99(1e-5);
+  under.roughness.max_pairs = n * n - 1;
+  try {
+    sim::sediment_eigenrays(under, source, kRoughPoints.data(), 3);
+    ADD_FAILURE() << "no refusal";
+  } catch (const std::invalid_argument& e) {
+    EXPECT_EQ(std::string(e.what()), sim::rough_cost_message(n, 0, n * n - 1));
+    const std::string msg = e.what();
+    for (const std::string& part : std::vector<std::string>{std::to_string(n) + " rays a leg", std::to_string(n * n) + " ray pairs",
+                                    "roughness.max_pairs " + std::to_string(n * n - 1), "raise roughness.max_pairs",
+                                    "coarser roughness.bin", "Nothing is truncated"}) {
+      EXPECT_NE(msg.find(part), std::string::npos) << part;
+    }
+  }
+  sim::SedimentConfig zero = sax99(1e-5);
+  zero.roughness.max_pairs = 0;
+  EXPECT_THROW(sim::sediment_eigenrays(zero, source, kRoughPoints.data(), 3), std::invalid_argument);
 }
 
 TEST(Paths, TwoWayPathsPairEveryOutboundAndReturnRay) {

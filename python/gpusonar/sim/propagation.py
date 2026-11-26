@@ -891,6 +891,9 @@ class SedimentProvider(EigenrayProvider):
             sin_d = d[:, 2] / np.linalg.norm(d, axis=1)
             sub = below & (sin_d < np.sqrt(1.0 - (self.sound_speed / self.sediment_speed) ** 2))
         rays = {int(k): self.rough.point_rays(source, points[k]) for k in np.flatnonzero(sub)}
+        # the cost cap (penetration.rough_cost_check): raise before any pairing, never truncate
+        from . import penetration as pen
+        pen.rough_cost_check([1 + len(r[0]) for r in rays.values()], list(rays), self.rough.max_pairs)
         extra = max((len(r[0]) for r in rays.values()), default=0)
         k = 1 + extra
         delay = np.zeros((s, k))
