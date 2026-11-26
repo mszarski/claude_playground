@@ -775,6 +775,7 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         warnings.warn("bistatic reverberation: this build of the C++ generator has azimuth sectors only; "
                       "falling back to the NumPy engine", RuntimeWarning, stacklevel=2)
         chosen = "numpy"
+    _engine.ran("reverberation", _engine.on_backend(backend) if chosen == "cpp" else "numpy")   # a fallback above included
     if chosen == "cpp":
         out = _series_cpp(rng, coarse, density, not bistatic and tx_gain is None and rx_gain is None, pulse_low,
                           positions - centre, fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,

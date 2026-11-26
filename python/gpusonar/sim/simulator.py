@@ -12,6 +12,7 @@ from .. import acoustics
 from .. import environment as site
 from ..config import dump_yaml, load_scenario_config
 from ..sonar import SonarModel, resolve_environment
+from . import engine as _engine
 from . import receiver
 from .propagation import EigenrayProvider, make_provider, two_way_paths
 from .scene import Scene, build_scene
@@ -77,6 +78,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     a dict passed in, also the flags, gain and offset of every sample, and "direct", the
     direct arrival alone).
     """
+    ran = _engine.begin_ping()           # what each stage ran on, into extra_json at the end (sim/engine.py, a-engrec)
     env = resolve_environment(environment, depth=pose.position[2])
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
                                time_ns=time_ns, environment=env, tx_pose=tx_pose)
@@ -139,16 +141,18 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # A sampled pulse: the same kernel reading the envelope table of sim/waveform.py
             # (C++, host or CUDA), or the NumPy reference when that engine is selected.
             from . import waveform as sampled
-            sampled.synthesize(record, sonar.sampled_waveform, q, p, amp, vq, vp,
-                               absorption=absorption_table(sonar, env, absorption_model),
-                               spreading=spreading,
-                               platform_acceleration=tuple(float(a) for a in acceleration),
-                               backend=backend, engine=engine)
+            how = sampled.synthesize(record, sonar.sampled_waveform, q, p, amp, vq, vp,
+                                     absorption=absorption_table(sonar, env, absorption_model),
+                                     spreading=spreading,
+                                     platform_acceleration=tuple(float(a) for a in acceleration),
+                                     backend=backend, engine=engine)
+            _engine.ran("synthesis", "numpy" if how == "numpy" else _engine.on_backend(backend))
         else:
             core.synthesize_into(record, q, p, amp, vq, vp,
                                  absorption=absorption_table(sonar, env, absorption_model),
                                  spreading=spreading, backend=backend,
                                  platform_acceleration=tuple(float(a) for a in acceleration))
+            _engine.ran("synthesis", _engine.on_backend(backend))
     from .. import taps
     taps.sim_tap(record, "echoes")
     if transmit and getattr(provider, "basin", None) is not None:      # `basin_reverberation` (sim/basin.py): the echoes' late tail
@@ -426,6 +430,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     s.array = samples
     s.kind = kind
     record.samples = s
+    _engine.end_ping(record, ran)
     return record
 
 

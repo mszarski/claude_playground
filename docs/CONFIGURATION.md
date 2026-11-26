@@ -749,10 +749,23 @@ by default, NumPy reference); analytic pulses are synthesised by the C++ kernel 
 When the extension module was built without the C++ simulator (`sim/engine.py`, a-engine):
 `cpp` asked for (`engine="cpp"` or `GPUSONAR_SIM_ENGINE=cpp`) is refused with `EngineUnavailable`
 naming what is missing (build with `SONAR_BUILD_PYTHON=ON`, or choose `numpy`); with nothing asked
-for, NumPy runs with one warning per process (before: NumPy in both cases, without a word). Only a
-sampled pulse's record says which engine ran (`extra_json` `{"gpusonar": {"echo_synthesis":
-"numpy_sampled"}}`). Any other value of either is refused with the nearest valid name. A module
-older than the sources fails with `StaleModuleError` naming the binding it lacks.
+for, NumPy runs with one warning per process (before: NumPy in both cases, without a word). Any
+other value of either is refused with the nearest valid name. A module older than the sources fails
+with `StaleModuleError` naming the binding it lacks.
+
+Every simulated record says what each stage with an engine choice actually ran on, fallbacks
+included (a-engrec; the owner, 2026-11-26), in the free-form `metadata/extra_json`, not in the
+schema: `{"gpusonar": {"engine": {"eigenrays": "cpp", "pairing": "cpp", "synthesis": "cpp_host",
+"reverberation": "cpp_host"}}}`. `eigenrays`: `cpp` or `numpy` (`free_field`, `image_source`,
+`sediment`), `bellhop` or `bellhop3d` (`eigenray`, `eigenray3d`), counting every provider call of the
+ping (echoes, reverberation, one-way sources); `pairing`: `cpp` or `numpy`; `synthesis` (the two-way
+echoes): `cpp_host`, `cpp_cuda` or `numpy` (a sampled pulse on NumPy); `reverberation`: `cpp_host`,
+`cpp_cuda` or `numpy`. A stage that did not run in the ping is absent (a passive capture's note is
+`{}`); a stage that ran on both engines in one ping reads `cpp+numpy`. Stages with one implementation
+for both engines (time-spread taps, basin tail, noise, front end, ADC, board clocks) are not listed.
+A sampled pulse synthesised by NumPy also keeps its older note `{"gpusonar": {"echo_synthesis":
+"numpy_sampled"}}`. The provider has its own `engine`: `simulate_ping(engine="numpy")` without a
+provider still computes its free-field eigenrays with the default engine, and the note says so.
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.
 
