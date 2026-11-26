@@ -761,7 +761,7 @@ REQUIREMENT = (
     "false-alarm probability, sea state or water**. What the design has used since (not the requirement): `docs/DESIGN.md`, \"The 12 km design "
     "point\": \"The targets are the two the study uses: a ship-sized target of +25 dB and a small target of +5 dB\"; detection probability 0.5 "
     "on one ping by the chain's own detector, with a false-alarm budget of 0.001 a ping over the window; ambient noise at 5 m/s wind; free "
-    "field (no site). POP-3 is checked against the +25 dB ship only (`tools/design_report.py`). The target classes "
+    "field (no site). Since 2026-11-26 the owner has said whom it is for: 'Large submerged mostly but also Large Ship is what we care about' (D-235); `tools/design_report.py` checks POP-3 for `large_submerged` first and `ship` second, in free field and per site. The target classes "
     "(`configs/builds/targets/reference_classes.yaml`) are all **assumed** placeholders; `docs/STATUS.md` owner questions 7 and 8 and "
     "`docs/tasks/DOPPLER.md` Sec. 5 q. 4 ask for the class, its aspect, and whether a near-surface ship at 12 km in non-ducting water is a "
     "requirement at all. **So this study reports every class at every site**; which of them 12 km is for is the owner's.")
@@ -786,7 +786,7 @@ NOT_EVALUATED = [
 OWNER_QUESTIONS = [
     "**Which target class is the 12 km requirement for**, at which aspect, detection probability and false-alarm rate? The answer below changes by class: "
     "the +25 dB classes need nothing more at most sites; the +5 dB class is not reached at 12 km by any variant in the grid.",
-    "**Is the +5 dB `xl_auv` at 12 km a requirement?** If it is, no row length, row count, band, pulse or source level in the grid reaches it where "
+    "**Is the +5 dB `xl_auv` at 12 km a requirement?** (Answered by the owner, 2026-11-26, D-235: no; the requirement is for `large_submerged` first and `ship` second. The rest stands as information.) If it is, no row length, row count, band, pulse or source level in the grid reaches it where "
     "reverberation limits it; only processing that separates it from the reverberation (a Doppler-resolving tone, for a target moving radially) or a "
     "different sensing geometry would. The transmitter is now ours to choose (the owner, 2026-11-26): is a tone outside the sweep's band (or alternate tone pings) acceptable, and what is the slowest radial speed that must be seen?",
     "**Which waters?** Every site here is illustrative (Lambert values taken from the scenes that simulate the same water). A bottom-scattering "
