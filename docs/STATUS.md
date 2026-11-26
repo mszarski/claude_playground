@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-203); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-225); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 33); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -32,9 +32,11 @@ Results after the shallow trials keep their whole bounce series and the self-tes
 
 The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for one, two and three rows (`e10b17f`), against 0.0097, 0.0212 and 0.0310 s at `15f1121`. Measured (`tools/live_chain_ablation.py` on an L4, `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`): the 6 to 7 ms are the multiscale detector of the detector rework (D-93). It runs on the CPU (`libs/live` `multiscale_detect`, no backend) and needs the fine power map back from the device every ping, where the earlier `cell_statistic: mean` ran CFAR on the device: `mean` saves 6.0, 6.3 and 7.2 ms, and the 15f1121 chain section with `mean` gives 9.8, 21.2 and 30.3 ms, the first run's times. Coverage, the ray-limited elevation search, the finer elevation step and the gradient terms each move it by under 0.6 ms. Not a fault: the cost of the detector chosen, 0.04 % of the 17.9 s ping interval; moving it to the device is a possible optimisation (issue `sonar-01u`). `gpu_benchmark_all_l4.json`, which the design report reads, is now that run; the first run is kept as `gpu_benchmark_all_l4_15f1121.*`. Since D-150 the multiscale statistic runs on the device: 12.73, 25.92 and 37.52 ms a ping as deployed (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`). These benchmark pings have ideal clocks and the benchmark leaves the board synchronisation stage out (`tools/gpu_benchmark_all.py`, `group_live`), so D-190 to D-195, which made that stage and the decimate-first correction faster, do not apply to them and the files were not re-measured. **With board synchronisation, on the Popoto trials' pings** (L4, chain time a ping after the first, median): C++ 0.048 / 0.054 / 0.065 s at 32 / 64 / 96 channels, Python 0.084 / 0.18 / 0.25 s (the one-row build decimates first: D-195; 64 and 96 channels: D-192; `tools/live_chain_timing.py`). Before D-191 the C++ engine took 1.05 to 1.83 s a ping at 64 and 96 channels there.
 
+**Last full suite: 2763 passed, 102 skipped, 4 xfailed, none failed** on the merged tree of D-204 to D-224 (merge commit `b88c458`; NVIDIA L4, Hugging Face job 6b07ea74d91f621b930a343d; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge, `GPUSONAR_REQUIRE_ORACLES=1` and `GPUSONAR_SLOW_ORACLES=1`; D-225, which also lists the six failures of the batch's earlier suites and their fixes). Before it: 2301 passed, 102 skipped on the tree of D-202 (job 6b079ab0d91f621b93098915).
+
 Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, CPU and GPU) are the paragraphs at the end of "Open and known wrong", just before "Open questions for the project owner". From D-158 on, each package's merged tree ran the full GPU suite on an NVIDIA L4 through Hugging Face Jobs before it was merged, and each decision's entry in `DECISIONS.md` names its job and count. The last: **2278 passed, 102 skipped, 1 xfailed, none failed** on the tree of D-201 (job 6b078a26d91f621b93096bc7; the expected failure is one of the six Popoto-rate Sensor Bridge loopback cases, its reason not in the log); the 3-D work after D-201 (the `eigenray3d` tier, `flank_seamount_3d`) is covered by a later job. Each decision from D-183 to D-201 names its own job and count; for example 2232 passed, 101 skipped (D-200 over the tree of D-196, job 6b077ea0d91f621b930950a5), 2183 passed, 101 skipped (D-195, job 6b076d06d91f621b93092f13), 2150 passed, 97 skipped, 4 xfailed (D-186, job 6b06553a1460ffe1d5e9aa10), 2102 passed, 95 skipped (D-183, job 6b060a4b1460ffe1d5e93111) and 2078 passed, 93 skipped, none failed on the tree of D-181 (commit `90f7d29`, job 6b055ee4c97b8ed4fcd799db; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`). Before it: 2065 passed, 93 skipped (D-180, job 6b054bd0c97b8ed4fcd78494); 1925 passed, 93 skipped (D-176 to D-178, job 6b0536c7ca8b51043c3b3ed9); 1875 passed, 92 skipped (D-172, D-173, job 6b04f660c97b8ed4fcd7093a). The Sensor Bridge loopback tests are part of these runs and pass at real time (D-153, D-162, D-173); the Popoto-rate cases (D-186 to D-188) pass when frames are lost only in the first 0.25 s of stream and end as an expected failure otherwise.
 
-**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-201 and the 3-D work) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
+**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-225) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
   wrong"; this list was brought up to date on 2026-11-24, and the first three entries were not
@@ -66,6 +68,18 @@ Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, C
   - Current: `docs/figures/gallery.json` and its figures are from a full-size CUDA run on an
     NVIDIA L4 at `4a80876` with D-178's leading-edge range (job 6b054768c97b8ed4fcd78015), and
     `SCENARIOS.md`'s gallery tables quote it; what got worse in earlier regenerations is item 16.
+    **Except `buried_objects`** (since D-212 the scene uses `penetration: fluid`): its entry in
+    `gallery.json` (cylinder over clutter 21.12 dB, about 20.3 now, full raster) and
+    `buried_objects.png` / `.gif` are stale until a GPU gallery job. The Popoto and flank gallery
+    scenes' surface reverberation fell about 1 dB with D-216 (A3); their gallery numbers were not
+    re-measured (item 46).
+  - Stale since D-216 (2026-11-26): `docs/figures/sst_validation.{md,json}` carry D-217's (A4)
+    numbers but the pursuit rows from before A3 (streak 16.7 dB on its track; 15.6 dB now), and the
+    matrix row "Sec. 6.4.2" still says "Chapman-Harris at the MEAN grazing angle" (CONFORMANCE A11 not
+    applied); `docs/figures/sst_pursuit.png` dates from 2026-11-20. `channel_validation_*` were not
+    regenerated with the new slope law (they need the UACR and Smart Ocean data).
+  - The main checkout's built module is older than the sources (no `sim_plane_image_eigenrays`, no
+    `roughness=` or shear arguments): its C++-engine tests fail with `StaleModuleError` until rebuilt.
   - `docs/figures/fjord_rehearsal.md` and `docs/design/popoto_12km.json`, stale at an earlier
     status, were regenerated with the shipped deployment files on 2026-11-18 (commits
     `506e959` and `1efa598`; items 5 and 18); for `popoto_12km.json` since then, see above.
@@ -96,7 +110,7 @@ How things are verified, in the words used below:
 | 9 3D near-field imaging | done on CPU | `test_volume.py` |
 | 10 Flank array and the long-range live chain | done on CPU in Python and in C++ (`libs/live`); far-field and MVDR beamforming also on the device (L4); gaps listed below | `test_live.py`, `test_live_cpp.py`, `test_detector.py`, `test_doa.py`, `test_flank.py`, `test_detect.py`, `test_calibration_sync.py`, `tests/cpp/test_live.cpp`, `test_detector.cpp` |
 | 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test has passed in a job at half real time; at real time the emulated board's spread catch-up lost nothing in 20 runs (open item 34). At a Popoto build's rate (32 to 96 channels, 102.4 kHz) the loopback loses frames only at the start of a run (D-186 to D-188) and both engines are real time on an L4 (D-190 to D-192); every receiver, the Holoscan source operator among them, merges per-board streams (D-200). Not done: the reference's SDK build, any hardware run, a host with Sensor Bridge's own socket setup (D-189), the RoCE receiver. The Holoscan `ConditionOp` applies the chain's gain step when asked (open item 33, closed) |
-| 12 Realistic propagation, reverberation and noise | **done as far as open literature allows** (audited item by item 2026-11-25; issues sonar-dzu and sonar-k7m closed, the remaining work split into sonar-rcq, sonar-pup, sonar-7iy, sonar-6t5, sonar-6fc, sonar-ugc, sonar-9le, sonar-3k1, sonar-5wa, sonar-f3mi, sonar-5bf2, sonar-yus6, with sonar-nyn and sonar-kob for stale documents); most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread). 3-D propagation: the shipped tiers are N×2-D at most (over a seamount 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`; explained further in D-197); since 2026-11-26 an opt-in `eigenray3d` tier runs Bellhop3D as a separate process (the owner's approval; `docs/tasks/PROPAGATION_3D.md` P1 to P6, issue sonar-rcq in progress), used only by the illustrative `flank_seamount_3d`, with no reverberation over relief at that tier. Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised) |
+| 12 Realistic propagation, reverberation and noise | **done as far as open literature allows** (audited item by item 2026-11-25; issues sonar-dzu and sonar-k7m closed, the remaining work split into sonar-rcq, sonar-pup, sonar-7iy, sonar-6t5, sonar-6fc, sonar-ugc, sonar-9le, sonar-3k1, sonar-5wa, sonar-f3mi, sonar-5bf2, sonar-yus6, with sonar-nyn and sonar-kob for stale documents); most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread). 3-D propagation: the shipped tiers are N×2-D at most (over a seamount 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`; explained further in D-197); since 2026-11-26 an opt-in `eigenray3d` tier runs Bellhop3D as a separate process (the owner's approval; `docs/tasks/PROPAGATION_3D.md` P1 to P6, issue sonar-rcq in progress), used only by the illustrative `flank_seamount_3d`, with no reverberation over relief at that tier. Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised). Since 2026-11-26 the boundary models, the sediment tier and time spreading are aligned to the read references and four owner-supplied papers (D-204 to D-224; `docs/references/CONFORMANCE.md`), with what got worse in each entry |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; FLOP/s from hardware counters (Nsight Compute is refused on the Hugging Face jobs, ERR_NVGPUCTRPERM; derived backprojection figures in RESULTS); the synthesis kernel's FLOP count; the Ceres solve of motion estimation is CPU only (its delay estimation has a CUDA path, D-148). The multiscale detector's statistic runs on the device (D-150). `docs/JETSON.md` is untested |
 | 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds pass every self-test on both engines (42 of 42, D-142 and D-143; open item 38) |
 | 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water** | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py` |
@@ -116,6 +130,34 @@ sections further down.
   bounces and arrivals kept by energy with a cap that warns. Verified by CPU tests per
   default; every shipped scenario states its bounce order or arrival count, so D-104 and
   D-105 moved no shipped record.
+- **Defaults aligned to the read references on 2026-11-26** (the owner: "apply every alignment
+  without asking"; `docs/references/CONFORMANCE.md`, D-208): grain-size input by the printed
+  relations (D-209); the sediment fit with small-slope and the row's grain-size prior, sigma2 up to
+  0.005 (D-210, D-211); rock elastic in the simulator, Bellhop and the live chain's depth, multipath,
+  coverage and planner models, shear unconfirmed (D-214, D-215); `bubble_layer_surface` with
+  `extinction: dahl_1997` and an attenuated facet term, every backscattering law made bistatic by the
+  geometric mean (D-216; surface reverberation about 1 dB lower in the multipath scenes); time
+  spreading with Dahl 1996's large-scale slope (D-217; `flank_sst_*` and `sst_asiaex` moved). Each
+  old behaviour stays selectable by name. Verified by CPU tests per change and the full GPU suite on
+  the merged tree (D-225).
+- **The sediment tier** (D-212, D-213): `penetration: constant | fluid | rough`; `fluid` (transmission,
+  attenuation, the evanescent field below the critical angle) is used by `buried_cylinder` and
+  `buried_objects` since 2026-11-26 (the owner); `rough` (roughness-scattered sub-critical
+  penetration, one frozen realisation) is opt-in, no scene uses it. Both engines
+  (`test_sediment_penetration.py`, `test_sediment_roughness.py`, `test_sim_cpp.py`).
+- **Bottom models after four papers the owner supplied** (D-222 to D-224): Wagner shadowing inside
+  the opt-in `composite` and `combined`; the Mourad-Jackson (1989) model opt-in (monostatic); five
+  named site rows (Gallaudet 2001; Jackson and Briggs 1992 ×3; Williams and Jackson 1998, its sigma2
+  ours); the soft rows' `sigma2_range` [0.0008, 0.005]. Small-slope stays the default (the owner).
+- **Simulator engine** (D-219, D-220): an explicit `cpp` without the C++ simulator raises
+  `EngineUnavailable`; the default falls back to NumPy with one warning; a stale module names the
+  binding it lacks (`StaleModuleError`); an `{axis, position}` wall takes only axis 0 or 1; one engine
+  per run reaches every provider the simulator builds; every record names the engine of each stage
+  (`extra_json` `gpusonar.engine`; schema 1.0.0 unchanged). The general image construction runs in C++
+  (D-205).
+- **3-D scenes** (D-204): five scenes at the opt-in `eigenray3d` tier with N × 2-D twins (90 -> 91
+  files with D-217's `asiaex_dahl_2004`); 3-D matters behind a seamount's flank and down a canyon, not
+  over a level bed, a 1° bank or a sill.
 - **One environment per site** (D-100, `python/gpusonar/environment.py`,
   `configs/environments/`): scenarios and build specs share one schema; a typed value that
   contradicts the site is an error unless named under `environment_overrides`. Verified:
@@ -584,12 +626,14 @@ Grouped; within a group the most consequential first.
 
 ### Coverage
 
-24. **The coverage picture ignores reverberation and any change of water or bottom with
-    range**, and so does the link budget (`SonarEquation`; D-198): where
-    reverberation dominates their detection ranges and margins are noise-limited and
-    optimistic. Example (D-198): for `flank_patrol`'s −3 dB small vehicle at 2.2 km they predict
-    about 30 dB of signal over noise; the simulated data give 3.8 to 5.1 dB over a background
-    that bottom reverberation holds 21.9 dB above the noise (issue `sonar-w2w3`, P1). The coverage picture has no caustic phase and no diffraction into shadows, and takes each class's
+24. **The coverage picture and the link budget have a reverberation term since D-221, but no shipped
+    site states its scattering**, so the design budgets, `DESIGN.md`'s tables and the deployment
+    files' coverage stay noise-only and say so (`"reverberation": "not included: …"`); they ignore any
+    change of water or bottom with range. Where the term is given, reverberation over noise agrees
+    with simulated data within 0.8 dB on `flank_patrol` and 1.3 dB at 10 km; the target margins are
+    off by up to 4.7 dB (small vehicle predicted 9.7 against 6.6 dB measured; wreck 24.4 against
+    29.1), cause not established. A refresh with the term costs about ten times as much (6.9 against
+    0.7 s). Before D-221 the budget gave the small vehicle about 30 dB over noise (D-198). The coverage picture has no caustic phase and no diffraction into shadows, and takes each class's
     middle depth for its nulls. **Its shipped site is illustrative** (`shelf_100m_sand`):
     the real site must be put in before a deployment. The test AUV and the static builds
     have no coverage. Its budget numbers are written into the deployment files: if
@@ -607,16 +651,23 @@ Grouped; within a group the most consequential first.
 27. **The decay-time rule of time spreading is not settled by any data set.** It is worth
     0.1 to 0.4 dB in detection with the long-range array, less than the spread between
     seeds. The facet tail still does not match both fitting windows of the one clean
-    measured bounce (D-107).
+    measured bounce (D-107). With the large-scale slope (default since D-217) the SPACE'08
+    steep-angle residual is measured over model 1.89 above 12° (1.28 with the Cox-Munk total), 1.68
+    overall, 0.96 below; the opt-in exact Kirchhoff tail makes it 2.10 (D-218: the hypothesis that the
+    tail's shape is the cause is rejected). Dahl 1999's measured spreads imply about half the slope law
+    (a strict xfail). The cause of the steep residual is open.
 28. **The coherent-phase wander is linear within a ping**, `legs: 1` is not verified
     through the kernel, and the long-range table is computed from the phase law, not
     through the kernel. Do not plan on coherent gain over several pings by surface paths
     at short range: 2 to 4 dB are lost in a 25 cm swell or sea state 4.
 29. **`channel_replay.model_channel` keeps every ray at its first snapshot's delay**, so a
     change of delay reads as a frequency-flat phase there.
-30. **The sediment fit tool (`tools/fit_sediment.py`, `sim/sediment_fit.py`) fits with the
-    perturbation model**, the default before D-86 made small-slope the default; its test
-    data are made with the model the fit names. Not switched.
+30. **The sediment fit tool fits with small-slope (D-210) and the `--sediment` row's grain-size
+    prior (D-211, sigma2 1e-4 to 5e-3; `--no-prior-bounds` to turn it off).** Without the prior a
+    small-slope fit can over-claim on one-frequency, volume-dominated data (5 of 10 silt draws flagged
+    nothing); with it, w2 or gamma2 ends on a prior bound in 8 of 10 draws, and the tool says so ("set
+    by the bound, not measured"). A small-slope fit takes 7.5 s against 0.2 s. `sediment_fit.fit` in the
+    library takes no row and stays unbounded. The w2 widths of the prior are ours.
 31. **The reverberation bindings still pass a placeholder sound speed** (`kSoundSpeedNotUsed`,
     1500 m/s, in `python/bindings/bind_simcpp.cpp`), and several study tools keep their own
     `1500` and band literals (audit item T-3).
@@ -687,6 +738,56 @@ Grouped; within a group the most consequential first.
     Sec. 1.9 and the older sections of `RESULTS.md`. The other margins in
     `projector_selection.md`, `SCENARIOS.md` and `README.md` were updated from the
     regenerated `DESIGN.md` and `projector_requirements.json`.
+
+### After the 2026-11-26 merge (D-204 to D-225)
+
+46. **Surface reverberation is about 1 dB lower in the multipath scenes** since the geometric-mean
+    bistatic rule (D-216, A3): it acts on every pair of paths that meet the surface at two angles,
+    monostatic direct/bottom-bounce pairs included (`popoto_12km` −1.28 dB, `popoto_env_gravel_30m`
+    −0.98, `flank_patrol` −0.91, `flank_sst_shallow` −0.08 overall and −1.43 in its worst twentieth,
+    FLS scenes under 0.35 dB; one ping each). The audit had said monostatic uses were bit-identical.
+    The other Popoto scenes were not measured; the gallery and D-181's figures predate it.
+    `bistatic_rule: mean_angle` gives the rule before.
+47. **The steep SPACE'08 tails are unexplained** (item 27): 1.89 measured over model above 12° with
+    the default slope; the exact Kirchhoff tail does not help (2.10, D-218), and fails Dahl 1996
+    eq. (13) at Table I's low-grazing sets and his kd* with the wind's slope (strict xfails).
+48. **`penetration: rough` is one frozen realisation and costly on large scenes** (D-213): too coherent
+    over a long synthetic aperture (no imaging run made); a sub-critical point adds 100 to 200 rays a
+    leg, so 10^4 or more pairs an echo, with no cap (a cap must raise, never truncate). With `fluid`
+    the sub-critical field is 80 to 95 dB too quiet; with the default tier 20 to 30 dB too loud. The
+    shipped buried scenes have no sub-critical point at 1700 m/s.
+49. **Rock's shear is unconfirmed** (D-214, D-215): 1900 m/s and 0.085 from another rock (arXiv:1601.06078)
+    on our row's 3820 m/s; within J&R's 40-60 % the 10° loss runs 2.1 to 6.8 dB. Bellhop is 1.2 dB
+    and 6.2° off ours at 30°. The sediment tier still takes rock as a fluid; an environment dict
+    bottom's `shear_speed` is not passed to Bellhop; `pebbles` stays fluid. No shipped scene has rock.
+50. **Design budgets are noise-only on this branch** (item 24): the reverberation term exists
+    (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`), but no build, environment or
+    deployment file states boundary scattering. With the scenarios' boundaries in 100 m over sand
+    `popoto_face_1x32` from 50 m would lose its +5 dB class from 6.5 to 2.4 km (`DESIGN.md`, not
+    shipped).
+51. **The sediment fit's prior sets what the data do not** (item 30): in 8 of 10 silt draws w2 or
+    gamma2 ends on a prior bound; a fit of the Arafura row's own data still ends on the 0.005 ceiling in
+    3 of 10 seeds; the prior admits values J&R call suspect (above 0.004). The default bounds only w2,
+    gamma2 and sigma2 (owner question 36).
+52. **The default grain-size relations miss Gallaudet's printed density** at 6.36 phi by 7.5e-5
+    (D-223; the check widened from 6e-5 to 8e-5); `method="table_linear"` reproduces it.
+53. **The published bistatic bottom model lies up to 6-7 dB below our small-slope default** at 20-45°
+    for sands and fits its own Panama City data better (one site; D-222); with the site rows our model is
+    up to 5.8 dB above Williams and Jackson's Fig. 7 at 20° (D-224). Small-slope stays the default (the
+    owner). The Williams-Jackson model is in progress, not merged.
+54. **The 3-D cross-slope warning flags a sill (0.2 dB) and misses a canyon (+6.2 dB)** (D-204,
+    `sonar-cu1g`).
+55. **Engine selection, what is left** (D-219, D-220): a provider passed in keeps its engine (warned
+    once a call); `run_scenario(engine=)` overrides a config's `propagation.engine` silently; a build
+    older than the reverberation components warns and falls back to NumPy even for an explicit `cpp`;
+    an `eigenray` tier with `own_ping_db` records `bellhop+cpp` or `bellhop+numpy`.
+56. **Time-spread measurements**: `tools/sst_validation.py`'s surface-tail fit window changed with
+    D-217 (about ±10 % method uncertainty) and cannot resolve tails shorter than the 3 ms pulse (D-218);
+    `test_channel_replay.py`'s closed-form test runs on the old slope law because the estimators cannot
+    resolve the new 0.19 ms decay.
+57. **The buried scenes' sediment is a class, not a survey** (D-212): they state only 1700 m/s; density
+    ratio 1.845 and 0.884 dB per wavelength are medium sand's values; no layering; attenuation at the
+    band centre only.
 
 API audit (2026-11-20/21, `API_AUDIT.md`): every approved group is merged (D-145, D-146);
 what is left undone is listed at the top of that file. One result moved, none committed:
@@ -825,12 +926,44 @@ section holds every open question)
 35. Answered (D-198): `flank_patrol`'s small vehicle stays a hard target, said in the scenario's
     description.
 
+**Answered 2026-11-26** (kept for the record): apply every conformance alignment without asking
+(D-208 to D-217); the sediment fit switched to small-slope (D-210; the plan's question 13) with prior
+bounds by default (D-211) and the sigma2 ceiling at 0.005 (D-211); the two buried scenes switched to
+`penetration: fluid` (D-212); the live chain's rock port (D-215); the large-scale slope law kept as
+the default (D-217; the owner was told that D-218 removed one of the reasons given); small-slope kept
+as the bottom roughness default against the published bistatic join (D-222); the engine recorded in
+every record and the engine argument gap fixed (D-220).
+
+**Raised by the 2026-11-26 merge**
+
+36. **The sediment fit's default prior**: should rho, nu and delta also be bounded by default under
+    `--fit-geoacoustic` (now only w2, gamma2, sigma2; rows coarser than about 1 phi lie outside the
+    rho and nu priors), and should the library `sediment_fit.fit` take a row with the tool's default
+    (D-211)?
+37. **Gallaudet's density**: keep the original's seven-digit constants (default relations 7.5e-5 off
+    his printed rho) or revert to J&R's rounded digits (D-223)?
+38. **Fluid rock in a planning environment**: accept `{sediment: rock, shear_speed: 0}` there (an
+    environment schema change), or keep typing the row's numbers (D-215)? And a measured shear speed
+    for the rock row.
+39. **`penetration: rough` on large scenes**: a cap on rays a point or a coarser default `bin` (any
+    cap raising an error, never truncating) (D-213)?
+40. **The site's boundary scattering**: which bottom and surface scattering should the coverage site
+    and the builds state, so that design budgets stop being noise-only (D-221; with question 12)?
+41. **The Mourad-Jackson (1989) model for near-monostatic seafloor scatterers** (it now refuses
+    unequal angles; allowing them needs a tolerance rule of ours), and coherent forward shadowing
+    (Wagner's S², recorded only) as an opt-in (D-223)?
+42. **The slope law's default**, with one reason for it removed by D-218: confirm the large-scale law
+    stays the default for the three time-spreading scenarios.
+
 ## What is next
 
 1. The whole CPU suite (`tools/test.sh`) on the present tree: last run whole on the tree of
-   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the tree of
-   D-201 (2278 passed, 102 skipped, 1 xfailed, HF job 6b078a26d91f621b93096bc7); a later job
-   covers the 3-D work.
+   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the merged
+   tree of D-204 to D-224 (2763 passed, 102 skipped, 4 xfailed, HF job 6b07ea74d91f621b930a343d;
+   D-225). A GPU gallery job for `buried_objects` and a regeneration of `sst_validation` and
+   `sst_pursuit.png` are due (the list of stale files at the top). The second batch of 2026-11-26
+   (the Williams-Jackson bistatic model, boundary-scattering design, Doppler scoping) is in progress
+   on its own branch and waits for its GPU suite.
    `docs/design/popoto_depth_planner.json` and `docs/figures/fjord_depth_plan.md` were
    regenerated for D-134 (open item 37) and predate D-156 to D-201, as the list of generated
    files at the top says. The gallery is regenerated (D-179); what got worse in it is open
@@ -1042,8 +1175,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `flank_sst_shallow`, `flank_sst_spread`, the four validation scenarios `sst_*`, and the
   Popoto build scenarios (`popoto_12km_{2,3}row`, `popoto_elevation_*`, `popoto_static_*`,
   `popoto_face_2row_shallow`, `popoto_testauv_*`, `fjord_*`, `ssp_*`) and
-  `popoto_12km_two_ships` (D-172). All 81 files are
-  listed in `SCENARIOS.md`, "Every scenario file".
+  `popoto_12km_two_ships` (D-172), the nine 3-D scenes and twins of D-204, `asiaex_dahl_2004` (D-217).
+  All 91 files are listed in `SCENARIOS.md`, "Every scenario file".
 - Gaps in those scenes: no surface or floor multipath in the gallery pool scenes
   (`pool_fls_p4_2v_walls`, not in the gallery, has wall ghosts, D-201); first-order surface and
   bottom bounces to objects only in the four forward-looking sea scenes at `image_source` (the
@@ -1133,8 +1266,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - Everything is synthesised from point scatterers (see "Scenes and scenarios" for what
   that leaves out).
-- Tiers: `free_field`, `image_source` (opt-in a tilted bed and walls as any plane, D-201),
-  `sediment` and `eigenray` (Bellhop as an external program; without it those scenarios and
+- Tiers: `free_field`, `image_source` (opt-in a tilted bed and walls as any plane, D-201; in C++
+  too since D-205), `sediment` (`penetration: constant | fluid | rough`, D-212, D-213; the two
+  buried scenes use `fluid`) and `eigenray` (Bellhop as an external program; without it those scenarios and
   tests skip), and the opt-in `eigenray3d` (Bellhop3D as an external program, 2026-11-26; only
   the illustrative `flank_seamount_3d`; no reverberation over relief at that tier;
   `docs/tasks/PROPAGATION_3D.md`). The shipped `eigenray` scenarios are N × 2-D: 3 to 4 dB too
@@ -1209,13 +1343,18 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   not a lower bound against data; the bottom model agrees within 0.2 and 3.9 dB, and that site's
   data cannot tell the roughness models apart. The bubble-loss law (`hall_novarini`) is an upper estimate above about
   10 kHz; the roughness interpolation and composite split are our own, not the published
-  ones (the composite split of 0.5 now matches a published criterion); elastic and
-  layered bottoms are not modelled. Twenty sediments are named with per-parameter
-  provenance, as class defaults and not site values; rock and pebbles carry a measured
-  Lambert parameter (D-88, D-132). The recommended bubble-loss law (`apl_1994`) has no
-  stated range of validity.
-- Time spreading: the decay time defaults to the facet rule (D-85) and the Doppler
-  spectrum to a Gaussian (D-84). Angle and frequency spreading use small-angle geometry,
+  ones (the composite split of 0.5 now matches a published criterion; since D-223 the opt-in
+  `composite` and `combined` carry Wagner's shadowing, and the Mourad-Jackson 1989 model is an
+  opt-in); layered bottoms are not modelled; rock reflects elastically since D-214 with unconfirmed
+  shear values (item 49). Twenty sediments are named with per-parameter provenance, as class
+  defaults and not site values, and five named site rows (D-209, D-224) carry one site each; rock and
+  pebbles carry a measured Lambert parameter (D-88, D-132). The recommended bubble-loss law
+  (`apl_1994`) has no stated range of validity. Since D-216 `bubble_layer_surface` takes Dahl et
+  al.'s (1997) extinction by default (−44.4 / −43.7 dB against Gallaudet's −51.3 / −41.5 at 68 kHz,
+  3 m/s), and the backscattering laws are made bistatic by the geometric mean (item 46).
+- Time spreading: the decay time defaults to the facet rule (D-85), with Dahl 1996's large-scale
+  slope since D-217 (`slope_law: cox_munk_total` the old one), the exact Kirchhoff tail opt-in
+  (`decay_time: kirchhoff_go`, D-218), and the Doppler spectrum to a Gaussian (D-84). Angle and frequency spreading use small-angle geometry,
   isotropic slopes and no shadowing. Against measured channels the Gaussian shape holds
   at three sites and the decay-time rule is not settled (open item 27).
 - `fls_300k` needed an analogue gain ramp to register a 300 m echo in 16 bits; the ramp in
