@@ -52,6 +52,16 @@ pictures, all made from its YAML file:
   and velocity gates of a group grown from an established track, transitively; the object is the
   group's earliest established arrival, D-155), uncertain.
 
+**Which propagation tier each family uses, and why.**
+
+- **FLS** uses `free_field` or `image_source`. At tens to hundreds of metres straight rays are exact to a fraction
+  of a beam. Its 3-D effects are reflections off walls and tilted beds, done by image sources (D-201).
+- **SAS** uses `free_field`, with one multipath scene (`sas_auv_multipath`).
+- **Long-range flank and Popoto scenes** use `eigenray` (Bellhop, 2-D). Every shipped one has a level bed or one
+  range profile on every bearing, where N × 2-D is exact.
+- **`eigenray3d`** (Bellhop3D) is used only by the six illustrative scenes with relief across the bearing. Where it
+  matters and where it does not: "Flank array over 3-D relief".
+
 All of it is simulation. The scenes in the table below are clouds of point scatterers on
 object surfaces (`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle,
 not specular glints, diffraction or resonances. Specular shapes exist now (D-65) and are
@@ -632,6 +642,30 @@ assumption (the scenario's `rms_amplitude`), not a prediction.
 
 ## Flank array over 3-D relief (`sonar-d7sw`)
 
+**Where 3-D matters and where it does not.** The `eigenray3d` tier is kept, opt-in, and used by these five scenes
+and `flank_seamount_3d` only. One-way level at the target, 3-D minus Bellhop3D's own N × 2-D mode (the bed's
+horizontal refraction alone; negative means quieter in 3-D):
+
+| Case | 3-D minus N × 2-D | Matters? |
+| --- | --- | --- |
+| Level bed (`flank_level_3d`) | +0.002 dB (the programs agree to 0.001 to 0.003 dB, D-197) | no |
+| 1° across the look (`flank_bank_3d`) | within 0.02 dB; arrivals 0.4 to 0.5° up-slope; peak moves 0.015° of a 3.6° beam | no |
+| Sill crossing at 45° (`flank_ridge_3d`) | −0.20 dB | no |
+| Within a few water depths, even over a seamount | within 0.07 dB to 1.8 km (D-149) | no |
+| Behind a seamount's flank (`flank_seamount_3d_opening`) | −3.98, −2.33 dB at 4.5, 6 km | **yes** |
+| Down a canyon along the look (`flank_canyon_3d`) | +6.16 dB; arrivals to 13.9° off; peak 2.8 dB lower, the detector misses it | **yes** |
+
+It is the default nowhere. A 3-D scenario takes 3 to 7 minutes on the CPU, against seconds for the 2-D tier's
+eigenrays. It has no reverberation over relief. Its levels rest on a per-receiver scaling to Bellhop3D's loss run
+(up to 10.4 dB, in the canyon). It runs an external GPL-3 program. Every other long-range scenario has a level bed
+or one profile on every bearing, where N × 2-D is exact.
+
+Rule of thumb (ours, from these six scenes): use `eigenray3d` when the target is beyond a few water depths AND the
+bed beside or under the path slopes by several degrees across the bearing (a seamount flank, a canyon or fjord
+wall, a steep bank); otherwise `eigenray`. The cross-slope warning does not yet tell these apart: it flags the
+sill and misses the canyon (an issue is filed). All of this relief is illustrative. More in
+`docs/tasks/PROPAGATION_3D.md` section 0.
+
 Five scenarios at the opt-in `eigenray3d` tier (Bellhop3D, `GPUSONAR_BELLHOP3D`), each paired with an `eigenray`
 twin (Bellhop 2-D, `GPUSONAR_BELLHOP`) that differs only in the tier and in how the bed is spelt: the twin's bed is
 the 3-D bed's profile along the target's bearing (`bathymetry.profile_along`), i.e. what an N × 2-D run sees there.
@@ -1153,13 +1187,12 @@ after the first whole-suite run"), `docs/figures/fjord_rehearsal.md`,
   has surface and bottom multipath.
 - Reverberation (the scattering-function model) over a tilted bed: refused; a sloping bed is
   given as scene scatterers (`fls_120k_quay_multipath`).
-- 3-D propagation in a gallery scene: every gallery scene is N × 2-D at most. The one scenario at
-  the opt-in `eigenray3d` tier, `flank_seamount_3d`, is illustrative, not in the gallery, and a
-  target in noise: no reverberation over relief at that tier (a receiver per scattering cell would be
+- 3-D propagation in a gallery scene: every gallery scene is N × 2-D at most. The six scenarios at
+  the opt-in `eigenray3d` tier (`flank_seamount_3d` and the five of `sonar-d7sw`) are illustrative, not in the
+  gallery, and targets in noise: no reverberation over relief at that tier (a receiver per scattering cell would be
   needed; `docs/tasks/PROPAGATION_3D.md` P5).
 - Waves that move as waves do, breaking, or a bubble layer; a wake that grows.
-- Reverberation over 3-D relief at the `eigenray3d` tier: the five 3-D scenes of `sonar-d7sw` and
-  `flank_seamount_3d` are targets in noise. A 3-D scene for the Popoto long-range array (4 to 6 kHz, 12 km),
+- A 3-D scene for the Popoto long-range array (4 to 6 kHz, 12 km),
   where the exposure is largest (`PROPAGATION_3D.md` section 3), or a moving platform over relief (a Bellhop3D run
   per source position). A short-range FLS or SAS scene beyond the three image-plane scenes: a narrow channel with
   two non-parallel banks was not added; the existing quay, pool lane and sloping-bed scenes already exercise a wall,

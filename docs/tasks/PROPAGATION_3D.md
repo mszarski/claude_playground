@@ -18,6 +18,41 @@ tier has no reverberation over relief. Option F was filed and done as `sonar-0ns
 corrects what this file said of the fjord beds (question 9). The decision entry for the 3-D tier
 is D-202 in `docs/DECISIONS.md`; issue `sonar-rcq` is closed with it.
 
+**Where 3-D matters and where it does not (measured).** The owner, after `sonar-d7sw`: "Keep the 3d mode but
+document where it doesnt matter and why its not used for most scenarios". One-way level at the target, the
+`eigenray3d` tier minus Bellhop3D's own N × 2-D mode, which isolates the bed's horizontal refraction; negative means
+quieter in 3-D. The scenes are illustrative: none of the relief was measured.
+
+| Case | 3-D minus N × 2-D | Does 3-D matter? | Source |
+| --- | --- | --- | --- |
+| Level bed | +0.002 dB; arrivals 0.0006° off their bearing | no: the two programs agree to 0.001 to 0.003 dB over a level bed | `flank_level_3d`; D-197 |
+| Bed sloping 1° across the look | within 0.02 dB; arrivals 0.4 to 0.5° up-slope against a 3.6° beam; the beamformed peak moves 0.015° | no | `flank_bank_3d` |
+| Sill crossing the bearing at 45° (flanks to 6.9°) | −0.20 dB | no, although the cross-slope warning flags it | `flank_ridge_3d` |
+| A few water depths from the sonar, even over a seamount | within 0.07 dB out to 1.8 km | no | D-149 |
+| FLS and SAS ranges (5 to 450 m, 38 to 68 m) | refraction 0.06° horizontal over 300 m in a strong front | no: their 3-D effects are reflections off walls and tilted beds, done exactly by image sources (D-201) | this section, below |
+| Every shipped long-range scenario but the six illustrative ones | zero by construction: a level bed, or one profile on every bearing | no: N × 2-D is exact there | this section, below |
+| Behind a seamount's flank | −3.98 and −2.33 dB at 4.5 and 6 km (two-way −6.2 and −6.8 dB against the twin); about 3.5 dB over the flanks at 3.5 to 6.5 km, where our 2-D tier is about 4 dB too loud | **yes** | `flank_seamount_3d_opening`; D-149, D-197 (section 2), D-202 |
+| Down a canyon along the look | +6.16 dB; arrivals up to 13.9° off the bearing; the echo is spread over many wall paths, so its peak is 2.8 dB lower and the gallery detector misses a target that has more energy | **yes** | `flank_canyon_3d` |
+
+**Why it is the default nowhere.**
+
+- **Cost.** A Bellhop3D run takes 18 to 90 s here (`flank_level_3d` to `flank_seamount_3d_opening`). There are
+  two runs a source position, four a scenario, more for a mover asked for ping by ping. A 3-D scenario takes 3 to
+  7 minutes; Bellhop 2-D gives the same three targets' eigenrays in 8 s.
+- **No reverberation over relief** at this tier.
+- **Levels rest on the per-receiver scaling** of merged arrivals to Bellhop3D's loss run (up to 10.4 dB, in the
+  canyon).
+- **External GPL-3 program** run as a separate process.
+- **Its tests are slow.** The acceptance test and four scenario tests run only with `GPUSONAR_SLOW_ORACLES=1`.
+
+**Rule of thumb** (ours, from these six scenes only): use `eigenray3d` when the target lies beyond a few water
+depths AND the bed between or beside the path slopes by several degrees across the bearing: a seamount flank, a
+canyon or fjord wall, a steep bank. Otherwise use `eigenray`.
+
+The cross-slope warning does not yet tell these cases apart. It flags the sill (0.2 dB) and misses the canyon
+(6 dB), because it reads the slope across a bearing only on that bearing; an issue is filed. Full numbers:
+`docs/SCENARIOS.md`, "Flank array over 3-D relief", and "The 3-D scenarios" before section 5's acceptance bound.
+
 **Will 3-D propagation make FLS or SAS better? No.** Neither family uses the tier that 3-D
 propagation would change. None of the 12 FLS scenarios and none of the 10 SAS scenarios is at
 the `eigenray` tier (`docs/handoff/SIMULATION.md`, section 4). FLS uses `free_field` or
@@ -93,7 +128,8 @@ case the right move is: add a warning where the cross-bearing slope is large, an
 characterisation test (`sonar-6c8` is explained in section 2 and needs no change to shipped runs
 over a level bed).
 
-**Recommended:**
+**Recommended** (done, 2026-11-26: P0 as an investigation, P1 the warning, and option A as the opt-in `eigenray3d` tier,
+which the owner keeps, opt-in, after `sonar-d7sw`):
 
 1. `sonar-6c8` (P0) is done as an investigation (section 2): the 1.0 to 2.5 dB is mostly the
    oracle's beam count (Bellhop3D, 121 Gaussian elevation beams) and, over relief, Bellhop's
@@ -569,7 +605,8 @@ in NumPy and C++ (`libs/sim` `paths.cpp`). No shipped scene uses it.
 ### Recommendation
 
 **Do E + B now, with P0 (`sonar-6c8`) first; do A only if the owner says the waters have steep
-relief and allows Bellhop3D as a provider.**
+relief and allows Bellhop3D as a provider.** (Done 2026-11-26: E, B and P0 as recommended; A built after the owner allowed
+Bellhop3D, and kept as an opt-in tier; where it matters: section 0.)
 
 - A is the only option that gives the level right over relief, at a known accuracy (the
   oracle's), for about a minute of tracing per source position, with the existing interface
