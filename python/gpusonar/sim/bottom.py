@@ -741,6 +741,34 @@ diverges. Evidence is the literature (PHYSICS_NOTES Sec. 23.2), not a measuremen
 
 _warned_no_small_slope = False
 
+LARGE_GAMMA2 = 3.7
+"""Above this relief spectral exponent `roughness_strength` warns (once per process per model) for the models in
+`LARGE_GAMMA2_MODELS`: Jackson and Briggs (1992), p. 974 (confirmed, docs/references/
+bottom_backscatter_jackson_briggs_1992.md Sec. 2.2): an exponent near 4 extrapolated below the measured wavenumbers
+gives an unrealistic large-scale slope (Quinault along strike, gamma2 3.92: 33 deg at 35 kHz) and too strong
+scattering, and past applications had exponents "generally less than 3.7". Values are not changed."""
+
+LARGE_GAMMA2_MODELS = ("small_slope", "composite", "combined", "williams_jackson_1998")
+"""The models whose result rests on the spectrum's extrapolation to low wavenumbers, through the structure function
+(small-slope, the Kirchhoff part of williams_jackson_1998) or the large-scale slope (composite, combined): the list
+of [JB] 5.3. First-order perturbation theory alone uses the spectrum at the Bragg wavenumber only (no warning);
+`kirchhoff` alone is a near-specular model (no warning); mourad_jackson_1989 has its own stated range."""
+
+_warned_large_gamma2: set = set()
+
+
+def _warn_large_gamma2(roughness_model: str, gamma2: float) -> None:
+    # From 4 on these models have no structure function and raise (structure_constant): nothing to warn about.
+    if roughness_model in LARGE_GAMMA2_MODELS and LARGE_GAMMA2 < gamma2 < 4.0 and roughness_model not in _warned_large_gamma2:
+        _warned_large_gamma2.add(roughness_model)
+        import warnings
+        warnings.warn(f"bottom roughness ({roughness_model}): gamma2 = {gamma2:g} is above 3.7. Jackson and Briggs (1992), "
+                      "p. 974: an exponent near 4 extrapolated below the measured wavenumbers gives an unrealistic "
+                      "large-scale slope (33 deg at 35 kHz for their gamma2 3.92) and too strong scattering; past fits had "
+                      "exponents generally below 3.7. With their along-strike Quinault inputs our small-slope result is "
+                      "5.6 dB (30 deg) and 10.3 dB (40 deg) above the across-strike one at 35 kHz, an anisotropy their data "
+                      "do not show. Evaluated as given; this warning is given once per model.", stacklevel=3)
+
 
 def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                        delta: float, w2: float, gamma2: float, azimuth=np.pi, roughness_model: str | None = None,
@@ -756,7 +784,8 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
     perturbation result is used and a warning says so once (naming "small_slope" raises).
     `shadowing` ("wagner" | "none"; None = the model's own default): Wagner's shadow function, carried by
     "composite" and "combined" (default "wagner" there) and by "mourad_jackson_1989"; the other models have
-    none, so naming "wagner" with them is an error."""
+    none, so naming "wagner" with them is an error. Above gamma2 = 3.7 the models of `LARGE_GAMMA2_MODELS` warn once
+    each (Jackson and Briggs 1992, p. 974; `LARGE_GAMMA2`); the values are unchanged."""
     global _warned_no_small_slope
     if roughness_model is None:
         roughness_model = DEFAULT_ROUGHNESS_MODEL
@@ -772,6 +801,7 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
                                                                                                  WILLIAMS_JACKSON_1998):
         raise ValueError(f"shadowing {shadowing!r}: roughness_model {roughness_model!r} has no shadowing (it is carried by "
                          "'composite', 'combined' and 'mourad_jackson_1989')")
+    _warn_large_gamma2(roughness_model, gamma2)
     args = (grazing_in, grazing_out, frequency, sound_speed)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=azimuth)
     if roughness_model == "perturbation":
