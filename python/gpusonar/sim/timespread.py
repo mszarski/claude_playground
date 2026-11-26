@@ -859,6 +859,14 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
     bottom_z = getattr(provider, "bottom_z", None)
     c_surface = c_bottom = None
     env = getattr(provider, "env", None)
+    bed = getattr(provider, "bed", None)
+    if getattr(provider, "tier", "") == "eigenray3d" and bed is not None and bed.flat_depth is None and cfg.get("bottom"):
+        # The 3-D tier over relief (opt-in; docs/tasks/PROPAGATION_3D.md P6): the bottom's spreading below takes each
+        # bounce's grazing angle from the ray's launch angle, as over a level bed; a bounce on a sloping facet grazes
+        # it at another angle. Not corrected (the arrivals do not say where a ray met the bed): said.
+        import warnings
+        warnings.warn("time_spread.bottom with fidelity eigenray3d over relief: bottom-bounce grazing angles are taken as over a level "
+                      "bed (from the launch angle); on sloping facets they differ", RuntimeWarning, stacklevel=2)
     if env is not None:                       # a ray-traced ocean: its depth and the speeds at its boundaries
         bottom_z = float(env.depth)
         surface_z = 0.0

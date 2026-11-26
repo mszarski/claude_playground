@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 80 scenario files; the twenty-five named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 81 scenario files; the twenty-six named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -817,10 +817,10 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 80 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 81 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Twenty-five files have no geometry diagram in `docs/scenarios/` yet: the nine of the
+set. Twenty-six files have no geometry diagram in `docs/scenarios/` yet: `flank_seamount_3d`, the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
 `popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
 scenes of `sonar-0nsi` (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`,
@@ -905,6 +905,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | Scenario | What it is |
 | --- | --- |
 | `flank_target_1km`, `flank_target_5km`, `flank_target_10km` | One target in noise in shallow water at each range; the link-budget cases. Needs Bellhop. |
+| `flank_seamount_3d` | ILLUSTRATIVE (unconfirmed relief). The flank array over a 180 m seamount in 200 m of water, a target 4 km out over its flank, at the opt-in `eigenray3d` tier (Bellhop3D: needs `GPUSONAR_BELLHOP3D`; about 4 minutes on the CPU: four Bellhop3D runs of about a minute, arrival files under 1 kB). One `bathymetry` for the whole scenario. No reverberation (the 3-D provider would need a receiver per cell). Not in the gallery. |
 | `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km, a wreck. Needs Bellhop. |
 | `flank_sst_shallow` | A target at 1 km in 100 m of water with time-spread bounce paths, sediment and surface reverberation and a volume layer; placeholders throughout. |
 | `flank_sst_spread` | The same channel with angle spreading, Doppler spreading within the pulse and convolved multi-bounce tails. |

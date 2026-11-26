@@ -16,21 +16,12 @@ i_theta * NSz * NRz + i_z for the first frequency and source).
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import tempfile
 
 import numpy as np
 
-
-def find_bellhop3d() -> str | None:
-    path = os.environ.get("GPUSONAR_BELLHOP3D")
-    if path and os.path.exists(path):
-        return path
-    beside = os.path.join(os.path.dirname(os.environ.get("GPUSONAR_BELLHOP", "") or "."), "bellhop3d.exe")
-    if os.environ.get("GPUSONAR_BELLHOP") and os.path.exists(beside):
-        return beside
-    return shutil.which("bellhop3d.exe")
+from gpusonar.sim.bellhop3d import find_bellhop3d, write_bty3d, write_env3d  # noqa: F401  (the writers live in the library since P2)
 
 
 def read_shade_bearings(path: str):
@@ -66,24 +57,11 @@ def run_bellhop3d(depth_fn, x, y, water_depth, sound_speed, bottom, frequency, s
         if len(v) > 1 and not np.allclose(np.diff(v), v[1] - v[0]):
             raise ValueError("bearings and ranges must be equally spaced (they are written as first, last /)")
     with tempfile.TemporaryDirectory(prefix="gpusonar_bellhop3d_") as tmp:
-        table = depth_fn(x[None, :], y[:, None])                         # [ny, nx]: one row per y
-        with open(os.path.join(tmp, "run.bty"), "w", encoding="ascii") as f:
-            f.write("'R'\n" + f"{len(x)}\n" + " ".join(f"{v / 1000.0:.6f}" for v in x) + "\n"
-                    + f"{len(y)}\n" + " ".join(f"{v / 1000.0:.6f}" for v in y) + "\n"
-                    + "".join(" ".join(f"{d:.4f}" for d in row) + "\n" for row in table))
-        speed, density, attenuation = bottom
-        lines = ["'gpusonar 3-D oracle'", f"{frequency:.6f}", "1", "'CVW'", f"2  0.0  {water_depth:.4f}",
-                 f"  0.0  {sound_speed:.4f}  /", f"  {water_depth:.4f}  {sound_speed:.4f}  /",
-                 "'A~' 0.0", f" {water_depth:.4f}  {speed:.4f} 0.0 {density:.4f} {attenuation:.4f} /",
-                 "1", "0.0 /", "1", "0.0 /", "1", f"{source_depth:.4f} /",
-                 f"{len(rz)}", " ".join(f"{v:.4f}" for v in rz) + " /",
-                 f"{len(ranges)}", f"{ranges[0] / 1000.0:.6f} {ranges[-1] / 1000.0:.6f} /",
-                 f"{len(bearings)}", f"{bearings[0]:.6f} {bearings[-1]:.6f} /",
-                 f"'I{beam}   {mode}'", f"{n_alpha}", f"{alpha_deg[0]:.3f} {alpha_deg[1]:.3f} /",
-                 f"{n_beta}", f"{beta_deg[0]:.3f} {beta_deg[1]:.3f} /",
-                 f"0.0  {box_km[0]:.4f} {box_km[1]:.4f} {1.05 * water_depth:.4f}"]
-        with open(os.path.join(tmp, "run.env"), "w", encoding="ascii") as f:
-            f.write("\n".join(lines) + "\n")
+        write_bty3d(os.path.join(tmp, "run.bty"), depth_fn, x, y)
+        write_env3d(os.path.join(tmp, "run.env"), frequency=frequency, profile=([0.0, water_depth], [sound_speed, sound_speed]),
+                    depth=water_depth, bottom=bottom, source_depth=source_depth, receiver_depths=rz, ranges=ranges,
+                    bearings_deg=bearings, run_type="I", mode=mode, n_alpha=n_alpha, alpha_deg=alpha_deg, n_beta=n_beta,
+                    beta_deg=beta_deg, box_km=box_km, beam=beam, title="gpusonar 3-D oracle")
         proc = subprocess.run([exe, "run"], cwd=tmp, capture_output=True, text=True, timeout=timeout)
         shd = os.path.join(tmp, "run.shd")
         if proc.returncode != 0 or not os.path.exists(shd):

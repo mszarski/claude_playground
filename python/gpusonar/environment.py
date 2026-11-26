@@ -606,7 +606,8 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         if prop.get("bottom_z") is not None and "bottom_coefficient" not in prop and bottom is not None:
             site.take(prop, "bottom", {"sediment": bottom} if isinstance(bottom, str) else bottom, "propagation.bottom", "environment.bottom")
         cfg["propagation"] = prop
-    elif tier == "eigenray":
+    elif tier in ("eigenray", "eigenray3d"):
+        # eigenray3d (Bellhop3D, opt-in) takes the same ocean; its bed is `propagation.bathymetry` (3-D), not a profile.
         prop = dict(cfg.get("propagation") or {})
         ocean = dict(prop.get("environment") or {})
         where = "propagation.environment"
@@ -651,7 +652,32 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
                 prop["max_range"] = float(np.ceil(1.1 * 0.5 * env["sound_speed"] * (start + n / sonar.sample_rate)))
                 site.filled.append("propagation.max_range")
         site.take(prop, "wind_speed", wind, "propagation.wind_speed", "environment.wind_speed_m_s")
+        if tier == "eigenray3d":
+            site.take(prop, "bathymetry", cfg.get("bathymetry"), "propagation.bathymetry", "bathymetry")
         cfg["propagation"] = prop
+
+    # One bed (`bathymetry`, a sim/bathymetry.py description at the top of a scenario; D-73's "one description"):
+    # the eigenray3d provider (above), every reverberation item on the bottom and every point-scatterer seafloor take
+    # it unless they give their own (which must then be the same). Absent, nothing here runs.
+    shared_bed = cfg.get("bathymetry")
+    if shared_bed is not None:
+        if cfg.get("scene"):
+            items = []
+            for i, item in enumerate(cfg["scene"]):
+                item = dict(item)
+                if item.get("type") == "seafloor":
+                    site.take(item, "bathymetry", shared_bed, f"scene[{i}].bathymetry", "bathymetry")
+                items.append(item)
+            cfg["scene"] = items
+        if cfg.get("reverberation"):
+            items = []
+            for i, item in enumerate(cfg["reverberation"]):
+                item = dict(item)
+                if (item.get("model", "lambert") != "volume" and _reverb_boundary(item) != "surface"
+                        and "boundary_z" not in item):
+                    site.take(item, "bathymetry", shared_bed, f"reverberation[{i}].bathymetry", "bathymetry")
+                items.append(item)
+            cfg["reverberation"] = items
 
     # time spreading
     if cfg.get("time_spread"):

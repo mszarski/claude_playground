@@ -30,7 +30,7 @@ placeholder or a class default until then.
 | --- | --- | --- |
 | Objects are clouds of point scatterers on their surfaces (`sim/scene.py`, D-41) | Highlights, shadows, layover and speckle are there; specular glints, diffraction and resonances are not. Smooth spheres, cylinders, plates and discs that glint exist (`sim/targets.py`, D-65) and no gallery scene uses them | `STATUS.md` "Simulator limits so far"; `SCENARIOS.md` "What no scenario has yet" |
 | Target strengths are assumed | The ship's +25 dB, every class in `configs/builds/targets/reference_classes.yaml`: placeholders. Detection ranges scale with them directly | `STATUS.md` open question 7 |
-| Four propagation tiers, none with 3-D refraction | `free_field`, `image_source` (isovelocity; flat boundaries, and opt-in since `sonar-0nsi` a tilted bed and walls as any plane, exact for straight rays, no roughness or diffraction on those paths, NumPy only), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149) | `sonar-6c8` (open): our Bellhop runs and Bellhop3D's N×2-D mode differ by 1 to 2.5 dB |
+| Four propagation tiers in the shipped scenarios, none with 3-D refraction | `free_field`, `image_source` (isovelocity; flat boundaries, and opt-in since `sonar-0nsi` a tilted bed and walls as any plane, exact for straight rays, no roughness or diffraction on those paths, NumPy only), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149). A fifth, opt-in tier `eigenray3d` (Bellhop3D, external, `sim/bellhop3d.py`) traces 3-D; only the illustrative `flank_seamount_3d` uses it | `sonar-6c8` explained (D-197); `sonar-rcq` packages in `docs/tasks/PROPAGATION_3D.md` |
 | Range-dependent water is rings about the sonar (D-110) | A front lying across a map, and horizontal refraction, are not modelled. Only the `eigenray` tier has it; the other tiers use the local speed and warn | item 26 |
 | Arrivals are cut by energy with a cap (D-105, D-137) | `popoto_12km` leaves out 1.4 % of a point's arrival energy at the cap of 64 (measured in `EXAMPLES.md` example 5; `SCENARIOS.md` says 1.5 %), `popoto_env_gravel_30m` 14 % | item 22; `sonar-9b8` (open): the rule lowers the gravel-water peak 3.3 dB |
 | 9 Bellhop scenarios reflect eigenrays from a flat surface in a windy sea; 21 simulate a bottom the record does not mention | Kept on purpose so records did not change; each is named under `environment_overrides` in its file (D-101) | item 21 |
@@ -98,7 +98,7 @@ Notes on the diagram, each checked in `simulator.py`:
 
 - **Bellhop is never linked.** It is an external program run as a separate process
   (`GPUSONAR_BELLHOP` names it; `tools/build_oracles.sh` builds it). It has two roles: the ray
-  tracer of the `eigenray` tier (22 of the 80 shipped scenarios; without it they and their tests skip), and
+  tracer of the `eigenray` tier (22 of the 81 shipped scenarios; without it they and their tests skip; Bellhop3D runs the opt-in `eigenray3d` tier of one more, `flank_seamount_3d`), and
   the oracle the `image_source` tier is tested against. KRAKEN, Bellhop3D and PyRAM are oracles
   only (`tests/python/kraken_oracle.py`, `bellhop3d_oracle.py`, `test_ram_crosscheck.py`).
 - **Two engines.** Path pairing, reverberation and sampled-pulse synthesis exist in NumPy and in
@@ -151,9 +151,9 @@ checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in f
 
 ## 4. The scenario catalogue
 
-`configs/scenarios/` holds **80 files**: the 76 described before `sonar-0nsi` and its four multipath scenes
-(`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`).
-`docs/SCENARIOS.md` lists all 80.
+`configs/scenarios/` holds **81 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
+(`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`) and `flank_seamount_3d` (added 2026-11-26 with the `eigenray3d` tier).
+`docs/SCENARIOS.md` lists all 81.
 
 Columns: **tier** is `fidelity`; **used by** names the tests under `tests/python/` (without the
 `test_` prefix and `.py`) and tools that load the file by name; **gallery** means

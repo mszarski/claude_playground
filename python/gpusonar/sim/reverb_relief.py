@@ -40,12 +40,37 @@ from __future__ import annotations
 import numpy as np
 
 from . import reverb_bistatic as rb
-from .bathymetry import Bathymetry
+from .bathymetry import Bathymetry, cross_bearing_slope, out_of_plane_turn
 from .propagation import EigenrayProvider
 
 # Slope (rise over run) by which nearer relief must stand above the line of sight to shadow a
 # cell: 0.2 mrad, 0.2 m at 1 km. Absorbs the interpolation of the horizon between azimuths.
 SHADOW_TOLERANCE = 2e-4
+
+# The cross-slope warning of an N x 2-D run (docs/tasks/PROPAGATION_3D.md, option B; ours). A ray grazing the bed at
+# CROSS_SLOPE_GRAZING_DEG leaves its bearing's vertical plane by phi = atan(tan g sin 2 alpha) where the bed slopes
+# by alpha across the bearing (bathymetry.out_of_plane_turn); a bearing is flagged where phi exceeds
+# CROSS_SLOPE_TURN_DEG somewhere along it. 10 degrees: the energy that carries beyond a few water depths in the
+# shipped eigenray waters travels below the bottom's critical angle (20 to 28 degrees for 1600 to 1700 m/s under
+# 1500 m/s), and 10 degrees is the middle of that span. 1.8 degrees: half the 3.6 degree receive beam of the two
+# long-range arrays (flank_32 at 8 kHz, popoto_long_range at 5 kHz: the arrays that use this tier). Over the
+# seamount of test_seamount_3d.py this flags the bearings from -16 to +2 and +10 to +30 degrees (the flanks, where
+# Bellhop3D's 3-D field is up to 3.6 dB below N x 2-D, D-149/D-197) and not -20, +6 (the summit's line) or +32.
+CROSS_SLOPE_GRAZING_DEG = 10.0
+CROSS_SLOPE_TURN_DEG = 1.8
+
+
+def cross_slope_report(bathymetry: Bathymetry, origin, azimuths, max_range: float, step: float = 10.0,
+                       grazing_deg: float = CROSS_SLOPE_GRAZING_DEG, turn_deg: float = CROSS_SLOPE_TURN_DEG) -> dict:
+    """Where an N x 2-D run about the horizontal `origin` misses horizontal refraction by the bed: per bearing
+    (`azimuths`, radians) the largest cross-bearing slope (degrees) within `max_range` and the out-of-plane turn
+    (degrees) of a ray grazing it at `grazing_deg`. `flagged` marks the bearings whose turn exceeds `turn_deg`."""
+    az = np.atleast_1d(np.asarray(azimuths, dtype=float))
+    r = np.arange(0.0, float(max_range) + step, step)
+    slope = np.array([np.abs(cross_bearing_slope(bathymetry, origin, a, r)).max() for a in az])
+    turn = np.degrees(np.abs(out_of_plane_turn(slope, np.radians(grazing_deg))))
+    return dict(azimuth_deg=np.degrees(az), slope_deg=np.degrees(np.arctan(slope)), turn_deg=turn,
+                flagged=turn > turn_deg, grazing_deg=float(grazing_deg), threshold_deg=float(turn_deg))
 
 
 class Horizon:
@@ -183,6 +208,7 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
             raise NotImplementedError("reverberation over relief with a ray-tracing provider is N x 2-D about one "
                                       "ground point: the transmitter must be above or below the receiver")
         per_chunk = 1                                              # one bearing, one depth profile, at a time
+        _warn_cross_slope(provider, bathymetry, rx, azimuths, rings[-1])
         base_provider = provider
         profile_step = float(min(getattr(provider, "ranges", [0.0, dr])[1] - getattr(provider, "ranges", [0.0, dr])[0], 10.0))
         profile_ranges = np.arange(0.0, rings[-1] + 2.0 * profile_step, profile_step)
@@ -237,3 +263,24 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
                                                          scatterer_rms_vertical_speed) if random_motion else None)
                     total.add(base, f_d, (t - times[0]) / dt, pw, u_p, var)
     return total.result()
+
+
+def _warn_cross_slope(provider, bathymetry, origin, azimuths, max_range) -> None:
+    """Warn, once per call, where the N x 2-D fan crosses steep cross-bearing relief; the provider keeps the
+    largest turn found so far as `cross_slope` (like `truncation`). Nothing else changes."""
+    rep = cross_slope_report(bathymetry, origin, azimuths, max_range)
+    if not rep["flagged"].any():
+        return
+    worst = int(np.argmax(rep["turn_deg"]))
+    found = dict(turn_deg=float(rep["turn_deg"][worst]), slope_deg=float(rep["slope_deg"][worst]),
+                 azimuth_deg=float(rep["azimuth_deg"][worst]), bearings_flagged=int(rep["flagged"].sum()),
+                 bearings=len(rep["flagged"]))
+    previous = getattr(provider, "cross_slope", None)
+    if previous is None or found["turn_deg"] > previous["turn_deg"]:
+        provider.cross_slope = found
+    import warnings
+    warnings.warn(f"reverberation over relief: N x 2-D on {found['bearings_flagged']} of {found['bearings']} bearings where the bed "
+                  f"slopes across the bearing (up to {found['slope_deg']:.1f} deg at {found['azimuth_deg']:.0f} deg): a ray grazing it at "
+                  f"{CROSS_SLOPE_GRAZING_DEG:g} deg leaves its vertical plane by {found['turn_deg']:.1f} deg (over {CROSS_SLOPE_TURN_DEG:g}). "
+                  "Horizontal refraction by the bed is not modelled; over a 12 deg seamount flank it moved levels by 3 to 4 dB "
+                  "(docs/tasks/PROPAGATION_3D.md)", RuntimeWarning, stacklevel=3)
