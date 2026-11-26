@@ -65,7 +65,10 @@ interface, which by reciprocity costs (1/rho^2) |T(ts)|^2 exp(-2 Im(b2s) z). Int
 
     sigma_v = sigma_vol |T(ti)|^2 |T(ts)|^2 / ( rho^2 * 2 (Im b2i + Im b2s) ),
 
-with sigma_vol = sigma2 x attenuation in dB/m = sigma2 x (20 / ln 10) k delta / nu.
+with sigma_vol = sigma2 x attenuation in dB/m = sigma2 x (20 / ln 10) k delta / nu. This is
+Mourad and Jackson (1989) eq. (39) with its misprint corrected (the page prints |1 - R|^2 for
+|1 - R^2|^2; tests/python/test_mourad_jackson_1989.py). Their model averages it over the
+large-scale slope and shadows it, (38): the opt-in `volume_model="mourad_jackson_1989"`.
 
 Other regimes (`roughness_model="small_slope"` is the default, `DEFAULT_ROUGHNESS_MODEL`;
 `"perturbation"`, the formulas above alone, was the default before D-86 and is unchanged).
@@ -129,7 +132,9 @@ average of the tilted small-scale perturbation result over the large-scale slope
 give its conditions: k x small-scale rms height below one, grazing angles above about twice
 the large-scale rms slope angle, shadowing below it. The handbook's own split and its
 interpolation between the Kirchhoff and composite results were not found in an open
-document. The composite result describes Bragg scattering only: towards the specular
+document; the 1989 model they grew from prints both (Mourad and Jackson 1989, eqs. (18) and
+(33)-(37), read since: the opt-in `mourad_jackson_1989`, section comment below; its split is
+k h_s = 1/sqrt(2), not our 1/2). The composite result describes Bragg scattering only: towards the specular
 direction, where Q falls below Kc, it goes to zero and the Kirchhoff term is the right one.
 
 Validity of the lowest-order small-slope result (`small_slope`), from a comparison with

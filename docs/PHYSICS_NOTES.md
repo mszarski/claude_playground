@@ -3017,6 +3017,11 @@ Reading, honestly:
 Recommendation: none needed for the formulas. A default change is the owner's: `small_slope`
 is what the current literature uses and it is valid wherever `perturbation` is.
 
+Later (2026-11-26, Sec. 32): the slope and shadowing corrections of the volume term and the Kirchhoff /
+composite interpolation are now printed ([MJ89] (33)-(38)) and selectable (`mourad_jackson_1989`); our
+`composite` and `combined` carry Wagner's shadowing; the Gallaudet figures below for the relations are
+those before C5 (since C5 rho 1.148225, nu 0.986422: rho 7.5e-5 below the printed 1.1483).
+
 *Against one printed measurement at 68 kHz (Gallaudet 2001; `test_gallaudet_boundaries.py`).*
 What it cannot do first: the measurement does not tell the roughness models apart, and its
 angular curves (data and the fitted model) are only figures (Fig. 15a), so the comparison is
@@ -4354,3 +4359,60 @@ deviates to 2.3e-16, the cross section to 3.1e-15, the eigenrays as above (`test
 `test_rough_penetration_matches`). Also host only: the extra rays reach a CUDA synthesis as ordinary pairs
 (`synth_cuda.cu` runs channels x paths, with no number of rays per point anywhere;
 `test_cuda_synthesis_takes_the_rough_rays`, run in the GPU job).
+
+## 32. Bottom scattering after Mourad and Jackson (1989) and Wagner (1967) (C1-C5, C-W1-C-W3) [CONFIRMED formulas; OURS bistatic shadowing]
+
+Sources: `docs/references/bottom_mourad_jackson_1989.md` ([MJ89], OCEANS '89 pp. 1168-1175) and
+`docs/references/shadowing_wagner_1967.md` ([W67], J. Acoust. Soc. Am. 41, 138-147), both read on the page
+images. Code: `python/gpusonar/sim/bottom.py`; Python only (the bottom scattering model has no C++ twin:
+`libs/` and `apps/` have no roughness or volume scattering strength; `libs/sim/src/penetration.cpp` has its
+own transmission perturbation term, untouched). Tests: `tests/python/test_bottom_models.py`,
+`test_mourad_jackson_1989.py`, `test_grain_size_relations.py`, `test_reverberation.py`, `test_reverb_bistatic.py`.
+
+**What is still wrong or unsettled (first).**
+- Shadowing is geometric optics in the plane of incidence only, with diffraction ignored ([W67] p. 145).
+  The bistatic form inside `composite` / `combined` is OURS: [W67] (33) and (35)-(36) are in-plane; out of
+  the plane we take the backward form R(min(ti, ts)) for cos(azimuth) < 0 and the forward form
+  (1 - exp[-2(B_i + B_s)]) / [2(B_i + B_s)] otherwise, which jumps at azimuth 90 deg.
+- The B form of R that [MJ89] and J&R use overstates illumination at very large slopes (by up to 1.1 dB at
+  rms slope sqrt(2) per axis, [W67] Fig. 6, figure); [W67]'s better form (A29) needs derivatives a power-law
+  relief does not have. For our sediments (per-axis slope 0.01-0.37) R is within 1 dB of 1 above 10 deg.
+- The 1989 model (`mourad_jackson_1989`) is backscatter only and 10-100 kHz, sands to clays (1-9 phi). Its
+  Kirchhoff part is the paper's closed-form approximation (19)-(22), +3.7 dB above the exact integral at
+  gamma2 3.67, 60 deg; its slope (18) uses k h_s = 1/sqrt(2), not the 1/2 of J&R and our `composite`. Whether
+  APL-UW TR 9407 kept these forms is not known (never read). Against our default it is up to +11.5 dB at
+  5 deg (sandy gravel 100 kHz, outside its range), +9.3 dB for medium sand at 100 kHz; within 0.4 dB at 5 deg
+  for silts and clays; 20-85 deg within -1.6 to +1.0 dB (the note Sec. 4.3). It is NOT the default (D-86's
+  small-slope model stays).
+- [MJ89] (39), the volume term, is misprinted (|1 - R|^2 for |1 - R^2|^2); the internal inconsistencies of
+  [MJ89] Fig. 8 (Arafura sigma2 0.002 and w2 0.000391 against its own (4) and (6)) stay unexplained.
+- C5 moves Gallaudet's 6.36 phi row of the relations further from his print (rho 7.5e-5 below 1.1483, was
+  5.1e-5): his print follows J&R's rounded constant or the table, not the original's digits.
+
+**Wagner's backscatter shadow function** (C1, C-W1). R = (1 - exp(-2B)) / (2B), B = [pi^(-1/2) exp(-v^2) -
+v erfc v] / (4v), v = tan(theta) / s, s the TOTAL rms slope (sqrt(2) x the per-axis slope of
+`large_scale_slope`) ([W67] (49) with (20)-(22); [MJ89] (24)-(26); J&R (13.81)-(13.83) with the sign of
+(13.82) corrected: the book prints pi^(+1/2), a misprint). R, not the illuminated fraction S of [W67] (20),
+because our average already drops the facets that face away (S would count them twice). Evaluated with
+erfcx (no cancellation), R = 1 at normal incidence. `bottom.wagner_backscatter_shadowing`,
+`bottom.wagner_bistatic_shadowing`; `shadowing="wagner"` (default) | `"none"` on `composite` and `combined`.
+Values (ours): R = 0.385059, 0.719744, 0.906503, 0.987541, 0.998564 at v = 0.1, 0.25, 0.5, 1, 1.5. What it
+moves (opt-in models only, roughness term, 5 deg, c = 1500 m/s): medium sand 30 kHz -41.58 -> -41.69 dB,
+100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75. The sea-surface facet term keeps no
+shadowing: R there is 1 to 1e-6 dB wherever that term matters (C-W3). The coherent forward shadowing S^2
+([W67] p. 141) is recorded only (C-W4): tens of dB at 2 deg from a ray argument no acoustic source applies.
+
+**The 1989 model** (C4): `roughness_model="mourad_jackson_1989"`, `volume_model="mourad_jackson_1989"` (the
+paper's model is both), formulas in `bottom.py`'s section comment with equation numbers. It reproduces the
+paper's own model curves (Figs. 6-10, seven curves) within the reading error (+-1.5 dB, +-2 dB at 90 deg;
+Arafura 10 deg 1.65 dB), rms 0.34-0.77 dB per curve. Its volume term (38) is the printed recipe for the
+slope and shadow corrections of the volume term (G-16): +3.9 / +9.6 dB at 5 deg for medium sand at 20 /
+100 kHz over our flat-interface term, under 0.3 dB for silts. The low-angle excess over our default is the
+slope average acting on both terms, not a difference in either term's form (perturbation (30)-(31) equals
+ours to 1e-10 dB without the (k/10)^2 of (32); the corrected (39) equals our volume term to 1e-12).
+
+**Grain-size constants** (C5): `apl_grain_size_relations` carries [MJ89] (1)-(2)'s seven-digit constants
+(3.0455234, 1.3424740, 1.1564755, 1.0018916) where J&R print four decimals; rho moves by -2.45e-5 to
++2.34e-5, nu by -2.6e-5 to 0 (1-9 phi), the normal-incidence loss by at most 0.0023 dB; the pieces meet at
+5.3 phi to 4e-6 (5.1e-5 before). 1.0091 in J&R (11.2) is a misprint, now confirmed by the original;
+0.4566 / 0.4556 in (11.3) stays open ([MJ89] prints no k(Mz)).

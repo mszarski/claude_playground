@@ -430,6 +430,23 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   100 kHz -32.9 -> -35.9; sandy gravel 100 kHz -21.4 -> -27.8 (Q as printed) [N4 WP-2].
 - **Must not: implement Q from the book's printed form before the primary paper is checked**; make
   `composite` or `combined` the default.
+- **Correction (2026-11-26):** the "before -> after" numbers above used the misprinted pi^(+1/2) of (13.82) and are
+  wrong. With Wagner's pi^(-1/2) ([W67] (22), [MJ89] (25)) the composite roughness term at 5 deg moves: medium sand
+  30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8)
+  (`docs/references/bottom_mourad_jackson_1989.md` C1; reproduced by `test_composite_shadowing_moves_the_opt_in_models_as_the_note_computes`).
+
+#### G-11 done (shadowing part; opt-in models only; no scene switched)
+
+- What is still wrong: the bistatic form of the shadow factor out of the plane of incidence is ours ([W67] is
+  in-plane); the B form overstates illumination at very large slopes ([W67] Fig. 6); geometric optics, no
+  diffraction. The default inside `composite` / `combined` is now `shadowing="wagner"` (the owner's instruction
+  for these two opt-in models, against "default none" above); `"none"` is the model before, bit for bit.
+- Sign settled: pi^(-1/2) ([W67] (22), [MJ89] (25), confirmed); J&R (13.82) is a misprint. The factor is R
+  ([W67] (49) with (20)), not S. `bottom.wagner_backscatter_shadowing`, `bottom.wagner_bistatic_shadowing`;
+  tests in `tests/python/test_bottom_models.py` (values, J&R's table with the corrected sign, limits,
+  reciprocity, bit-identity of "none"), `test_reverberation.py` and `test_reverb_bistatic.py` (both engines).
+- Not done here: the validity warning (sigma_sL > 0.1, theta > 70 deg, K_c above Bragg, (13.78)) and
+  `slope_average="book_1d"` (the 1989 model's three-point in-plane average exists as `mourad_jackson_1989`).
 
 ### G-12 Correlated cross-section texture (McDaniel 1996) — OPT-IN, M
 - Gap U8 (`sonar-6fc`; `sonar-6t5` for the texture). From [N2 WP-1]; formulas (16.59)-(16.69) [N2 §2.6].
@@ -512,6 +529,17 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Tests first: zero slope gives exactly today's value; a sin-independent constant averages to itself times the
   shadow factor; reciprocity. Numbers to prepare: medium sand and very fine silt, 30/100 kHz, 5-30 deg.
 - Depends on G-11.
+
+#### G-16 in part (2026-11-26): the 1989 recipe, opt-in, backscatter only
+
+- What exists: `volume_model="mourad_jackson_1989"` ([MJ89] (38) with (39) corrected: three-point in-plane
+  Gauss-Hermite average over the slope (18), arguments clamped to 1-90 deg, times Wagner's R with R = 1 for t > 2).
+  Volume over our flat-interface term at 5 / 10 / 20 deg (c = 1500 m/s; the note D1): medium sand 20 kHz +3.9 /
+  +0.9 / +0.2 dB, 100 kHz +9.6 / +3.4 / +2.3; sandy gravel 100 kHz +12.2 / +6.0 / +6.4; very fine silt +0.04 to
+  +0.3 at 5 deg. Tests: `tests/python/test_mourad_jackson_1989.py` (a constant averages to itself, no slope gives
+  the flat term, the factor is R, the paper's figures).
+- Still open: a bistatic slope-averaged volume term (J&R Sect. 14.1.2's recipe for any geometry), reciprocity
+  (needs the bistatic form), the default (unchanged: the flat-interface term).
 
 ### G-17 Elastic rough-interface perturbation (and later elastic volume) for rock — OPT-IN, M (L for volume)
 - Gap U3 (a physical rock model instead of Lambert). From [N4 WP-6]; (13.27)-(13.34) with V from (9.34), in the
@@ -796,14 +824,14 @@ above is unchanged; where it disagrees, this section is the later reading.
 
 | Package / row | Was | Now | Note |
 |---|---|---|---|
-| G-11 Wagner shadowing | blocked on the sign of pi^(1/2) in J&R (13.82) | **unblocked**: pi^(-1/2) printed in [W67] (22) and [MJ89] (25); J&R (13.82) is a misprint. The composite needs R (= [W67] (49) with (20)), not S | G-11's "before -> after" used the misprint. Corrected (composite roughness, 5 deg): medium sand 30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8). [MJ89] C1, [W67] C-W1, C-W2 (bistatic form, ours) |
-| G-16 Volume slope average | recipe only (J&R Sect. 14.1.2), not quantified | printed recipe [MJ89] (38) with corrected (39): three-point in-plane Gauss-Hermite average and R | quantified: volume +3.9 / +9.6 dB at 5 deg for medium sand 20 / 100 kHz, +7.9 / +12.2 for sandy gravel, under 0.3 dB for silts; part of [MJ89] C4 (opt-in) |
-| G-6 grain-size relations | 1.0091 judged a misprint by continuity | confirmed: [MJ89] (2) prints 1.0018916; 0.4566 / 0.4556 NOT settled ([MJ89] prints no k(Mz)) | [MJ89] C5 (optional: the original's seven digits, rho/nu move by under 3e-5) |
+| G-11 Wagner shadowing (done 2026-11-26, see G-11) | blocked on the sign of pi^(1/2) in J&R (13.82) | **unblocked**: pi^(-1/2) printed in [W67] (22) and [MJ89] (25); J&R (13.82) is a misprint. The composite needs R (= [W67] (49) with (20)), not S | G-11's "before -> after" used the misprint. Corrected (composite roughness, 5 deg): medium sand 30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8). [MJ89] C1, [W67] C-W1, C-W2 (bistatic form, ours) |
+| G-16 Volume slope average (in part 2026-11-26, see G-16) | recipe only (J&R Sect. 14.1.2), not quantified | printed recipe [MJ89] (38) with corrected (39): three-point in-plane Gauss-Hermite average and R | quantified: volume +3.9 / +9.6 dB at 5 deg for medium sand 20 / 100 kHz, +7.9 / +12.2 for sandy gravel, under 0.3 dB for silts; part of [MJ89] C4 (opt-in) |
+| G-6 grain-size relations | 1.0091 judged a misprint by continuity | confirmed: [MJ89] (2) prints 1.0018916; 0.4566 / 0.4556 NOT settled ([MJ89] prints no k(Mz)) | [MJ89] C5 done 2026-11-26: the original's seven digits; rho -2.45e-5 to +2.34e-5, nu -2.6e-5 to 0; Gallaudet's 6.36 phi rho now 7.5e-5 below his print (was 5.1e-5) |
 | G-5 / decision 1 (volume parameter) | step at 5.5 phi (Snellen, via secondary) | [MJ89] (4) steps at 5.0 phi; its own Fig. 8 used 0.002 at 5.3 phi | kept at 5.5 (later prints of the same model); `sandy_silt` would lose 3.0 dB under (4). No change |
 | G-10 EDFM | must not apply to the TR 9407 rows (double count) | supported: [MJ89] fitted the relations' density to acoustic data, below bulk values (p. 1170) | no change |
 | G-8, G-12 | - | nothing in either paper | - |
 | G-36 | named in the brief for this work | no package G-36 exists in this file | - |
-| New: [MJ89] model as an opt-in (`roughness_model` / `volume_model` "mourad_jackson_1989") | interpolation "not printed" (0.3) | printed: Kirchhoff approximation (19)-(22), interpolation (33)-(37), slope (18) | [MJ89] C4; tests reproduce the paper's Figs. 6-10 within the readings. Default unchanged (D-86); vs our default the model is +1.6 to +11.5 dB at 5 deg for sands and gravel, within 0.4 dB for silts |
+| New (done 2026-11-26): [MJ89] model as an opt-in (`roughness_model` / `volume_model` "mourad_jackson_1989") | interpolation "not printed" (0.3) | printed: Kirchhoff approximation (19)-(22), interpolation (33)-(37), slope (18) | [MJ89] C4; tests reproduce the paper's Figs. 6-10 within the readings. Default unchanged (D-86); vs our default the model is +1.6 to +11.5 dB at 5 deg for sands and gravel, within 0.4 dB for silts |
 | Section 0.3 "Kirchhoff / composite interpolation function" | not printed | printed in [MJ89] (33)-(37) (the 1989 model; TR 9407's not known) | |
 | Section 0.4 row "(13.82) Wagner Q" | "pi^(-1/2)?" | settled: pi^(-1/2) | |
 | Section 0.4, new row | - | [MJ89] (39) prints abs(1 - R)^2; abs(1 - R^2)^2 meant (the paper's figures reproduce only with it; J&R (14.8); ours) | our `volume_strength` is right; [MJ89] C3 pins it |
