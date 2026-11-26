@@ -141,9 +141,17 @@ def test_sediment_from_grain_size_hits_the_classes_and_stays_between_them():
     for name, phi in CINTRON_NAMES.items():
         if name in FROM_ARXIV:
             continue
-        got, row = bottom.sediment_from_grain_size(phi), bottom.sediment(name)
+        # The class table interpolated (the default before A5, docs/references/CONFORMANCE.md Sec. 1.1) lands on
+        # the rows with the tolerances held before A5.
+        got, row = bottom.sediment_from_grain_size(phi, method="table_linear"), bottom.sediment(name)
         assert got["rho"] == pytest.approx(row["rho"], abs=1.1e-3) and got["nu"] == pytest.approx(row["nu"], abs=6e-5)
         assert got["w2"] == pytest.approx(row["w2"], rel=2e-5) and got["sigma2"] == row["sigma2"]
+        # The default, the printed relations J&R (11.1)-(11.3): within the sum of the two held distances, row to
+        # Cintron's print (above) and relations to the print (test_grain_size_relations.py: rho 5e-4, nu 1e-4).
+        # Measured: rho 1.13e-3 (very coarse sand: relations 2.40113, row 2455.20 / 1023 = 2.40000), nu 5.0e-5.
+        rel = bottom.sediment_from_grain_size(phi)
+        assert rel["rho"] == pytest.approx(row["rho"], abs=1.6e-3) and rel["nu"] == pytest.approx(row["nu"], abs=1.6e-4)
+        assert rel["w2"] == got["w2"] and rel["sigma2"] == row["sigma2"]
     mid, lo, hi = (bottom.sediment_from_grain_size(x) for x in (2.2, 2.0, 2.5))
     for key in ("rho", "nu", "w2"):
         assert min(lo[key], hi[key]) < mid[key] < max(lo[key], hi[key])

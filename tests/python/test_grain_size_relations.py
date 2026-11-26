@@ -1,12 +1,14 @@
 """The TR 9407 grain-size relations as Jackson and Richardson (2007) print them, eqs. (11.1)-(11.3),
-pp. 313-314 [J&R], as an opt-in method of `bottom.sediment_from_grain_size` (docs/tasks/SST_GAPS_JACKSON.md
+pp. 313-314 [J&R], as a method of `bottom.sediment_from_grain_size` (docs/tasks/SST_GAPS_JACKSON.md
 G-6; notes docs/references/jackson_richardson_2007/01 Sec. 2.4, 3.2 [N1] and 03 Sec. 2.5, 3.2, 6 [N3]).
 
 Two printed constants are taken as misprints, as the notes argue: 1.0019, not 1.0091, in the last piece
 of (11.2) (continuity with the cubic at 5.3 phi, and the tabulated rows 5.5-9 phi), and 0.4556, not
 0.4566, in the first piece of (11.3) (the next piece starts at 0.4556, and the rows at -1 and -0.5 phi
 follow it). The book calls the relations "ad hoc" model-fit expressions, not geoacoustic regressions
-(p. 314). Today's linear interpolation of the half-phi table stays the default.
+(p. 314). Since the conformance item A5 (docs/references/CONFORMANCE.md Sec. 1.1) the relations are the
+default (a printed reference outranks our interpolation); the linear interpolation of the half-phi table
+stays selectable as `method="table_linear"` and is held bit for bit below.
 """
 import math
 
@@ -38,13 +40,14 @@ def old_sediment_from_grain_size(phi):
     return dict(out, **bottom.grain_size_scattering(phi))
 
 
-def test_the_default_is_todays_interpolation_bit_for_bit():
+def test_table_linear_is_the_interpolation_before_the_relations_bit_for_bit():
+    """`method="table_linear"` (the default until A5) computes what the function computed before either method
+    existed, every float identical."""
     grid = np.round(np.linspace(-1.0, 9.0, 1001), 10)
     for phi in grid:
         phi = float(phi)
         old = old_sediment_from_grain_size(phi)
-        assert bottom.sediment_from_grain_size(phi) == old, phi                       # dict equality: every float identical
-        assert bottom.sediment_from_grain_size(phi, method="table_linear") == old, phi
+        assert bottom.sediment_from_grain_size(phi, method="table_linear") == old, phi  # dict equality: every float identical
     with pytest.raises(ValueError, match="unknown method 'relation'.*did you mean 'relations'"):
         bottom.sediment_from_grain_size(2.0, method="relation")
     with pytest.raises(ValueError, match="outside the range"):
@@ -64,11 +67,25 @@ BEFORE = {
 }
 
 
-def test_the_default_matches_values_saved_from_the_tree_before_the_change():
+def test_table_linear_matches_values_saved_from_the_tree_before_the_change():
     for phi, values in BEFORE.items():
-        got = bottom.sediment_from_grain_size(phi)
+        got = bottom.sediment_from_grain_size(phi, method="table_linear")
         assert (got["rho"], got["nu"], got["delta"]) == values, phi                   # exact
         assert {k: got[k] for k in ("w2", "gamma2", "sigma2")} == bottom.grain_size_scattering(phi)
+
+
+def test_the_default_is_the_relations():
+    """A5 (docs/references/CONFORMANCE.md Sec. 1.1): with no method named, rho, nu and delta are the printed
+    relations (J&R (11.1)-(11.3), pp. 313-314, printed; [N1 3.2]), every float identical; between the table's
+    points this differs from the interpolation used before (by up to 0.68 dB, test_difference_from_todays_interpolation)."""
+    import inspect
+    assert inspect.signature(bottom.sediment_from_grain_size).parameters["method"].default == "relations"
+    grid = np.round(np.linspace(-1.0, 9.0, 1001), 10)
+    for phi in grid:
+        phi = float(phi)
+        assert bottom.sediment_from_grain_size(phi) == bottom.sediment_from_grain_size(phi, method="relations"), phi
+    # Where the two differ most in reflection (5.3 phi) the default is no longer the saved interpolation.
+    assert bottom.sediment_from_grain_size(5.3)["nu"] != BEFORE[5.3][1]
 
 
 def test_the_relations_reproduce_every_tabulated_row():
@@ -82,7 +99,7 @@ def test_the_relations_reproduce_every_tabulated_row():
         par = bottom.sediment_from_grain_size(mz, method="relations")
         assert {k: par[k] for k in ("rho", "nu", "delta")} == {k: rel[k] for k in ("rho", "nu", "delta")}
         for key in ("w2", "gamma2", "sigma2"):                                        # the scattering parameters do not depend on the method
-            assert par[key] == bottom.sediment_from_grain_size(mz)[key]
+            assert par[key] == bottom.sediment_from_grain_size(mz, method="table_linear")[key]
 
 
 def test_delta_follows_from_k_by_2_6_with_the_tables_water():
@@ -155,7 +172,7 @@ def test_difference_from_todays_interpolation():
     worst = {}
     for phi in grid:
         phi = float(phi)
-        new, old = bottom.sediment_from_grain_size(phi, method="relations"), bottom.sediment_from_grain_size(phi)
+        new, old = bottom.sediment_from_grain_size(phi, method="relations"), bottom.sediment_from_grain_size(phi, method="table_linear")
         diffs = {"dB": abs(normal_incidence_loss_db(new) - normal_incidence_loss_db(old)), "rho": abs(new["rho"] - old["rho"]),
                  "nu": abs(new["nu"] - old["nu"]), "delta": abs(old["delta"] / new["delta"] - 1.0)}
         if not 5.0 < phi < 6.0:

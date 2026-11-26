@@ -2864,9 +2864,11 @@ source puts the transmit-pattern bias at up to -9 dB, and both bands carry rever
   direction. The near-normal band (72-90 degrees, -19.4 dB printed) is not compared: our band
   mean there is -14.5 dB as a mean of intensity and -19.3 dB as a mean of dB, and the source
   does not say which it printed.
-- Table VI's rho, nu and delta are what `sediment_from_grain_size(6.36)` gives (within
-  4e-5), and w2 is our grain-size rule (0.0005175 cm^4): an independent second print of the
-  class regressions. The fit differs from the class in gamma (3.00 against 3.25, no effect
+- Table VI's rho, nu and delta are what `sediment_from_grain_size(6.36, method="table_linear")`
+  gives (within 4e-5), and w2 is our grain-size rule (0.0005175 cm^4): an independent second print
+  of the class regressions. The default method since A5 (`docs/references/CONFORMANCE.md`), the
+  printed relations J&R (11.1)-(11.3), gives rho 1.148249, nu 0.986430, delta 0.003267: rho 5.1e-5
+  below the printed 1.1483, inside its rounding once the rounding of the printed 6.36 phi is added. The fit differs from the class in gamma (3.00 against 3.25, no effect
   here) and sigma2 (0.003 against 0.001).
 - The class row `fine_silt` (6-7 phi) gives -27.6 and -29.5 dB: 5.0 and 0.8 dB low, 4.8 dB
   below the site fit in both bands (the volume parameter). Inside the +-3 to 6 dB of 23.1.

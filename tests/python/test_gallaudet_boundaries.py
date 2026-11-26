@@ -95,14 +95,29 @@ def test_printed_values_as_data():
 
 def test_table_vi_geoacoustic_ratios_are_our_grain_size_interpolation():
     """[G01] Table VI's rho, nu and delta came from grain-size regressions at Mz 6.36 (pp. 47-48);
-    our linear interpolation of the Cintron (2001) class table at 6.36 phi gives the same to
-    within 4e-5 (rho 1.14828, nu 0.98644, delta 0.003284). The spectral strength is our
-    grain-size rule too (0.0005175 cm^4, printed 0.000518). The two fitted values differ from our
-    class defaults: gamma2 3.00 against 3.25, sigma2 0.003 against 0.001 (three times ours)."""
-    ours = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI)
+    our linear interpolation of the Cintron (2001) class table at 6.36 phi (`method="table_linear"`)
+    gives the same to within 4e-5 (rho 1.14828, nu 0.98644, delta 0.003284). The spectral strength is
+    our grain-size rule too (0.0005175 cm^4, printed 0.000518). The two fitted values differ from our
+    class defaults: gamma2 3.00 against 3.25, sigma2 0.003 against 0.001 (three times ours).
+
+    Since A5 (docs/references/CONFORMANCE.md Sec. 1.1) the default method is the printed relations,
+    J&R (11.1)-(11.3): rho 1.148249, nu 0.986430, delta 0.003267 at 6.36 phi. Their rho is 5.08e-5
+    below the printed 1.1483, just outside that print's own rounding (half a unit of the fourth
+    decimal, 5e-5) and inside it once the rounding of the printed Mz 6.36 is added (+-0.005 phi times
+    the slope 0.0013 of (11.1) above 5.3 phi: 6.5e-6); their delta is 3.3e-5 from the printed 0.0033
+    (the print's rounding 5e-5), outside the 2e-5 held for the interpolation. So the strict check
+    below names `table_linear` and keeps its tolerances unchanged; the relations get their own check
+    at the print's rounding (5e-5, plus 1e-5 on rho for the rounding of Mz). Neither tolerance was
+    widened."""
+    ours = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI, method="table_linear")
     assert ours["rho"] == pytest.approx(BOTTOM_FIT["rho"], abs=5e-5)
     assert ours["nu"] == pytest.approx(BOTTOM_FIT["nu"], abs=5e-5)
     assert ours["delta"] == pytest.approx(BOTTOM_FIT["delta"], abs=2e-5)
+    rel = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI)                     # the default: the relations
+    assert rel["rho"] == pytest.approx(BOTTOM_FIT["rho"], abs=6e-5) and abs(rel["rho"] - BOTTOM_FIT["rho"]) > 5e-5
+    assert rel["nu"] == pytest.approx(BOTTOM_FIT["nu"], abs=5e-5)
+    assert rel["delta"] == pytest.approx(BOTTOM_FIT["delta"], abs=5e-5)
+    assert {k: rel[k] for k in ("w2", "gamma2", "sigma2")} == {k: ours[k] for k in ("w2", "gamma2", "sigma2")}
     assert bottom.grain_size_w2_cm4(MEAN_GRAIN_SIZE_PHI) == pytest.approx(BOTTOM_FIT_PRINTED["w2_cm4"], abs=6e-7)  # 0.0005175 printed to 6 places
     assert ours["gamma2"] == 3.25 and ours["sigma2"] == 0.001
 

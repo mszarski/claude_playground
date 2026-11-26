@@ -729,19 +729,25 @@ def apl_grain_size_relations(phi: float, water_sound_speed: float = GRAIN_SIZE_W
 GRAIN_SIZE_METHODS = ("table_linear", "relations")
 
 
-def sediment_from_grain_size(phi: float, method: str = "table_linear") -> dict:
+def sediment_from_grain_size(phi: float, method: str = "relations") -> dict:
     """The six parameters for a mean grain size in phi units (-1 to 9), for a site whose grain
     size is known and that is not one of the named classes.
 
-    `method="table_linear"` (the default, unchanged): rho, nu and delta are interpolated linearly
-    between the tabulated classes of `GRAIN_SIZE_TABLE` (every half phi). The interpolation is ours;
-    the table is piecewise (the density ratio drops from 2.151 to 1.615 between 1 and 2 phi), so
+    `method="relations"` (the default since the conformance item A5, docs/references/CONFORMANCE.md
+    Sec. 1.1: a printed reference outranks our interpolation): rho, nu and delta from the relations
+    themselves, `apl_grain_size_relations` (J&R 2007 eqs. (11.1)-(11.3), printed; with the constants
+    1.0019 and 0.4556 for two printed misprints), which give the table at its points (rho 5e-4,
+    nu 1e-4, delta 0.5 %).
+    `method="table_linear"` (the default before A5; selectable): rho, nu and delta are interpolated
+    linearly between the tabulated classes of `GRAIN_SIZE_TABLE` (every half phi). The interpolation is
+    ours; the table is piecewise (the density ratio drops from 2.151 to 1.615 between 1 and 2 phi), so
     between two classes the result is a guess good to the difference of its neighbours.
-    `method="relations"`: rho, nu and delta from the relations themselves, `apl_grain_size_relations`
-    (J&R 2007 eqs. (11.1)-(11.3)), which give the table at its points (rho 5e-4, nu 1e-4, delta
-    0.5 %). Between the points the two differ by at most 0.68 dB in the normal-incidence reflection
+    Between the points the two differ by at most 0.68 dB in the normal-incidence reflection
     coefficient (at 5.3 phi), under 0.1 dB outside 5-6 phi; rho by up to 0.0106 (1.25 phi), delta by up
-    to 7.6 % (near 5.8 phi). w2, gamma2 and sigma2 are `grain_size_scattering` either way."""
+    to 7.6 % (near 5.8 phi). At Gallaudet's 6.36 phi (his Table VI prints 1.1483, 0.9864, 0.0033) the
+    relations give 1.148249, 0.986430, 0.003267 and the interpolation 1.14828, 0.986436, 0.003284
+    (tests/python/test_gallaudet_boundaries.py). w2, gamma2 and sigma2 are `grain_size_scattering`
+    either way."""
     if method not in GRAIN_SIZE_METHODS:
         import difflib
         near = difflib.get_close_matches(str(method), GRAIN_SIZE_METHODS, n=1)

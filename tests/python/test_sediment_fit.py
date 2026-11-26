@@ -313,7 +313,7 @@ def test_prior_bounds_come_from_the_notes_and_keep_the_fit_inside():
     assert any("sigma2: the fit ran to the prior bound 0.002" in n for n in fit.notes)
     assert yaml.safe_load(fit.yaml_row("s", "x"))["s"]["fit"]["bounds"] == "test"
     # A held value outside the bounds is pointed out (the TR 9407 gravel row has rho 2.49, nu 1.34).
-    gravel = bottom.sediment_from_grain_size(-1.0)
+    gravel = bottom.sediment_from_grain_size(-1.0, method="table_linear")   # the table row itself (the relations give nu 1.336961)
     fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.3, bounds=sediment_fit.prior_bounds(-1.0), n_starts=2, **geo(gravel))
     assert any(n.startswith("rho is held at 2.49") for n in fit.notes) and any(n.startswith("nu is held at 1.337") for n in fit.notes)
     with pytest.raises(ValueError, match=r"bounds\.sigma_2: unknown key; did you mean 'sigma2'\?"):
