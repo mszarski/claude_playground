@@ -45,3 +45,14 @@ x86_64 numbers to compare with.
   (`docs/handoff/hardware_builds.json`, `rate_total_bit_s`): 1.6 to 4.8 times the flank source and
   far below the ultrasound capture, so the rate alone does not rule either receiver out; no stream
   has been received on a Jetson at any of these rates.
+- At those rates the socket receiver needs Sensor Bridge's own host setup (`net.core.rmem_max`
+  31,326,208 and an isolated receiver core; the guide shows `isolcpus` for a Jetson), which no
+  container used here allowed; `tools/hsb_host_check.py` reads what a host has and prints the
+  measurement to make (`DEPLOYMENT.md`, "Checking a host and making the measurement"; D-189). Even
+  on the containers' L4 hosts the first 12 to 20 ms of a Popoto-rate stream were lost at start-up
+  (D-187).
+- Chain time to compare with (x86_64 + L4, the Popoto trials' pings with board synchronisation,
+  after the first ping): C++ 0.048 / 0.054 / 0.065 s and Python 0.084 / 0.18 / 0.25 s at 32 / 64 /
+  96 channels (D-192, D-195; `tools/live_chain_timing.py` runs the same measurement on any host).
+  Board synchronisation runs on the CPU threads (`parallel_for_host`), so a Jetson's CPU cores
+  matter there, not its GPU.

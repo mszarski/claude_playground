@@ -2,7 +2,8 @@
 
 Later additions: section 3.12 (sources of the SST-equivalence work, D-62 to D-79) and
 section 3.13 (everything used since D-82: org-arl formulations, Bellhop as an external
-process for new purposes, the three measured channel data sets, the literature search).
+process for new purposes, Bellhop3D as the program of the opt-in `eigenray3d` tier since
+2026-11-26, the three measured channel data sets, the literature search).
 
 Status: first-hand verification pass, 2026-11-16, from an x86_64 Ubuntu 24.04 container
 (no GPU, Python 3.13.18, gcc 13.3, cmake 3.28.3, restricted network).
@@ -64,7 +65,7 @@ Roles: depend / vendor / port / test-oracle only / reference reading only / reje
 | Project | URL | Licence (as read) | Last activity | Validation evidence | Verified here | PROPOSED role | Notes |
 |---|---|---|---|---|---|---|---|
 | arlpy | github.com/org-arl/arlpy | BSD 3-clause (LICENSE; header says "Simplified BSD") | 2026-09-06 (HEAD 2627a8c); PyPI 1.9.3 2026-07-18 | wide use as Bellhop front-end (GitHub search hits); no paper cited in README | cloned; **`pip install arlpy` fails on Python 3.13**; works with `--no-deps` on numpy 2.2.6 / scipy 1.15.3 for the functions tried | reference reading only; small formulas (absorption, sound speed) may be ported with citation | Maintenance mode; needs external `bellhop.exe`; see 3.5 |
-| Acoustics Toolbox (BELLHOP, BELLHOP3D, KRAKEN, KRAKENC, SCOOTER, SPARC, BOUNCE, FIELD) | github.com/oalib-acoustics/Acoustics-Toolbox | **GPL-3.0** (LICENSE) | 2025-10-08 (HEAD 8b4682b) | de-facto community reference codes (OALIB); not independently re-validated | cloned; **built and run here** with a user-space gfortran 13.3 after one Makefile fix | test-oracle only, separate process (copyleft: sign-off) | See 3.6 for the build and test-case locations. `tools/build_oracles.sh` clones exactly 8b4682b. BELLHOP3D (same GPL-3 tree, separate process, found as `GPUSONAR_BELLHOP3D` or `bellhop3d.exe` beside `bellhop.exe`) is the 3-D oracle of `tests/python/test_seamount_3d.py` (`tests/python/bellhop3d_oracle.py`) and, since 2026-11-26 with the owner's approval, the program behind the opt-in `eigenray3d` tier (`python/gpusonar/sim/bellhop3d.py`: writes its input files, runs it as a separate process, reads its arrivals and TL; nothing linked or copied, as for BELLHOP and the `eigenray` tier) |
+| Acoustics Toolbox (BELLHOP, BELLHOP3D, KRAKEN, KRAKENC, SCOOTER, SPARC, BOUNCE, FIELD) | github.com/oalib-acoustics/Acoustics-Toolbox | **GPL-3.0** (LICENSE) | 2025-10-08 (HEAD 8b4682b) | de-facto community reference codes (OALIB); not independently re-validated | cloned; **built and run here** with a user-space gfortran 13.3 after one Makefile fix | test-oracle only, separate process (copyleft: sign-off); as used: BELLHOP is also the `eigenray` tier's program and, opt-in since 2026-11-26, BELLHOP3D the `eigenray3d` tier's, both separate processes (section 3.13) | See 3.6 for the build and test-case locations. `tools/build_oracles.sh` clones exactly 8b4682b. BELLHOP3D (same GPL-3 tree, separate process, found as `GPUSONAR_BELLHOP3D` or `bellhop3d.exe` beside `bellhop.exe`) is the 3-D oracle of `tests/python/test_seamount_3d.py` (`tests/python/bellhop3d_oracle.py`) and, since 2026-11-26 with the owner's approval, the program behind the opt-in `eigenray3d` tier (`python/gpusonar/sim/bellhop3d.py`: writes its input files, runs it as a separate process, reads its arrivals and TL; nothing linked or copied, as for BELLHOP and the `eigenray` tier) |
 | A-New-BellHope/bellhop | github.com/A-New-BellHope/bellhop | GPL-3.0 (LICENSE) | 2023-03-30 (HEAD ae1a477) | — | cloned only | reject (superseded by the two rows around it) | Fortran fork used as the bellhopcuda comparison baseline |
 | bellhopcxx / bellhopcuda | github.com/A-New-BellHope/bellhopcuda | **GPL-3.0** (LICENSE; README states GPLv3-or-later) | 2026-04-29 (HEAD d28b217) | repo ships comparison scripts and pass/fail lists against Fortran BELLHOP (`tl_match.txt`, `ray_tests_pass.txt`, `ray_tests_fail.txt`, `doc/accuracy.md`) | cloned; **CPU build (`-DBHC_ENABLE_CUDA=OFF`) built and run here**; CUDA build not attempted (no GPU) | test-oracle only, separate process (copyleft: sign-off) | 2D / 3D / Nx2D executables; README notes CMake >= 3.27 for CUDA detection |
 | KRAKEN | (inside Acoustics Toolbox) | GPL-3.0 (same tree) | as above | as above | built here (`kraken.exe`, `krakenc.exe`); `MunkK` run produced a `.mod` file | test-oracle only (copyleft: sign-off) | — |
@@ -314,7 +315,7 @@ open (MIT or BSD) file or an open paper, with that file's attribution to APL-UW 
 may be used with the attribution; the handbook itself stays unread and was not downloaded.
 This is a practical reading of the licences, not legal advice (`ORG_ARL_SURVEY.md` Sec. 5).
 
-**The Acoustics Toolbox (Bellhop, KRAKEN): a separate process only.**
+**The Acoustics Toolbox (Bellhop, Bellhop3D, KRAKEN): a separate process only.**
 `github.com/oalib-acoustics/Acoustics-Toolbox`, GPL-3.0 (row in 2c, build in 3.6). Since
 D-82 it is used for three more things, all through the same boundary: our code writes
 Bellhop's input files, runs `bellhop.exe` as an external program
@@ -332,6 +333,15 @@ ported.
   layered profile (`PHYSICS_NOTES.md` Secs. 25, 28); the reports of that work state that
   no Bellhop code was read or copied for it.
 - A test oracle for the surface-image factor (`lloyd.py`) and the coverage picture.
+- **Bellhop3D as the program of the opt-in `eigenray3d` tier** (2026-11-26; the owner approved it
+  as an opt-in provider run as a separate process, `docs/tasks/PROPAGATION_3D.md` question 1).
+  `python/gpusonar/sim/bellhop3d.py` writes its `.env` and `.bty` files, runs `bellhop3d.exe`
+  (`GPUSONAR_BELLHOP3D`, or beside `GPUSONAR_BELLHOP`) in a temporary directory, and reads its
+  arrivals (ASCII and binary) and TL output. The **formats** were read from the toolbox's
+  `doc/bellhop3d.htm`, `Bellhop/bdry3DMod.f90`, `Bellhop/ReadEnvironmentBell.f90` and
+  `Bellhop/ArrMod.f90` (format only); the merge of its beam contributions into eigenrays and
+  their scaling to its TL run are ours. Nothing is linked, vendored or ported. Before this it was
+  a test oracle only (D-149, `tests/python/bellhop3d_oracle.py`, which now imports the writers).
 
 A cause of a delay error inside a sharp front (interpolation of delay between ray steps)
 is inferred from Bellhop's output, not read from its code (`STATUS.md`, open item 26).

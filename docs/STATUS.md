@@ -30,11 +30,11 @@ GPU result with the new tracker association (commit `1442de5`, NVIDIA L4 through
 
 Results after the shallow trials keep their whole bounce series and the self-test judges ambiguous elevations by depth (D-142, D-143, commit `ecd2526`, 2026-11-19): CPU, every test passed, 139 of 139 ctest entries including the whole pytest run; GPU (NVIDIA L4, same job as above), 1497 passed and 24 skipped, none failed. The six builds' self-tests: 42 of 42 on both engines.
 
-The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for one, two and three rows (`e10b17f`), against 0.0097, 0.0212 and 0.0310 s at `15f1121`. Measured (`tools/live_chain_ablation.py` on an L4, `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`): the 6 to 7 ms are the multiscale detector of the detector rework (D-93). It runs on the CPU (`libs/live` `multiscale_detect`, no backend) and needs the fine power map back from the device every ping, where the earlier `cell_statistic: mean` ran CFAR on the device: `mean` saves 6.0, 6.3 and 7.2 ms, and the 15f1121 chain section with `mean` gives 9.8, 21.2 and 30.3 ms, the first run's times. Coverage, the ray-limited elevation search, the finer elevation step and the gradient terms each move it by under 0.6 ms. Not a fault: the cost of the detector chosen, 0.04 % of the 17.9 s ping interval; moving it to the device is a possible optimisation (issue `sonar-01u`). `gpu_benchmark_all_l4.json`, which the design report reads, is now that run; the first run is kept as `gpu_benchmark_all_l4_15f1121.*`. Since D-150 the multiscale statistic runs on the device: 12.73, 25.92 and 37.52 ms a ping as deployed (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`).
+The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for one, two and three rows (`e10b17f`), against 0.0097, 0.0212 and 0.0310 s at `15f1121`. Measured (`tools/live_chain_ablation.py` on an L4, `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`): the 6 to 7 ms are the multiscale detector of the detector rework (D-93). It runs on the CPU (`libs/live` `multiscale_detect`, no backend) and needs the fine power map back from the device every ping, where the earlier `cell_statistic: mean` ran CFAR on the device: `mean` saves 6.0, 6.3 and 7.2 ms, and the 15f1121 chain section with `mean` gives 9.8, 21.2 and 30.3 ms, the first run's times. Coverage, the ray-limited elevation search, the finer elevation step and the gradient terms each move it by under 0.6 ms. Not a fault: the cost of the detector chosen, 0.04 % of the 17.9 s ping interval; moving it to the device is a possible optimisation (issue `sonar-01u`). `gpu_benchmark_all_l4.json`, which the design report reads, is now that run; the first run is kept as `gpu_benchmark_all_l4_15f1121.*`. Since D-150 the multiscale statistic runs on the device: 12.73, 25.92 and 37.52 ms a ping as deployed (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`). These benchmark pings have ideal clocks and the benchmark leaves the board synchronisation stage out (`tools/gpu_benchmark_all.py`, `group_live`), so D-190 to D-195, which made that stage and the decimate-first correction faster, do not apply to them and the files were not re-measured. **With board synchronisation, on the Popoto trials' pings** (L4, chain time a ping after the first, median): C++ 0.048 / 0.054 / 0.065 s at 32 / 64 / 96 channels, Python 0.084 / 0.18 / 0.25 s (the one-row build decimates first: D-195; 64 and 96 channels: D-192; `tools/live_chain_timing.py`). Before D-191 the C++ engine took 1.05 to 1.83 s a ping at 64 and 96 channels there.
 
-Since 2026-11-19 (D-145 to D-181): the results up to D-157 (2026-11-21 and 22, CPU and GPU) are the paragraphs at the end of "Open and known wrong", just before "Open questions for the project owner". From D-158 on, each package's merged tree ran the full GPU suite on an NVIDIA L4 through Hugging Face Jobs before it was merged, and each decision's entry in `DECISIONS.md` names its job and count. The last: **2150 passed, 97 skipped, 4 xfailed, none failed** on the tree of D-186 (job 6b06553a1460ffe1d5e9aa10; the expected failures are the Popoto-rate Sensor Bridge loopback, D-186); before it 2102 passed, 95 skipped (D-183, job 6b060a4b1460ffe1d5e93111) and 2078 passed, 93 skipped, none failed on the tree of D-181 (commit `90f7d29`, job 6b055ee4c97b8ed4fcd799db; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`). Before it: 2065 passed, 93 skipped (D-180, job 6b054bd0c97b8ed4fcd78494); 1925 passed, 93 skipped (D-176 to D-178, job 6b0536c7ca8b51043c3b3ed9); 1875 passed, 92 skipped (D-172, D-173, job 6b04f660c97b8ed4fcd7093a). The Sensor Bridge loopback tests are part of these runs and pass at real time (D-153, D-162, D-173).
+Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, CPU and GPU) are the paragraphs at the end of "Open and known wrong", just before "Open questions for the project owner". From D-158 on, each package's merged tree ran the full GPU suite on an NVIDIA L4 through Hugging Face Jobs before it was merged, and each decision's entry in `DECISIONS.md` names its job and count. The last: **2278 passed, 102 skipped, 1 xfailed, none failed** on the tree of D-201 (job 6b078a26d91f621b93096bc7; the expected failure is one of the six Popoto-rate Sensor Bridge loopback cases, its reason not in the log); the 3-D work after D-201 (the `eigenray3d` tier, `flank_seamount_3d`) is covered by a later job. Each decision from D-183 to D-201 names its own job and count; for example 2232 passed, 101 skipped (D-200 over the tree of D-196, job 6b077ea0d91f621b930950a5), 2183 passed, 101 skipped (D-195, job 6b076d06d91f621b93092f13), 2150 passed, 97 skipped, 4 xfailed (D-186, job 6b06553a1460ffe1d5e9aa10), 2102 passed, 95 skipped (D-183, job 6b060a4b1460ffe1d5e93111) and 2078 passed, 93 skipped, none failed on the tree of D-181 (commit `90f7d29`, job 6b055ee4c97b8ed4fcd799db; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`). Before it: 2065 passed, 93 skipped (D-180, job 6b054bd0c97b8ed4fcd78494); 1925 passed, 93 skipped (D-176 to D-178, job 6b0536c7ca8b51043c3b3ed9); 1875 passed, 92 skipped (D-172, D-173, job 6b04f660c97b8ed4fcd7093a). The Sensor Bridge loopback tests are part of these runs and pass at real time (D-153, D-162, D-173); the Popoto-rate cases (D-186 to D-188) pass when frames are lost only in the first 0.25 s of stream and end as an expected failure otherwise.
 
-**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-181) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
+**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-201 and the 3-D work) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
   wrong"; this list was brought up to date on 2026-11-24, and the first three entries were not
@@ -45,9 +45,9 @@ Since 2026-11-19 (D-145 to D-181): the results up to D-157 (2026-11-21 and 22, C
     item 37; commits `a37ea93`, `53b0693`, `32e39b6`) and not since. They predate the slant
     range in `lloyd.bellhop_transfer` (API audit, 2026-11-21: at most 0.20 dB at 300 m and
     1e-4 dB at 12 km in the planner's peak factor, see the API-audit paragraph below) and
-    D-145 to D-181, none of which has been checked against them.
+    D-145 to D-201, none of which has been checked against them.
   - `docs/design/popoto_12km.json` (last regenerated 2026-11-20, commits `0dce56b` and
-    `fa57b04`) predates D-156 to D-181: it was made by the live chain when a detection's
+    `fa57b04`) predates D-156 to D-201: it was made by the live chain when a detection's
     range was the centroid (the leading edge is the default since D-160) and before the
     tracker took each detection at its own time (D-156) and the report's line went through
     the measured positions (D-157). The sections of `DESIGN.md` that read it are as stale.
@@ -95,8 +95,8 @@ How things are verified, in the words used below:
 | 8 Motion estimation | done on CPU, with gaps listed below | `test_motion.py` |
 | 9 3D near-field imaging | done on CPU | `test_volume.py` |
 | 10 Flank array and the long-range live chain | done on CPU in Python and in C++ (`libs/live`); far-field and MVDR beamforming also on the device (L4); gaps listed below | `test_live.py`, `test_live_cpp.py`, `test_detector.py`, `test_doa.py`, `test_flank.py`, `test_detect.py`, `test_calibration_sync.py`, `tests/cpp/test_live.cpp`, `test_detector.cpp` |
-| 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test has passed in a job at half real time; at real time the emulated board's spread catch-up lost nothing in 20 runs (open item 34). Not done: the reference's SDK build, any hardware run, the RoCE receiver. The Holoscan `ConditionOp` applies the chain's gain step when asked (open item 33, closed) |
-| 12 Realistic propagation, reverberation and noise | **done as far as open literature allows** (audited item by item 2026-11-25; issues sonar-dzu and sonar-k7m closed, the remaining work split into sonar-rcq, sonar-pup, sonar-7iy, sonar-6t5, sonar-6fc, sonar-ugc, sonar-9le, sonar-3k1, sonar-5wa, sonar-f3mi, sonar-5bf2, sonar-yus6, with sonar-nyn and sonar-kob for stale documents); most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread); 3-D propagation (N×2-D only: over a seamount it is 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`). Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised) |
+| 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test has passed in a job at half real time; at real time the emulated board's spread catch-up lost nothing in 20 runs (open item 34). At a Popoto build's rate (32 to 96 channels, 102.4 kHz) the loopback loses frames only at the start of a run (D-186 to D-188) and both engines are real time on an L4 (D-190 to D-192); every receiver, the Holoscan source operator among them, merges per-board streams (D-200). Not done: the reference's SDK build, any hardware run, a host with Sensor Bridge's own socket setup (D-189), the RoCE receiver. The Holoscan `ConditionOp` applies the chain's gain step when asked (open item 33, closed) |
+| 12 Realistic propagation, reverberation and noise | **done as far as open literature allows** (audited item by item 2026-11-25; issues sonar-dzu and sonar-k7m closed, the remaining work split into sonar-rcq, sonar-pup, sonar-7iy, sonar-6t5, sonar-6fc, sonar-ugc, sonar-9le, sonar-3k1, sonar-5wa, sonar-f3mi, sonar-5bf2, sonar-yus6, with sonar-nyn and sonar-kob for stale documents); most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread). 3-D propagation: the shipped tiers are N×2-D at most (over a seamount 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`; explained further in D-197); since 2026-11-26 an opt-in `eigenray3d` tier runs Bellhop3D as a separate process (the owner's approval; `docs/tasks/PROPAGATION_3D.md` P1 to P6, issue sonar-rcq in progress), used only by the illustrative `flank_seamount_3d`, with no reverberation over relief at that tier. Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised) |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; FLOP/s from hardware counters (Nsight Compute is refused on the Hugging Face jobs, ERR_NVGPUCTRPERM; derived backprojection figures in RESULTS); the synthesis kernel's FLOP count; the Ceres solve of motion estimation is CPU only (its delay estimation has a CUDA path, D-148). The multiscale detector's statistic runs on the device (D-150). `docs/JETSON.md` is untested |
 | 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds pass every self-test on both engines (42 of 42, D-142 and D-143; open item 38) |
 | 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water** | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py` |
@@ -585,7 +585,11 @@ Grouped; within a group the most consequential first.
 ### Coverage
 
 24. **The coverage picture ignores reverberation and any change of water or bottom with
-    range**, has no caustic phase and no diffraction into shadows, and takes each class's
+    range**, and so does the link budget (`SonarEquation`; D-198): where
+    reverberation dominates their detection ranges and margins are noise-limited and
+    optimistic. Example (D-198): for `flank_patrol`'s −3 dB small vehicle at 2.2 km they predict
+    about 30 dB of signal over noise; the simulated data give 3.8 to 5.1 dB over a background
+    that bottom reverberation holds 21.9 dB above the noise (issue `sonar-w2w3`, P1). The coverage picture has no caustic phase and no diffraction into shadows, and takes each class's
     middle depth for its nulls. **Its shipped site is illustrative** (`shelf_100m_sand`):
     the real site must be put in before a deployment. The test AUV and the static builds
     have no coverage. Its budget numbers are written into the deployment files: if
@@ -642,9 +646,9 @@ Grouped; within a group the most consequential first.
     **At a Popoto build's rate it loses frames (D-186).** At 32, 64 and 96 channels and 102.4 kHz
     (78.6 to 236 Mbit/s) the real-time loopback lost frames in 12, 20 and 20 of 20 C++ runs on
     a10g-large containers (median 1, 11 and 11.5 frames a run), every lost datagram refused by the
-    socket buffer that `rmem_max` caps, about 3 frames a ping; a larger buffer (as far as the
+    socket buffer that `rmem_max` caps ("about 3 frames a ping" was wrong: the loss is at the start, D-187, below); a larger buffer (as far as the
     container allows), smaller frames and fewer OpenMP threads did not cure it and the cause is not
-    located. The chain keeps up (C++ 0.13, 1.4, 2.2 s a ping against 3 s then, on a10g-large; since D-191, which resamples a board's rows together with every output unchanged, 0.11, 0.10 and 0.15 s on an L4, from 0.11, 1.1 and 1.7 s); the Python engine is not
+    located. The chain keeps up (C++ 0.13, 1.4, 2.2 s a ping against 3 s then, on a10g-large; since D-191, which resamples a board's rows together with every output unchanged, 0.11, 0.10 and 0.15 s on an L4, from 0.11, 1.1 and 1.7 s, and since D-192's weights 0.06 to 0.07 s at 64 and 0.08 to 0.11 s at 96 channels through Sensor Bridge); the Python engine is not
     real time at 96 channels on a10g-large (on an L4 it is: 2.1 s a ping, and 0.42 to 0.47 s since D-190, which made the frame path and the board resampling faster with every output unchanged; that case is in the suite since). The test records the loss as an expected failure (xfail) with its
     numbers. On an L4 the suite's five cases gave four expected failures and one pass (job
     6b06553a1460ffe1d5e9aa10; which, and their numbers, are not in its log). On D-187's tree the suite gave 2155 passed, 97 skipped, 1 xfailed (job 6b06728ad0582cfbbefdb5eb): the one is a Popoto case in which a frame arrived in part (counted damaged) beside 2 frames lost at the start (D-187). Since D-188 the receiver names its damaged frames (`damaged_frames`) and the test accepts one in the first 0.25 s of stream: in 40 L4 runs the one damaged frame was frame 3, after frames 1 and 2 never arrived, and all 40 passed (job 6b0693c6d0582cfbbefdf55e); the full suite on that tree: 2159 passed, 97 skipped, none failed (job 6b0699f4d0582cfbbefe0373). Untested (sonar-02c; D-189 adds a read-only host check, `tools/hsb_host_check.py`, and a runbook in DEPLOYMENT.md, and records that the containers refuse every such setting): a host with Sensor Bridge's socket setup, the RoCE
@@ -799,13 +803,36 @@ the arrival-time solve runs (4, 4) passes (D-83).
 28. Answered (D-147): `sonar_live` defaults to `auto`.
 29. Answered (D-147): `cuda` without a usable device is an error; only `auto` falls back.
 
+**Raised since D-182** (each is kept in the issue or task file named; listed here so that this
+section holds every open question)
+
+30. **Board timing** (D-184, D-185; issue `sonar-9a2`): how the boards stamp their capture start
+    (PTP, 1PPS, NTP: the merge needs them true to about 0.8 ms), each board's clock rate, and the
+    board-to-channel map. Also `docs/tasks/VEHICLE_ADAPTERS.md` section 3.
+31. **The grating lobe** (issue `sonar-68e`): at 6 kHz the 0.15 m pitch is 0.60 wavelengths and a
+    grating lobe is in view beyond ±42° on five of six builds while the deployment files steer to
+    ±60°: limit the sector, change the pitch, or accept?
+32. **The fjord beds** (D-197, D-199; issue `sonar-2e9e`; `docs/tasks/PROPAGATION_3D.md` question 9):
+    keep the three `fjord_*` beds as written (recommended: their summed arrivals agree with
+    Bellhop's loss run within 0.2 to 1.1 dB), and does the 2-row scenario keep its 12-arrival limit
+    (2.7 dB from the loss run)?
+33. **SAS with bed multipath** (D-201; issue `sonar-ya2c`): every shipped SAS scene but
+    `sas_auv_multipath` is free field; should SAS scenes carry bed multipath?
+34. **3-D propagation** (`docs/tasks/PROPAGATION_3D.md` section 6): question 1 answered 2026-11-26
+    (Bellhop3D as an opt-in provider, run as a separate process); open are the waters' relief
+    across the look (2), the ranges and slopes that matter (3), the run time and disk acceptable
+    (4), and whether the FLS and SAS use includes walls and sloping banks (7).
+35. Answered (D-198): `flank_patrol`'s small vehicle stays a hard target, said in the scenario's
+    description.
+
 ## What is next
 
 1. The whole CPU suite (`tools/test.sh`) on the present tree: last run whole on the tree of
-   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU job on the final tree is done (2102 passed, 95 skipped at D-183, HF job 6b060a4b1460ffe1d5e93111; before it 2078 passed,
-   93 skipped on an L4, job 6b055ee4c97b8ed4fcd799db, tree `90f7d29`, D-181).
+   D-157 (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the tree of
+   D-201 (2278 passed, 102 skipped, 1 xfailed, HF job 6b078a26d91f621b93096bc7); a later job
+   covers the 3-D work.
    `docs/design/popoto_depth_planner.json` and `docs/figures/fjord_depth_plan.md` were
-   regenerated for D-134 (open item 37) and predate D-156 to D-181, as the list of generated
+   regenerated for D-134 (open item 37) and predate D-156 to D-201, as the list of generated
    files at the top says. The gallery is regenerated (D-179); what got worse in it is open
    item 16.
 2. The owner's answers on rows, band, converter, projector and site (questions 1 to 12).
@@ -840,13 +867,17 @@ the arrival-time solve runs (4, 4) passes (D-83).
   Face Jobs (`tools/gpu_job.sh`, image `nvidia/cuda:12.6.3-devel-ubuntu24.04`). The job
   can also build Ceres, the Bellhop and KRAKEN oracles and the ultrasound reference's
   native module. Full suite on a T4 (an early tree: 288 passed, 0 failed, 6 skipped);
-  benchmarks on T4, L4, A10G, A100 and two A10Gs; the last full-suite job, on an L4 at
-  commit `90f7d29` (D-181; 2078 passed, 93 skipped), is described at the top of this file.
+  benchmarks on T4, L4, A10G, A100 and two A10Gs; the last full-suite job, on an L4 on the
+  tree of D-201 (2278 passed, 102 skipped, 1 xfailed), is described at the top of this file.
 - **Holoscan:** SDK 4.6.0 on rented T4 and L4 machines. It cannot be imported in the
   development container, so those tests skip locally.
 - **Sensor Bridge:** 2.7.0 built against Holoscan 4.6.0 on rented L4 and T4 machines; its
   board emulator (with the opt-in UDP-socket patch, D-79) and socket receiver carried six
-  simulated pings to the chain. Not run: the stock emulator with a raw socket, the RoCE
+  simulated pings to the chain, and since D-186 each Popoto build's trial at 32, 64 and 96
+  channels and 102.4 kHz (start-up loss only, D-187, D-188), and one stream per board at
+  `flank_32`'s rate (D-200). Not run: a host with Sensor Bridge's own socket setup
+  (`tools/hsb_host_check.py` checks one, D-189; the containers refuse every such setting),
+  per-board frames at a Popoto build's rate, the stock emulator with a raw socket, the RoCE
   receiver, any hardware.
 - **Not yet:** a DGX Spark, a Jetson, any aarch64 machine, any Sensor Bridge hardware, any
   Popoto board, any water.
@@ -1013,14 +1044,23 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `popoto_face_2row_shallow`, `popoto_testauv_*`, `fjord_*`, `ssp_*`) and
   `popoto_12km_two_ships` (D-172). All 81 files are
   listed in `SCENARIOS.md`, "Every scenario file".
-- Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
-  only to objects in the forward-looking sea scenes; range-independent oceans in the
+- Gaps in those scenes: no surface or floor multipath in the gallery pool scenes
+  (`pool_fls_p4_2v_walls`, not in the gallery, has wall ghosts, D-201); first-order surface and
+  bottom bounces to objects only in the four forward-looking sea scenes at `image_source` (the
+  free-field ones have direct paths only; "direct paths only in every sea scene" was said here
+  until D-201); no multipath in any gallery SAS scene (`sas_auv_multipath`, not in the gallery,
+  has it: the bed-bounce copy is the brightest echo and the sharpness falls to a third, D-201,
+  `sonar-ya2c`); with walls and a sloping bed the FLS chain tracks the ghosts as objects
+  (`fls_120k_quay_multipath`, D-201, `sonar-izys`); range-independent oceans in the
   long-range gallery scenes (the three `ssp_*` and three `fjord_*` trial scenarios change
   with range and are illustrative); a wake that does not grow; no breaking waves or bubble layer; large
   surfaces have fewer scatterers than resolution cells except in `sas_minsas_speckle`; no
   specular echoes in any gallery scene (the shapes that glint are used only in the three
   new target scenarios).
-- In `flank_patrol` the −3 dB small vehicle is not detected, and 5 confirmed tracks are
+- In `flank_patrol` the −3 dB small vehicle is not detected (D-198: below the scene's bottom
+  reverberation, 3.8 to 5.1 dB over its background against the gallery's 12 dB cut; left as a hard
+  target on purpose, the owner's choice; the link budget's ~30 dB for it has no reverberation term,
+  `sonar-w2w3`), and 5 confirmed tracks are
   made for 2 objects: 1 mover (the submarine, 1.0 m from its outline since D-178's
   leading-edge range, was 25.8 m), 2 static (one the wreck, 3.5 m off), 2 uncertain.
 
@@ -1093,8 +1133,13 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - Everything is synthesised from point scatterers (see "Scenes and scenarios" for what
   that leaves out).
-- Tiers: `free_field`, `image_source`, `sediment` and `eigenray` (Bellhop as an external
-  program; without it those scenarios and tests skip).
+- Tiers: `free_field`, `image_source` (opt-in a tilted bed and walls as any plane, D-201),
+  `sediment` and `eigenray` (Bellhop as an external program; without it those scenarios and
+  tests skip), and the opt-in `eigenray3d` (Bellhop3D as an external program, 2026-11-26; only
+  the illustrative `flank_seamount_3d`; no reverberation over relief at that tier;
+  `docs/tasks/PROPAGATION_3D.md`). The shipped `eigenray` scenarios are N × 2-D: 3 to 4 dB too
+  loud on bearings over a seamount's flanks against Bellhop3D (D-149, D-197); none of them has a
+  bed that slopes across a bearing, and relief reverberation at that tier warns where one does.
 - Sampled transmit pulses are synthesised by the C++ kernel on the host (D-81) and on
   the device (L4 benchmark: host-CUDA agreement 3.9e-7). With beams and absorption the
   sampled path is 3 times the analytic kernel (2.4 s against 0.80 s for 300 scatterers on
@@ -1147,7 +1192,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
     collapsed to its mean.
   - No ping-to-ping coherence: wrong for a still sonar over a still bottom.
   - The K texture is independent between pings and between neighbouring cells. Its
-    `shape` has no default: there is no confirmed value for any seabed.
+    `shape` has no default: there is no confirmed value for any seabed. Since D-196 the shape
+    can be set per cell from a density of scatterers or patches (Abraham and Lyons 2002); no
+    density is known for any seabed either.
   - Near-specular reverberation is not removed by default when time spreading is on: the
     removal exists, opt-in, on `geometry: bistatic` items only (`exclude_specular`, D-123;
     `test_reverb_specular.py`). There is no near-specular surface scattering model.
@@ -1157,7 +1204,10 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
     receiver at one point (`test_reverb_relief.py::test_bellhop_over_a_level_bed_by_bearing_equals_the_flat_run`);
     a truly bistatic geometry with Bellhop has not been exercised. Its cost grows
     with sectors × rings × eigenrays of each leg.
-- Boundary models: the bubble-loss law (`hall_novarini`) is an upper estimate above about
+- Boundary models: against Gallaudet's (2001) printed values at 68 kHz and 3 m/s
+  (D-193) the surface model `bubble_layer_surface` lies 3.4 and 13.0 dB above the data, so it is
+  not a lower bound against data; the bottom model agrees within 0.2 and 3.9 dB, and that site's
+  data cannot tell the roughness models apart. The bubble-loss law (`hall_novarini`) is an upper estimate above about
   10 kHz; the roughness interpolation and composite split are our own, not the published
   ones (the composite split of 0.5 now matches a published criterion); elastic and
   layered bottoms are not modelled. Twenty sediments are named with per-parameter

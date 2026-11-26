@@ -2,14 +2,15 @@
 
 How to run the tests, what each one protects, which decisions they pin, how to recognise a
 failure that is not one, and what is not tested. Written at the tree of `933972b`, decisions to
-D-181. Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
+D-181; brought to D-201 and the opt-in 3-D tier on 2026-11-26 (counts per file collected then with
+`pytest --collect-only`). Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
 [README.md](README.md) (the set).
 
 **What is not known first.** No per-file run time is recorded anywhere in the repository; the
 "class" column in section 2 is a judgement from what each test does. The log of the last full
-GPU run (job `6b055ee4c97b8ed4fcd799db`) was not available when this was written: its 93 skips
-are derived in section 1 from the test sources and from the saved log of an earlier run with
-92 skips, not read from that job.
+GPU run (job `6b078a26d91f621b93096bc7`, D-201) was not read for this file: its 102 skips are
+derived in section 1 from the 93 of D-181's job and the decisions since, not read from its log,
+and which Popoto-rate loopback case was its one expected failure is not in its log.
 
 ## 1. How to run
 
@@ -47,7 +48,8 @@ Run one pytest process at a time. The program tests need `build/bin/sonar_live` 
 | Variable | What it enables | Without it |
 | --- | --- | --- |
 | `GPUSONAR_BELLHOP=/path/bellhop.exe` | the `eigenray` tier: tests of the long-range, trial and range-dependent scenarios (`tools/build_oracles.sh <dir>` builds it and prints the exports) | those tests skip |
-| `GPUSONAR_BELLHOP3D`, `GPUSONAR_KRAKEN_DIR` | the 3-D seamount comparison; rays against normal modes | skip |
+| `GPUSONAR_BELLHOP3D`, `GPUSONAR_KRAKEN_DIR` | Bellhop3D (the seamount comparison, the `eigenray3d` tier's tests; without the variable, `bellhop3d.exe` beside `GPUSONAR_BELLHOP` is used); rays against normal modes | skip |
+| `GPUSONAR_SLOW_ORACLES=1` | the `eigenray3d` tier's acceptance against Bellhop3D's converged 3-D field (`test_seamount_3d.py::test_eigenray3d_tier_over_the_seamount`, about 8 minutes) | skip, always, in the suite; the skip names no oracle variable, so `GPUSONAR_REQUIRE_ORACLES=1` does not turn it into a failure |
 | PyRAM 1.3.0 installed (`pyram`) | rays against a parabolic equation (`test_ram_crosscheck.py`) | skip |
 | `GPUSONAR_REQUIRE_ORACLES=1` | an oracle test that would skip fails instead (`tests/python/oracle_gate.py`) | the run ends with a line counting the oracle skips |
 | a Ceres without SuiteSparse at `SONAR_CERES_DIR` | motion estimation is built (`core.HAVE_MOTION`) | `test_motion.py`, `test_motion_delays.py` and three other tests skip |
@@ -56,6 +58,7 @@ Run one pytest process at a time. The program tests need `build/bin/sonar_live` 
 | `-DSONAR_BUILD_HOLOSCAN=ON` | `test_holoscan_cpp.py` (needs `build/bin/sonar_live_holoscan`) | skip |
 | Sensor Bridge built (`tools/build_hsb.sh`) and a CUDA device | the loopback tests of `test_hsb.py` | skip |
 | `GPUSONAR_HSB_STUDY=1` | two measurements in `test_hsb.py` that are not tests (`test_loopback_loss_study`; `test_popoto_rate_loopback_study`, with `GPUSONAR_HSB_STUDY_RUNS`, `_ROWS`, `_ENGINES`, `_CONFIGS`, `_BUDGET_S`, `_RECEIVER_CORE`) | skip, always, in the suite |
+| `GPUSONAR_HSB_TIMING=1` | a measurement in `test_hsb.py` (`test_frame_path_timing_study`: the receive path's cost a frame, D-190; `GPUSONAR_HSB_TIMING_ROWS`, `_ENGINES`) | skip, always, in the suite |
 | `GPUSONAR_PICMUS_DIR`, `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN`, `GPUSONAR_SMARTOCEAN_CACHE` | tests on public data sets, never committed (`tools/fetch_picmus.py`, `tools/fetch_channels.py`) | skip |
 | `GPUSONAR_NVUS_PYTHON`, `GPUSONAR_NVUS_DIR` | the NVIDIA ultrasound reference's module and checkout (`tools/build_nvus_reference.sh`) | skip |
 | `arlpy` installed | independent checks of medium and noise formulas | skip |
@@ -96,7 +99,7 @@ The full suite as it has been run since D-163:
 GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSONAR_REQUIRE_ORACLES=1 tools/gpu_job.sh
 ```
 
-- About 45 minutes on the `l4x1` flavour. L4 is the reference: every timing and every Sensor
+- About 45 to 50 minutes on the `l4x1` flavour (49 min 55 s for D-201's job). L4 is the reference: every timing and every Sensor
   Bridge number in the documents is from an L4.
 - How a job is launched (archive the tree, upload it to the private dataset, start a job that
   downloads it and runs the script) and the launcher's text: `docs/HANDOFF.md` section 4. The
@@ -112,13 +115,13 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
-| Full GPU suite, NVIDIA L4, tree of D-201 | **2278 passed, 102 skipped, 1 xfailed**, none failed (job `6b078a26d91f621b93096bc7`; the xfail is one Popoto-rate loopback case, its reason not in the log). Before it, D-200 over the tree of D-196: 2232 passed, 101 skipped (job `6b077ea0d91f621b930950a5`). Before it, D-195's tree: 2183 passed, 101 skipped (job `6b076d06d91f621b93092f13`). Before it, D-192's tree: 2183 passed, 101 skipped (job `6b07608ed91f621b930918b0`). Before it, D-191's tree: 2180 passed, 101 skipped (job `6b07440eb6a90bbe997e6027`). Before it, D-190's tree: 2180 passed, 100 skipped (job `6b06d64fd91f621b93079be0`). Before it, D-189's tree: 2171 passed, 98 skipped (job `6b06bbda1460ffe1d5ea75b5`). Before it, D-188's tree: 2159 passed, 97 skipped (job `6b0699f4d0582cfbbefe0373`). Before it, D-187's tree: 2155 passed, 97 skipped, 1 xfailed (job `6b06728ad0582cfbbefdb5eb`; the xfail was one Popoto-rate loopback case with a frame damaged at the start, accepted since D-188). Before it, D-186's tree: 2150 passed, 97 skipped, 4 xfailed (job `6b06553a1460ffe1d5e9aa10`). Before it, D-183's tree: 2102 passed, 95 skipped (D-181's tree: 2078 passed, 93 skipped, which the skip groups below describe; the two further skips are in the tests added since) | `docs/DECISIONS.md` D-183, job `6b060a4b1460ffe1d5e93111` (before: `6b055ee4c97b8ed4fcd799db` |
+| Full GPU suite, NVIDIA L4, tree of D-201 | **2278 passed, 102 skipped, 1 xfailed**, none failed (job `6b078a26d91f621b93096bc7`; the xfail is one Popoto-rate loopback case, its reason not in the log). The 3-D work after D-201 is covered by a later job. Before it, D-200 over the tree of D-196: 2232 passed, 101 skipped (job `6b077ea0d91f621b930950a5`). Before it, D-195's tree: 2183 passed, 101 skipped (job `6b076d06d91f621b93092f13`). Before it, D-192's tree: 2183 passed, 101 skipped (job `6b07608ed91f621b930918b0`). Before it, D-191's tree: 2180 passed, 101 skipped (job `6b07440eb6a90bbe997e6027`). Before it, D-190's tree: 2180 passed, 100 skipped (job `6b06d64fd91f621b93079be0`). Before it, D-189's tree: 2171 passed, 98 skipped (job `6b06bbda1460ffe1d5ea75b5`). Before it, D-188's tree: 2159 passed, 97 skipped (job `6b0699f4d0582cfbbefe0373`). Before it, D-187's tree: 2155 passed, 97 skipped, 1 xfailed (job `6b06728ad0582cfbbefdb5eb`; the xfail was one Popoto-rate loopback case with a frame damaged at the start, accepted since D-188). Before it, D-186's tree: 2150 passed, 97 skipped, 4 xfailed (job `6b06553a1460ffe1d5e9aa10`). Before it, D-183's tree: 2102 passed, 95 skipped (job `6b060a4b1460ffe1d5e93111`). Before it, D-181's tree: 2078 passed, 93 skipped (job `6b055ee4c97b8ed4fcd799db`), which the skip groups below describe | each decision's entry in `docs/DECISIONS.md`, D-183 to D-201 |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
-| GoogleTest at this tree | 172 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`) | section 2 |
-| pytest at this tree | 1375 test functions in 114 files (counted in `tests/python/test_*.py`); parametrisation makes them 2171 collected on the L4 job | D-181's counts |
+| GoogleTest at this tree | 175 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`; 172 at D-181) | section 2 |
+| pytest at this tree | 1516 test functions in 127 files (counted in `tests/python/test_*.py`, 2026-11-26; 1375 in 114 at D-181); parametrisation makes them 2381 outcomes on D-201's L4 job (2278 + 102 + 1) | counted |
 
-No full CPU run of the tree at D-181 is recorded; `docs/STATUS.md` ("State of verification")
-records the CPU and GPU runs up to D-143 and the decisions record the GPU runs after.
+No full CPU run of the tree is recorded since D-157 (`605a4e1`); `docs/STATUS.md` ("State of
+verification") records the CPU and GPU runs up to D-157 and the decisions record the GPU runs after.
 
 ### What the 93 skips are
 
@@ -139,6 +142,15 @@ that skips without a git checkout).
 
 The rows sum to 93. The earlier log's rows were the same with 64 in the first group. Read the
 `-rs` lines at the end of the next job's log to confirm the list.
+
+**From 93 to 102 (D-201's job), derived from the decisions, not read from a log:** +2 at D-183 (the
+`--help` tests of D-182's two tools, `tools/handoff_hardware.py` and `tools/software_diagrams.py`,
+by the count's rise; not itemised in D-183); +2 at D-186 (the opt-in `test_popoto_rate_loopback_study`
+and one D-186 says was not looked up); +1 at D-189 (`tools/hsb_host_check.py --help`); +2 at D-190
+(the opt-in `test_frame_path_timing_study` and `tools/hsb_frame_timing.py --help`); +1 at D-191
+(`tools/live_chain_timing.py --help`); +1 between D-200's job (tree of D-196, 101) and D-201's
+(likely D-197's `tools/eigenray_tl_check.py --help`; not checked). The 3-D work adds one more skip by
+design (`GPUSONAR_SLOW_ORACLES`).
 
 On a CPU container without the oracles many more tests skip: every CUDA comparison, every
 Bellhop test, the Holoscan and Sensor Bridge tests, and motion estimation when Ceres is absent.
@@ -181,7 +193,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 
 | File | Tests | Protects | Needs | Class | Marks |
 | --- | --- | --- | --- | --- | --- |
-| `test_live_cpp.py` | 57 | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
+| `test_live_cpp.py` | 58 | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
 | `test_live.py` | 8 | one object on simulated pings, a replayed recording, UDP blocks, navigation datagrams, a watched directory | CUDA for one test | minutes | |
 | `test_detect.py` | 27 | MVDR, CFAR, clustering, the tracker (association, detection times, misses), the classes golden | CUDA for one test | minutes | **golden** |
 | `test_detector.py` | 24 | the multiscale detector on both engines: thresholds, false alarms by Monte Carlo, range estimate, resolution | | minutes | **parity**, **golden** |
@@ -198,11 +210,11 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_deployment_defaults.py` | 10 | what the shipped deployment files switch on; coverage refuses to run without a site (D-118 to D-120) | | minutes | |
 | `test_decimate.py` | 10 | the decimate-first stage: filter, tones, streaming against whole-ping, the program | `sonar_live` for one test | minutes | **parity** |
 | `test_blanking.py` | 7 | blanking and synchronisation when the direct sound clips a reference burst | | minutes | |
-| `test_calibration_sync.py` | 12 | array calibration; the sync stage recovers injected offsets and drifts | | minutes | |
+| `test_calibration_sync.py` | 15 | array calibration; the sync stage recovers injected offsets and drifts | | minutes | |
 | `test_beamform_cpp.py` | 13 | C++ far-field and MVDR beamformers against NumPy; the chain with them | `sonar_live` for one test | minutes | **parity** |
 | `test_flank.py` | 11 | far-field and backprojection agree; beam width; detection range against the sonar equation | | minutes | |
 | `test_hardcoded.py` | 22 | another sonar or board is a configuration change: derived sizes, capacities, the program | `sonar_live` for some | minutes | |
-| `test_dict_keys.py` | 8 | every options dictionary of the live library refuses a key it does not read (D-177) | | fast | **parity** |
+| `test_dict_keys.py` | 9 | every options dictionary of the live library refuses a key it does not read (D-177) | | fast | **parity** |
 | `test_nav_adapter.py` | 14 | the navigation adapter; what datagrams carry into a record; both receivers | | fast | **parity** |
 | `test_nav_lever_arm.py` | 6 | lever arm and mounting rotation in both engines (D-167) | | minutes | **parity** |
 | `test_tonal.py` | 19 | Goertzel lines and DEMON, Python against C++, the program | `sonar_live` for some; `arlpy` for one | minutes | **parity** |
@@ -217,14 +229,14 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_sources.py` | 9 | file replay: the container and WAV with a sidecar | | fast | |
 | `test_wav_watch.py` | 3 | recordings that appear in a watched directory | | fast | |
 | `test_taps.py` | 5 | taps can be inspected, exported and fed back in | | fast | |
-| `test_flank_stream.py` | 5 | the capture stream from an emulated board through UDP back to records | skips if the loopback dropped samples | minutes | |
-| `test_board_streams.py` | 36 | per-board streams merged into the whole-array stream (D-184): the block's board field (whole-array blocks unchanged), the whole-array receivers refusing a board block, merged pings equal to the whole-array pings, loss, restarts, a silent board, a late start, refusals by name, the options, the program and `--emulate --per-board` over UDP, the relay tool; sonar-bwu: `build/bin/sonar_live --listen` and `sonar_live_hsb.py receive` (frames of one board each, `serve --per-board`'s framing) merging as the relay in front does, clean, a board's block lost (drop, zero), reordered and repeated, boards on their own rates | the program for one test; loopback tests skip if data was dropped | minutes | **parity** |
-| `test_board_clock.py` | 20 | a board clock's rate against true time (D-185): the stamp's drift an hour in and the pose it moves, `clock_ppm` in both engines and the program, boards at their own rates aligned by them, the estimate from arrival times and its opt-in discipline | the program for one test | fast | **parity** |
-| `test_hsb_receive.py` | 24 | what the receiver and assembler count when frames go missing, repeat or arrive out of order, with no network (D-161, D-177) | | fast | **parity** |
-| `test_hsb_host_check.py` | 12 | `tools/hsb_host_check.py` on injected readings (a container like the ones used, a host set up as Sensor Bridge's guide asks), its stream arithmetic from `hardware_builds.json`, its exit statuses, and one run on the machine itself (sonar-02c) | | fast | |
-| `test_hsb.py` | 24 (35 collected; 26 before D-186) | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173); a Popoto build's trial at 32, 64 and 96 channels and 102.4 kHz, framed and through the loopback in both engines (D-186) | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
+| `test_flank_stream.py` | 8 (13 collected) | the capture stream from an emulated board through UDP back to records; the 24-bit decoder and the window-only decode (D-190) | skips if the loopback dropped samples | minutes | |
+| `test_board_streams.py` | 21 (36 collected) | per-board streams merged into the whole-array stream (D-184): the block's board field (whole-array blocks unchanged), the whole-array receivers refusing a board block, merged pings equal to the whole-array pings, loss, restarts, a silent board, a late start, refusals by name, the options, the program and `--emulate --per-board` over UDP, the relay tool; sonar-bwu: `build/bin/sonar_live --listen` and `sonar_live_hsb.py receive` (frames of one board each, `serve --per-board`'s framing) merging as the relay in front does, clean, a board's block lost (drop, zero), reordered and repeated, boards on their own rates | the program for one test; loopback tests skip if data was dropped | minutes | **parity** |
+| `test_board_clock.py` | 13 (20 collected) | a board clock's rate against true time (D-185): the stamp's drift an hour in and the pose it moves, `clock_ppm` in both engines and the program, boards at their own rates aligned by them, the estimate from arrival times and its opt-in discipline | the program for one test | fast | **parity** |
+| `test_hsb_receive.py` | 25 (99 collected) | what the receiver and assembler count when frames go missing, repeat or arrive out of order, with no network (D-161, D-177) | | fast | **parity** |
+| `test_hsb_host_check.py` | 10 (12 collected) | `tools/hsb_host_check.py` on injected readings (a container like the ones used, a host set up as Sensor Bridge's guide asks), its stream arithmetic from `hardware_builds.json`, its exit statuses, and one run on the machine itself (sonar-02c) | | fast | |
+| `test_hsb.py` | 31 (43 collected) | framing; the receive application's stop; the real-time loopback through Sensor Bridge's emulator and receiver (D-153, D-162, D-163, D-173); a Popoto build's trial at 32, 64 and 96 channels and 102.4 kHz, framed and through the loopback in both engines, start-up loss and damaged frames (D-186 to D-188, D-190); one stream per board through the loopback (D-200); the opt-in studies | Holoscan SDK; Sensor Bridge and a CUDA device for the loopbacks; OpenMP for one | minutes | |
 | `test_holoscan.py` | 5 | stages as Holoscan operators, fed by the simulator and by replay | Holoscan SDK | minutes | |
-| `test_holoscan_cpp.py` | 7 | the C++ Holoscan application against the standalone program; an operator's error ends it with status 1 and the reason, not an abort (D-186); its source operator merging per-board streams as the relay in front does, pings and `--listen` (sonar-bwu) | built with `-DSONAR_BUILD_HOLOSCAN=ON` | minutes | **parity** |
+| `test_holoscan_cpp.py` | 4 (7 collected) | the C++ Holoscan application against the standalone program; an operator's error ends it with status 1 and the reason, not an abort (D-186); its source operator merging per-board streams as the relay in front does, pings and `--listen` (sonar-bwu) | built with `-DSONAR_BUILD_HOLOSCAN=ON` | minutes | **parity** |
 | `test_nvus_adapter.py`, `test_nvus_scanner.py` | 7, 6 | the ultrasound reference's frames to records; its runtime as a source | the reference's checkout and native module | fast | |
 | `test_picmus.py`, `test_fetch_picmus.py` | 9, 5 | the PICMUS benchmark through the kernel; the fetch tool without the network | PICMUS data for the first | minutes, fast | |
 
@@ -260,9 +272,12 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_propagation.py`, `test_propagation_defaults.py` | 11, 5 | providers against Bellhop; a bottom needs a description, arrivals kept by energy (D-104, D-105) | Bellhop for the first | minutes |
 | `test_long_range.py` | 2 | long-range scenarios at the eigenray tier | Bellhop (whole file) | minutes |
 | `test_ssp_range.py` | 14 | sound speed that changes with range in the Bellhop provider (D-110) | Bellhop for some | minutes |
+| `test_bellhop_nx2d_agreement.py` | 6 | Bellhop 2-D against Bellhop3D's N × 2-D and 3-D modes, beam counts, arrivals against the loss run over a piecewise-linear bed (D-197; characterisations) | each test its oracle: Bellhop, Bellhop3D, KRAKEN, PyRAM (about 45 s in all) | minutes |
+| `test_image_planes.py`, `test_multipath_scenes.py` | 14 (32 collected), 5 | image sources off a tilted bed and walls as any plane against closed forms, both engines; the four multipath scenes' ghost geometry (D-201) | | fast to minutes |
+| `test_gallaudet_boundaries.py` | 6 (10 collected) | the bottom and surface models against Gallaudet 2001's printed values at 68 kHz (D-193; characterisations: the bound is what we get plus a small margin) | | fast |
 | `test_kraken_crosscheck.py`, `test_ram_crosscheck.py`, `test_seamount_3d.py` | 2, 2, 4 | rays against normal modes, a parabolic equation and Bellhop3D (D-149); the last file's acceptance of the `eigenray3d` tier (8 minutes) runs only with `GPUSONAR_SLOW_ORACLES=1` | Bellhop with KRAKEN, PyRAM, Bellhop3D | minutes |
-| `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` | 5, 5, 6, 4 | the N × 2-D cross-slope warning; Bellhop3D's arrivals read and merged; the opt-in `eigenray3d` provider; one bed for a scenario and `flank_seamount_3d` on both engines (sonar-rcq P1 to P6, `docs/tasks/PROPAGATION_3D.md`) | Bellhop3D for some (27 s and 47 s with it) | fast to minutes |
-| `test_reverberation.py`, `test_reverb_statistics.py` | 10, 13 | reverberation level within 2 dB of the sonar equation; K statistics (D-37, D-70) | | minutes |
+| `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` | 5, 4 (5 collected), 6, 4 | the N × 2-D cross-slope warning; Bellhop3D's arrivals read and merged; the opt-in `eigenray3d` provider; one bed for a scenario and `flank_seamount_3d` on both engines (sonar-rcq P1 to P6, `docs/tasks/PROPAGATION_3D.md`) | Bellhop3D for some (27 s and 47 s with it) | fast to minutes |
+| `test_reverberation.py`, `test_reverb_statistics.py` | 10, 27 (42 collected) | reverberation level within 2 dB of the sonar equation; K statistics (D-37, D-70), the shape from a density per cell (D-196) | | minutes |
 | `test_reverb_bistatic.py`, `test_reverb_motion.py`, `test_reverb_relief.py`, `test_reverb_specular.py` | 23, 10, 16, 6 | bistatic, moving scatterers, relief, near-specular removal (D-69, D-72, D-73, D-123) | CUDA for one; Bellhop for some | minutes |
 | `test_bottom.py`, `test_bottom_models.py`, `test_sediment_table.py`, `test_sediment_literature.py`, `test_sediment_fit.py` | 9, 16, 11, 9, 8 | the bottom model, its regimes, the named sediments against open literature, the fit (D-63, D-66, D-67, D-132) | Bellhop for one | fast |
 | `test_surface.py`, `test_surface_models.py`, `test_bubble_layer.py` | 5, 13, 9 | surface backscatter, bubble loss (D-38, D-68, D-87) | Bellhop for one; `arlpy` for one | fast |
@@ -272,7 +287,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_oneway_sources.py` | 16 | one-way sources against the passive sonar equation (D-78) | `sonar_live` for one | minutes |
 | `test_basin.py` | 20 | a basin's late reverberation (D-106) | Bellhop for one | minutes |
 | `test_channel_replay.py`, `test_channel_sounding.py` | 23, 20 | measured-channel replay and sounding estimators on synthetic channels | UACR, Watermark, Smart Ocean data for seven | minutes |
-| `test_sst_validation.py` | 23 | two worked examples of APL-UW TR 0702 end to end (D-78, D-144) | | long |
+| `test_sst_validation.py` | 24 | two worked examples of APL-UW TR 0702 end to end (D-78, D-144) | | long |
 | `test_simcal.py` | 7 | simulator calibration finds hidden settings in a simulated log (D-56) | | minutes |
 | `test_literature_models.py`, `test_medium_models.py`, `test_lloyd.py` | 11, 13, 21 | formulas against printed values; medium helpers; the surface-image factor (D-126) | `arlpy` for three; Bellhop for one | fast |
 
@@ -281,15 +296,17 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | File | Tests | Protects | Needs | Class | Marks |
 | --- | --- | --- | --- | --- | --- |
 | `test_environment.py` | 8 | one environment per site; contradictions (D-100, D-101) | | fast | |
+| `test_emulate.py` | 8 (15 collected) | `sonar_live.py --emulate` lays the receive window out at the scenario's sound speed; the program reports an error on its UDP path (D-183) | `sonar_live` for the program case | minutes | |
+| `test_build_diagrams_layout.py` | 2 (8 collected) | the build diagrams' heading and row labels stay on the page (D-183) | `matplotlib` | fast | |
 | `test_yaml_numbers.py` | 3 | every tracked YAML's numbers load as numbers with plain PyYAML (D-180) | | fast | |
 | `test_design.py` | 7 | every owner requirement is met by the config files; `docs/DESIGN.md` is up to date (D-44) | `matplotlib` | minutes | reads committed files |
 | `test_buildspec.py` | 21 | build specs validate; the generator's output is what is committed; a different build runs through both engines (D-127) | `matplotlib`; Bellhop for one | long | reads committed files |
-| `test_realistic_scenes.py` | 25 | every mode's scenario simulates and images end to end (`tools/gallery.py --quick`); `test_documented_full_size_classes` reads `docs/figures/gallery.json` | `matplotlib`; Bellhop for five; Ceres for one | long | **golden** (the gallery) |
+| `test_realistic_scenes.py` | 25 (28 collected) | every mode's scenario simulates and images end to end (`tools/gallery.py --quick`); `test_documented_full_size_classes` reads `docs/figures/gallery.json`; `flank_patrol`'s small vehicle is not tracked (D-198) | `matplotlib`; Bellhop for five; Ceres for one | long | **golden** (the gallery) |
 | `test_classify_rules_eval.py` | 15 | the scoring of `tools/classify_rules_eval.py` on a made-up case, no simulation | | fast | |
 | `test_gallery_echo_position.py`, `test_gallery_subgrid_bearing.py` | 4, 7 | the gallery's echo placement and leading edge (D-172, D-178, D-181); its opt-in sub-grid bearing (D-176) | | fast | |
 | `test_gpu_benchmark_all.py` | 4 | the benchmark tool's table and JSON on whatever backend the build has | | minutes | |
 | `test_study_resume.py` | 7 | the resumable studies reuse stored results and recompute with `--fresh` | `matplotlib` | fast | |
-| `test_tools_help.py` | 5 | every tool answers `--help` and changes nothing in the tree | a git checkout | minutes | |
+| `test_tools_help.py` | 5 (83 collected) | every tool answers `--help` and changes nothing in the tree | a git checkout | minutes | |
 | `test_oracle_gate.py` | 8 | an oracle skip becomes a failure under `GPUSONAR_REQUIRE_ORACLES` | | fast | |
 
 Helpers, not tests: `conftest.py` (`make_record`), `oracle_gate.py`, `reference_bp.py` (the
@@ -343,14 +360,17 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-178 | the gallery's range is the leading edge | `test_gallery_echo_position.py::test_the_leading_edge_of_a_merged_multipath_echo_is_its_direct_arrival`; `test_classify_rules_eval.py::test_a_capture_without_a_recorded_range_estimate_is_the_centroid`, `::test_flank_patrol_tracks_are_scored_in_the_order_the_scoring_reads`; `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
 | D-180 | YAML numbers; `sonar_live_hsb`'s navigation | `test_yaml_numbers.py`; `test_sediment_fit.py::test_the_row_writes_numbers_plain_yaml_reads_as_numbers`; `test_deployment_defaults.py::test_the_rehearsal_sync_reference_reaches_the_cpp_receivers`; `test_hsb.py::test_receive_builds_its_navigation_as_sonar_live_does` |
 | D-181 | the opt-in LFM range-Doppler correction | `test_live_cpp.py::test_range_doppler_is_off_by_default_and_said_only_when_on`, `::test_range_doppler_ownship_adds_the_factor_times_the_ownships_closing_speed_to_each_range`, `::test_range_doppler_full_moves_each_track_by_its_own_closing_speed`, `::test_range_doppler_full_gives_the_same_report_in_both_engines`, `::test_range_doppler_refuses_an_unknown_word`; `test_lfm_range_doppler.py::test_ownship_under_way_couples_like_a_closing_target_and_the_correction_removes_it`; `Options.RangeDopplerIsOffUnlessGivenAndRefusesOtherWords` and the `RangeDoppler` suite; `test_gallery_echo_position.py::test_doppler_range_takes_out_the_ownships_lfm_coupling_only_when_asked`; `test_classify_rules_eval.py::test_a_capture_with_the_targets_doppler_part_is_scored_with_it` |
+| D-183 (sonar-8zj) | the receive window laid out at `source.sound_speed`; `sonar_live`'s UDP path reports an error and exits 1 | `test_emulate.py` (the whole file; five fail without the fix); `test_build_diagrams_layout.py` |
 | D-184 | per-board streams merged into the whole-array stream (sonar-6f9) | `test_board_streams.py` (the whole file) |
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
+| 3-D work, 2026-11-26 (sonar-rcq P1 to P6; its decision entry not yet written) | the cross-slope warning; Bellhop3D's arrivals read and merged; the `eigenray3d` provider; one top-level bed; the tier against Bellhop3D's converged field | `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` (the whole files); `test_seamount_3d.py::test_eigenray3d_tier_over_the_seamount` (`GPUSONAR_SLOW_ORACLES=1`) |
 | D-201 (sonar-0nsi) | image sources off tilted planes and walls against closed forms; the four multipath scenes' ghost geometry | `test_image_planes.py`, `test_multipath_scenes.py` (the whole files) |
 | D-200 (sonar-bwu) | every receiver merges per-board streams as the relay in front does | `test_board_streams.py` (the `--listen` and Sensor Bridge cases); `test_holoscan_cpp.py::test_holoscan_merges_per_board_streams_as_the_relay_in_front_does`; `test_hsb.py::test_loopback_of_one_stream_per_board_gives_the_direct_chains_reports` |
 | D-198 (sonar-80b) | `flank_patrol`'s small vehicle is not tracked (below the scene's reverberation) | `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
-| D-197 (sonar-6c8) | Bellhop 2-D and Bellhop3D N x 2-D agree over a level bed; beam counts; arrivals over a piecewise-linear bed (characterisations) | `test_bellhop_nx2d_agreement.py` (the whole file; oracles) |
+| D-199 | corrects D-197's account of the fjord beds; nothing changed | none (no code changed) |
+| D-197 (sonar-6c8) | Bellhop 2-D and Bellhop3D N x 2-D agree over a level bed; beam counts; arrivals over a piecewise-linear bed (characterisations) | `test_bellhop_nx2d_agreement.py` (the whole file; oracles; first run on a GPU job with D-201's suite, passed) |
 | D-196 (sonar-6fc) | the K shape from a density per cell; our shape is the paper's alpha; its worked example | `test_reverb_statistics.py` (`test_our_shape_is_the_papers_alpha`, `test_the_papers_worked_example`, `test_the_shape_follows_the_cell`, `test_density_statistics_in_a_ping` and the rest of the new cases) |
 | D-195 (sonar-59u) | the decimate-first correction by board, the samples to the bit | `tests/cpp/test_stage2.cpp`: `Decimate.BoardsCorrectedTogetherGiveTheChannelByChannelSamplesToTheBit` |
 | D-194 (sonar-nyn) | the TR 0702 matrix names only tests that exist and does not deny features we have | `test_sst_validation.py::test_matrix_names_only_tests_that_exist_and_does_not_deny_features_we_have` |
@@ -397,7 +417,8 @@ navigation unit or Sensor Bridge hardware (`docs/STATUS.md`, first paragraph).
 | --- | --- | --- |
 | Real data | simulator calibration is checked only on its own simulated logs; the live chain has never run on a recording from the sea | `docs/SIM_CALIBRATION.md`; `sonar-sul` |
 | Hardware | no DGX Spark or Jetson measurement (`docs/JETSON.md` is untested); no RoCE receiver; the board forwarder is not written | STATUS milestones 11, 13; item 36 |
-| Sensor Bridge | loopback through the emulator only. The idle stop ran on a GPU only in runs set up for it; the pace table of D-173 was not repeated on L4 | D-163, D-173; `sonar-3wd`, `sonar-e2u` |
+| Sensor Bridge | loopback through the emulator only. The idle stop ran on a GPU only in runs set up for it; the pace table of D-173 was not repeated on L4. Never on a host with Sensor Bridge's own socket setup (the containers refuse it; `tools/hsb_host_check.py` and its test check a host, they do not measure the receiver). Per-board frames only at `flank_32`'s rate. Nothing enforces the 0.25 s lead before the first transmit | D-163, D-173, D-187, D-189, D-200; `sonar-3wd`, `sonar-e2u`, `sonar-02c`, `sonar-a75` |
+| Per-board streams | only emulated boards on loopback; the Holoscan listen path was not compared with the program's `--listen`; the clock-rate keys are ignored, not refused, for a whole-array stream in the Holoscan application and `receive` | D-184, D-185, D-200; `sonar-9a2`, `sonar-pnyv` |
 | Only on a GPU job | the Holoscan C++ operators cannot be built in the CPU container; the CUDA halves of 17 Python files and `DetectorDevice` skip on a CPU | D-158; section 2 |
 | Only on a checkout | `test_tools_help.py` (65 cases) never runs in the GPU job | section 1 |
 | Never in the suite | the tests on PICMUS, UACR, Watermark and Smart Ocean data, the `arlpy` checks, and the ultrasound reference run only where someone has the data or the build | section 1 |
@@ -414,6 +435,9 @@ navigation unit or Sensor Bridge hardware (`docs/STATUS.md`, first paragraph).
 | Gallery classes | `flank_patrol`'s classes are not asserted in `test_documented_full_size_classes`; the full-size classification evaluation was not rerun at this tree | `sonar-n18`, `sonar-mgt`; D-170 |
 | Offline captures | `classify_rules_eval` captures lack per-row ping times, so D-165's rule is not tested on them | `sonar-18n` |
 | Motion estimation | the acceptance bounds are ours (the paper reports none); lambda 2 on few scenes; along-track surge not implemented; the Ceres solve is CPU only | D-164; `sonar-0bc`, `sonar-7k2` |
-| Propagation | 3-D propagation is quantified against Bellhop3D, not modelled; APL-UW TR 9407's boundary models are unread and must stay so | D-149; STATUS milestone 12 |
+| Propagation | 3-D propagation in the shipped scenarios is N × 2-D at most; the opt-in `eigenray3d` tier is held against Bellhop3D only by the 8-minute test that runs with `GPUSONAR_SLOW_ORACLES=1`, and has no reverberation over relief; APL-UW TR 9407's boundary models are unread and must stay so | D-149, D-197; `docs/tasks/PROPAGATION_3D.md`; STATUS milestone 12 |
+| Boundary models against data | one site, one wind (Gallaudet 2001, 68 kHz); characterisations, not bounds from the paper | D-193; `sonar-64sm` |
+| Link budget | no reverberation term, so no test of a reverberation-limited prediction | D-198; `sonar-w2w3` |
+| Multipath in the chains | the FLS chain's ghost tracks measured on one seed, 4 pings, half densities; no rejection tested | D-201; `sonar-izys` |
 | Performance | FLOP/s from hardware counters could not be measured on the jobs | STATUS milestone 13 |
 | The beads hook | the worktree rule of D-177 has no test in `tests/` | D-177 |

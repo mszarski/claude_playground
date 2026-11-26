@@ -57,7 +57,7 @@ Done means all of the following:
 
 Never mark the issue done with a failing test.
 
-## 2. Current state (checked in the code at `6600df8`)
+## 2. Current state (checked in the code at `6600df8`; brought to D-201 on 2026-11-26)
 
 ### 2.1 How samples reach the chain
 
@@ -100,7 +100,16 @@ Facts about these that an adapter must respect:
   `python/gpusonar/sources/board_merge.py`). The board -> channel map and each board's
   clock-rate error (`source.boards.clock_ppm`, D-185) are configuration. The header field is
   ours; the owner accepted it and the `drop` default (D-184). Tests: `tests/python/test_board_streams.py`,
-  `test_board_clock.py`.
+  `test_board_clock.py`. Since D-200 every receiver merges in-process, the relay is optional.
+  Through Sensor Bridge every frame is one board's block on one data channel, so every board
+  must carry the same number of channels; whether real boards would share one data channel or
+  have one each is not known (one each needs a setting that does not exist).
+- **A board must start streaming at least 0.25 s before the first transmit that matters**
+  (D-187, D-188): at a Popoto build's rate Sensor Bridge's socket receiver lost the first 12 to
+  20 ms of stream on an L4 (51 ms on a10g-large), while it allocates its queue. Nothing in the
+  receivers enforces the lead; a forwarder should provide it.
+- **The receive window is laid out at `source.sound_speed`** (D-183; absent: the sonar file's
+  nominal speed), which a deployment for real water should set.
 - **`PingAssembler` needs the transmit's sample index** in the block header to cut a ping:
   each transmit opens the sonar config's receive window. A board stream that does not say
   when the projector fired cannot be cut into pings by this assembler.
@@ -115,9 +124,10 @@ Facts about these that an adapter must respect:
   `tools/sonar_live.py CONFIG --export-template template.h5`.
 - **Sensor Bridge** (`python/gpusonar/sources/hsb.py`, `tools/sonar_live_hsb.py`) carries
   the same `GSFB` blocks as fixed-size frames. Feeding Sensor Bridge's receiver from real
-  hardware is not part of this task and no open issue covers it: `sonar-0ra`, now closed, was
-  the mode with the simulator behind Sensor Bridge's emulator (the loopback path, D-151), not
-  a real board. Do not do it here.
+  hardware is not part of this task: `sonar-0ra`, now closed, was the mode with the simulator
+  behind Sensor Bridge's emulator (the loopback path, D-151), not a real board; `sonar-57w`
+  (open, P3) records that a real board on that path needs the owner's approval before any FPGA
+  or firmware work. Do not do it here.
 
 Hardware facts already in config, all unconfirmed (`unconfirmed:` lists in the files):
 `configs/sonars/popoto_8.yaml` (102.4 kHz, 24 bits, 2.61 V full scale at the ADC, 43 dB
@@ -211,7 +221,9 @@ of them. Where an answer is "not known yet", that item stays in config and `unco
    port, file names, a header field)?
 4. Timing: what clock stamps the samples (free-running per board, PTP, GPS PPS, the
    vehicle's clock)? Is there a sample counter since capture start? What happens to it at a
-   restart or a dropout?
+   restart or a dropout? (Since D-184 and D-185 the merge needs each board's capture start true
+   to about 0.8 ms, and each board's clock rate either configured or estimated; issue
+   `sonar-9a2`.)
 5. The transmit: how does the host learn when the projector fired, to the sample (a
    trigger line recorded on an input, a field in the stream, a fixed schedule from a known
    start, the direct blast found in the data)? Who triggers the projector?

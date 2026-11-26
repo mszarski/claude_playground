@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181: the gallery pictures, the headline numbers with their sources, what a
+decision D-181 (the gallery is unchanged since; the text was brought to D-201 on 2026-11-26): the gallery pictures, the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -181,7 +181,11 @@ Look at the three boats: closing, crossing and at anchor. Geometry: [`scenarios/
 
 ### 1.4 SAS with unknown motion: `wreck_sas`, `minefield_sas`
 
-**Wrong or missing:** both scenes were re-drawn in D-171 (their seabed widened), so their
+**Wrong or missing:** **both scenes are free field, as is every shipped SAS scene except
+`sas_auv_multipath`** (not in the gallery): no surface or bed multipath. With bed multipath (D-201)
+the bed-bounce copy of a target above the bed is its brightest echo, 2.7 to 6.6 dB over the direct
+one, and the sharpness measure below falls from 178,767 to 63,747 in that scene against its
+free-field twin (issue `sonar-ya2c`). Both scenes were re-drawn in D-171 (their seabed widened), so their
 sharpness and object levels cannot be compared with any gallery before D-174. `wreck_sas`
 sway error went 0.045 -> 0.053 wavelengths with the new draw. The `minefield_sas`
 echo-synthesis benchmark row in `RESULTS.md` is still of the old scene (section 2.6). The
@@ -206,7 +210,7 @@ Look at the two cylinders, the sphere and the rocks, each with a highlight towar
 
 ### 1.5 SAS, the owner's MINSAS-class design, and rail SAS
 
-**Wrong or missing:** navigation is exact in these five scenes; no motion is estimated.
+**Wrong or missing:** free field, as every gallery SAS scene (section 1.4). Navigation is exact in these five scenes; no motion is estimated.
 Fainter copies ("ghosts") of bright objects appear about 10 m up and down the track in the
 sparse scenes (a grating lobe of the receive array; -47 to -54 dB on a point target,
 `tests/python/test_minsas_resolution.py`); they are covered only in the scene with
@@ -282,9 +286,14 @@ Two depth slices (at the cylinder's top, 0.25 m, and the sphere's top, 0.14 m) a
 **Wrong or missing:**
 
 - **The small vehicle (-3 dB, 2 m/s) is never detected**: no detection above the cut near
-  it on any ping of ten seeds (D-178, issue `sonar-80b`). In `gallery.json` its
+  it on any ping of ten seeds (D-178). In `gallery.json` its
   `position_error_m` of 1283 m is the distance to the nearest
-  unrelated track.
+  unrelated track. **It is a hard target on purpose, not a defect** (D-198, issue `sonar-80b`
+  closed; the owner chose to leave it): it is below the scene's bottom reverberation, its 4 m
+  cell 3.8 to 5.1 dB over the local background against the gallery's 12 dB cut; the live chain's
+  defaults miss it by 0.8 dB; the opt-in `cfar.integrate_cells: [1, 4, 16]` detects it at the cost
+  of one extra detection a ping. The link budget predicts about 30 dB for it because it has no
+  reverberation term (`sonar-w2w3`). [`SCENARIOS.md`](../SCENARIOS.md), `flank_patrol`.
 - 5 tracks for two objects: multipath splits the wreck's echo into several clusters and
   each starts a track; 2 tracks are `uncertain`.
 - The outcome rests on an assumed seabed (-27 dB Lambert), wind (5 m/s) and noise (45 dB);
@@ -436,6 +445,11 @@ their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 
 not measured: with three rows it reads 8 to 35 m for a true 4 m (D-160), and the depth
 sigma there is 2960 to 3010 m (`RESULTS.md`, "The 12 km study, rerun").
 
+**The link budget has no reverberation term** (`SonarEquation`; D-198, issue `sonar-w2w3`): the
+table below is noise-limited and optimistic wherever reverberation dominates. Example: it gives
+`flank_patrol`'s −3 dB small vehicle at 2.2 km about 30 dB, where the simulated data give 3.8 to 5.1
+dB over a background of bottom reverberation 21.9 dB above the noise (section 1.7).
+
 Link budget, free field, spherical spreading, steady point echo in noise. Source:
 `docs/design/derived.json`, `requirements` entry `POP-3` (written by
 `tools/design_report.py`; also `RESULTS.md`, "The 12 km margins with the detector's
@@ -562,7 +576,7 @@ Gallery scenes (source: `gallery.json`, section 1.4; D-171 for before -> after):
 `minefield_sas` sway 0.140 -> 0.022 wavelengths and heave 0.101 -> 0.044; `wreck_sas`
 sway 0.045 -> 0.053 (worse), heave 0.083 -> 0.044.
 
-### 2.5 Sensor Bridge loopback and pace (D-153, D-162, D-163, D-173)
+### 2.5 Sensor Bridge loopback and pace (D-153, D-162, D-163, D-173, D-186 to D-192, D-200)
 
 **What is wrong first:** this is the board emulator with the opt-in UDP-socket patch, in
 a container, never hardware, never the RoCE receiver. The margin is thin: the receiver's
@@ -572,10 +586,15 @@ board has gone ends in a Sensor Bridge shutdown error (`shutdown_error`, `os._ex
 pace table is from an `a10g-small`, not the L4 reference (issue `sonar-e2u`).
 **At a Popoto build's rate (32, 64, 96 channels at 102.4 kHz) the loopback loses frames in
 nearly every run** in the containers, whatever buffer, frame size or thread count was tried (D-186;
-measured on `a10g-large`, no L4 available).
-**`RESULTS.md`'s "Sensor Bridge loopback" section is stale**: it still says the loopback
-test has not passed in a job and lists pace 0.5 as the setting. The numbers below are in
-the `DECISIONS.md` entries only.
+measured on `a10g-large`, no L4 available). **Located since (D-187, D-188): the loss is at the start
+of the run**, the first 12 to 20 ms of stream on an L4 while Sensor Bridge's receiver allocates its
+queue; the test passes when every frame missing or damaged lies in the first 0.25 s of stream, and a
+board must start streaming at least 0.25 s before the first transmit that matters (nothing enforces
+it). Not measured: a host with Sensor Bridge's own socket setup (D-189), the RoCE receiver, per-board
+frames at a Popoto build's rate (D-200).
+`RESULTS.md`'s "Sensor Bridge loopback" section keeps its 2026-11-17 record (the loopback test not
+yet passed, pace 0.5) beside a "Since then" paragraph; "Sensor Bridge at Popoto rates" holds D-186 to
+D-192.
 
 | Measurement | Result | Source |
 | --- | --- | --- |
@@ -587,7 +606,9 @@ the `DECISIONS.md` entries only.
 | Chain time per ping in the loopback, L4, host backend | about 450 ms for the first ping, 85 to 95 ms after | `RESULTS.md`, "Sensor Bridge loopback" (older run) |
 | Popoto rates, real time, C++ engine, default buffer, `a10g-large`: runs with frames lost or damaged at 32 / 64 / 96 channels | 12 of 20 / 20 of 20 / 20 of 20; at most 8 / 57 / 66 frames a run; a ping dropped in 2 / 1 / 3 runs; every lost datagram refused by the full socket buffer | D-186, `RESULTS.md` "Sensor Bridge at Popoto rates" (jobs `6b063a21d0582cfbbefd60a3`, `6b0641ce1460ffe1d5e98956`) |
 | Popoto rates: doubled buffer (425,984 B), 200-sample frames, chain OpenMP on 2 threads | none lossless at 64 or 96 channels (10 of 10 runs lost frames in each); at 32 channels 5 to 10 of 10 | same |
-| Popoto rates: chain time per ping after the first, C++ / Python, CUDA backend, `a10g-large` | 0.13 / 0.17 s (32 ch), 1.40 / 1.69 s (64), 2.17 / 2.64 s (96), against the trials' 3 s interval; the Python engine at 96 channels falls behind the stream (receiver queue overflow) | same |
+| Popoto rates: chain time per ping after the first, C++ / Python, CUDA backend, `a10g-large` | 0.13 / 0.17 s (32 ch), 1.40 / 1.69 s (64), 2.17 / 2.64 s (96), against the trials' 3 s interval; the Python engine at 96 channels falls behind the stream (receiver queue overflow) | same (before D-190) |
+| Popoto rates, the same through Sensor Bridge on an L4 since D-192 (board resampling by board, weights from three trig calls; outputs to the bit) | C++ 0.06 to 0.07 s (64 ch), 0.08 to 0.11 s (96); Python 0.18 to 0.22 s, 0.28 to 0.32 s | D-190 to D-192 |
+| Popoto rates, where the frames are lost (L4, C++, default buffer, 4 s queue) | frames 1 to 5 only, every ping reported, worst delay after the start 1.2 to 3.4 ms; with D-188's rule 40 of 40 runs passed | D-187, D-188 (jobs `6b0666a6d0582cfbbefda036`, `6b0693c6d0582cfbbefdf55e`) |
 | Popoto rates: reports of the pings that came through against the direct chain on the same pings | equal (largest difference 0.0) | the test, job `6b064e8e1460ffe1d5e9a072` |
 
 ### 2.6 Throughput per GPU
@@ -606,9 +627,12 @@ the `DECISIONS.md` entries only.
 - Motion estimation has no GPU code; CUDA delay estimation is slower than the host
   (issue `sonar-b6r`).
 
-The live chain on the device, C++ engine, per ping, as deployed. Source: `RESULTS.md`,
-"Performance", first paragraph; `docs/benchmarks/live_chain_ablation_l4_b2a918e.json`
-(L4, D-150):
+The live chain on the device, C++ engine, per ping, as deployed but with ideal clocks: the
+benchmark leaves the board synchronisation stage out. Source: `RESULTS.md`,
+"Performance"; `docs/benchmarks/live_chain_ablation_l4_b2a918e.json`
+(L4, D-150). With board synchronisation, on the Popoto trials' pings (L4, after the first, median;
+D-192, D-195): C++ 0.048 / 0.054 / 0.065 s and Python 0.084 / 0.18 / 0.25 s at 32 / 64 / 96
+channels.
 
 | Rows | ms a ping | With `cell_statistic: mean` |
 | --- | --- | --- |
@@ -661,8 +685,12 @@ rows was rerun at HEAD.
 example of TR 0702 is a numerical reproduction of its figures (the report does not print
 the parameters; ours are marked `unconfirmed`). TR 9407 is distribution-limited and
 unread. The measured-channel data sets state no sea state, so every sea parameter is
-fitted or assumed. Our Bellhop 2-D runs and Bellhop3D differ by up to 1 to 2.5 dB (issue
-`sonar-6c8`). The committed `sst_validation` matrix and figures were first made before the
+fitted or assumed. The surface model lies above Gallaudet's (2001) 68 kHz data at 3 m/s wind by 3.4
+and 13.0 dB (D-193). The 1 to 2.5 dB between our Bellhop 2-D runs and Bellhop3D's N × 2-D mode is
+explained (D-197, corrected by D-199): the oracle's elevation beam count on a level bed, and
+Bellhop's arrivals over a piecewise-linear bed over relief. Over relief our shipped tiers are N × 2-D
+(3 to 4 dB too loud on bearings over a seamount's flanks); the opt-in `eigenray3d` tier is within
+1.2 dB of Bellhop3D's 3-D field there (`docs/tasks/PROPAGATION_3D.md` P4). The committed `sst_validation` matrix and figures were first made before the
 reverberation Doppler fix (D-80); they were regenerated after it on 2026-11-19 (`26586a3`)
 and 2026-11-20 (`1debe6d`), as `RESULTS.md` now records.
 
