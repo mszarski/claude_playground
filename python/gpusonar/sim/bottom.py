@@ -196,7 +196,9 @@ def parameters_from_physical(*, density: float, sound_speed: float, attenuation_
 
 
 def sediment_table(path=None) -> dict:
-    """The entries of `configs/sediments.yaml` (or `path`) as written."""
+    """The entries of `configs/sediments.yaml` (or `path`) as written. Keys that only inform the
+    reader (`sigma2_range`, `basis`, `w2_note`, `note`, `provenance`, ...) are carried as they are and no
+    model reads them: `sediment` returns the six parameters only."""
     from pathlib import Path
 
     import yaml

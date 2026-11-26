@@ -36,6 +36,12 @@ REFLECTION_ONLY = ["pebbles", "rock"]                  # not fluid sediments: no
 # The one place the file departs from the Julia table: its line for SandyGravel prints 2073.50 m/s
 # (ratio 1.3570); three other prints of the row give 1.337 (the entry's note), which is carried.
 SANDY_GRAVEL_SPEED = 1.337 * 1528.0
+# Named site rows (A6 of docs/references/CONFORMANCE.md Sec. 1.1): one measured site each, never a class.
+SITE_ROWS = ("gallaudet_2001_site",)
+# The seven rows of 5.5 phi and finer (docs/tasks/SEDIMENT_DEFAULTS_DECISION.md, option E) and their class
+# volume parameter, unchanged by A6 (very_fine_silt: arXiv:1809.08459's -28.6 dB/m over 1.4 dB/m).
+SOFT_ROWS = {"medium_silt": 0.001, "sandy_mud": 0.001, "fine_silt": 0.001, "sandy_clay": 0.001,
+             "very_fine_silt": 10.0 ** (-28.6 / 10.0) / 1.4, "silty_clay": 0.001, "clay": 0.001}
 
 
 def quiet(fn, *args, **kw):
@@ -46,7 +52,7 @@ def quiet(fn, *args, **kw):
 
 def test_every_row_loads_and_the_table_is_complete():
     table = bottom.sediment_table()
-    assert set(table) == set(JULIA_TABLE) | {"placeholder_sand"}
+    assert set(table) == set(JULIA_TABLE) | {"placeholder_sand"} | set(SITE_ROWS)
     for name, entry in table.items():
         par = quiet(bottom.sediment_reflection, name)
         assert set(par) == {"rho", "nu", "delta"} and all(math.isfinite(v) and v > 0 for v in par.values())
@@ -242,3 +248,52 @@ def test_a_second_open_source_agrees_on_nine_rows():
     lows = [table[n]["grain_size_phi"][0] for n in ("coarse_sand", "medium_sand", "fine_sand", "very_fine_sand",
                                                     "coarse_silt", "medium_silt", "fine_silt", "very_fine_silt", "clay")]
     assert lows == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+
+
+def test_the_soft_rows_keep_their_class_values_and_carry_the_measured_range():
+    """A6 (docs/references/CONFORMANCE.md Sec. 1.1; docs/tasks/SEDIMENT_DEFAULTS_DECISION.md option E): the
+    seven rows of 5.5 phi and finer keep sigma2 0.001 (0.000986 for very_fine_silt) and the w2 rule, and gain
+    `sigma2_range: [0.0008, 0.0037]` (the five J&R Table 14.1 sites by (14.10), an agents' computation,
+    [N2] Sec. 3.3: 0.0031, 0.0037, 0.0008, 0.0017, 0.0016; and Gallaudet's fitted 0.003, printed, one site)
+    with a `basis:` and a `w2_note:` (Briggs' spectra, J&R Table 6.1, +7.1 dB at 10 kHz and +2.2 dB at
+    100 kHz above the rule, [N2] Sec. 3.2, ours). The loader carries the keys and does not use them."""
+    table = bottom.sediment_table()
+    for name, sigma2 in SOFT_ROWS.items():
+        entry = table[name]
+        assert entry["sigma2_range"] == [0.0008, 0.0037], name
+        low, high = entry["sigma2_range"]
+        assert low <= sigma2 <= high and low <= 0.003 <= high
+        for site, value in (("Arafura", "0.0031"), ("San Francisco", "0.0037"), ("Orcas", "0.0008"),
+                            ("Porto Venere", "0.0017"), ("Mariella", "0.0016"), ("Gallaudet", "0.003")):
+            assert site in entry["basis"] and value in entry["basis"], (name, site)
+        assert "Table 14.1" in entry["basis"] and "not independent" in entry["basis"] and "volume dominance" in entry["basis"]
+        assert "Table 6.1" in entry["w2_note"] and "+7.1 dB" in entry["w2_note"] and "+2.2 dB" in entry["w2_note"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")                              # confirmed rows still do not warn
+            par = bottom.sediment(name)
+        assert par["sigma2"] == pytest.approx(sigma2, rel=1e-12) and par["gamma2"] == 3.25
+        assert par["w2"] == pytest.approx(bottom.grain_size_scattering(entry["mean_grain_size_phi"])["w2"], rel=1e-3)
+        assert set(par) == set(bottom.SEDIMENT_KEYS)                    # the six parameters only: the range is not used
+        assert bottom._entry(name)["sigma2_range"] == [0.0008, 0.0037]  # but it is carried
+    # No other row claims the soft rows' range.
+    assert {n for n, e in table.items() if "sigma2_range" in e} == set(SOFT_ROWS)
+
+
+def test_the_gallaudet_site_row_is_his_table_vi():
+    """`gallaudet_2001_site`: Gallaudet (2001) Ch. 3 Table VI, p. 60 (printed; one site, NE Gulf of Mexico,
+    68 kHz), the inputs of the composite model he fitted to measured backscatter, and his Mz 6.36 ("estimated
+    from porosity", Table I(e), p. 55). Equal to the copy typed in test_gallaudet_boundaries.py. Its 0.003 is
+    one fitted site, not a class value: the row says why it is not independent of the volume-dominance
+    assumption."""
+    from test_gallaudet_boundaries import BOTTOM_FIT, BOTTOM_FIT_PRINTED, MEAN_GRAIN_SIZE_PHI
+    entry = bottom.sediment_table()["gallaudet_2001_site"]
+    assert entry["status"] == "confirmed" and "Table VI" in entry["source"] and "Gallaudet" in entry["source"]
+    assert entry["mean_grain_size_phi"] == MEAN_GRAIN_SIZE_PHI and "porosity" in entry["provenance"]["mean_grain_size_phi"]
+    assert entry["scattering"]["w2_cm4"] == BOTTOM_FIT_PRINTED["w2_cm4"]
+    assert "volume dominance" in entry["note"] and "one fitted site" in entry["note"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        par = bottom.sediment("gallaudet_2001_site")
+    assert par == pytest.approx(BOTTOM_FIT, rel=1e-12)
+    assert not bottom.is_reflection_only("gallaudet_2001_site")
+    assert bottom.sediment_reflection("gallaudet_2001_site") == {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
