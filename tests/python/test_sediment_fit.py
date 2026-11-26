@@ -18,12 +18,13 @@ C = 1500.0
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def synthetic(params, angles_deg, freqs, noise_db, seed):
+def synthetic(params, angles_deg, freqs, noise_db, seed, model=None):
     g, f = np.meshgrid(np.asarray(angles_deg, dtype=float), np.asarray(freqs, dtype=float))
     g, f = g.ravel(), f.ravel()
-    # Made with the model the fit uses unless told otherwise (first-order perturbation theory; the
-    # forward default is small_slope since D-86), so that a noise-free fit can be exact.
-    truth = np.concatenate([bottom.backscattering_strength_db(np.radians(g[f == v]), v, C, roughness_model="perturbation", **params)
+    # Made with the model the fit uses unless told otherwise (`sediment_fit.DEFAULT_ROUGHNESS_MODEL`,
+    # small_slope since A10; perturbation before), so that a noise-free fit can be exact.
+    model = model or sediment_fit.DEFAULT_ROUGHNESS_MODEL
+    truth = np.concatenate([bottom.backscattering_strength_db(np.radians(g[f == v]), v, C, roughness_model=model, **params)
                             for v in np.unique(f)])
     order = np.concatenate([np.flatnonzero(f == v) for v in np.unique(f)])
     y = np.empty(len(g))
@@ -83,10 +84,12 @@ def test_the_row_writes_numbers_plain_yaml_reads_as_numbers():
 
 def test_volume_dominated_data_do_not_fix_the_roughness():
     """Very fine silt at one frequency: volume scattering is more than 100 times the roughness
-    term, so sigma2 is found and w2, gamma2 are reported as unconstrained."""
+    term, so sigma2 is found and w2, gamma2 are reported as unconstrained. With the perturbation model
+    named (the default before A10); the small-slope default needs prior bounds for this verdict:
+    `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`."""
     truth = bottom.sediment("very_fine_silt")
-    g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(truth))
+    g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1, model="perturbation")
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, roughness_model="perturbation", **geo(truth))
     assert "w2" in fit.unconstrained and "gamma2" in fit.unconstrained and "sigma2" not in fit.unconstrained
     assert fit.roughness_share[1] < 0.5
     assert any("mostly volume scattering and do not fix w2 or gamma2" in n for n in fit.notes)
@@ -97,10 +100,12 @@ def test_volume_dominated_data_do_not_fix_the_roughness():
 
 def test_one_frequency_at_low_angles_cannot_separate_strength_from_exponent():
     """Sand at 300 kHz, 5 to 25 degrees: roughness only, and at one frequency the level fixes
-    w2 (2k)^-gamma2, not each. Both are flagged, with the reason; so is sigma2 (not seen)."""
+    w2 (2k)^-gamma2, not each. Both are flagged, with the reason; so is sigma2 (not seen). First-order
+    perturbation theory, named (the default before A10); with the small-slope default gamma2 is
+    borderline: `test_a10_what_the_small_slope_default_changes_in_the_cases_above`."""
     truth = bottom.sediment("medium_sand")
-    g, f, y = synthetic(truth, np.arange(5.0, 26.0, 1.0), [300e3], 0.5, 2)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(truth))
+    g, f, y = synthetic(truth, np.arange(5.0, 26.0, 1.0), [300e3], 0.5, 2, model="perturbation")
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, roughness_model="perturbation", **geo(truth))
     assert {"w2", "gamma2", "sigma2"} <= set(fit.unconstrained)
     assert any("one frequency" in n for n in fit.notes) and any("upper limit on sigma2" in n for n in fit.notes)
     assert fit.rms_residual_db < 1.0                                 # the curve itself is still fitted
@@ -133,8 +138,8 @@ def test_input_checks_and_model_validity_note():
         sediment_fit.fit([10.0, 20.0], 100e3, [-30.0, -28.0], **geo(truth))
     with pytest.raises(ValueError, match="grazing"):
         sediment_fit.fit([0.0, 20.0, 30.0], 100e3, [-30.0, -28.0, -27.0], **geo(truth))
-    g, f, y = synthetic(truth, np.arange(10.0, 81.0, 5.0), [100e3], 0.2, 0)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.2, n_starts=4, **geo(truth))
+    g, f, y = synthetic(truth, np.arange(10.0, 81.0, 5.0), [100e3], 0.2, 0, model="perturbation")
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.2, n_starts=4, roughness_model="perturbation", **geo(truth))
     assert any("not valid there" in n for n in fit.notes)
 
 
@@ -161,17 +166,21 @@ def test_tool_end_to_end(tmp_path):
 
 
 # --- G-9 (docs/tasks/SST_GAPS_JACKSON.md): error bars from the number of independent samples, the
-# covariance and its propagation, prior bounds, held parameters. All opt-in: the default fit and the
-# tool's default output are the same, bit for bit, as at c1d2b8f (the tree before G-9).
+# covariance and its propagation, prior bounds, held parameters. All opt-in: the fit and the tool's
+# output without them, with the roughness model named `perturbation` (the default before A10), are the
+# same, bit for bit, as at c1d2b8f (the tree before G-9).
 
-def test_default_fit_and_tool_output_are_bit_identical_to_before_the_opt_in_options():
-    """Values computed on the tree at c1d2b8f (before G-9) with the inputs of the tests above: the
-    unweighted fit (no sigma_db), the volume-dominated silt fit and the tool's whole output (stdout and
-    stderr, sha256) on the end-to-end CSV without a sigma_db column."""
+def test_the_old_default_named_is_bit_identical_to_before_the_opt_in_options_and_a10():
+    """Values computed on the tree at c1d2b8f (before G-9; the default roughness model was then
+    `perturbation`) with the inputs of the tests above, made with that model: the unweighted fit (no
+    sigma_db), the volume-dominated silt fit and the tool's whole output (stdout and stderr, sha256) on the
+    end-to-end CSV without a sigma_db column. Since A10 they need `roughness_model="perturbation"`
+    (`--roughness-model perturbation`) named."""
     import hashlib
+    old = "perturbation"
     truth = bottom.sediment("medium_sand")
-    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.5, 1)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, **geo(truth))
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.5, 1, model=old)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, roughness_model=old, **geo(truth))
     assert {k: fit.params[k].hex() for k in fit.fitted} == {
         "w2": "0x1.56e2e07737bcfp-13", "gamma2": "0x1.a2bc47bb29a05p+1", "sigma2": "0x1.e68f1ab1f1277p-11"}
     assert {k: v.hex() for k, v in fit.std.items()} == {
@@ -180,8 +189,8 @@ def test_default_fit_and_tool_output_are_bit_identical_to_before_the_opt_in_opti
     assert fit.notes == ["w2 and gamma2 trade off against each other (correlation +0.987): their errors are not independent"]
     assert (fit.independent_samples, fit.bounds, fit.held, fit.sample_error) == (None, None, None, None)
     silt = bottom.sediment("very_fine_silt")
-    g, f, y = synthetic(silt, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(silt))
+    g, f, y = synthetic(silt, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1, model=old)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, roughness_model=old, **geo(silt))
     assert {k: fit.params[k].hex() for k in fit.fitted} == {
         "w2": "0x1.c998d9c703ed3p-24", "gamma2": "0x1.06666666666cap+1", "sigma2": "0x1.e0c9e2f663b66p-11"}
     assert {k: v.hex() for k, v in fit.std.items()} == {
@@ -189,17 +198,27 @@ def test_default_fit_and_tool_output_are_bit_identical_to_before_the_opt_in_opti
     assert fit.rms_residual_db.hex() == "0x1.3dfe2f6991b72p-2" and fit.unconstrained == ["w2", "gamma2"]
     assert len(fit.notes) == 6 and not any("roughness models" in n for n in fit.notes)
     held = bottom.sediment_reflection("fine_sand")
-    g, f, y = synthetic(dict(held, w2=3.0e-5, gamma2=3.1, sigma2=2.0e-3), np.arange(5.0, 56.0, 2.5), [30e3, 300e3], 0.4, 5)
+    g, f, y = synthetic(dict(held, w2=3.0e-5, gamma2=3.1, sigma2=2.0e-3), np.arange(5.0, 56.0, 2.5), [30e3, 300e3], 0.4, 5,
+                        model=old)
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         data = Path(tmp) / "tool_no_sigma.csv"
         data.write_text("# synthetic\ngrazing_deg,frequency_hz,bs_db\n" + "".join(f"{a},{b},{c}\n" for a, b, c in zip(g, f, y)))
+        # Since the default prior (2026-11-26) also --no-prior-bounds (fine_sand has a grain size), and the tool's
+        # new statement lines are left out of the hash (`_without_bounds_lines`); everything else is as at c1d2b8f.
         run = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--sediment", "fine_sand",
-                              "--name", "my_site", "--source", "synthetic test data", "--starts", "6"],
+                              "--name", "my_site", "--source", "synthetic test data", "--starts", "6", "--roughness-model", old,
+                              "--no-prior-bounds"],
                              capture_output=True, text=True, env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"})
     assert run.returncode == 0, run.stderr
-    assert hashlib.sha256((run.stdout + run.stderr).encode()).hexdigest() == \
+    assert "bounds used: the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: --no-prior-bounds" in run.stderr
+    assert hashlib.sha256((run.stdout + _without_bounds_lines(run.stderr)).encode()).hexdigest() == \
         "f33aca24c3ace4080b380ffdb37029b7676c864b8db602a25add258b9c52d901", run.stdout + run.stderr
+
+
+def _without_bounds_lines(text: str) -> str:
+    """The tool's stderr without the two statement lines added with the default prior (2026-11-26)."""
+    return "".join(line for line in text.splitlines(keepends=True) if not line.startswith(("bounds used: ", "on a bound ")))
 
 
 def test_independent_samples_set_the_error_bars_of_a_weighted_fit():
@@ -225,10 +244,10 @@ def test_independent_samples_set_the_error_bars_of_a_weighted_fit():
         sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, sample_error="exact", **geo(truth))
 
 
-def _speckled(truth, n_looks, seed):
+def _speckled(truth, n_looks, seed, model=None):
     """Medium-sand strengths at 5-55 degrees, 20 and 200 kHz, each the dB of an average of `n_looks`
     exponential (Rayleigh-intensity) samples about the model: 10 log10(Gamma(N, 1/N))."""
-    g, f, clean = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.0, 0)
+    g, f, clean = synthetic(truth, np.arange(5.0, 56.0, 2.5), [20e3, 200e3], 0.0, 0, model=model)
     return g, f, clean + 10 * np.log10(np.random.default_rng(seed).gamma(n_looks, 1.0 / n_looks, len(g)))
 
 
@@ -247,13 +266,17 @@ def test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_r
     gamma rule is close to the nominal rate; its w2 and gamma2 (correlation about 0.99) stay a little
     below it, which we put down to the linearised errors of a strongly correlated pair (not shown).
     Bounds: 0.50-0.85 (gamma) and 0.40-0.80 (book) for the parameters, the same widened by 0.2 below for
-    the prediction (40 draws): blocks of 40 seeds varied by up to 0.15 about the 100-seed means."""
+    the prediction (40 draws): blocks of 40 seeds varied by up to 0.15 about the 100-seed means.
+    These are statistics of the error rules, not of the roughness model: measured, and kept, with
+    `perturbation` named (80 small-slope fits would take minutes; below 55 degrees the two models
+    differ by tenths of a dB, A10)."""
     truth = bottom.sediment("medium_sand")
     inside, total, pred_inside, z = 0, 0, 0, []
     trials = 40
     for seed in range(2000, 2000 + trials):
-        g, f, y = _speckled(truth, 16, seed)
-        fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, sample_error=rule, n_starts=4, **geo(truth))
+        g, f, y = _speckled(truth, 16, seed, model="perturbation")
+        fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, sample_error=rule, n_starts=4,
+                               roughness_model="perturbation", **geo(truth))
         assert fit.unconstrained == [], fit.notes
         for k in fit.fitted:
             err = np.log10(fit.params[k] / truth[k]) if k in sediment_fit.LOG_KEYS else fit.params[k] - truth[k]
@@ -270,10 +293,13 @@ def test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_r
 def test_covariance_and_the_error_of_the_predicted_strength():
     """The covariance is the one behind `std` (sqrt of its diagonal) and `correlation`; the prediction
     error at the data is below the error of one value (the fit averages) and grows away from the data
-    (an untouched frequency and angle)."""
+    (an untouched frequency and angle). The propagation itself does not depend on the roughness model; the
+    case is the perturbation one it was measured with (with small-slope, at 2 MHz the roughness term is in
+    its Kirchhoff-like regime and the prediction error there is 0.11 dB, below the 0.08-0.18 dB at the data;
+    at 85 degrees, 100 kHz it is 0.33 dB: A10, not asserted)."""
     truth = bottom.sediment("medium_sand")
-    g, f, y = _speckled(truth, 67, 11)
-    fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=67, n_starts=4, **geo(truth))
+    g, f, y = _speckled(truth, 67, 11, model="perturbation")
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=67, n_starts=4, roughness_model="perturbation", **geo(truth))
     cov = fit.covariance
     assert np.sqrt(np.diag(cov)) == pytest.approx([fit.std[k] for k in fit.fitted], rel=1e-12)
     assert cov / np.outer(np.sqrt(np.diag(cov)), np.sqrt(np.diag(cov))) == pytest.approx(fit.correlation, abs=1e-12)
@@ -343,18 +369,25 @@ def test_gallaudet_band_means_cannot_fix_the_roughness_or_tell_the_roughness_mod
     16, 67 and 260 all give the same verdict) leaves both roughness parameters with errors beyond any
     use (w2: more than a factor 1e10, gamma2: more than 1e6) and listed as unconstrained, with the
     reason; the five roughness models with Table VI's own w2 differ by under 0.05 dB over 29-66 degrees.
-    The model misses the SF3 band by about 4 dB (D-193's +3.9 dB): the fit says so too."""
+    The model misses the SF3 band by about 4 dB (D-193's +3.9 dB): the fit says so too.
+    Both roughness models (A10): the small-slope default ends where the roughness term is 1e-51 of the
+    intensity (w2 about 0.026, gamma2 2.15: a relief so rough that its backscatter away from the specular
+    direction vanishes), with an all-zero Jacobian, whose errors came out NaN, and unflagged, before the
+    covariance's absolute floor; the "cannot tell apart" note is evaluated at the fitted parameters, so
+    it is the perturbation fit (w2 at its 1e-9 limit) that carries it."""
     angles, levels = _gallaudet_points()
     geo_site = {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
-    fit = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=n,
-                           hold={"sigma2": BOTTOM_FIT["sigma2"]}, **geo_site)
-    assert fit.fitted == ("w2", "gamma2") and set(fit.unconstrained) == {"w2", "gamma2"}
-    assert fit.std["w2"] > 10.0 and fit.std["gamma2"] > 1e6
-    assert fit.roughness_share[1] < 0.01
-    assert any("mostly volume scattering and do not fix w2 or gamma2" in x for x in fit.notes)
+    for model in ("small_slope", "perturbation"):
+        fit = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=n,
+                               hold={"sigma2": BOTTOM_FIT["sigma2"]}, roughness_model=model, **geo_site)
+        assert fit.roughness_model == model
+        assert fit.fitted == ("w2", "gamma2") and set(fit.unconstrained) == {"w2", "gamma2"}, (model, fit.std)
+        assert fit.std["w2"] > 10.0 and fit.std["gamma2"] > 1e6
+        assert fit.roughness_share[1] < 0.01
+        assert any("mostly volume scattering and do not fix w2 or gamma2" in x for x in fit.notes)
+        assert any("more than twice the stated measurement error" in x for x in fit.notes)
+        assert 3.0 < fit.rms_residual_db < 5.0
     assert any("cannot tell the roughness models apart" in x for x in fit.notes)
-    assert any("more than twice the stated measurement error" in x for x in fit.notes)
-    assert 3.0 < fit.rms_residual_db < 5.0
     spread = sediment_fit.roughness_model_spread_db(BOTTOM_FIT, np.linspace(29.0, 66.0, 38), FREQUENCY)
     assert spread < 0.05, spread
 
@@ -364,28 +397,37 @@ def test_gallaudet_band_means_cannot_tell_volume_from_roughness_and_a_prior_boun
     by roughness alone (w2 about 1.5e-3, 280 times Table VI's 5.18e-6, sigma2 at its search limit; rms
     0.37 dB) than by the site's volume-dominated model: two values cannot tell the mechanisms apart.
     The prior for 6.36 phi (w2 at most +14.5 dB above our rule, Table 6.1's muds) excludes that
-    explanation: w2 then ends on the prior bound and is listed as set by it."""
+    explanation: w2 then ends on the prior bound and is listed as set by it.
+    That is first-order perturbation theory, named (the default before A10), used at a relief 280 times
+    Table VI's. The small-slope default has no such explanation (A10): with gamma2 3.00 roughness alone
+    leaves at best 11.0 dB rms on the two means, and the best of a 61 x 61 grid over w2 1e-7 to 0.1 and
+    sigma2 1e-6 to 1 is 2.0 dB rms (w2 7.9e-5, sigma2 0.0020; ours, not asserted); the fit ends there
+    (2.8 dB with one degree of freedom) with volume still the larger part."""
     angles, levels = _gallaudet_points()
     geo_site = {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
     free = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
-                            hold={"gamma2": BOTTOM_FIT["gamma2"]}, **geo_site)
+                            hold={"gamma2": BOTTOM_FIT["gamma2"]}, roughness_model="perturbation", **geo_site)
     assert free.params["w2"] > 100 * BOTTOM_FIT["w2"] and "sigma2" in free.unconstrained
     assert free.roughness_share[0] > 0.99 and free.rms_residual_db < 1.0
+    small = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
+                             hold={"gamma2": BOTTOM_FIT["gamma2"]}, **geo_site)
+    assert small.roughness_model == "small_slope" and small.rms_residual_db > 2.0 and small.roughness_share[1] < 0.5
     prior = sediment_fit.prior_bounds(6.36)
     bounded = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
-                               hold={"gamma2": BOTTOM_FIT["gamma2"]}, bounds=prior, **geo_site)
+                               hold={"gamma2": BOTTOM_FIT["gamma2"]}, bounds=prior, roughness_model="perturbation", **geo_site)
     assert bounded.params["w2"] == pytest.approx(prior["w2"][1], rel=1e-5) and "w2" in bounded.unconstrained
     assert any(x.startswith("w2: the fit ran to the prior bound") for x in bounded.notes)
 
 
 def test_tool_options_for_error_bars_bounds_and_holds(tmp_path):
     """The tool with --independent-samples (a number and `column`), --hold, --prior-bounds: the extended
-    report is printed, the Gallaudet case is reported unconstrained with the reason."""
+    report is printed, the Gallaudet case is reported unconstrained with the reason. With the perturbation
+    model named, whose fits these outputs are (the test above has the small-slope ones)."""
     angles, levels = _gallaudet_points()
     data = tmp_path / "bands.csv"
     data.write_text("grazing_deg,frequency_hz,bs_db,n_samples\n" + "".join(f"{a},{FREQUENCY},{v},67\n" for a, v in zip(angles, levels)))
     base = [sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--source", "Gallaudet 2001 band means",
-            "--name", "gulf_site"] + [f"--{k}={BOTTOM_FIT[k]}" for k in ("rho", "nu", "delta")]
+            "--name", "gulf_site", "--roughness-model", "perturbation"] + [f"--{k}={BOTTOM_FIT[k]}" for k in ("rho", "nu", "delta")]
     env = {"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"}
     run = subprocess.run(base + ["--hold", f"sigma2={BOTTOM_FIT['sigma2']}", "--independent-samples", "column"],
                          capture_output=True, text=True, env=env)
@@ -402,3 +444,243 @@ def test_tool_options_for_error_bars_bounds_and_holds(tmp_path):
     assert "w2: the fit ran to the prior bound" in run.stderr and "bounds (prior, mean grain size 6.36 phi" in run.stderr
     run = subprocess.run(base + ["--sigma-db", "0.5", "--independent-samples", "67"], capture_output=True, text=True, env=env)
     assert run.returncode != 0 and "not both" in run.stderr
+
+
+# --- A10 (docs/references/CONFORMANCE.md): the fit's roughness model defaults to the forward model's,
+# small_slope (D-86); perturbation stays selectable by name (the bit-identity test above); the error-bar
+# default stays the book's rule (App. G.2.3).
+
+def test_a10_the_default_roughness_model_is_small_slope_and_the_error_rule_stays_the_books(tmp_path):
+    """Noise-free medium-sand curves made with the small-slope model, 10 to 85 degrees at 20 and 200 kHz,
+    are fitted back exactly by the default fit and by the tool without --roughness-model; the old
+    default, perturbation, cannot fit them above 60 degrees (rms measured 3.44 dB, w2 a tenth of the truth,
+    nothing flagged, only its validity note).
+    With independent_samples the error rule is still the book's unless named."""
+    import inspect
+    assert sediment_fit.DEFAULT_ROUGHNESS_MODEL == bottom.DEFAULT_ROUGHNESS_MODEL == "small_slope"
+    params = inspect.signature(sediment_fit.fit).parameters
+    assert params["roughness_model"].default == "small_slope" and params["sample_error"].default == "book"
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(10.0, 86.0, 5.0), [20e3, 200e3], 0.0, 0, model="small_slope")
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, n_starts=4, **geo(truth))
+    assert fit.roughness_model == "small_slope" and fit.rms_residual_db < 1e-3, fit.rms_residual_db
+    for k in ("w2", "gamma2", "sigma2"):
+        assert fit.params[k] == pytest.approx(truth[k], rel=1e-3)
+    assert not any("not valid there" in n for n in fit.notes)
+    old = sediment_fit.fit(g, f, y, sound_speed=C, n_starts=4, roughness_model="perturbation", **geo(truth))
+    assert old.rms_residual_db > 2.0 and any("not valid there" in n for n in old.notes), old.rms_residual_db
+    weighted = sediment_fit.fit(g, f, y, sound_speed=C, independent_samples=16, n_starts=1, **geo(truth))
+    assert weighted.sample_error == "book" and weighted.sigma_db == pytest.approx(10 * np.log10(1.25), abs=1e-12)
+    data = tmp_path / "bs.csv"
+    data.write_text("grazing_deg,frequency_hz,bs_db\n" + "".join(f"{a},{b},{float(c)!r}\n" for a, b, c in zip(g, f, y)))
+    env = {"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"}
+    run = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--sediment", "medium_sand",
+                          "--name", "s", "--source", "synthetic", "--starts", "2"], capture_output=True, text=True, env=env)
+    assert run.returncode == 0, run.stderr
+    row = yaml.safe_load(run.stdout)["s"]
+    assert "(small_slope roughness model)" in row["source"] and row["fit"]["rms_residual_db"] < 1e-3
+    run = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--help"], capture_output=True, text=True, env=env)
+    assert "default small_slope" in " ".join(run.stdout.split())
+
+
+def test_a10_models_with_a_structure_function_refuse_gamma2_outside_two_to_four():
+    """Small-slope (and Kirchhoff, composite, combined) need 2 < gamma2 < 4 (bottom.structure_constant): a
+    bound or a held gamma2 outside is refused before fitting, with the way out; perturbation accepts it.
+    An unknown model is refused with the nearest known one."""
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 5.0), [20e3, 200e3], 0.0, 0, model="perturbation")
+    with pytest.raises(ValueError, match=r"'small_slope' needs 2 < gamma2 < 4; gamma2 is bounded by 1.5 to 3.5"):
+        sediment_fit.fit(g, f, y, sound_speed=C, bounds={"gamma2": (1.5, 3.5)}, **geo(truth))
+    with pytest.raises(ValueError, match=r"'kirchhoff' needs 2 < gamma2 < 4; gamma2 is held at 4.2"):
+        sediment_fit.fit(g, f, y, sound_speed=C, hold={"gamma2": 4.2}, roughness_model="kirchhoff", **geo(truth))
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, hold={"gamma2": 4.2}, roughness_model="perturbation", n_starts=1, **geo(truth))
+    assert fit.params["gamma2"] == 4.2 and fit.held == {"gamma2": 4.2}
+    # Only perturbation is defined there: no model comparison (it raised before), and no claim about it.
+    assert np.isnan(sediment_fit.roughness_model_spread_db(fit.params, [10.0], [20e3]))
+    assert not any("roughness models" in n for n in fit.notes)
+    with pytest.raises(ValueError, match=r"did you mean 'small_slope'\?"):
+        sediment_fit.fit(g, f, y, sound_speed=C, roughness_model="small-slope", **geo(truth))
+
+
+def test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds():
+    """What got worse with A10. The silt case above (one frequency, 8-44 degrees, 0.5 dB noise, seed 1)
+    fitted with the small-slope default and no bounds: the fit explains part of the noise with a relief
+    126 times rougher than the truth (w2 2.1e-3 against 1.6e-5, gamma2 3.37 +- 0.17), whose small-slope
+    curve differs from the perturbation one by up to 0.37 dB over these angles; gamma2 is then NOT
+    flagged and sigma2 comes out at 0.72 of the truth (its 1 sigma is a factor 1.10). Measured over
+    seeds 0-9: 5 of 10 such fits flag nothing, sigma2 0.65-0.78 of the truth; with perturbation all 10
+    flag w2 and gamma2, sigma2 0.78-1.02. With the notes' prior bounds for 7.5 phi (`prior_bounds`, w2 at
+    most +14.5 dB above the grain-size rule) the small-slope fit gives the verdict of the test above on
+    every one of seeds 0-8 (sigma2 0.85-1.05 of the truth). Characterisation: the first block pins the
+    defect, so a change that removes it fails here and must update this test.
+
+    What changed on 2026-11-26 (the owner: "yes apply prior bounds by default"): the TOOL now applies
+    `row_prior_bounds` of its --sediment row by default (`test_tool_applies_the_rows_prior_by_default_and_the_off_switch_gives_the_fit_of_before`),
+    so through the tool with --sediment very_fine_silt the defect is gone unless --no-prior-bounds is given.
+    `fit` itself takes no row and still fits unbounded unless given `bounds`: the first block still holds and
+    still pins the defect of the library default. Re-measured over all ten seeds 0-9 (seed 9 was missing
+    before): unbounded, seeds 4, 5, 7, 8, 9 flag nothing and seed 1 flags w2 alone, sigma2 0.645-0.783 of the
+    truth in those six; with the default prior all ten flag w2 and gamma2, sigma2 0.850-1.048 of the truth
+    (seed 9: 1.014), and in eight of them (all but 0 and 3) w2 or gamma2 ends ON a prior bound, so the prior
+    sets that value: the verdict is "not measured", which the result's `on_bound` and the notes say.
+    Seed 9 is also asserted below."""
+    truth = bottom.sediment("very_fine_silt")
+    g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1)
+    free = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(truth))
+    assert free.roughness_model == "small_slope"
+    assert free.unconstrained == ["w2"] and free.params["w2"] > 30 * truth["w2"] and free.std["gamma2"] < 0.5
+    assert 0.6 < free.params["sigma2"] / truth["sigma2"] < 0.8
+    default, _ = sediment_fit.row_prior_bounds("very_fine_silt")           # the tool's default for this row
+    for seed in (1, 9):
+        if seed != 1:
+            g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, seed)
+        bounded = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, bounds=default, **geo(truth))
+        assert "w2" in bounded.unconstrained and "gamma2" in bounded.unconstrained and "sigma2" not in bounded.unconstrained
+        assert bounded.params["sigma2"] == pytest.approx(truth["sigma2"], rel=0.25)
+        assert any("mostly volume scattering and do not fix w2 or gamma2" in n for n in bounded.notes)
+        assert bounded.on_bound, seed                                     # a prior bound sets w2 (seed 1) or w2 and gamma2 (9)
+
+
+def test_a10_what_the_small_slope_default_changes_in_the_cases_above():
+    """The 300 kHz, 5-25 degree sand case of `test_one_frequency_at_low_angles_cannot_separate_strength_from_exponent`,
+    made and fitted with the small-slope default: w2 and sigma2 are still flagged, but gamma2 is not
+    (3.24 +- 0.49 against the truth 3.25; the limit is 0.5): at k = 1257 rad/m this relief's small-slope
+    curve is not first-order theory's, and its shape carries some of gamma2. The combination the data fix
+    is still right to 25 % (measured 0.91 of the truth; perturbation 0.90)."""
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 26.0, 1.0), [300e3], 0.5, 2)
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.5, **geo(truth))
+    assert set(fit.unconstrained) == {"w2", "sigma2"} and 0.3 < fit.std["gamma2"] < 0.5, fit.std
+    assert fit.params["gamma2"] == pytest.approx(truth["gamma2"], abs=fit.std["gamma2"])
+    k = 2 * np.pi * 300e3 / C
+    level = lambda p: p["w2"] * (2 * k * np.cos(np.radians(15.0))) ** -p["gamma2"]          # noqa: E731
+    assert level(fit.params) == pytest.approx(level(truth), rel=0.25)
+
+
+# --- Prior bounds by default (the owner, 2026-11-26: "yes apply prior bounds by default"): the tool applies
+# `row_prior_bounds(--sediment)` (w2, gamma2, sigma2 of `prior_bounds(the row's mean_grain_size_phi)`) unless
+# --prior-bounds PHI (wins) or --no-prior-bounds (the fit of a2e7fbe, bit for bit) is given; a row without a
+# grain size, or no row, gets none and the output says so. `fit` itself takes no row and is unchanged.
+
+SILT_SEED1_A2E7FBE = "96454ec4cdd7255ec34752edebca5970a41530a6b57c63b11e3b2bbb01ae71ee"
+"""sha256 of stdout + stderr of tools/fit_sediment.py at a2e7fbe on the silt seed-1 CSV (`_silt_csv`) with
+--sediment very_fine_silt --sigma-db 0.5 --name s --source synthetic (small_slope, 12 starts): the unbounded
+fit, w2 126 times the truth, only w2 flagged, sigma2 0.72 of the truth."""
+NO_ROW_A2E7FBE = "d070abe4f5720fddcfba8964e16b367b78e9d6634388dfc7a4acf03e279f7f62"
+"""The same at a2e7fbe with --rho 1.147 --nu 0.984 --delta 0.00189317 (no row) --starts 2 --roughness-model perturbation."""
+PLACEHOLDER_ROW_STDOUT_A2E7FBE = "6b444c65d11058fc7c28e63326e203201169dfa5a28f994cd09bb22628d4921f"
+"""stdout (the row) at a2e7fbe with --sediment placeholder_sand (no grain size) and the options of NO_ROW_A2E7FBE."""
+
+
+def _silt_csv(path: Path, seed: int = 1) -> Path:
+    g, f, y = synthetic(bottom.sediment("very_fine_silt"), np.arange(8.0, 46.0, 2.0), [100e3], 0.5, seed)
+    path.write_text("grazing_deg,frequency_hz,bs_db\n" + "".join(f"{float(a)!r},{float(b)!r},{float(c)!r}\n" for a, b, c in zip(g, f, y)))
+    return path
+
+
+def _fit_tool(data: Path, *extra):
+    import hashlib
+    run = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--sigma-db", "0.5",
+                          "--name", "s", "--source", "synthetic", *extra], capture_output=True, text=True,
+                         env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin", "OMP_NUM_THREADS": "1"})
+    assert run.returncode == 0, run.stderr
+    return run, hashlib.sha256((run.stdout + _without_bounds_lines(run.stderr)).encode()).hexdigest()
+
+
+def test_default_prior_bounds_of_a_row_are_its_grain_sizes_scattering_priors():
+    """`row_prior_bounds(name)`: w2, gamma2, sigma2 of `prior_bounds(mean_grain_size_phi)` with a source naming
+    the row and the grain size; None, with the reason, for the rows without a grain size. Every row with a
+    grain size lies inside its own default prior (the table's w2, gamma2, sigma2)."""
+    bounds, source = sediment_fit.row_prior_bounds("very_fine_silt")
+    full = sediment_fit.prior_bounds(7.5)
+    assert bounds == {k: full[k] for k in ("w2", "gamma2", "sigma2")} and sediment_fit.DEFAULT_PRIOR_KEYS == sediment_fit.SCATTER_KEYS
+    assert "'very_fine_silt', mean grain size 7.5 phi" in source and "--no-prior-bounds" in source
+    for name in ("placeholder_sand", "rock", "pebbles"):
+        none, why = sediment_fit.row_prior_bounds(name)
+        assert none is None and why == f"the row {name!r} carries no mean_grain_size_phi"
+    table = bottom.sediment_table()
+    rows = [n for n, e in table.items() if isinstance(e, dict) and e.get("mean_grain_size_phi") is not None]
+    assert len(rows) == 20
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for name in rows:
+            b, _ = sediment_fit.row_prior_bounds(name)
+            p = bottom.sediment(name)
+            assert all(b[k][0] <= p[k] <= b[k][1] for k in b), (name, p, b)
+    with pytest.raises(ValueError, match="unknown sediment"):
+        sediment_fit.row_prior_bounds("very_fine_slit")
+
+
+def test_tool_applies_the_rows_prior_by_default_and_the_off_switch_gives_the_fit_of_before(tmp_path):
+    """The A10 silt case, seed 1, through the tool. Default: the row's prior for 7.5 phi is applied and stated;
+    w2 and gamma2 are flagged, sigma2 comes back to 0.93 of the truth (unbounded: 0.72), and w2 ends on the
+    prior's low end (0.195 of the truth), which the output, the row (fit.on_bound) and the note call set by the
+    bound, not measured. --no-prior-bounds: stdout and stderr are a2e7fbe's bit for bit but for the new
+    "bounds used:" line. --prior-bounds 6.36 replaces the default (explicit wins); with --no-prior-bounds it is refused."""
+    data = _silt_csv(tmp_path / "silt.csv")
+    truth = bottom.sediment("very_fine_silt")
+    run, _ = _fit_tool(data, "--sediment", "very_fine_silt")
+    assert "bounds used: default prior for the row 'very_fine_silt', mean grain size 7.5 phi" in run.stderr
+    assert "UNCONSTRAINED" in run.stderr.split("  w2 ", 1)[1].splitlines()[0]
+    assert "UNCONSTRAINED" in run.stderr.split("  gamma2 ", 1)[1].splitlines()[0]
+    assert "on a bound (set by the bound, not measured): w2 at the prior bound" in run.stderr
+    assert "w2: the fit ran to the prior bound" in run.stderr and "set by the bound, not measured" in run.stderr
+    row = yaml.safe_load(run.stdout)["s"]
+    assert row["fit"]["bounds"].startswith("default prior for the row 'very_fine_silt'") and row["fit"]["on_bound"] == ["w2"]
+    assert set(row["unconfirmed_fields"]) == {"w2", "gamma2"}
+    assert row["sigma2"] == pytest.approx(0.93 * truth["sigma2"], rel=0.02)
+    assert row["w2"] == pytest.approx(sediment_fit.prior_bounds(7.5)["w2"][0], rel=1e-5)
+    off, digest = _fit_tool(data, "--sediment", "very_fine_silt", "--no-prior-bounds")
+    assert "no prior bounds applied: --no-prior-bounds" in off.stderr and "on a bound" not in off.stderr
+    assert digest == SILT_SEED1_A2E7FBE, off.stdout + off.stderr
+    given, _ = _fit_tool(data, "--sediment", "very_fine_silt", "--prior-bounds", "6.36")
+    assert "bounds used: prior, mean grain size 6.36 phi (sediment_fit.prior_bounds; given)" in given.stderr
+    assert "default prior" not in given.stderr
+    assert yaml.safe_load(given.stdout)["s"]["fit"]["bounds"].startswith("prior, mean grain size 6.36 phi")
+    both = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--data", str(data), "--sediment", "very_fine_silt",
+                           "--source", "x", "--prior-bounds", "7.5", "--no-prior-bounds"], capture_output=True, text=True,
+                          env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"})
+    assert both.returncode != 0 and "not both" in both.stderr
+    helptext = subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--help"], capture_output=True, text=True,
+                              env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"}).stdout
+    assert "--no-prior-bounds" in helptext and "that spread is OURS" in " ".join(helptext.split())
+
+
+def test_tool_without_a_row_or_a_grain_size_applies_no_prior_and_says_so(tmp_path):
+    """No --sediment row, or a row without a grain size (placeholder_sand): no prior, and the output says why; the
+    fit and the row are a2e7fbe's (perturbation, 2 starts, for speed). gamma2 ends on its search limit 2.05: the
+    new "on a bound" line says so; the row (an unbounded fit's) is unchanged."""
+    data = _silt_csv(tmp_path / "silt.csv")
+    common = ("--starts", "2", "--roughness-model", "perturbation")
+    run, digest = _fit_tool(data, "--rho", "1.147", "--nu", "0.984", "--delta", "0.00189317", *common)
+    assert "bounds used: the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: no --sediment row named" in run.stderr
+    assert "on a bound (set by the bound, not measured): gamma2 at the search limit 2.05 (low)" in run.stderr
+    assert digest == NO_ROW_A2E7FBE, run.stdout + run.stderr
+    import hashlib
+    run, _ = _fit_tool(data, "--sediment", "placeholder_sand", *common)
+    assert "no prior bounds applied: the row 'placeholder_sand' carries no mean_grain_size_phi" in run.stderr
+    assert hashlib.sha256(run.stdout.encode()).hexdigest() == PLACEHOLDER_ROW_STDOUT_A2E7FBE, run.stdout
+    assert "bounds" not in yaml.safe_load(run.stdout)["s"]["fit"]
+
+
+def test_a_parameter_on_a_bound_is_in_the_result_and_called_not_measured():
+    """`SedimentFit.on_bound`: every fitted parameter that ended on a bound, with the bound, the side and the kind.
+    A prior bound: also a note "set by the bound, not measured" and `fit.on_bound` in the row. A search limit of an
+    unbounded fit: in `on_bound` and its note as before, the row as before (no on_bound line)."""
+    truth = bottom.sediment("medium_sand")
+    g, f, y = synthetic(truth, np.arange(5.0, 56.0, 5.0), [20e3, 200e3], 0.3, 4, model="perturbation")
+    bounds = dict(sediment_fit.prior_bounds(1.5), sigma2=(2e-3, 4e-3))
+    fit = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.3, bounds=bounds, bounds_source="test", n_starts=4,
+                           roughness_model="perturbation", **geo(truth))
+    assert fit.on_bound == {"sigma2": {"bound": 2e-3, "side": "low", "kind": "prior bound"}}
+    assert "sigma2: the fit ran to the prior bound 0.002: the value is set by the bound, not measured" in fit.notes
+    row = yaml.safe_load(fit.yaml_row("s", "x"))["s"]
+    assert row["fit"]["on_bound"] == ["sigma2"] and "sigma2" in row["unconfirmed_fields"]
+    free = sediment_fit.fit(g, f, y, sound_speed=C, sigma_db=0.3, n_starts=4, roughness_model="perturbation", **geo(truth))
+    assert free.on_bound == {} and "on_bound" not in yaml.safe_load(free.yaml_row("s", "x"))["s"]["fit"]
+    angles, levels = _gallaudet_points()
+    site = sediment_fit.fit(angles, FREQUENCY, levels, sound_speed=bottom.NOMINAL_SOUND_SPEED, independent_samples=67,
+                            hold={"sigma2": BOTTOM_FIT["sigma2"]}, roughness_model="perturbation",
+                            **{k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")})
+    assert site.on_bound["w2"] == {"bound": 1e-9, "side": "low", "kind": "search limit"}
+    assert "w2: the fit ran to the search limit 1e-09" in site.notes
