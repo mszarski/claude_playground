@@ -3720,3 +3720,43 @@ issues (2026-11-25).
 - A comment in `sim/timespread.py` named only `hall_novarini`; `apl_1994` is adopted (D-123).
 - Checked on the CPU: `test_sst_validation.py` 24 passed, with the neighbouring files (the agent's
   run); the full GPU suite was not rerun for this.
+
+### D-195 The decimate-first correction works by board, with the board resampler's weights (issue sonar-59u; the owner: "do the decimate-first resampler too"; no output changed)
+
+What got worse first: the stage holds one copy of the moving boards' samples beside the record until it
+ends (before: one channel a thread; at most about 2.4 MB on the cases measured). A channel whose board
+has no clock entry is now refused (`std::invalid_argument`); before, the code read past the array's end.
+
+- What it did: `correct_baseband` (`libs/live/src/decimate.cpp`), the complex resampler of the
+  decimate-first stage (the path of deployment files with a `decimate:` stage, such as the one-row
+  Popoto build), worked a channel a task and computed, for every sample of every channel, a sine and a
+  cosine for each of 16 taps and the carrier turn. It uses the board resampler's own 16-tap Hann sinc
+  (taps -7 to 8, the same 1e-12 rule), and a board's channels share their positions and their turn.
+- Changed in two steps, measured apart: (a) the weights and the turn once a board and a block of 256
+  samples for up to 8 of its channels, every (board, group, block) in one `parallel_for_host`; (b) the
+  weights from `resample_weights` (D-192). The Python engine calls this C++ stage through the bindings
+  (`core.live_decimate_record`, `core.PingDecimator`), so both engines change together; no CUDA source
+  does this stage.
+- Outputs, old against (a) and against (b), both engines, on the 1-, 2- and 3-row Popoto trials (4, 8
+  and 12 boards) and test_decimate's fixtures and chains: the corrected baseband samples (6,032,512
+  from the stage and 200,576 from the streaming receivers), the sync facts and board metadata, the beam
+  maps and every field of every report are equal to the bit. Before the rounding to float32 step (b)
+  moves a sample by at most 5.5e-16 of the largest input, 0.023 of a float32 step.
+- Speed on this container's CPU, the correction alone, old to (b): 53 to 4.2 ms at 32 channels on one
+  thread, 58 to 4.6 ms at 64, 91 to 7.3 ms at 96 (12 to 13 times); the whole chain gains 3 to 12 %,
+  the correction having been a small share of a ping.
+- Measured on an L4 (HF job 6b076cffb6a90bbe997ea8e8, 4 OpenMP threads, chain time a ping after the
+  first, median): the one-row build, whose deployment decimates first, C++ 0.087 s (D-192's job) to
+  0.048 s, of which the decimate stage 0.032 s; Python 0.124 to 0.084 s. With `--decimate` on the 2- and
+  3-row trials: C++ 0.054 and 0.063 s (stage 0.028 and 0.044 s). All 18 loopback runs of that job passed.
+- Tests: `Decimate.BoardsCorrectedTogetherGiveTheChannelByChannelSamplesToTheBit`
+  (`tests/cpp/test_stage2.cpp`): to the bit against the channel-by-channel loop with the same weights,
+  and against the per-tap formula within one float32 step plus 16 x 4.5e-16 x the largest input
+  (measured: every one of its 37,170 parts equal); a board out of range is refused. No existing
+  tolerance or pinned value changed. The exact pin does not tell the old weights from the new (they
+  never differ in a float32 output here).
+- `tools/live_chain_timing.py` gains the decimate stage's time and `--decimate`.
+- Not run: `popoto_face_1row` (the same `decimate: {}` stage). The 12 km scenarios simulate baseband
+  directly and never pass this stage.
+- Full GPU suite on this tree: **2183 passed, 101 skipped**, none failed (NVIDIA L4, HF job
+  6b076d06d91f621b93092f13, 46 min 40 s).

@@ -700,7 +700,7 @@ Examples are from each tool's docstring or its argument list.
 | `sonar_live_hsb.py` | the chain through Holoscan Sensor Bridge, as two processes | `tools/sonar_live_hsb.py serve --scenario flank_patrol` and `tools/sonar_live_hsb.py receive CONFIG --pings 20 --report r.jsonl` |
 | `hsb_host_check.py` | read-only check of a host for Sensor Bridge's socket receiver at a Popoto build's rate (`rmem_max`, the granted socket buffer, isolated receiver core, imports, CUDA, RDMA devices); prints the study's command for that host (sonar-02c; nothing measured with it yet) | `tools/hsb_host_check.py --receiver-core 2 --json-out hsb_host_check.json` |
 | `hsb_frame_timing.py` | the receive path's cost a frame at a Popoto build's rate, a profile, and the one-thread schedule emulated with the real chain (D-190) | `tools/hsb_frame_timing.py` |
-| `live_chain_timing.py` | chain time and board-synchronisation time a ping for each engine on the Popoto trials (D-191); with `--decimate`, the decimate-first stage's time (sonar-59u) | `tools/live_chain_timing.py` |
+| `live_chain_timing.py` | chain time and board-synchronisation time a ping for each engine on the Popoto trials (D-191); with `--decimate`, the decimate-first stage's time (D-195) | `tools/live_chain_timing.py` |
 | `sonar_run.py` | a batch chain from a YAML file | `tools/sonar_run.py configs/chains/stripmap_points.yaml` |
 | `inspect_tap.py` | numbers and plots of records in a container or a tap directory | `tools/inspect_tap.py taps/ --stage prepare --ping 2` |
 | `board_merge.py` | per-board GSFB streams to one whole-array stream, as a UDP relay (D-184) | `tools/board_merge.py popoto_testauv_1row_clocks --port 5710 --to 127.0.0.1:5700` |
