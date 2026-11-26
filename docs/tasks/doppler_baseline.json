@@ -1,0 +1,1311 @@
+{
+ "what": "docs/tasks/DOPPLER.md section 3: margins with and without a Doppler bank, and the reverberation's Doppler spectrum (tools/doppler_study.py)",
+ "status": "ours: simulated records only, one target-only ping per case, the background's mean from 2 (sweep) or 6 (CW) pings",
+ "tree": "integration branch at f5054b4, the main checkout's built module of 2026-11-25 (no C++ change in this package)",
+ "environment": "CPU, OMP_NUM_THREADS=1, GPUSONAR_BELLHOP set (flank_patrol, popoto_far_mover, popoto_12km are eigenray scenes); 2026-11-26",
+ "notes": [
+  "fp_scene, fp_cwhann and fp_cw ran before the tool's spread_* fields existed; the later runs have them",
+  "range_rate_m_s is the target's range rate relative to the platform at the first ping (positive opening); platform_part_m_s the platform's share"
+ ],
+ "runs": {
+  "fp_scene": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform scene --pings 2 --vmax 3",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "scene",
+    "platform_velocity": [
+     0,
+     0,
+     0
+    ],
+    "background_seconds": 25.698493480682373,
+    "targets": [
+     {
+      "label": "submarine",
+      "bearing_deg": -11.500000000000002,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 3000.1929455663494,
+      "zero_doppler_margin_db": 26.63811044166469,
+      "bank_margin_db": 28.562630919113154,
+      "bank_best_range_rate": -0.74842057301248,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.20007836643586005,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -3.0404585778632,
+       3.0404585778632
+      ],
+      "seconds": 267.84086513519287,
+      "gain_db": 1.924520477448464,
+      "noise_only_zero_doppler_margin_db": 46.28184049784266,
+      "noise_only_bank_margin_db": 48.20710724384053,
+      "range_rate_m_s": -0.6077856266442947,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 24.20000000000002,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2208.2846751042002,
+      "zero_doppler_margin_db": 7.032440823086357,
+      "bank_margin_db": 12.87799925335798,
+      "bank_best_range_rate": 2.05815657578432,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.20007836643586005,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -3.0404585778632,
+       3.0404585778632
+      ],
+      "seconds": 57.721752643585205,
+      "gain_db": 5.845558430271624,
+      "noise_only_zero_doppler_margin_db": 31.186409427940816,
+      "noise_only_bank_margin_db": 36.959488871278566,
+      "range_rate_m_s": 1.9961754246718668,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "wreck",
+      "bearing_deg": 24.60000000000001,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 3603.0125400584775,
+      "zero_doppler_margin_db": 29.76138162409302,
+      "bank_margin_db": 29.76138162409302,
+      "bank_best_range_rate": 0.0,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.20007836643586005,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -3.0404585778632,
+       3.0404585778632
+      ],
+      "seconds": 61.945921182632446,
+      "gain_db": 0.0,
+      "noise_only_zero_doppler_margin_db": 46.21943996707151,
+      "noise_only_bank_margin_db": 46.21943996707151,
+      "range_rate_m_s": 0.0,
+      "platform_part_m_s": 0.0
+     }
+    ]
+   }
+  },
+  "fp_cwhann": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform cw_hann --pings 6 --vmax 3",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "cw_hann",
+    "platform_velocity": [
+     0,
+     0,
+     0
+    ],
+    "background_seconds": 26.228928327560425,
+    "targets": [
+     {
+      "label": "submarine",
+      "bearing_deg": -11.400000000000002,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 3032.714022055548,
+      "zero_doppler_margin_db": -46.25721277782436,
+      "bank_margin_db": 63.38847770783393,
+      "bank_best_range_rate": -0.60809171557264,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 474.44539165496826,
+      "gain_db": 109.64569048565829,
+      "noise_only_zero_doppler_margin_db": 10.103438681095332,
+      "noise_only_bank_margin_db": 62.20192806233564,
+      "range_rate_m_s": -0.6077856266442947,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.40000000000002,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2249.774035074321,
+      "zero_doppler_margin_db": -102.54014836338402,
+      "bank_margin_db": 39.81314785807181,
+      "bank_best_range_rate": 1.96460400415776,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.6176646205357142,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 75.38677668571472,
+      "gain_db": 142.35329622145582,
+      "noise_only_zero_doppler_margin_db": -44.474809732270344,
+      "noise_only_bank_margin_db": 38.48253413872644,
+      "range_rate_m_s": 1.9961754246718668,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "wreck",
+      "bearing_deg": 24.000000000000018,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 3686.5522026728486,
+      "zero_doppler_margin_db": -16.586064338176033,
+      "bank_margin_db": -16.586064338176033,
+      "bank_best_range_rate": 0.0,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 102.74230790138245,
+      "gain_db": 0.0,
+      "noise_only_zero_doppler_margin_db": 34.60224815163146,
+      "noise_only_bank_margin_db": 34.60224815163146,
+      "range_rate_m_s": 0.0,
+      "platform_part_m_s": 0.0
+     }
+    ]
+   }
+  },
+  "fp_cw": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform cw --pings 6 --vmax 3 --target small_vehicle",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "cw",
+    "platform_velocity": [
+     0,
+     0,
+     0
+    ],
+    "background_seconds": 37.56048607826233,
+    "targets": [
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.40000000000002,
+      "waveform": "cw",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2266.4323326696663,
+      "zero_doppler_margin_db": -55.46282588060958,
+      "bank_margin_db": 18.002129858534055,
+      "bank_best_range_rate": 1.96460400415776,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.7846010044642857,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.09355257162656,
+       0.09355257162656
+      ],
+      "seconds": 48.85368323326111,
+      "gain_db": 73.46495573914363,
+      "noise_only_zero_doppler_margin_db": 6.818777293929255,
+      "noise_only_bank_margin_db": 37.606138758803226,
+      "range_rate_m_s": 1.9961754246718668,
+      "platform_part_m_s": 0.0
+     }
+    ]
+   }
+  },
+  "fp_sweep": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform cw_hann --target small_vehicle --radial 0 0.1 0.2 0.3 0.5 1 --pings 6 --vmax 3",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "cw_hann",
+    "platform_velocity": [
+     0,
+     0,
+     0
+    ],
+    "background_seconds": 39.058303356170654,
+    "targets": [
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.50000000000001,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2253.9386094731576,
+      "zero_doppler_margin_db": -14.797360179878972,
+      "bank_margin_db": -14.797360179878972,
+      "bank_best_range_rate": 0.0,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 81.4125771522522,
+      "gain_db": 0.0,
+      "noise_only_zero_doppler_margin_db": 43.89939294790036,
+      "noise_only_bank_margin_db": 43.89939294790036,
+      "spread_90_s": 0.628793712797619,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": -16.33986283526768,
+      "range_rate_m_s": 0.0,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.40000000000002,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2262.26775827083,
+      "zero_doppler_margin_db": -16.967520999500348,
+      "bank_margin_db": -7.5382177258640315,
+      "bank_best_range_rate": 0.09355257162656,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 77.15550136566162,
+      "gain_db": 9.429303273636316,
+      "noise_only_zero_doppler_margin_db": 41.757261249563975,
+      "noise_only_bank_margin_db": 47.21766915768046,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": -9.06573800534409,
+      "range_rate_m_s": 0.09999896051516867,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.30000000000002,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2270.596907068503,
+      "zero_doppler_margin_db": -28.164861151874774,
+      "bank_margin_db": 5.6710774710910155,
+      "bank_best_range_rate": 0.18710514325312,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 56.89033007621765,
+      "gain_db": 33.83593862296579,
+      "noise_only_zero_doppler_margin_db": 30.646357520589056,
+      "noise_only_bank_margin_db": 48.56617167485811,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 4.140746052883999,
+      "range_rate_m_s": 0.19999792103033734,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.200000000000017,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2274.7614814673393,
+      "zero_doppler_margin_db": -41.69493712946575,
+      "bank_margin_db": 22.668276770401775,
+      "bank_best_range_rate": 0.28065771487968,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 54.70152473449707,
+      "gain_db": 64.36321389986753,
+      "noise_only_zero_doppler_margin_db": 16.266227498240205,
+      "noise_only_bank_margin_db": 50.60128990815312,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 21.13710074250023,
+      "range_rate_m_s": 0.29999688154550597,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.100000000000016,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2274.7614814673393,
+      "zero_doppler_margin_db": -58.910944346230465,
+      "bank_margin_db": 38.98632770168759,
+      "bank_best_range_rate": 0.4677628581328,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 53.2208251953125,
+      "gain_db": 97.89727204791805,
+      "noise_only_zero_doppler_margin_db": -1.035137036189234,
+      "noise_only_bank_margin_db": 45.79843440545624,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 37.4505542894501,
+      "range_rate_m_s": 0.4999948025758433,
+      "platform_part_m_s": 0.0
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.100000000000016,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2241.4448862766485,
+      "zero_doppler_margin_db": -84.55969479157937,
+      "bank_margin_db": 39.02352527110838,
+      "bank_best_range_rate": 0.98230200207888,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.9960537574404762,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.14032885743984,
+       0.14032885743984
+      ],
+      "seconds": 54.76994967460632,
+      "gain_db": 123.58322006268776,
+      "noise_only_zero_doppler_margin_db": -26.72536419829642,
+      "noise_only_bank_margin_db": 38.76920989074072,
+      "spread_90_s": 0.6009709821428572,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 37.47158528821805,
+      "range_rate_m_s": 0.9999896051516866,
+      "platform_part_m_s": 0.0
+     }
+    ]
+   }
+  },
+  "fp_v15": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform cw_hann --platform-speed 1.5 --target small_vehicle --radial -2 0 0.25 0.5 1 2 --pings 6 --vmax 4",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "cw_hann",
+    "platform_velocity": [
+     1.5,
+     0.0,
+     0.0
+    ],
+    "background_seconds": 40.5699143409729,
+    "targets": [
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.50000000000002,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2363.0504587226687,
+      "zero_doppler_margin_db": -51.89439641361945,
+      "bank_margin_db": 35.967647815172434,
+      "bank_best_range_rate": -2.5726957197304,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 1.0016183035714286,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.74842057301248,
+       -0.42098657231951997
+      ],
+      "seconds": 59.705278396606445,
+      "gain_db": 87.86204422879189,
+      "noise_only_zero_doppler_margin_db": -45.95649939239476,
+      "noise_only_bank_margin_db": 35.96988096260451,
+      "spread_90_s": 0.5252931547619047,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 34.45958551477347,
+      "range_rate_m_s": -2.615519827778709,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.800000000000015,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2366.3821182417378,
+      "zero_doppler_margin_db": -26.591274500349257,
+      "bank_margin_db": -35.378774580507084,
+      "bank_best_range_rate": -0.65486800138592,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.6054226190476191,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.79519685882576,
+       -0.42098657231951997
+      ],
+      "seconds": 58.632068157196045,
+      "gain_db": -8.787500080157827,
+      "noise_only_zero_doppler_margin_db": -20.72906079502763,
+      "noise_only_bank_margin_db": 20.852320816072265,
+      "spread_90_s": 0.654390625,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": -36.82395461815548,
+      "range_rate_m_s": -0.6155406174753357,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.800000000000015,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2176.4775256548023,
+      "zero_doppler_margin_db": -10.188216787768463,
+      "bank_margin_db": -11.110872874416112,
+      "bank_best_range_rate": -0.32743400069296,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.5030349702380952,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.79519685882576,
+       -0.42098657231951997
+      ],
+      "seconds": 54.84763765335083,
+      "gain_db": -0.922656086647649,
+      "noise_only_zero_doppler_margin_db": -4.156689741187857,
+      "noise_only_bank_margin_db": 24.926505643028186,
+      "spread_90_s": 0.6499389880952381,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": -12.627518266647034,
+      "range_rate_m_s": -0.3655432161874141,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.50000000000001,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2236.447396998045,
+      "zero_doppler_margin_db": 30.386909967621882,
+      "bank_margin_db": 29.152815906252574,
+      "bank_best_range_rate": -0.09355257162656,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 1.0016183035714286,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.74842057301248,
+       -0.42098657231951997
+      ],
+      "seconds": 55.44343447685242,
+      "gain_db": -1.2340940613693085,
+      "noise_only_zero_doppler_margin_db": 36.39440158806461,
+      "noise_only_bank_margin_db": 37.13212885766663,
+      "spread_90_s": 0.6321324404761904,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 27.616205205879503,
+      "range_rate_m_s": -0.11554581489949249,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.0,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2276.427311226874,
+      "zero_doppler_margin_db": -0.35290350247385327,
+      "bank_margin_db": 50.306912510049585,
+      "bank_best_range_rate": 0.37421028650624,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 1.0016183035714286,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.74842057301248,
+       -0.42098657231951997
+      ],
+      "seconds": 61.79538345336914,
+      "gain_db": 50.659816012523436,
+      "noise_only_zero_doppler_margin_db": 6.247532387676231,
+      "noise_only_bank_margin_db": 48.24991009284996,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 48.770775585965566,
+      "range_rate_m_s": 0.3844489876763508,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.100000000000016,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2183.1408446929404,
+      "zero_doppler_margin_db": -41.83281798636948,
+      "bank_margin_db": 36.794679102599204,
+      "bank_best_range_rate": 1.35651228858512,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.6143258928571428,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.74842057301248,
+       -0.42098657231951997
+      ],
+      "seconds": 59.506296157836914,
+      "gain_db": 78.62749708896868,
+      "noise_only_zero_doppler_margin_db": -35.9816948704216,
+      "noise_only_bank_margin_db": 38.25386562266429,
+      "spread_90_s": 0.6232291666666666,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 35.24300859297236,
+      "range_rate_m_s": 1.3844385928280374,
+      "platform_part_m_s": -0.6155406174753357
+     }
+    ]
+   }
+  },
+  "fp_v15_lfm": {
+   "command": "python3 tools/doppler_study.py margin flank_patrol --waveform scene --platform-speed 1.5 --target small_vehicle --radial -2 0.5 2 --pings 2 --vmax 4",
+   "result": {
+    "scenario": "flank_patrol",
+    "waveform": "scene",
+    "platform_velocity": [
+     1.5,
+     0.0,
+     0.0
+    ],
+    "background_seconds": 42.78561472892761,
+    "targets": [
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 24.000000000000004,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2190.023209527381,
+      "zero_doppler_margin_db": 8.953931278826445,
+      "bank_margin_db": 9.472272501948689,
+      "bank_best_range_rate": -2.66624829135696,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.2000797601533511,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -4.02276057994208,
+       4.02276057994208
+      ],
+      "seconds": 52.10371232032776,
+      "gain_db": 0.5183412231222437,
+      "noise_only_zero_doppler_margin_db": 33.10363567087378,
+      "noise_only_bank_margin_db": 33.63723782905793,
+      "spread_90_s": 0.1498362446008233,
+      "spread_cells": 599.3449784032931,
+      "spread_energy_margin_db": -2.983986739133903,
+      "range_rate_m_s": -2.615519827778709,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 24.000000000000018,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2205.234723159494,
+      "zero_doppler_margin_db": 10.23378363818281,
+      "bank_margin_db": 10.255818569204898,
+      "bank_best_range_rate": -0.04677628581328,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.2000797601533511,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -4.02276057994208,
+       4.02276057994208
+      ],
+      "seconds": 53.897857904434204,
+      "gain_db": 0.022034931022087534,
+      "noise_only_zero_doppler_margin_db": 34.33138906296619,
+      "noise_only_bank_margin_db": 34.353440888380575,
+      "spread_90_s": 0.176096204994782,
+      "spread_cells": 704.384819979128,
+      "spread_energy_margin_db": -3.994761547849121,
+      "range_rate_m_s": -0.11554581489949249,
+      "platform_part_m_s": -0.6155406174753357
+     },
+     {
+      "label": "small_vehicle",
+      "bearing_deg": 23.900000000000016,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 7999.910858543652,
+      "range_m": 2207.486027177047,
+      "zero_doppler_margin_db": 8.757879716171196,
+      "bank_margin_db": 12.565216962949098,
+      "bank_best_range_rate": 1.4032885743984,
+      "speed_resolution_m_s": 0.09355257162656,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.2000797601533511,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -4.02276057994208,
+       4.02276057994208
+      ],
+      "seconds": 55.81079459190369,
+      "gain_db": 3.8073372467779016,
+      "noise_only_zero_doppler_margin_db": 32.842061535239544,
+      "noise_only_bank_margin_db": 36.67202593205231,
+      "spread_90_s": 0.14910454291801947,
+      "spread_cells": 596.4181716720778,
+      "spread_energy_margin_db": -2.4175605542330696,
+      "range_rate_m_s": 1.3844385928280374,
+      "platform_part_m_s": -0.6155406174753357
+     }
+    ]
+   }
+  },
+  "fm_scene": {
+   "command": "python3 tools/doppler_study.py margin popoto_far_mover --waveform scene --pings 2 --vmax 3",
+   "result": {
+    "scenario": "popoto_far_mover",
+    "waveform": "scene",
+    "platform_velocity": [
+     1.5,
+     0,
+     0
+    ],
+    "background_seconds": 24.550527095794678,
+    "targets": [
+     {
+      "label": "ship",
+      "bearing_deg": 7.0,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 8000.0,
+      "range_m": 6061.1886020506,
+      "zero_doppler_margin_db": 27.178659747183392,
+      "bank_margin_db": 27.802892217322935,
+      "bank_best_range_rate": -0.6548607044000001,
+      "speed_resolution_m_s": 0.09355152920000001,
+      "range_resolution_m": 0.18710305840000002,
+      "background_window_s": 0.2000625,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -3.0404246990000003,
+       3.0404246990000003
+      ],
+      "seconds": 92.44430947303772,
+      "gain_db": 0.6242324701395425,
+      "noise_only_zero_doppler_margin_db": 27.764846608263063,
+      "noise_only_bank_margin_db": 28.380496127286627,
+      "spread_90_s": 0.19,
+      "spread_cells": 760.0,
+      "spread_energy_margin_db": 15.547446021580896,
+      "range_rate_m_s": -0.9912274137260555,
+      "platform_part_m_s": -0.1982454827452111
+     }
+    ]
+   }
+  },
+  "fm_cwhann": {
+   "command": "python3 tools/doppler_study.py margin popoto_far_mover --waveform cw_hann --pings 6 --vmax 3",
+   "result": {
+    "scenario": "popoto_far_mover",
+    "waveform": "cw_hann",
+    "platform_velocity": [
+     1.5,
+     0,
+     0
+    ],
+    "background_seconds": 17.004122734069824,
+    "targets": [
+     {
+      "label": "ship",
+      "bearing_deg": 6.899999999999997,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 8000.0,
+      "range_m": 6072.7889916714,
+      "zero_doppler_margin_db": -31.222391211908672,
+      "bank_margin_db": 49.42533494870052,
+      "bank_best_range_rate": -0.935515292,
+      "speed_resolution_m_s": 0.09355152920000001,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.954625,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.37420611680000004,
+       0.0
+      ],
+      "seconds": 133.29166626930237,
+      "gain_db": 80.64772616060918,
+      "noise_only_zero_doppler_margin_db": -14.113896014081673,
+      "noise_only_bank_margin_db": 51.493433113297456,
+      "spread_90_s": 0.5733125,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 47.88724903193325,
+      "range_rate_m_s": -0.9912274137260555,
+      "platform_part_m_s": -0.1982454827452111
+     }
+    ]
+   }
+  },
+  "k12_scene": {
+   "command": "python3 tools/doppler_study.py margin popoto_12km --waveform scene --pings 2 --vmax 3",
+   "result": {
+    "scenario": "popoto_12km",
+    "waveform": "scene",
+    "platform_velocity": [
+     1.5,
+     0,
+     0
+    ],
+    "background_seconds": 32.30748748779297,
+    "targets": [
+     {
+      "label": "ship",
+      "bearing_deg": 3.4000000000000017,
+      "waveform": "scene",
+      "duration_s": 1.0,
+      "carrier_hz": 5000.0,
+      "range_m": 12076.009934714,
+      "zero_doppler_margin_db": 24.028473110049553,
+      "bank_margin_db": 25.92083720230403,
+      "bank_best_range_rate": 1.34714202048,
+      "speed_resolution_m_s": 0.14968244672,
+      "range_resolution_m": 0.37420611680000004,
+      "background_window_s": 0.200125,
+      "background_pings": 2,
+      "reverb_within_10db_of_peak_m_s": [
+       -3.06849015776,
+       3.06849015776
+      ],
+      "seconds": 124.37130308151245,
+      "gain_db": 1.8923640922544749,
+      "noise_only_zero_doppler_margin_db": 24.56082376434334,
+      "noise_only_bank_margin_db": 26.462561479285714,
+      "spread_90_s": 0.301,
+      "spread_cells": 602.0,
+      "spread_energy_margin_db": 12.298393640471177,
+      "range_rate_m_s": -0.4988925168426798,
+      "platform_part_m_s": -0.09977850336853597
+     }
+    ]
+   }
+  },
+  "k12_cwhann": {
+   "command": "python3 tools/doppler_study.py margin popoto_12km --waveform cw_hann --pings 6 --vmax 3",
+   "result": {
+    "scenario": "popoto_12km",
+    "waveform": "cw_hann",
+    "platform_velocity": [
+     1.5,
+     0,
+     0
+    ],
+    "background_seconds": 49.61992073059082,
+    "targets": [
+     {
+      "label": "ship",
+      "bearing_deg": 3.4000000000000017,
+      "waveform": "cw_hann",
+      "duration_s": 1.0,
+      "carrier_hz": 5000.0,
+      "range_m": 12052.9962585308,
+      "zero_doppler_margin_db": -12.19991283199298,
+      "bank_margin_db": 34.731977385126655,
+      "bank_best_range_rate": -0.59872978688,
+      "speed_resolution_m_s": 0.14968244672,
+      "range_resolution_m": 748.4122336,
+      "background_window_s": 0.81375,
+      "background_pings": 6,
+      "reverb_within_10db_of_peak_m_s": [
+       -0.3742061168,
+       0.14968244672
+      ],
+      "seconds": 199.03255462646484,
+      "gain_db": 46.93189021711964,
+      "noise_only_zero_doppler_margin_db": -1.1636325528191587,
+      "noise_only_bank_margin_db": 34.07639432733258,
+      "spread_90_s": 0.718875,
+      "spread_cells": 1.0,
+      "spread_energy_margin_db": 33.4265667841263,
+      "range_rate_m_s": -0.4988925168426798,
+      "platform_part_m_s": -0.09977850336853597
+     }
+    ]
+   }
+  },
+  "sp_scene": {
+   "command": "python3 tools/doppler_study.py margin sst_pursuit --waveform scene --pings 3 --vmax 25",
+   "result": {
+    "scenario": "sst_pursuit",
+    "waveform": "scene",
+    "platform_velocity": [
+     20.0,
+     0,
+     0
+    ],
+    "background_seconds": 93.2531886100769,
+    "targets": [
+     {
+      "label": "target",
+      "bearing_deg": -2.220446049250313e-16,
+      "waveform": "scene",
+      "duration_s": 0.1,
+      "carrier_hz": 9900.0,
+      "range_m": 2100.5133928571427,
+      "zero_doppler_margin_db": -15.626441116159409,
+      "bank_margin_db": 12.658790484240134,
+      "bank_best_range_rate": -17.424242424242426,
+      "speed_resolution_m_s": 0.7575757575757576,
+      "range_resolution_m": 75.0,
+      "background_window_s": 0.100625,
+      "background_pings": 3,
+      "reverb_within_10db_of_peak_m_s": [
+       -20.454545454545453,
+       -19.318181818181817
+      ],
+      "seconds": 0.678663969039917,
+      "gain_db": 28.28523160039954,
+      "noise_only_zero_doppler_margin_db": -15.33034696251547,
+      "noise_only_bank_margin_db": 32.78626412126495,
+      "spread_90_s": 0.10404761904761906,
+      "spread_cells": 1.0404761904761906,
+      "spread_energy_margin_db": 10.448693685201283,
+      "range_rate_m_s": -17.5,
+      "platform_part_m_s": -20.0
+     }
+    ]
+   }
+  },
+  "rs_mono": {
+   "command": "python3 tools/doppler_study.py reverb-spectrum --speed 3",
+   "result": {
+    "speed": 3.0,
+    "boundary": "bottom",
+    "geometry": "monostatic",
+    "wind": 8.0,
+    "carrier": 5000.0,
+    "pulse_s": 1.0,
+    "full_extent_hz": 20.042430263128182,
+    "beams": [
+     {
+      "bearing_deg": -80.0,
+      "expected_hz": -19.737940712335142,
+      "peak_hz": -19.625,
+      "minus10_db_from_hz": -20.5625,
+      "minus10_db_to_hz": 21.25
+     },
+     {
+      "bearing_deg": -70.0,
+      "expected_hz": -18.833723820877722,
+      "peak_hz": -18.4375,
+      "minus10_db_from_hz": -20.3125,
+      "minus10_db_to_hz": 20.9375
+     },
+     {
+      "bearing_deg": -60.0,
+      "expected_hz": -17.357253761447037,
+      "peak_hz": -18.375,
+      "minus10_db_from_hz": -19.5,
+      "minus10_db_to_hz": -15.375
+     },
+     {
+      "bearing_deg": -50.0,
+      "expected_hz": -15.35339232966898,
+      "peak_hz": -15.875,
+      "minus10_db_from_hz": -17.1875,
+      "minus10_db_to_hz": -15.3125
+     },
+     {
+      "bearing_deg": -40.0,
+      "expected_hz": -12.88302584114532,
+      "peak_hz": -13.3125,
+      "minus10_db_from_hz": -14.6875,
+      "minus10_db_to_hz": -11.875
+     },
+     {
+      "bearing_deg": -30.0,
+      "expected_hz": -10.02121513156409,
+      "peak_hz": -10.125,
+      "minus10_db_from_hz": -12.4375,
+      "minus10_db_to_hz": -8.375
+     },
+     {
+      "bearing_deg": -20.0,
+      "expected_hz": -6.854914871189821,
+      "peak_hz": -6.75,
+      "minus10_db_from_hz": -9.0625,
+      "minus10_db_to_hz": -5.8125
+     },
+     {
+      "bearing_deg": -10.0,
+      "expected_hz": -3.480331491208744,
+      "peak_hz": -4.3125,
+      "minus10_db_from_hz": -5.0,
+      "minus10_db_to_hz": -1.5
+     },
+     {
+      "bearing_deg": 0.0,
+      "expected_hz": 0.0,
+      "peak_hz": 0.875,
+      "minus10_db_from_hz": -1.3125,
+      "minus10_db_to_hz": 2.0
+     },
+     {
+      "bearing_deg": 10.0,
+      "expected_hz": 3.480331491208744,
+      "peak_hz": 4.625,
+      "minus10_db_from_hz": 1.5,
+      "minus10_db_to_hz": 5.25
+     },
+     {
+      "bearing_deg": 20.0,
+      "expected_hz": 6.854914871189821,
+      "peak_hz": 7.5625,
+      "minus10_db_from_hz": 6.9375,
+      "minus10_db_to_hz": 8.375
+     },
+     {
+      "bearing_deg": 30.0,
+      "expected_hz": 10.02121513156409,
+      "peak_hz": 8.875,
+      "minus10_db_from_hz": 8.1875,
+      "minus10_db_to_hz": 12.0
+     },
+     {
+      "bearing_deg": 40.0,
+      "expected_hz": 12.88302584114532,
+      "peak_hz": 11.25,
+      "minus10_db_from_hz": 10.6875,
+      "minus10_db_to_hz": 15.1875
+     },
+     {
+      "bearing_deg": 50.0,
+      "expected_hz": 15.35339232966898,
+      "peak_hz": 15.875,
+      "minus10_db_from_hz": 13.6875,
+      "minus10_db_to_hz": 16.4375
+     },
+     {
+      "bearing_deg": 60.0,
+      "expected_hz": 17.357253761447037,
+      "peak_hz": 17.5625,
+      "minus10_db_from_hz": 15.8125,
+      "minus10_db_to_hz": 18.9375
+     },
+     {
+      "bearing_deg": 70.0,
+      "expected_hz": 18.833723820877722,
+      "peak_hz": 18.375,
+      "minus10_db_from_hz": -19.8125,
+      "minus10_db_to_hz": 20.9375
+     },
+     {
+      "bearing_deg": 80.0,
+      "expected_hz": 19.737940712335142,
+      "peak_hz": 19.8125,
+      "minus10_db_from_hz": -20.4375,
+      "minus10_db_to_hz": 21.25
+     }
+    ]
+   }
+  },
+  "rs_bi": {
+   "command": "python3 tools/doppler_study.py reverb-spectrum --speed 3 --geometry bistatic",
+   "result": {
+    "speed": 3.0,
+    "boundary": "bottom",
+    "geometry": "bistatic",
+    "wind": 8.0,
+    "carrier": 5000.0,
+    "pulse_s": 1.0,
+    "full_extent_hz": 20.042430263128182,
+    "beams": [
+     {
+      "bearing_deg": -80.0,
+      "expected_hz": -19.737940712335142,
+      "peak_hz": -19.125,
+      "minus10_db_from_hz": -20.5,
+      "minus10_db_to_hz": 20.125
+     },
+     {
+      "bearing_deg": -70.0,
+      "expected_hz": -18.833723820877722,
+      "peak_hz": -19.0625,
+      "minus10_db_from_hz": -20.3125,
+      "minus10_db_to_hz": 19.875
+     },
+     {
+      "bearing_deg": -60.0,
+      "expected_hz": -17.357253761447037,
+      "peak_hz": -18.375,
+      "minus10_db_from_hz": -19.25,
+      "minus10_db_to_hz": -16.8125
+     },
+     {
+      "bearing_deg": -50.0,
+      "expected_hz": -15.35339232966898,
+      "peak_hz": -15.0625,
+      "minus10_db_from_hz": -15.875,
+      "minus10_db_to_hz": -13.1875
+     },
+     {
+      "bearing_deg": -40.0,
+      "expected_hz": -12.88302584114532,
+      "peak_hz": -12.8125,
+      "minus10_db_from_hz": -13.8125,
+      "minus10_db_to_hz": -12.25
+     },
+     {
+      "bearing_deg": -30.0,
+      "expected_hz": -10.02121513156409,
+      "peak_hz": -9.5625,
+      "minus10_db_from_hz": -11.375,
+      "minus10_db_to_hz": -8.625
+     },
+     {
+      "bearing_deg": -20.0,
+      "expected_hz": -6.854914871189821,
+      "peak_hz": -6.1875,
+      "minus10_db_from_hz": -8.75,
+      "minus10_db_to_hz": -5.0
+     },
+     {
+      "bearing_deg": -10.0,
+      "expected_hz": -3.480331491208744,
+      "peak_hz": -3.875,
+      "minus10_db_from_hz": -5.1875,
+      "minus10_db_to_hz": -1.8125
+     },
+     {
+      "bearing_deg": 0.0,
+      "expected_hz": 0.0,
+      "peak_hz": -1.0,
+      "minus10_db_from_hz": -1.8125,
+      "minus10_db_to_hz": 2.625
+     },
+     {
+      "bearing_deg": 10.0,
+      "expected_hz": 3.480331491208744,
+      "peak_hz": 3.5,
+      "minus10_db_from_hz": 1.5625,
+      "minus10_db_to_hz": 4.9375
+     },
+     {
+      "bearing_deg": 20.0,
+      "expected_hz": 6.854914871189821,
+      "peak_hz": 7.3125,
+      "minus10_db_from_hz": 5.1875,
+      "minus10_db_to_hz": 8.125
+     },
+     {
+      "bearing_deg": 30.0,
+      "expected_hz": 10.02121513156409,
+      "peak_hz": 10.5625,
+      "minus10_db_from_hz": 8.75,
+      "minus10_db_to_hz": 12.0
+     },
+     {
+      "bearing_deg": 40.0,
+      "expected_hz": 12.88302584114532,
+      "peak_hz": 12.9375,
+      "minus10_db_from_hz": 11.25,
+      "minus10_db_to_hz": 14.375
+     },
+     {
+      "bearing_deg": 50.0,
+      "expected_hz": 15.35339232966898,
+      "peak_hz": 15.25,
+      "minus10_db_from_hz": 14.125,
+      "minus10_db_to_hz": 16.875
+     },
+     {
+      "bearing_deg": 60.0,
+      "expected_hz": 17.357253761447037,
+      "peak_hz": 16.0625,
+      "minus10_db_from_hz": 14.9375,
+      "minus10_db_to_hz": 19.125
+     },
+     {
+      "bearing_deg": 70.0,
+      "expected_hz": 18.833723820877722,
+      "peak_hz": 19.9375,
+      "minus10_db_from_hz": -20.625,
+      "minus10_db_to_hz": 22.375
+     },
+     {
+      "bearing_deg": 80.0,
+      "expected_hz": 19.737940712335142,
+      "peak_hz": -19.0625,
+      "minus10_db_from_hz": -20.5625,
+      "minus10_db_to_hz": 20.25
+     }
+    ]
+   }
+  },
+  "rs_surf": {
+   "command": "python3 tools/doppler_study.py reverb-spectrum --speed 0 --boundary surface --wind 8",
+   "result": {
+    "speed": 0.0,
+    "boundary": "surface",
+    "geometry": "monostatic",
+    "wind": 8.0,
+    "carrier": 5000.0,
+    "pulse_s": 1.0,
+    "full_extent_hz": 0.0,
+    "beams": [
+     {
+      "bearing_deg": -80.0,
+      "expected_hz": -0.0,
+      "peak_hz": -0.0625,
+      "minus10_db_from_hz": -0.875,
+      "minus10_db_to_hz": 1.25
+     },
+     {
+      "bearing_deg": -70.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.125,
+      "minus10_db_from_hz": -2.0625,
+      "minus10_db_to_hz": 1.9375
+     },
+     {
+      "bearing_deg": -60.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.0625,
+      "minus10_db_from_hz": -1.5,
+      "minus10_db_to_hz": 2.0625
+     },
+     {
+      "bearing_deg": -50.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.75,
+      "minus10_db_from_hz": -1.1875,
+      "minus10_db_to_hz": 1.5625
+     },
+     {
+      "bearing_deg": -40.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.5625,
+      "minus10_db_from_hz": -1.625,
+      "minus10_db_to_hz": 1.8125
+     },
+     {
+      "bearing_deg": -30.0,
+      "expected_hz": -0.0,
+      "peak_hz": 1.125,
+      "minus10_db_from_hz": -2.5625,
+      "minus10_db_to_hz": 1.75
+     },
+     {
+      "bearing_deg": -20.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.3125,
+      "minus10_db_from_hz": -0.25,
+      "minus10_db_to_hz": 1.1875
+     },
+     {
+      "bearing_deg": -10.0,
+      "expected_hz": -0.0,
+      "peak_hz": 0.5,
+      "minus10_db_from_hz": -1.5,
+      "minus10_db_to_hz": 1.1875
+     },
+     {
+      "bearing_deg": 0.0,
+      "expected_hz": 0.0,
+      "peak_hz": 1.125,
+      "minus10_db_from_hz": -2.5,
+      "minus10_db_to_hz": 1.875
+     },
+     {
+      "bearing_deg": 10.0,
+      "expected_hz": 0.0,
+      "peak_hz": -0.1875,
+      "minus10_db_from_hz": -1.0,
+      "minus10_db_to_hz": 0.6875
+     },
+     {
+      "bearing_deg": 20.0,
+      "expected_hz": 0.0,
+      "peak_hz": 0.125,
+      "minus10_db_from_hz": -0.9375,
+      "minus10_db_to_hz": 1.0
+     },
+     {
+      "bearing_deg": 30.0,
+      "expected_hz": 0.0,
+      "peak_hz": -0.4375,
+      "minus10_db_from_hz": -1.875,
+      "minus10_db_to_hz": 1.25
+     },
+     {
+      "bearing_deg": 40.0,
+      "expected_hz": 0.0,
+      "peak_hz": -0.6875,
+      "minus10_db_from_hz": -2.375,
+      "minus10_db_to_hz": 0.25
+     },
+     {
+      "bearing_deg": 50.0,
+      "expected_hz": 0.0,
+      "peak_hz": 0.625,
+      "minus10_db_from_hz": -1.875,
+      "minus10_db_to_hz": 1.8125
+     },
+     {
+      "bearing_deg": 60.0,
+      "expected_hz": 0.0,
+      "peak_hz": 0.5,
+      "minus10_db_from_hz": -0.8125,
+      "minus10_db_to_hz": 1.0625
+     },
+     {
+      "bearing_deg": 70.0,
+      "expected_hz": 0.0,
+      "peak_hz": 0.625,
+      "minus10_db_from_hz": -1.0,
+      "minus10_db_to_hz": 1.25
+     },
+     {
+      "bearing_deg": 80.0,
+      "expected_hz": 0.0,
+      "peak_hz": -0.1875,
+      "minus10_db_from_hz": -0.8125,
+      "minus10_db_to_hz": 1.25
+     }
+    ]
+   }
+  }
+ }
+}
