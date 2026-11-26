@@ -789,3 +789,191 @@ Runs (scratch, not committed): `tools/doppler_study.py margin <scene> --target <
 small_vehicle --ranges 1800 2000 2200 2600 3000 --depths 20 40 60 --comb 4 --channels 4`, the same with
 `--fidelity free_field`, and `fade popoto_far_mover_doppler --target ship --ranges 5800 6000 6200 6400 6600 --comb 4
 --channels 4`.
+
+## D3 done (2026-11-26, branch `d3-tone`): a CFAR combiner for the sweep bank, the tone's Doppler filter bank
+
+Appended; nothing above was rewritten. Every number here is **ours** (simulated records, the shared 4-core CPU, one
+thread a process, host backend, Bellhop eigenrays, the scenes' own seeds). Commands and every field:
+`docs/tasks/doppler_d3_eval.json`.
+
+### D3.1 What failed, got worse, is uncertain or was not run (read first)
+
+1. **The train scene with the tone above the band (`flank_patrol_doppler_tone`, new) was not measured end to end.**
+   Simulating its 6 pings (a 2 s sampled train through the eigenray reverberation, 32 channels) ran 4 h 40 min on this
+   shared CPU and did not finish. It was stopped; the brief's 1 h bound for an evaluation run applies. The figures
+   "small vehicle and submarine with the tone outside the band in one ping" are therefore NOT measured through the
+   chain. What stands in for them: D2's study (the tone at 10.5 kHz at 37.7 dB over its background, the sweep 6.4 dB)
+   and the alternating-pings run on `flank_patrol` (D3.3), where the tone at 10.5 kHz and the sweep travel in separate
+   pings through the same water. To do: `tools/doppler_tone_eval.py flank_patrol_doppler_tone --cache DIR` in the GPU job
+   (CUDA synthesis), or with fewer pings. The gated test `test_doppler_scenes.py::test_the_chain_with_the_tone_path_sees_the_small_vehicle_and_keeps_the_wreck`
+   (`GPUSONAR_DOPPLER_CHAIN=1`) holds its acceptance and was not run.
+2. **The first scene run of the tone path failed**: 43 to 50 false detections a ping on flank_patrol's tone pings at the
+   notch's edges, and the wreck was given 0.23 m/s. The leakage rule (D3.3 (c)) was designed after seeing this, on the
+   same records. It brought them to 1, 0 and 0, but that is not an independent test. One false detection
+   (2983 m, 22.8 degrees, +0.24 m/s, 18.4 dB) is not explained.
+3. **Today's chain on a train compresses with the whole train**, and on `popoto_12km_doppler` that loses the ship on every
+   ping (0 of 6). With the tone path on, the sweep path now uses the sweep part of the replica alone (6 of 6). The
+   default (tone off) is unchanged and keeps that loss: D2's train scenes are blind through the default chain on this
+   scene. This is a finding about D2's scenes, not a change of a default.
+4. **The tone gives a rate on the 12 km ship on one ping in six.** Its range rate (-0.50 m/s) lies 2.7 resolution cells
+   from its beam's ridge, at the notch's edge, and the leakage rule removes the rest. The owner has set the 12 km
+   requirement for the large submerged class first and the large ship second: the scenes that matter for it are those
+   classes at 12 km (no such scene exists yet). How much the tone helps there depends on their radial speed against the
+   ridge (expected small for a crossing target: section 3.3 item 4).
+5. **The normalisation for the tone is along rate, not per (beam, hypothesis) along range** as the brief asked: a ping
+   holds 13 lags on flank_patrol at a quarter of 1 s, too few for a background per (beam, hypothesis). Part A's sweep
+   combiner is per (beam, hypothesis).
+6. **The threshold correction of part A was measured only at loosened budgets** (3, 1 and 0.3 a ping, long-range array,
+   60 noise pings); at the default 1e-3 a ping it is the planned value (0.62 to 0.70 dB), not a measured one. The flank
+   array's noise count was stopped for time.
+7. **Engines**: the two engines' tone paths are one C++ function (`tone_stage`), called by both, like `plan_doppler`.
+   Only the merge and the reporting are written twice. Parity of the tone stage is by construction. A NumPy reference of
+   the matched filter in the test holds the function itself. Without the tone path, the Python chain on a CW record of a
+   short window makes a map of nonsense (snr of thousands of dB), where the C++ chain refuses it. This divergence predates
+   D3 and is a follow-up.
+8. **The small vehicle in part A is thin**: margins 0.48 to 1.37 dB on its three pings (it is below the reverberation by
+   design); the sweep bank does not separate reverberation.
+9. Nothing ran on a GPU; the GPU suite was not run.
+
+### D3.2 Part A: `doppler: {mode: sweep_bank, combine: cfar}`
+
+D4's bank took the largest power over each beam's hypotheses and let the detector estimate its background from that
+maximum (9.1 item 1). `combine: cfar` normalises each (beam, hypothesis) map by its own background first: the detector's
+own estimate (`detector_background`, both engines) on that hypothesis' cell means, over the cells the detector keeps
+(blanking). The largest normalised value per sample is kept (`fold_normalised`; the hypothesis that holds it gives the
+detection's coarse rate as before) and the detector tests it with the background it was normalised by: the map it is
+handed is that maximum times the background of the beam's centre (own-ship) hypothesis, and that background is given to
+it (`multiscale_cells` / `detect.multiscale` take an optional `level`; without it the detector is as before, bit for bit).
+
+The threshold correction for N hypotheses a beam, **derived** (ours): each normalised map is a statistic the detector's
+thresholds were planned for, and P(max over N > x) <= N P(one > x) (the union bound), so planning the thresholds for the
+budget divided by N holds the configured rate, on the safe side because neighbouring hypotheses are correlated (one
+step of the sweep loses 0.97 dB: their noise is nearly the same). In dB the correction is the single-sample threshold
+of the divided budget over the undivided one; in an exponential tail about 10 log10((x + ln N) / x).
+
+**Measured** (the live chain itself, C++ engine; `tools/doppler_bank_threshold.py --chain cfar`): noise-only pings of the
+long-range array (60 pings, 800 m, bearings -60 to 60 every 0.5), budgets loosened so that a CPU counts:
+
+| Budget a ping | Bank off: detections (of the budget) | cfar, 7 a beam (1 m/s): detections, ratio to off, correction | cfar, 17 a beam (3 m/s) |
+| --- | --- | --- | --- |
+| 3 | 128 (0.71) | 109, 0.85, +0.74 dB | 105, 0.82, +1.04 dB |
+| 1 | 56 (0.93) | 37, 0.66, +0.67 dB | 43, 0.77, +0.94 dB |
+| 0.3 | 14 (0.78) | 12, 0.86, +0.61 dB | 12, 0.86, +0.86 dB |
+
+Every ratio is within three Poisson sigmas of 1 (0.26 to 2.8 at 0.3 a ping, 0.55 to 1.26 at 3) and under it: the union
+bound holds the rate and is not loose by much here. On the scenes' reverberation-only pings (4 each, budget 3 a ping):
+flank_patrol 5 -> 5, popoto_far_mover 18 -> 17, popoto_12km 20 -> 7; at the default budget 0 -> 0 on all three. **Not
+measured**: the default budget (1e-3 a ping): a CPU cannot count it (a few hundred thousand pings); the correction there
+is the planned one (0.62 to 0.70 dB on the scenes, below), not a measured one. The flank array's noise count (35 a beam)
+was started and stopped for time (40 pings at budget 3: off 88; the cfar count not finished).
+
+**End to end** (`tools/doppler_bank_eval.py SCENE --combine cfar`, 6 pings, both engines; the off and max rows are
+D4's `docs/tasks/doppler_bank_eval.json`, the same records: the off margins here agree with it to the printed digit).
+Margin = snr_db less the single-sample threshold of the plan in use, mean over the pings both detect. Python and C++
+gave the same numbers to the printed digit on every row. Worst first:
+
+| Scene, target | Hypotheses a beam | Threshold correction | Margin off, dB | D4 max | cfar | cfar - off | Detected off / max / cfar (of 6) | Tracked off -> cfar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| flank_patrol wreck (still) | 35 | +0.69 dB | 14.63 | 9.33 | 14.15 | -0.48 | 6 / 6 / 6 | static -> static |
+| popoto_12km ship | 19 | +0.62 dB | 9.11 | 5.57 | 9.63 | +0.52 | 6 / 6 / 6 | mover -> mover |
+| popoto_far_mover ship | 35 | +0.70 dB | 12.35 | 8.84 | 13.65 | +1.30 | 6 / 6 / 6 | mover -> mover |
+| flank_patrol submarine | 35 | +0.69 dB | 11.69 | 8.32 | 13.20 | +1.51 | 6 / 6 / 6 | mover -> mover |
+| flank_patrol small vehicle (2.0 m/s) | 35 | +0.69 dB | -0.82 (ping 6 only) | (ping 3 only) | +0.48 to +1.37 (pings 3, 4, 5) | | 1 / 1 / 3 | no -> yes (static) |
+
+So the acceptance of part A holds on these scenes: the still target loses less than the correction (0.48 against
+0.69 dB: the maximum over normalised neighbours adds 0.21 dB of snr), every mover gains (the mismatch the bank recovers
+less the correction), and the small vehicle, detected on one ping without the bank and with D4's max, is detected on
+three with ranges rates 1.87 to 2.25 m/s (true 2.00) and tracked (called static: three pings). Its margins (0.5 to 1.4
+dB) are thin: it is below the reverberation by design (D-198) and the sweep's bank does not separate reverberation.
+
+Cost a ping (median after the first): the same as D4's max (the background of each hypothesis is a cell-mean pass):
+flank_patrol Python 4.26 -> 140.1 s, C++ 4.02 -> 121.6 s; popoto_far_mover 2.61 -> 119.2, 2.24 -> 111.0;
+popoto_12km 1.20 -> 30.0, 1.07 -> 26.0.
+
+### D3.3 Part B: `doppler: {tone: bank}` (both engines; one C++ function, `tone_stage`)
+
+What it is (`docs/CONFIGURATION.md` has every key; `libs/live/include/sonar/live/doppler.hpp` the reasons):
+
+- **Where the tone is.** A CW record is a tone-only ping (its own frequency, length, taper). A train (an arbitrary
+  record) names its tone in the chain's configuration (`tone_frequency_hz`, `tone_start_s`, `tone_duration_s`,
+  `tone_window_alpha`; `doppler.tone_from_sonar(sonar)` reads them from the sonar's segment table): the record carries
+  the train as sent, not its table (no schema change), so a train without them is refused by name. A linear-sweep record
+  has no tone path (the other ping of an alternating pair). Any frequency, inside or outside the sweep's band.
+- **Baseband.** The conversion gets the allowance that keeps the tone and its largest shift (2 r f / c + 8 / T) inside
+  its untapered band (`plan_tone`); for the shipped sweeps without a tone nothing changes.
+- **The bank.** Per beam of the far-field beamformer (the chain's bearings and aperture window) on the baseband record
+  before compression: the beam mixed to the tone and cut to the band the hypotheses need by an exact FFT decimation; at
+  lags a quarter of the tone apart, the matched filter of the tone's envelope at each range-rate hypothesis
+  (r_k = k x c / (4 f T): half the resolution; the echo's envelope time scaling, under 2 ms at 3 m/s and 1 s, left out:
+  ours). Held against a NumPy matched filter at the full rate within 0.1 dB on every cell within 25 dB of the peak
+  (`test_doppler_tone.py`). Each beam's 2K + 1 hypotheses are centred on its own-ship rate, as the sweep bank's.
+- **The ridge.** (a) A notch: hypotheses within the own-ship rate's spread over the beam's half-power width plus three
+  resolution cells are not tested (still reverberation, still targets: the sweep's). (b) A CFAR along RATE per (beam,
+  lag): the mean over the hypotheses 5 to 36 steps away either side, notch excluded; the threshold the cell-averaging
+  factor for exponential power, training cells counted at step / (enbw x resolution) each, at the budget over every cell
+  tested (union bound). Not along range, as the brief asked: a ping holds too few lags (13 on flank_patrol at a quarter of
+  1 s) for a background per (beam, hypothesis); the per-(beam, hypothesis) normalisation of part A is the sweep's.
+  (c) **Leakage** (added after the first scene run): a flagged cell no more than 10 dB above what a stronger cell of its
+  beam and lag (the ridge, or a stronger cell) leaks into it through the tone's own spectrum (the window's power spectrum,
+  its envelope) is dropped. Without (c), flank_patrol's tone pings gave **43 to 50 false detections a ping** at the notch's
+  edges and gave the wreck a rate of 0.23 m/s; with it 1, 0 and 0 on those pings, the wreck none (designed on these records: D3.1 item 2).
+- **Detections and merge.** Touching flagged cells are one detection, refined by parabolas (rate, bearing, lag); its
+  range is the lag's (coarse: c T / 2). Each tone detection gives its rate to the strongest sweep detection within c T / 4
+  and 2 degrees (`doppler_path: both`: the sweep's range and bearing, the tone's rate); one that finds none is its own
+  detection (`tone`) with a range sigma of c T / 8 for the tracker (`Detection::range_sigma`, NaN for every other
+  detection: the tracker as before); every other sweep detection is as it was (`sweep`). A stationary target seen only
+  by the sweep and a mover seen only by the tone both survive (tests).
+- **A train's sweep path compresses with the sweep part of the replica alone** (the tone's samples zeroed,
+  `sweep_only_replica`; added after the popoto run): with the whole train as the replica the sweep path pays the tone's
+  half of the energy in its noise and its c T / 2 pedestal in the map. On `popoto_12km_doppler` the whole-train replica
+  gave the ship on **0 of 6** pings through the chain (the tone path on 3, tone-only); with the sweep replica 6 of 6.
+- **Tone-only pings** make no sweep map and do not size the chain (sizes derive from the first sweep ping; a tone-only
+  ping before it is reported, not tracked). Tracker change: only the per-detection range sigma.
+
+Measured, end to end, both engines (`tools/doppler_tone_eval.py`; Python and C++ report lines agree within 0.05 m,
+0.05 degrees, 0.05 dB and the path on every scene; tone margins are the Python engine's tone stage, the same function):
+
+**`flank_patrol_doppler_tone`** (one ping: the tone at 10.5 kHz, then the sweep): **not measured** (D3.1 item 1).
+
+**Alternating pings** (`--alternate 10.5e+3` on `flank_patrol`: a 1 s Hann CW at 10.5 kHz with the sweep's whole energy
+(199.86 dB re 1 uPa^2 s) on pings 0, 2, 4, the scene's sweep on 1, 3, 5; 12 s apart):
+
+| Target (true range rate) | Tone pings: detected, rate m/s, tone margin dB, range error m | Sweep pings: detected | Tracked at the last ping |
+| --- | --- | --- | --- |
+| small vehicle (+2.00) | 3 of 3: 1.972, 1.992, 1.988; 19.5, 22.2, 26.0; +132, +50, +8 | 1 of 3 (ping 5, 12.5 dB snr) | yes (22 m off; called static) |
+| submarine (-0.61 to -0.43) | 2 of 3: -0.568, -0.420; 23.9, 26.6; -8, +36 (ping 2 missed) | 3 of 3 | yes (13 m; uncertain) |
+| wreck (still) | 0 of 3 (the notch) | 3 of 3 (27.9 to 28.0 dB snr) | yes (18 m; uncertain) |
+
+False detections: one tone detection on tone ping 0 (2983 m, 22.8 degrees, +0.24 m/s, 18.4 dB: just outside the notch;
+not explained). Without the bank the chain cannot take the tone pings at all (the C++ chain refuses a CW of fewer
+than three range cells; see D3.1); off here is the sweep pings alone: small vehicle 1 of 3, submarine and wreck 3 of 3.
+
+**`popoto_12km_doppler`** (as shipped: the 5 kHz tone INSIDE the 4-6 kHz sweep band, the background noise; the ship's
+range rate -0.50 m/s, its beam's own-ship rate near -0.10 m/s: the ship lies 2.7 resolution cells from the ridge, at
+the notch's edge):
+
+| Path | Ship detected (of 6) | snr dB | Rate | Tracked |
+| --- | --- | --- | --- | --- |
+| off (the whole train as the replica) | 0 | | | no |
+| tone path on (sweep replica alone) | 6: ping 0 `both`, pings 1 to 5 `sweep` | 18.5 to 21.8 | -0.573 on ping 0 (true -0.499); tone margin 15.9 dB | yes (mover, 33 m) |
+| tone path on, before the leakage rule and with the whole train | 3, `tone` alone | 29.5 to 32.4 | -0.573, -0.486, -0.486 | no |
+
+So at 12 km the tone gives a rate on one ping in six: the ship is too slow against its ridge for the notch and the
+leakage rule (expected, DOPPLER.md 3.3 item 4); the gain on this scene is the sweep replica's. Background (2 pings,
+targets removed): default budget 1 -> 0, budget 3: 11 -> 8 (2 of them the tone's).
+
+Cost a ping (median after the first; C++ / Python): popoto_12km_doppler 1.12 / 1.24 s off -> 2.65 / 2.95 s with the
+tone path; flank_patrol's tone-only pings 0.50 to 0.57 s (C++; no sweep map), its sweep pings 3.8 s (the sweep path
+alone, as off: 4.1 s). Nothing ran on a GPU (the tone stage's beamformer runs on the chain's backend; the bank
+and the CFAR are host loops).
+
+### D3.4 What is left
+
+- The surface's own Doppler spread (D1) is still missing: every tone margin on a surface-limited background is an upper
+  bound (section 0 item 1).
+- The tone's matched filter is the configured Tukey envelope, not the record's replica as sent (a real projector's
+  spectrum sets the leakage: section 3.3 item 3).
+- A per-(beam, hypothesis) background for the tone along range needs longer windows or pings pooled (not done).
+- The tone path is refused with `range_doppler` other than off and with `elevation` (not made for them).
+- The tracker takes the tone's range rate nowhere (D5): only its range sigma.
+- D8: the bank and both CFARs on the GPU; the GPU suite (`tools/gpu_job.sh`) was not run.

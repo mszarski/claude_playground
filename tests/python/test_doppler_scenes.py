@@ -225,7 +225,7 @@ def test_the_chain_with_the_tone_path_sees_the_small_vehicle_and_keeps_the_wreck
     (below the reverberation by design, D-198) detected on at least 5 of 6 pings with its range rate within 0.1 m/s of
     the truth, the submarine as well, the wreck (still, on the bed) by the sweep on every ping; the engines' report lines
     agree; the tone path's false detections on the background at the default budget at most one a ping. Numbers in
-    docs/tasks/doppler_tone_eval.json (ours)."""
+    docs/tasks/doppler_d3_eval.json (ours); not run on a CPU yet (the simulation exceeds 4 h)."""
     sys.path.insert(0, str(ROOT / "tools"))
     import doppler_tone_eval
     out = tmp_path / "eval.json"

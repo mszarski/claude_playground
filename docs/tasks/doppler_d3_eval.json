@@ -1,0 +1,2124 @@
+{
+ "status": "ours: simulated records, CPU (4 cores shared, 1 thread a process), host backend, Bellhop eigenrays, 2026-11-26; branch d3-tone",
+ "commands": {
+  "threshold_noise": "tools/doppler_bank_threshold.py --chain cfar --sonar long_range --pings 60 --budgets 3,1,0.3 --max-rates 1,3 --seed 7000",
+  "cfar_scenes": "tools/doppler_bank_eval.py SCENE --combine cfar --background 4   (SCENE: flank_patrol, popoto_far_mover, popoto_12km); the max (D4) rows are docs/tasks/doppler_bank_eval.json (the same seeds and records; the off rows agree to the printed digit)",
+  "tone_scene": "tools/doppler_tone_eval.py flank_patrol_doppler_tone --background 4 [--cache DIR]",
+  "tone_popoto": "tools/doppler_tone_eval.py popoto_12km_doppler --background 4",
+  "alternating": "tools/doppler_tone_eval.py flank_patrol --alternate 10.5e+3 --pings 6",
+  "default_off": "a script outside the tree: both engines, chain defaults / doppler mode off / range_doppler ownship, 2 pings each of flank_patrol and popoto_12km: sha256 of the report lines without processing_seconds, base build (0a8b477) vs this branch",
+  "tone_popoto_wholetrain": "the same, run before 51d2b12 (the sweep path then compressed with the whole train) and before 80df69d (no leakage rule): tone_p12_wholetrain"
+ },
+ "threshold_noise": {
+  "sonar": "popoto_long_range",
+  "seed": 7000,
+  "combine": "cfar",
+  "counts": {
+   "3.0/off": {
+    "budget": 3.0,
+    "max_range_rate_m_s": null,
+    "per_beam": 1,
+    "detections": 128,
+    "pings": 60,
+    "threshold_db": 10.5661
+   },
+   "3.0/1.0": {
+    "budget": 3.0,
+    "max_range_rate_m_s": 1.0,
+    "per_beam": 7,
+    "detections": 109,
+    "pings": 60,
+    "threshold_db": 11.3061,
+    "ratio_to_off": 0.8515625,
+    "threshold_correction_db": 0.7400000000000002,
+    "ratio_3sigma": [
+     0.5759797502573285,
+     1.2590003226368174
+    ]
+   },
+   "3.0/3.0": {
+    "budget": 3.0,
+    "max_range_rate_m_s": 3.0,
+    "per_beam": 17,
+    "detections": 105,
+    "pings": 60,
+    "threshold_db": 11.603,
+    "ratio_to_off": 0.8203125,
+    "threshold_correction_db": 1.0368999999999993,
+    "ratio_3sigma": [
+     0.5526269080418353,
+     1.2176616590035978
+    ]
+   },
+   "1.0/off": {
+    "budget": 1.0,
+    "max_range_rate_m_s": null,
+    "per_beam": 1,
+    "detections": 56,
+    "pings": 60,
+    "threshold_db": 11.0006
+   },
+   "1.0/1.0": {
+    "budget": 1.0,
+    "max_range_rate_m_s": 1.0,
+    "per_beam": 7,
+    "detections": 37,
+    "pings": 60,
+    "threshold_db": 11.6705,
+    "ratio_to_off": 0.6607142857142857,
+    "threshold_correction_db": 0.6699000000000002,
+    "ratio_3sigma": [
+     0.3499341409841697,
+     1.2475015044807736
+    ]
+   },
+   "1.0/3.0": {
+    "budget": 1.0,
+    "max_range_rate_m_s": 3.0,
+    "per_beam": 17,
+    "detections": 43,
+    "pings": 60,
+    "threshold_db": 11.9427,
+    "ratio_to_off": 0.7678571428571429,
+    "threshold_correction_db": 0.9420999999999999,
+    "ratio_3sigma": [
+     0.4179299340827472,
+     1.410773777501176
+    ]
+   },
+   "0.3/off": {
+    "budget": 0.3,
+    "max_range_rate_m_s": null,
+    "per_beam": 1,
+    "detections": 14,
+    "pings": 60,
+    "threshold_db": 11.4281
+   },
+   "0.3/1.0": {
+    "budget": 0.3,
+    "max_range_rate_m_s": 1.0,
+    "per_beam": 7,
+    "detections": 12,
+    "pings": 60,
+    "threshold_db": 12.0355,
+    "ratio_to_off": 0.8571428571428571,
+    "threshold_correction_db": 0.6074000000000002,
+    "ratio_3sigma": [
+     0.26333076680904965,
+     2.7900039423945193
+    ]
+   },
+   "0.3/3.0": {
+    "budget": 0.3,
+    "max_range_rate_m_s": 3.0,
+    "per_beam": 17,
+    "detections": 12,
+    "pings": 60,
+    "threshold_db": 12.285,
+    "ratio_to_off": 0.8571428571428571,
+    "threshold_correction_db": 0.8568999999999996,
+    "ratio_3sigma": [
+     0.26333076680904965,
+     2.7900039423945193
+    ]
+   }
+  }
+ },
+ "cfar_scenes": {
+  "flank_patrol": {
+   "engines": {
+    "python": {
+     "summary": {
+      "submarine": {
+       "pings_both": 6,
+       "margin_off_db": 11.69084983756349,
+       "margin_on_db": 13.197070550359511,
+       "gross_db": 2.1968207127960184,
+       "net_db": 1.5062207127960185,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        -0.7484122336000001,
+        -0.18710305840000002,
+        -1.6839275256000001,
+        -1.871030584,
+        2.9936489344000003,
+        -1.4968244672000002
+       ],
+       "true_range_rate": [
+        -0.6077856266442947,
+        -0.5726881692919699,
+        -0.5373449669870942,
+        -0.5017690954025895,
+        -0.46597411147376644,
+        -0.4299740319884584
+       ]
+      },
+      "small_vehicle": {
+       "pings_both": 0
+      },
+      "wreck": {
+       "pings_both": 6,
+       "margin_off_db": 14.630432944954636,
+       "margin_on_db": 14.153774027389304,
+       "gross_db": 0.2139410824346649,
+       "net_db": -0.476658917565335,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "static",
+       "kind_on": "static",
+       "range_rate_on": [
+        -0.18710305840000002,
+        -0.18710305840000002,
+        0.18710305840000002,
+        -0.18710305840000002,
+        0.18710305840000002,
+        0.18710305840000002
+       ],
+       "true_range_rate": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ]
+      }
+     },
+     "threshold_db_off": 13.3345,
+     "threshold_db_cfar": 14.0251,
+     "seconds_off": 4.262354149002931,
+     "seconds_cfar": 140.09079385699442,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.1871030584,
+      "hypotheses": 35,
+      "per_beam": 35,
+      "first_m_s": -3.180751993,
+      "last_m_s": 3.180751993,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 6.548607044,
+      "combine": "cfar",
+      "budget_divisor": 35
+     }
+    },
+    "cpp": {
+     "summary": {
+      "submarine": {
+       "pings_both": 6,
+       "margin_off_db": 11.690849751666667,
+       "margin_on_db": 13.197070484999998,
+       "gross_db": 2.196820733333333,
+       "net_db": 1.5062207333333333,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        -0.7484122336,
+        -0.1871030584,
+        -1.683927526,
+        -1.871030584,
+        2.993648934,
+        -1.496824467
+       ],
+       "true_range_rate": [
+        -0.6077856266442947,
+        -0.5726881692919699,
+        -0.5373449669870942,
+        -0.5017690954025895,
+        -0.46597411147376644,
+        -0.4299740319884584
+       ]
+      },
+      "small_vehicle": {
+       "pings_both": 0
+      },
+      "wreck": {
+       "pings_both": 6,
+       "margin_off_db": 14.630432811666665,
+       "margin_on_db": 14.153773981666667,
+       "gross_db": 0.21394117,
+       "net_db": -0.47665882999999987,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "static",
+       "kind_on": "static",
+       "range_rate_on": [
+        -0.1871030584,
+        -0.1871030584,
+        0.1871030584,
+        -0.1871030584,
+        0.1871030584,
+        0.1871030584
+       ],
+       "true_range_rate": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ]
+      }
+     },
+     "threshold_db_off": 13.3345,
+     "threshold_db_cfar": 14.0251,
+     "seconds_off": 4.021128305001184,
+     "seconds_cfar": 121.5675101759989,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.1871030584,
+      "hypotheses": 35,
+      "per_beam": 35,
+      "first_m_s": -3.180751993,
+      "last_m_s": 3.180751993,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 6.548607044,
+      "combine": "cfar",
+      "budget_divisor": 35
+     }
+    }
+   },
+   "background": {
+    "default": {
+     "off": 0,
+     "on": 0,
+     "pings": 4
+    },
+    "3.0": {
+     "off": 5,
+     "on": 5,
+     "pings": 4
+    }
+   },
+   "pings": 6
+  },
+  "popoto_far_mover": {
+   "engines": {
+    "python": {
+     "summary": {
+      "ship": {
+       "pings_both": 6,
+       "margin_off_db": 12.348479343108218,
+       "margin_on_db": 13.64922533552698,
+       "gross_db": 2.0047459924187603,
+       "net_db": 1.3007459924187597,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        1.3097214088000002,
+        1.3097214088000002,
+        -2.8065458760000004,
+        2.6194428176000004,
+        1.6839275256000001,
+        -1.1226183504000002
+       ],
+       "true_range_rate": [
+        -0.9912274137260555,
+        -0.8813503376391045,
+        -0.7708948232106071,
+        -0.6599300304706429,
+        -0.5485267765604876,
+        -0.4367573190150188
+       ]
+      }
+     },
+     "threshold_db_off": 13.2478,
+     "threshold_db_cfar": 13.9518,
+     "seconds_off": 2.6073468980030157,
+     "seconds_cfar": 119.14527915400686,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.1871030584,
+      "hypotheses": 45,
+      "per_beam": 35,
+      "first_m_s": -4.116267285,
+      "last_m_s": 4.116267285,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 6.548607044,
+      "combine": "cfar",
+      "budget_divisor": 35
+     }
+    },
+    "cpp": {
+     "summary": {
+      "ship": {
+       "pings_both": 6,
+       "margin_off_db": 12.348479276666666,
+       "margin_on_db": 13.649225743333332,
+       "gross_db": 2.004746466666667,
+       "net_db": 1.3007464666666664,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        1.309721409,
+        1.309721409,
+        -2.806545876,
+        2.619442818,
+        1.683927526,
+        -1.12261835
+       ],
+       "true_range_rate": [
+        -0.9912274137260555,
+        -0.8813503376391045,
+        -0.7708948232106071,
+        -0.6599300304706429,
+        -0.5485267765604876,
+        -0.4367573190150188
+       ]
+      }
+     },
+     "threshold_db_off": 13.2478,
+     "threshold_db_cfar": 13.9518,
+     "seconds_off": 2.2350527710004826,
+     "seconds_cfar": 110.96835022699815,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.1871030584,
+      "hypotheses": 45,
+      "per_beam": 35,
+      "first_m_s": -4.116267285,
+      "last_m_s": 4.116267285,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 6.548607044,
+      "combine": "cfar",
+      "budget_divisor": 35
+     }
+    }
+   },
+   "background": {
+    "default": {
+     "off": 0,
+     "on": 0,
+     "pings": 4
+    },
+    "3.0": {
+     "off": 18,
+     "on": 17,
+     "pings": 4
+    }
+   },
+   "pings": 6
+  },
+  "popoto_12km": {
+   "engines": {
+    "python": {
+     "summary": {
+      "ship": {
+       "pings_both": 6,
+       "margin_off_db": 9.110671872665721,
+       "margin_on_db": 9.625993197661112,
+       "gross_db": 1.131321324995391,
+       "net_db": 0.5153213249953913,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        1.4968244672000002,
+        0.37420611680000004,
+        3.3678550512000003,
+        1.4968244672000002,
+        1.1226183504000002,
+        -0.37420611680000004
+       ],
+       "true_range_rate": [
+        -0.4988925168426798,
+        -0.4061219754350797,
+        -0.3131641028455749,
+        -0.22006143307049927,
+        -0.12685683390447605,
+        -0.03359340881138415
+       ]
+      }
+     },
+     "threshold_db_off": 13.0648,
+     "threshold_db_cfar": 13.6808,
+     "seconds_off": 1.1957313120001345,
+     "seconds_cfar": 30.006314917001873,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.3742061168,
+      "hypotheses": 25,
+      "per_beam": 19,
+      "first_m_s": -4.490473402,
+      "last_m_s": 4.490473402,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 7.109916219,
+      "combine": "cfar",
+      "budget_divisor": 19
+     }
+    },
+    "cpp": {
+     "summary": {
+      "ship": {
+       "pings_both": 6,
+       "margin_off_db": 9.110671608333334,
+       "margin_on_db": 9.625993306666667,
+       "gross_db": 1.1313216983333334,
+       "net_db": 0.5153216983333339,
+       "detected_off": 6,
+       "detected_on": 6,
+       "tracked_off": true,
+       "tracked_on": true,
+       "kind_off": "mover",
+       "kind_on": "mover",
+       "range_rate_on": [
+        1.496824467,
+        0.3742061168,
+        3.367855051,
+        1.496824467,
+        1.12261835,
+        -0.3742061168
+       ],
+       "true_range_rate": [
+        -0.4988925168426798,
+        -0.4061219754350797,
+        -0.3131641028455749,
+        -0.22006143307049927,
+        -0.12685683390447605,
+        -0.03359340881138415
+       ]
+      }
+     },
+     "threshold_db_off": 13.0648,
+     "threshold_db_cfar": 13.6808,
+     "seconds_off": 1.073437794999336,
+     "seconds_cfar": 25.961257864997606,
+     "plan": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.3742061168,
+      "hypotheses": 25,
+      "per_beam": 19,
+      "first_m_s": -4.490473402,
+      "last_m_s": 4.490473402,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 7.109916219,
+      "combine": "cfar",
+      "budget_divisor": 19
+     }
+    }
+   },
+   "background": {
+    "default": {
+     "off": 0,
+     "on": 0,
+     "pings": 4
+    },
+    "3.0": {
+     "off": 20,
+     "on": 7,
+     "pings": 4
+    }
+   },
+   "pings": 6
+  }
+ },
+ "tone_p12": {
+  "scene": "popoto_12km_doppler",
+  "alternate_hz": null,
+  "tone_energy_db": null,
+  "pings": 6,
+  "channels": 32,
+  "tone": {
+   "tone": "bank",
+   "tone_frequency_hz": 5000.0,
+   "tone_start_s": 0.0,
+   "tone_duration_s": 1.0,
+   "tone_window_alpha": 1.0
+  },
+  "max_range_rate_m_s": 3.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 1.2441357749921735,
+     "detections_per_ping": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "on": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": 19.47523598229208,
+         "path": "both",
+         "range_rate_m_s": -0.5734752466719901,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": -7.138599375970443,
+         "tone": {
+          "snr_db": 30.67341023101182,
+          "threshold_db": 14.767129192564283,
+          "margin_db": 15.906281038447538,
+          "range_rate": -0.5734752466719901,
+          "range_error_m": 45.17518834004295
+         }
+        },
+        {
+         "snr_db": 18.508223005273877,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": -1.1333594639181683,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": 18.743516504907337,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": -3.4761874789965077,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": 19.557718990671955,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": -1.6703887325147662,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": 21.638448651697328,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": 0.03158137344144052,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": 21.761997742954442,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": 0.6281230147505994,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "both",
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "mover",
+       "track_error_m": 32.72200135756422
+      }
+     },
+     "seconds_median_after_first": 2.945595212993794,
+     "detections_per_ping": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "tone_plan": {
+      "tone": true,
+      "frequency_hz": 5000,
+      "start_s": 0,
+      "duration_s": 1,
+      "window_alpha": 1,
+      "tone_only": false,
+      "step_m_s": 0.07484122336,
+      "resolution_m_s": 0.1496824467,
+      "hypotheses": 109,
+      "per_beam": 83,
+      "hop_s": 0.25,
+      "guard": 4,
+      "train": 32,
+      "budget": 0.001,
+      "baseband_max_range_rate_m_s": 0,
+      "gate_range_m": 374.2061168,
+      "gate_bearing_rad": 0.03490658504,
+      "range_sigma_m": 187.1030584
+     },
+     "tone_factor_db": 14.767129192564283
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 1.1219825279986253,
+     "detections_per_ping": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "on": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": 19.47523563,
+         "path": "both",
+         "range_rate_m_s": -0.5734752467,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": -7.138599375970443,
+         "tone": null
+        },
+        {
+         "snr_db": 18.50822357,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": -1.1333594639181683,
+         "tone": null
+        },
+        {
+         "snr_db": 18.7435165,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": -3.4761874789965077,
+         "tone": null
+        },
+        {
+         "snr_db": 19.55771855,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": -1.6703887325147662,
+         "tone": null
+        },
+        {
+         "snr_db": 21.63844895,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": 0.03158137344144052,
+         "tone": null
+        },
+        {
+         "snr_db": 21.76199839,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": 0.6281230147505994,
+         "tone": null
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "both",
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "mover",
+       "track_error_m": 32.72200194497693
+      }
+     },
+     "seconds_median_after_first": 2.654738194993115,
+     "detections_per_ping": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    }
+   }
+  },
+  "background": {
+   "default": {
+    "off": 1,
+    "on": 0,
+    "on_tone_only": 0,
+    "pings": 2
+   },
+   "3.0": {
+    "off": 11,
+    "on": 8,
+    "on_tone_only": 2,
+    "pings": 2
+   }
+  },
+  "engines_equal_on": true
+ },
+ "tone_p12_wholetrain": {
+  "scene": "popoto_12km_doppler",
+  "alternate_hz": null,
+  "tone_energy_db": null,
+  "pings": 6,
+  "channels": 32,
+  "tone": {
+   "tone": "bank",
+   "tone_frequency_hz": 5000.0,
+   "tone_start_s": 0.0,
+   "tone_duration_s": 1.0,
+   "tone_window_alpha": 1.0
+  },
+  "max_range_rate_m_s": 3.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 1.1776957910042256,
+     "detections_per_ping": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "on": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": 30.67341023101182,
+         "path": "tone",
+         "range_rate_m_s": -0.5734752466719901,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": 45.17518834004295,
+         "tone": {
+          "snr_db": 30.67341023101182,
+          "threshold_db": 14.767129192564283,
+          "margin_db": 15.906281038447538,
+          "range_rate": -0.5734752466719901,
+          "range_error_m": 45.17518834004295
+         }
+        },
+        {
+         "snr_db": 32.40704607710552,
+         "path": "tone",
+         "range_rate_m_s": -0.48646795184,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": 169.83927559518088,
+         "tone": {
+          "snr_db": 32.40704607710552,
+          "threshold_db": 14.767129192564283,
+          "margin_db": 17.639916884541236,
+          "range_rate": -0.48646795184,
+          "range_error_m": 169.83927559518088
+         }
+        },
+        {
+         "snr_db": 29.45100633953252,
+         "path": "tone",
+         "range_rate_m_s": -0.48646795184,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": 126.73903030734982,
+         "tone": {
+          "snr_db": 29.45100633953252,
+          "threshold_db": 14.767129192564283,
+          "margin_db": 14.683877146968236,
+          "range_rate": -0.48646795184,
+          "range_error_m": 126.73903030734982
+         }
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 14.767129192564283
+         }
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "tone"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 2.721668679994764,
+     "detections_per_ping": [
+      1,
+      1,
+      1,
+      0,
+      0,
+      0
+     ],
+     "tone_plan": {
+      "tone": true,
+      "frequency_hz": 5000,
+      "start_s": 0,
+      "duration_s": 1,
+      "window_alpha": 1,
+      "tone_only": false,
+      "step_m_s": 0.07484122336,
+      "resolution_m_s": 0.1496824467,
+      "hypotheses": 109,
+      "per_beam": 83,
+      "hop_s": 0.25,
+      "guard": 4,
+      "train": 32,
+      "budget": 0.001,
+      "baseband_max_range_rate_m_s": 0,
+      "gate_range_m": 374.2061168,
+      "gate_bearing_rad": 0.03490658504,
+      "range_sigma_m": 187.1030584
+     },
+     "tone_factor_db": 14.767129192564283
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 1.0413896739919437,
+     "detections_per_ping": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "on": {
+     "targets": {
+      "ship": {
+       "pings": [
+        {
+         "snr_db": 30.67341023,
+         "path": "tone",
+         "range_rate_m_s": -0.5734752467,
+         "true_range_rate_m_s": -0.4988925168426798,
+         "range_error_m": 45.17519062402971,
+         "tone": null
+        },
+        {
+         "snr_db": 32.40704608,
+         "path": "tone",
+         "range_rate_m_s": -0.4864679518,
+         "true_range_rate_m_s": -0.4061219754350797,
+         "range_error_m": 169.8392805360818,
+         "tone": null
+        },
+        {
+         "snr_db": 29.45100634,
+         "path": "tone",
+         "range_rate_m_s": -0.4864679518,
+         "true_range_rate_m_s": -0.3131641028455749,
+         "range_error_m": 126.73903252100354,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.22006143307049927,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.12685683390447605,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.03359340881138415,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "tone"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds_median_after_first": 2.586068887001602,
+     "detections_per_ping": [
+      1,
+      1,
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   }
+  },
+  "background": {
+   "default": {
+    "off": 1,
+    "on": 1,
+    "on_tone_only": 0,
+    "pings": 2
+   },
+   "3.0": {
+    "off": 11,
+    "on": 12,
+    "on_tone_only": 1,
+    "pings": 2
+   }
+  },
+  "engines_equal_on": true
+ },
+ "tone_alt": {
+  "scene": "flank_patrol",
+  "alternate_hz": 10500.0,
+  "tone_energy_db": 199.86211715514366,
+  "pings": 6,
+  "channels": 32,
+  "tone": {
+   "tone": "bank"
+  },
+  "max_range_rate_m_s": 3.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "submarine": {
+       "pings": [
+        {
+         "snr_db": 24.618517834599444,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5726881692919699,
+         "range_error_m": -7.020767728680312,
+         "tone": null
+        },
+        {
+         "snr_db": 24.67379212311962,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5017690954025895,
+         "range_error_m": -5.992085928978668,
+         "tone": null
+        },
+        {
+         "snr_db": 24.935291278978397,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4299740319884584,
+         "range_error_m": -5.076194360705813,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 9.177888378088772
+      },
+      "small_vehicle": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961758750987615,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961767334593614,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 12.515743451012224,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.996177539036864,
+         "range_error_m": 11.96872487085193,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "wreck": {
+       "pings": [
+        {
+         "snr_db": 27.995948163204453,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        },
+        {
+         "snr_db": 27.997436121029736,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        },
+        {
+         "snr_db": 27.88698913794451,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 18.336512610129418
+      }
+     },
+     "seconds_median_after_first": 4.530620461009676,
+     "detections_per_ping": [
+      2,
+      2,
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "submarine": {
+       "pings": [
+        {
+         "snr_db": 39.01920452015678,
+         "path": "tone",
+         "range_rate_m_s": -0.5683349094130167,
+         "true_range_rate_m_s": -0.6077856266442947,
+         "range_error_m": -7.492865213527239,
+         "tone": {
+          "snr_db": 39.01920452015678,
+          "threshold_db": 15.074942814392463,
+          "margin_db": 23.944261705764312,
+          "range_rate": -0.5683349094130167,
+          "range_error_m": -7.492865213527239
+         }
+        },
+        {
+         "snr_db": 24.618517834599444,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5726881692919699,
+         "range_error_m": -7.020767728680312,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5373449669870942,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.074942814392463
+         }
+        },
+        {
+         "snr_db": 24.67379212311962,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5017690954025895,
+         "range_error_m": -5.992085928978668,
+         "tone": null
+        },
+        {
+         "snr_db": 41.68404191066891,
+         "path": "tone",
+         "range_rate_m_s": -0.4203089006953292,
+         "true_range_rate_m_s": -0.46597411147376644,
+         "range_error_m": 36.193109755904516,
+         "tone": {
+          "snr_db": 41.68404191066891,
+          "threshold_db": 15.074942814392463,
+          "margin_db": 26.609099096276445,
+          "range_rate": -0.4203089006953292,
+          "range_error_m": 36.193109755904516
+         }
+        },
+        {
+         "snr_db": 24.935291278978397,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4299740319884584,
+         "range_error_m": -5.076194360705813,
+         "tone": null
+        }
+       ],
+       "detected": 5,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 13.226558251456002
+      },
+      "small_vehicle": {
+       "pings": [
+        {
+         "snr_db": 34.539806275962064,
+         "path": "tone",
+         "range_rate_m_s": 1.9716831291452088,
+         "true_range_rate_m_s": 1.9961754246718668,
+         "range_error_m": 132.20664507988158,
+         "tone": {
+          "snr_db": 34.539806275962064,
+          "threshold_db": 15.074942814392463,
+          "margin_db": 19.4648634615696,
+          "range_rate": 1.9716831291452088,
+          "range_error_m": 132.20664507988158
+         }
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961758750987615,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 37.26231235725041,
+         "path": "tone",
+         "range_rate_m_s": 1.9915991304595884,
+         "true_range_rate_m_s": 1.9961763111597672,
+         "range_error_m": 50.099743862800096,
+         "tone": {
+          "snr_db": 37.26231235725041,
+          "threshold_db": 15.074942814392463,
+          "margin_db": 22.187369542857944,
+          "range_rate": 1.9915991304595884,
+          "range_error_m": 50.099743862800096
+         }
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961767334593614,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 41.08695310765604,
+         "path": "tone",
+         "range_rate_m_s": 1.9880310045240916,
+         "true_range_rate_m_s": 1.996177142570561,
+         "range_error_m": 7.800445001954358,
+         "tone": {
+          "snr_db": 41.08695310765604,
+          "threshold_db": 15.074942814392463,
+          "margin_db": 26.01201029326358,
+          "range_rate": 1.9880310045240916,
+          "range_error_m": 7.800445001954358
+         }
+        },
+        {
+         "snr_db": 12.515743451012224,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.996177539036864,
+         "range_error_m": 11.96872487085193,
+         "tone": null
+        }
+       ],
+       "detected": 4,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "static",
+       "track_error_m": 22.49390670033174
+      },
+      "wreck": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.074942814392463
+         }
+        },
+        {
+         "snr_db": 27.995948163204453,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.074942814392463
+         }
+        },
+        {
+         "snr_db": 27.997436121029736,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.074942814392463
+         }
+        },
+        {
+         "snr_db": 27.88698913794451,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013833821003572666,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 18.336512610129212
+      }
+     },
+     "seconds_median_after_first": 4.371947174004163,
+     "detections_per_ping": [
+      3,
+      2,
+      2,
+      2,
+      2,
+      3
+     ]
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "submarine": {
+       "pings": [
+        {
+         "snr_db": 24.61851783,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5726881692919699,
+         "range_error_m": -7.020767395346866,
+         "tone": null
+        },
+        {
+         "snr_db": 24.67379161,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5017690954025895,
+         "range_error_m": -5.992085928978668,
+         "tone": null
+        },
+        {
+         "snr_db": 24.93529128,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4299740319884584,
+         "range_error_m": -5.076194694038804,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 9.177888349949134
+      },
+      "small_vehicle": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961758750987615,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961767334593614,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 12.51574374,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.996177539036864,
+         "range_error_m": 11.968724537518483,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "wreck": {
+       "pings": [
+        {
+         "snr_db": 27.99594761,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        },
+        {
+         "snr_db": 27.9974364,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        },
+        {
+         "snr_db": 27.88698857,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 18.33651304736327
+      }
+     },
+     "seconds_median_after_first": 4.1180770179926185,
+     "detections_per_ping": [
+      2,
+      2,
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "submarine": {
+       "pings": [
+        {
+         "snr_db": 39.01920452,
+         "path": "tone",
+         "range_rate_m_s": -0.5683349094,
+         "true_range_rate_m_s": -0.6077856266442947,
+         "range_error_m": -7.492865296913351,
+         "tone": null
+        },
+        {
+         "snr_db": 24.61851783,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5726881692919699,
+         "range_error_m": -7.020767395346866,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5373449669870942,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 24.67379161,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.5017690954025895,
+         "range_error_m": -5.992085928978668,
+         "tone": null
+        },
+        {
+         "snr_db": 41.68404191,
+         "path": "tone",
+         "range_rate_m_s": -0.4203089007,
+         "true_range_rate_m_s": -0.46597411147376644,
+         "range_error_m": 36.19310949845658,
+         "tone": null
+        },
+        {
+         "snr_db": 24.93529128,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4299740319884584,
+         "range_error_m": -5.076194694038804,
+         "tone": null
+        }
+       ],
+       "detected": 5,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 13.226557838328423
+      },
+      "small_vehicle": {
+       "pings": [
+        {
+         "snr_db": 34.53980628,
+         "path": "tone",
+         "range_rate_m_s": 1.971683129,
+         "true_range_rate_m_s": 1.9961754246718668,
+         "range_error_m": 132.2066451347314,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961758750987615,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 37.26231236,
+         "path": "tone",
+         "range_rate_m_s": 1.99159913,
+         "true_range_rate_m_s": 1.9961763111597672,
+         "range_error_m": 50.099744189820285,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.9961767334593614,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 41.08695311,
+         "path": "tone",
+         "range_rate_m_s": 1.988031005,
+         "true_range_rate_m_s": 1.996177142570561,
+         "range_error_m": 7.800444639545276,
+         "tone": null
+        },
+        {
+         "snr_db": 12.51574374,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 1.996177539036864,
+         "range_error_m": 11.968724537518483,
+         "tone": null
+        }
+       ],
+       "detected": 4,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "static",
+       "track_error_m": 22.493906628653463
+      },
+      "wreck": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 27.99594761,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 27.9974364,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 27.88698857,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": 0.0,
+         "range_error_m": -0.00013800487658954808,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 18.33651304736327
+      }
+     },
+     "seconds_median_after_first": 3.797707851001178,
+     "detections_per_ping": [
+      3,
+      2,
+      2,
+      2,
+      2,
+      3
+     ]
+    }
+   }
+  },
+  "background": {},
+  "engines_equal_on": true
+ },
+ "default_off": {
+  "base": {
+   "flank_patrol/python/default": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/python/doppler_off": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/python/rd_ownship": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/default": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/doppler_off": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/rd_ownship": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "popoto_12km/python/default": {
+    "sha256": "c21a9a6d2b4168811786d3a7eab3f6356a8b11059d2e935ec992f34125b957ee",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/python/doppler_off": {
+    "sha256": "c21a9a6d2b4168811786d3a7eab3f6356a8b11059d2e935ec992f34125b957ee",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/python/rd_ownship": {
+    "sha256": "c142115d1fbb4981a4a4298a56a8e49d891d54f59a82a33ef43527edc484cd51",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/default": {
+    "sha256": "dfecd2ea53839f28f158e24b8f73421c24d8eec1b84009dca75b9d4fb9e0f034",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/doppler_off": {
+    "sha256": "dfecd2ea53839f28f158e24b8f73421c24d8eec1b84009dca75b9d4fb9e0f034",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/rd_ownship": {
+    "sha256": "7b90943c8ff48930eae694c64c126a4edc730ca83a78d6fe166033b6e983ac72",
+    "detections": [
+     1,
+     1
+    ]
+   }
+  },
+  "branch": {
+   "flank_patrol/python/default": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/python/doppler_off": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/python/rd_ownship": {
+    "sha256": "7b845e841b29b23e3a306dc782a48cb3c3b05be02e1e82db754e115b1ad82c12",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/default": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/doppler_off": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "flank_patrol/cpp/rd_ownship": {
+    "sha256": "9c1f720fa7f46f3481c5d9894834fc61fd9e8d928d3df82c07e4e50ae28ebef8",
+    "detections": [
+     2,
+     2
+    ]
+   },
+   "popoto_12km/python/default": {
+    "sha256": "c21a9a6d2b4168811786d3a7eab3f6356a8b11059d2e935ec992f34125b957ee",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/python/doppler_off": {
+    "sha256": "c21a9a6d2b4168811786d3a7eab3f6356a8b11059d2e935ec992f34125b957ee",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/python/rd_ownship": {
+    "sha256": "c142115d1fbb4981a4a4298a56a8e49d891d54f59a82a33ef43527edc484cd51",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/default": {
+    "sha256": "dfecd2ea53839f28f158e24b8f73421c24d8eec1b84009dca75b9d4fb9e0f034",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/doppler_off": {
+    "sha256": "dfecd2ea53839f28f158e24b8f73421c24d8eec1b84009dca75b9d4fb9e0f034",
+    "detections": [
+     1,
+     1
+    ]
+   },
+   "popoto_12km/cpp/rd_ownship": {
+    "sha256": "7b90943c8ff48930eae694c64c126a4edc730ca83a78d6fe166033b6e983ac72",
+    "detections": [
+     1,
+     1
+    ]
+   }
+  }
+ },
+ "not_measured": [
+  "flank_patrol_doppler_tone end to end: its 6-ping simulation ran 4 h 40 min on the shared CPU and was stopped (GPU-job item)",
+  "the cfar combiner's false-alarm rate at the default budget (1e-3 a ping)",
+  "the flank array's noise count with cfar"
+ ]
+}
