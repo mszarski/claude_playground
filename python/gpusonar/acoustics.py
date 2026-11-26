@@ -218,14 +218,21 @@ KNOTS_PER_MS = 1.943844
 def chapman_harris_db(grazing, wind_speed: float, frequency: float):
     """Sea-surface backscattering strength in dB (Chapman and Harris, JASA 34, 1962).
 
-    Unconfirmed (docs/REFERENCES.md Sec. 4 and Sec. 10): the paper was not opened, and neither
-    the formula below nor its stated range has been checked against any opened print.
+    Via secondary: Chapman and Harris's paper was not opened; the formula is identical to
+    McDaniel's reprint of it, "Sea surface reverberation: A review", JASA 94, 1905-1922 (1993),
+    eq. (27), p. 1918 (her text calls it "Eq. (28)" twice; there is no eq. (28))
+    (tests/python/test_surface_papers_1997.py; docs/references/surface_papers_mcdaniel_dahl.md):
 
     S = 3.3 beta log10(theta / 30) - 42.4 log10(beta) + 2.6,
     beta = 158 (v f^(1/3))^(-0.58), theta the grazing angle in degrees, v the wind speed in
-    knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here. The fit was made
-    to explosive-source data from 400 to 6400 Hz and grazing angles below about 40
-    degrees; using it at 8 kHz and above is an extrapolation.
+    knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here.
+
+    Range, as McDaniel states it: explosive sources north of Bermuda, March 1961, 400 to 6400 Hz,
+    wind up to 15 m/s, "at low grazing angles". No upper grazing angle is printed (her Fig. 27
+    plots 0 to 30 degrees). The sea was not fully developed (the wind rose from 0 to 15 m/s in
+    15 hours), and McDaniel finds that the law "yield[s] scattering strengths that exceed the
+    remaining data" at low frequency. At 30 degrees it goes as wind^2.46 and frequency^0.82.
+    Using it above 6.4 kHz is an extrapolation.
     """
     theta = np.degrees(np.maximum(np.asarray(grazing, dtype=float), 1e-3))
     v = max(float(wind_speed), 0.1) * KNOTS_PER_MS

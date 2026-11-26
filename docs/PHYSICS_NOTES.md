@@ -2998,6 +2998,63 @@ input in the same way.
   were not read.
 - Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
 
+### 23.7 The bubble layer's optical depth from a published fit (`extinction: dahl_1997`, opt-in)
+
+Sources: Dahl, Plant, Nuetzel, Schmidt, Herwig and Terray, JASA 101, 2583-2595 (1997) [D97], and
+McDaniel, JASA 94, 1905-1922 (1993) [McD93], as `docs/references/surface_papers_mcdaniel_dahl.md`
+extracts them. Default unchanged (`apl_1994`); tests `test_surface_dahl_1997.py`,
+`test_gallaudet_boundaries.py`.
+
+What is still wrong or unknown, first:
+- **Nothing above 70 kHz.** [D97]'s data end at 70 kHz and [McD93]'s at 60 kHz. Above 70 kHz the
+  law is the 70 kHz fit scaled as f^0.8 (ours, with a warning); the resonant radii there (27 to 10
+  micrometres at 120 to 330 kHz) are below the smallest bubble counted in any population shown. The
+  FLS bands have no support from this law or any other in hand.
+- **Coastal against open ocean has no parameter.** [McD93] p. 1917: coastal waters exceed the open
+  ocean by about 10 dB before saturation at 3-60 kHz, 5 dB of it attributed to whitecap coverage.
+  Table II is one North Sea site. A named multiplier on beta_I is the only form the papers support;
+  it needs the owner (G-21).
+- **An excess remains at low grazing.** At 68 kHz and 3 m/s the 27-38 degree band is still 6.9 dB
+  above Gallaudet's printed mean; against Urick and Hoover's 60 kHz open-ocean curves (McDaniel
+  Fig. 18, read from the figure, +-1.5 dB) the model is +5.2 to +7.0 dB at 3.9-6.4 m/s and 15-30
+  degrees. No law in hand explains it. Candidates: the averaging of the printed means (a mean of dB
+  lies 3.4-4.5 dB below the dB of the mean under Dahl and Plant's statistics) and the omitted
+  roughness term; neither is proven.
+- One site, one angle (17 degrees), and the acoustic data were forced to the saturation levels of
+  Table I (a calibration uncertainty), so the absolute low-wind level carries that forcing.
+
+The law. [D97] Table II: `log10 beta_I = a + b log10 U10`, (a, b) = (-6.16, 5.50) at 26.5 kHz,
+(-6.70, 6.40) at 50 kHz, (-5.75, 5.35) at 70 kHz, obtained by inverting their eq. (17) (our
+`bubble_backscatter`, the same formula) on 1-minute averages at 17 degrees; U10 is the wind
+corrected to 10 m, our `wind_speed`. Between the three frequencies `log10 beta_I` is interpolated
+linearly in `log10 f` (ours; it is the table exactly at its frequencies and continuous); outside
+26.5-70 kHz the nearest fit times `(f / f_end)^0.8`, the trend [D97] state (p. 2592). Warnings below
+2.5 m/s (their fit is dashed there) and above 13 m/s (beyond their data), as the other laws warn
+outside their ranges; the value is still the fit's. beta_I is one vertical crossing in nepers of
+intensity, [D97] Sec. VI's convention and ours.
+
+What it changes (the default does not move; computed):
+- beta_I of `apl_1994` over that of `dahl_1997`, dB, at 2 / 3 / 5 / 10 / 15 m/s: +10.1 / +5.7 / +3.9 /
+  -4.0 / -10.9 at 26.5 kHz; +15.2 / +9.1 / +5.3 / -0.6 (8 m/s) / -13.8 at 50 kHz. Above about 8 m/s
+  backscatter barely depends on beta_I (saturation): `apl_1994` gives up to 15.1 dB more backscatter
+  at 2 m/s and between 2.5 dB less and 3.7 dB more above 8 m/s (the note's grid, its Sec. 3.2).
+- Gallaudet, 68 kHz, 3 m/s (beta_I 5.8e-4 against 2.4e-3): band means -43.7 dB at 44-66 degrees
+  (2.2 dB below the printed -41.5; `apl_1994` 3.4 dB above) and -44.4 dB at 27-38 degrees (6.9 dB
+  above -51.3; `apl_1994` 13.0). The reference note computed -43.4 / -44.1 with the 70 kHz fit
+  scaled as f^0.8 instead of the interpolation: 0.3 dB apart, both held by the test.
+- Wind exponent at 17 degrees, 2-7 m/s (least squares on 51 winds): `dahl_1997` U^5.37 / 6.20 /
+  5.10 at 26.5 / 50 / 70 kHz against the measured U^5.5 / 6.4 / 5.3 ([D97] p. 2591); `apl_1994`
+  U^4.25 / 4.06 / 3.91 (3.4 to 4.25 depending on how the winds are sampled, because that law
+  changes form at 6 m/s); `hall_novarini` U^2.63 / 2.12 / 1.72.
+- Urick-Hoover 60 kHz (figure readings, characterisation only): every point within +8 dB with
+  `dahl_1997` (largest +7.0); with `apl_1994` up to +12.2 dB.
+
+Also confirmed by these papers (no change; `test_surface_papers_1997.py`): the bubble term and its
+limits are [D97] eqs. (17)-(19) and [McD93] eqs. (9)-(12); the damping 2.55e-3 f^(1/3) is printed
+with f in Hz, our kHz form; the saturation at 17 degrees is within 0.1 dB of [D97] Table I; the
+facet term is [McD93] eq. (7); Chapman-Harris is [McD93] eq. (27) (via secondary; range 400-6400 Hz,
+wind to 15 m/s, low grazing angles: the "below about 40 degrees" we used to print is not in it).
+
 ## 24. The surface image in a link budget; own depth as a lever [OURS]
 
 `python/gpusonar/lloyd.py`, `depthplan.py`, `target_classes.py`; `tools/popoto_depth_planner.py`,

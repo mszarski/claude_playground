@@ -407,19 +407,37 @@ def searay_bottom_strength(frequency: float, bottom_type):
 # What the source does not print, and what is used here instead (ours, stated per item):
 #   - the unit of f in delta. kHz is used: it gives delta = 0.08 at 30 kHz and 0.10 at 68 kHz,
 #     the size of the damping of a resonant bubble (the damping of eqs. (7)-(9) above gives
-#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5.
+#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5. Confirmed
+#     since: Dahl et al., JASA 101, 2583-2595 (1997) [D97], p. 2587, print the same law as
+#     2.55e-3 f^(1/3) with f in Hz (Devin 1959), which is ours with f in kHz.
 #   - the empirical law for beta_I against wind speed and frequency. beta_I is the optical depth
 #     of one vertical crossing of the layer, so a surface bounce loses 2 beta_I / sin(t) nepers
 #     of intensity: exactly what the bubble loss laws of this module give. It is taken from one
 #     of them (`extinction`): "apl_1994" (default; beta_I = loss in dB x sin(t) ln(10) / 20, which
-#     for that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`).
+#     for that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`); or,
+#     opt-in, from the published fit of [D97] Table II, "dahl_1997" (`dahl_1997_optical_depth`).
+#     Whether Table II is the handbook's law is not stated in [D97].
 #   - the small-scale roughness term sigma_sc = G(U10) tan^4(t) (their eq. (9); G is "an empirical
 #     function" not printed) and the bubble extinction applied to the roughness terms. They are
-#     left out: between about 30 and 70 degrees, where the source says sigma_sc is fitted, this
-#     model is therefore a lower bound; below about 30 degrees bubbles dominate at these
-#     frequencies and winds, and above about 70 degrees the facets do.
+#     left out. Below about 30 degrees bubbles dominate at these frequencies and winds, and above
+#     about 70 degrees the facets do; between, where the source says sigma_sc is fitted, the
+#     model lacks a positive term. That makes it a lower bound on the full published model, NOT
+#     on the sea: at 2.6 to 6.4 m/s, 5 to 45 degrees, with the default `apl_1994` it lies 6 to 12 dB
+#     ABOVE every open-ocean data set McDaniel (1993) shows, and 3.4 to 13 dB above Gallaudet's
+#     68 kHz, 3 m/s band means (docs/references/surface_papers_mcdaniel_dahl.md Sec. 3.3-3.5;
+#     tests/python/test_gallaudet_boundaries.py). The omitted term computed from McDaniel's
+#     spectrum is at most about 3 dB at 8 m/s and above, so "lower bound" holds at high wind only.
 #   - delta_r = 0.0136 is k a at resonance for a bubble near the surface (2 pi f a_R / c with
 #     Minnaert's a_R f = 3.26 m Hz gives 0.01366: tested), so it is not a free constant.
+#
+# Confirmed in print since (docs/references/surface_papers_mcdaniel_dahl.md; held by
+# tests/python/test_surface_papers_1997.py): eq. (10) and its limits (11)-(12) are [D97] eqs.
+# (17)-(19) and McDaniel, JASA 94, 1905-1922 (1993) [McD93] eqs. (9)-(12) (Crowther 1980);
+# delta_r = 0.0136 in both; our saturation level at 17 degrees is within 0.1 dB of [D97] Table I
+# (-26.82 / -27.74 / -28.22 dB against -26.9 / -27.8 / -28.3 at 26.5 / 50 / 70 kHz); the facet
+# term eq. (8) equals [McD93] eq. (7) with the x-slope variance half our total mean-square
+# slope; and beta_I as one vertical crossing is [D97] Sec. VI's convention (two-way loss
+# 20 log10(e) beta_I / sin(t) dB).
 BUBBLE_RERADIATION_DAMPING = 0.0136
 
 
@@ -428,16 +446,61 @@ def bubble_damping_constant(frequency: float) -> float:
     return 2.55e-2 * (float(frequency) / 1e3) ** (1.0 / 3.0)
 
 
+# [D97] Table II (p. 2591): log10 beta_I = a + b log10 U10, by frequency (Hz): (a, b). Fitted by
+# inverting eq. (17) (their Newton-Raphson) on 1-minute averages at 17 degrees grazing, North Sea
+# (SAXON-FPN, December 1991 and March 1992), data 0-13 m/s, the fit drawn dashed below 2.5 m/s
+# "to emphasize the extrapolation". U10: sonic anemometers on the platform, corrected to 10 m,
+# the same height as our `wind_speed`. The acoustic data were forced to the eq. (18) saturation
+# levels (Table I; a calibration uncertainty), so the absolute low-wind level carries that forcing.
+DAHL_1997_TABLE_II = {26.5e3: (-6.16, 5.50), 50e3: (-6.70, 6.40), 70e3: (-5.75, 5.35)}
+DAHL_1997_WINDS = (2.5, 13.0)               # m/s: the fit's solid line and the extent of its data
+DAHL_1997_FREQUENCY_EXPONENT = 0.8          # beta_I ~ f^0.8, [D97] p. 2592 (clearest 26.5-70 kHz)
+EXTINCTION_LAWS = ("apl_1994", "dahl_1997", "hall_novarini")
+
+
+def dahl_1997_optical_depth(wind_speed: float, frequency: float) -> float:
+    """beta_I from [D97] Table II (comment above): exactly the printed fit at 26.5, 50 and 70 kHz;
+    between them log10 beta_I linear in log10 f (ours); outside 26.5-70 kHz the nearest fit scaled
+    as f^0.8 ([D97]'s stated trend, its use outside their band ours), with a warning. A warning
+    below 2.5 m/s (their dashed extrapolation) and above 13 m/s (beyond their data); the value is
+    the fit's in both. One site, one angle (17 degrees): whether it holds at other angles and sites
+    is not tested in [D97] beyond one figure at 45 degrees. Nothing in [D97] is above 70 kHz."""
+    u, f = max(float(wind_speed), 0.0), float(frequency)
+    if not DAHL_1997_WINDS[0] <= u <= DAHL_1997_WINDS[1]:
+        side = f"below {DAHL_1997_WINDS[0]:g} m/s, where the published fit is an extrapolation (drawn dashed)" \
+            if u < DAHL_1997_WINDS[0] else f"above {DAHL_1997_WINDS[1]:g} m/s, beyond the data it was fitted to"
+        warnings.warn(f"dahl_1997 extinction: wind speed {wind_speed:g} m/s is {side}", stacklevel=3)
+    freqs = sorted(DAHL_1997_TABLE_II)
+    if not freqs[0] <= f <= freqs[-1]:
+        warnings.warn(f"dahl_1997 extinction: {f / 1e3:g} kHz is outside the fit's 26.5-70 kHz; the nearest fit is "
+                      f"scaled as f^{DAHL_1997_FREQUENCY_EXPONENT:g} (an extrapolation)", stacklevel=3)
+    if u <= 0.0:
+        return 0.0
+    log_u, log_f = math.log10(u), math.log10(f)
+    logs = [DAHL_1997_TABLE_II[x][0] + DAHL_1997_TABLE_II[x][1] * log_u for x in freqs]
+    log_freqs = [math.log10(x) for x in freqs]
+    if f <= freqs[0]:
+        level = logs[0] + DAHL_1997_FREQUENCY_EXPONENT * (log_f - log_freqs[0])
+    elif f >= freqs[-1]:
+        level = logs[-1] + DAHL_1997_FREQUENCY_EXPONENT * (log_f - log_freqs[-1])
+    else:
+        level = float(np.interp(log_f, log_freqs, logs))
+    return 10.0 ** level
+
+
 def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                                extinction: str = "apl_1994") -> float:
     """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from a
-    bubble loss law of this module: "apl_1994" or "hall_novarini"."""
+    bubble loss law of this module, "apl_1994" (default) or "hall_novarini", or from the published
+    fit of Dahl et al. (1997), "dahl_1997" (`dahl_1997_optical_depth`)."""
     if extinction == "apl_1994":
         t = np.radians(30.0)                              # the law is exactly 1 / sin(t): any angle gives the same
         return float(apl_1994_bubble_loss_db(t, wind_speed, frequency)) * math.sin(t) * math.log(10.0) / 20.0
     if extinction == "hall_novarini":
         return bubble_layer_depth_integral(frequency, wind_speed, sound_speed)
-    raise ValueError(f"unknown extinction {extinction!r}; 'apl_1994' or 'hall_novarini'")
+    if extinction == "dahl_1997":
+        return dahl_1997_optical_depth(wind_speed, frequency)
+    raise ValueError(f"unknown extinction {extinction!r}; one of {', '.join(EXTINCTION_LAWS)}")
 
 
 def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,

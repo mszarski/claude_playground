@@ -196,6 +196,15 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Files: the test file; `acoustics.chapman_harris_db` docstring (range: 400-6400 Hz, to 15 m/s, low grazing,
   explosive sources, March 1961, [McD93] p. 1918). The `surface.py` "lower bound" comment goes with G-7.
 - Engines: none. Size S.
+- **Done** (2026-11-26, branch `g-surface`): `tests/python/test_surface_papers_1997.py`, 12 tests, every
+  equality of [NS §3.1] reproduced: Table I -26.82 / -27.74 / -28.22 against -26.9 / -27.8 / -28.3 dB
+  (bound 0.1 dB); eq. (17) = [McD93] eq. (9) = ours to 1e-9; eqs. (18), (19) limits; bracket peak +3.73 dB;
+  McDaniel's damping law -0.35 dB at 68 kHz (the note's table to 0.01 dB); [D97] Sec. VI convention for
+  both laws; facet = eq. (7) to 1e-9; Chapman-Harris = eq. (27) to 1e-9 dB (1e-6 relative with the exact
+  knot), exponents 2.459 / 0.820; [DP97] 2.507 dB and 5.57 dB. Printed resonant radii 121 / 64 / 46 um:
+  ours 122.4 / 64.9 / 46.3 (1.5 %). Docstrings: `chapman_harris_db` (via secondary, the stated range;
+  "below about 40 degrees" removed), `surface.py` (the kHz unit of delta and the bubble/facet terms now
+  confirmed in print). No behaviour changed.
 
 ### G-3 Sediment tier above the critical angle: transmission and attenuation — OWNER FIRST (code may land opt-in), S
 - Gap W1: 6 dB two-way at 20 kHz, 9 dB at 30 kHz, 0.3 m of medium sand [N3 §3.5]. Exposure: `buried_cylinder`,
@@ -286,6 +295,16 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   at low wind and rises by up to 3.7 dB above 8 m/s; no shipped scenario affected; `test_gallaudet_boundaries.py`
   values move.
 - Must not: change the `extinction` default; tune a constant to one figure reading (+-1.5 dB).
+- **Done, opt-in** (2026-11-26, branch `g-surface`): `surface.dahl_1997_optical_depth`, `extinction: dahl_1997`;
+  `tests/python/test_surface_dahl_1997.py` (9 tests) and one new test in `test_gallaudet_boundaries.py` (its
+  existing assertions unchanged). Found: the note's 68 kHz values -44.1 / -43.4 dB were computed with the 70 kHz
+  fit scaled as f^0.8, not with the log-f interpolation this package specifies; with the interpolation the
+  bands are -44.4 / -43.7 dB (+6.9 / -2.2 against Gallaudet; 0.3 dB apart; both held). Wind exponent at 17 deg:
+  5.37 / 6.20 / 5.10 (measured 5.5 / 6.4 / 5.3); `apl_1994` 4.25 / 4.06 / 3.91 with a 51-point fit (the note's
+  4.13 / 3.94 / 3.80 not reproduced: that law's exponent depends on the wind sampling, 3.4-4.25); Urick-Hoover
+  readings all within +8 dB (max +7.0). Default bit-identical (float.hex values from before). Docs:
+  CONFIGURATION.md (`bubble_layer_surface` row), PHYSICS_NOTES Sec. 23.7; the "lower bound" comment in
+  `surface.py` corrected (holds at high wind only).
 
 ### G-8 Surface model of the FLS scenarios: prepare the decision — OWNER FIRST, S
 - Gap U5. From [NS WP7]. No code. The notes give, `bubble_layer_surface` minus Chapman-Harris at 5 m/s: +5.4 /
