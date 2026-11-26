@@ -9,6 +9,15 @@ The C++ one is used when the extension module has it. To select the NumPy one, p
 `engine="numpy"` to the provider or function, or set the environment variable
 `GPUSONAR_SIM_ENGINE=numpy` (read at each call).
 
+One engine choice per run (a-engarg; the owner, 2026-11-26): `engine=` given to `run_scenario` or
+`simulate_ping` reaches every stage it governs, the eigenray providers they build for themselves included
+(the scenario's tier, the free field of a ping given no provider, the straight direct arrival, a basin's
+own-ping pulse). Before, those last three ran on the default engine whatever was asked, so an explicit
+NumPy ping recorded `eigenrays: cpp` (or `numpy+cpp`), and an explicit `cpp` on a module without the C++
+simulator warned about the default's fallback before it was refused. A provider the caller passes in keeps
+its own `engine`; when that differs from an explicit `engine=` argument, `check_provider` says so once,
+naming both. GPUSONAR_SIM_ENGINE is a default: a provider's own engine wins over it without a word.
+
 What happens when the C++ simulator is not in the loaded module (a-engine; before, every
 case below ran NumPy without a word):
 - `cpp` asked for by argument or by GPUSONAR_SIM_ENGINE: `EngineUnavailable`, naming the
@@ -138,6 +147,38 @@ def call(name: str, *args, **kwargs):
                                    f"engine (engine=\"numpy\" or GPUSONAR_SIM_ENGINE=numpy)") from e
         e.add_note(f"if {_module_file()} was built from older sources than python/gpusonar, rebuild it")
         raise
+
+
+def provider_engine(provider) -> str | None:
+    """The engine a provider's eigenrays will run on by its own setting: its `engine`, else GPUSONAR_SIM_ENGINE,
+    else the default ('cpp' when built). A wrapper without an engine of its own (sim/timespread.py) is looked
+    through to its `inner`. None for a provider with no engine choice (Bellhop). Raises nothing for a missing C++
+    simulator (the provider's call does)."""
+    seen = 0
+    while provider is not None and not hasattr(provider, "engine") and hasattr(provider, "inner") and seen < 16:
+        provider, seen = provider.inner, seen + 1
+    if provider is None or not hasattr(provider, "engine"):
+        return None
+    if provider.engine:
+        return _check_name(str(provider.engine), "the provider's engine")
+    if os.environ.get("GPUSONAR_SIM_ENGINE"):
+        return _check_name(os.environ["GPUSONAR_SIM_ENGINE"], "GPUSONAR_SIM_ENGINE")
+    return "cpp" if HAVE_CPP else "numpy"
+
+
+def check_provider(provider, engine: str | None, where: str) -> None:
+    """A provider passed in by the caller keeps its own engine; when an explicit `engine` argument names another,
+    say so (one RuntimeWarning naming both). Nothing when no argument is given or the provider has no engine
+    choice."""
+    if not engine:
+        return
+    asked = _check_name(str(engine), "engine argument")
+    own = provider_engine(provider)
+    if own is not None and own != asked:
+        warnings.warn(f"{where}: the provider passed in runs its eigenrays on the {own!r} engine (its own `engine`, "
+                      f"which it keeps), but the engine argument asks for {asked!r}: the other stages run on {asked!r}. "
+                      f"To run one engine, give the provider engine={asked!r}, or leave the argument out",
+                      RuntimeWarning, stacklevel=3)
 
 
 # --- what ran, into the record (a-engrec) ---------------------------------------------------------------------------

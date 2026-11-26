@@ -421,7 +421,8 @@ def transmitted_pulse(record, sonar, *, environment: dict, absorption_model: str
     record's sample units, and the time of its first sample (s after the transmit): made by the
     one-way pulse path of sim/sources.py (the engines' own kernel, so every waveform type and
     level convention is the simulator's) from a point `distance` m away on the element's
-    boresight, scaled back to 1 m."""
+    boresight, scaled back to 1 m. `engine` is that of the free-field eigenrays too (a-engarg;
+    before, they ran on the default engine whatever was asked)."""
     from . import sources as source_models
     from .propagation import make_provider
     c = float(record.environment.sound_speed)
@@ -442,7 +443,7 @@ def transmitted_pulse(record, sonar, *, environment: dict, absorption_model: str
     smp.start_time = distance / c - lead
     work.samples = smp
     projector = source_models._Projector(where, velocity, 0.0)
-    part = source_models._pulse(work, sonar, projector, projector.signals[0], make_provider("free_field", c), environment, absorption_model, 0.0, c,
+    part = source_models._pulse(work, sonar, projector, projector.signals[0], make_provider("free_field", c, engine=engine), environment, absorption_model, 0.0, c,
                                 core.Backend.Host if backend is None else backend, engine, True, (0.0, 0.0, 0.0))
     if part is None:
         return np.zeros(n, dtype=record.samples.array.dtype), -lead

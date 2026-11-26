@@ -168,7 +168,7 @@ def test_vertical_coherence_follows_the_elevation_spread():
 # --- echoes: the two-way tail -----------------------------------------------------------------------
 
 def ping(m, cfg, *, t=0.0, engine=None, pose=None, seed=0, target=(0.0, 300.0, 20.0)):
-    provider = basin.attach(make_provider("free_field", C), cfg, seed=seed)
+    provider = basin.attach(make_provider("free_field", C, engine=engine), cfg, seed=seed)   # one engine per ping (a-engarg)
     scene = Scene().add_points([list(target)], target_strength_db=10.0)
     rec = simulate_ping(m, pose or make_pose((0.0, 0.0, 20.0)), scene, environment=ENV, provider=provider, adc=False, absorption_model="none",
                         scenario_time=t, engine=engine)

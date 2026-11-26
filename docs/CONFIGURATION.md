@@ -764,8 +764,19 @@ echoes): `cpp_host`, `cpp_cuda` or `numpy` (a sampled pulse on NumPy); `reverber
 `{}`); a stage that ran on both engines in one ping reads `cpp+numpy`. Stages with one implementation
 for both engines (time-spread taps, basin tail, noise, front end, ADC, board clocks) are not listed.
 A sampled pulse synthesised by NumPy also keeps its older note `{"gpusonar": {"echo_synthesis":
-"numpy_sampled"}}`. The provider has its own `engine`: `simulate_ping(engine="numpy")` without a
-provider still computes its free-field eigenrays with the default engine, and the note says so.
+"numpy_sampled"}}`.
+
+One engine choice per run (a-engarg): `engine=` on `run_scenario` or `simulate_ping` (or
+`GPUSONAR_SIM_ENGINE`) reaches every eigenray provider they build for themselves: the scenario's tier
+(in place of `propagation.engine`), the free field of a `simulate_ping` given no provider, the straight
+direct arrival (`transmit.direct_path: {boundaries: false}`) and a basin's own-ping pulse
+(`basin_reverberation.own_ping_db`). Before, the last three ran on the default engine whatever was asked
+(an explicit-NumPy ping recorded `eigenrays: cpp`, or `numpy+cpp`; an explicit `cpp` on a module without
+the C++ simulator warned about the default's fallback before it was refused). A provider passed to
+`simulate_ping` keeps its own `engine`; when that is not the engine an explicit `engine=` names, one
+`RuntimeWarning` names both (the provider is not changed). `GPUSONAR_SIM_ENGINE` is a default: a
+provider's own engine wins over it without a word. A stage fed by two providers of different kinds in one
+ping still lists both (`bellhop+numpy`: an `eigenray` tier with a basin's own-ping pulse).
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.
 
