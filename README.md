@@ -17,9 +17,9 @@ the CUDA backend has been run and benchmarked on rented GPUs. The long-range des
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite ran on the tree of decision D-201
-(2278 passed, 102 skipped, 1 xfailed, none failed, on an NVIDIA L4); the opt-in 3-D
-propagation tier added after it is covered by a later job; the whole CPU suite has not been
+(the depth sigma now says so). The full GPU suite ran on the tree of decision D-202
+(2301 passed, 102 skipped, none failed, on an NVIDIA L4), the opt-in 3-D
+propagation tier included; the whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
 entries). The link budget and the coverage model have no reverberation term, so where
 reverberation dominates their margins and ranges are optimistic (D-198). Every shipped SAS scene

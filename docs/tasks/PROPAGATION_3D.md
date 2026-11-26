@@ -16,7 +16,7 @@ tier, its acceptance test behind `GPUSONAR_SLOW_ORACLES=1`, the top-level `bathy
 illustrative `flank_seamount_3d`) are done, with what differs from the plan said in each row. The
 tier has no reverberation over relief. Option F was filed and done as `sonar-0nsi` (D-201). D-199
 corrects what this file said of the fjord beds (question 9). The decision entry for the 3-D tier
-is to be written in `docs/DECISIONS.md`; issue `sonar-rcq` stays in progress until then.
+is D-202 in `docs/DECISIONS.md`; issue `sonar-rcq` is closed with it.
 
 **Will 3-D propagation make FLS or SAS better? No.** Neither family uses the tier that 3-D
 propagation would change. None of the 12 FLS scenarios and none of the 10 SAS scenarios is at

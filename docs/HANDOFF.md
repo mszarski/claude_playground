@@ -266,7 +266,7 @@ Code worth knowing first:
 
 ## 6. State of verification (to D-201 and the 3-D work)
 
-- **GPU, latest (NVIDIA L4, HF job 6b078a26d91f621b93096bc7, the tree of D-201): 2278 passed, 102 skipped, 1 xfailed (one Popoto-rate Sensor Bridge loopback case; the log does not print its reason), none failed.**
+- **GPU, latest (NVIDIA L4, HF job 6b079ab0d91f621b93098915, the tree of D-202, with `GPUSONAR_SLOW_ORACLES=1`): 2301 passed, 102 skipped, none failed.** Before it, D-201's tree: 2278 passed, 102 skipped, 1 xfailed (job 6b078a26d91f621b93096bc7).
   CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and
   Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`. The skips are data and tools not in the
   job and the opt-in measurements. The 3-D work after D-201 (`eigenray3d`, `flank_seamount_3d`)

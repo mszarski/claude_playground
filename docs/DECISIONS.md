@@ -3991,3 +3991,81 @@ What is wrong first, found by this work:
   6b078a26d91f621b93096bc7, 49 min 55 s). First GPU run of D-197's six oracle tests (passed). The
   expected failure is one of the six Popoto-rate Sensor Bridge loopback cases; the log does not print
   its reason (D-188's and D-192's kind: a damaged or late frame outside the bounds).
+
+### D-202 Opt-in 3-D propagation: a cross-slope warning, the `eigenray3d` tier running Bellhop3D as a separate process, `flank_seamount_3d` (issue sonar-rcq, packages P1 to P6 of `docs/tasks/PROPAGATION_3D.md`; the owner approved Bellhop3D as a separate process, 2026-11-26; nothing shipped changed)
+
+What is wrong or limited first:
+- Bellhop3D's arrivals do not hold the field over relief. Merged, they differ from its own loss run by
+  -3.9 to +2.5 dB at single receivers on the seamount (Gaussian-beam arrivals are 8.7 to 11.0 dB low
+  everywhere, so the provider uses hat beams). The provider therefore scales each receiver's eigenrays
+  to Bellhop3D's loss run: levels are the loss run's, delays and directions the arrivals'. The tier's
+  accuracy rests on that scaling.
+- No reverberation at this tier over relief: it would need a receiver a scattering cell, which the
+  node product and the disk cap refuse. `flank_seamount_3d` has a target and noise only.
+- The acceptance test takes 8 minutes (three Bellhop3D runs at converged fans) and runs only with
+  `GPUSONAR_SLOW_ORACLES=1`; `GPUSONAR_REQUIRE_ORACLES=1` does not make its skip a failure.
+- One margin is thin: on the 16 degree bearing ours minus N x 2-D is +2.24 dB against the 2.0 bound.
+
+- P1: `bathymetry.cross_bearing_slope`, `out_of_plane_turn` (atan(tan g sin 2 alpha)),
+  `reverb_relief.cross_slope_report`; an N x 2-D relief run warns once where the turn at 10 degrees
+  grazing exceeds 1.8 degrees (half the 3.6 degree beam of the two arrays that use this tier). No
+  shipped scenario warns. It changes no number.
+- P2: `sim/bellhop3d.py`: `read_arrivals3d` (ASCII and binary), `merge_arrivals` (contributions of
+  neighbouring source angles with the same bounce counts, magnitudes added). On a level bed the merged
+  hat-beam arrivals equal the loss run within 0.046 dB.
+- P3: `Bellhop3DProvider`, tier `eigenray3d`: hat beams 241 x 361 (fewer than 241 elevation beams
+  refused, D-197); only the nodes the points need; two runs a source position (binary arrivals, loss);
+  the D-105 arrival rule with 3-D launch and arrival vectors. It refuses a run whose arrivals file
+  would exceed `max_file_mb` (300 MB by default, estimated at 10 kB a receiver; measured 3.6 to 4.8 kB).
+  On a level bed within 0.16 dB of the image sources and of our 2-D tier. The `eigenray` tier, its
+  provider and `libs/` are untouched: all 76 scenarios shipped before D-201 expand to the same
+  configuration as before.
+- P4: against Bellhop3D's converged 3-D field on the seamount (bearings -24, -4, 16, 36 degrees): ours
+  minus 3-D -0.01, -0.10, -1.17, +0.01 dB; ours minus N x 2-D -0.45, +3.37, +2.24, -0.71 dB. Bounds:
+  1.5 dB, more than 2.0 dB over the flanks, 0.5 dB at single near ranges. The N x 2-D
+  characterisations of D-149 stay.
+- P5: one top-level `bathymetry` feeds the provider, every bottom reverberation item and every seafloor
+  item (a different one beside it is refused). New scenario `flank_seamount_3d` (flank_32, a 180 m
+  seamount, a target 4 km out over its flank): 231 s on the CPU, four Bellhop3D runs of about 57 s,
+  arrival files of 472 and 576 bytes.
+- P6: Lambert weighting over relief needed no change (`two_way_paths` already takes facet normals,
+  D-73); `TimeSpreadProvider` warns when it wraps this tier over relief with a bottom section (it
+  cannot know where a ray met the bed).
+- Tests: `test_cross_slope.py` (5), `test_bellhop3d_reader.py` (5), `test_bellhop3d_provider.py` (6),
+  `test_eigenray3d_scenario.py` (4), `test_seamount_3d.py` (the slow acceptance added).
+- Full GPU suite on this tree, with `GPUSONAR_SLOW_ORACLES=1`: **2301 passed, 102 skipped**, none
+  failed, no expected failure (NVIDIA L4, HF job 6b079ab0d91f621b93098915, 54 min 35 s). First GPU run
+  of the tier and of the acceptance test.
+
+### D-203 The documentation brought up to date with D-182 to D-202; `CLAUDE.md` and `AGENTS.md` are the sonar suite's (issue sonar-tadd; the owner: "update the docs everywhere"; no code behaviour or result changed)
+
+What was wrong, not only stale:
+- The chain-time benchmarks never included board synchronisation: `tools/gpu_benchmark_all.py`,
+  `tools/live_chain_ablation.py` and `tools/popoto_elevation_bench.py --full-rate` drop `chain.sync`
+  because their pings have ideal clocks, and no document said so. Their figures (0.0155 / 0.0282 /
+  0.0395 s and the others) measure another workload than a trial's ping and are not superseded by
+  D-190 to D-195, which changed stages they never ran. The trials' times with synchronisation (C++
+  0.048 / 0.054 / 0.065 s, Python 0.084 / 0.18 / 0.25 s at 32 / 64 / 96 channels on an L4) now stand
+  beside them wherever they are quoted. No benchmark file was changed. `docs/design/popoto_parts.md`
+  (generated with its JSON) still lacks the caveat.
+- `REFERENCES.md` and `OPEN_SOURCE.md` called Bellhop "oracle only"; it is the program behind the
+  `eigenray` tier, and Bellhop3D now that of `eigenray3d`.
+- `handoff/TESTS.md`'s counts a file mixed two ways of counting; recounted.
+- Statements left behind by later fixes (D-183's `--emulate`, D-199's fjord numbers, D-201's bounce
+  paths in STATUS) corrected.
+
+- The link budget and the coverage model have no reverberation term (D-198): said wherever a detection
+  range or coverage is quoted, `DESIGN.md` through its generators (`tools/design_report.py`,
+  `tools/reference_plan.py`). No number changed.
+- `flank_patrol`'s small vehicle is described as deliberately a hard target (the owner's choice), in
+  `SCENARIOS.md`, the scenario tables and a comment in the scenario file (the parsed scenario is
+  unchanged; no hash of the file's bytes is pinned).
+- Pointers "Later: ..." added to eleven earlier entries of this file; none rewritten.
+- `REFERENCES.md`: rows for the two theses the owner supplied (Mopin 2023, via secondary for Jackson
+  et al. 1986 and the empirical models; Steininger 2013).
+- `CLAUDE.md` rewritten for the sonar suite only, on the owner's instruction (what the repository is,
+  what to read first, the owner's rules, build and test, how work is done; the tracker's blocks kept
+  byte for byte), and `AGENTS.md` given the same sections with its own tracker blocks unchanged.
+- Also new since D-201, documents only: reference notes under `docs/references/` (Jackson and
+  Richardson 2007 in four parts; McDaniel 1993 and Dahl et al. 1997) and the plan
+  `docs/tasks/SST_GAPS_JACKSON.md` (30 work packages; its first wave is in progress).
