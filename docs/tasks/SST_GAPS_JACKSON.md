@@ -176,6 +176,13 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   `REFERENCES.md` (section 5), PHYSICS_NOTES Sec. 15 (our baseband is the conjugate of the book's P, [N2 §3.4]).
 - Engines: none. Size S. Depends on nothing.
 - Must not: change any formula or value.
+- **Done (2026-11-26, branch `g-bottom`)**: `tests/python/test_jackson_2007_bottom.py`, 15 tests, every book
+  formula retyped. Everything the notes said agrees, agrees: perturbation to 1e-13, Kirchhoff and small-slope
+  to 2e-7 (against an independent real-axis I_K), volume to 1e-11, (D.12) to 1e-14, (13.75)/(13.77) to 1e-12,
+  Fig. 13.19 slopes 0.0227 / 0.0595 / 0.1432 printed digits, the notes' SSA + volume tables to their 0.01 dB.
+  Small-slope's hemisphere integral is 0.902 / 1.031 / 1.005 |V|^2 at 20 / 40 / 70 deg (Fig. 13.2, 30 kHz):
+  below the (2.20) bound, not exactly (L.26). `configs/sediments.yaml`: comments only (loads identically).
+  The `bottom.py` docstring citations went with G-6. Nothing disagreed.
 
 ### G-2 Pin the surface papers' equalities; fix the docstrings — RECORD ONLY, S
 - Gap: Chapman-Harris "unconfirmed"; its docstring range "below about 40 degrees" is not printed; the surface
