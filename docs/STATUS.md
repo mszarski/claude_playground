@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-199); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-200); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -661,8 +661,10 @@ Grouped; within a group the most consequential first.
     Holoscan report sink cannot split and refuses an over-long line (questions for the
     owner below).
 36. The board forwarder is not written. What it must send is now one stream per board: the
-    receivers merge per-board streams (D-184; not the Holoscan application, `sonar_live_hsb.py
-    receive` or `--listen`, which need the relay `tools/board_merge.py`), provided the boards'
+    receivers merge per-board streams (D-184), every one of them since D-200: the Python source,
+    `build/bin/sonar_live` with and without `--listen`, the Holoscan application and
+    `sonar_live_hsb.py receive` (through Sensor Bridge each frame is one board's block on one data
+    channel; whether real boards share a channel is not known), provided the boards'
     capture starts agree with true time to about 0.8 ms; a board clock's rate can be configured or
     estimated (D-185; default none, ranges not corrected). Neither has met a real board or
     network. The navigation mapping for the vehicle's unit is

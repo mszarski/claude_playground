@@ -27,6 +27,7 @@
 #include <holoscan/holoscan.hpp>
 
 #include "sonar/io/record_file.hpp"
+#include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/udp_source.hpp"
 
@@ -52,7 +53,8 @@ class ReplaySourceOp : public holoscan::Operator {
 };
 
 /// Capture-board blocks from a UDP port, assembled into pings on the transmit marks, or with
-/// `listen` into fixed-length stretches of the untriggered stream. Navigation datagrams on
+/// `listen` into fixed-length stretches of the untriggered stream. With stream_boards=1 in `options`
+/// the boards' own streams are merged into the whole-array stream first (live::make_board_merger). Navigation datagrams on
 /// `nav_port` (0: none) set each ping's pose. A thread of its own drains the socket.
 /// Stops the pipeline after `max_pings`, or when no block has arrived for `idle_seconds`.
 /// Its two socket threads are stopped and joined in stop() and, if the operator is destroyed without
@@ -79,6 +81,8 @@ class UdpSourceOp : public holoscan::Operator {
   std::int64_t queue_dropped_ = 0;
   std::unique_ptr<live::PingAssembler> pings_;
   std::unique_ptr<live::StreamAssembler> stream_;
+  std::unique_ptr<live::BoardMerger> merger_;          ///< stream_boards=1: per-board streams merged first (sonar-bwu)
+  std::vector<std::vector<unsigned char>> merged_;     ///< the merge's output blocks of one input block (scratch)
   std::unique_ptr<live::UdpSocket> socket_, nav_socket_;
   live::Navigation nav_;
   std::mutex mutex_;

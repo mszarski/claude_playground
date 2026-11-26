@@ -6,10 +6,14 @@
     tools/hsb_frame_timing.py --schedule serial --engine python                 # HsbLiveApp's one-thread schedule, emulated
     tools/hsb_frame_timing.py --schedule serial --chain-seconds 2.64,2.91       # ... with a chain time given, not run
     tools/hsb_frame_timing.py --schedule threads --engine python                # what-if: the chain on a thread of its own
+    tools/hsb_frame_timing.py --per-board                      # one stream per capture board, merged (sonar-bwu)
 
 The stream is a Popoto build's shortest trial (`--rows` 1, 2 or 3: 32, 64 or 96 channels at 102.4 kHz, 4 pings 3 s
 apart, boards on their own clocks), framed as `serve` frames it (`hsb.FrameStream`, 1 s lead) and received with the
 build's deployment file, as tests/python/test_hsb.py's Popoto loopback does (`POPOTO` there; the same table here).
+`--per-board`: every board's own stream instead (`serve --per-board`: frames of one board each, board k's capture started
+k x 1031 samples before the first's), received with `source.boards: {}`, so the frame path merges them; a frame then
+carries one board's channels and the frames per second are the boards' together.
 
 What it measures, and what it cannot:
 - The frame path: `hsb.FrameReceiver.take` (the frame-number bookkeeping and the ping assembler) on every frame, with
@@ -68,10 +72,18 @@ def popoto_stream(rows: int):
     return records, cfg
 
 
-def frames_of(records, frame_samples: int):
-    """(frames as host arrays of bytes, as frame_to_host gives them; frames a second; seconds between transmits)."""
+def frames_of(records, frame_samples: int, per_board: bool = False):
+    """(frames as host arrays of bytes, as frame_to_host gives them; frames a second; seconds between transmits).
+    `per_board`: one stream per capture board, as `sonar_live_hsb.py serve --per-board` sends them."""
     from gpusonar.sources import hsb
-    st = hsb.FrameStream(records, frame_samples, lead_seconds=LEAD)
+    options = {}
+    if per_board:
+        sys.path.insert(0, str(ROOT / "tools"))
+        from sonar_live import PER_BOARD_START_STEP
+        from sonar_live_hsb import board_map
+        boards = board_map(records[0])
+        options = {"boards": boards, "start_offsets": [-PER_BOARD_START_STEP * k for k in range(len(boards))]}
+    st = hsb.FrameStream(records, frame_samples, lead_seconds=LEAD, **options)
     frames = [np.frombuffer(f, dtype=np.uint8).copy() for f in st]
     interval = (records[1].transmit.time_ns - records[0].transmit.time_ns) * 1e-9 if len(records) > 1 else float("nan")
     return frames, 1.0 / st.frame_seconds, interval
@@ -81,7 +93,7 @@ def receiver_for(cfg: dict, frame_samples: int):
     from gpusonar.sources import hsb
     src = cfg["source"]
     return hsb.FrameReceiver(src["sonar"], src.get("sonar_overrides"), sound_speed=src["sound_speed"],
-                             frame_samples=frame_samples)
+                             frame_samples=frame_samples, boards=src.get("boards"))
 
 
 def _metadata(k: int, frame) -> dict:
@@ -227,6 +239,7 @@ def main(argv=None) -> int:
     ap.add_argument("--rows", type=int, choices=sorted(POPOTO), default=3)
     ap.add_argument("--frame-samples", type=int, default=400)
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--per-board", action="store_true", help="one stream per capture board, merged by the frame path")
     ap.add_argument("--profile", action="store_true", help="cProfile of one pass of the frame path")
     ap.add_argument("--schedule", choices=["serial", "threads"], help="emulate the application's schedule (serial) or a "
                     "two-thread one (threads)")
@@ -239,8 +252,10 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     t = time.perf_counter()
     records, cfg = popoto_stream(args.rows)
-    frames, fps, interval = frames_of(records, args.frame_samples)
-    print("STREAM " + json.dumps({"rows": args.rows, "channels": records[0].samples.n_channels, "frames": len(frames),
+    if args.per_board:
+        cfg["source"]["boards"] = dict(cfg["source"].get("boards") or {})
+    frames, fps, interval = frames_of(records, args.frame_samples, args.per_board)
+    print("STREAM " + json.dumps({"rows": args.rows, "channels": records[0].samples.n_channels, "per_board": args.per_board, "frames": len(frames),
                                   "frame_bytes": int(len(frames[0])), "frames_per_s": fps, "interval_s": interval,
                                   "simulated_s": round(time.perf_counter() - t, 1)}), flush=True)
     for row in frame_path_timing(frames, cfg, args.frame_samples, fps, interval, args.repeats):

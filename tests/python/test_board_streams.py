@@ -472,3 +472,286 @@ def test_source_boards_reach_the_program_as_key_value_options():
         live.program_options({}, None, {"source": {"boards": {"wait": 0.1}}})
     with pytest.raises(ValueError, match="stream_board_missing"):
         core.live_options_from_text("stream_board_missing=repeat\n")
+
+
+# --- the receivers that took one whole-array stream only until sonar-bwu ----------------------------------------------
+# build/bin/sonar_live --listen, the Holoscan source operator and `sonar_live_hsb.py receive` refused per-board streams
+# and needed tools/board_merge.py in front (D-184). Each now merges in-process. What `board_merge.py` in front gives is
+# the Python merger's output for the same blocks in the same order (test_the_relay_tool_turns_board_streams_into_one_stream
+# holds the tool to that), so each is compared with that: the same merged stream, the same frames or pings, the same
+# merge statistics.
+
+LISTEN = ["--band", "4000", "6000", "n_fft=8192", "hop=8192", "n_average=4", "idle_seconds=2"]
+
+
+def _board_options_text(options: dict) -> list:
+    """The program's stream_board_* keys for a source.boards mapping (live.program_options, as --export-template)."""
+    from gpusonar import live
+    return [f"{k}={v}" for k, v in live.program_options({}, None, {"source": {"boards": options}}).items() if k.startswith("stream_board")]
+
+
+def _listen_cases(sc, records, sonar):
+    """(name, source.boards options, per-board blocks in arrival order): clean; a block lost on board 2 inside ping 1's
+    window with `missing: drop` and `zero`; blocks reordered, repeated and lost with another reference and wait; boards
+    on their own clock rates, pings 20 minutes apart (only each window sent)."""
+    period = int(round(float(sc["pings"]["interval"]) * sonar.sample_rate))
+    emu = _emulator(sc, records[:2], sonar)
+    clean = emu.blocks()
+    victim = next(k for k, (board, block) in enumerate(clean)
+                  if board == 2 and fs.decode_header(block)["sample_index"] + OFFSETS[2] > period + int(0.25 * sonar.sample_rate))
+    lost = [x for k, x in enumerate(clean) if k != victim]
+    rng = np.random.default_rng(3)
+    shuffled = list(clean)
+    for _ in range(len(shuffled) // 40):
+        i = int(rng.integers(0, len(shuffled) - 3))
+        j = i + int(rng.integers(1, 3))
+        shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+    drop = set(rng.choice(len(shuffled), size=6, replace=False).tolist())
+    twice = set(rng.choice(len(shuffled), size=6, replace=False).tolist())
+    messy = [b for k, b in enumerate(shuffled) if k not in drop for b in ([b, b] if k in twice else [b])]
+    rates = {0: 25.0, 1: -20.0, 2: 10.0, 3: -5.0}
+    timed = bm.BoardStreamEmulator(records[:2], float(sc["pings"]["interval"]), _boards(sonar), start_offsets=OFFSETS,
+                                   start_ns=1_700_000_000_000_000_000, block_samples=BLOCKS, clock_ppm=[rates[i] for i in range(4)],
+                                   ping_times=[0.0, 1200.0]).blocks()
+    return [("clean", {}, clean), ("lost_drop", {"missing": "drop"}, lost), ("lost_zero", {"missing": "zero"}, lost),
+            ("messy", {"reference": 1, "wait_s": 0.02}, messy), ("clock", {"clock_ppm": rates}, timed)]
+
+
+def _relayed(sonar, options, blocks):
+    """What tools/board_merge.py sends on for these blocks: the Python merger's output, and its statistics."""
+    merger = bm.BoardMerger.from_options(options, sonar)
+    out = []
+    for _, b in blocks:
+        out += merger.feed(b)
+    return out + merger.finish(), merger.stats()
+
+
+def _send(port, blocks):
+    import socket
+    import time
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as tx:
+        for i, b in enumerate(blocks):
+            tx.sendto(b, ("127.0.0.1", port))
+            if i % 4 == 3:
+                time.sleep(0.002)
+
+
+def _free_port():
+    import socket
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+def _run_program(exe, args, blocks, report, start_s=1.0):
+    """Run `exe --udp PORT args`, send `blocks` after `start_s`, return (status, report lines, stderr)."""
+    import subprocess
+    import time
+    port = _free_port()
+    proc = subprocess.Popen([str(exe), "--udp", str(port), *args, "--report", str(report)], stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(start_s)
+        _send(port, blocks)
+        _, err = proc.communicate(timeout=300.0)
+    finally:
+        proc.kill()
+    lines = report.read_text().splitlines() if report.exists() else []
+    return proc.returncode, lines, err
+
+
+def _boards_line(err, prefix="sonar_live: boards "):
+    got = [ln[len(prefix):] for ln in err.splitlines() if ln.startswith(prefix)]
+    return json.loads(got[-1]) if got else None
+
+
+@pytest.mark.skipif(not EXE.exists(), reason="build/bin/sonar_live is not built")
+@pytest.mark.parametrize("case", ["clean", "lost_drop", "lost_zero", "messy", "clock"])
+def test_listen_merges_per_board_streams_as_the_relay_in_front_does(trial, tmp_path, case):
+    """build/bin/sonar_live --listen with stream_boards=1 (it refused them before, sonar-bwu): the passive frames, the
+    stream's counts and the merge's statistics per board are those of --listen on the stream tools/board_merge.py sends
+    on, for a clean stream, a board's block lost (drop and zero), blocks reordered, repeated and lost (another reference
+    and wait) and boards on their own clock rates (D-185)."""
+    sc, sonar, records = trial
+    name, options, blocks = next(c for c in _listen_cases(sc, records, sonar) if c[0] == case)
+    template = tmp_path / "template.h5"
+    w = core.RecordWriter(str(template))
+    w.write(sonar.make_record(core.Pose(), environment={"sound_speed": float(records[0].environment.sound_speed)}))
+    w.close()
+    relayed, relay_stats = _relayed(sonar, options, blocks)
+    keys = _board_options_text(options)
+    assert "stream_boards=1" in keys
+    code, merged, err = _run_program(EXE, ["--template", str(template), "--listen", *LISTEN, *keys], [b for _, b in blocks],
+                                     tmp_path / "merged.jsonl")
+    assert code == 0, err.strip()[-600:]
+    stats = _boards_line(err)
+    if stats is None or sum(b["blocks"] + b["bad_blocks"] for b in stats["boards"].values()) < len(blocks):
+        pytest.skip(f"the loopback dropped data: {stats}")
+    code2, want, err2 = _run_program(EXE, ["--template", str(template), "--listen", *LISTEN], relayed, tmp_path / "relayed.jsonl")
+    assert code2 == 0, err2.strip()[-600:]
+    summary = [ln for ln in err.splitlines() if " frames, " in ln][-1]
+    summary2 = [ln for ln in err2.splitlines() if " frames, " in ln][-1]
+    if " 0 blocks dropped at the full queue" not in summary2:
+        pytest.skip(f"the relayed stream was not all taken: {summary2}")
+    assert stats == relay_stats
+    assert len(merged) >= 5 and merged == want
+    cut = lambda s: s.split(", 0 blocks dropped")[0]  # noqa: E731
+    assert cut(summary) == cut(summary2)
+    assert "frames completed by the merge at stop, not processed" in err
+    if case == "lost_drop":
+        assert stats["dropped_blocks"] >= 3 and stats["boards"]["2"]["missing_samples"] > OFFSETS[2]
+    if case == "lost_zero":
+        assert stats["zero_filled_blocks"] > 0 and stats["dropped_blocks"] == 0
+
+
+# --- Sensor Bridge: every frame one board's block (sonar_live_hsb.py receive) -------------------------------------------
+
+HSB_FRAME = 400                 # samples per frame (hsb.FRAME_SAMPLES): 9728-byte frames of a board of 8 channels
+
+
+def _hsb_cases(sc, records, sonar):
+    """(name, source.boards options, per-board frames in arrival order, their frame numbers), as one sender numbers the
+    boards' frames on the one data channel: clean; a frame of board 2 lost inside ping 1's window (drop and zero);
+    frames reordered, repeated and lost (another reference and wait); boards on their own clock rates (D-185)."""
+    period = int(round(float(sc["pings"]["interval"]) * sonar.sample_rate))
+    size = fs.HEADER_BYTES + 3 * HSB_FRAME * 8
+    clean = [x for x in _emulator(sc, records[:2], sonar, block_samples=HSB_FRAME).blocks() if len(x[1]) == size]   # whole frames only
+    numbers = list(range(len(clean)))
+    victim = next(k for k, (board, block) in enumerate(clean)
+                  if board == 2 and fs.decode_header(block)["sample_index"] + OFFSETS[2] > period + int(0.25 * sonar.sample_rate))
+    lost = [k for k in numbers if k != victim]
+    rng = np.random.default_rng(5)
+    order = list(numbers)
+    for _ in range(len(order) // 40):
+        i = int(rng.integers(0, len(order) - 3))
+        j = i + int(rng.integers(1, 3))
+        order[i], order[j] = order[j], order[i]
+    drop = set(rng.choice(len(order), size=6, replace=False).tolist())
+    twice = set(rng.choice(len(order), size=6, replace=False).tolist())
+    messy = [k for i, k in enumerate(order) if i not in drop for k in ([k, k] if i in twice else [k])]
+    rates = {0: 25.0, 1: -20.0, 2: 10.0, 3: -5.0}
+    timed = bm.BoardStreamEmulator(records[:2], float(sc["pings"]["interval"]), _boards(sonar), start_offsets=OFFSETS,
+                                   start_ns=1_700_000_000_000_000_000, block_samples=HSB_FRAME, clock_ppm=[rates[i] for i in range(4)],
+                                   ping_times=[0.0, 1200.0]).blocks()
+    pick = lambda frames, ks: ([frames[k] for k in ks], ks)  # noqa: E731
+    return [("clean", {}, *pick(clean, numbers)), ("lost_drop", {"missing": "drop"}, *pick(clean, lost)),
+            ("lost_zero", {"missing": "zero"}, *pick(clean, lost)),
+            ("messy", {"reference": 1, "wait_s": 0.02}, *pick(clean, messy)),
+            ("clock", {"clock_ppm": rates}, *pick(timed, list(range(len(timed)))))]
+
+
+@pytest.mark.parametrize("case", ["clean", "lost_drop", "lost_zero", "messy", "clock"])
+def test_sensor_bridge_frames_of_each_board_are_merged_as_the_relay_in_front_does(trial, case):
+    """`sonar_live_hsb.py receive` with source.boards (it refused them before, sonar-bwu): every Sensor Bridge frame is
+    one board's block, numbered by the one sender. The pings, the assembler's counts (pings, dropped_pings, lost_samples)
+    and the merge's statistics per board are those of the whole-array receive path behind tools/board_merge.py on the
+    same frames in the same order; the frame numbers count what was lost, late and repeated."""
+    from gpusonar.sources import hsb
+    sc, sonar, records = trial
+    name, options, frames, numbers = next(c for c in _hsb_cases(sc, records, sonar) if c[0] == case)
+    c = float(records[0].environment.sound_speed)
+    receiver = hsb.FrameReceiver(sonar, sound_speed=c, frame_samples=HSB_FRAME, boards=options)
+    assert receiver.frame_bytes == 9728 and receiver.frames_per_period == 4
+    got = []
+    for (_, frame), k in zip(frames, numbers):
+        got += receiver.take(frame, {"frame_number": k, "frame_bytes_received": len(frame), "packets_dropped": 0})
+    got += receiver.finish()
+    s = receiver.stats()
+    relayed, relay_stats = _relayed(sonar, options, frames)
+    whole = hsb.FrameReceiver(sonar, sound_speed=c)                       # today: the relay's whole-array blocks
+    # ... stamped at the reference board's rate, as source.boards.clock_ppm says the merged stream is (D-185; the
+    # whole-array receive path takes no rate of its own).
+    whole.assembler.clock_ppm = bm.BoardMerger.from_options(options, sonar).clock_ppm(options.get("reference", 0))
+    want = [r for b in relayed for r in whole.take(b)] + whole.finish()
+    w = whole.stats()
+    _same_records(got, want)
+    assert len(got) >= 1 and (s["pings"], s["dropped_pings"], s["lost_samples"]) == (w["pings"], w["dropped_pings"], w["lost_samples"])
+    assert s["boards"] == relay_stats and "boards" not in w
+    arrived = len(frames)
+    assert s["frames"] + s["frames_repeated"] + s["frames_too_late"] == arrived and s["bad_frames"] == s["frames_damaged"] == 0
+    if case in ("clean", "clock"):
+        assert (s["frames"], s["frames_lost"], s["frames_late"], s["trouble_frames"]) == (arrived, 0, 0, [])
+    if case.startswith("lost"):
+        victim = next(k for k in range(len(numbers) + 1) if k not in numbers)
+        assert (s["frames_lost"], s["trouble_frames"], s["frames_late"]) == (1, [victim + 1], 0)
+        assert s["boards"]["boards"]["2"]["missing_samples"] >= HSB_FRAME + OFFSETS[2]      # and the tail of a part frame
+        assert len(got) == (1 if case == "lost_drop" else 2)
+    if case == "messy":
+        never = set(range(max(numbers) + 1)) - set(numbers)
+        assert s["frames_lost"] == len(never) + s["frames_too_late"] and s["frames_repeated"] >= 6 and s["frames_late"] > 0
+
+
+def test_sensor_bridge_board_frames_must_be_one_size_and_the_keys_are_checked(trial):
+    from gpusonar.sources import hsb
+    sc, sonar, records = trial
+    with pytest.raises(ValueError, match="source.boards.channels: Sensor Bridge frames are all one size"):
+        hsb.FrameReceiver(sonar, frame_samples=HSB_FRAME, boards={"channels": [{"id": 0, "first": 0, "count": 16},
+                                                                               {"id": 1, "first": 16, "count": 8},
+                                                                               {"id": 2, "first": 24, "count": 8}]})
+    with pytest.raises(ValueError, match="source.boards.wiat_s: unknown key; did you mean 'wait_s'"):
+        hsb.FrameReceiver(sonar, frame_samples=HSB_FRAME, boards={"wiat_s": 0.1})
+    whole = hsb.FrameReceiver(sonar, frame_samples=HSB_FRAME)              # without source.boards: as before
+    assert whole.merger is None and whole.frames_per_period == 1 and whole.frame_bytes == 128 + 3 * HSB_FRAME * 32
+
+
+def test_a_per_board_frame_stream_gives_the_pings_of_the_whole_array_frames(trial):
+    """`serve --per-board` (hsb.FrameStream with `boards`): each board's frames on its own counter (board k's capture
+    started k x 1031 samples before the first's), interleaved as they would be sent, all of one size. Received with
+    source.boards they give the pings the whole-array frames give, sample for sample and stamp for stamp."""
+    import sonar_live_hsb
+    from gpusonar.sources import hsb
+    sc, sonar, records = trial
+    boards = sonar_live_hsb.board_map(records[0])
+    assert boards == _boards(sonar)
+    offsets = [-1031 * k for k in range(len(boards))]
+    whole = hsb.FrameStream(records, HSB_FRAME, lead_seconds=1.0)
+    per = hsb.FrameStream(records, HSB_FRAME, lead_seconds=1.0, boards=boards, start_offsets=offsets)
+    frames = list(per)
+    assert len(frames) == per.n_frames and {len(f) for f in frames} == {per.frame_bytes} and per.frame_bytes == 9728
+    assert per.frame_seconds == pytest.approx(whole.frame_seconds / 4) and per.n_frames >= 4 * whole.n_frames
+    heads = [fs.decode_header(f) for f in frames]
+    ends = [h["sample_index"] + h["n_samples"] + offsets[h["board"]] for h in heads]      # on the whole-array stream's counter
+    assert heads[0]["board"] == 3 and ends == sorted(ends) and {h["board"] for h in heads} == {0, 1, 2, 3}
+    c = float(records[0].environment.sound_speed)
+    receiver = hsb.FrameReceiver(sonar, sound_speed=c, frame_samples=HSB_FRAME, boards={})
+    got = [r for k, f in enumerate(frames) for r in receiver.take(f, {"frame_number": k, "frame_bytes_received": len(f)})]
+    got += receiver.finish()
+    want = hsb.records_from_frames(iter(whole), sonar, sound_speed=c)
+    _same_records(got, want)
+    s = receiver.stats()
+    assert (s["frames"], s["frames_lost"], s["dropped_pings"], s["lost_samples"]) == (len(frames), 0, 0, 0)
+    assert s["boards"]["dropped_blocks"] == 0 and all(b["missing_samples"] == 0 for b in s["boards"]["boards"].values())
+    idle = per.idle()
+    assert {fs.decode_header(next(idle))["board"] for _ in range(4)} == {0, 1, 2, 3}
+
+
+def test_receive_takes_source_boards_and_checks_them_before_looking_for_the_board(tmp_path, monkeypatch):
+    """`sonar_live_hsb.py receive CONFIG` with source.boards hands the mapping to run_receiver (it exited with "merge
+    per-board streams with tools/board_merge.py" before, sonar-bwu); an unknown key or a map Sensor Bridge frames cannot
+    carry is refused before the board is looked for (D-166, D-177)."""
+    import yaml
+    import sonar_live_hsb as tool
+    from gpusonar.sources import hsb
+    seen = {}
+
+    def fake_run_receiver(chain, sonar, sonar_overrides, **options):
+        seen.update(options)
+        return [], {"reports": 0, "stopped": "idle"}
+    monkeypatch.setattr(hsb, "run_receiver", fake_run_receiver)
+    chain = {}
+    for boards, error in (({"missing": "zero"}, None), ({"misssing": "zero"}, "source.boards.misssing"),
+                          ({"channels": [{"id": 0, "first": 0, "count": 16}, {"id": 1, "first": 16, "count": 8},
+                                         {"id": 2, "first": 24, "count": 8}]}, "all one size")):
+        path = tmp_path / "deploy.yaml"
+        path.write_text(yaml.safe_dump({"source": {"sonar": "popoto_testauv_1row", "boards": boards}, "chain": chain}))
+        seen.clear()
+        if error is None:
+            assert tool.main(["receive", str(path), "--quiet"]) == 0
+            assert seen["boards"] == boards
+        else:
+            with pytest.raises(ValueError, match=error):
+                tool.main(["receive", str(path), "--quiet"])
+            assert not seen
+    path.write_text(yaml.safe_dump({"source": {"sonar": "popoto_testauv_1row"}, "chain": chain}))
+    assert tool.main(["receive", str(path), "--quiet"]) == 0 and seen["boards"] is None     # without it: as before

@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -168,5 +169,36 @@ class BoardMerger {
   bool have_ref_frontier_ = false, have_decided_ = false;
   std::int64_t ref_frontier_ = 0, decided_to_ = 0, anchor_ = 0;
 };
+
+struct StreamOptions;   // chain.hpp
+
+/// The merge the stream options configure (stream_boards=1 and the stream_board_* keys, D-184; the map defaults to the
+/// template's channel_board), for every receiver of the program's stream: build/bin/sonar_live (pings and --listen) and
+/// the Holoscan source operator (sonar-bwu). nullptr without stream_boards. Throws std::invalid_argument for
+/// stream_board_ppm without stream_boards, and for stream_clock_ppm with it (the rates go per board).
+std::unique_ptr<BoardMerger> make_board_merger(const StreamOptions& stream, const PingRecord& template_record);
+
+/// One block of the stream into `assembler` (a PingAssembler or a StreamAssembler): through `merger` when there is one
+/// (a block it refuses is counted in its bad_blocks), else straight. `merged` is scratch.
+template <typename Assembler>
+void feed_stream(BoardMerger* merger, const unsigned char* data, std::size_t size, Assembler& assembler, std::vector<PingRecord>& ready,
+                 std::vector<std::vector<unsigned char>>& merged) {
+  if (merger == nullptr) {
+    assembler.feed(data, size, ready);
+    return;
+  }
+  merged.clear();
+  merger->feed(data, size, merged);
+  for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
+}
+
+/// The end of the stream for the merge: its waiting spans decided with what the boards gave, into `assembler`.
+template <typename Assembler>
+void finish_stream(BoardMerger* merger, Assembler& assembler, std::vector<PingRecord>& ready, std::vector<std::vector<unsigned char>>& merged) {
+  if (merger == nullptr) return;
+  merged.clear();
+  merger->finish(merged);
+  for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
+}
 
 }  // namespace sonar::live

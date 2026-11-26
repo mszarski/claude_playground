@@ -58,7 +58,8 @@
 //   stream_buffer_bytes (socket buffer; 0: from the data rate) stream_queue_mb (blocks waiting for the chain; 0: no bound)
 //   report_udp_max_bytes (a longer report line goes out as several datagrams, each a complete line with "part": [k, n])
 //   sync_search_time sync_tolerance_us elevation_min_row_elements nav_history_margin_s
-//   per-board streams (one GSFB stream per capture board, merged before the assembler; libs/live board_merge.hpp):
+//   per-board streams (one GSFB stream per capture board, merged before the assembler, for pings and --listen alike;
+//   libs/live board_merge.hpp):
 //   stream_boards (0 | 1) stream_board_channels (id:first:count,...; default the template's channel_board)
 //   stream_board_reference (board id; -1: the first) stream_board_missing (drop | zero) stream_board_wait_s
 //   the boards' clocks (sonar-ubg): stream_clock_ppm (the whole-array stream's rate error, ppm; 0: as before)
@@ -250,23 +251,9 @@ int main(int argc, char** argv) {
       }
       live::PingAssembler assembler(template_record, streaming ? &stream_decimate : nullptr,
                                     chain_options.sync ? &chain_options.reference : nullptr, stream_options.sample_bytes);
-      // stream_boards=1: each capture board sends its own stream; they are merged into the whole-array stream first.
-      std::unique_ptr<live::BoardMerger> merger;
-      if (stream_options.boards) {
-        if (listen) throw std::invalid_argument("stream_boards: per-board streams are merged for pings only; --listen takes a whole-array stream (tools/board_merge.py relays one)");
-        live::BoardMergeOptions mo;
-        mo.boards = stream_options.board_channels.empty() ? live::boards_from_template(template_record)
-                                                          : live::parse_board_channels(stream_options.board_channels);
-        mo.reference = stream_options.board_reference;
-        mo.zero = stream_options.board_zero;
-        mo.wait_s = stream_options.board_wait_s;
-        mo.sample_bytes = stream_options.sample_bytes;
-        mo.clock_ppm = live::parse_board_ppm(stream_options.board_ppm);
-        if (stream_options.clock_ppm != 0.0) throw std::invalid_argument("stream_clock_ppm: with stream_boards give each board's rate in stream_board_ppm");
-        merger = std::make_unique<live::BoardMerger>(mo, template_record.samples.n_channels, template_record.samples.sample_rate);
-      } else if (!stream_options.board_ppm.empty()) {
-        throw std::invalid_argument("stream_board_ppm: per-board rates need stream_boards=1 (one whole-array stream: stream_clock_ppm)");
-      }
+      // stream_boards=1: each capture board sends its own stream; they are merged into the whole-array stream first,
+      // for pings and for --listen alike (sonar-bwu).
+      const std::unique_ptr<live::BoardMerger> merger = live::make_board_merger(stream_options, template_record);
       // The clock's rate: configured, and estimated from arrival times per board (-1: the whole-array stream).
       const double configured_ppm = merger ? merger->clock_ppm(merger->reference()) : live::clock_rate(stream_options.clock_ppm, "stream_clock_ppm");
       assembler.clock_ppm = configured_ppm;
@@ -397,7 +384,7 @@ int main(int argc, char** argv) {
         last = std::chrono::steady_clock::now();
         ready.clear();
         if (listen) {
-          stream.feed(block.data(), block.size(), ready);
+          live::feed_stream(merger.get(), block.data(), block.size(), stream, ready, merged);
           for (PingRecord& rec : ready) {
             if (recorder) {
               recorder->write(rec);
@@ -426,13 +413,7 @@ int main(int argc, char** argv) {
             assembler.clock_ppm = it->second.stamp_ppm(configured_ppm);
           }
         }
-        if (merger) {
-          merged.clear();
-          merger->feed(block.data(), block.size(), merged);     // a refused block is counted in the merge's bad_blocks
-          for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
-        } else {
-          assembler.feed(block.data(), block.size(), ready);
-        }
+        live::feed_stream(merger.get(), block.data(), block.size(), assembler, ready, merged);   // a refused block: the merge's bad_blocks
         for (PingRecord& rec : ready) {
           if (nav_socket) {
             bool first_without_velocity = false;
@@ -449,25 +430,25 @@ int main(int argc, char** argv) {
       stop = true;
       receiver.join();
       nav_thread.join();
-      std::int64_t discarded = 0;      // complete pings the assembler still held when the run stopped: not processed
-      if (!listen) {
-        ready.clear();
-        if (merger) {                   // the boards' spans still waiting, decided with what arrived
-          merged.clear();
-          merger->finish(merged);
-          for (const auto& m : merged) assembler.feed(m.data(), m.size(), ready);
-        }
-        assembler.finish(ready);        // the end of the stream: holes still awaited are counted
-        discarded = static_cast<std::int64_t>(ready.size());
-      }
+      std::int64_t discarded = 0;      // complete pings (frames) the assemblers still held when the run stopped: not processed
+      ready.clear();
       if (listen) {
+        live::finish_stream(merger.get(), stream, ready, merged);     // the boards' spans still waiting, decided with what arrived
+        discarded = static_cast<std::int64_t>(ready.size());
         std::fprintf(stderr, "sonar_live: %lld frames, %lld dropped, %lld samples lost, %lld bad blocks, %lld blocks dropped at the full queue, "
                              "%lld reports split, %lld report datagrams refused\n", static_cast<long long>(done),
                      static_cast<long long>(stream.dropped_chunks), static_cast<long long>(stream.lost_samples),
                      static_cast<long long>(stream.bad_blocks), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
                      static_cast<long long>(out_socket ? out_socket->refused : 0));
+        if (merger) {
+          std::fprintf(stderr, "sonar_live: boards %s\n", merger->stats_json().c_str());
+          std::fprintf(stderr, "sonar_live: %lld frames completed by the merge at stop, not processed\n", static_cast<long long>(discarded));
+        }
         return 0;
       }
+      live::finish_stream(merger.get(), assembler, ready, merged);    // the boards' spans still waiting, decided with what arrived
+      assembler.finish(ready);          // the end of the stream: holes still awaited are counted
+      discarded = static_cast<std::int64_t>(ready.size());
       std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld blocks late (%lld too late), "
                            "%lld blocks repeated, %lld restarts, %lld pings discarded at stop, %lld pings without navigation, "
                            "%lld pings without velocity, %lld blocks dropped at the full queue, %lld reports split, %lld report datagrams refused\n",

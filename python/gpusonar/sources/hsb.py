@@ -31,13 +31,14 @@ from __future__ import annotations
 
 import ctypes
 import math
+import struct
 import time
 from typing import Iterable, Iterator
 
 import numpy as np
 
 from ..sonar import SonarModel
-from .flank_stream import FULL_SCALE_COUNTS, HEADER_BYTES, REORDER_BLOCKS, BlockError, PingAssembler, encode_block
+from .flank_stream import BOARD_OFFSET, FULL_SCALE_COUNTS, HEADER_BYTES, REORDER_BLOCKS, BlockError, PingAssembler, encode_block
 
 FRAME_SAMPLES = 400            # 6.25 ms of the 64 kSPS stream: 38,528 bytes with 32 channels, 160 frames a second.
 # A frame leaves the sender as one burst of 29 datagrams (1408-byte payloads) into the receiver's
@@ -71,10 +72,18 @@ class FrameStream:
     carry the original times; records that start at time zero come out `lead_seconds` later.
     The tail is padded with zeros to a whole frame. `idle()` continues the stream with
     frames of zeros, as a board with nothing in the water would.
+
+    `boards` ([{id, first, count}], every board the same count; sonar-bwu): one stream per capture board (D-184), each
+    frame one board's block of `frame_samples` samples on that board's own counter, whose sample 0 is sample
+    `start_offsets[k]` of the whole-array stream (default 0; its capture start stamped to match), the boards' frames
+    interleaved by the instant their last sample was taken. Every board names the transmits on its own counter (one
+    before its capture start: none). `frame_seconds` is then the stream's time a frame sent, a board's frame period over
+    the number of boards, and `n_frames` counts every board's frames.
     """
 
     def __init__(self, records, frame_samples: int = FRAME_SAMPLES, ping_interval: float | None = None,
-                 lead_seconds: float = 0.0, start_ns: int | None = None, gain_code: int = 0):
+                 lead_seconds: float = 0.0, start_ns: int | None = None, gain_code: int = 0, boards: list | None = None,
+                 start_offsets: list | None = None):
         self.records = list(records)
         if not self.records:
             raise ValueError("no ping records to send")
@@ -114,6 +123,23 @@ class FrameStream:
         end = self.tx[-1] + self.window_start + self.window_length
         self.n_frames = -(-end // self.frame_samples)
         self.frame_seconds = self.frame_samples / self.sample_rate
+        self.boards = None
+        if boards is not None:
+            from .board_merge import half_up
+            self.boards = [(int(b["id"]), int(b["first"]), int(b["count"])) for b in boards]
+            counts = sorted({c for _, _, c in self.boards})
+            if len(counts) != 1:
+                raise ValueError("boards: Sensor Bridge frames are all one size, so every board must carry the same number of channels")
+            self.offsets = [int(o) for o in (start_offsets or [0] * len(self.boards))]
+            if len(self.offsets) != len(self.boards):
+                raise ValueError("start_offsets: one per board")
+            self.frame_bytes = frame_bytes(counts[0], self.frame_samples)
+            stop = self.n_frames * self.frame_samples          # each board's frames run to the whole-array stream's end
+            self._board_frames_n = [-(-(stop - o) // self.frame_samples) for o in self.offsets]
+            self.n_frames = sum(self._board_frames_n)
+            self.frame_seconds /= len(self.boards)
+            self._board_ns = [self.start_ns + half_up(o * 1e9 / self.sample_rate) for o in self.offsets]
+            self._ping_cache = {}
 
     def _counts(self, i: int) -> np.ndarray:
         x = np.rint(self.records[i].samples.array.T * self.counts_per_volt)
@@ -125,6 +151,9 @@ class FrameStream:
         return encode_block(chunk, first, self.tx[last_tx], self.ping_index[last_tx], self.gain_code, 0, self.start_ns)
 
     def __iter__(self) -> Iterator[bytes]:
+        if self.boards is not None:
+            yield from self._interleaved()
+            return
         n, w0, wl = self.frame_samples, self.window_start, self.window_length
         last_tx, cached = -1, (None, None)                  # one ping's samples as counts at a time
         for k in range(self.n_frames):
@@ -142,8 +171,47 @@ class FrameStream:
                     chunk[a - first:b - first] = cached[1][a - self.tx[i] - w0:b - self.tx[i] - w0]
             yield self._encode(chunk, first, last_tx)
 
+    def _ping_counts(self, i: int) -> np.ndarray:
+        """Ping i's samples as counts, kept for the two latest pings (the boards' frames move through a ping together)."""
+        if i not in self._ping_cache:
+            if len(self._ping_cache) >= 2:
+                del self._ping_cache[min(self._ping_cache)]
+            self._ping_cache[i] = self._counts(i)
+        return self._ping_cache[i]
+
+    def _board_frames(self, q: int, idle: bool = False) -> Iterator[tuple]:
+        """(whole-array sample after the frame, board order, frame bytes) of board q's frames; `idle`: the frames of
+        zeros after its last one, without end."""
+        bid, ch0, count = self.boards[q]
+        o, n, w0, wl = self.offsets[q], self.frame_samples, self.window_start, self.window_length
+        j = self._board_frames_n[q] if idle else 0
+        last_tx = len(self.tx) - 1 if idle else -1
+        while idle or j < self._board_frames_n[q]:
+            first = o + j * n                                   # whole-array sample of the frame's first sample
+            while last_tx + 1 < len(self.tx) and self.tx[last_tx + 1] <= first:
+                last_tx += 1
+            chunk = np.zeros((n, count), dtype=np.int32)
+            for i in (() if idle else (last_tx, last_tx + 1)):
+                if not 0 <= i < len(self.tx):
+                    continue
+                a, b = max(first, self.tx[i] + w0), min(first + n, self.tx[i] + w0 + wl)
+                if b > a:
+                    chunk[a - first:b - first] = self._ping_counts(i)[a - self.tx[i] - w0:b - self.tx[i] - w0, ch0:ch0 + count]
+            own = self.tx[last_tx] - o if last_tx >= 0 else -1
+            tx, index = (own, self.ping_index[last_tx]) if own >= 0 else (-1, 0)
+            yield first + n, q, encode_block(chunk, j * n, tx, index, self.gain_code, 0, self._board_ns[q], board=bid)
+            j += 1
+
+    def _interleaved(self, idle: bool = False) -> Iterator[bytes]:
+        import heapq
+        for _, _, frame in heapq.merge(*(self._board_frames(q, idle) for q in range(len(self.boards))), key=lambda x: (x[0], x[1])):
+            yield frame
+
     def idle(self) -> Iterator[bytes]:
         """Frames of zeros that continue the stream after the last ping, without end."""
+        if self.boards is not None:
+            yield from self._interleaved(idle=True)
+            return
         chunk = np.zeros((self.frame_samples, self.n_channels), dtype=np.int32)
         k = self.n_frames
         while True:
@@ -204,14 +272,41 @@ class FrameReceiver:
     back is judged by the samples: a restart the assembler confirms (another capture start, or the
     samples starting again) restarts the numbering; a frame the assembler takes as continuing the
     stream renumbers it (a wrap or a sender's reset), counting nothing lost by number.
+
+    `boards` (a deployment file's `source.boards`, {} for every default; sonar-bwu): each capture board sends its own
+    stream (D-184) and every frame is one board's block, all boards' frames on the one data channel and one size (every
+    board the same channel count). They are merged as `tools/board_merge.py` merges them (`board_merge.BoardMerger`)
+    before the assembler, which is stamped at the reference board's rate (`source.boards.clock_ppm`, D-185). The merge
+    decides what a frame is (used, a repeat, too late, a board's restart); the frame numbers only count, as
+    `_take_board_frame` says; `stats()` adds the merge's statistics per board (`boards`).
     """
 
     def __init__(self, sonar: str | SonarModel = "flank_32", sonar_overrides: dict | None = None, pose=None,
-                 sound_speed: float | None = None, frame_samples: int | None = None, reorder_blocks: int = REORDER_BLOCKS):
+                 sound_speed: float | None = None, frame_samples: int | None = None, reorder_blocks: int = REORDER_BLOCKS,
+                 boards: dict | None = None):
         model = sonar if isinstance(sonar, SonarModel) else SonarModel.load(sonar, sonar_overrides)
-        self.assembler = PingAssembler(model, pose, sound_speed, reorder_blocks=reorder_blocks)
+        self.merger = None
+        clock_ppm = 0.0
+        if boards is not None:
+            # One stream per capture board (sonar-bwu, D-184): every frame is one board's block, merged into the
+            # whole-array stream before the assembler, the merged stream stamped at the reference board's rate (D-185).
+            from .board_merge import BoardMerger
+            self.merger = BoardMerger.from_options(boards, model, where="source.boards.")
+            counts = sorted({b.count for b in self.merger.boards})
+            if len(counts) > 1:
+                raise ValueError(f"source.boards.channels: Sensor Bridge frames are all one size, so every board must carry the same "
+                                 f"number of channels (here {', '.join(str(c) for c in counts)})")
+            clock_ppm = self.merger.clock_ppm(self.merger.reference)
+            if frame_samples:
+                # In-process the merged stream need not fit a datagram: one merged block a reference frame, not the
+                # relay's datagram-sized pieces of it. The same samples, transmits and holes reach the assembler.
+                self.merger.block_samples = max(self.merger.block_samples, int(frame_samples))
+        self.assembler = PingAssembler(model, pose, sound_speed, reorder_blocks=reorder_blocks, clock_ppm=clock_ppm)
         self.frame_samples = frame_samples
-        self.frame_bytes = frame_bytes(self.assembler.n_channels, frame_samples) if frame_samples else None
+        channels = self.merger.boards[0].count if self.merger is not None else self.assembler.n_channels
+        self.frame_bytes = frame_bytes(channels, frame_samples) if frame_samples else None
+        # Frames a frame period of the stream holds: one per board when each board sends its own.
+        self.frames_per_period = len(self.merger.boards) if self.merger is not None else 1
         self.frames = 0                 # frames used
         self.frames_lost = 0            # never received by the time their place was given up (frame numbers only)
         self.frames_damaged = 0         # arrived with packets missing
@@ -320,6 +415,8 @@ class FrameReceiver:
         get = metadata.get if metadata is not None else (lambda key, default=None: default)
         number = get("frame_number", None)
         number = int(number) if number is not None else None
+        if self.merger is not None:
+            return self._take_board_frame(frame, number, get)
         if number is not None:
             for i, (lo, hi) in enumerate(self._lost_numbers):
                 if lo <= number < hi:                     # counted lost, here after all: too late, once
@@ -375,9 +472,14 @@ class FrameReceiver:
     def finish(self, keep: bool = True) -> list:
         """The stream has ended: what is still awaited is lost; the pings that were waiting are returned. With
         `keep` False the caller has stopped and will not use them: they are counted in `pings_discarded_at_stop`."""
-        records = self.assembler.finish()
-        self._account()
-        self._settle(everything=True)
+        if self.merger is not None:
+            records = [r for block in self.merger.finish() for r in self.assembler.feed(block)] + self.assembler.finish()
+            self._give_up(self._awaited)
+            self._awaited = []
+        else:
+            records = self.assembler.finish()
+            self._account()
+            self._settle(everything=True)
         if keep:
             self.pings += len(records)
         else:
@@ -391,7 +493,128 @@ class FrameReceiver:
                 "bad_frames": self.bad_frames, "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number,
                 "trouble_frames": list(self.trouble_frames), "damaged_frames": list(self.damaged_frames), "pings": self.pings,
                 "pings_discarded_at_stop": self.pings_discarded_at_stop, "dropped_pings": a.dropped_pings,
-                "lost_samples": a.lost_samples}
+                "lost_samples": a.lost_samples, **({"boards": self.merger.stats()} if self.merger is not None else {})}
+
+    # -- one stream per board (sonar-bwu) ---------------------------------------------------------------------------
+
+    def _board_counts(self, frame) -> tuple:
+        """(restarts, repeated, late) of the board a frame names (None: no such board; the merge refuses it)."""
+        b = self.merger._by_id.get(struct.unpack_from("<H", frame, BOARD_OFFSET)[0]) if len(frame) >= HEADER_BYTES else None
+        return None if b is None else (b.restarts, b.repeated_blocks, b.late_blocks)
+
+    def _give_up(self, ranges) -> None:
+        """Numbers awaited ([lo, hi, noticed]) that can no longer be used: lost."""
+        for lo, hi, noticed in ranges:
+            if hi > lo:
+                self._lose(lo, hi, noticed)
+
+    def _take_board_frame(self, frame, number, get) -> list:
+        """`take` for per-board frames: every frame complete and of the boards' frame size goes to the merge
+        (`board_merge.BoardMerger`) as it comes, and what the merge completes to the assembler, so the merged stream is
+        the one `tools/board_merge.py` would send on for these frames. The merge tells a frame used, a repeat, too late
+        (its board's part already decided) or a board's restart. Frame numbers (one sender numbering every board's
+        frames) only count: a number skipped is awaited until it arrives, or, at `finish()`, lost (as is one that
+        arrives too late, and the oldest when more than MAX_AWAITED are awaited); `trouble_frames` gets the number of
+        the frame after the gap when its first number is counted lost."""
+        if number is not None:
+            for i, (lo, hi) in enumerate(self._lost_numbers):
+                if lo <= number < hi:                     # counted lost, here after all: too late, once
+                    self._lost_numbers[i:i + 1] = [r for r in ([lo, number], [number + 1, hi]) if r[0] < r[1]]
+                    self.frames_late += 1
+                    self.frames_too_late += 1
+                    return []
+        last = self._last_frame_number
+        awaited = number is not None and any(lo <= number < hi for lo, hi, _ in self._awaited)
+        old = number is not None and last is not None and number <= last and not awaited
+        if not old:
+            self.packets_dropped = max(self.packets_dropped, int(get("packets_dropped", 0) or 0))
+        size = len(frame)
+        received = get("frame_bytes_received", None)
+        records, verdict = [], "unused"
+        if received is not None and int(received) < size:
+            if old:
+                self.frames_repeated += 1
+                return []
+            self.frames_damaged += 1
+            if number is not None and len(self.trouble_frames) < 16:
+                self.trouble_frames.append(number)
+            if number is not None and len(self.damaged_frames) < 16:
+                self.damaged_frames.append(number)
+        elif self.frame_bytes is not None and size != self.frame_bytes:
+            self.bad_frames += 1
+        else:
+            before = self._board_counts(frame)
+            try:
+                blocks = self.merger.feed(frame)
+            except BlockError:
+                self.bad_frames += 1
+                blocks = None
+            if blocks is not None:
+                restarts, repeated, late = (x - y for x, y in zip(self._board_counts(frame), before))
+                verdict = "restart" if restarts else "repeated" if repeated else "too_late" if late else "used"
+                records = [r for block in blocks for r in self.assembler.feed(block)]
+        if verdict in ("used", "restart"):
+            self.frames += 1
+        elif verdict == "repeated" or (verdict == "too_late" and (number is None or old)):
+            if verdict == "too_late" and number is None:
+                self.frames_late += 1                     # without numbers: told from the samples, as the assembler tells it
+                self.frames_too_late += 1
+            else:
+                self.frames_repeated += 1                 # a numbered frame not awaited: a repeat (as on the whole-array path)
+        if number is not None:
+            self._board_number(number, verdict, last, awaited, old)
+        self.pings += len(records)
+        return records
+
+    def _board_number(self, number: int, verdict: str, last, awaited: bool, old: bool) -> None:
+        if last is None:
+            self.first_frame_number = self._last_frame_number = number
+            return
+        if number > last:
+            if number > last + 1:
+                self._awaited.append([last + 1, number, number])
+                over = sum(hi - lo for lo, hi, _ in self._awaited) - MAX_AWAITED
+                while over > 0:                           # far more than a window behind: lost at once
+                    lo, hi, noticed = self._awaited[0]
+                    k = min(over, hi - lo)
+                    self._give_up([[lo, lo + k, noticed]])
+                    over -= k
+                    if lo + k < hi:
+                        self._awaited[0] = [lo + k, hi, noticed]
+                    else:
+                        self._awaited.pop(0)
+            self._last_frame_number = number
+            if verdict == "too_late":                     # its board's part already decided by the merge: late, and lost
+                self.frames_late += 1
+                self.frames_too_late += 1
+                self._give_up([[number, number + 1, number]])
+            return
+        if awaited:
+            for i, (lo, hi, noticed) in enumerate(self._awaited):
+                if lo <= number < hi:
+                    self._awaited[i:i + 1] = [r for r in ([lo, number, noticed], [number + 1, hi, noticed]) if r[0] < r[1]]
+                    if verdict == "too_late":             # arrived after the merge gave its place up: late, and lost
+                        self.frames_late += 1
+                        self.frames_too_late += 1
+                        self._give_up([[number, number + 1, noticed]])
+                    elif verdict != "unused":
+                        self.frames_late += 1
+                    break
+            return
+        if verdict == "used" and self.first_frame_number is not None and number < self.first_frame_number:
+            # Placed before the first frame seen (it was late): the numbers between are awaited too.
+            self.frames_late += 1
+            if number + 1 < self.first_frame_number:
+                self._awaited.insert(0, [number + 1, self.first_frame_number, self.first_frame_number])
+            self.first_frame_number = number
+            return
+        if verdict == "restart":                          # a board's new capture: what was awaited can no longer come
+            self._give_up(self._awaited)
+            self._awaited = []
+            self._last_frame_number = number
+        elif verdict == "used":                           # the samples go on, the numbers went back: renumbered
+            self._awaited = []
+            self._last_frame_number = number
 
 
 def records_from_frames(frames: Iterable, sonar: str | SonarModel = "flank_32", sonar_overrides: dict | None = None,
@@ -984,8 +1207,8 @@ if Operator is not None:
             self.chain, self.receiver = chain, receiver
             self._omp_threads = chain_omp_threads
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
-            if queue_frames is None:        # QUEUE_SECONDS of this stream
-                queue_frames = queue_frames_for(receiver.assembler.sample_rate, receiver.frame_samples)
+            if queue_frames is None:        # QUEUE_SECONDS of this stream (of every board's frames, with one stream per board)
+                queue_frames = queue_frames_for(receiver.assembler.sample_rate, receiver.frame_samples) * receiver.frames_per_period
             if int(queue_frames) < 1:
                 raise ValueError("queue_frames must be at least 1")
             self._n, self._queue, self._idle = n_pings, int(queue_frames), idle_timeout
@@ -1050,14 +1273,15 @@ _KEEP = []       # applications whose stop failed (run_receiver), kept to the en
 
 def run_receiver(chain, sonar: str = "flank_32", sonar_overrides: dict | None = None, hololink_ip: str = "127.0.0.1",
                  frame_samples: int = FRAME_SAMPLES, n_pings: int | None = None, sound_speed: float | None = None,
-                 find_timeout: float = 30.0, on_report=None, **app_options) -> tuple[list, dict]:
+                 find_timeout: float = 30.0, on_report=None, boards: dict | None = None, **app_options) -> tuple[list, dict]:
     """Find the board at `hololink_ip`, receive its frames with Sensor Bridge's Linux receiver
     and run `chain` (a `gpusonar.live.LiveChain`) on the pings. Returns (reports, statistics).
-    Needs a CUDA device (the receiver puts each frame in GPU memory)."""
+    `boards`: one stream per capture board, merged (FrameReceiver). Needs a CUDA device (the receiver puts each
+    frame in GPU memory)."""
     if Application is None:
         raise RuntimeError("the Holoscan SDK is not usable here")
     import hololink
-    receiver = FrameReceiver(sonar, sonar_overrides, sound_speed=sound_speed, frame_samples=frame_samples)
+    receiver = FrameReceiver(sonar, sonar_overrides, sound_speed=sound_speed, frame_samples=frame_samples, boards=boards)
     cuda = CudaDriver()
     udp0, cpu0 = udp_counters(), cpu_throttling()
     shutdown_error = None

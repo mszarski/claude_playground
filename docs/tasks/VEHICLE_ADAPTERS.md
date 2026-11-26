@@ -94,8 +94,9 @@ Facts about these that an adapter must respect:
   blocks (flag bit 1, the board id as the u16 at offset 44) on that board's own sample
   counter, with its own capture start stamped on the navigation's clock to well inside 1 ms
   (about 0.8 ms; the synchronisation search is 2 ms), and the reference board marking each
-  transmit. The receivers merge them (`source.boards` in the deployment file, `stream_boards=1`
-  for `build/bin/sonar_live`, or the relay `tools/board_merge.py`; rules in
+  transmit. Every receiver merges them (`source.boards` in the deployment file, `stream_boards=1`
+  for `build/bin/sonar_live` and the Holoscan application, through Sensor Bridge one board's
+  block a frame; the relay `tools/board_merge.py` for a receiver elsewhere; rules in
   `python/gpusonar/sources/board_merge.py`). The board -> channel map and each board's
   clock-rate error (`source.boards.clock_ppm`, D-185) are configuration. The header field is
   ours; the owner accepted it and the `drop` default (D-184). Tests: `tests/python/test_board_streams.py`,

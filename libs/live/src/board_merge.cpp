@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "sonar/live/chain.hpp"
 #include "sonar/live/udp_source.hpp"
 
 namespace sonar::live {
@@ -561,6 +562,24 @@ std::string BoardMerger::stats_json() const {
   s << "}, \"merged_blocks\": " << merged_blocks << ", \"dropped_blocks\": " << dropped_blocks << ", \"zero_filled_blocks\": "
     << zero_filled_blocks << ", \"bad_blocks\": " << bad_blocks << ", \"pending\": " << pending_.size() << "}";
   return s.str();
+}
+
+std::unique_ptr<BoardMerger> make_board_merger(const StreamOptions& stream, const PingRecord& template_record) {
+  if (!stream.boards) {
+    if (!stream.board_ppm.empty()) {
+      throw std::invalid_argument("stream_board_ppm: per-board rates need stream_boards=1 (one whole-array stream: stream_clock_ppm)");
+    }
+    return nullptr;
+  }
+  if (stream.clock_ppm != 0.0) throw std::invalid_argument("stream_clock_ppm: with stream_boards give each board's rate in stream_board_ppm");
+  BoardMergeOptions o;
+  o.boards = stream.board_channels.empty() ? boards_from_template(template_record) : parse_board_channels(stream.board_channels);
+  o.reference = stream.board_reference;
+  o.zero = stream.board_zero;
+  o.wait_s = stream.board_wait_s;
+  o.sample_bytes = stream.sample_bytes;
+  o.clock_ppm = parse_board_ppm(stream.board_ppm);
+  return std::make_unique<BoardMerger>(o, template_record.samples.n_channels, template_record.samples.sample_rate);
 }
 
 }  // namespace sonar::live

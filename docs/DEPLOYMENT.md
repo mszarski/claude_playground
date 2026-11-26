@@ -780,8 +780,11 @@ use it.
 
 ```bash
 tools/sonar_live.py DEPLOY                         # with source.boards: {} (or a map): the Python source merges
-build/bin/sonar_live --udp 5700 --template t.h5 stream_boards=1 ...      # the C++ program merges (--export-template prints it)
-tools/board_merge.py SONAR --port 5710 --to 127.0.0.1:5700               # a relay for receivers that do not merge
+build/bin/sonar_live --udp 5700 --template t.h5 stream_boards=1 ...      # the C++ program merges (--export-template prints it);
+                                                                         # with --listen too
+build/bin/sonar_live_holoscan --udp 5700 --template t.h5 stream_boards=1 ...   # the Holoscan source operator merges
+tools/sonar_live_hsb.py receive DEPLOY                                   # with source.boards: every Sensor Bridge frame one board's block
+tools/board_merge.py SONAR --port 5710 --to 127.0.0.1:5700               # a relay, for a receiver elsewhere that takes one stream
 tools/sonar_live.py DEPLOY --emulate SCENARIO --per-board --port 0       # rehearsal: one emulated stream per board
 ```
 
@@ -816,8 +819,32 @@ them too): `blocks`, `used_blocks`, `late_blocks` (arrived after their span was 
 `merged_blocks`, `dropped_blocks`, `zero_filled_blocks`, `bad_blocks` (every refused block: no board id, a board not in
 the map, another channel count), `pending`.
 
-Not merged: `--listen` (passive) on `build/bin/sonar_live`, the Holoscan application and `sonar_live_hsb.py receive`
-refuse per-board streams; put `tools/board_merge.py` in front of them.
+Every receiver merges in-process (sonar-bwu): `tools/sonar_live.py` (`flank_udp`), `build/bin/sonar_live` for pings and
+with `--listen`, the Holoscan application's source operator (`UdpSourceOp`, `UdpSourceOp: boards {...}` when it stops) and
+`sonar_live_hsb.py receive`. Each gives what `tools/board_merge.py` in front of it gives: the same merged stream, so the
+same pings or passive frames, and the same statistics per board (`tests/python/test_board_streams.py`,
+`test_holoscan_cpp.py`). What differs, all ours:
+- The merged stream is stamped at the reference board's `clock_ppm` wherever pings are made (`flank_udp`, the program,
+  the Holoscan operator, `receive`); behind the relay only a receiver given that rate itself (`stream_clock_ppm` for the
+  program) stamps so. The Holoscan application and `receive` take no rate for a whole-array stream, and no listening
+  path (`--listen`) corrects a stamp.
+- When the run stops, spans still waiting for a board are decided and whatever they complete is counted, not processed
+  (`... pings discarded at stop`; with `--listen`, `sonar_live: N frames completed by the merge at stop, not processed`).
+  The relay would send them on to a receiver still running.
+- **Through Sensor Bridge** (`receive` with `source.boards`): every frame is one board's block, all boards' frames on the
+  one data channel, numbered by its one sender (`serve --per-board` sends such a stream). So every board must carry the
+  same number of channels (frames are one size; refused by name otherwise), there are as many frames a second as boards
+  times the frame rate (the receiver's queue default is 4 s of all of them), and the frame numbers only count: a number
+  skipped is lost unless it arrives, a frame the merge has already decided past is too late and lost, and the merge
+  decides what each frame is (used, a repeat, a board's restart). `receive`'s statistics add `boards` (the merge's).
+  How per-board streams reach a Sensor Bridge host (one data channel for every board, as here, or one per board) is not
+  known; one per board would need a receiver per channel and a setting naming each board's channel, which does not exist.
+  Measured on this development container's CPU, not on an L4 (`tools/hsb_frame_timing.py`, the 96-channel trial, 3
+  repeats): with 400-sample frames the frame path costs 0.039 to 0.040 ms a frame on average at 3072 frames a second,
+  0.36 to 0.37 s of every 3 s ping interval, against 0.057 to 0.060 ms and 0.043 to 0.046 s for the whole-array stream's
+  256 frames a second (eight times the time); with 1600-sample frames (768 a second, 38,528 bytes) 0.16 to 0.18 s.
+  Sensor Bridge's own cost a frame (the receiver operator, the copy from GPU memory, the metadata) is not in it and is
+  paid twelve times as often with 400-sample frames.
 
 ### The boards' clocks and `transmit.time_ns`
 
@@ -864,6 +891,9 @@ prints that it is waiting for a receiver, or give `receive --find-timeout S` (de
 and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan application of
 Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
 (`python/gpusonar/sources/hsb.py`), and the chain. On a real board only `receive` runs.
+With `source.boards` in the deployment file every frame is one board's block and `receive` merges the boards' streams
+before the assembler (`serve --per-board` sends such frames; "Several boards: one stream each" above says what is
+counted then).
 
 What `receive` counts (`FrameReceiver.stats()`, printed as `hsb: {...}` when the run ends,
 after `finish()` has given up whatever was still awaited). Frames are placed by the sample

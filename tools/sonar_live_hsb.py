@@ -3,14 +3,16 @@
 
     tools/sonar_live_hsb.py serve --scenario flank_patrol          # the board: simulated pings sent through
     tools/sonar_live_hsb.py serve --replay flight.h5               # Sensor Bridge's emulator (or a recording)
+    tools/sonar_live_hsb.py serve --scenario NAME --per-board      # ... one stream per capture board
     tools/sonar_live_hsb.py receive CONFIG --pings 20 --report r.jsonl      # the host: Sensor Bridge's Linux
     tools/sonar_live_hsb.py receive --sonar flank_32 --chain '{...}' ...    # receiver -> ping records -> chain
 
 `serve` announces a board at --ip (127.0.0.1: both on one machine) and streams when `receive`
 connects; it needs root (the emulator's data socket is a raw socket). `receive` needs a CUDA
 device. CONFIG is a deployment file like configs/deploy/popoto_vehicle.yaml: its source names the
-sonar, its chain, nav and output sections are used as by tools/sonar_live.py. Both sides must use
-the same --frame-samples. Sensor Bridge itself: tools/build_hsb.sh.
+sonar, its chain, nav and output sections are used as by tools/sonar_live.py; with source.boards
+every frame is one board's block and the boards' streams are merged before the assembler (sonar-bwu;
+`serve --per-board` sends such frames). Both sides must use the same --frame-samples. Sensor Bridge itself: tools/build_hsb.sh.
 `serve --scenario` simulates every ping before it announces the board; `receive` looks for the board
 for --find-timeout seconds (default 30), so start it after serve says it is waiting for a receiver,
 or give it longer.
@@ -28,7 +30,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from gpusonar.config import load_yaml  # noqa: E402
 from gpusonar.sources import hsb, make_source  # noqa: E402
-from sonar_live import ping_line  # noqa: E402
+from sonar_live import PER_BOARD_START_STEP, ping_line  # noqa: E402
 
 
 def positive_int(text: str) -> int:
@@ -68,6 +70,9 @@ def parse(argv=None):
                    help="after the sender falls behind: send the frames it owes at most two per frame period (spread, "
                         "the default) or back to back (burst, the behaviour before)")
     s.add_argument("--send-log", help="JSON file of every frame's send time")
+    s.add_argument("--per-board", action="store_true",
+                   help="send one stream per capture board (the records' channel_board map), every frame one board's block, "
+                        "board k's capture started k x 1031 samples before the first's; receive with source.boards")
     r = sub.add_parser("receive", help="receive with Sensor Bridge's LinuxReceiverOp and run the chain")
     r.add_argument("config", nargs="?", help="deployment YAML (source.sonar, chain, nav, output)")
     r.add_argument("--hololink", default="127.0.0.1", help="the board's address")
@@ -114,6 +119,20 @@ def serve_records(args):
     return records, args.interval or (None if timed else float(sc["pings"]["interval"]))
 
 
+def board_map(record) -> list:
+    """[{id, first, count}]: the boards a record's metadata.channel_board names, each one run of channels (as the C++
+    program's boards_from_template)."""
+    out = []
+    for c, b in enumerate(int(x) for x in record.metadata.channel_board):
+        if out and out[-1]["id"] == b:
+            out[-1]["count"] += 1
+        elif any(x["id"] == b for x in out):
+            raise ValueError(f"board {b} is not one run of channels")
+        else:
+            out.append({"id": b, "first": c, "count": 1})
+    return out or [{"id": 0, "first": 0, "count": int(record.samples.n_channels)}]
+
+
 def receive_plan(args) -> dict:
     """What `receive` will run: the sonar of the stream, chain settings, navigation and outputs."""
     cfg = load_yaml(args.config) if args.config else {}
@@ -126,17 +145,18 @@ def receive_plan(args) -> dict:
     sonar = args.sonar or source.get("sonar")
     if not sonar:
         sys.exit("receive: name the stream's sonar with --sonar or a deployment file")
-    if source.get("boards") is not None:
-        # Sensor Bridge frames are one whole-array stream; per-board streams are merged before it (sonar-6f9).
-        sys.exit("receive: source.boards: Sensor Bridge carries one whole-array stream; merge per-board streams with "
-                 "tools/board_merge.py before the board side")
     if cfg.get("nav"):
         from gpusonar.live import check_nav_keys
         check_nav_keys(cfg["nav"])    # a key NavListener does not take is refused before the board is looked for (D-177)
+    overrides = json.loads(args.sonar_overrides) if args.sonar_overrides else source.get("sonar_overrides")
+    if source.get("boards") is not None:
+        # One stream per capture board, every frame one board's block, merged before the assembler (sonar-bwu): the
+        # keys and the board map are checked against the sonar before the board is looked for.
+        hsb.FrameReceiver(sonar, overrides, frame_samples=args.frame_samples, boards=source["boards"])
     out = cfg.get("output") or {}
     stamp = time.strftime
-    return {"sonar": sonar, "chain": chain, "nav": cfg.get("nav"), "sound_speed": source.get("sound_speed"),
-            "sonar_overrides": json.loads(args.sonar_overrides) if args.sonar_overrides else source.get("sonar_overrides"),
+    return {"sonar": sonar, "chain": chain, "nav": cfg.get("nav"), "sound_speed": source.get("sound_speed"), "boards": source.get("boards"),
+            "sonar_overrides": overrides,
             "report": args.report or (stamp(out["report"]) if out.get("report") else None),
             "recording": args.recording or (stamp(out["recording"]) if out.get("recording") else None),
             "report_udp": out.get("report_udp"), "taps": out.get("taps")}
@@ -149,7 +169,11 @@ def main(argv=None):
         records, interval = serve_records(args)
         if args.scenario:     # the board is announced only after this: a receive started with it may need --find-timeout
             print(f"simulated {len(records)} pings of {args.scenario} in {time.perf_counter() - t0:.1f} s", flush=True)
-        board = hsb.HsbBoardEmulator(records, args.frame_samples, ip=args.ip, pace=args.pace, lead_seconds=args.lead,
+        per_board = {}
+        if args.per_board:
+            boards = board_map(records[0])
+            per_board = {"boards": boards, "start_offsets": [-PER_BOARD_START_STEP * k for k in range(len(boards))]}
+        board = hsb.HsbBoardEmulator(records, args.frame_samples, ip=args.ip, pace=args.pace, lead_seconds=args.lead, **per_board,
                                      ping_interval=interval, linger=args.linger, catch_up=args.catch_up, hold=args.hold)
         print("hsb: " + json.dumps(board.run(connect_timeout=args.connect_timeout, log=lambda t: print(t, flush=True))))
         if args.send_log:
@@ -164,7 +188,7 @@ def main(argv=None):
                    report_udp=plan["report_udp"], taps=plan["taps"]) as chain:
         _, stats = hsb.run_receiver(chain, plan["sonar"], plan["sonar_overrides"], hololink_ip=args.hololink,
                                     frame_samples=args.frame_samples, n_pings=args.pings, sound_speed=plan["sound_speed"],
-                                    find_timeout=args.find_timeout, idle_timeout=args.idle, queue_frames=args.queue,
+                                    find_timeout=args.find_timeout, idle_timeout=args.idle, queue_frames=args.queue, boards=plan["boards"],
                                     receiver_affinity=args.receiver_core,
                                     socket_buffer=args.socket_buffer, log_arrivals=bool(args.arrival_log),
                                     chain_omp_threads=args.chain_omp_threads,

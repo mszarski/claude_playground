@@ -3882,3 +3882,43 @@ existing choice; issue sonar-9b8's subject), not the bed. The bed's form is wort
 form's arrivals disagreeing with its own loss run. Recommendation: keep the beds; the owner decides
 whether the 2-row scenario keeps its 12-arrival limit. Bellhop3D cannot referee this: the scenarios
 are axisymmetric and the arrivals machinery is the same.
+
+### D-200 Every receiver merges per-board streams: `sonar_live --listen`, the Holoscan source operator and `sonar_live_hsb.py receive` (issue sonar-bwu; no default result moves)
+
+What differs or costs, first:
+- Through Sensor Bridge every frame is one board's block on ONE data channel, so the boards must have
+  equal channel counts (otherwise refused by name) and frames come 12 times as often at 96 channels. On
+  this container's CPU the frame path then costs 0.36 to 0.37 s of a 3 s ping interval at 400-sample
+  frames (0.16 to 0.18 s at 1600), against 0.043 to 0.046 s for the whole-array stream; Sensor Bridge's
+  own cost a frame is not in these numbers and is not measured. Whether real boards share one data
+  channel or have one each is not known: one each needs a setting that does not exist and was not added.
+- Merged in the receiver, the stream is stamped at the reference board's `clock_ppm`, as
+  `source.boards.clock_ppm` says. Behind the relay (`tools/board_merge.py`) the Holoscan application and
+  `receive` stamp at the nominal rate: they ignore `stream_clock_ppm` / `source.clock_ppm` and
+  `source.clock` for a whole-array stream, as they did before. Follow-up filed.
+- At the end of a run the spans still waiting for a board are decided and what they complete is counted,
+  not processed (as the ping path already did); `--listen` says so on stderr.
+
+- Before: each of the three refused `stream_boards` / `source.boards` and asked for the relay in front
+  (D-184). Now each merges with the existing mergers (`BoardMerger`, `BoardMergerCpp`) and the same keys;
+  no key was added or changed. A configuration without per-board streams takes the code it took.
+- C++: `live::make_board_merger`, `feed_stream`, `finish_stream` (`libs/live`), used by the program for
+  pings and `--listen` and by `UdpSourceOp`. Python: `hsb.FrameReceiver(boards=...)`,
+  `FrameStream(boards=, start_offsets=)`; `serve --per-board`; `hsb_frame_timing.py --per-board`.
+- Same output, less work: the Python `BoardMerger` moves sample bytes without decoding them (the
+  per-board frame path went from 1.07 to 0.36 s an interval; the merged bytes are unchanged), and
+  `FrameReceiver` hands the assembler one merged block a reference frame.
+- Held equal to the relay in front (the same pings to the bit, the same counts and merge statistics)
+  in five cases each: clean, a block lost with `missing: drop`, with `missing: zero`, blocks reordered,
+  repeated and lost with another reference and wait, and boards on their own clock rates (D-185).
+- Tests: `test_board_streams.py` (13 new: `--listen` and Sensor Bridge frames in the five cases, the
+  equal-size rule and keys, a per-board frame stream, `receive` taking `source.boards`),
+  `test_holoscan_cpp.py` (4 new: pings and listen, clean and lost-with-zero), `test_hsb.py` (a per-board
+  loopback through Sensor Bridge's emulator and receiver).
+- The Holoscan operator could not be compiled where it was written; it compiled and its four tests and
+  the per-board loopback passed in the job below.
+- Not measured: per-board frames through Sensor Bridge at a Popoto build's rate (the loopback test is
+  `flank_32`, one board); the Holoscan listen path against the program's `--listen`.
+- Full GPU suite on this change over the tree of D-196: **2232 passed, 101 skipped**, none failed
+  (NVIDIA L4, HF job 6b077ea0d91f621b930950a5, 49 min 30 s). That tree lacked D-197's oracle tests and
+  D-198's assertion; a later job covers them.

@@ -11,6 +11,8 @@ import pytest
 
 import gpusonar as gs
 from gpusonar.sources import FlankBoardEmulator, make_source
+import test_board_streams as tbs
+from test_board_streams import trial  # noqa: F401  (a fixture)
 from test_live import INTERVAL, N, copies, pings  # noqa: F401  (pings is a fixture)
 from test_live_cpp import EXE, EXE_OPTIONS
 
@@ -119,3 +121,52 @@ def test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abo
     assert proc.returncode == 1, f"ended with {proc.returncode} (negative: a signal): {err.strip()[-600:]}"
     assert "reference burst not found" in err                          # the reason reaches the operator's log or main's
     assert not (tmp_path / "rep.jsonl").exists() or not lines(tmp_path / "rep.jsonl")
+
+
+@pytest.mark.parametrize("mode", ["pings", "listen"])
+@pytest.mark.parametrize("case", ["clean", "lost_zero"])
+def test_holoscan_merges_per_board_streams_as_the_relay_in_front_does(trial, tmp_path, mode, case):
+    """sonar-bwu: the Holoscan source operator merges per-board streams (stream_boards=1; it refused them before and
+    needed tools/board_merge.py in front). On the four boards' streams of the one-row trial it reports what it reports
+    on the whole-array stream the relay sends on for the same blocks (pings: the trial's chain; --listen: passive
+    frames), and the merge's statistics per board are the relay merger's (test_board_streams.py holds the relay tool to
+    that merger and build/bin/sonar_live to the same comparison)."""
+    import shlex
+    import sys
+    from gpusonar.config import load_yaml
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import sonar_live
+    finally:
+        sys.path.pop(0)
+    sc, sonar, records = trial
+    name, options, blocks = next(c for c in tbs._listen_cases(sc, records, sonar) if c[0] == case)
+    relayed, relay_stats = tbs._relayed(sonar, options, blocks)
+    cfg = load_yaml(str(ROOT / "configs" / "deploy" / "popoto_testauv_1row.yaml"))
+    cfg["source"] = dict(cfg["source"], sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), host="127.0.0.1", port=0,
+                         sound_speed=float(records[0].environment.sound_speed), boards=options)
+    cfg.pop("nav")
+    cfg["output"] = {}
+    template = tmp_path / "template.h5"
+    cmd = shlex.split(sonar_live.export_template(cfg, str(template), str(HOLO)))
+    keys = [a for a in cmd if "=" in a and not a.startswith("-")]                    # the chain's and the merge's keys
+    merge = [k for k in keys if k.startswith("stream_board")]
+    assert "stream_boards=1" in merge
+    if mode == "pings":
+        args = ["--template", str(template), *[k for k in keys if k not in merge], "idle_seconds=6"]
+    else:
+        args = ["--template", str(template), "--listen", *tbs.LISTEN, "idle_seconds=6"]   # the runtime takes a moment to start
+    got = {}
+    for run, extra, sent in (("boards", merge, [b for _, b in blocks]), ("relayed", [], relayed)):
+        code, out, err = tbs._run_program(HOLO, [*args, *extra], sent, tmp_path / f"{run}.jsonl", start_s=4.0)
+        assert code == 0, f"{run}: ended with {code}: {err.strip()[-600:]}"
+        summary = [ln for ln in err.splitlines() if ln.startswith("UdpSourceOp: ") and " emitted, " in ln]
+        stats = tbs._boards_line(err, "UdpSourceOp: boards ")
+        if run == "boards" and (stats is None or sum(b["blocks"] + b["bad_blocks"] for b in stats["boards"].values()) < len(blocks)):
+            pytest.skip(f"the loopback dropped data: {stats}")
+        if run == "relayed" and (not summary or " 0 blocks dropped at the full queue" not in summary[-1]):
+            pytest.skip(f"the relayed stream was not all taken: {summary}")
+        got[run] = ([strip(json.loads(x)) for x in out if x.startswith("{")], stats, summary[-1].split(" pings discarded")[0])
+    (a, sa, ua), (b, sb, ub) = got["boards"], got["relayed"]
+    assert sa == relay_stats and sb is None
+    assert len(a) >= 2 and a == b and ua == ub

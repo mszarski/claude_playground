@@ -66,7 +66,7 @@ from typing import Iterator
 import numpy as np
 
 from .flank_stream import (FLAG_OVERFLOW, clock_rate, MAX_DATAGRAM, MAX_SAMPLE_INDEX, SAMPLE_BYTES, HEADER_BYTES, BlockError,
-                           FlankBoardEmulator, block_samples_for, decode_block, encode_block,
+                           MAGIC, VERSION, _HEADER, FlankBoardEmulator, block_samples_for, decode_block, decode_header, encode_block,
                            full_scale_counts)
 
 WAIT_S = 0.05            # how long (in samples of the stream) a board may lag the others before its part is missing; ours
@@ -90,7 +90,10 @@ class _Board:
         self.ppm = 0.0                    # its clock's configured rate error (clock_ppm; sonar-ubg)
         self.start_ns = None              # the capture start of its latest capture
         self.left = []
-        self.blocks = {}                  # (capture start, own first sample) -> [n, counts [n, count] int32, flags, used]
+        self.blocks = {}                  # (capture start, own first sample) -> [n, rows, flags, used]: rows [n, count x sample
+                                          # bytes] uint8, the block's samples as sent (never decoded: the merge moves bytes)
+        self.version = 0                  # changed whenever `blocks` is (BoardMerger._spans keeps its last answer until then)
+        self.spans_cache = (None, None)
         self.frontier = None              # own sample after the furthest block of the latest capture
         self.n_blocks = self.used_blocks = self.late_blocks = self.repeated_blocks = 0
         self.restarts = self.missing_samples = self.bad_blocks = 0
@@ -155,6 +158,7 @@ class BoardMerger:
         self._ref_frontier = None
         self._decided_to = None           # merged sample after the furthest span decided
         self._anchor = 0                  # anchor of the latest reference block (its transmit, else its first sample)
+        self._offsets = {}                # offset() of (board, capture start, anchor, reference's capture start): the same answer
 
     @classmethod
     def from_options(cls, options: dict | None, sonar, sample_bytes: int = SAMPLE_BYTES, where: str = "boards.") -> "BoardMerger":
@@ -189,18 +193,30 @@ class BoardMerger:
             d = x (1 + e_b) + anchor (e_b - e_ref) / (1 + e_ref),   x = (start_ref - start_b) 1e-9 fs
         (ours: board b counts (t - start_b) fs (1 + e_b) at true time t, the reference (t - start_ref) fs (1 + e_ref);
         the difference at the reference's count `anchor`). All rates 0: d = x."""
-        eb, er = board.ppm * 1e-6, self._ref.ppm * 1e-6
-        x = float(self._ref.start_ns - start_ns) * 1e-9 * self.sample_rate
-        d = x * (1.0 + eb) + float(anchor) * (eb - er) / (1.0 + er)
-        return -half_up(d)
+        memo = (board.id, start_ns, anchor, self._ref.start_ns)
+        got = self._offsets.get(memo)
+        if got is None:
+            eb, er = board.ppm * 1e-6, self._ref.ppm * 1e-6
+            x = float(self._ref.start_ns - start_ns) * 1e-9 * self.sample_rate
+            d = x * (1.0 + eb) + float(anchor) * (eb - er) / (1.0 + er)
+            got = -half_up(d)
+            if len(self._offsets) >= 4096:        # the arithmetic is cheap; the memo only spares repeating it per block
+                self._offsets.clear()
+            self._offsets[memo] = got
+        return got
 
     def _spans(self, board: _Board, anchor: int) -> list:
-        """The board's blocks as [merged first, merged end, key], sorted by merged first."""
+        """The board's blocks as [merged first, merged end, key], sorted by merged first. The list is kept until the
+        board's blocks, the anchor or the reference's capture start change (callers only read it)."""
+        memo = (anchor, board.version, self._ref.start_ns)
+        if board.spans_cache[0] == memo:
+            return board.spans_cache[1]
         out = []
         for key, blk in board.blocks.items():
             f = key[1] + self.offset(board, key[0], anchor)
             out.append([f, f + blk[0], key])
         out.sort(key=lambda x: (x[0], x[1], x[2]))
+        board.spans_cache = (memo, out)
         return out
 
     def _frontier(self, board: _Board, anchor: int):
@@ -219,7 +235,7 @@ class BoardMerger:
     def feed(self, data: bytes, arrival_ns: int | None = None) -> list:
         """Take one per-board block; return the whole-array blocks it completes (bytes, in order)."""
         try:
-            block = decode_block(data, self.sample_bytes)
+            block = decode_header(data, self.sample_bytes)
         except BlockError as e:
             self._refuse(str(e))
         bid = block["board"]
@@ -254,7 +270,7 @@ class BoardMerger:
                 board.repeated_blocks += 1
                 return out
             p = {"first": first, "n": n, "tx": tx, "index": block["ping_index"], "gain": block["gain_code"],
-                 "flags": block["flags"] & FLAG_OVERFLOW, "start_ns": ns, "counts": block["counts"],
+                 "flags": block["flags"] & FLAG_OVERFLOW, "start_ns": ns, "rows": self._rows(data, block),
                  "anchor": tx if tx >= 0 else first}
             at = len(self._pending)
             while at and self._pending[at - 1]["first"] > first:
@@ -271,7 +287,8 @@ class BoardMerger:
             if not self._wanted(board, ns, first, n):
                 board.late_blocks += 1
                 return out
-            board.blocks[(ns, first)] = [n, block["counts"], block["flags"] & FLAG_OVERFLOW, False]
+            board.blocks[(ns, first)] = [n, self._rows(data, block), block["flags"] & FLAG_OVERFLOW, False]
+            board.version += 1
             board.frontier = first + n if board.frontier is None else max(board.frontier, first + n)
         out += self._decide(force=False)
         self._prune()
@@ -300,7 +317,8 @@ class BoardMerger:
         return not (self._decided_to is not None and e <= self._decided_to)
 
     def _cover(self, board: _Board, a: int, b: int, anchor: int, dest=None) -> tuple:
-        """(samples of merged [a, b) the board's blocks hold, their overflow flags); copied into `dest` [b - a, count]."""
+        """(samples of merged [a, b) the board's blocks hold, their overflow flags); their rows copied into `dest`
+        [b - a, count x sample bytes] uint8."""
         pos, covered, flags = a, 0, 0
         for f, e, key in self._spans(board, anchor):
             if f >= b:
@@ -354,25 +372,31 @@ class BoardMerger:
             out += self._emit(p)
         return out
 
+    def _rows(self, data, block: dict) -> np.ndarray:
+        """A block's samples as [n, channels x sample bytes] uint8, copied (the caller may reuse its buffer)."""
+        width = block["n_channels"] * self.sample_bytes
+        return np.frombuffer(data, dtype=np.uint8, count=block["n_samples"] * width, offset=HEADER_BYTES).reshape(-1, width).copy()
+
     def _emit(self, p: dict) -> list:
-        out = []
+        """The span's whole-array blocks: each board's sample bytes put side by side in the array's channel order (the
+        bytes `encode_block` would write for the decoded samples; the merge never decodes them, sonar-bwu)."""
+        out, sb = [], self.sample_bytes
+        ref = self._ref
         for k0 in range(0, p["n"], self.block_samples):
             k1 = min(k0 + self.block_samples, p["n"])
             p0, p1 = p["first"] + k0, p["first"] + k1
-            counts = np.zeros((k1 - k0, self.n_channels), dtype=np.int32)
-            ref = self._ref
-            counts[:, ref.first:ref.first + ref.count] = p["counts"][k0:k1]
+            rows = np.zeros((k1 - k0, self.n_channels * sb), dtype=np.uint8)
+            rows[:, ref.first * sb:(ref.first + ref.count) * sb] = p["rows"][k0:k1]
             flags = p["flags"]
-            for b in self._others:
-                part = np.zeros((k1 - k0, b.count), dtype=np.int32)
-                flags |= self._cover(b, p0, p1, p["anchor"], part)[1]
-                counts[:, b.first:b.first + b.count] = part
+            for b in self._others:                       # zeros where a board's part is missing (`missing: zero`)
+                flags |= self._cover(b, p0, p1, p["anchor"], rows[:, b.first * sb:(b.first + b.count) * sb])[1]
             if 0 <= p["tx"] < p1:
                 tx, index = p["tx"], p["index"]
             else:
                 before = [t for t in self._named if t[0] < p1]
                 tx, index = before[-1] if before else (-1, p["index"])
-            out.append(encode_block(counts, p0, tx, index, p["gain"], flags, p["start_ns"], self.sample_bytes))
+            head = _HEADER.pack(MAGIC, VERSION, self.n_channels, k1 - k0, p0, tx, index, p["gain"], flags, p["start_ns"])
+            out.append(head.ljust(HEADER_BYTES, b"\0") + rows.tobytes())
         return out
 
     def _prune(self) -> None:
@@ -384,11 +408,17 @@ class BoardMerger:
             if not b.blocks:
                 continue
             front = self._frontier(b, self._anchor)
+            limits = [x for x in (None if front is None else front - self.wait, self._decided_to) if x is not None]
+            if not limits:
+                continue
+            limit = max(limits)                     # a block is forgotten only if it ends at or before this
             for f, e, key in self._spans(b, self._anchor):
-                if any(min(e, p["first"] + p["n"]) > max(f, p["first"]) for p in self._pending):
+                if f >= limit:                      # sorted by first sample: every block from here ends after the limit
+                    break
+                if e > limit or any(min(e, p["first"] + p["n"]) > max(f, p["first"]) for p in self._pending):
                     continue
-                if (front is not None and e <= front - self.wait) or (self._decided_to is not None and e <= self._decided_to):
-                    del b.blocks[key]
+                del b.blocks[key]
+                b.version += 1
 
     def stats(self) -> dict:
         return {"boards": {str(b.id): b.stats() for b in self.boards}, "merged_blocks": self.merged_blocks,

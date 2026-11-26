@@ -7,9 +7,10 @@
 Every capture board sends its own stream (its channels, its own sample counter and capture start, its board id in
 the block header) to --port; the relay sends the whole-array stream (every channel on the reference board's counter)
 to --to, where any whole-array receiver takes it: `flank_udp` without `source.boards`, `build/bin/sonar_live --udp`
-without `stream_boards`, the Sensor Bridge and Holoscan receivers. The rules (board map, alignment by capture start,
-waiting, missing boards, restarts) are those of python/gpusonar/sources/board_merge.py; `tools/sonar_live.py` and
-`build/bin/sonar_live` run the same merge in-process (`source.boards`, `stream_boards=1`), and need no relay.
+without `stream_boards`, or a receiver elsewhere. The rules (board map, alignment by capture start, waiting, missing
+boards, restarts) are those of python/gpusonar/sources/board_merge.py; `tools/sonar_live.py`, `build/bin/sonar_live`
+(with and without --listen), the Holoscan application and `tools/sonar_live_hsb.py receive` run the same merge
+in-process (`source.boards`, `stream_boards=1`; sonar-bwu), and need no relay.
 
 --boards: a YAML file holding the `source.boards` mapping of a deployment file (channels, reference, missing,
 wait_s); without it, the sonar file's `receive.boards` and every default. The statistics per board are printed as one

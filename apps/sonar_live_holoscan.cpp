@@ -8,12 +8,15 @@
 // Operators: libs/holoscan_ops. Needs the Holoscan SDK (cmake -DSONAR_BUILD_HOLOSCAN=ON).
 #include <cstdio>
 #include <cstdlib>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include <holoscan/holoscan.hpp>
 
 #include "sonar/holoscan_ops/operators.hpp"
 #include "sonar/io/record_file.hpp"
+#include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/options.hpp"
 
@@ -93,11 +96,9 @@ int main(int argc, char** argv) {
     }
     sonar::live::program_defaults(chain, passive);        // backend auto, as build/bin/sonar_live (D-147)
     ops::apply_options(s.options, chain, passive);        // fail on a bad option before the pipeline starts
-    // The source operator takes one whole-array stream; per-board streams are not merged here (sonar-6f9).
-    if (chain.stream.boards) {
-      throw std::invalid_argument("stream_boards: the Holoscan source operator takes one whole-array stream; merge the boards' streams "
-                                  "with tools/board_merge.py in front of it, or run build/bin/sonar_live");
-    }
+    // Per-board streams (stream_boards=1) are merged by the source operator as build/bin/sonar_live merges them
+    // (sonar-bwu); the settings are checked here, against the template's board map, before the pipeline starts.
+    if (s.replay.empty()) (void)sonar::live::make_board_merger(chain.stream, sonar::io::RecordReader(s.template_path).read(0));
     // The stream's own settings go to the source operator; the frame length of a listening run follows from the
     // passive options and, for block sizes left to be derived, from the sonar in the template.
     s.idle_seconds = chain.stream.idle_seconds;
@@ -106,6 +107,14 @@ int main(int argc, char** argv) {
                        std::to_string(chain.stream.buffer_bytes) + " stream_queue_mb=" + std::to_string(chain.stream.queue_mb) +
                        " bind=" + chain.stream.bind + " nav_keep_s=" + std::to_string(chain.nav.keep_s) + " nav_history_margin_s=" +
                        std::to_string(chain.nav.history_margin_s);
+    if (chain.stream.boards) {          // the merge's keys, numbers written to round trip
+      std::ostringstream b;
+      b << std::setprecision(17) << " stream_boards=1 stream_board_reference=" << chain.stream.board_reference
+        << " stream_board_missing=" << (chain.stream.board_zero ? "zero" : "drop") << " stream_board_wait_s=" << chain.stream.board_wait_s;
+      if (!chain.stream.board_channels.empty()) b << " stream_board_channels=" << chain.stream.board_channels;
+      if (!chain.stream.board_ppm.empty()) b << " stream_board_ppm=" << chain.stream.board_ppm;
+      s.stream_options += b.str();
+    }
     if (s.listen) s.chunk = sonar::live::passive_span(passive, sonar::io::RecordReader(s.template_path).read(0));
     auto app = holoscan::make_application<LiveApp>(s);
     app->run();

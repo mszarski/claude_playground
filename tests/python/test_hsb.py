@@ -911,6 +911,35 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     assert [t["kind"] for t in got[-1]["tracks"]] == ["mover", "mover"]
 
 
+def test_loopback_of_one_stream_per_board_gives_the_direct_chains_reports(pings, tmp_path):
+    """sonar-bwu: `serve --per-board` sends every frame as one board's block (flag bit 1 and its board id; flank_32 is
+    one board of 32 channels, so the frames keep the whole-array frames' size and rate) and `receive` with
+    `source.boards: {}` merges them before the assembler. At real time through Sensor Bridge's emulator and Linux
+    receiver nothing is lost and the reports are the direct chain's on the same pings."""
+    import yaml
+    reason = sensor_bridge_reason()
+    if reason:
+        pytest.skip(reason)
+    config = tmp_path / "deploy.yaml"
+    config.write_text(yaml.safe_dump({"source": {"sonar": "flank_32", "sonar_overrides": OVERRIDES, "boards": {}}, "chain": dict(CHAIN)}))
+    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
+    omp = max(1, usable_cpus() // 2)
+    board, stats, receive, report = run_loopback(tmp_path, pings, pace, serve_args=("--per-board",), stream=(str(config),),
+                                                 receive_args=("--chain-omp-threads", str(omp)), tag="boards")
+    print("sender:", board)
+    print("transport:", stats)
+    assert stats["pings"] == N and stats["frames_lost"] == 0 and stats["frames_damaged"] == 0 and stats["dropped_pings"] == 0
+    assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
+    merge = stats["boards"]
+    assert merge["dropped_blocks"] == 0 and merge["bad_blocks"] == 0 and merge["boards"]["0"]["missing_samples"] == 0
+    direct_records = hsb.records_from_frames(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD), "flank_32", OVERRIDES)
+    with LiveChain(dict(CHAIN)) as chain:
+        direct = chain.run(direct_records)
+    got = lines(report)
+    assert len(got) == len(direct) == N
+    assert_same_reports(got, direct)
+
+
 # The pings of test_live.pings as a scenario the board simulates itself (serve --scenario, sonar-8rj): ownship at
 # 1.5 m/s along its array, a target crossing at 3 m/s and one standing, free field, the same receive window.
 SCENARIO = {
@@ -1271,6 +1300,12 @@ def test_the_frame_timing_harness_emulates_the_one_thread_schedule_and_its_queue
     assert slow["pings"] + slow["dropped_pings"] == len(records)
     rows = tool.frame_path_timing(frames[:300], cfg, FRAME, fps, interval, repeats=1)
     assert rows[0]["frames"] == 300 and rows[0]["all_ms"]["n"] == 300
+    # --per-board (sonar-bwu): the four boards' frames, merged by the frame path (source.boards: {}); every ping back.
+    per, per_fps, _ = tool.frames_of(records, FRAME, per_board=True)
+    assert per_fps == pytest.approx(4 * fps) and {len(f) for f in per} == {128 + 3 * FRAME * 8}
+    cfg_boards = dict(cfg, source=dict(cfg["source"], boards={}))
+    rows = tool.frame_path_timing(per, cfg_boards, FRAME, per_fps, interval, repeats=1)
+    assert rows[0]["pings"] == len(records) and rows[0]["frames"] == len(per)
 
 
 @pytest.mark.skipif(os.environ.get("GPUSONAR_HSB_TIMING") != "1", reason="a measurement, run with GPUSONAR_HSB_TIMING=1")

@@ -55,7 +55,7 @@ void UdpSourceOp::setup(holoscan::OperatorSpec& spec) {
   spec.param(idle_seconds_, "idle_seconds", "Idle time", "Stop when no block has arrived for this long (0: never)", 30.0);
   spec.param(options_, "options", "Options",
              "Stream options as space-separated key=value pairs: stream_sample_bytes, stream_buffer_bytes, stream_queue_mb, bind, "
-             "and the nav_... keys",
+             "the nav_... keys, and stream_boards with the stream_board_... keys (per-board streams, merged first)",
              std::string());
 }
 
@@ -73,6 +73,10 @@ void UdpSourceOp::start() {
   } else {
     pings_ = std::make_unique<live::PingAssembler>(template_record, nullptr, nullptr, so.sample_bytes);
   }
+  // stream_boards=1: per-board streams merged into the whole-array stream before the assembler, as build/bin/sonar_live
+  // does (sonar-bwu); the merged stream is stamped at the reference board's configured rate.
+  merger_ = live::make_board_merger(so, template_record);
+  if (merger_ && pings_) pings_->clock_ppm = merger_->clock_ppm(merger_->reference());
   // The socket buffer follows the stream's data rate; a shortfall in what the system grants is said.
   socket_ = std::make_unique<live::UdpSocket>(so.bind, port_.get(), 0.2,
                                               live::stream_buffer_bytes(template_record, so.sample_bytes, so.buffer_bytes));
@@ -120,9 +124,14 @@ UdpSourceOp::~UdpSourceOp() { join_threads(); }
 void UdpSourceOp::stop() {
   join_threads();
   std::size_t discarded = 0;           // complete pings the assembler still held at stop: not emitted
+  std::vector<PingRecord> rest;
+  std::vector<std::vector<unsigned char>> merged;
   if (pings_) {
-    std::vector<PingRecord> rest;
+    live::finish_stream(merger_.get(), *pings_, rest, merged);   // the boards' spans still waiting, decided with what arrived
     pings_->finish(rest);              // the end of the stream: holes still awaited are counted
+    discarded = rest.size();
+  } else if (stream_) {
+    live::finish_stream(merger_.get(), *stream_, rest, merged);
     discarded = rest.size();
   }
   std::cerr << "UdpSourceOp: " << emitted_ << " emitted, "
@@ -131,6 +140,7 @@ void UdpSourceOp::stop() {
             << (pings_ ? pings_->late_blocks : 0) << " blocks late, " << (pings_ ? pings_->repeated_blocks : 0) << " blocks repeated, " << discarded << " pings discarded at stop, "
             << nav_counts_.without_nav
             << " without navigation, " << nav_counts_.without_velocity << " without velocity, " << queue_dropped_ << " blocks dropped at the full queue\n";
+  if (merger_) std::cerr << "UdpSourceOp: boards " << merger_->stats_json() << "\n";
 }
 
 void UdpSourceOp::compute(holoscan::InputContext&, holoscan::OutputContext& out, holoscan::ExecutionContext&) {
@@ -153,9 +163,9 @@ void UdpSourceOp::compute(holoscan::InputContext&, holoscan::OutputContext& out,
     }
     ready.clear();
     if (stream_) {
-      stream_->feed(block.data(), block.size(), ready);
+      live::feed_stream(merger_.get(), block.data(), block.size(), *stream_, ready, merged_);
     } else {
-      pings_->feed(block.data(), block.size(), ready);
+      live::feed_stream(merger_.get(), block.data(), block.size(), *pings_, ready, merged_);
     }
     for (PingRecord& rec : ready) {
       if (nav_socket_ && !stream_) {
