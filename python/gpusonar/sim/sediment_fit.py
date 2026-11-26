@@ -19,7 +19,22 @@ What a data set can and cannot tell is reported, not guessed (the convention of 
   the volume term in the intensity at each data point (a term that is the smaller part
   everywhere is poorly seen by the data), the number of frequencies, the angle span.
 
-Why the coverage matters (first-order perturbation theory, bottom.py):
+The roughness model is `small_slope` unless named (`DEFAULT_ROUGHNESS_MODEL`, the forward model's
+default since D-86; A10 of docs/references/CONFORMANCE.md): the lowest-order small-slope result, which
+is first-order perturbation theory away from the specular direction and the Kirchhoff result in it.
+Jackson and Richardson (2007) fitted with perturbation theory and show the two overlapping below about
+70 degrees for medium sand ([N4] Sec. 2.5, docs/references/jackson_richardson_2007/04_*.md); above
+that only small-slope is valid. `roughness_model="perturbation"` gives the fits made before A10, bit for
+bit (tests/python/test_sediment_fit.py). Cost: every step with a new gamma2 builds a Kirchhoff table
+(bottom._kirchhoff_table), so a small-slope fit takes seconds where a perturbation fit takes a fraction
+of one (7.5 s against 0.2 s for 42 values, 12 starts, one core). What got worse: on volume-dominated
+data at one frequency (very fine silt, 100 kHz, 0.5 dB noise) an unbounded small-slope fit can explain
+part of the noise with a relief about 100 times rougher, flag nothing and put sigma2 at 0.65-0.78 of the
+truth (5 of 10 noise draws; perturbation: none); `bounds=prior_bounds(phi)` removes it in the draws
+tried (tests/python/test_sediment_fit.py `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
+
+Why the coverage matters (first-order perturbation theory, bottom.py; the same for small-slope away
+from the specular direction):
 
 - the volume term is proportional to sigma2 and depends on frequency only through the
   angles, so sigma2 is fixed by the level wherever the volume term dominates: soft sediments,
@@ -37,8 +52,8 @@ s^2 (J^T J)^-1 with s the stated measurement error in dB, or the rms residual wh
 given. They do not include calibration bias: an error of x dB in the absolute level of the
 data moves w2 and sigma2 by the factor 10^(x / 10) and is not visible to the fit.
 
-Opt-in (G-9 of docs/tasks/SST_GAPS_JACKSON.md; with none of these the fit is bit-identical to
-before them, held by tests/python/test_sediment_fit.py):
+Opt-in (G-9 of docs/tasks/SST_GAPS_JACKSON.md; with none of these and `roughness_model="perturbation"`
+the fit is bit-identical to before them, held by tests/python/test_sediment_fit.py):
 
 - `independent_samples`: the number N of independent intensity samples behind each value (one
   number or one per value). The error of each value is then Jackson and Richardson's (2007)
@@ -47,7 +62,7 @@ before them, held by tests/python/test_sediment_fit.py):
   N-sample intensity mean is somewhat larger (1.10 against 0.97 dB at N = 16) and the dB mean is
   low by about 4.34 / (2 N) dB (`measure.intensity_mean_db_bias`), neither corrected by this
   rule; `sample_error="gamma"` uses that standard deviation and removes the bias (ours). Measured
-  coverage (synthetic N = 16 data, 100 sets): 55 % of the fitted parameters within 1 sigma with the
+  coverage (synthetic N = 16 data, 100 sets, perturbation model): 55 % of the fitted parameters within 1 sigma with the
   book's rule, 61 % with "gamma", against 68 % nominal (tests/python/test_sediment_fit.py).
 - `bounds`: search limits replacing `BOUNDS` for the keys named, e.g. `prior_bounds(phi)` (the
   spreads the reference notes give per sediment class: `PRIOR_BOUNDS`) or `site_bounds(...)` (the
@@ -75,6 +90,9 @@ from . import bottom
 SCATTER_KEYS = ("w2", "gamma2", "sigma2")
 GEO_KEYS = ("rho", "nu", "delta")
 LOG_KEYS = ("w2", "sigma2", "delta")                       # fitted as log10: they span decades
+DEFAULT_ROUGHNESS_MODEL = bottom.DEFAULT_ROUGHNESS_MODEL
+"""The roughness model of a fit that names none: the forward model's (`small_slope`, D-86; A10).
+`perturbation` was the default before A10."""
 BOUNDS = {"w2": (1e-9, 1e-1), "gamma2": (2.05, 3.95), "sigma2": (1e-6, 1.0),
           "rho": (1.01, 3.0), "nu": (0.9, 3.0), "delta": (1e-4, 0.1)}
 """Search limits (ours: wide enough for clay to rock; gamma2 must lie between 2 and 4 for the
@@ -161,7 +179,11 @@ def roughness_model_spread_db(params: dict, grazing_deg, frequency, sound_speed:
     """The largest difference, over the given points, between the backscattering strengths of the
     roughness models of `bottom.ROUGHNESS_MODELS` with the same six parameters, dB. Below the
     measurement error the data cannot tell the models apart (D-193 found 0.001 dB at its site).
-    Evaluated at the given parameters: in a fit where w2 is unconstrained it says only what holds there."""
+    Evaluated at the given parameters: in a fit where w2 is unconstrained it says only what holds there.
+    NaN when gamma2 is outside (2, 4), where only the perturbation model is defined (bottom.structure_constant):
+    there is nothing to compare."""
+    if not 2.0 < float(params["gamma2"]) < 4.0:
+        return float("nan")
     g = np.radians(np.asarray(grazing_deg, dtype=float).ravel())
     f = np.broadcast_to(np.asarray(frequency, dtype=float).ravel(), g.shape)
     with warnings.catch_warnings():
@@ -300,7 +322,7 @@ def _unpack(x, keys, held: dict) -> dict:
 
 
 def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-        sigma_db=None, fit_geoacoustic: bool = False, roughness_model: str = "perturbation", start: dict | None = None,
+        sigma_db=None, fit_geoacoustic: bool = False, roughness_model: str = DEFAULT_ROUGHNESS_MODEL, start: dict | None = None,
         n_starts: int = 12, seed: int = 0, independent_samples=None, bounds: dict | None = None,
         bounds_source: str | None = None, hold: dict | None = None, sample_error: str = "book") -> SedimentFit:
     """Fit w2, gamma2 and sigma2 (and rho, nu, delta with `fit_geoacoustic`) to measured
@@ -309,11 +331,12 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
     (Hz, one per value or a single number). `sigma_db`: the measurement's standard error in
     dB (a number or one per value); without it the rms residual is used for the uncertainties.
     Several starts are tried and the best kept, because the dB misfit has local minima.
-    `roughness_model` is named here and recorded in the result: "perturbation" unless given,
-    which is NOT the forward model's default since D-86 (small_slope). Below about 60 degrees
-    the two agree to a few tenths of a dB; with a free exponent the small-slope table would be
-    rebuilt at every step (minutes instead of seconds), so it is for data nearer the specular
-    direction, by request.
+    `roughness_model` is recorded in the result and the row: `DEFAULT_ROUGHNESS_MODEL`
+    ("small_slope", the forward model's default) unless given; "perturbation" was the default
+    before A10 and reproduces those fits. Below about 60 degrees the two agree to a few tenths
+    of a dB; above, only small-slope is valid. Every model but "perturbation" needs
+    2 < gamma2 < 4: bounds or a held gamma2 outside that are refused. A small-slope fit builds a
+    Kirchhoff table at every new gamma2: seconds, not a fraction of one.
 
     Opt-in (G-9; the module docstring): `independent_samples` N (a number or one per value; not
     with `sigma_db`) sets each value's error to 10 log10(1 + 1/sqrt(N)) (`measure.sigma_db_from_samples`,
@@ -344,6 +367,11 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
             y = y - measure.intensity_mean_db_bias(n_used)
         else:
             raise ValueError(f"fit: sample_error {sample_error!r}: use 'book' or 'gamma'")
+    if roughness_model not in bottom.ROUGHNESS_MODELS:
+        import difflib
+        near = difflib.get_close_matches(str(roughness_model), bottom.ROUGHNESS_MODELS, n=1)
+        raise ValueError(f"fit: roughness_model {roughness_model!r}: unknown" + (f"; did you mean {near[0]!r}?" if near else
+                         f" (known: {', '.join(bottom.ROUGHNESS_MODELS)})"))
     hold = dict(hold or {})
     _refuse_unknown(hold, bottom.SEDIMENT_KEYS, "fit: hold.")
     active = dict(BOUNDS)
@@ -353,6 +381,14 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
             if not (np.isfinite(b_lo) and np.isfinite(b_hi) and b_lo < b_hi) or (k in LOG_KEYS and b_lo <= 0.0):
                 raise ValueError(f"fit: bounds.{k}: need finite low < high" + (" and low > 0" if k in LOG_KEYS else ""))
             active[k] = (float(b_lo), float(b_hi))
+    if roughness_model != "perturbation":
+        # The structure function of a power-law spectrum exists only for 2 < gamma2 < 4 (bottom.structure_constant):
+        # outside it every step would raise, and the starts would fail one by one without saying why.
+        g_lo, g_hi = (hold["gamma2"],) * 2 if "gamma2" in hold else active["gamma2"]
+        if not 2.0 < g_lo <= g_hi < 4.0:
+            raise ValueError(f"fit: roughness_model {roughness_model!r} needs 2 < gamma2 < 4; gamma2 is "
+                             + (f"held at {g_lo:g}" if "gamma2" in hold else f"bounded by {g_lo:g} to {g_hi:g}")
+                             + " (use roughness_model 'perturbation')")
     weight = np.ones(len(y)) if sigma_db is None else 1.0 / np.broadcast_to(np.asarray(sigma_db, dtype=float).ravel(), y.shape)
     keys = tuple(k for k in SCATTER_KEYS + (GEO_KEYS if fit_geoacoustic else ()) if k not in hold)
     held = {} if fit_geoacoustic else {"rho": float(rho), "nu": float(nu), "delta": float(delta)}
@@ -400,7 +436,9 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
     jw = jac * (weight[:, None] if sigma_db is not None else 1.0 / max(rms, 1e-6))
     # Pseudo-inverse: a direction the data do not see gets a huge, not an infinite, variance.
     u, s, vt = np.linalg.svd(jw, full_matrices=False)
-    floor = 1e-6 * max(s.max(), 1e-300)
+    # (The absolute floor 1e-150: with an all-zero Jacobian, e.g. a small-slope roughness term 1e-51 of the
+    # intensity, 1e-300 squared underflowed to 0 and the errors came out NaN, which no test flags.)
+    floor = max(1e-6 * s.max(), 1e-150)
     cov = (vt.T / np.maximum(s, floor) ** 2) @ vt
     std = np.sqrt(np.diag(cov))
     corr = cov / np.outer(std, std)
@@ -417,7 +455,7 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
 
     for j, k in enumerate(keys):
         limit = np.log10(MAX_FACTOR) if k in LOG_KEYS else MAX_STD.get(k, np.inf)
-        if std[j] > limit:
+        if not std[j] <= limit:                                   # NaN included
             flag(k, f"{k}: 1 sigma is " + (f"a factor {10.0 ** min(std[j], 30.0):.3g}" if k in LOG_KEYS else f"{std[j]:.3g}")
                  + ", too wide to call the value known")
         if best.x[j] - lo[j] < 1e-6 * (hi[j] - lo[j]) or hi[j] - best.x[j] < 1e-6 * (hi[j] - lo[j]):

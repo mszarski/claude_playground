@@ -17,8 +17,15 @@ configs/sediments.yaml, the reflection-only rows included) or from --rho --nu --
 What the data cannot fix is listed (`unconfirmed_fields` in the row, with the reasons): see
 python/gpusonar/sim/sediment_fit.py.
 
-Error bars, priors and the extended report (opt-in; without these options the output is what it
-was before them, bit for bit):
+  --roughness-model M       small_slope (the default, the simulator's own since D-86; A10 of
+                            docs/references/CONFORMANCE.md), perturbation (the default before A10:
+                            name it to reproduce earlier fits; not valid above about 60-70 degrees
+                            grazing), kirchhoff, composite or combined. A small-slope fit takes
+                            seconds (a Kirchhoff table per trial gamma2), a perturbation fit less
+                            than one. The row records the model used.
+
+Error bars, priors and the extended report (opt-in; without these options, and with
+--roughness-model perturbation, the output is what it was before them, bit for bit):
 
   --independent-samples N   each value is the dB of an intensity average of N independent samples
                             (or `column`: an n_samples column per value); its error is then
@@ -101,8 +108,12 @@ def print_extended(result, grazing, frequency, roughness_model: str, file) -> No
     print(f"predicted strength, 1 sigma over the data points: {pred.min():.3g} to {pred.max():.3g} dB", file=file)
     spread = sediment_fit.roughness_model_spread_db(result.params, grazing, np.broadcast_to(frequency, np.shape(grazing)),
                                                     result.sound_speed)
-    print(f"roughness models with the fitted parameters differ by at most {spread:.3g} dB over the data "
-          f"(this fit: {roughness_model})", file=file)
+    if np.isnan(spread):
+        print(f"roughness models not compared: gamma2 = {result.params['gamma2']:g} is outside (2, 4), where only "
+              f"perturbation is defined (this fit: {roughness_model})", file=file)
+    else:
+        print(f"roughness models with the fitted parameters differ by at most {spread:.3g} dB over the data "
+              f"(this fit: {roughness_model})", file=file)
 
 
 def main(argv=None) -> int:
@@ -116,7 +127,9 @@ def main(argv=None) -> int:
     ap.add_argument("--fit-geoacoustic", action="store_true", help="fit rho, nu, delta too (start from the held values)")
     ap.add_argument("--sound-speed", type=float, default=1500.0, help="water sound speed at the bottom, m/s")
     ap.add_argument("--sigma-db", type=float, help="measurement error of every value, dB (overrides a sigma_db column)")
-    ap.add_argument("--roughness-model", default="perturbation", choices=bottom.ROUGHNESS_MODELS)
+    ap.add_argument("--roughness-model", default=sediment_fit.DEFAULT_ROUGHNESS_MODEL, choices=bottom.ROUGHNESS_MODELS,
+                    help=f"roughness model of the fit (default {sediment_fit.DEFAULT_ROUGHNESS_MODEL}; "
+                         "perturbation was the default before A10)")
     ap.add_argument("--name", default="fitted_sediment", help="name of the output row")
     ap.add_argument("--source", required=True, help="where the data come from (goes into the row's status and source)")
     ap.add_argument("--starts", type=int, default=12)

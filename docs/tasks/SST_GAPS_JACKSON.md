@@ -595,7 +595,11 @@ G-17 (after G-4), G-19, G-20 (after G-7), the rest.
     Jackson (1989), Williams and Jackson (1998), Lyons and Abraham (1999): obtain, or leave wanted? (section 4)
 13. **Sediment fit tool** (STATUS item 30, `sonar-5bf2`): switch its model to small-slope? The book shows
     perturbation and small-slope overlap below about 70 deg for medium sand and used perturbation for its own
-    model-data fits [N4 §2.5, §4].
+    model-data fits [N4 §2.5, §4]. **Answered by the owner's 2026-11-26 instruction (A10 of
+    `docs/references/CONFORMANCE.md`): switched, `perturbation` kept by name; the book's error-bar rule stays the
+    default.** Found in doing it: on one-frequency, volume-dominated data a small-slope fit without prior bounds can
+    report a much rougher relief and a low sigma2 as constrained (`test_sediment_fit.py`
+    `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
 
 ---
 

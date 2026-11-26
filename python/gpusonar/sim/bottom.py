@@ -376,7 +376,10 @@ def _kirchhoff_table(a: float):
     rot = np.exp(1j * psi)
     kernel = wt * hankel1(0, t * rot) * t * rot**2
     log_b = np.linspace(np.log(_SMALL_B), np.log(_large_b(a)), 500)
-    f = np.array([(kernel * np.exp(-b * (t * rot) ** (2.0 * a))).sum().real for b in np.exp(log_b)])
+    # The power is computed once, not once per b (the same values: 3 times faster to build, which
+    # matters to a fit with a free exponent, where every step builds a new table).
+    tp = (t * rot) ** (2.0 * a)
+    f = np.array([(kernel * np.exp(-b * tp)).sum().real for b in np.exp(log_b)])
     return CubicSpline(log_b, np.log(f))
 
 

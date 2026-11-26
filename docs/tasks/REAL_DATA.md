@@ -274,12 +274,15 @@ G-9 of `docs/tasks/SST_GAPS_JACKSON.md`). How it is judged:
 - Fit with `--independent-samples N` (or a per-value `n_samples` column). The book's rule is an
   upper 1-sigma bar; on synthetic N = 16 data the fitted parameters fall within their reported 1 sigma
   in 55 % of cases (nominal 68 %) with it, 61 % with `--sample-error gamma` (the test
-  `test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_rate`): read the
+  `test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_rate`, made and fitted with
+  the perturbation model, the default when it was measured): read the
   reported errors as somewhat optimistic.
 - A fit passes when the rms residual is within about the stated error (the tool notes it when it is
   more than twice), every parameter used downstream is constrained (not in `unconfirmed_fields`), no
   parameter ends on a `--prior-bounds` limit, and the result is recorded with the roughness model used
-  (`--roughness-model`; the tool's default is still `perturbation`, STATUS item 30) and the extended
+  (`--roughness-model`; the tool's default is `small_slope` since A10 of `docs/references/CONFORMANCE.md`,
+  `perturbation` before it; with one frequency and volume-dominated data a small-slope fit without
+  `--prior-bounds` can trade sigma2 for a much rougher relief, `test_sediment_fit.py`) and the extended
   report (covariance, predicted-strength error). Where the roughness models differ by less than the
   error over the data (the report says so), the data cannot choose among them; at D-193's Gallaudet
   site they differ by under 0.05 dB and two band means fix neither w2 nor gamma2.
