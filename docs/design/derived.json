@@ -371,10 +371,16 @@
     },
     {
       "id": "POP-3",
-      "requirement": "Frequency and source level that take the Popoto array to 12 km",
+      "requirement": "Frequency and source level that take the Popoto array to 12 km, for `large_submerged` first and `ship` second (the owner, 2026-11-26: \"Large submerged mostly but also Large Ship is what we care about\")",
       "set_in": "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
-      "value": "5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse: 14.6 dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.8 dB, margin -1.1 dB, detection probability 0.22; 2 rows: needs 13.2 dB, margin +1.4 dB, detection probability 0.87; 3 rows: needs 11.8 dB, margin +2.9 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.8 dB in one row). Met by the recommended three rows; one row alone is 1.1 dB short",
-      "met": true
+      "value": "5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse. **Free field** (spherical spreading, no site), `large_submerged` and `ship` at the low end of their assumed strengths (+25 and +25 dB, the budget's ship-sized target): 14.6 dB in one row at 12 km, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.8 dB, margin -1.1 dB, detection probability 0.22; 2 rows: needs 13.2 dB, margin +1.4 dB, detection probability 0.87; 3 rows: needs 11.8 dB, margin +2.9 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.8 dB in one row); held by the recommended three rows, one row alone is 1.1 dB short. **At the 6 illustrative sites** of the depth plan (three rows, own depth planned; `docs/design/popoto_depth_planner.json`; ours, illustrative): `large_submerged` held at 4 of 6, not at `deep_no_bottom_return_sea_state_5` (-7.1 dB), `summer_60m_mud_profile` (-4.7 dB); `ship` held at 4 of 6, not at `deep_no_bottom_return_sea_state_5` (-6.1 dB), `summer_60m_mud_profile` (-96.1 dB). Per site: *The 12 km design point*. Still open with the owner: the worst sea state in which 12 km must hold, the detection probability and false-alarm rate, and the operating area (its wind, noise and bottom backscatter).",
+      "met": true,
+      "classes": [
+        "large_submerged",
+        "ship"
+      ],
+      "status": "partly met",
+      "met_text": "free field: yes, both classes (three rows; one row: no); illustrative sites: **not** at `deep_no_bottom_return_sea_state_5`, `summer_60m_mud_profile` (4 of 6 held by both; per site: *The 12 km design point*)"
     },
     {
       "id": "POP-4",

@@ -15,7 +15,9 @@ Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on 
 (propagation and reverberation) as far as open literature allows (audited 2026-11-25), and
 the CUDA backend has been run and benchmarked on rented GPUs. The long-range design is
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
-on the chain's own detector, depth at range is limited by what is known of the sound-speed
+on the chain's own detector (free field, the ship-sized target); the 12 km requirement is for
+`large_submerged` first and `ship` second (the owner, 2026-11-26), and three rows hold it for
+both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
 (the depth sigma now says so). The full GPU suite last ran on the tree of the second 2026-11-26
 batch, decisions D-226 to D-228 (2823 passed, 103 skipped, 4 xfailed, none failed, on an NVIDIA L4;
