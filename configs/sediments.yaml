@@ -834,3 +834,162 @@ gallaudet_2001_site:
     Gallaudet, "Shallow water acoustic backscatter and reverberation measurements using a 68-kHz cylindrical
     array", dissertation (2001), https://hdl.handle.net/10945/11015, Ch. 3 Table VI (p. 60) and Table I(e)
     (p. 55); opened and read (docs/DECISIONS.md D-193). Ratios to the water above, as printed.
+
+# Jackson and Briggs (1992), J. Acoust. Soc. Am. 92 (2), 962-977: three sites, Table V (p. 973) the model inputs,
+# Tables I (whole core) and II (surficial 0-2 cm) the cores' mean grain size. Extraction and the reasons for each
+# choice: docs/references/bottom_backscatter_jackson_briggs_1992.md ([JB]) Sec. 2.1, 5.1, 6. The paper prints w2 in
+# cm^4 at K = 2 pi / lambda = 1 cm^-1 (h0 = 1 cm): the rows keep it as `w2_cm4` and the loader converts it with
+# bottom.w2_from_cm4, w2 [m^(4 - gamma2)] = w2_cm4 x 10^(2 gamma2 - 8) (the arithmetic is in each row's comment).
+# sigma2 is the only fitted parameter of Table V (one site each).
+
+jackson_briggs_1992_quinault:
+  # Table V, Quinault row: nu 1.113, rho 1.94, delta 0.0115, sigma2 0.001; ACROSS-strike gamma 3.67 and
+  # w2 0.00422 cm^4 (what Fig. 10 uses). w2 in SI: 0.00422 x 10^(2 x 3.67 - 8) = 0.00422 x 0.21878 = 9.232e-4 m^0.33.
+  # Also printed and not carried: along strike gamma 3.92, w2 0.00598 cm^4 (= 0.00598 x 10^(-0.16) = 4.137e-3
+  # m^0.08, J&R 2007 Table 13.1's Quinault row 0.0041); the paper calls the along-strike exponent unreliable (p. 974).
+  # Mz: Table II (surficial) 2.97 phi, carried; Table I (whole core) 2.94 phi.
+  rho: 1.94
+  nu: 1.113
+  delta: 0.0115
+  mean_grain_size_phi: 2.97
+  scattering:
+    w2_cm4: 0.00422
+    gamma2: 3.67
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; rho and nu equal the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 2.94)"
+    w2: "printed (Table V, across strike, 0.00422 cm^4; Table III's 1-D spectrum through the paper's eq. (4))"
+    gamma2: "printed (Table V, across strike, 3.67)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; the fit is 'rather insensitive' to it, p. 974)"
+  note: >-
+    ONE SITE, not a class: fine sand with directional ripples, 49 m, off Washington; backscatter measured at 15-45 kHz.
+    The roughness across strike is carried, as the paper's Fig. 10 uses it; Table V also prints along strike gamma2
+    3.92 and w2 0.00598 cm^4, which the paper calls unreliable (an exponent near 4 extrapolated below the measured
+    wavenumbers, p. 974). The sigma2 fit is insensitive (roughness dominates except at about 20-70 degrees). delta
+    0.0115 follows Table I's whole-core attenuation (0.37 dB/m/kHz), although the text says Table V uses surficial
+    values (Table II's 0.30 would give 0.0093): kept as printed ([JB] Sec. 6). The measured density ratio 1.94 is far
+    above the class relations at 2.97 phi (1.345): use this row for this site, not for fine sand in general. With our
+    default model the row reproduces Fig. 10's model curve within 1 dB at 20-60 degrees and lies 1.4-2 dB below it at
+    10 degrees (tests/python/test_sediment_table.py).
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, "High-frequency bottom backscattering: Roughness versus sediment volume
+    scattering", J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II (p. 964); read on the
+    page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the water above, as printed.
+
+jackson_briggs_1992_arafura:
+  # Table V, Arafura Sea row: nu 0.988, rho 1.39, delta 0.00553, sigma2 0.005; gamma 3.18 and w2 0.00318 cm^4 along
+  # and across (one spectrum, Table III). w2 in SI: 0.00318 x 10^(2 x 3.18 - 8) = 0.00318 x 0.022909 = 7.285e-5
+  # m^0.82. sigma2: the text (p. 974) says 0.004-0.006 "give reasonable fits"; 0.005 is the printed value.
+  # Mz: Table II (surficial) 5.63 phi, carried; Table I (whole core) 5.24 phi.
+  rho: 1.39
+  nu: 0.988
+  delta: 0.00553
+  mean_grain_size_phi: 5.63
+  scattering:
+    w2_cm4: 0.00318
+    gamma2: 3.18
+    sigma2: 0.005
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; equal to the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 5.24)"
+    w2: "printed (Table V, 0.00318 cm^4, the same along and across strike)"
+    gamma2: "printed (Table V, 3.18)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; 0.004-0.006 give reasonable fits, p. 974)"
+  note: >-
+    ONE SITE, not a class: silt-clay with buried shell, 47 m, Arafura Sea; backscatter at 15-45 kHz, volume
+    scattering clearly dominant. sigma2 0.005 is the authors' fit (0.004-0.006 fit reasonably), at the border of
+    single scattering (above about 0.004 the first-order volume model may fail, p. 974), and the paper warns that
+    the mean grain size misleads here: the sediment is bimodal, 55 % sand and gravel by weight in a silty clay. It
+    is +7.0 dB on the volume term above the class value 0.001 at this grain size; a fitted site is not a class value
+    (the soft rows keep 0.001 and cite this fit in their `basis`). With our default model the row is within 1 dB of
+    Fig. 12's model curve at 40-70 degrees and of Fig. 14's -25.1 dB at 20 degrees (15-45 kHz), and 1.0-1.9 dB above
+    it at 10-30 degrees (the published volume term is slope-averaged and shadowed, ours is not).
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II
+    (p. 964); read on the page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the
+    water above, as printed.
+
+jackson_briggs_1992_san_francisco:
+  # Table V, San Francisco (STRESS mid-shelf) rows: nu 1.002, rho 1.41, delta 0.0104, sigma2 0.002; PRE-STORM ALONG
+  # strike gamma 3.65 and w2 0.000846 cm^4 (what Fig. 15 uses). w2 in SI: 0.000846 x 10^(2 x 3.65 - 8) = 0.000846 x
+  # 0.19953 = 1.688e-4 m^0.35. Also printed, not carried: pre-storm across gamma 3.38, w2 0.000912 cm^4
+  # (5.248e-5 m^0.62); post-storm along 3.73, 0.000826 (2.382e-4 m^0.27); post-storm across 3.56, 0.001296
+  # (1.709e-4 m^0.44). The paper's eq. (4) from Table III gives 0.000885 for the pre-storm along value ([JB] Sec. 6).
+  # Mz: Table II (surficial) 6.39 phi, carried; Table I (whole core) 6.35 phi.
+  rho: 1.41
+  nu: 1.002
+  delta: 0.0104
+  mean_grain_size_phi: 6.39
+  scattering:
+    w2_cm4: 0.000846
+    gamma2: 3.65
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; equal to the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 6.35)"
+    w2: "printed (Table V, pre-storm along strike, 0.000846 cm^4; eq. (4) from Table III gives 0.000885, 4.6 % more)"
+    gamma2: "printed (Table V, pre-storm along strike, 3.65)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; p. 975)"
+  note: >-
+    ONE SITE, not a class: bioturbated silt, 90 m, 180 km NW of San Francisco; backscatter at 40 kHz, 4-30 degrees,
+    volume scattering clearly dominant. The roughness pre-storm along strike is carried, as the paper's Fig. 15
+    uses it; Table V also prints pre-storm across strike and post-storm values (the comment above). The printed
+    w2 0.000846 cm^4 is 4.6 % (0.19 dB) below the 0.000885 that the paper's eq. (4) gives from its Table III,
+    while the other six rows agree within 0.11 %; which number is misprinted is not known ([JB] Sec. 6), the
+    printed one is kept. sigma2 0.002 is +3.0 dB on the volume term above the class value 0.001 at this grain
+    size; the paper notes the data's angular dependence is stronger than the model's (a sigma2 rising with depth
+    would explain it, p. 975). With our default model the row is within 0.4 dB of Fig. 15's model curve at 10-70
+    degrees.
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II
+    (p. 964); read on the page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the
+    water above, as printed.
+
+williams_jackson_1998_panama_city:
+  # Williams and Jackson (1998), Table I (p. 171), Panama City column: rho 1.97, nu 1.126, delta 0.0166,
+  # gamma2 3.12, w2 0.00849 cm^4 (at 2 pi / lambda = 1 cm^-1), and the volume spectrum gamma3 4, w3 0.0000161 cm^3,
+  # mu -2.44. w2 in SI: 0.00849 x 10^(2 x 3.12 - 8) = 0.00849 x 0.017378 = 1.475e-4 m^0.88 (J&R 2007 Table 13.1
+  # prints 0.0001475 for this site). w3 in SI: 0.0000161 x 10^(2 x 4 - 6) = 1.61e-3 m^-1.
+  # The paper prints no sigma2: 0.00007 is OUR equivalent of its spectral volume term, eqs. (21)-(22) in backscatter
+  # at 20 degrees, 40 kHz, c 1500 m/s: sigma_v -28.3 dB/m over the amplitude attenuation in dB/m gives 6.93e-5
+  # (0.000058 at 10 degrees, 0.000087 at 35: the spectral term is not a constant sigma2). Hence unconfirmed_fields.
+  # Eckernfoerde (the paper's other site) has no row: no sigma2 is printed, it is a gassy mud whose volume
+  # parameters the paper calls phenomenological, and its w3 was adjusted ([WJ] 5.5).
+  rho: 1.97
+  nu: 1.126
+  delta: 0.0166
+  scattering:
+    w2_cm4: 0.00849
+    gamma2: 3.12
+    sigma2: 0.00007
+  volume_spectral:
+    w3_cm3: 0.0000161
+    gamma3: 4.0
+    mu: -2.44
+  unconfirmed_fields: [sigma2]
+  provenance:
+    rho_nu_delta: "printed (Williams and Jackson 1998, Table I, p. 171; from Ref. 30, Jackson, Briggs, Williams and Richardson 1996)"
+    w2: "printed (Table I, 0.00849 cm^4)"
+    gamma2: "printed (Table I, 3.12)"
+    sigma2: >-
+      ours: the paper's spectral volume term (21)-(22) at 20 degrees backscatter, 40 kHz, as an equivalent
+      (6.93e-5); the paper prints w3 1.61e-5 cm^3, gamma3 4, mu -2.44 instead (`volume_spectral`, read by no model
+      until the spectral volume option exists, [WJ] 5.3)
+    volume_spectral: "printed (Table I: gamma3 4, w3 0.0000161 cm^3 at 1 cm^-1, mu -2.44)"
+  note: >-
+    ONE SITE, not a class: coarse sand off Panama City, roughness dominated, bistatic and backscatter data at 40
+    kHz (Tables AI-AII). The paper prints no mean grain size, so the row carries none. J&R (2007) Table 13.1 prints
+    the same site reprocessed to the upper 2 cm (rho 1.948, nu 1.097, delta 0.032, gamma2 3.12, w2 0.0001475
+    m^0.88). Our default model (small-slope) with this row agrees with the paper's Fig. 7 model curve at 5
+    degrees backscatter (-40.1 against -40.0 dB) and lies 1.2 to 5.8 dB above it at 10-60 degrees: the paper joins
+    Kirchhoff and perturbation theory by its eq. (10), which is up to 6.1 dB below small-slope at 20 degrees for
+    this sand ([WJ] Sec. 4 item 1). The sigma2 is our equivalent and warns.
+  status: confirmed
+  source: >-
+    Williams and Jackson (1998): K. L. Williams and D. R. Jackson, "Bistatic bottom scattering: Model, experiments, and model/data comparison",
+    J. Acoust. Soc. Am. 103 (1), 169-181 (1998), Table I (p. 171); read on the page images
+    (docs/references/bottom_bistatic_williams_jackson_1998.md). Ratios to the water above, as printed.

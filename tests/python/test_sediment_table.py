@@ -37,7 +37,12 @@ REFLECTION_ONLY = ["pebbles", "rock"]                  # not fluid sediments: no
 # (ratio 1.3570); three other prints of the row give 1.337 (the entry's note), which is carried.
 SANDY_GRAVEL_SPEED = 1.337 * 1528.0
 # Named site rows (A6 of docs/references/CONFORMANCE.md Sec. 1.1): one measured site each, never a class.
-SITE_ROWS = ("gallaudet_2001_site",)
+# Jackson and Briggs (1992) Table V and Williams and Jackson (1998) Table I: the notes
+# docs/references/bottom_backscatter_jackson_briggs_1992.md ([JB]) 5.1 and
+# docs/references/bottom_bistatic_williams_jackson_1998.md ([WJ]) 5.5.
+JB_ROWS = ("jackson_briggs_1992_quinault", "jackson_briggs_1992_arafura", "jackson_briggs_1992_san_francisco")
+WJ_ROWS = ("williams_jackson_1998_panama_city",)
+SITE_ROWS = ("gallaudet_2001_site",) + JB_ROWS + WJ_ROWS
 # The seven rows of 5.5 phi and finer (docs/tasks/SEDIMENT_DEFAULTS_DECISION.md, option E) and their class
 # volume parameter, unchanged by A6 (very_fine_silt: arXiv:1809.08459's -28.6 dB/m over 1.4 dB/m).
 SOFT_ROWS = {"medium_silt": 0.001, "sandy_mud": 0.001, "fine_silt": 0.001, "sandy_clay": 0.001,
@@ -299,3 +304,171 @@ def test_the_gallaudet_site_row_is_his_table_vi():
     assert par == pytest.approx(BOTTOM_FIT, rel=1e-12)
     assert not bottom.is_reflection_only("gallaudet_2001_site")
     assert bottom.sediment_reflection("gallaudet_2001_site") == {k: BOTTOM_FIT[k] for k in ("rho", "nu", "delta")}
+
+
+# --- The Jackson and Briggs (1992) and Williams and Jackson (1998) site rows ---------------------------------------
+# Typed in again here from the notes, independently of the YAML ([JB] Sec. 2.1; [WJ] Sec. 2.1; confirmed, as printed).
+# [JB] Table V (p. 973): nu, rho, delta, sigma2, gamma2 (along, across strike), w2 in cm^4 (along, across strike).
+JB_TABLE_V = {
+    "quinault": (1.113, 1.94, 0.0115, 0.001, (3.92, 3.67), (0.00598, 0.00422)),
+    "arafura": (0.988, 1.39, 0.00553, 0.005, (3.18, 3.18), (0.00318, 0.00318)),
+    "san_francisco_pre_storm": (1.002, 1.41, 0.0104, 0.002, (3.65, 3.38), (0.000846, 0.000912)),
+    "san_francisco_post_storm": (1.002, 1.41, 0.0104, 0.002, (3.73, 3.56), (0.000826, 0.001296)),
+}
+# [JB] Tables II (surficial 0-2 cm, used) and I (whole core) mean grain size, phi.
+JB_MZ = {"quinault": (2.97, 2.94), "arafura": (5.63, 5.24), "san_francisco": (6.39, 6.35)}
+# Which Table V values each row carries ([JB] 5.1): Quinault across strike (Fig. 10; the along-strike exponent is
+# called unreliable, p. 974), Arafura (one spectrum), San Francisco pre-storm along strike (Fig. 15).
+JB_CHOICE = {"jackson_briggs_1992_quinault": ("quinault", 1, "quinault"),
+             "jackson_briggs_1992_arafura": ("arafura", 0, "arafura"),
+             "jackson_briggs_1992_san_francisco": ("san_francisco_pre_storm", 0, "san_francisco")}
+# [WJ] Table I (p. 171), Panama City: rho, nu, delta, gamma3, w3 (cm^3), mu, gamma2, w2 (cm^4).
+WJ_PANAMA_CITY = {"rho": 1.97, "nu": 1.126, "delta": 0.0166, "gamma3": 4.0, "w3_cm3": 0.0000161, "mu": -2.44,
+                  "gamma2": 3.12, "w2_cm4": 0.00849}
+
+
+def row_text(name):
+    """The row's lines in configs/sediments.yaml, comments included (the alternatives the paper prints are there)."""
+    from gpusonar import config
+    lines = (config.config_dir() / "sediments.yaml").read_text().splitlines()
+    start = lines.index(f"{name}:")
+    end = next((i for i in range(start + 1, len(lines)) if lines[i] and not lines[i].startswith((" ", "#"))), len(lines))
+    return "\n".join(lines[start:end])
+
+
+@pytest.mark.parametrize("name", JB_ROWS)
+def test_the_jackson_briggs_rows_are_table_v_as_printed(name):
+    """[JB] 5.1: each row equals Table V as printed (the chosen column), Mz from Table II, status confirmed, one
+    site, no warning; w2 is the printed cm^4 through bottom.w2_from_cm4; the row's comment keeps the other values the
+    paper prints for the site and its note names the choice."""
+    key, column, site = JB_CHOICE[name]
+    nu, rho, delta, sigma2, gammas, w2s = JB_TABLE_V[key]
+    entry = bottom.sediment_table()[name]
+    assert (entry["rho"], entry["nu"], entry["delta"]) == (rho, nu, delta)
+    assert entry["scattering"] == {"w2_cm4": w2s[column], "gamma2": gammas[column], "sigma2": sigma2}
+    assert entry["mean_grain_size_phi"] == JB_MZ[site][0]
+    assert entry["status"] == "confirmed" and "unconfirmed_fields" not in entry
+    assert "Jackson and Briggs" in entry["source"] and "Table V" in entry["source"]
+    note = " ".join(entry["note"].split())
+    assert note.startswith("ONE SITE, not a class") and "one site" in " ".join(entry["provenance"]["sigma2"].split())
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        par = bottom.sediment(name)
+    assert par == {"rho": rho, "nu": nu, "delta": delta, "w2": bottom.w2_from_cm4(w2s[column], gammas[column]),
+                   "gamma2": gammas[column], "sigma2": sigma2}
+    assert not bottom.is_reflection_only(name)
+    # The other printed values for the site stay in the row's comment.
+    text = row_text(name)
+    others = {"quinault": ["0.00598", "3.92", "2.94"], "arafura": ["0.004-0.006", "5.24"],
+              "san_francisco": ["0.000912", "3.38", "0.000826", "3.73", "0.001296", "3.56", "6.35", "0.000885"]}[site]
+    assert all(v in text for v in others), (name, [v for v in others if v not in text])
+
+
+def test_the_jackson_briggs_rows_name_their_choices_and_caveats():
+    """The notes the rows carry ([JB] 5.1 and Sec. 6): Quinault's across-strike choice, the insensitive sigma2 and the
+    whole-core delta; Arafura's 0.004-0.006 fit, bimodal sediment, border of single scattering; San Francisco's
+    pre-storm along-strike choice and the 4.6 % question on its w2."""
+    table = bottom.sediment_table()
+    q, a, s = (" ".join(table[n]["note"].split()) for n in JB_ROWS)
+    assert "across strike" in q and "unreliable" in q and "insensitive" in q and "whole-core" in q
+    assert "0.004-0.006" in a and "bimodal" in a and "single scattering" in a
+    assert "pre-storm" in s and "along strike" in s and "0.000885" in s and "4.6 %" in s
+    # Eckernfoerde ([WJ] Table I) has no row: no printed sigma2, gassy mud, w3 adjusted ([WJ] 5.5).
+    assert not any("eckern" in n for n in table)
+
+
+def test_the_williams_jackson_panama_city_row_is_table_i():
+    """[WJ] 5.5: rho, nu, delta, gamma2, w2 as printed in Table I; the printed spectral volume parameters in
+    `volume_spectral:` (carried, read by no model yet: [WJ] 5.3); `sigma2` is OUR equivalent (the paper prints none),
+    so it is `unconfirmed_fields: [sigma2]` and warns, while the reflection numbers do not."""
+    entry = bottom.sediment_table()["williams_jackson_1998_panama_city"]
+    p = WJ_PANAMA_CITY
+    assert (entry["rho"], entry["nu"], entry["delta"]) == (p["rho"], p["nu"], p["delta"])
+    assert entry["scattering"] == {"w2_cm4": p["w2_cm4"], "gamma2": p["gamma2"], "sigma2": 0.00007}
+    assert entry["volume_spectral"] == {"w3_cm3": p["w3_cm3"], "gamma3": p["gamma3"], "mu": p["mu"]}
+    assert entry["status"] == "confirmed" and entry["unconfirmed_fields"] == ["sigma2"]
+    assert "Williams and Jackson" in entry["source"] and "Table I" in entry["source"]
+    assert "ours" in entry["provenance"]["sigma2"] and "mean_grain_size_phi" not in entry   # Table I prints no Mz
+    note = " ".join(entry["note"].split())
+    assert note.startswith("ONE SITE, not a class") and "Table 13.1" in note and "0.0001475" in note
+    with pytest.warns(UserWarning, match=r"\['sigma2'\] could not be confirmed"):
+        par = bottom.sediment("williams_jackson_1998_panama_city")
+    assert par["w2"] == bottom.w2_from_cm4(0.00849, 3.12) and par["w2"] == pytest.approx(1.4754e-4, rel=1e-4)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert bottom.sediment_reflection("williams_jackson_1998_panama_city") == {"rho": 1.97, "nu": 1.126, "delta": 0.0166}
+    # The equivalent: [WJ] (21)-(22) in backscatter at 20 degrees, 40 kHz, c 1500 m/s (not printed: ours), divided
+    # by the amplitude attenuation in dB/m, (20 / ln 10) k delta / nu ([JB] (3), (A11)). Written out here:
+    # backscatter makes the bracket of (21) kappa^2 (mu - 1) and Delta k = 2 k (cos^2 + (Re P)^2)^(1/2).
+    k = 2 * math.pi * 40e3 / 1500.0
+    kappa = (1 + 1j * p["delta"]) / p["nu"]
+    g = math.radians(20.0)
+    pz = cmath.sqrt(kappa ** 2 - math.cos(g) ** 2)
+    pz = -pz if pz.imag < 0 else pz
+    dk = 2 * k * math.sqrt(math.cos(g) ** 2 + pz.real ** 2)
+    w3 = p["w3_cm3"] * 10.0 ** (2 * p["gamma3"] - 6)                    # cm^3 at 1 rad/cm -> m^(3 - gamma3)
+    sigma_v = math.pi / 2 * k ** 4 * abs(kappa ** 2 * (p["mu"] - 1)) ** 2 * w3 / dk ** p["gamma3"]
+    assert 10 * math.log10(sigma_v) == pytest.approx(-28.3, abs=0.05)   # [WJ] Sec. 4 item 6: -28.3 dB/m
+    equivalent = sigma_v / (20 / math.log(10) * k * p["delta"] / p["nu"])
+    assert round(equivalent, 5) == 0.00007                               # 6.93e-5, ours
+
+
+# Readings of the papers' printed model curves (figure: [JB] about +-1 dB, [WJ] about +-0.5 dB; never a bound tighter
+# than +-1 dB) and our default model (small-slope plus volume) with the row, c 1500 m/s (ours: the notes' values to
+# their printed 0.1 dB, so +-0.051 dB). Grazing angles in degrees.
+FIGURES = {
+    # name: [(label, frequency, angles, readings, ours)]
+    "jackson_briggs_1992_quinault": [
+        ("[JB] Fig. 10a, across strike, 25 kHz", 25e3, (20, 30, 40, 50, 60), (-29.8, -27.8, -26.5, -24.7, -21.5),
+         (-29.0, -27.1, -26.3, -24.6, -21.1)),
+        ("[JB] Fig. 10b, across strike, 35 kHz", 35e3, (20, 30, 40, 50, 60), (-29.2, -27.3, -26.3, -24.8, -21.3),
+         (-28.5, -26.8, -26.0, -24.2, -20.5))],
+    "jackson_briggs_1992_arafura": [
+        ("[JB] Fig. 12, 20 kHz", 20e3, (40, 50, 60, 70), (-22.5, -21.5, -21.0, -20.5), (-21.9, -21.1, -20.5, -19.8)),
+        ("[JB] Fig. 14, 20 degrees, 15 kHz", 15e3, (20,), (-25.1,), (-24.8,)),
+        ("[JB] Fig. 14, 20 degrees, 25 kHz", 25e3, (20,), (-25.1,), (-24.8,)),
+        ("[JB] Fig. 14, 20 degrees, 35 kHz", 35e3, (20,), (-25.1,), (-24.8,)),
+        ("[JB] Fig. 14, 20 degrees, 45 kHz", 45e3, (20,), (-25.1,), (-24.8,))],
+    "jackson_briggs_1992_san_francisco": [
+        ("[JB] Fig. 15, pre-storm along strike, 40 kHz", 40e3, (10, 20, 30, 40, 50, 60, 70),
+         (-31.5, -28.5, -27.0, -25.8, -25.0, -24.3, -23.5), (-31.5, -28.5, -26.8, -25.7, -24.9, -24.3, -23.4))],
+    "williams_jackson_1998_panama_city": [
+        ("[WJ] Fig. 7a, backscatter (phi 180), 5 deg, 40 kHz", 40e3, (5,), (-40.0,), (-40.1,))],
+}
+# Where our default model is known NOT to reproduce the figure, the difference is recorded, not hidden: ours minus
+# the reading must have the sign and at most the size (+1 dB of reading error) the notes give. Each is a DIFFERS
+# of the notes, kept visible here.
+RECORDED_DIFFERENCES = {
+    # [JB] Sec. 3: at 10 deg ours (small-slope) is 1.4-2 dB lower; their model is composite there.
+    "jackson_briggs_1992_quinault": [("[JB] Fig. 10a, 10 deg", 25e3, 10, -34.5, (-3.0, 0.0)),
+                                     ("[JB] Fig. 10b, 10 deg", 35e3, 10, -33.5, (-3.0, 0.0))],
+    # [JB] Sec. 3: ours 1.2-1.9 dB higher at 10-20 deg and up to 1.0 at 30 (their volume term is slope-averaged
+    # and shadowed, ours not: their reading, not checked).
+    "jackson_briggs_1992_arafura": [("[JB] Fig. 12, 10 deg", 20e3, 10, -30.5, (0.0, 2.9)),
+                                    ("[JB] Fig. 12, 20 deg", 20e3, 20, -26.0, (0.0, 2.9)),
+                                    ("[JB] Fig. 12, 30 deg", 20e3, 30, -24.0, (0.0, 2.9))],
+    # [WJ] Sec. 0 item 1 and Sec. 4 item 1: the paper's model (Kirchhoff and perturbation joined by (10)) lies below
+    # our small-slope by up to 6.1 dB in roughness (20 deg); the total here, with our equivalent sigma2, is
+    # +1.2 to +5.8 dB above the reading (ours). The figure test of the paper's own model is [WJ] 5.2.
+    "williams_jackson_1998_panama_city": [("[WJ] Fig. 7a, 10 deg", 40e3, 10, -31.6, (0.0, 7.1)),
+                                          ("[WJ] Fig. 7b, 20 deg", 40e3, 20, -29.5, (4.0, 7.1)),
+                                          ("[WJ] Fig. 7c, 35 deg", 40e3, 35, -27.6, (2.0, 7.1)),
+                                          ("[WJ] Fig. 7d, 60 deg", 40e3, 60, -21.9, (0.0, 7.1))],
+}
+
+
+@pytest.mark.parametrize("name", JB_ROWS + WJ_ROWS)
+def test_each_site_row_through_the_default_model_against_the_papers_figure(name):
+    """Each site row through `bottom.named_backscattering_strength_db` (the default roughness model, small-slope, plus
+    the volume term) at c 1500 m/s: equal to the notes' computed values (ours, 0.051 dB) and within +-1 dB of the
+    paper's model curve where the notes say it agrees (figure); where the notes record a difference, its sign and
+    size."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                                 # Panama City's sigma2 is unconfirmed
+        for label, f, angles, readings, ours in FIGURES[name]:
+            got = bottom.named_backscattering_strength_db(name, np.radians(np.array(angles, dtype=float)), f, 1500.0)
+            assert got == pytest.approx(np.array(ours), abs=0.051), (label, got)
+            assert np.all(np.abs(got - np.array(readings)) <= 1.0), (label, got - np.array(readings))
+        for label, f, angle, reading, (low, high) in RECORDED_DIFFERENCES.get(name, []):
+            got = float(bottom.named_backscattering_strength_db(name, np.radians([float(angle)]), f, 1500.0)[0])
+            assert low < got - reading <= high, (label, got - reading)
