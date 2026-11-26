@@ -108,6 +108,7 @@ ctest --test-dir <build dir> -R 'Tracker\.' --output-on-failure    # one GoogleT
 | `GPUSONAR_CERES=1` (GPU job) | build Ceres without SuiteSparse, so motion estimation is built and tested |
 | `GPUSONAR_HOLOSCAN_CPP=1` (GPU job) | install the Holoscan C++ package and build the C++ operators |
 | `GPUSONAR_HSB=1` (GPU job) | build Holoscan Sensor Bridge (implies `GPUSONAR_HOLOSCAN_CPP=1`) for `test_hsb.py` |
+| `GPUSONAR_SHARD=I/N` (GPU job) | run shard I of N of the test files only (`tools/test_shards.py`: every file in exactly one shard; C++ suites in shard 1), so the suite runs as N jobs at once |
 
 The full table, including the data-set variables, is `docs/handoff/TESTS.md` section 1.
 

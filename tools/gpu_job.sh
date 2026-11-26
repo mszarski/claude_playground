@@ -13,6 +13,9 @@
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
 #        GPUSONAR_HOLOSCAN_CPP=1 tools/gpu_job.sh  also install the Holoscan C++ package and build the C++ operators
 #        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
+#        GPUSONAR_SHARD=I/N tools/gpu_job.sh    run shard I of N of the test files only (tools/test_shards.py), so the
+#                                               suite can run as N jobs at once; the C++ suites run in shard 1; the
+#                                               suite has passed when every shard has
 #        GPUSONAR_HSB=1 tools/gpu_job.sh        also build Holoscan Sensor Bridge 2.7.0 (emulator, Linux receiver, Python;
 #                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py; where raw
 #                                               sockets are refused it sets HSB_UDP_PATCH=1 HSB_EMULATOR_UDP_SOCKET=1 itself
@@ -197,7 +200,18 @@ if [ "${GPUSONAR_JOB:-tests}" = "motion" ]; then
   PYTHONPATH=python python3 tools/motion_study.py timing || status=$?
   exit "$status"
 fi
-echo "=== ctest (C++ suites) ==="
-ctest --test-dir build --output-on-failure -E pytest | tail -5
-echo "=== pytest (all, with skip reasons) ==="
-PYTHONPATH=python${PYTHONPATH:+:$PYTHONPATH} python3 -m pytest -q -rs tests/python "$@"
+# GPUSONAR_SHARD=I/N: this job runs shard I of N of the test files (tools/test_shards.py: every file in exactly one
+# shard); the C++ suites run in shard 1 only. Unset: everything, as before. The per-test seconds printed at the end
+# (--durations) are what tools/test_shards.py --weights reads.
+shard_files="tests/python"
+if [ -n "${GPUSONAR_SHARD:-}" ]; then
+  shard_files=$(python3 tools/test_shards.py "$GPUSONAR_SHARD")
+  echo "=== shard $GPUSONAR_SHARD: $(echo "$shard_files" | wc -l) test files ==="
+fi
+if [ -z "${GPUSONAR_SHARD:-}" ] || [ "${GPUSONAR_SHARD%%/*}" = "1" ]; then
+  echo "=== ctest (C++ suites) ==="
+  ctest --test-dir build --output-on-failure -E pytest | tail -5
+fi
+echo "=== pytest (${GPUSONAR_SHARD:-all}, with skip reasons) ==="
+# shellcheck disable=SC2086
+PYTHONPATH=python${PYTHONPATH:+:$PYTHONPATH} python3 -m pytest -q -rs --durations=0 --durations-min=0.5 $shard_files "$@"
