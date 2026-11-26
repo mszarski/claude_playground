@@ -9,6 +9,15 @@ measurement, stated as such; **unconfirmed**). "Measured here" means run on this
 
 ## 0. Answer first
 
+**State on 2026-11-26, after this scoping was written** (read section 5's table for each
+package): the owner answered question 1 (Bellhop3D as an opt-in provider, run as a separate
+process). P1 (the cross-slope warning) and P2 to P6 (`sim/bellhop3d.py`, the opt-in `eigenray3d`
+tier, its acceptance test behind `GPUSONAR_SLOW_ORACLES=1`, the top-level `bathymetry` key and the
+illustrative `flank_seamount_3d`) are done, with what differs from the plan said in each row. The
+tier has no reverberation over relief. Option F was filed and done as `sonar-0nsi` (D-201). D-199
+corrects what this file said of the fjord beds (question 9). The decision entry for the 3-D tier
+is D-202 in `docs/DECISIONS.md`; issue `sonar-rcq` is closed with it.
+
 **Will 3-D propagation make FLS or SAS better? No.** Neither family uses the tier that 3-D
 propagation would change. None of the 12 FLS scenarios and none of the 10 SAS scenarios is at
 the `eigenray` tier (`docs/handoff/SIMULATION.md`, section 4). FLS uses `free_field` or
@@ -46,7 +55,8 @@ section 3):
     `fls_170k_traffic`, do give their objects first-order surface and bottom bounce paths (three
     eigenrays a leg, nine pairs a scatterer); the free-field FLS scenes do not. `SCENARIOS.md` said
     otherwise.)
-  - SAS scenes are `free_field`, with no surface or bottom multipath at all.
+  - SAS scenes are `free_field`, with no surface or bottom multipath at all. (Since D-201,
+    `sas_auv_multipath`, not in the gallery, has both; every other SAS scene is still free field.)
   - There are 78 false movers from a rough surface over ten seeds, and small targets such as
     the kayak are missed (`docs/handoff/README.md`, risk 7).
   - `fls_170k_transit` reverberation is 1 to 1.5 dB off (STATUS item 32).
@@ -670,17 +680,27 @@ an assertion that P1's warning fires on the flank bearings.
 5. Answered by `sonar-6c8` (section 2): no change to beam type, count or run type is needed; the
    level-bed scenarios' levels stay.
 6. Should the simulator warn where the bed slopes steeply across a bearing (P1)? It changes no
-   record.
+   record. Done 2026-11-26 with the approved packages (P1: `reverb_relief.cross_slope_report`, a
+   `RuntimeWarning` only).
 7. For FLS and SAS: are harbours, pools with walls, canyons or sloping banks part of the use? If
    so, wall and tilted-plane multipath by image sources (option F) would be filed as its own issue.
+   Filed and done as `sonar-0nsi` (D-201, opt-in, four multipath scenes); whether the use includes
+   such waters is still not recorded.
 8. If A goes ahead: the Fortran `bellhop3d.exe`, or bellhopcxx3d (also GPL-3, faster, its 3-D
-   accuracy not checked here)?
+   accuracy not checked here)? As built (P2, P3), the provider runs the Fortran `bellhop3d.exe`
+   (`GPUSONAR_BELLHOP3D`, or beside `GPUSONAR_BELLHOP`; `sim/bellhop3d.py` `find_bellhop3d`);
+   bellhopcxx3d was not tried.
 9. **The fjord bed** (`fjord_static_trial_2row`, `_3row`, `fjord_testauv_trial_1row`): its profile
    is written to Bellhop as piecewise linear (`'L'`), over which Bellhop's arrivals disagree with
    its own TL run. Writing the same points as curvilinear (`'C'`) would move the target's one-way
    loss by +5.1, +0.2 and +3.6 dB, and does not settle it. Should the fjord profile be read as
    linear between its points (keep), as a smooth bed (`'C'`), or be referred to a wave model before
-   anything changes? Nothing is changed until you say.
+   anything changes? Nothing is changed until you say. **Corrected by D-199:** on the bed as
+   shipped the summed arrivals agree with Bellhop's own loss run within 0.2, 0.3 and 1.1 dB (2-row,
+   3-row, 1-row); the 2-row scenario's 2.7 dB against the loss run is its limit of 12 arrivals, not
+   the bed; the +5.1, +0.2, +3.6 dB are the curvilinear form's arrivals disagreeing with its own loss
+   run. Recommendation: keep the beds; the question left is whether the 2-row scenario keeps its
+   12-arrival limit (issue `sonar-2e9e`).
 
 ## 7. What was not verified
 

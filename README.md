@@ -11,15 +11,19 @@ of every other document).
 
 **State of the project.** Everything here is software, simulation and analysis: no sonar
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
-Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU and
+Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU, 12
+(propagation and reverberation) as far as open literature allows (audited 2026-11-25), and
 the CUDA backend has been run and benchmarked on rented GPUs. The long-range design is
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite ran on the tree of decision D-201
-(2278 passed, 102 skipped, 1 xfailed, none failed, on an NVIDIA L4); the whole CPU suite has not been
+(the depth sigma now says so). The full GPU suite ran on the tree of decision D-202
+(2301 passed, 102 skipped, none failed, on an NVIDIA L4), the opt-in 3-D
+propagation tier included; the whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
-entries). [`docs/STATUS.md`](docs/STATUS.md) says
+entries). The link budget and the coverage model have no reverberation term, so where
+reverberation dominates their margins and ranges are optimistic (D-198). Every shipped SAS scene
+but one (`sas_auv_multipath`) is free field: no surface or bed multipath (D-201). [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;
 [`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
 
@@ -39,8 +43,10 @@ what works, how each part was checked, and lists what is open or known to be wro
   vehicle holds. A coverage picture (where it can and cannot detect). Passive bearings
   and tonal analysis (Goertzel lines, DEMON). The same program runs on a simulation, a
   recording, an emulated board over UDP, and as Holoscan operators.
-- **A simulator** with four propagation tiers (free field, image source, sediment
-  interface, eigenrays from Bellhop run as a separate program), reverberation from bottom,
+- **A simulator** with four propagation tiers in general use (free field, image source with
+  opt-in tilted beds and walls, sediment interface, eigenrays from Bellhop run as a separate
+  program) and an opt-in fifth (eigenrays over a 3-D bed from Bellhop3D, also a separate program;
+  one illustrative scenario uses it), reverberation from bottom,
   surface and volume, time, angle and frequency spreading of bounce paths, targets and
   specular shapes, one-way sources, noise with a spectrum and array coherence, the
   projector's direct sound and receiver overload, a basin's late reverberation, and sound
@@ -94,6 +100,8 @@ Tests that need something external skip without it. The switches:
 | --- | --- |
 | `GPUSONAR_BELLHOP=/path/to/bellhop.exe` | the `eigenray` tier: every `flank_*`, `popoto_*`, `fjord_*` and `ssp_*` scenario that names Bellhop, and their tests (`tools/build_oracles.sh` builds it) |
 | `GPUSONAR_KRAKEN_DIR` | the rays-against-normal-modes cross-check |
+| `GPUSONAR_BELLHOP3D=/path/to/bellhop3d.exe` | Bellhop3D: the seamount comparison and the opt-in `eigenray3d` tier with its scenario `flank_seamount_3d` (without the variable, `bellhop3d.exe` beside `bellhop.exe` is used) |
+| `GPUSONAR_SLOW_ORACLES=1` | the `eigenray3d` tier's 8-minute acceptance test against Bellhop3D (not part of the suite) |
 | `GPUSONAR_REQUIRE_ORACLES=1` | an oracle test (Bellhop, Bellhop3D, KRAKEN, PyRAM) that would skip fails instead; without it the run ends with a line counting the oracle skips (`tests/python/oracle_gate.py`; `GPUSONAR_ORACLES=1 tools/gpu_job.sh` sets it) |
 | `GPUSONAR_PICMUS_DIR` | the PICMUS ultrasound benchmark (`tools/fetch_picmus.py`) |
 | `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN` | the measured channel data sets (`tools/fetch_channels.py`; not in the repository, see `docs/OPEN_SOURCE.md` 3.13) |
@@ -189,7 +197,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 76 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 81 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |
@@ -206,7 +214,8 @@ end to end, each with a geometry diagram, a result figure and an animation:
   with waves; boat traffic;
 - synthetic aperture: a wreck and a mined seabed with unknown motion; the MINSAS-class
   survey over a wreck, cable and calibration cube; a boulder field; rippled sand with a
-  rock outcrop; the rail; buried objects in 3D;
+  rock outcrop; the rail; buried objects in 3D (all free field: with bed multipath, outside the
+  gallery in `sas_auv_multipath`, the image's sharpness falls to about a third, D-201);
 - long range: the flank patrol; the Popoto array against a ship at 6 km and at 12 km, and
   in four other oceans (winter duct over sand, summer thermocline over mud, shallow gravel,
   deep water over silt).
@@ -382,7 +391,10 @@ platform and the operation; the sonar file, the deployment file, a parts list, d
 and checklists are generated from it, and seven self-tests run the generated chain on
 simulated pings. `docs/REFERENCE_DESIGN.md` walks through it; `docs/DEPLOYMENT.md` says
 what each report field means. The link budget's threshold is the chain's own detector's
-(`docs/DECISIONS.md` D-117, D-134), so margins and the chain agree to about half a dB.
+(`docs/DECISIONS.md` D-117, D-134), so margins and the chain agree to about half a dB in noise.
+The budget has no reverberation term: where reverberation dominates it is optimistic (for
+`flank_patrol`'s small vehicle about 30 dB, where the simulated data give about 4 dB over the
+background; D-198, issue `sonar-w2w3`).
 
 ## Run a whole chain from one YAML file
 

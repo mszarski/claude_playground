@@ -46,7 +46,7 @@ models are from it.
    the repository; proposed text for `docs/RESULTS.md`, `docs/STATUS.md` and, where a
    decision was taken, `docs/DECISIONS.md` goes in your report (section 7).
 
-## 2. Current state (checked in the code at `6600df8`)
+## 2. Current state (checked in the code at `6600df8`; brought to D-201 on 2026-11-26)
 
 ### 2.1 Simulator calibration (`simcal.py`, `tools/calibrate_sim.py`, `docs/SIM_CALIBRATION.md`)
 
@@ -83,7 +83,8 @@ models are from it.
   `test_speckle_statistics_tell_sparse_from_developed`,
   `test_an_overall_gain_changes_nothing_for_an_image`, `test_display_scale_can_be_undone`).
   `docs/SIM_CALIBRATION.md` reports the self-check: hidden +6.0 / -4.0 dB / 38.0 dB found
-  as +6.1 / -4.0 / 38.0 dB with a 0.17 dB RMS misfit; SAS densities 400 and 6000 per m²
+  as +5.9 / -4.0 / 38.6 dB with a 0.16 dB RMS misfit (at the tree of D-181; +6.1 / -4.0 / 38.0
+  and 0.17 dB when first written, the move not traced: D-182); SAS densities 400 and 6000 per m²
   found as 620 and 8000. It says model error is not in those numbers because the "real"
   log came from the same simulator.
 - **Not checked**: whether `fls --log` works on records of a flank or Popoto sonar

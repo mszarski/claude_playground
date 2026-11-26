@@ -381,6 +381,11 @@ with walls and 83.2 dB in free field (the walls' own echoes come back through th
 
 ## Synthetic aperture sonar
 
+**Every SAS scene in this section except `sas_auv_multipath` is free field: no surface or bed
+multipath** (D-201). With bed multipath the bed-bounce copy of a target above the bed is its
+brightest echo and the sharpness measure falls to about a third (178,767 -> 63,747, its section
+below; issue `sonar-ya2c`), so the SAS images and numbers here are the easy case.
+
 ### `wreck_sas` and `minefield_sas`
 
 ![wreck_sas](figures/wreck_sas.png)
@@ -595,8 +600,21 @@ assumption (the scenario's `rms_amplitude`), not a prediction.
 | --- | --- |
 | Submarine-like target, 56 m, +16 dB in all, 3.0 m/s along x | tracked; velocity 2.98, 0.02 m/s; 1.0 m from its outline (2.6 m from its centre); classified mover (3.02 ± 0.02 m/s) |
 | Wreck on the seabed, +12 dB, not moving | tracked; speed 0.04 m/s; 3.5 m from truth; classified static |
-| Small vehicle, −3 dB, 2 m/s | **not detected** |
+| Small vehicle, −3 dB, 2 m/s | **not detected**: a hard target left so on purpose (below) |
 
+- **The small vehicle is a hard target on purpose (D-198; the owner, 2026-11-26: "I'd leave it
+  and say so in the scenario's description; a -3 dB target at 2.2 km over that seabed should be
+  hard").** It is below the scene's reverberation, not lost to a defect: bottom reverberation
+  (Lambert −27 dB) is 21.9 dB above the noise at 2.2 km, and the vehicle's 4 m cell stands 3.8 to
+  5.1 dB above its local background (median 4.4 dB; 28 full-size pings, seeds 17 to 26) against the
+  gallery detector's 12 dB cut. Against noise alone it would be 23.8 dB up and detected. The live
+  chain's defaults miss it by 0.8 dB (cell mean 5.0 dB against its 5.8 dB threshold); its opt-in
+  range integration `cfar.integrate_cells: [1, 4, 16]` (D-97) detects it on both pings tried (10.6
+  and 10.3 dB) at the cost of one extra detection a ping near 4150 m. **The link budget
+  (`SonarEquation`, the coverage model) predicts about 30 dB for it, because it has no
+  reverberation term** (issue `sonar-w2w3`). `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks`
+  asserts that it is not tracked, so a change that starts detecting it is noticed. The other
+  options D-198 measured (a stronger vehicle, a lower gallery cut) were not applied.
 - Range is the leading edge of each detection (D-178). Before D-178 it was the
   power-weighted centroid of a detection made of several surface and bottom arrivals, the
   later ones stronger: the submarine read 25.8 m from its outline (26.1 m from its
@@ -1022,7 +1040,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `flank_level_3d`, `flank_bank_3d`, `flank_level_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). Three targets at 5 km over a level 100 m bed (control: the tiers agree within 0.003 dB) and over a bed sloping 1° across the look (arrivals 0.4° up-slope, no level change), and their level-bed `eigenray` twin. About 3 and 7 min (3-D), 2 min (twin). |
 | `flank_ridge_3d`, `flank_ridge_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A sill crossing the bearing at 45° (`bathymetry.ridge`), a target 5 km behind it: 3-D adds −0.2 dB; the twin is 1.9 dB louder for its own reasons. About 5 min (3-D), 1 min (twin). |
 | `flank_canyon_3d`, `flank_canyon_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A canyon along the look direction (a trough, `bathymetry.ridge` with negative height), a target 5 km down its axis: 3-D is 6.2 dB louder one-way than N × 2-D; the cross-slope warning does not flag it. About 4.5 min (3-D), 25 s (twin). |
-| `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km, a wreck. Needs Bellhop. |
+| `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km (−3 dB: below the scene's reverberation, never detected, left as a hard target on purpose, D-198), a wreck. Needs Bellhop. |
 | `flank_sst_shallow` | A target at 1 km in 100 m of water with time-spread bounce paths, sediment and surface reverberation and a volume layer; placeholders throughout. |
 | `flank_sst_spread` | The same channel with angle spreading, Doppler spreading within the pulse and convolved multi-bounce tails. |
 
@@ -1135,6 +1153,10 @@ after the first whole-suite run"), `docs/figures/fjord_rehearsal.md`,
   has surface and bottom multipath.
 - Reverberation (the scattering-function model) over a tilted bed: refused; a sloping bed is
   given as scene scatterers (`fls_120k_quay_multipath`).
+- 3-D propagation in a gallery scene: every gallery scene is N × 2-D at most. The one scenario at
+  the opt-in `eigenray3d` tier, `flank_seamount_3d`, is illustrative, not in the gallery, and a
+  target in noise: no reverberation over relief at that tier (a receiver per scattering cell would be
+  needed; `docs/tasks/PROPAGATION_3D.md` P5).
 - Waves that move as waves do, breaking, or a bubble layer; a wake that grows.
 - Reverberation over 3-D relief at the `eigenray3d` tier: the five 3-D scenes of `sonar-d7sw` and
   `flank_seamount_3d` are targets in noise. A 3-D scene for the Popoto long-range array (4 to 6 kHz, 12 km),

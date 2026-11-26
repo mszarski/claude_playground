@@ -2,7 +2,8 @@
 
 Twelve things a newcomer can run, in rising order of complexity. Every command below was run for
 this file on the tree of decision D-181, on a CPU; every output shown is what came back, trimmed
-where marked. Part of the handoff set: `README.md` (entry point), `SIMULATION.md` (what the
+where marked. They were not rerun for D-182 to D-201; what those decisions changed in them is said
+where it applies (the first two items below are fixed). Part of the handoff set: `README.md` (entry point), `SIMULATION.md` (what the
 simulator models), `OUTPUTS.md` (the full-size gallery and results), `SOFTWARE.md`, `TESTS.md`.
 
 ## What failed or surprised, first
@@ -18,10 +19,14 @@ simulator models), `OUTPUTS.md` (the full-size gallery and results), `SOFTWARE.m
    path works for a generated build, whose scenarios type 1500 m/s (example 10), and for a
    single-board scenario, where it leaves a +0.2 % range bias instead (1002.3 m for a target at
    1000 m). No test runs `--emulate` with board synchronisation. Not fixed here (code was not to
-   be changed); it needs an issue.
+   be changed); it needs an issue. **Fixed since (D-183, issue `sonar-8zj` closed):** `flank_udp`
+   lays the window out at `source.sound_speed`, which `--emulate` sets to the scenario's speed; the
+   same command now synchronises four pings (worst residual 0.43 to 0.47 µs) and the single board
+   reads 999.5 m, and `tests/python/test_emulate.py` holds it.
 2. **The documented self-check numbers of simulator calibration are stale.** `docs/SIM_CALIBRATION.md`
    and `docs/RESULTS.md` say +6.1 dB, 38.0 dB, 0.17 dB RMS; the test and the tool give +5.9 dB,
    38.6 dB, 0.16 dB RMS on this tree (example 9). The test passes; its tolerances are 1 dB.
+   **Corrected since:** both documents give the new numbers (D-182).
 3. **In quick mode the boat under way is `uncertain`, not `mover`** (example 8): four pings are too
    few for the classifier. Quick runs show that the path works, not what the full-size scene gives.
 4. **A plain CFAR on a 20-target grid gives 12 detections for 12 of the targets** (example 12):
@@ -181,6 +186,11 @@ sharpness, navigation only      59.62 / estimated motion 219.62 / true motion 22
 
 These are the numbers of `docs/figures/gallery.json` (`wreck_sas`: 0.0527 and 0.0443 wavelengths,
 59.62, 219.62, 224.55), which came from an NVIDIA L4: host and GPU agree to the digits printed.
+**`wreck_sas`, like every shipped SAS scene except `sas_auv_multipath`, is free field: no surface
+or bed multipath.** With bed multipath (D-201, `sas_auv_multipath` against its free-field twin) the
+bed-bounce copy of every target above the bed is its brightest echo, 2.7 to 6.6 dB over the direct
+one, and the sharpness measure falls from 178,767 to 63,747 (issue `sonar-ya2c`), so these images
+are the easy case.
 The SAS scene that does want a GPU is `sas_minsas_speckle` (445,567 scatterers: 14 minutes on four
 cores in the older CPU run, 92 s on an L4): `tools/gallery.py --backend cuda --only sas_minsas_speckle`,
 or `GPUSONAR_JOB=gallery GPUSONAR_CERES=1 GPUSONAR_GALLERY_ARGS="--only sas_minsas_speckle" tools/gpu_job.sh`.
