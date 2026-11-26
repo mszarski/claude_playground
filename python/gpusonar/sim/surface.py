@@ -567,7 +567,13 @@ def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed
 
 def facet_backscatter(grazing, wind_speed: float):
     """Near-specular backscattering cross section of the wave facets, eq. (8) of the comment
-    above, with the Cox-Munk mean square slope of `acoustics.mean_square_slope`."""
+    above, with the Cox-Munk mean square slope of `acoustics.mean_square_slope`.
+
+    No shadowing factor, on purpose: Wagner's backscatter shadow function R (J. Acoust. Soc. Am. 41,
+    138-147, 1967, eqs. (49), (20)-(22); `bottom.wagner_backscatter_shadowing`) is 1 to 1e-6 dB wherever
+    this term is within 30 dB of its peak (grazing above 47-70 deg for 3-20 m/s; at 10 deg it would be
+    -0.02 to -0.35 dB, where the term is far below anything else; docs/references/shadowing_wagner_1967.md
+    W3, C-W3; tests/python/test_bottom_models.py)."""
     from ..acoustics import mean_square_slope
     s2 = mean_square_slope(wind_speed)
     t = np.clip(np.asarray(grazing, dtype=float), 1e-6, 0.5 * np.pi)

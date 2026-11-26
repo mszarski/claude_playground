@@ -257,3 +257,33 @@ def test_a_lambert_item_without_mu_db_uses_minus_29_db_and_warns_once_at_sonar_f
     from gpusonar.sim import reverb_bistatic, reverb_relief
     for fn in (reverb_bistatic.directional_power, reverb_relief.directional_power):
         assert inspect.signature(fn).parameters["mu_db"].default == bottom.DEFAULT_LAMBERT_MU_DB
+
+
+def _fluid_sediment_ping(item, seed=3):
+    from gpusonar.sim import bottom
+    sonar, _ = empty_baseband_ping()
+    par = dict(bottom.sediment("medium_sand"), **item)
+    rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, -HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                        reverberation=[dict({"model": "fluid_sediment", "boundary_z": 0.0}, **par)], rng=np.random.default_rng(seed))
+    return rec.samples.array.copy()
+
+
+def test_composite_item_carries_wagner_shadowing_and_shadowing_none_turns_it_off():
+    """C1 of docs/references/bottom_mourad_jackson_1989.md: a `fluid_sediment` item with `roughness_model:
+    composite` has Wagner's shadow function by default; `shadowing: none` is the composite before C1. The
+    grazing angles here run from about 5 deg (230 m) to 53 deg, where 10 log R of medium sand at 27.5 kHz
+    lies between -0.2 dB and 0 (bottom.wagner_backscatter_shadowing): the shadowed ping is weaker by no more."""
+    from gpusonar.sim import bottom
+    on = _fluid_sediment_ping({"roughness_model": "composite"})
+    off = _fluid_sediment_ping({"roughness_model": "composite", "shadowing": "none"})
+    assert not np.array_equal(on, off)
+    ratio_db = 10 * np.log10((np.abs(on) ** 2).mean() / (np.abs(off) ** 2).mean())
+    slope, _ = bottom.large_scale_slope(27.5e3, C, **bottom.sediment("medium_sand"))
+    floor = 10 * np.log10(bottom.wagner_backscatter_shadowing(np.arcsin(HEIGHT / 230.0), np.sqrt(2.0) * slope))
+    assert floor < ratio_db < 0.0, (floor, ratio_db)
+    # The default (small_slope) carries none: naming it unchanged is the default ping, naming "wagner" is refused.
+    assert np.array_equal(_fluid_sediment_ping({"shadowing": "none"}), _fluid_sediment_ping({}))
+    with pytest.raises(ValueError, match="has no shadowing"):
+        _fluid_sediment_ping({"shadowing": "wagner"})
+    with pytest.raises(ValueError, match="did you mean 'none'"):
+        _fluid_sediment_ping({"roughness_model": "composite", "shadowing": "non"})

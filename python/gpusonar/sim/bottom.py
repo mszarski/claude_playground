@@ -25,8 +25,11 @@ docs/references/jackson_richardson_2007/: the spectrum convention (6.5)-(6.8), t
 constant (D.11)-(D.13), the cm conversion D.1.3, flat-interface reflection (8.49)-(8.53),
 delta and its conversions (2.6), (8.25)-(8.27), perturbation (13.9), (13.21)-(13.25), Kirchhoff
 (13.10), (13.12)-(13.17), small-slope (13.11), the composite cut-off and large-scale slope
-(13.72)-(13.77) and the volume term (14.7)-(14.9). Not in J&R: our `combined` model, and the
-book's composite carries Wagner's shadowing factor (13.81)-(13.83), which ours lacks.
+(13.72)-(13.77) and the volume term (14.7)-(14.9). Not in J&R: our `combined` model. The book's
+composite carries Wagner's shadowing factor (13.81)-(13.83); ours has carried it too since C1 of
+docs/references/bottom_mourad_jackson_1989.md (`shadowing="wagner"`, the default inside `composite` and
+`combined`; `"none"` is the model before), with pi^(-1/2) in (13.82) as Wagner (1967) (22) and Mourad and
+Jackson (1989) (25) print it: the book's pi^(+1/2) is a misprint (docs/references/shadowing_wagner_1967.md).
 
 Parameters (dimensionless unless noted), as in the published models:
   rho     sediment density / water density
@@ -118,8 +121,9 @@ zeta_mu^2 = 2 pi integral_Kc^inf W K dK and the facet slope variance 2 pi integr
 (both axes together: twice the per-axis s^2 above). J&R (2007) print the same split and slope,
 (13.72)-(13.77), and attribute k_w h_s = 1/2 to "D. Jackson et al. 1986a"; our
 `large_scale_slope` gives the slopes printed for Fig. 13.19 (0.0227, 0.0595, 0.1432). Their
-average (13.80) is over the in-plane slope only and adds Wagner's shadowing factor (13.81)-(13.83),
-which ours does not. Olson and Lyons (arXiv:2106.05909,
+average (13.80) is over the in-plane slope only and adds Wagner's shadowing factor (13.81)-(13.83);
+ours multiplies its two-axis average by the same factor (`wagner_bistatic_shadowing`, which is Wagner's
+backscatter R in backscatter; its bistatic halves are ours). Olson and Lyons (arXiv:2106.05909,
 Sec. VIII, eq. (44), after McDaniel and Gorman 1983) write the composite model as this same
 average of the tilted small-scale perturbation result over the large-scale slope density and
 give its conditions: k x small-scale rms height below one, grazing angles above about twice
@@ -160,7 +164,7 @@ import numpy as np
 
 from ..acoustics import NOMINAL_SOUND_SPEED
 from scipy.interpolate import CubicSpline
-from scipy.special import hankel1
+from scipy.special import erfcx, hankel1
 
 PLACEHOLDER_SAND = {"rho": 1.9, "nu": 1.1, "delta": 0.0147, "w2": 2.0e-5, "gamma2": 3.25, "sigma2": 0.002}
 """Illustrative values only, NOT a measured or published sediment: the density, speed and loss
@@ -515,11 +519,105 @@ def _slope_average(fn, ti, ts, phi, slope: float, nodes: int):
     return total
 
 
+# --- Shadowing of the large-scale relief: Wagner (1967) ----------------------------------------------
+#
+# R. J. Wagner, "Shadowing of Randomly Rough Surfaces", J. Acoust. Soc. Am. 41 (1), 138-147 (1967) [W67],
+# extracted in docs/references/shadowing_wagner_1967.md (read on the page images; status words there).
+# Geometric optics, one-dimensional in the plane of incidence, a Gaussian height process; diffraction
+# ignored ([W67] p. 145). Used by `composite_strength` and `combined_strength` (default "wagner" inside
+# those two opt-in models).
+
+SHADOWING_MODELS = ("wagner", "none")
+
+
+def _wagner_b(v):
+    """[W67] (22): B = [exp(-v^2) - sqrt(pi) v erfc v] / (4 sqrt(pi) v) = [pi^(-1/2) exp(-v^2) - v erfc v] / (4 v)
+    (confirmed; [MJ89] (25) prints the same; J&R (2007) (13.82) prints pi^(+1/2), a misprint). Evaluated as
+    exp(-v^2) [1 - sqrt(pi) v erfcx(v)] / (4 sqrt(pi) v), which has no cancellation of two tiny numbers at
+    large v and underflows to 0 there (no shadowing). inf for v <= 0 (a ray at or below the horizon)."""
+    v = np.asarray(v, dtype=float)
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore", under="ignore"):
+        vv = np.maximum(v, 1e-300)
+        b = np.exp(-vv * vv) * np.maximum(1.0 - math.sqrt(math.pi) * vv * erfcx(vv), 0.0) / (4.0 * math.sqrt(math.pi) * vv)
+    return np.where(v > 0.0, b, np.inf)
+
+
+def _wagner_r_of_b(b):
+    """(1 - exp(-2B)) / (2B): 1 at B = 0, 0 at B = inf; 1 - B (its series, exact to double precision)
+    below B = 1e-8, where B may be subnormal."""
+    b = np.asarray(b, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        r = -np.expm1(-2.0 * b) / (2.0 * np.maximum(b, 1e-8))
+    return np.where(b < 1e-8, 1.0 - b, np.where(np.isinf(b), 0.0, r))
+
+
+def wagner_backscatter_shadowing(grazing, total_rms_slope: float, cutoff: float | None = None):
+    """Wagner's backscatter shadow function R ([W67] eq. (49) with (20)-(22)):
+
+        R = (1 - exp(-2B)) / (2B),   B = [pi^(-1/2) exp(-v^2) - v erfc v] / (4 v),   v = tan(grazing) / s,
+
+    s = the TOTAL (both-axes) rms slope of the large-scale relief, i.e. sqrt(2 |psi_0''|) of [W67] (21) for
+    an isotropic surface = sqrt(2) x the per-axis slope `large_scale_slope` returns (ours, [W67] Sec. 2.1).
+    R, not the illuminated fraction S of [W67] (20): R is the factor for backscatter once the facets that
+    face away from the source are left out ([W67] (48)-(50)), which a slope average that drops or clamps
+    them has already done (S would count them twice). Mourad and Jackson (1989) (24)-(26) and J&R (2007)
+    (13.81)-(13.83) use R. Limits (ours): R -> 2 sqrt(pi) v as v -> 0; R = 1 at normal incidence; 0 at and
+    below grazing. `cutoff`: R = 1 where v > cutoff ([MJ89] p. 1173 sets it 1 for t > 2, an error under
+    1.3e-4); None evaluates it everywhere."""
+    g = np.asarray(grazing, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore"):
+        v = np.where(g > 0.0, np.tan(np.minimum(g, 0.5 * np.pi)) / float(total_rms_slope), 0.0)
+    r = _wagner_r_of_b(_wagner_b(v))
+    if cutoff is not None:
+        r = np.where(v > cutoff, 1.0, r)
+    return r
+
+
+def wagner_bistatic_shadowing(grazing_in, grazing_out, azimuth, total_rms_slope: float):
+    """The shadow factor of the bistatic composite average (ours, derived from [W67] (33), (35)-(36) and
+    (46)-(47) as [W67] (48) is from (47) and (20); not printed; docs/references/shadowing_wagner_1967.md
+    Sec. 2.4 and C-W2):
+      backward half, cos(azimuth) < 0: R(min(grazing_in, grazing_out)), the monostatic R of the lower ray
+        ([W67] (35)-(36): in the backward half the shadowing is that of the lower ray);
+      forward half, cos(azimuth) >= 0: (1 - exp[-2(B_in + B_out)]) / [2(B_in + B_out)] ([W67] (33)).
+    [W67] treats rays in the plane of incidence only; applying the two halves out of the plane by the sign
+    of cos(azimuth) is OURS. Symmetric in the two angles (reciprocity), and exactly
+    `wagner_backscatter_shadowing` in backscatter (azimuth = pi, equal angles)."""
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    s = float(total_rms_slope)
+    backward = wagner_backscatter_shadowing(np.minimum(ti, ts), s)
+    with np.errstate(over="ignore", invalid="ignore"):
+        vi = np.where(ti > 0.0, np.tan(np.minimum(ti, 0.5 * np.pi)) / s, 0.0)
+        vs = np.where(ts > 0.0, np.tan(np.minimum(ts, 0.5 * np.pi)) / s, 0.0)
+    forward = _wagner_r_of_b(_wagner_b(vi) + _wagner_b(vs))
+    return np.where(np.cos(phi) < 0.0, backward, forward)
+
+
+def _check_shadowing(shadowing: str) -> str:
+    if shadowing not in SHADOWING_MODELS:
+        import difflib
+        near = difflib.get_close_matches(str(shadowing), SHADOWING_MODELS, n=1)
+        raise ValueError(f"unknown shadowing {shadowing!r}" + (f"; did you mean {near[0]!r}?" if near else "")
+                         + f" (one of {SHADOWING_MODELS})")
+    return shadowing
+
+
+def _shadowed(average, ti, ts, phi, slope: float, shadowing: str):
+    """The slope average times Wagner's factor ("wagner") or unchanged ("none": the same array)."""
+    if _check_shadowing(shadowing) == "none":
+        return average
+    return average * wagner_bistatic_shadowing(ti, ts, phi, math.sqrt(2.0) * slope)
+
+
 def composite_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                        delta: float, w2: float, gamma2: float, azimuth=np.pi, small_scale_kh: float = 0.5,
-                       slope_nodes: int = 12, **_ignored):
+                       slope_nodes: int = 12, shadowing: str = "wagner", **_ignored):
     """Perturbation cross section of the small-scale relief (K > Kc) averaged over the slopes
-    of the large-scale relief (composite roughness). For low and moderate grazing angles."""
+    of the large-scale relief (composite roughness). For low and moderate grazing angles.
+    `shadowing`: "wagner" (the default since C1 of docs/references/bottom_mourad_jackson_1989.md)
+    multiplies the average by Wagner's shadow function, `wagner_bistatic_shadowing` with the total
+    slope sqrt(2) x per-axis (J&R (2007) (13.80)-(13.83) and Mourad and Jackson (1989) (23)-(26) both
+    print it); "none" is the model before C1, bit for bit."""
     ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     slope, kc = large_scale_slope(frequency, sound_speed, w2=w2, gamma2=gamma2, small_scale_kh=small_scale_kh)
@@ -527,20 +625,21 @@ def composite_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
     def small_scale(li, ls, ph):
         factor, q = _perturbation_factor(li, ls, ph, k, rho, nu, delta)
         return factor * np.where(q >= kc, _power_law(q, w2, gamma2), 0.0)
-    return _slope_average(small_scale, ti, ts, phi, slope, slope_nodes)
+    return _shadowed(_slope_average(small_scale, ti, ts, phi, slope, slope_nodes), ti, ts, phi, slope, shadowing)
 
 
 def combined_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                       delta: float, w2: float, gamma2: float, azimuth=np.pi, small_scale_kh: float = 0.5,
-                      slope_nodes: int = 12, **_ignored):
+                      slope_nodes: int = 12, shadowing: str = "wagner", **_ignored):
     """The small-slope cross section averaged over the large-scale slopes: Kirchhoff near the
     specular direction, perturbation theory at intermediate angles, composite roughness at
-    small grazing angles."""
+    small grazing angles. `shadowing` as for `composite_strength` (default "wagner"; "none" is the
+    model before C1, bit for bit)."""
     ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
     slope, _ = large_scale_slope(frequency, sound_speed, w2=w2, gamma2=gamma2, small_scale_kh=small_scale_kh)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2)
-    return _slope_average(lambda li, ls, ph: small_slope_strength(li, ls, frequency, sound_speed, azimuth=ph, **par),
-                          ti, ts, phi, slope, slope_nodes)
+    return _shadowed(_slope_average(lambda li, ls, ph: small_slope_strength(li, ls, frequency, sound_speed, azimuth=ph, **par),
+                                    ti, ts, phi, slope, slope_nodes), ti, ts, phi, slope, shadowing)
 
 
 ROUGHNESS_MODELS = ("perturbation", "kirchhoff", "small_slope", "composite", "combined")
@@ -559,14 +658,17 @@ _warned_no_small_slope = False
 
 def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                        delta: float, w2: float, gamma2: float, azimuth=np.pi, roughness_model: str | None = None,
-                       small_scale_kh: float = 0.5, **_ignored):
+                       small_scale_kh: float = 0.5, shadowing: str | None = None, **_ignored):
     """Cross section per unit area and solid angle from interface roughness. `azimuth` is the
     angle between the horizontal directions of the incident and scattered waves: pi for
     backscatter, 0 for forward scatter. `roughness_model`: "small_slope" (the default,
     `DEFAULT_ROUGHNESS_MODEL`), "perturbation" (first order; the default before D-86),
     "kirchhoff", "composite" or "combined" (module docstring). The small-slope result needs a
     structure function, i.e. 2 < gamma2 < 4: outside that range, when no model is named, the
-    perturbation result is used and a warning says so once (naming "small_slope" raises)."""
+    perturbation result is used and a warning says so once (naming "small_slope" raises).
+    `shadowing` ("wagner" | "none"; None = the model's own default): Wagner's shadow function, carried by
+    "composite" and "combined" (default "wagner" there); the other models have
+    none, so naming "wagner" with them is an error."""
     global _warned_no_small_slope
     if roughness_model is None:
         roughness_model = DEFAULT_ROUGHNESS_MODEL
@@ -578,6 +680,9 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
                               "(name roughness_model to choose)", stacklevel=2)
                 _warned_no_small_slope = True
             roughness_model = "perturbation"
+    if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope"):
+        raise ValueError(f"shadowing {shadowing!r}: roughness_model {roughness_model!r} has no shadowing (it is carried by "
+                         "'composite' and 'combined')")
     args = (grazing_in, grazing_out, frequency, sound_speed)
     par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=azimuth)
     if roughness_model == "perturbation":
@@ -586,10 +691,11 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
         return kirchhoff_strength(*args, **par)
     if roughness_model == "small_slope":
         return small_slope_strength(*args, **par)
+    shade = {} if shadowing is None else {"shadowing": shadowing}
     if roughness_model == "composite":
-        return composite_strength(*args, small_scale_kh=small_scale_kh, **par)
+        return composite_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
     if roughness_model == "combined":
-        return combined_strength(*args, small_scale_kh=small_scale_kh, **par)
+        return combined_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
     raise ValueError(f"unknown roughness_model {roughness_model!r}; one of {ROUGHNESS_MODELS}")
 
 

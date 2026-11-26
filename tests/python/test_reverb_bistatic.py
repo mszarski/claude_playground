@@ -610,3 +610,34 @@ def test_scatterer_doppler_variance_closed_form_and_histogram():
     shift = -f / c * v @ (q + p)
     assert np.var(shift) == pytest.approx(scatterer_doppler_variance(f, c, q, p, s, sv), rel=0.01)   # 200000 draws: 0.3 % rms
     assert scatterer_doppler_variance(f, c, np.stack([a, q]), np.stack([a, p]), s, sv).shape == (2,)
+
+
+def test_composite_model_with_shadowing_is_used_at_the_bistatic_azimuth():
+    """The composite model with Wagner's bistatic shadow factor (C1 / C-W2 of the reference notes; the forward
+    and backward halves by the sign of cos(azimuth), ours) is evaluated at each cell's true angles and azimuth:
+    a patch's reverberation changes by the model's own ratio between that azimuth and backscatter."""
+    from gpusonar.sim import bottom
+    params = dict(bottom.sediment("medium_sand"), roughness_model="composite")
+    fn = lambda g_in, g_out, azimuth=np.pi: bottom.strength(g_in, g_out, F, C, azimuth=azimuth, **params)  # noqa: E731
+    back_only = lambda g_in, g_out: bottom.strength(g_in, g_out, F, C, **params)                             # noqa: E731
+    for where in ([75.0, 100.0], [100.0, -40.0], [40.0, 60.0]):
+        kw = dict(frequency=F, strength_map=patch_map(where, 1.0))
+        a = reverb_bistatic.directional_power(FreeFieldProvider(C), TX, RX, 0.0, TIMES, sectors(720), strength=fn, **kw)
+        b = reverb_bistatic.directional_power(FreeFieldProvider(C), TX, RX, 0.0, TIMES, sectors(720),
+                                              strength=back_only, **kw)
+        centre = np.array([where[0], where[1], 0.0])
+        g1 = np.arcsin(-TX[2] / np.linalg.norm(centre - TX))
+        g2 = np.arcsin(-RX[2] / np.linalg.norm(centre - RX))
+        to_cell, back = (centre - TX)[:2], (RX - centre)[:2]
+        azimuth = np.arccos(to_cell @ back / (np.linalg.norm(to_cell) * np.linalg.norm(back)))
+        expected = bottom.strength(g1, g2, F, C, azimuth=azimuth, **params) / bottom.strength(g1, g2, F, C, **params)
+        assert a["power"].sum() / b["power"].sum() == pytest.approx(float(expected), rel=0.01)
+    # The shadow factor itself is what the item adds: the same patch with shadowing "none" differs by it.
+    slope, _ = bottom.large_scale_slope(F, C, **bottom.sediment("medium_sand"))
+    g1, g2 = np.radians(8.0), np.radians(12.0)
+    for azimuth in (0.3, 2.5):
+        on = bottom.strength(g1, g2, F, C, azimuth=azimuth, **params)
+        off = bottom.strength(g1, g2, F, C, azimuth=azimuth, **dict(params, shadowing="none"))
+        rough_off = bottom.roughness_strength(g1, g2, F, C, azimuth=azimuth, **dict(params, shadowing="none"))
+        shade = bottom.wagner_bistatic_shadowing(g1, g2, azimuth, np.sqrt(2.0) * slope)
+        assert float(on) == pytest.approx(float(off - rough_off + rough_off * shade), rel=1e-12)
