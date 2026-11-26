@@ -1,0 +1,57 @@
+# popoto_far_mover with a Doppler-resolving ping (docs/tasks/DOPPLER.md, option C, packages D2 and D9): a 1 s
+# Hann-tapered tone at 8 kHz, then the scene's own 6-10 kHz sweep (1 s, Tukey 0.1), back to back in one 2 s ping.
+# Everything else is popoto_far_mover's (ownship 1.5 m/s, the ship at 6 km crossing at 6 m/s: range rate -0.99 m/s).
+# The baseline found the background here is noise, not reverberation (DOPPLER.md section 3.3 item 4): the tone's
+# higher margin is its 750 m cell gathering the ship's highlights and arrivals, not a Doppler gain.
+#
+# UNCONFIRMED, waiting on the owner (docs/tasks/DOPPLER.md section 5):
+#   - question 1: whether the projector can send a tone followed by a sweep in one ping, at what peak power and duty
+#     (assumed here: yes, no gap, a 2 s ping: twice the duty of popoto_far_mover's 1 s).
+#   - questions 1 and 3: the split of energy. The total is popoto_far_mover's sweep (185 dB rms, Tukey 0.1, 1 s =
+#     184.72 dB re 1 uPa^2 s at 1 m), half to each segment: the sweep has 3 dB LESS energy than in popoto_far_mover.
+#     The Hann tone sets the peak: derived source_level_db_rms 186.0 dB, 1.0 dB above 185.
+#   - question 2: the tone's length (1 s; 0.094 m/s of speed resolution at 8 kHz).
+# Like popoto_far_mover: needs GPUSONAR_BELLHOP; no Doppler spread of the sea surface (DOPPLER.md section 0 item 1).
+name: popoto_far_mover_doppler
+sonar: popoto_array
+fidelity: eigenray
+sonar_overrides:
+  array: {count: 32, pitch: 0.094}                   # half a wavelength at 8 kHz
+  transmit:
+    lever_arm: [0, 0, 1.0]
+    waveform:
+      type: sampled
+      source: train
+      f_start: 6.0e+3                     # the band the train occupies (the base sonar's is 20-35 kHz)
+      f_stop: 10.0e+3
+      source_level_db_rms: null           # derived from source_energy_db (sonar.py)
+      source_energy_db: 184.72            # dB re 1 uPa^2 s at 1 m: popoto_far_mover's sweep, all of it
+      segments:
+        - {kind: cw, frequency: 8.0e+3, duration: 1.0, window_alpha: 1.0, energy_share: 0.5}
+        - {kind: gap, duration: 0.0}
+        - {kind: lfm, f_start: 6.0e+3, f_stop: 10.0e+3, duration: 1.0, window_alpha: 0.1, energy_share: 0.5}
+  receive: {kind: baseband, sample_rate: 16.0e+3, window: {range: [5200.0, 6800.0]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  max_range: 7200
+  range_step: 25.0
+  depth_step: 2.0
+  max_arrivals: 32
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 12.0}
+scene:
+  - type: points
+    label: ship
+    positions: [[740.0, 6000.0, 4.0], [770.0, 6000.0, 4.0], [800.0, 6000.0, 4.0], [830.0, 6000.0, 4.0], [860.0, 6000.0, 4.0]]
+    target_strength_db: 18.0
+    velocity: [-6.0, 0.0, 0.0]
+reverberation:
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}
+seed: 41
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as in popoto_far_mover"

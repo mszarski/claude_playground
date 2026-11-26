@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 91 scenario files; the thirty-six named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 95 scenario files; the forty named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -989,10 +989,11 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 91 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 95 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Thirty-six files have no geometry diagram in `docs/scenarios/` yet: `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
+set. Forty files have no geometry diagram in `docs/scenarios/` yet: the four Doppler scenes of `sonar-u1fu` (the
+geometry of `flank_patrol`, `popoto_far_mover` and `popoto_12km`, whose diagrams apply), `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
 scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
 `popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
@@ -1084,6 +1085,8 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `flank_ridge_3d`, `flank_ridge_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A sill crossing the bearing at 45° (`bathymetry.ridge`), a target 5 km behind it: 3-D adds −0.2 dB; the twin is 1.9 dB louder for its own reasons. About 5 min (3-D), 1 min (twin). |
 | `flank_canyon_3d`, `flank_canyon_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A canyon along the look direction (a trough, `bathymetry.ridge` with negative height), a target 5 km down its axis: 3-D is 6.2 dB louder one-way than N × 2-D; the cross-slope warning does not flag it. About 4.5 min (3-D), 25 s (twin). |
 | `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km (−3 dB: below the scene's reverberation, never detected, left as a hard target on purpose, D-198), a wreck. Needs Bellhop. |
+| `flank_patrol_doppler` | `flank_patrol` with a Doppler-resolving ping (`docs/tasks/DOPPLER.md` option C, package D2): a 1 s Hann tone at 8 kHz, then the 6-10 kHz sweep, back to back (a 2 s ping); `flank_patrol`'s energy, half to each segment (`energy_share`), so the sweep has 3 dB less; the peak 1.1 dB higher (201.1 dB rms derived from `source_energy_db`). Everything unconfirmed about the transmitter waits on the owner (DOPPLER.md section 5, questions 1 to 3; the file's header). Measured (`tools/doppler_study.py`, two pings; ours): the small vehicle's tone with a Doppler bank 10.9 dB over its background (ceiling 36.3), the sweep at zero Doppler 6.4 dB (`flank_patrol`'s 7.0): the sweep's reverberation fills the tone's Doppler cells, so the tone gains 4.5 dB, not the 33 dB of a tone alone (DOPPLER.md, "D2 done"). Not in the gallery. Needs Bellhop. |
+| `flank_patrol_doppler_underway` | The same with the platform at 1.5 m/s along the array (the baseline's under-way case: the bottom's ridge on the small vehicle's beam at −0.62 m/s). Measured: tone with the bank 7.8 / 36.8 dB, sweep 7.3 dB (the same cause). Not in the gallery. Needs Bellhop. |
 | `flank_sst_shallow` | A target at 1 km in 100 m of water with time-spread bounce paths, sediment and surface reverberation and a volume layer; placeholders throughout. |
 | `flank_sst_spread` | The same channel with angle spreading, Doppler spreading within the pulse and convolved multi-bounce tails. |
 
@@ -1103,6 +1106,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | --- | --- |
 | `popoto_trial_100m`, `popoto_trial_1000m`, `popoto_trial_2000m` | Eight hydrophones, 190 dB, a +10 dB target at each range in shallow water. Needs Bellhop. `popoto_trial_1000m` is in the gallery. |
 | `popoto_far_mover` | Gallery. 32 hydrophones in the 6 to 10 kHz band against a ship-sized mover at 6 km, ownship at 1.5 m/s. Needs Bellhop. |
+| `popoto_far_mover_doppler` | `popoto_far_mover` with the train of `flank_patrol_doppler` (8 kHz Hann tone, then the 6-10 kHz sweep; half the energy each; peak 1.0 dB higher). The baseline found noise, not reverberation, behind the ship here. Measured: tone with the bank 47.9 / 51.7 dB, sweep 24.1 / 24.2 dB (`popoto_far_mover`'s 27.2 / 27.8: half the energy). Not in the gallery. Needs Bellhop. |
 
 ### The 12 km design (`popoto_long_range`: 4 to 6 kHz, 197 dB, 32 hydrophones a row)
 
@@ -1111,6 +1115,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_12km` | Gallery. A ship-sized mover (+25 dB, a placeholder) at 12 km in 100 m of isovelocity water over sand; one row. Needs Bellhop. Keeps arrivals by energy: 64, the cap (1.4 % of arrival energy left out, as a one-ping run at the tree of D-181 warns; this row said 1.5 % before; D-137). |
 | `popoto_12km_2row` | The same with two stacked rows on the face (outer rows 1.5 m apart); the ship 4 m deep. Needs Bellhop. |
 | `popoto_12km_3row` | The same with three rows. Needs Bellhop. |
+| `popoto_12km_doppler` | `popoto_12km` with a 1 s Hann tone at 5 kHz, then the 4-6 kHz sweep (half the energy each; peak 1.0 dB higher; the ping 2 s: twice the duty the projector is sized for, an owner question). The ship's radial speed is small (−0.50 m/s): the Doppler path is not expected to help, and the scene is there to show it. Measured: tone with the bank 33.2 / 28.8 dB, sweep 21.2 / 21.3 dB (`popoto_12km`'s 24.0 / 24.6). Not in the gallery. Needs Bellhop. |
 | `popoto_12km_two_ships` | `popoto_12km` with a second ship beyond the first, at one bearing and one velocity, 850 m apart in range: the test scene of echo grouping's reach (a group reaches no farther than one gate from its object, D-172). Needs Bellhop. |
 | `popoto_env_winter_sand_200m` | Gallery. The same ship at 8 km in winter water over sand (a surface duct). Needs Bellhop. |
 | `popoto_env_summer_mud_60m` | Gallery. At 4 km under a summer thermocline over mud: not detected. Needs Bellhop. |

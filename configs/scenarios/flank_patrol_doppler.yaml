@@ -1,0 +1,59 @@
+# flank_patrol with a Doppler-resolving ping (docs/tasks/DOPPLER.md, option C, package D2): a 1 s Hann-tapered
+# tone at 8 kHz, then the scene's own 6-10 kHz sweep (1 s, Tukey 0.05), back to back in one 2 s ping. Everything
+# else is flank_patrol's: the same water, platform (still), targets, reverberation, noise and seed.
+#
+# UNCONFIRMED, waiting on the owner (docs/tasks/DOPPLER.md section 5):
+#   - question 1: whether the projector and amplifier can send a tone followed by a sweep in one ping at all, at
+#     what peak power and duty. This file assumes yes, with no gap between them (`gap` 0 s) and a 2 s ping (twice
+#     flank_patrol's: twice the duty and a blind range of c (T1 + T2) / 2 = 1.5 km).
+#   - question 1 and 3: the split of energy. This file keeps flank_patrol's total energy (its sweep's: 200 dB rms,
+#     Tukey 0.05, 1 s = 199.86 dB re 1 uPa^2 s at 1 m) and gives each segment half (`energy_share` 0.5 / 0.5): the
+#     sweep therefore has 3 dB LESS energy than in flank_patrol, and every sweep margin that noise sets falls by
+#     about 3 dB. The peak this needs is set by the Hann tone: the derived source_level_db_rms is 201.1 dB, 1.1 dB
+#     above flank_patrol's 200 dB (the Hann taper carries 0.375 of a constant envelope's energy).
+#   - question 2: the tone's length (1 s: speed resolution c / (2 f T) = 0.094 m/s at 8 kHz) and question 3
+#     (stationary targets stay with the sweep).
+# Like flank_patrol: needs GPUSONAR_BELLHOP; the reverberation has the platform's Doppler only (still here), no
+# Doppler spread of the sea surface (docs/tasks/DOPPLER.md section 0 item 1).
+name: flank_patrol_doppler
+sonar: flank_32
+fidelity: eigenray
+sonar_overrides:
+  receive: {window: {range: [1800, 4200]}}
+  transmit:
+    waveform:
+      type: sampled
+      source: train
+      source_level_db_rms: null           # derived from source_energy_db (sonar.py): 201.1 dB, the train's peak
+      source_energy_db: 199.86            # dB re 1 uPa^2 s at 1 m: flank_patrol's sweep, all of it
+      segments:
+        - {kind: cw, frequency: 8.0e+3, duration: 1.0, window_alpha: 1.0, energy_share: 0.5}
+        - {kind: gap, duration: 0.0}
+        - {kind: lfm, f_start: 6.0e+3, f_stop: 10.0e+3, duration: 1.0, window_alpha: 0.05, energy_share: 0.5}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  max_range: 4500
+  range_step: 20.0
+  depth_step: 2.0
+  max_arrivals: 32
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 6, interval: 12.0}
+scene:
+  - type: points
+    label: submarine
+    positions: [[-628.0, 2900.0, 60.0], [-620.0, 2900.0, 60.0], [-612.0, 2900.0, 60.0], [-604.0, 2900.0, 60.0],
+                [-596.0, 2900.0, 60.0], [-588.0, 2900.0, 60.0], [-580.0, 2900.0, 60.0], [-572.0, 2900.0, 60.0]]
+    target_strength_db: 7.0
+    velocity: [3.0, 0.0, 0.0]
+  - {type: points, label: small_vehicle, positions: [[900.0, 2000.0, 40.0]], target_strength_db: -3.0, velocity: [0.82, 1.82, 0.0]}
+  - {type: points, label: wreck, positions: [[1500.0, 3270.0, 98.0]], target_strength_db: 12.0}
+reverberation:
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}
+seed: 17
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as in flank_patrol"

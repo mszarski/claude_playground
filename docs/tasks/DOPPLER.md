@@ -365,6 +365,9 @@ package, held by `tests/python/test_live_cpp.py`; an unknown key refused with th
 
 ### D2. A Doppler-resolving waveform in the transmit configuration and in scenes (simulator, opt-in)
 
+- **Done 2026-11-26** (branch `d2-train`): see "D2 done" at the end of this file, which also says what option C
+  as planned did NOT deliver (the sweep's reverberation fills the tone's Doppler cells).
+
 - **Goal.** Scenes with option C (a tapered CW followed by the scene's sweep in one ping) and, for comparison, a CW
   alone, so that the chain work (D3) has records to run on and the owner can see the trade.
 - **Files.** `python/gpusonar/sim/waveform.py`: a sampled source `train` (a list of segments, each `cw` with
@@ -576,3 +579,97 @@ background.
   wording (no schema change).
 - `flank_patrol`'s header says "reverberation has no Doppler spread": true of the scene (a still platform), but the
   simulator does have own-motion spread; no edit made (scenario files untouched).
+
+## D2 done (2026-11-26, branch `d2-train`): what was built and what it found
+
+Appended; nothing above was rewritten. Status of every number here: **ours** (simulated records, CPU, Bellhop,
+`tools/doppler_study.py`, one seed per scene; JSON in the run logs named below, not committed).
+
+**What got worse or did not work (first).**
+
+1. **Option C as planned (a tone at the band centre, then the sweep, in one ping) does not give the tone its Doppler
+   gain where the bottom reverberates.** The sweep's reverberation, from ranges c T / 2 nearer, arrives with the
+   tone's echo, is broadband (6-10 kHz) and fills every Doppler cell of the tone. On `flank_patrol_doppler` the
+   small vehicle's tone with the bank is at **10.9 dB** over its background (ceiling 36.3 dB), where the tone alone
+   of the baseline reached its ceiling (39.8 / 38.5 dB, section 3.2); under way **7.8 / 36.8 dB** (baseline 36.8 /
+   38.3). It is still above the train's sweep at zero Doppler (6.4 and 7.3 dB), but by 4.5 and 0.5 dB, not 33.
+   Controls on the static scene, small vehicle, two background pings: the sweep muted (`--mute 2`, the tone keeps
+   its half of the energy): **33.9 / 36.3 dB** (the tone back at its ceiling); the order reversed (sweep, then
+   tone): tone 17.7 / 34.8 dB and the sweep's zero-Doppler margin falls to 1.4 dB (the tone's reverberation now
+   lies under the sweep); **the tone moved outside the sweep's band (10.5 kHz, above 6-10 kHz): 37.7 / 34.4 dB**,
+   at its ceiling. So a tone and a sweep in one ping work only if the tone is outside the sweep's band (option D's
+   band split, sequential) or the two are in separate pings. This is a question for the owner (section 5 question
+   1: can the projector send a tone outside the sweep's band?), and changes what D3 can show on the shipped scenes.
+2. **Option E's comb helps the fade only a little** (item 3 below), and inside the sweep's band it meets the same
+   reverberation: a 4-tone comb (6.5, 7.5, 8.5, 9.5 kHz, Schroeder phases, the tone's half of the energy), each
+   tone's bank summed incoherently, gave the small vehicle **3.9 / 30.9 dB** on `flank_patrol_doppler` (single tone
+   10.9 / 36.3); with the sweep muted it reaches its ceiling, 31.1 / 30.9 dB, still 5.4 dB under the single tone's
+   ceiling at this geometry (2.2 km, 40 m), where the fade table below has the comb 5.3 dB under the tone.
+3. The tone's margins in the margin study scatter by about +-3 dB between runs: its background is a mean over a
+   1 s window of a filter about 1 Hz wide, about two independent values a ping, and the study takes two pings (the
+   baseline took six for the tone's reverberation, two for noise). The tests' tolerances say so.
+
+**The waveform** (`sim/waveform.py` `build_train`; keys in `docs/CONFIGURATION.md`): `transmit.waveform: {type:
+sampled, source: train, segments: [...]}` with `cw` (one `frequency` or several `frequencies` at once), `lfm`,
+`hfm` and `gap` segments, each with its Tukey `window_alpha`, and opt-in `energy_share` or `source_energy_db` per
+segment. Built as one sampled envelope, so the C++ host and CUDA kernel (`pair_sampled`) and the NumPy reference
+synthesise it unchanged; Doppler is the exact time scaling of the whole train; the record holds it as its replica
+(type Arbitrary; no field added). **Why a tone could not be a sampled pulse**: the envelope's sample rate is
+`oversample` x the stated band and the gain knots span that band, so `f_start == f_stop` gave a zero rate
+(`build_waveform` refuses it, as before for `source: lfm`); a train's tone takes f +- `tone_halfwidth_hz` (16 / T)
+as its band, or the sweep's band when there is one. No C++ was changed.
+
+**Energy accounting** (`sonar.py`): `source_level_db_rms` keeps its meaning (the peak of the envelope before the
+taper); the energy at 1 m is SL + 10 log10(integral |b|^2 du), measured on a free-field echo within 1e-3 dB.
+Opt-in `source_energy_db` states the energy and SL is derived. The four scenes keep their base scene's energy and
+give each segment half; the Hann tone then sets the peak: +1.1 dB (flank, 201.1 dB rms) and +1.0 dB (Popoto).
+
+**Measured** (tests in `tests/python/test_pulse_train.py`, `tests/python/test_doppler_scenes.py`):
+
+- one-segment train = today's sampled sweep, bit for bit (samples and record, both engines); one-tone train against
+  the analytic CW: 1.8e-6 relative rms (interpolation);
+- the train's envelope against its closed-form pieces: 1.4e-12 on its grid, 4.8e-6 of the peak between samples
+  (the default interpolator's own floor, 2.9e-6 for a single tone too);
+- engines: C++ against NumPy 6.0e-8 rms (worst sample 1.5e-7 of the peak) on a train with beams, absorption and
+  motion; on one thinned ping of each new scene 1.4e-8 to 1.1e-6 rms; CUDA: a gated test (not run here: no GPU);
+- Doppler: a target closing at 6 m/s: the echo is the train time-scaled by (c + v) / (c - v) to 5.7e-8; the tone's
+  peak at 8064.255 Hz against 8064.257 expected; the sweep segment's bank peaks at -6.0 m/s; the echo is the sum of
+  the pieces' echoes to 1.6e-16;
+- both live chains (unchanged) read train records and report the same detections.
+
+**The scenes against the baseline** (small vehicle / ship, two background pings, the baseline's bearing; margin /
+ceiling in dB; expected: ceilings -3.0 dB, noise-limited margins -3.0 dB, reverberation-limited margins unchanged):
+
+| Scene | Tone with the bank (baseline tone alone) | Sweep at zero Doppler (baseline) | |
+| --- | --- | --- | --- |
+| `flank_patrol_doppler` | 10.9 / 36.3 (39.8 / 38.5) | 6.4 / 28.3 (7.0 / 31.2) | tone: the sweep's reverberation (item 1) |
+| `flank_patrol_doppler_underway` (+2 m/s over ground: +1.38 m/s) | 7.8 / 36.8 (36.8 / 38.3) | 7.3 / 29.9 (8.8 / 32.8) | the same |
+| `popoto_far_mover_doppler` | 47.9 / 51.7 (49.4 / 51.5) | 24.1 / 24.2 (27.2 / 27.8) | noise-limited: as expected within the tone's scatter |
+| `popoto_12km_doppler` | 33.2 / 28.8 (34.7 / 34.1) | 21.2 / 21.3 (24.0 / 24.6) | the same |
+
+**The fade** (`tools/doppler_study.py fade`: target-only pings, the target moved along its bearing, four
+hydrophones, echo energy over transmitted energy per segment, the tone's against the sweep's):
+
+| Water, target | Geometries | Single tone minus sweep, dB: mean / min / max / std | 4-tone comb minus sweep |
+| --- | --- | --- | --- |
+| `flank_patrol_doppler` (Bellhop), small vehicle | 15: 1.8, 2.0, 2.2, 2.6, 3.0 km x 20, 40, 60 m | -1.9 / **-11.0** / +7.6 / 5.4 | -3.2 / **-9.3** / +2.4 / 3.8 |
+| `popoto_far_mover_doppler` (Bellhop), ship as one point at 4 m | 5: 5.8 to 6.6 km | -1.4 / **-8.6** / +6.2 / 5.3 | -3.1 / **-7.3** / +2.8 / 3.4 |
+| the same water, free field (check) | 2 | 0.0 (within 0.014) | 0.0 |
+
+The baseline's 18.9 dB was one image-source geometry; over these 20 Bellhop geometries the tone's worst is
+11.0 dB under the sweep, and the spread 18.7 dB. Option E (`frequencies`: four tones across the band, energy
+shared) narrows the spread to 11.7 dB and lifts the worst case by 1.3 to 1.7 dB, at a mean cost of 1.3 to 1.7 dB:
+cheap to configure (the key exists), small in effect, and inside the sweep's band it meets item 1. Not a fix.
+
+**What D3 can rely on**: a train record (type Arbitrary, the replica as sent, `f_start`/`f_stop` the train's
+band, `duration` the whole train) and the segment table from the sonar's configuration
+(`SonarModel.sampled_waveform.segments`: kind, start, duration, band, frequencies, taper, energy); a segment's
+replica at any range rate (`TrainSegment.signal`, as `tools/doppler_study.py` `segment_replica` uses it); exact
+Doppler on every segment on both engines. Not: a tone path free of the sweep's reverberation on these scenes (item 1).
+
+Runs (scratch, not committed): `tools/doppler_study.py margin <scene> --target <label> --pings 2 --bearing <deg>
+--vmax 3|4` per scene (the slow test, `GPUSONAR_DOPPLER_STUDY=1`, 42 min for the four); the controls with `--mute
+2`, a reversed-order and a tone-above-band copy of `flank_patrol_doppler`; `fade flank_patrol_doppler --target
+small_vehicle --ranges 1800 2000 2200 2600 3000 --depths 20 40 60 --comb 4 --channels 4`, the same with
+`--fidelity free_field`, and `fade popoto_far_mover_doppler --target ship --ranges 5800 6000 6200 6400 6600 --comb 4
+--channels 4`.

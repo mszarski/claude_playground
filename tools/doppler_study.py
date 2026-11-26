@@ -30,6 +30,12 @@ broadside, then 0.1 degree steps. The background is the clairvoyant mean of a se
 real detector estimates it from neighbouring cells (a CFAR), which costs a little more. The peak is one sample, as a
 detector's peak cell; the chain's cells (2 m) average a few samples.
 
+A pulse train (`source: train`, sim/waveform.py; the scenes `*_doppler`) is processed segment by segment: each tone
+or sweep has its own replica (the segment alone, from the sonar's segment table, time-scaled per hypothesis) and its
+own margins, all from the same pings (the record holds the whole train as its replica; the segment table is
+configuration). `--comb tones` processes each tone of a comb segment alone and sums their powers (incoherent
+combination, option E); the default `whole` correlates with the comb as sent.
+
 A third run, noise only (no scene, no reverberation, up to two pings), gives the same cells' margin against noise alone:
 the ceiling that perfect rejection of the reverberation would reach.
 
@@ -40,6 +46,14 @@ Examples (CPU, Bellhop for the eigenray scenes: GPUSONAR_BELLHOP):
   python3 tools/doppler_study.py reverb-spectrum --speed 3
   python3 tools/doppler_study.py margin flank_patrol --waveform cw --pings 6 --json out.json
   python3 tools/doppler_study.py margin flank_patrol --waveform cw --target small_vehicle --radial 0.25 0.5 1 2
+  python3 tools/doppler_study.py margin flank_patrol_doppler --target small_vehicle --bearing 23.5
+  python3 tools/doppler_study.py fade flank_patrol_doppler --target small_vehicle --ranges 1800 2200 2600 --depths 20 40 60
+
+  fade SCENARIO     The single-frequency fade (DOPPLER.md section 0 item 3): for a train scene, a target-only ping per
+                    geometry (the target moved along its bearing to each range and depth, its velocity kept) and per
+                    segment sent alone; the echo's energy (mean over the hydrophones) over the segment's transmitted
+                    energy, in dB, and each tone's against the sweep's. `--comb N` adds a comb of N tones across the
+                    sweep's band in place of the tone, with the tone's energy (option E).
 """
 from __future__ import annotations
 
@@ -114,6 +128,56 @@ def replica(waveform, fs, fc, range_rate=0.0, c=1500.0):
     return r / np.sqrt(np.sum(np.abs(r) ** 2))
 
 
+class Proc:
+    """What one processing path correlates with: the record's own analytic pulse, or one segment (or tone) of a train.
+    `replicas(fs, fc, v, c)` gives the unit-energy replica of each part whose powers are summed (one part unless a
+    comb is split into its tones); `offset` is the segment's start in the train (s)."""
+
+    def __init__(self, name, duration, is_cw, band, centre, parts, offset=0.0):
+        self.name, self.duration, self.is_cw, self.band, self.centre = name, float(duration), bool(is_cw), float(band), float(centre)
+        self.parts, self.offset = parts, float(offset)
+
+    def replicas(self, fs, fc, v, c):
+        return [part(fs, fc, v, c) for part in self.parts]
+
+
+def segment_replica(seg):
+    """The replica of one train segment (sim/waveform.py TrainSegment) at range rate v: the segment alone, time-scaled
+    by eta = (c - v) / (c + v), complex baseband about fc, unit energy."""
+    def make(fs, fc, v, c):
+        eta = (c - v) / (c + v)
+        t = np.arange(int(np.floor(seg.duration / eta * fs)) + 1) / fs
+        r = seg.signal(eta * t) * np.exp(-2j * np.pi * fc * t)
+        return r / np.sqrt(np.sum(np.abs(r) ** 2))
+    return make
+
+
+def processing_paths(record, sonar, comb="whole", segments=None):
+    """The paths to measure: the record's analytic pulse, or each sounding segment of a train."""
+    wf = record.transmit.waveform
+    train = getattr(getattr(sonar, "sampled_waveform", None), "segments", None)
+    if not train:
+        T = float(wf.duration)
+        band = abs(float(wf.f_stop) - float(wf.f_start))
+        return [Proc("pulse", T, int(wf.type) == 0, band if int(wf.type) != 0 else 1.0 / T,
+                     0.5 * (float(wf.f_start) + float(wf.f_stop)), [lambda fs, fc, v, c: replica(wf, fs, fc, v, c)])]
+    out = []
+    for seg in train:
+        if seg.kind == "gap" or (segments is not None and seg.index not in segments):
+            continue
+        is_cw = seg.kind == "cw"
+        band = 1.0 / seg.duration if is_cw else abs(seg.f_stop - seg.f_start)
+        centre = 0.5 * (seg.f_start + seg.f_stop)
+        name = f"{seg.index}:{seg.kind}" + (f"x{len(seg.frequencies)}" if is_cw and len(seg.frequencies) > 1 else "")
+        if is_cw and len(seg.frequencies) > 1 and comb == "tones":
+            parts = [segment_replica(seg.tone(k)) for k in range(len(seg.frequencies))]
+            name += ":tones"
+        else:
+            parts = [segment_replica(seg)]
+        out.append(Proc(name, seg.duration, is_cw, band, centre, parts, seg.start))
+    return out
+
+
 def correlate(y, r):
     """Matched-filter output z[k] = sum_m y[k + m] conj(r[m]) (time of the echo's start), by FFT."""
     n = len(y) + len(r)
@@ -126,6 +190,9 @@ def set_waveform(cfg, kind, sonar_cfg):
     """Replace the transmit waveform by a CW at the band centre with the scene's duration and pulse energy."""
     if kind == "scene":
         return cfg
+    if str(sonar_cfg["transmit"]["waveform"].get("source", "")).lower() == "train":
+        raise SystemExit("--waveform cw / cw_hann replace a scene's sweep; this scene sends a train: run it with "
+                         "--waveform scene (its segments are measured one by one), or compare on the scene it was made from")
     wf = dict(sonar_cfg["transmit"]["waveform"])
     over = cfg.setdefault("sonar_overrides", {}).setdefault("transmit", {}).setdefault("waveform", {})
     wf.update(over)
@@ -148,8 +215,27 @@ def scene_config(name, args):
     cfg = load_scenario_config(name, expand=False)
     if args.platform_speed is not None:
         cfg.setdefault("platform", {})["velocity"] = [float(args.platform_speed), 0.0, 0.0]
+    if getattr(args, "mute", None):
+        cfg = mute_segments(cfg, args.mute)
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
     cfg = set_waveform(cfg, args.waveform, sonar.config)
+    return cfg
+
+
+def mute_segments(cfg, indices):
+    """A train scene with segments `indices` replaced by silence of the same length: the others keep their timing and
+    their energy (with `energy_share`, the train's `source_energy_db` falls by the muted shares). The control for
+    what one segment does to another's background."""
+    wf = cfg["sonar_overrides"]["transmit"]["waveform"]
+    segs = [dict(sg) for sg in wf["segments"]]
+    shares = [float(sg.get("energy_share", 0.0)) for sg in segs]
+    for i in indices:
+        segs[i] = {"kind": "gap", "duration": segs[i]["duration"]}
+    wf = dict(wf, segments=segs)
+    if wf.get("source_energy_db") is not None and sum(shares) > 0.0:
+        kept = sum(sh for i, sh in enumerate(shares) if i not in indices)
+        wf["source_energy_db"] = float(wf["source_energy_db"]) + 10.0 * np.log10(kept / sum(shares))
+    cfg["sonar_overrides"]["transmit"]["waveform"] = wf
     return cfg
 
 
@@ -188,16 +274,18 @@ def run(cfg, pings):
     return run_scenario(cfg).records
 
 
-def hypotheses(waveform, fc, c, vmax):
+def hypotheses(duration, fc, c, vmax):
     """Range rates of the bank: a grid at half the speed resolution of a CW of the pulse's length, c / (2 f T), out to
     +-vmax, for either waveform (an LFM's bank shows how little a Doppler-tolerant pulse separates)."""
-    res = c / (2.0 * fc * float(waveform.duration))
+    res = c / (2.0 * fc * float(duration))
     k = int(np.ceil(vmax / (0.5 * res)))
     return np.arange(-k, k + 1) * 0.5 * res, res
 
 
 def margins(cfg, label, args, background, item_override=None, noise=None):
-    """Margin of one target (dB): zero-Doppler matched filter, and the Doppler bank's best cell, per waveform."""
+    """Margins of one target (dB): zero-Doppler matched filter, and the Doppler bank's best cell, for each processing
+    path (the pulse; or each segment of a train). Returns one dict per path."""
+    from gpusonar.sonar import SonarModel
     t0 = time.time()
     tcfg = copy.deepcopy(cfg)
     items = target_items(cfg, label) if item_override is None else [item_override]
@@ -209,30 +297,51 @@ def margins(cfg, label, args, background, item_override=None, noise=None):
     tcfg["receiver"] = rx
     rec_t = run(tcfg, 1)[0]
     x, fs, fc, c, start = baseband(rec_t)
-    wf = rec_t.transmit.waveform
-    # The target's beam: the strongest zero-Doppler output on a fine grid of bearings (from broadside).
-    r0 = replica(wf, fs, fc, 0.0, c)
-    best, bearing = -1.0, 0.0
-    for step, span in ((1.0, 80.0), (0.1, 1.0)):
-        centre = np.degrees(bearing)
-        for b in np.radians(np.arange(centre - span, centre + span + 1e-9, step)):
-            e = np.max(np.abs(correlate(beam(rec_t, x, fs, fc, b), r0)) ** 2)
-            if e > best:
-                best, bearing = e, b
+    sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
+    procs = processing_paths(rec_t, sonar, getattr(args, "comb", "whole"), getattr(args, "segments", None))
+    # The target's beam: the strongest zero-Doppler output on a fine grid of bearings (from broadside), through the
+    # sweep where there is one (its peak is sharp), or a bearing given.
+    if getattr(args, "bearing", None) is not None:
+        bearing = float(np.radians(args.bearing))
+    else:
+        search = next((p for p in procs if not p.is_cw), procs[0])
+        r0 = search.replicas(fs, fc, 0.0, c)
+        best, bearing = -1.0, 0.0
+        for step, span in ((1.0, 80.0), (0.1, 1.0)):
+            centre = np.degrees(bearing)
+            for b in np.radians(np.arange(centre - span, centre + span + 1e-9, step)):
+                yb = beam(rec_t, x, fs, fc, b)
+                e = np.max(sum(np.abs(correlate(yb, r)) ** 2 for r in r0))
+                if e > best:
+                    best, bearing = e, b
     yt = beam(rec_t, x, fs, fc, bearing)
-    rates, res = hypotheses(wf, fc, c, args.vmax)
-    reps = [replica(wf, fs, fc, v, c) for v in rates]
-    zt = np.array([np.abs(correlate(yt, r)) ** 2 for r in reps])
-    def cube(bb):
-        beams = [beam(rec_b, xb, fsb, fcb, bearing) for (xb, fsb, fcb, cb, sb), rec_b in zip(bb, background_records(bb))]
-        return np.array([[np.abs(correlate(yb, r)) ** 2 for r in reps] for yb in beams])     # [pings, hyp, n]
+    bg_beams = [beam(rec_b, xb, fsb, fcb, bearing) for (xb, fsb, fcb, cb, sb), rec_b in zip(background, background_records(background))]
+    nz_beams = ([beam(rec_b, xb, fsb, fcb, bearing) for (xb, fsb, fcb, cb, sb), rec_b in zip(noise, background_records(noise))]
+                if noise else None)
+    results = []
+    for proc in procs:
+        results.append(_proc_margins(proc, label, args, rec_t, yt, bg_beams, nz_beams, fs, fc, c, start, bearing))
+    for r in results:
+        r["seconds"] = time.time() - t0
+    return results
 
-    zb = cube(background)
-    zn = cube(noise) if noise else None
-    T = float(wf.duration)
-    half = (args.window * T) if int(wf.type) == 0 else 0.1
-    valid = len(yt) - len(r0)
-    i0 = int(np.argmax(zt[rates == 0.0][0][:valid]))
+
+def _proc_margins(proc, label, args, rec_t, yt, bg_beams, nz_beams, fs, fc, c, start, bearing):
+    rates, res = hypotheses(proc.duration, proc.centre, c, args.vmax)
+    reps = [proc.replicas(fs, fc, v, c) for v in rates]                    # [hyp][part]
+    z_len = len(reps[list(rates).index(0.0) if 0.0 in rates else 0][0])
+
+    def power(y, parts):
+        return sum(np.abs(correlate(y, r)) ** 2 for r in parts)
+
+    zt = np.array([power(yt, parts) for parts in reps])
+    zb = np.array([[power(yb, parts) for parts in reps] for yb in bg_beams])         # [pings, hyp, n]
+    zn = np.array([[power(yb, parts) for parts in reps] for yb in nz_beams]) if nz_beams else None
+    T = proc.duration
+    half = (args.window * T) if proc.is_cw else 0.1
+    valid = len(yt) - z_len
+    z0 = int(np.where(rates == 0.0)[0][0])
+    i0 = int(np.argmax(zt[z0][:valid]))
     k = np.argmax(zt[:, :valid].max(axis=1))
     i1 = int(np.argmax(zt[k, :valid]))
 
@@ -241,22 +350,20 @@ def margins(cfg, label, args, background, item_override=None, noise=None):
         lo, hi = max(0, i - int(half * fs)), min(valid, i + int(half * fs) + 1)
         return float(z[:, h, lo:hi].mean()), (hi - lo) / fs
 
-    z0 = int(np.where(rates == 0.0)[0][0])
     b0, span = bg(z0, i0)
     b1, _ = bg(k, i1)
     # The reverberation's own spread on this beam: where the background's power, as a function of hypothesis at the
     # target's delay, is within 10 dB of its peak.
     prof = np.array([bg(h, i1)[0] for h in range(len(rates))])
     near = rates[prof >= prof.max() / 10.0]
-    out = dict(label=label, bearing_deg=float(np.degrees(bearing)), waveform=args.waveform,
-               duration_s=T, carrier_hz=fc, range_m=float(0.5 * c * (start + i1 / fs)),
+    out = dict(label=label, segment=proc.name, bearing_deg=float(np.degrees(bearing)), waveform=args.waveform,
+               duration_s=T, carrier_hz=proc.centre, range_m=float(0.5 * c * (start + i1 / fs - proc.offset)),
                zero_doppler_margin_db=float(10 * np.log10(zt[z0, i0] / b0)),
                bank_margin_db=float(10 * np.log10(zt[k, i1] / b1)),
                bank_best_range_rate=float(rates[k]), speed_resolution_m_s=res,
-               range_resolution_m=(0.5 * c * T if int(wf.type) == 0 else 0.5 * c / abs(float(wf.f_stop) - float(wf.f_start))),
-               background_window_s=span, background_pings=len(background),
-               reverb_within_10db_of_peak_m_s=([float(near.min()), float(near.max())] if len(rates) > 1 else None),
-               seconds=time.time() - t0)
+               range_resolution_m=(0.5 * c * T if proc.is_cw else 0.5 * c / proc.band),
+               background_window_s=span, background_pings=len(bg_beams),
+               reverb_within_10db_of_peak_m_s=([float(near.min()), float(near.max())] if len(rates) > 1 else None))
     out["gain_db"] = out["bank_margin_db"] - out["zero_doppler_margin_db"]
     if zn is not None:
         # The same cells against noise alone (no reverberation): the ceiling a perfect reverberation rejection reaches.
@@ -281,9 +388,8 @@ def margins(cfg, label, args, background, item_override=None, noise=None):
     idx = np.where(keep)[0]
     a, b = lo + idx.min(), lo + idx.max() + 1
     width = (b - a) / fs
-    band = abs(float(wf.f_stop) - float(wf.f_start)) if int(wf.type) != 0 else 1.0 / T
     out["spread_90_s"] = float(width)
-    out["spread_cells"] = float(max(1.0, width * band))
+    out["spread_cells"] = float(max(1.0, width * proc.band))
     out["spread_energy_margin_db"] = float(10 * np.log10(zt[k, a:b].sum() / (b1 * (b - a))))
     return out
 
@@ -323,10 +429,10 @@ def cmd_margin(args):
             it = copy.deepcopy(item)
             if v is not None:
                 set_radial(it, plat.get("position", [0, 0, 0]), v)
-            m = margins(cfg, label, args, background, it, noise)
-            m["range_rate_m_s"], m["platform_part_m_s"] = radial_speed(it, plat)
-            results["targets"].append(m)
-            print(json.dumps({k: (round(val, 3) if isinstance(val, float) else val) for k, val in m.items()}), flush=True)
+            for m in margins(cfg, label, args, background, it, noise):
+                m["range_rate_m_s"], m["platform_part_m_s"] = radial_speed(it, plat)
+                results["targets"].append(m)
+                print(json.dumps({k: (round(val, 3) if isinstance(val, float) else val) for k, val in m.items()}), flush=True)
     if args.json:
         with open(args.json, "w") as f:
             json.dump(results, f, indent=1)
@@ -373,6 +479,103 @@ def cmd_reverb_spectrum(args):
     return out
 
 
+def _echo_over_transmit_db(record, sonar):
+    """10 log10(echo energy / transmitted energy) of a target-only record, in the record's own units: the echo's energy
+    averaged over the hydrophones (real passband: integral x^2; baseband: half of integral |x|^2) over the pulse's
+    (amplitude^2 / 2) integral |b|^2."""
+    from gpusonar import _gpusonar as core
+    s = record.samples
+    x = np.asarray(s.array)
+    e = (np.sum(np.abs(x) ** 2, axis=1) * (0.5 if s.kind == core.SampleKind.ComplexBaseband else 1.0)).mean() / s.sample_rate
+    a = float(record.transmit.waveform.amplitude)
+    return float(10.0 * np.log10(e / (0.5 * a * a * sonar.sampled_waveform.envelope_energy())))
+
+
+def cmd_fade(args):
+    """The tone's fade against the sweep, per geometry (docs/tasks/DOPPLER.md section 0 item 3), on a train scene."""
+    from gpusonar.sonar import SonarModel
+    cfg = scene_config(args.scenario, args)
+    if args.fidelity:
+        cfg["fidelity"] = args.fidelity
+        if args.fidelity == "free_field":
+            cfg.pop("propagation", None)
+    if args.channels:
+        # The energy is a mean over hydrophones: fewer of them change it by the array's own spread only.
+        cfg.setdefault("sonar_overrides", {}).setdefault("array", {})["count"] = int(args.channels)
+    sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
+    wf = sonar.waveform_config
+    train = getattr(sonar.sampled_waveform, "segments", None)
+    if not train:
+        raise SystemExit("fade: the scene must send a train (source: train)")
+    sounding = [sg for sg in train if sg.kind != "gap"]
+    sweep = next(sg for sg in sounding if sg.kind != "cw")
+    variants = {}
+    for sg in sounding:
+        segs = [{"kind": "gap", "duration": o.duration} for o in train]
+        if sg.kind == "cw":
+            segs[sg.index] = {"kind": "cw", "frequencies": list(sg.frequencies), "duration": sg.duration, "window_alpha": sg.window_alpha}
+        else:
+            segs[sg.index] = {"kind": sg.kind, "f_start": sg.f_start, "f_stop": sg.f_stop, "duration": sg.duration,
+                              "window_alpha": sg.window_alpha}
+        variants[f"{sg.index}:{sg.kind}" + (f"x{len(sg.frequencies)}" if len(sg.frequencies) > 1 else "")] = segs
+    tone = next((sg for sg in sounding if sg.kind == "cw"), None)
+    for n in (args.comb or []):
+        # Option E: N tones at once, at the centres of N equal parts of the sweep's band, in the tone's place.
+        lo, hi = sorted((sweep.f_start, sweep.f_stop))
+        freqs = [lo + (k + 0.5) * (hi - lo) / n for k in range(n)]
+        segs = [{"kind": "gap", "duration": o.duration} for o in train]
+        segs[tone.index] = {"kind": "cw", "frequencies": freqs, "duration": tone.duration, "window_alpha": tone.window_alpha}
+        variants[f"comb{n}"] = segs
+    item = target_items(cfg, args.target)[0]
+    plat = np.asarray(cfg.get("platform", {}).get("position", [0, 0, 0]), dtype=float)
+    centre = item_centre(item)
+    d = centre - plat
+    d[2] = 0.0
+    d /= np.linalg.norm(d)
+    rows = []
+    for r in (args.ranges or [float(np.hypot(*(centre - plat)[:2]))]):
+        for z in (args.depths or [float(centre[2])]):
+            pos = plat + d * float(r)
+            pos[2] = float(z)
+            it = copy.deepcopy(item)
+            it.pop("origin", None)
+            it["positions"] = [list(map(float, pos))]
+            row = dict(range_m=float(r), depth_m=float(z))
+            for name, segs in variants.items():
+                tcfg = copy.deepcopy(cfg)
+                tcfg["scene"] = [it]
+                tcfg["reverberation"] = []
+                rx = dict(tcfg.get("receiver", {}))
+                rx.pop("ambient_noise", None)
+                rx["noise_rms"] = 0.0
+                tcfg["receiver"] = rx
+                tx = {k: v for k, v in wf.items() if k not in ("segments", "source_energy_db")}
+                tx.update(segments=segs, f_start=float(wf["f_start"]), f_stop=float(wf["f_stop"]), normalise="none",
+                          source_energy_db=None, source_level_db_rms=float(wf["source_level_db_rms"]))
+                over = copy.deepcopy(tcfg.get("sonar_overrides", {}))
+                over.setdefault("transmit", {})["waveform"] = tx
+                tcfg["sonar_overrides"] = over
+                vs = SonarModel.load(tcfg["sonar"], over)
+                row[name] = _echo_over_transmit_db(run(tcfg, 1)[0], vs)
+            sweep_name = next(k for k in variants if k.endswith(sweep.kind))
+            for name in variants:
+                if name != sweep_name:
+                    row[f"{name}_minus_sweep_db"] = row[name] - row[sweep_name]
+            rows.append(row)
+            print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in row.items()}), flush=True)
+    out = dict(scenario=args.scenario, target=args.target, fidelity=cfg.get("fidelity"), rows=rows)
+    for key in rows[0]:
+        if key.endswith("_minus_sweep_db"):
+            vals = np.array([r[key] for r in rows])
+            out[key] = dict(mean=float(vals.mean()), min=float(vals.min()), max=float(vals.max()), spread=float(np.ptp(vals)),
+                            std=float(vals.std()))
+            print(key, json.dumps({k: round(v, 2) for k, v in out[key].items()}), flush=True)
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(out, f, indent=1)
+    return out
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__.split("\n\n", 1)[1])
@@ -393,11 +596,28 @@ def main(argv=None):
     m.add_argument("--pings", type=int, default=4, help="background pings, each a new draw (4)")
     m.add_argument("--window", type=float, default=0.5, help="background window, +- this many pulse lengths (CW; 0.5)")
     m.add_argument("--vmax", type=float, default=4.0, help="the bank's largest range rate, m/s (4)")
+    m.add_argument("--mute", type=int, nargs="*", help="a train's segments to replace by silence (a control; energies of the rest kept)")
+    m.add_argument("--bearing", type=float, help="the target's beam, degrees from broadside (default: searched)")
+    m.add_argument("--segments", type=int, nargs="*", help="a train's segments to measure, by index (default: every tone and sweep)")
+    m.add_argument("--comb", choices=("whole", "tones"), default="whole",
+                   help="a comb segment: correlate with it as sent (whole), or with each tone and sum the powers (tones)")
     m.add_argument("--json", help="write the results here")
+    fd = sub.add_parser("fade", help="a train's tone against its sweep: echo energy over transmitted energy per geometry")
+    fd.add_argument("scenario")
+    fd.add_argument("--target", required=True, help="the scene label to move")
+    fd.add_argument("--ranges", type=float, nargs="*", help="horizontal ranges from the platform along the target's bearing, m")
+    fd.add_argument("--depths", type=float, nargs="*", help="target depths, m")
+    fd.add_argument("--comb", type=int, nargs="*", help="also a comb of N tones across the sweep's band in the tone's place")
+    fd.add_argument("--channels", type=int, help="hydrophones to simulate (default: the scene's)")
+    fd.add_argument("--fidelity", help="replace the scene's propagation tier (e.g. free_field, the check that nothing fades)")
+    fd.add_argument("--json", help="write the results here")
     args = p.parse_args(argv)
+    args.waveform = getattr(args, "waveform", "scene")
+    args.platform_speed = getattr(args, "platform_speed", None)
+    args.mute = getattr(args, "mute", None)
     global MAX_RANGE_RATE
     MAX_RANGE_RATE = float(getattr(args, "vmax", 5.0)) + 1.0
-    return cmd_reverb_spectrum(args) if args.cmd == "reverb-spectrum" else cmd_margin(args)
+    return {"reverb-spectrum": cmd_reverb_spectrum, "margin": cmd_margin, "fade": cmd_fade}[args.cmd](args)
 
 
 if __name__ == "__main__":
