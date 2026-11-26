@@ -2,7 +2,7 @@
 
 Issue `sonar-gm8e` (feeds `sonar-3k1`, `sonar-9le`, `sonar-6fc`, `sonar-6t5`, `sonar-sul`, `sonar-64sm`,
 `sonar-5bf2`, `sonar-w2w3`). Written 2026-11-26 at commit `0e03c32` on branch `fix-jr`, from five reference
-notes. Read `docs/HANDOFF.md` section 2 (rules in force) first, then this file, then the note sections that a
+notes; extended the same day with two more surface notes ([FS], [BS]; packages G-31 to G-38). Read `docs/HANDOFF.md` section 2 (rules in force) first, then this file, then the note sections that a
 package names. "SST" is the sonar simulation toolset; APL-UW TR 0702 is its open description and
 `docs/figures/sst_validation.md` our comparison with it (its Table 6 row: "APLBottom, JacksonBottom,
 McDanielSurface ... cannot be checked"). TR 9407 is distribution-limited and is never read.
@@ -16,6 +16,11 @@ The notes, cited below by tag and section:
 | [N3] | `docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md` | Chs. 8-11, 15, Apps. F, G, (13.14), L.3 |
 | [N4] | `docs/references/jackson_richardson_2007/04_scattering_models.md` | Chs. 12-14, Apps. J-M |
 | [NS] | `docs/references/surface_papers_mcdaniel_dahl.md` | McDaniel (1993), Dahl and Plant (1997), Dahl et al. (1997) |
+| [FS] | `docs/references/surface_forward_scatter_dahl_1996_2004.md` | Dahl (1996), Dahl (2004): forward scatter, spatial coherence, angular spread |
+| [BS] | `docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md` | Dahl (1999) bistatic surface scattering; McDaniel (1986) diffractive corrections |
+
+Paper tags used inside those notes: [McD93], [D97], [DP97] are in [NS]; [D96] (Dahl 1996), [D04] (Dahl 2004)
+in [FS]; [D99] (Dahl 1999), [McD86] (McDaniel 1986) in [BS].
 
 Every number below is quoted from a note (tag and section) or from the repository (file named). Exposure
 counts come from reading the 80 files in `configs/scenarios/` at `0e03c32`. Where two notes, or a note and
@@ -36,7 +41,12 @@ the repository, disagree, it is said where the number is used and collected in s
 | W5 | Composite validity (13.78) not checked: sigma_sL < 0.1, theta < 70 deg, K_c below Bragg | medium sand 100 kHz sigma_sL 0.157; sandy gravel 0.178 / 0.367 at 30 / 100 kHz: "corrections suspect" | **0** | [N4 §3.1] |
 | W6 | Volume term isotropic in sigma_v | toward forward scatter (theta 20 deg, Fig. 14.3 inputs): ours 4 dB too high (rho_rk = -1) or 10.6 dB too low (rho_rk = 0) | **0** (the one bistatic item, in `sst_pursuit`, is a Chapman-Harris surface) | [N4 §3.6] |
 | W7 | `bubble_layer_surface` (`apl_1994`) at low wind, open ocean | 6 to 12 dB above every open-ocean data set at 2.6-6.4 m/s and 5-45 deg (0-3 dB at 60 deg); wind exponent U^3.8-4.1 against measured U^5.3-6.4 at 17 deg, 26.5-70 kHz | **0** (no scenario uses `bubble_layer_surface` or `kraus_surface`); D-193's `test_gallaudet_boundaries.py` | [NS §3], [NS §3.2] |
-| W8 | Facet term near normal incidence | 3.3-4.3 dB below Nuetzel's 20 kHz data at 82.5-88 deg (one data set, read from a figure) | **0** | [NS §3.1], [NS WP6] |
+| W8 | Facet term near normal incidence | 3.3-4.3 dB below Nuetzel's 20 kHz data at 82.5-88 deg (one data set, read from a figure); [McD86]'s correction, as [BS] reads it, lowers rather than raises the lobe there: not settled | **0** | [NS §3.1], [NS WP6], [BS §4] |
+| W9 | Forward-scatter (time-spreading) slope: `boundary_parameters` takes the total clean-surface Cox-Munk slope (0.003 + 0.00512 U) where the papers use the large-scale slope (waves longer than about 30 cm, K <= k/4; or about 1 m) | mss 1.4-2.2 times Dahl's eq. (A7) at 1.5-10 m/s; angular spread 1.2-1.5 times too wide against [D96] (1.5-2.6 times against [D99]); coherence lengths across the path 25-45 % short at five of six [D96] sets, 3 times short at 1.5 m/s; facet decay time 1.6-1.9 times (1.5 times at [D99] runs 2, 4); measured tails fall 4-10 dB faster than our facet rule at 5-14 ms after the pulse | **3** use `time_spread`: `flank_sst_shallow`, `flank_sst_spread` (6 m/s), `sst_asiaex` (3 m/s). The `reverb_specular` lobe uses the same slopes (`exclude_specular`: used by no scenario) | [FS §3, §3.2-§3.3, §5], [BS §3, §3.3] |
+| W10 | Vertical coherence of a surface bounce at low grazing (6-11 deg) | about 2 times too short in our facet model and in geometric optics; ASIAEX abs Gamma_V(0.30 m, 20 kHz) measured 0.57-0.69, ours 0.03-0.2 | `sst_asiaex` is the only shipped forward-scatter scene at such angles; no scene computes vertical coherence | [FS §3 item 4, §3.2] |
+| W11 | `bubble_layer_surface` does not attenuate its facet term by the bubble layer | -0.6 to -1.6 dB missing at 80-89 deg (30 kHz, 8-15 m/s), -1.2 to -3.2 dB at 68 kHz, 0 at 45 deg (with our `apl_1994` beta_I) | **0** (no scenario uses the model) | [BS §3.2, WP3] |
+| W12 | No surface model takes the bistatic angle: `chapman_harris_strength` and `bubble_layer_surface_strength` use the arithmetic mean grazing angle | against [D99]'s bistatic bubble form (13): +1.8 dB in the weak limit, up to +8.2 dB for very unequal angles at 12 m/s (5/80 deg); the geometric mean is closer by 0.3-5 dB, neither right | **1** bistatic surface item: `sst_pursuit` (Chapman-Harris; transmitter and receiver on one vehicle, so the two angles differ only on paths with a bottom leg) | [BS §3.2, §5] |
+| W13 | `sst_asiaex` against what [D04] prints for ASIAEX (East China Sea, 2001) | scenario: depths 30/50 m, 3 m/s (TR 0702's "4 m/s, but 3 m/s fits the tail better"); [D04]: source 25 m, VLAs at 26 and 52 m, about 467-500 m, water 105 m, U 7 +- 0.5 m/s, H 0.3 +- 0.1 m. **Whether TR 0702's "Run/Set 22" is [D04]'s data set is stated in neither source**, so "wrong" holds only if it is | **1**: `sst_asiaex` and the `sst_validation` rows built on it | [FS §2.6, WP5], `configs/scenarios/sst_asiaex.yaml` header |
 
 Uncertain, not shown wrong (owner decisions in section 3):
 
@@ -51,8 +61,11 @@ Uncertain, not shown wrong (owner decisions in section 3):
 | U7 | Constant delta (no causal dispersion) | +0.24 dB normal-incidence reflection and +2.1 deg critical angle per decade (sand); SAX99 data flat above 20 kHz | all fluid bottoms, small | [N1 §3.4] |
 | U8 | K texture: large-cell limit, no saturation for small cells, no correlation between cells or pings | structural, no dB figure | **0** reverberation items with K statistics (the three fjord scenarios use K only on ambient noise) | [N2 §3.4] |
 | U9 | Default Lambert -29 dB (D-89) | book mud and sand fits are -19.7 and -20.2 dB, 9 dB above the bare default at 10-140 kHz | **0** rely on the default: every Lambert item sets `mu_db` (-27 dB in 19 files; -30, -20, -35 in one each) | [N4 §4] |
+| U10 | `exclude_specular`'s facet lobe against the published (SSA) near-specular lobe | peak 2.9 dB below the SSA lobe (stand-in spectrum, 30 kHz, 4 m/s); over-removes 0.5-3.5 dB a few degrees off specular; integrated lobes differ by 0.64 dB | **0** (`exclude_specular` used by no scenario) | [BS §3.3, §3.5] |
+| U11 | beta_I (bubble optical depth) by site | `apl_1994` within [D96]'s 0.05-0.10 at 7-10 m/s (FLIP); 4.4-4.5 times [D04]'s East China Sea values at 7 m/s; 5.2 dB above [D99]'s upper bound 0.0012 at 30 kHz, about 4 m/s, which agrees with [D97] Table II within 0.7 dB | through `bubble_loss_db` in the time-spread scenes (`flank_sst_*` type `bubble_loss_db: 0.5`); `bubble_layer_surface` used by none | [FS §3.1], [BS §3.1, §3.2] |
+| U12 | The published monostatic and bistatic bubble forms do not join | [D99] (13) at backscatter is 1.76 dB below [D97] (17) in the weak limit, -1.3 dB at beta_I/sin theta 0.3, 0 at saturation | **0** | [BS §3 item 4, §3.2] |
 
-### 0.2 What the sources confirmed in our simulator (no change needed; G-1, G-2 pin them)
+### 0.2 What the sources confirmed in our simulator (no change needed; G-1, G-2, G-31 pin them)
 
 - Conventions: exp(-i w t) with Im k > 0, grazing angles, a_rho, nu_p, delta_p and its conversions (2.6),
   (8.18), (8.25)-(8.27) (dB per wavelength 40 pi / ln 10), sigma and S_b, reciprocity (2.18), energy bound
@@ -75,18 +88,37 @@ Uncertain, not shown wrong (owner decisions in section 3):
   0.1 dB of [D97] Table I; facet term = [McD93] eq. (7) to 1e-6 dB; Chapman-Harris formula identical to
   [McD93] eq. (27) (via secondary); optical-depth convention identical [NS §3.1].
 
+- Surface forward and bistatic scatter ([FS], [BS]): our facet lobe (`reverb_specular.facet_lobe`,
+  `surface.facet_backscatter`) equals the geometric-optics Kirchhoff term: [McD86]'s Q_L times 2 (the
+  [McD93] erratum) and J&R (13.62)/(13.63), to 5e-13 dB over 1990 random bistatic geometries, and it
+  integrates to sin theta_i (0.998 / 1.000 / 1.000 at 30 / 60 / 89 deg) [BS §3.1, §3.4];
+  `bottom.kirchhoff_strength` equals [D99] eq. (4) to under 0.001 dB at six geometries [BS §3.1];
+  `small_slope_strength` equals [D99] SSA(2) (5)-(6) algebraically (relative error 7e-16; not run through our
+  code for a pressure-release surface, it divides by rho) [BS §3.1]; the facet model's geometric scaling of the
+  angular spread is Dahl's: across-path spread sqrt(2 mss) sin g / (1 + RD/SD) = [D96] eq. (15) with q = sqrt 2
+  against the fitted 1.348 (+4.9 %), [D04] eqs. (7)-(9) including d*_HL = d*_H, [D99]'s sin theta_g / (1 +
+  RD/SD) [FS §3.1], [BS §3]; Rayleigh parameter and coherence-length definitions identical [FS §2.1]; delta =
+  0.0792 at 30 kHz ([D96] p. 754, [D99] p. 2159) [FS §3.1], [BS §3.1]; our bubble-crossing convention
+  (exp(-beta_I / sin theta) a crossing) equals [D99] eq. (12) and [D97] Sec. VI [BS §3.1]; total Cox-Munk mss at
+  4 m/s 0.0235 against [D99]'s blended-spectrum total 0.024 (2 %) [BS §3.1]; the facet decay rule fits measured
+  tails better than the rule of thumb (by 4 dB rms or more) [FS §3.3].
+
 ### 0.3 What the sources do NOT contain that we hoped for
 
 | Wanted | Result | Source |
 |---|---|---|
-| Kirchhoff / composite interpolation function (published APL-UW model) | not printed: "smooth interpolation" only (p. 349, Fig. 13.8); the book recommends small-slope as the single all-angle expression (p. 336), which is our D-66/D-86 choice. [McD93] prints none either | [N4 §2.7], [NS §2.2] |
+| Kirchhoff / composite interpolation function (published APL-UW model) | not printed: "smooth interpolation" only (p. 349, Fig. 13.8); the book recommends small-slope as the single all-angle expression (p. 336), which is our D-66/D-86 choice. [McD93] prints none either. For the surface, [D99] replaces it by SSA(2) and [McD86] by a corrected composite with a weak partition dependence (at most 2 dB) | [N4 §2.7], [NS §2.2], [BS §2.3, §2.7, §4] |
 | Empirical large-roughness law for gravel and rock | not printed; Lambert fits only; "no experiments ... on well-characterised gravel or rock" (p. 362) | [N4 §2.7] |
 | Williams-Jackson bistatic interpolation | not printed; the general bistatic cross sections are | [N4 §2.7] |
 | Layered-seafloor reflection recursion | not in Chs. 8-11; the book has (13.26) and (M.36)-(M.47), which need a layered V; the recursion in [N3 §2.2.9] is ours | [N3 §2.2.9], [N4 §2.3, §2.9] |
 | Measured K shapes for any seabed | none printed (figures only); only McDaniel's fitted L = 1 m, gamma = 1.5 | [N2 §2.6] |
 | Medium-sand volume parameter (D-90) | no named-sediment sigma_2 anywhere; typical range 0.0001-0.004 | [N1 §2.1], [N2 §3.3], [N4 §4] |
 | Anything for the sea surface above about 70 kHz | nothing: data end at 60 kHz ([McD93]) and 70 kHz ([D97]); the book is about the seafloor | [NS §1, §3.6], [N2 §4] |
-| A near-specular (forward) surface scattering model, coherent loss, time/angle spread | none in the three papers; candidate McDaniel (1986), not in hand | [NS §2.2, §4] |
+| A near-specular (forward) surface scattering model, coherent loss, time/angle spread | not in [McD93]/[D97]/[DP97]. Now: [McD86] read: a corrected composite for backscatter and specular forward scatter of a pressure-release Gaussian surface, high grazing only (no shadowing), no wind laws, no bubbles, no time or angle spread; [D99] gives a bistatic Kirchhoff/SSA(2) model at 30 kHz; [D96], [D99] give measured angle spreads, [D99] delay e-folds. **TR 0702's `McDanielSurface` is not [McD86]**: TR 0702 cites McDaniel, ARL Penn State TM 90-88 (1990), "Models for predicting bistatic surface scattering strength", not in hand | [BS §2.7, §4], [FS §4] |
+| A printed law of time spread (decay) and Doppler spread | not in [D96], [D04], [D99], [McD86]; the decays are two figures ([D96] Fig. 2, [D04] Fig. 3c) and four measured e-folds ([D99] p. 2165); the printed law would be in Dahl (2001), IEEE JOE 26, 141 (not supplied) | [FS §1, §4], [BS §4] |
+| A measured coherent fraction at low grazing; scintillation with numbers | none: all data at chi of order 4-13 or more, coherent part negligible; [D96] says one set is "approximately exponentially distributed" (SI about 1) and names focusing without numbers | [FS §3.1, §4], [BS §2.2] |
+| [D99]'s wave spectrum (buoy blended with Plant 1986) | only plotted (Fig. A2); every [D99] roughness-term number in [BS] uses a stand-in spectrum of the note's own | [BS §1, §3.3] |
+| Anything above the papers' frequencies | [D96] 20-40 kHz, [D04] 8 and 20 kHz, [D99] 30 kHz only, [McD86] 10 kHz with "very similar" results to 60 kHz: nothing above 60 kHz | [FS §2.2, §2.6], [BS §1] |
 | The handbook's G(U), Plant's spectrum, u*(U10), Cox-Munk constants | none printed | [NS §2.5, §2.8] |
 | Ping-to-ping coherence of reverberation | no formula; seabed decorrelation about 1 day (roughness) to 1 month (volume) | [N2 §2.6, §3.4] |
 | Mackenzie (1981) sound speed | not printed (Medwin and Del Grosso are) | [N1 §3.3] |
@@ -117,14 +149,24 @@ Uncertain, not shown wrong (owner decisions in section 3):
 | J&R p. 497 | (G.6)-(G.7) | "t - tau/2" on both bounds | upper bound "+" | [N3 §6] |
 | J&R App. G.2 | (G.13) | -2 alpha_p r_t | water absorption | consistent with exp(-4 k_w'' r_t) in (G.11) [N3 §2.9] |
 | J&R pp. 362-368 | (13.82) Wagner Q | pi^(+1/2) exp(-t^2) | pi^(-1/2)? | the usual Smith/Wagner form; 2-5 dB at 2 deg for rms slopes 0.05-0.35; **check Wagner (1967)** [N4 §6] |
-| J&R p. 546 | (L.34), (L.35) | Delta k^2/Delta k_z^2; 1/(2 pi norm B_s) | (13.62)-(13.63) forms | Ch. 13 versions consistent with (13.67), (13.70) [N4 §6] |
+| J&R p. 546 | (L.34), (L.35) | Delta k^2/Delta k_z^2; 1/(2 pi norm B_s) | (13.62)-(13.63) forms | **settled: (13.62)/(13.63) are right, (L.34)/(L.35) misprinted.** Checks: [McD86]'s Q_L with the [McD93] erratum equals (13.62)/(13.63) to 5e-13 dB; [D99] eq. (1) in the stationary-phase limit gives the same; (13.62) conserves energy, while (L.34)/(L.35) integrate to 97.9-98.1 times sin theta_i (s2 = 0.02) [BS §3.4]; also consistent with (13.67), (13.70) [N4 §6] |
 | J&R p. 323 | Sect. 12.1.1 sand bound | "5 phi < Mz <= 0 phi" | 0 < Mz < 5 | inverted [N4 §6] |
 | J&R p. 23 | seawater density | kg/m^2 | kg/m^3 | [N1 §6] |
 | [McD93] p. 1910 | eq. (22) | Omega = g K (1 + tau K^2) | Omega^2 | dimensions [NS §2.5] |
 | [McD93] p. 1910 | eq. (23), Gamma | exp[-(K/K_p)^(1/2)/(2 s^2)] | (sqrt(K/K_p) - 1)^2 in the exponent (Donelan) | probably; immaterial at Bragg wavenumbers [NS §2.5] |
 | [McD93] p. 1911 | eq. (24) range | 0.942 cm | 0.942 cm^-1 | [NS §6] |
 | [McD93] pp. 1918-1919 | Chapman-Harris | "Eq. (28)" | eq. (27) | no eq. (28) exists [NS §2.7] |
-| [McD93] p. 1921 (reference list) | McDaniel (1986) eq. (18) | as published | right side times 2 | erratum printed in the review's reference list [NS §2.2] |
+| [McD93] p. 1921 (reference list) | McDaniel (1986) eq. (18) | as published | right side times 2 | erratum printed in the review's reference list [NS §2.2]; **confirmed right**: without it Q_L is 3.01 dB low everywhere and half the reflected energy vanishes; [McD86]'s "factor of one-half" claim (Appendix) is what the erratum undoes [BS §3.4] |
+| [McD86] p. 955 | eq. (18), first exponential | exp(+(alpha + K_x)^2/(2 mu_x^2) - ...) | leading minus, as in eq. (14) | the integral would diverge [BS §6] |
+| [McD86] | eqs. (14), (18) limits | 0 to infinity in K_x and K_y | the full plane: four times the printed integral in-plane (the note's derivation) | the erratum restores Q_L, not by itself this factor; unresolved [BS §6] |
+| [D96] p. 751 | eq. (17), bubble attenuation of the specular term | exp[-2 (beta_I/sin theta_i + beta_I/sin theta_s)] | exp[-(beta_I/sin theta_i + beta_I/sin theta_s)] | eq. (18) of the same paper needs one crossing = exp(-beta_I/sin theta) [FS §2.1]; [D99] states that [D96]'s equation (cited as eq. (12)) was "printed with an error" and prints the single form as its eq. (12) [BS §2.3]. Size: 4.18 against 2.09 dB a bounce at beta_I 0.05, 12 deg [FS §2.1] |
+| [D96] p. 750 | text after eq. (5) | kappa "equals k sqrt(alpha^2 + beta^2)", called the transverse component of (k_i - k_s) | that component is 2 k sqrt(...); with J0(2 kappa rho) the formula is consistent | [FS §2.3, §6] |
+| [D04] p. 594 | bubble estimate | "Equation (5) of Ref. 18" (Plant 2002, a microwave model) | probably Ref. 17 (Dahl 2003, bubbles) | [FS §6] |
+| [D04] | ASIAEX range | 467 m (Fig. 4), 497 m (Sec. IV.C), "nominal 500 m" | 467 m reproduces the printed 9.4 deg angle | [FS §6] (an inconsistency, not proven a misprint) |
+| [D99] p. 2156 | eq. (3) text | (k_i - k_s)/k | (k_i - k_s)/(2k): the printed components carry the 1/2 | [BS §2.1, §6] |
+| [D99] App. B | E(Delta_i Delta_s) | s_L^2 cos(phi_b) | s_L^2 cos(phi_b)/2; eq. (10) itself is right (Monte Carlo of (B1)) | [BS §6] |
+| [D99] | eq. (14) | H^2 nabla^2 C(0) = int K^3 F dK | a minus sign (nabla^2 C < 0 at the origin) | [BS §6] |
+| [D99] App. A | (A3), last branch | 10^(-0.4 + 0.8393 exp[log_e((omega/omega_p)^2)]) | jumps from 1.23 to 56 at 1.6; the -0.567 factor of Banner's form is from memory, **unconfirmed**; the print is wrong either way | [BS §2.4, §6] |
 
 ### 0.5 Where the notes contradict each other or the repository
 
@@ -139,6 +181,13 @@ Uncertain, not shown wrong (owner decisions in section 3):
 | C7 | How much of the book's tables may be carried in tests | [N2 WP-3], [N2 §5]: never tabulate Table 6.1 or C.1; "a test may carry three or four rows". [N4 WP-10]: encode Table 13.1 (8 rows) and Table 14.1 (5 rows) as a test-data file | owner decision 11 |
 | C8 | Rock properties, p. 169 | [N1 §2.7] confirmed on the page image; [N3 §2.3] from extracted text only | use [N1]'s reading |
 | C9 | Cut-off attribution | `docs/REFERENCES.md` 3.2 credits the k h_s = 1/2 split to Fonseca 2025 / Novarini-Caruthers; the book attributes it to D. Jackson et al. 1986a | add the attribution (section 5) |
+| C10 | Citation of Dahl (1996) | `docs/REFERENCES.md` Sec. 10 gives "J. Acoust. Soc. Am. 100, 2742 (1996)"; the forward-scatter paper read is 100 (2), Pt. 1, **748-758** [FS] top. [D99] cites a second 1996 Dahl paper, JASA 100, 2840 (low-grazing backscatter, its ref. 21) [BS §2.3]; 2742 matches neither (not checked further) | correct the row (section 5) |
+| C11 | Is McDaniel (1986) TR 0702's near-specular model? | [NS] (finding 7 and §4, §6) named it the candidate, and so did this plan's first version (0.3, section 4); [BS §4]: read, it is not: TR 0702 cites ARL-PSU TM 90-88, and [McD86] lacks the wind laws `McDanielSurface` computes | [BS] supersedes; TM 90-88 wanted (section 4) |
+| C12 | The decay-time rule (STATUS item 27 "not settled by any data set") | [FS §3.3]: two measured decays reject the rule of thumb by 8-16 dB and show the facet default 4-10 dB too long; the remedy is the large-scale slope plus exact Kirchhoff geometry (GO within 1.7 dB at 52 m). [BS §3.3]: with Cox-Munk the facet e-fold is right for [D99] run 3, 1.5 times too long for runs 2 and 4, 6 times too long for run 1; no single slope fits the four runs, because the late decay belongs to the Bragg-scale waves (run 2 needs K to 500 rad/m), which a facet model lacks | both agree the default is too long in most cases; they differ on whether a slope change suffices. Not picked: G-32, G-33 test both |
+| C13 | The large-scale slope | [FS]: Dahl's (A7) s_L^2 = 0.0046 ln(2.1 U^2): 0.0141 at 3.2 m/s, 0.0182 at 5 m/s, 0.0221 at 7.6 m/s [FS WP2]; it reproduces [D96]'s coherence and gives S_L 0.146 at 7 m/s, equal to [D04]'s (Dahl 2001) value [FS §2.6]. [D99] itself prints s_L^2 = 0.017 (K_sep = 0.25 k) at about 4 m/s [BS §2.4]: between (A7)'s 3.2 and 5 m/s values, so **these two agree**. [BS §3]'s "waves longer than about 1 m, mss 0.008 to 0.011", read from [D99]'s visibility boundary and from its measured angle spreads (0.0081-0.0106 implied for runs 2-4; 0.0013 for run 1), is **about half of both** | they do not all agree: two prints agree near 0.016-0.017 at 4 m/s; [D99]'s measured angle spreads imply roughly half. Not picked; G-32 offers both, owner decision 14 |
+| C14 | Bubble attenuation, factor 2 | [FS §2.1]: [D96] eq. (17) twice our exponent, "the paper does not say which"; [BS §2.3]: [D99] says the 1996 equation was printed with an error (numbering it eq. 12; [FS] identifies eq. 17) | settled for our convention (0.4); G-31 records it |
+| C15 | D-193 numbers with a published bubble law | G-7's tests (in progress) use [D97] (17): -44.1 / -43.4 dB at 27-38 / 44-66 deg [NS §3.4]; with [D99]'s bistatic form (13) at backscatter and [D97] beta_I: -46.2 / -45.2 dB, 3.7 dB below Gallaudet at 44-66 deg [BS §3.2] | not a conflict in G-7 (it implements [D97]); recorded for G-35 |
+| C16 | [D04]'s model "not reproducible" | [FS §1, §6]: the small-slope formulas are in Dahl (1999), not supplied; now read ([BS §2.3]), but [D99]'s wave spectrum is only plotted, so the model curves still cannot be reproduced exactly | G-37 |
 
 ---
 
@@ -460,18 +509,119 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - From [N3 WP8]; (10.66)-(10.69). Printed 20 kHz numbers: fast 1763 m/s, 7.0 dB/m; slow 141 m/s, 852 dB/m [N3 §2.4].
   Not for the runtime.
 
+### G-31 Pin the forward-scatter and bistatic identities; record the gaps — RECORD ONLY, S (extends G-2)
+- Gap: confirmations of 0.2 (surface forward and bistatic) and gaps W9, W10 held by tests. Merges [FS WP1],
+  [FS WP4] and [BS WP1]. G-2 is being implemented now and is not changed: this is a separate package with its
+  own test files.
+- Tests first (new `tests/python/test_forward_scatter_dahl.py` and `tests/python/test_surface_bistatic_papers.py`):
+  our closed-form across-path spread equals [D96] eq. (15) with q = sqrt 2, and with the fitted slopes s_LA
+  reproduces Table I kd*/(2 pi) within 20 % at all six sets (computed 0-19 %); the provider's Monte Carlo within
+  12 % of the closed form at the six geometries; an **xfail** recording that the wind law gives kd*/(2 pi) 21-67 %
+  below Table I; [D96] Fig. 2 readings against `facet_delay_density` convolved with 4 ms: facet beats the rule of
+  thumb by >= 4 dB rms (computed 6.9 against 11.3 dB with Cox-Munk); an **xfail** for ASIAEX vertical coherence
+  (abs Gamma_V(0.30 m) >= 0.5 at 52 m, 20 kHz; measured 0.69) [FS WP1]; `bubble_damping_constant(30e3)` = 0.0792;
+  `kirchhoff_strength / |V|^2` = [D99] eq. (4) (six geometries, 0.01 dB); `facet_lobe` = [McD86] Q_L x 2 with
+  <(n.k')^2> = |q|^4/(4 q_z^2) (1e-9 relative) and its energy integral sin theta_i within 1 % at 30-89 deg, with a
+  note that the 1986 print is 3.01 dB low; a test-local [D99] eq. (13) in its limits (theta_i = theta_s; weak limit
+  beta_I delta_r/(pi delta); ratio to `bubble_backscatter` -1.76 dB at beta_I/sin theta = 1e-3) [BS WP1]; our
+  per-bounce loss = exp(-2 beta_I/sin g), and `bubble_backscatter`'s bracket = the path-by-path reconstruction of
+  [D96] eq. (18) in the monostatic limit [FS WP4].
+- Files: the two test files. The `surface.py` note that [D96] eq. (17) prints twice the exponent waits until G-7
+  (same file) has merged. Proposed text for `REFERENCES.md` (section 5), for [N4 §6] on (L.34)/(L.35) and for
+  [NS]'s finding 7 (in the report; this plan does not edit the notes).
+- Engines: none (Python strengths and providers; `TimeSpreadProvider` is Python). Exposure: none. Size S.
+
+### G-32 Large-scale (near-specular) slope law for time and angle spreading — OPT-IN, S-M
+- Gap W9 (and STATUS item 27). Merges [FS WP2] (`slope_law: phillips_slick`, s_L^2 = 0.0046 ln(2.1 U^2),
+  [D96] eq. (A7), clamped below at the 1.5 m/s value with a warning: negative below 0.69 m/s) and [BS WP4]
+  (`surface.lobe_slope`: a number in config, e.g. 0.0086 at 4 m/s, derived by [BS] from [D99], or computed from a
+  wave spectrum as the slope variance of waves longer than the visibility scale; ours). One package because both
+  replace the same slope in the same place; the two values disagree (C13): offer both, choose none.
+- Files: `sim/timespread.py` (`boundary_parameters`; the decay time, delay shape and `angle_spread`),
+  `acoustics.py` (new `large_scale_mean_square_slope`; G-2 edits a docstring in the same file: start after G-2
+  has merged), `docs/PHYSICS_NOTES.md` Sec. 16. Do not change `acoustics.mean_square_slope` itself (backscatter
+  and other users depend on it) [FS WP2].
+- Tests first: (A7) at 1.5 / 3.2 / 5 / 7.6 m/s = 0.0071 / 0.0141 / 0.0182 / 0.0221; [D96] Table I kd* within 20 %
+  at sets 1-3, 5A, 5B [FS WP2]; [D99] runs 2-4 horizontal rms arrival angle within 25 % of 0.76 / 1.87 / 0.82 deg
+  with the option, and the Cox-Munk values 1.29 / 2.78 / 1.21 deg as an expected-difference test; late e-fold
+  0.21 ms +-30 % for runs 2 and 4; runs 1 (0.03 ms) and 3 (0.31 ms) recorded as not reproduced by a facet model
+  [BS WP4]. Default unchanged, bit-identical.
+- Before -> after if made the default (owner decision 14): at 6 m/s (`flank_sst_shallow`, `flank_sst_spread`)
+  mss 0.0337 -> 0.0199, facet decay time x0.59, angular spread x0.77, coherence length x1.30; at 3 m/s
+  (`sst_asiaex`) 0.0184 -> 0.0135, x0.74 [FS WP2]. To prepare: the fitted decay times and record changes of the
+  three scenarios [BS WP4].
+- Engines: Python only. Must not: tune the slope to one figure or to [D99]'s four runs; change the default.
+
+### G-33 Exact Kirchhoff (geometric-optics) tail and angles: `decay_time: kirchhoff_go` — OPT-IN, M-L
+- Gap W9's tail (second-order facet geometry overstates the mean delay 1.4-1.6 times at 9-12 deg [FS §3 item 3]).
+  From [FS WP3]: integrate [D96] eqs. (4), (9), (10) over the surface for each bounce, intensity
+  sigma_geo/(R_i^2 R_s^2), delay R_i + R_s - specular; tabulate in (grazing, r1/(r1 + r2), mss, lever).
+- Files: `sim/timespread.py` (shape and angle sampler), docs. Tests first: [D96] eq. (13) energy closure within
+  0.25 dB; GO mean delay converges to the facet form at steep grazing; [D04] Fig. 3c (52 m) within 2 dB rms
+  (computed 1.0); [D96] Fig. 2 within 3.5 dB rms (computed 2.9); Table I kd* within 20 % [FS WP3].
+- Depends on G-32. [BS §3.3]'s finding that the late tail needs the Bragg-scale waves (C12) limits what a GO tail
+  can do: record runs 1 and 3 of [D99] as not reproduced. Default facet stays.
+
+### G-34 Bubble attenuation of the facet term in `bubble_layer_surface` — OWNER FIRST, S
+- Gap W11. From [BS WP3]; [D97] Sec. VI and [D99] (11)-(12): facet x exp(-2 beta_I / sin theta) in backscatter.
+- Files: `sim/surface.py` (after G-7 has merged: same file), a test file.
+- Tests first: the facet-attenuation table of [BS §3.2] (e.g. 30 kHz, 80 deg: -0.60 / -0.85 / -1.13 / -1.59 dB at
+  8 / 10 / 12 / 15 m/s; 68 kHz, 80 deg: -1.20 / -1.70 / -2.25 / -3.17); no change at or below 45 deg.
+- Before -> after: as in the test; no shipped scenario. To prepare: whether D-193's 44-66 deg band in
+  `test_gallaudet_boundaries.py` moves at 68 kHz, 3 m/s (the note tabulates 8-15 m/s only). [BS WP3] calls it a
+  fix to be documented in a D-entry once the owner agrees.
+
+### G-35 Bistatic bubble surface term ([D99] eqs. 11-13) — OPT-IN, M
+- Gap W12. From [BS WP2]: sigma = facet(g_in, g_out, azimuth) x alpha_b (12) + sigma_b (13), the facet being
+  `reverb_specular.facet_lobe` (equal to `facet_backscatter` at azimuth pi: test).
+- Files: `sim/surface.py` (a `bistatic: true` option or a model key `bubble_layer_bistatic`), `sim/simulator.py`
+  (accept the key; shared file, minimal). Engines: the surface strengths have no C++ twin (section 1 note); the
+  live chain does not use them.
+- Tests first: the G-31 limits; the [BS §3.2] bistatic rows at 30 kHz to 0.05 dB with the same beta_I;
+  `takes_azimuth` true; symmetry in (g_in, g_out); the facet part integrates to |R|^2 alpha_b sin theta_i.
+- Before -> after if it became the bistatic default (owner decision 17): 5/40 deg, 8 m/s, 30 kHz, [D97] beta_I:
+  bubble part -23.8 -> -27.6 dB [BS WP2]. Exposure: `sst_pursuit`'s bistatic item is Chapman-Harris and is not
+  touched unless switched. Depends on G-34 (same file; G-34 first).
+
+### G-36 The ASIAEX scenario's facts: prepare the decision — OWNER FIRST, S
+- Gap W13. From [FS WP5]. No code. Prepare: what changes in `sst_asiaex` if set to [D04]'s printed geometry
+  (source 25 m; receivers 26 and 52 m; 467 m, the range that reproduces the printed 9.4 deg; water 105 m; 8 and
+  20 kHz; 3 ms CW; U 7 m/s; H 0.3 m); which `sst_validation` rows and tests move. State plainly that neither TR
+  0702 nor [D04] says TR 0702's Set 22 is this data set. Must not: change the scenario before the owner answers.
+
+### G-37 SSA(2) surface strength with a wave spectrum; vertical coherence at low grazing — OPT-IN, M-L (blocked in part)
+- Gaps W10, U10, and the bistatic roughness part of `sonar-9le`. Merges [BS WP5] and [FS WP6] (both need [D99]'s
+  SSA(2) and a spectrum). Formulas [D99] (1), (4)-(7), (9)-(10), (11)-(13) [BS §2.3]; harness: the vCZT [D04]
+  eq. (1) [FS §2.5].
+- Blocked: [D99]'s spectrum is only plotted; Plant (1986) must be opened before any test against [D99]'s or
+  [D04]'s model curves. A stand-in (Pierson-Moskowitz plus a K^-4 range) is ours.
+- Files: `sim/surface.py` or a new module; reuse `bottom.small_slope_strength` numerics only if they can take a
+  tabulated spectrum and a pressure-release boundary (they divide by rho) [BS WP5].
+- Tests first: the g identity; small-chi limit = (7); specular limit = (1); Kirchhoff energy 1.00 +- 0.01 at 14
+  and 30 deg (stand-in); SSA energy 0.83-0.91 recorded [BS §3.3]; the ASIAEX xfail of G-31 turned into a pass
+  only with the paper's spectrum. Figure levels only at +-2 dB. Not a default.
+
+### G-38 `sst_validation` matrix wording — RECORD ONLY, S
+- From [BS WP6]. `docs/figures/sst_validation.md` rows Sec. 6.4.2 and 12.2-12.5: [McD86] read, not TR 0702's
+  `McDanielSurface` (TR 0702 cites ARL-PSU TM 90-88, not available); [D99]'s published bistatic bubble law is
+  closer to the geometric-mean rule than to our mean-angle rule (W12). Docs only; no exposure.
+
 ### Counts
 
 | Flag | Packages | Count |
 |---|---|---|
-| RECORD ONLY | G-1, G-2, G-22, G-25 | 4 |
-| OWNER FIRST | G-3, G-5, G-8, G-21 | 4 |
-| OPT-IN | G-4, G-6, G-7, G-9 to G-20, G-23, G-24, G-26 to G-30 | 22 |
+| RECORD ONLY | G-1, G-2, G-22, G-25, G-31, G-38 | 6 |
+| OWNER FIRST | G-3, G-5, G-8, G-21, G-34, G-36 | 6 |
+| OPT-IN | G-4, G-6, G-7, G-9 to G-20, G-23, G-24, G-26 to G-30, G-32, G-33, G-35, G-37 | 26 |
 
 Merged from about 37 note packages: [N1] WP-A..G (7), [N2] WP-1..6 (6), [N3] WP1..8 (8), [N4] WP-1..10 (10),
 [NS] WP1..7 (7). Merges: G-1 (N1 §3.5 + N2 WP-2 + N4 WP-1, WP-7, WP-9), G-4 (N1 WP-C + N3 WP4), G-6 (N1 WP-A +
 N3 WP5), G-9 (N1 WP-E + N3 WP6), G-14 (N3 WP7 + N4 WP-5), G-15 (N2 WP-4 + N4 WP-4), G-26 (N4 WP-8 + N1 WP-G
 gassy), G-27 (N2 WP-5 + N1 WP-G ripples).
+The two later notes' twelve packages ([FS] WP1-WP6, [BS] WP1-WP6) became eight: G-31 (FS WP1 + FS WP4 + BS WP1),
+G-32 (FS WP2 + BS WP4), G-33 (FS WP3), G-34 (BS WP3), G-35 (BS WP2), G-36 (FS WP5), G-37 (FS WP6 + BS WP5),
+G-38 (BS WP6). [NS WP6]'s near-normal facet gap (G-22) is related to [BS §4]'s reading of [McD86] but stays
+separate (G-22 records a gap; nothing here closes it).
 
 ### Must not, across all packages
 
@@ -484,6 +634,10 @@ gassy), G-27 (N2 WP-5 + N1 WP-G ripples).
   book's figures; tabulate Table 6.1 or C.1 in the repository.
 - Call the TR 9407 relations "geoacoustic regressions"; describe our layered recursion as the book's.
 - Give a row a shear speed without a source.
+- Change `mean_square_slope`, `decay_time`, the bubble convention, the mean-angle rule, the facet attenuation or
+  `extinction` by default; fit a slope or beta_I to one figure or one run; use figure readings at a tolerance
+  tighter than +-1 dB ([FS]) or +-2 dB ([BS] scans) [FS §5], [BS §5].
+- Follow [D96] eq. (17)'s doubled exponent, (L.34)/(L.35), or [McD86] eq. (18) as printed (0.4).
 
 ---
 
@@ -502,9 +656,21 @@ parallel (shared file `sim/simulator.py` touched only by G-7, minimally).
 | 6 | G-5 Mud volume parameter table | the largest class-default question (about 5 dB, U1, on the 7 rows from 5.5 to 9 phi [N3 §3.2]) needs only numbers | none (scratch script; numbers in the report) |
 | 7 | G-9 Estimators and fit priors | `sonar-sul` (P1) needs error bars and bounds before any real data | `tools/fit_sediment.py`, `sim/sediment_fit.py`, `tests/python/test_sediment_fit.py` |
 
-Second wave (after the first lands): G-4 (after G-3: same files `propagation.py`, `paths.cpp`), G-8 (decision
-prep, any time), G-10, G-11's warning part, G-12, G-18. Then G-13 (after G-3), G-15, G-14, G-16 (after G-11),
-G-17 (after G-4), G-19, G-20 (after G-7), the rest.
+### Second wave (after the first wave, now in progress, has merged)
+
+| Order | Package | Waits for | Can run in parallel with |
+|---|---|---|---|
+| 1 | G-31 forward-scatter and bistatic identities (RECORD ONLY) | nothing (own test files); its `surface.py` comment after G-7 | all below |
+| 2 | G-38 `sst_validation` wording (RECORD ONLY) | nothing | all |
+| 3 | G-36 ASIAEX decision prep (no code) and G-8 FLS surface decision prep (no code) | nothing | all |
+| 4 | G-32 large-scale slope law (OPT-IN) | G-2 (`acoustics.py`) | G-4, G-34, G-12, G-18 |
+| 5 | G-4 elastic reflection (OPT-IN) | G-3 (`propagation.py`, `paths.cpp`), G-6 (`bottom.py`) | G-32, G-34, G-12 |
+| 6 | G-34 facet bubble attenuation (OWNER FIRST: code with the owner's yes) | G-7 (`surface.py`) | G-32, G-4, G-12, G-18 |
+| 7 | G-12 correlated texture (`reverb.py`) | nothing | all of the above |
+| 8 | G-18 roughness conversion helper, then G-11's warning part (both `bottom.py`) | G-6 (`bottom.py`); not at the same time as G-4, which edits `bottom.reflection` | G-32, G-34, G-12 |
+
+Third wave: G-35 (after G-34, same file), G-33 (after G-32, same file), G-10, G-13 (after G-3), G-15, G-14,
+G-16 (after G-11), G-17 (after G-4), G-19, G-20 (after G-7), G-37 once Plant (1986) is in hand, the rest.
 
 ---
 
@@ -541,11 +707,29 @@ G-17 (after G-4), G-19, G-20 (after G-7), the rest.
     for silts) [N1 §3.2, WP-B]? Make the printed formulas the default between rows (up to 0.68 dB) [N1 §3.2]?
 11. **How much of the book's tables may live in tests**: three or four rows per table with page citations [N2],
     or Table 13.1 and Table 14.1 in full as a test-data file [N4 WP-10] (C7)?
-12. **Papers to obtain**: Wagner (1967) (blocks G-11), McDaniel (1986) (near-specular surface, G-22), Mourad and
-    Jackson (1989), Williams and Jackson (1998), Lyons and Abraham (1999): obtain, or leave wanted? (section 4)
+12. **Papers to obtain**: Wagner (1967) (blocks G-11), Mourad and Jackson (1989), Williams and Jackson (1998),
+    Lyons and Abraham (1999), ARL-PSU TM 90-88 (TR 0702's `McDanielSurface`; unpublished), Dahl (2001) (time and
+    angle spread law), Plant (1986) (blocks G-37): obtain, or leave wanted? (section 4; McDaniel 1986 is now read)
 13. **Sediment fit tool** (STATUS item 30, `sonar-5bf2`): switch its model to small-slope? The book shows
     perturbation and small-slope overlap below about 70 deg for medium sand and used perturbation for its own
     model-data fits [N4 §2.5, §4].
+14. **Forward-scatter slope by default** for the three time-spreading scenarios (`flank_sst_shallow`,
+    `flank_sst_spread`, `sst_asiaex`): keep the Cox-Munk total, or default to the large-scale law? With [D96]'s
+    (A7) at 6 m/s: mss 0.0337 -> 0.0199, facet decay time x0.59, angular spread x0.77, coherence length x1.30;
+    at 3 m/s 0.0184 -> 0.0135 (x0.74) [FS WP2]. [D99]'s measured angle spreads imply about half of (A7)'s slope
+    (C13), so the choice of law is part of the decision. Records of the three scenarios move.
+15. **`sst_asiaex`**: keep TR 0702's stated values (3 m/s, our chosen depths), or set [D04]'s printed geometry and
+    wind (source 25 m, receivers 26/52 m, about 467-500 m, water 105 m, 7 +- 0.5 m/s, H 0.3 m)? Neither source
+    says TR 0702's example is [D04]'s data set [FS WP5]. G-36 prepares what moves.
+16. **Bubble attenuation of the facet term** in `bubble_layer_surface`: apply it (a fix: -0.6 to -1.6 dB at
+    80-89 deg at 30 kHz, -1.2 to -3.2 dB at 68 kHz, 8-15 m/s; 0 at 45 deg) [BS WP3]? No shipped scenario.
+17. **A bistatic surface model as the bistatic default**: after G-35, should bistatic surface items use [D99]'s
+    form instead of a backscatter law at the mean angle (bubble part 5/40 deg, 8 m/s, 30 kHz: -23.8 -> -27.6 dB;
+    the mean-angle rule overstates by 1.8 dB weak limit, up to 8.2 dB) [BS §3.2, WP2]? Exposure: `sst_pursuit`
+    only, and only if its Chapman-Harris item is switched.
+18. **Bubble convention**: confirm our one-crossing convention (exp(-beta_I / sin theta) a crossing; [D97],
+    [D99] eq. (12)) over [D96] eq. (17)'s doubled exponent (4.18 against 2.09 dB a bounce at beta_I 0.05, 12 deg)
+    [FS §2.1], [BS §2.3]: record only, no change.
 
 ---
 
@@ -563,14 +747,19 @@ reference list".
 | Volume parameters and heterogeneity by site | D. Jackson and Briggs (1992) (cited by the book for Table 14.1 and Table 13.1 Quinault; details not in the notes) | sigma_2 or spectra per site; backscatter as numbers [N4 §2.9, WP-10] |
 | Measured K shapes | Lyons and Abraham, J. Acoust. Soc. Am. 106, 1307 (1999) (`REFERENCES.md` Sec. 10) | shapes with beamwidth, bandwidth, grazing band, seabed (80 kHz; the book shows Fig. 16.3 only) [N2 §2.6] |
 | Shadowing function sign | Wagner (1967) (cited by the book; details not in the notes); Smith's shadow function for comparison | Q with pi^(+1/2) or pi^(-1/2) [N4 §6] |
-| Near-specular surface scattering | McDaniel, "Diffractive corrections to the high-frequency Kirchhoff approximation", J. Acoust. Soc. Am. 79, 952-957 (1986) (read in [McD93]'s reference list, with its factor-2 erratum) | the model; whether it is TR 0702's "McDaniel" model [NS §2.2, §6] |
+| TR 0702's `McDanielSurface` (near-specular and bistatic surface model) | McDaniel, "Models for predicting bistatic surface scattering strength", Tech. Mem. 90-88, ARL Penn State (1990) (title read in [D96]'s reference list; unpublished); TR 0702 also names Lang and Culver TM 92-342 and Donelan et al. (1985) (as recorded in PHYSICS_NOTES Sec. 13) | the model and its wind laws. **McDaniel (1986) is now read and is not it** [BS §4] |
+| Printed law of time and angle spread; Doppler spread | Dahl, IEEE J. Oceanic Eng. 26, 141 (2001), "characteristic scales of time and angle spreading" ([D04] ref. 2) | the decay law (STATUS item 27), the slope formula behind S_L 0.146 at 7 m/s, Doppler [FS §2.6, §4] |
+| Wave spectrum for [D99]'s roughness term (and [D97]'s composite) | Plant (1986), JGR 91, 10735 (as [BS §4] cites it) | the spectrum, to reproduce [D99]'s sigma_r and [D04]'s model curves (G-37) [BS §2.4] |
+| Banner's directional spreading constant | Banner (1990) (cited by [D99]) | the factor of the last branch of (A3) (the note's -0.567 is from memory) [BS §6] |
+| 0 dB forward-scatter loss in mild conditions | APL-UW TR 9307 ([D96] ref. 23) | the measurement [FS §2.2] |
 | Correlated cross-section model | McDaniel (1996) (cited by the book; details not in the notes) | the model as first printed; how L and gamma were fitted to Gensane (1989) [N2 §2.6] |
 | Surface reverberation fluctuations | McDaniel, "Sea surface reverberation fluctuations", J. Acoust. Soc. Am. 94, 1551-1559 (1993) (read in [McD93]'s reference list) | statistics to compare with [DP97] [NS §2.2] |
-| Surface forward scatter | Dahl, J. Acoust. Soc. Am. 100, 2742 (1996); 105, 2155 (1999); 115, 589 (2004); IEEE J. Oceanic Eng. 26, 141 (2001); Preisig and Deane, J. Acoust. Soc. Am. 116, 2067 (2004) (`REFERENCES.md` Sec. 10) | coherent loss against the Rayleigh parameter; time and angle spread; Doppler spread [NS §4] |
+| Surface forward scatter | **read now**: Dahl 1996 (JASA 100 (2), 748-758, not "2742"), 1999 (105, 2155), 2004 (115, 589) [FS], [BS]. Still wanted: Dahl (2001) (row above); Preisig and Deane, J. Acoust. Soc. Am. 116, 2067 (2004) (`REFERENCES.md` Sec. 10) | a measured coherent loss against the Rayleigh parameter at low chi; scintillation with numbers (focusing); Doppler spread [FS §4] |
 | Handbook small-scale surface roughness | the handbook's G(U); Plant (1986) spectrum (cited in [D97]) | G(U10); the spectrum; a low-wind capillary cut-off law [NS §2.8, §4] |
 | Backscatter at the book's test sites as numbers | Stanic et al. 1988, 1989, 1998; D. Jackson et al. 1996a; Williams et al. 2002b; Briggs et al. 2002a; Jones and Jackson 1997; Pouliquen and Lyons 2002 (as named in [N4 WP-10]) | measured curves as numbers [N4 WP-10] |
 | Gravel and rock | **data**: the book says no experiment has characterised a gravel or rock seafloor (p. 362) | backscatter with roughness, heterogeneity and shear measured at one site [N4 §2.7], [N1 §2.7] |
-| Surface above 70 kHz | **data** | backscatter against wind and grazing at 120-330 kHz with stated averaging [NS §3.6] |
+| Surface above 70 kHz | **data** (forward scatter: nothing above 40 kHz measured in [FS], [BS]) | backscatter and forward scatter against wind and grazing at 120-330 kHz with stated averaging [NS §3.6], [FS §4] |
+| Large-scale slope by site | **data** (wave buoy with the acoustics) | the slope steering near-specular energy: [D99]'s spreads imply about half of (A7) (C13) |
 | Scatterer or patch densities | **data** (Abraham and Lyons 2002 say they must be estimated from reverberation) | per m^2 for named seabeds (D-196) |
 | Ping-to-ping coherence | **data** | decorrelation time of seafloor and surface reverberation for a still and a moving sonar; the book gives 1 day / 1 month seabed scales [N2 §2.4] and [DP97] O(10) ms at 50 kHz for the surface [NS §2.9] |
 | Rock shear speed per site | **data** | V_s, delta_t with V_p, density |
@@ -609,6 +798,18 @@ Not applied here. "J&R" = Jackson and Richardson (2007), confirmed on the page i
 | 10 "The handbook's law for beta_I and G(U)" | wanted | beta_I: [D97] Table II, a published fit (whether the handbook's: not stated); G(U), interpolation: not in these papers | [NS §4] |
 | 10 "Bubble loss per surface bounce" | wanted | partly: [D97] Sec. VI two-way loss 20 log10(e) beta_I / sin theta (a backscatter inversion) | [NS §4] |
 | 10 "Chapman-Harris fit and its range" | wanted | via secondary in [McD93] (see Sec. 4 row) | [NS §4] |
+| 10 "Coherent fraction, delay spread, angle spread and scintillation of surface forward scatter" | wanted; cites "J. Acoust. Soc. Am. 100, 2742 (1996)" | **citation corrected to 100 (2), Pt. 1, 748-758**; partly answered: angle spread [D96] Table I, eq. (15), [D04] eqs. (7)-(9), [D99] Table I; delay spread [D99] e-folds 0.03-0.31 ms (p. 2165) and two figures; coherent fraction negligible at chi >= 4; scintillation about 1 (one set); still wanted Dahl 2001, Preisig and Deane 2004 | [FS] top, [FS §4], [BS §4] |
+| 10 "Doppler spread against grazing angle" | wanted | unchanged (not in [D96], [D04], [D99], [McD86]) | [FS §4], [BS §4] |
+| 10 "The handbook's law for beta_I and G(U)" (as amended above) | - | add: one more beta_I point, [D99] p. 2161 (<= 0.0012 at 30 kHz, about 4 m/s), agreeing with [D97]; the facet/small-scale interpolation replaced by [D99]'s SSA(2) and [McD86]'s corrected composite (both confirmed formulas) | [BS §4] |
+| 10 new: TR 0702's `McDanielSurface` source | - | wanted: McDaniel, ARL Penn State TM 90-88 (1990), unpublished; McDaniel (1986) read and not it | [BS §4] |
+| 10 new: Plant (1986) spectrum | - | wanted (G-37) | [BS §4] |
+| 5 "Dahl's forward-scatter papers ..., Preisig and Deane (2004)" | wanted | [D96], [D04], [D99]: confirmed (page images); Dahl 2001 and Preisig-Deane still wanted | [FS §4], [BS §4] |
+| 5 facet model (decay time, tap directions) | ours | geometry confirmed: across-path spread = [D96] eq. (15) with q = sqrt 2 (fitted 1.348); [D04] eqs. (7)-(9); the slope it uses differs (W9) | [FS §3.1] |
+| 4 new rows [D96], [D04], [D99], [McD86] | - | confirmed (page images); [McD86] with [McD93]'s erratum, which is shown right | [FS §1], [BS §1, §3.4] |
+| 4 `facet_backscatter` / `reverb_specular.facet_lobe` | via secondary | confirmed: = [McD86] Q_L x 2 = J&R (13.62)/(13.63), 5e-13 dB | [BS §3.1, §3.4] |
+| 4 bubble loss per crossing ("Extinction by resonant bubbles ...", ours) | ours | convention confirmed: [D99] eq. (12), [D97] Sec. VI; [D96] eq. (17) a misprint | [FS §2.1], [BS §2.3] |
+| 4 Cox-Munk total regression | unconfirmed to 0.8 % | unchanged (not printed); add: [D99]'s blended-spectrum total 0.024 at 4 m/s within 2 %; [D96] prints the slick law (A7) for acoustics | [FS §4], [BS §3.1] |
+| 3.2 Kirchhoff prefactor (ours, above) | - | add: second print [D99] eq. (4) (< 0.001 dB) | [BS §3.1] |
 | 11 new row | - | J&R p. 433 "2 nu" patches against D-196 (shape n for n patches): D-196 kept | [N2] top |
 | 12.4 dB per wavelength to delta | ours; agrees with an implementation | confirmed: J&R (2.6), (8.18), (8.25)-(8.27), pp. 15, 251-252 | [N1 §3.5], [N3 §3.1] |
 | 12.4 Li and Chitre (Rayleigh coefficient) | via secondary | add: equal to J&R (8.49)-(8.53) to 1.8e-15 | [N3 §3.1] |
@@ -644,3 +845,12 @@ Not applied here. "J&R" = Jackson and Richardson (2007), confirmed on the page i
 | Whether TR 0702's "McDaniel" near-specular model is McDaniel (1986) | G-22 | [NS §6] |
 | How Gallaudet's band means were averaged (dB or intensity: 3.4-4.5 dB) | G-7, decision 7 | [NS §3.4], D-193 |
 | Not read by any note: J&R App. J beyond [N4]'s pages, L.1-L.2 by [N3]; App. C Table C.1 by [N2]; nothing of TR 9407 | all | [N2 §1], [N3 §6] |
+| [D96] Fig. 2 frequency not stated; all decay and coherence values of [D96], [D04] read from figures (+-1 dB, +-0.03) | G-31, G-33 | [FS §6] |
+| [D96] beta_I 0.05-0.10 "for 7-10 m/s", frequency not stated; [D04]'s beta_1 convention (per crossing?) not stated | G-34, U11 | [FS §6] |
+| [D04] range 467 / 497 / 500 m | G-36 | [FS §6] |
+| [D99]'s spectrum only plotted: every [BS] sigma_r number uses the note's stand-in | G-35, G-37, U10 | [BS §1, §6] |
+| [D99] wind at 6.9 m, not converted (the note's 3 % conversion is its own) | G-32 | [BS §6] |
+| [McD86]: quadrant limits of (14)/(18); two readings of <(n.k')^2>; eq. (18) numerically unusable as written; scan readings +-2 dB | G-22, G-37 | [BS §6] |
+| (A3) Banner coefficient from memory | G-37 | [BS §6] |
+| Whether TR 0702's `McDanielSurface` uses [McD86]'s correction inside TM 90-88 | G-38 | [BS §6] |
+| Which large-scale slope is right (C13); whether a facet model can carry the Bragg-scale tail (C12) | G-32, G-33 | [FS §3.3], [BS §3.3] |
