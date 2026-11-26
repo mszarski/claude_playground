@@ -189,6 +189,15 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Files: the test file; `acoustics.chapman_harris_db` docstring (range: 400-6400 Hz, to 15 m/s, low grazing,
   explosive sources, March 1961, [McD93] p. 1918). The `surface.py` "lower bound" comment goes with G-7.
 - Engines: none. Size S.
+- **Done** (2026-11-26, branch `g-surface`): `tests/python/test_surface_papers_1997.py`, 12 tests, every
+  equality of [NS §3.1] reproduced: Table I -26.82 / -27.74 / -28.22 against -26.9 / -27.8 / -28.3 dB
+  (bound 0.1 dB); eq. (17) = [McD93] eq. (9) = ours to 1e-9; eqs. (18), (19) limits; bracket peak +3.73 dB;
+  McDaniel's damping law -0.35 dB at 68 kHz (the note's table to 0.01 dB); [D97] Sec. VI convention for
+  both laws; facet = eq. (7) to 1e-9; Chapman-Harris = eq. (27) to 1e-9 dB (1e-6 relative with the exact
+  knot), exponents 2.459 / 0.820; [DP97] 2.507 dB and 5.57 dB. Printed resonant radii 121 / 64 / 46 um:
+  ours 122.4 / 64.9 / 46.3 (1.5 %). Docstrings: `chapman_harris_db` (via secondary, the stated range;
+  "below about 40 degrees" removed), `surface.py` (the kHz unit of delta and the bubble/facet terms now
+  confirmed in print). No behaviour changed.
 
 ### G-3 Sediment tier above the critical angle: transmission and attenuation — OWNER FIRST (code may land opt-in), S
 - Gap W1: 6 dB two-way at 20 kHz, 9 dB at 30 kHz, 0.3 m of medium sand [N3 §3.5]. Exposure: `buried_cylinder`,

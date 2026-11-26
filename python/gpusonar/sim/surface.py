@@ -407,7 +407,9 @@ def searay_bottom_strength(frequency: float, bottom_type):
 # What the source does not print, and what is used here instead (ours, stated per item):
 #   - the unit of f in delta. kHz is used: it gives delta = 0.08 at 30 kHz and 0.10 at 68 kHz,
 #     the size of the damping of a resonant bubble (the damping of eqs. (7)-(9) above gives
-#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5.
+#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5. Confirmed
+#     since: Dahl et al., JASA 101, 2583-2595 (1997) [D97], p. 2587, print the same law as
+#     2.55e-3 f^(1/3) with f in Hz (Devin 1959), which is ours with f in kHz.
 #   - the empirical law for beta_I against wind speed and frequency. beta_I is the optical depth
 #     of one vertical crossing of the layer, so a surface bounce loses 2 beta_I / sin(t) nepers
 #     of intensity: exactly what the bubble loss laws of this module give. It is taken from one
@@ -420,6 +422,15 @@ def searay_bottom_strength(frequency: float, bottom_type):
 #     frequencies and winds, and above about 70 degrees the facets do.
 #   - delta_r = 0.0136 is k a at resonance for a bubble near the surface (2 pi f a_R / c with
 #     Minnaert's a_R f = 3.26 m Hz gives 0.01366: tested), so it is not a free constant.
+#
+# Confirmed in print since (docs/references/surface_papers_mcdaniel_dahl.md; held by
+# tests/python/test_surface_papers_1997.py): eq. (10) and its limits (11)-(12) are [D97] eqs.
+# (17)-(19) and McDaniel, JASA 94, 1905-1922 (1993) [McD93] eqs. (9)-(12) (Crowther 1980);
+# delta_r = 0.0136 in both; our saturation level at 17 degrees is within 0.1 dB of [D97] Table I
+# (-26.82 / -27.74 / -28.22 dB against -26.9 / -27.8 / -28.3 at 26.5 / 50 / 70 kHz); the facet
+# term eq. (8) equals [McD93] eq. (7) with the x-slope variance half our total mean-square
+# slope; and beta_I as one vertical crossing is [D97] Sec. VI's convention (two-way loss
+# 20 log10(e) beta_I / sin(t) dB).
 BUBBLE_RERADIATION_DAMPING = 0.0136
 
 
