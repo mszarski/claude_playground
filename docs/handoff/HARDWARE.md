@@ -682,10 +682,11 @@ rig's first hardware-run checklist is `docs/HOLOSCAN_NOTES.md` section 11.
 on one ping. Two rows have +1.4 dB (0.87), three +2.9 dB (0.99). The budget is still about 0.45 dB kind
 against the chain (three small terms stated and not added, D-117). These are figures for a steady point echo
 in noise with a placeholder target strength; a fluctuating or extended echo and reverberation are not in them
-(`docs/STATUS.md`, "The 12 km design point"). **The budget and the coverage model have no reverberation term at
-all** (`SonarEquation`; D-198, issue `sonar-w2w3`, P1): where reverberation dominates, every margin and reach
-below is noise-limited and optimistic. Example: `flank_patrol`'s −3 dB small vehicle at 2.2 km gets about 30 dB
-from the budget; in the simulated data it is 3.8 to 5.1 dB over a background that bottom reverberation
+(`docs/STATUS.md`, "The 12 km design point"). **The budget and the coverage model are noise-only in every shipped
+file**: the reverberation term exists since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`),
+but no build, environment or deployment file states boundary scattering, so every margin and reach below is
+noise-limited and optimistic where reverberation dominates, and says so (issue `sonar-w2w3`). Example: `flank_patrol`'s
+−3 dB small vehicle at 2.2 km got about 30 dB from the noise-only budget (D-198); in the simulated data it is 3.8 to 5.1 dB over a background that bottom reverberation
 (Lambert −27 dB) holds 21.9 dB above the noise, and it is not detected. **Water decides more than the design does**: in simulation the
 ship is detected at 12 km on 6 of 6 pings in 100 m over sand and in the gravel and winter-sand waters, and on
 0 of 6 in the deep-silt and summer-mud waters, with three rows as with one (`docs/design/popoto_12km.json`,

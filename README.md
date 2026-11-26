@@ -17,12 +17,17 @@ the CUDA backend has been run and benchmarked on rented GPUs. The long-range des
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite ran on the tree of decision D-202
-(2301 passed, 102 skipped, none failed, on an NVIDIA L4), the opt-in 3-D
-propagation tier included; the whole CPU suite has not been
+(the depth sigma now says so). The full GPU suite ran on the merged tree of decisions D-204 to D-225
+(2763 passed, 102 skipped, 4 xfailed, none failed, on an NVIDIA L4; Hugging Face job
+6b07ea74d91f621b930a343d), the opt-in 3-D propagation tier and the slow Bellhop3D checks included; the
+whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
-entries). The link budget and the coverage model have no reverberation term, so where
-reverberation dominates their margins and ranges are optimistic (D-198). Every shipped SAS scene
+entries). The link budget and the coverage model have a reverberation term since D-221, but no shipped site
+states its scattering, so the design margins and ranges are noise-only and optimistic where
+reverberation dominates, and say so. On 2026-11-26 the boundary models, the sediment tier and time
+spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
+got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
+scenes, D-216). Every shipped SAS scene
 but one (`sas_auv_multipath`) is free field: no surface or bed multipath (D-201). [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;
 [`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
@@ -197,7 +202,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 81 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 91 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |
@@ -392,9 +397,11 @@ and checklists are generated from it, and seven self-tests run the generated cha
 simulated pings. `docs/REFERENCE_DESIGN.md` walks through it; `docs/DEPLOYMENT.md` says
 what each report field means. The link budget's threshold is the chain's own detector's
 (`docs/DECISIONS.md` D-117, D-134), so margins and the chain agree to about half a dB in noise.
-The budget has no reverberation term: where reverberation dominates it is optimistic (for
-`flank_patrol`'s small vehicle about 30 dB, where the simulated data give about 4 dB over the
-background; D-198, issue `sonar-w2w3`).
+The shipped budgets are noise-only: the reverberation term exists (`coverage.reverberation`,
+`SonarEquation(reverberation_db=...)`, D-221) but no shipped site states scattering, so where
+reverberation dominates the budget is optimistic (for `flank_patrol`'s small vehicle about 30 dB by
+the noise-only budget, where the simulated data give about 4 dB over the background, D-198; with the
+term 9.7 dB predicted against 6.6 dB measured, D-221).
 
 ## Run a whole chain from one YAML file
 

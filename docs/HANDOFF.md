@@ -2,7 +2,8 @@
 
 Refreshed 2026-11-24 at commit `933972b` on branch `claude/gpu-sonar-suite-u289p5`
 (decisions to D-181; the version before this one was written 2026-11-19 at `2160fe8` and
-stopped at D-144), and brought to D-201 and the opt-in 3-D propagation tier on 2026-11-26. These notes are for whoever picks the work up next, a person or a coding
+stopped at D-144), and brought to D-201 and the opt-in 3-D propagation tier on 2026-11-26, then to
+D-225 (the merge `b88c458`) the same day: only the state lines and the statements that merge made false. These notes are for whoever picks the work up next, a person or a coding
 model. `docs/STATUS.md` is the authoritative list of what works and what is wrong; this
 file tells you how to work here and where the edges are. The wider handoff set is in
 `docs/handoff/` (start at `docs/handoff/README.md`).
@@ -231,7 +232,7 @@ Flavours and pitfalls:
 | --- | --- |
 | The handoff set: entry point, hardware, software, tests, outputs | `docs/handoff/README.md`, `HARDWARE.md`, `SOFTWARE.md`, `TESTS.md`, `OUTPUTS.md` |
 | What works, what is wrong, questions for the owner | `docs/STATUS.md` (open items 1 to 45, owner questions 1 to 35) |
-| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-201; later entries amend earlier ones) |
+| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-225; later entries amend earlier ones) |
 | Every measured number and its source | `docs/RESULTS.md` (the Sensor Bridge numbers of D-153 to D-192 are summarised there, and D-193 to D-201 in a summary table before "Not yet measured"; D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only) |
 | Scenes, with figures and per-scene results | `docs/SCENARIOS.md`, `docs/figures/` (gallery of D-179) |
 | Work waiting on owner input, written as briefs for an agent | `docs/tasks/VEHICLE_ADAPTERS.md` (`sonar-o7m`), `docs/tasks/REAL_DATA.md` (`sonar-sul`); `docs/tasks/PROPAGATION_3D.md` (`sonar-rcq`: the scope of 3-D propagation, its packages P1 to P6 done, owner questions in section 6) |
@@ -264,9 +265,9 @@ Code worth knowing first:
 - `tools/popoto_12km_study.py`, `tools/fjord_rehearsal.py`, `tools/design_report.py`: the
   studies behind the design documents.
 
-## 6. State of verification (to D-201 and the 3-D work)
+## 6. State of verification (to D-225)
 
-- **GPU, latest (NVIDIA L4, HF job 6b079ab0d91f621b93098915, the tree of D-202, with `GPUSONAR_SLOW_ORACLES=1`): 2301 passed, 102 skipped, none failed.** Before it, D-201's tree: 2278 passed, 102 skipped, 1 xfailed (job 6b078a26d91f621b93096bc7).
+- **GPU, latest (NVIDIA L4, HF job 6b07ea74d91f621b930a343d, the merged tree `b88c458` of D-204 to D-224, with `GPUSONAR_SLOW_ORACLES=1`): 2763 passed, 102 skipped, 4 xfailed, none failed** (D-225, which lists the six failures of the batch's earlier suites and their fixes). Before it, D-202's tree: 2301 passed, 102 skipped (job 6b079ab0d91f621b93098915); D-201's: 2278 passed, 102 skipped, 1 xfailed (job 6b078a26d91f621b93096bc7).
   CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and
   Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`. The skips are data and tools not in the
   job and the opt-in measurements. The 3-D work after D-201 (`eigenray3d`, `flank_seamount_3d`)
@@ -277,8 +278,10 @@ Code worth knowing first:
   owner"). Since then each package ran its affected test files locally and the whole suite on the
   GPU job. A whole CPU run at HEAD is not on record.
 - The gallery (`docs/figures/`, `gallery.json`) is from the L4 job 6b054768c97b8ed4fcd78015
-  on tree `4a80876` (D-179). D-180 to D-201 change no default result of a gallery scene, so it
-  stands.
+  on tree `4a80876` (D-179). D-180 to D-201 change no default result of a gallery scene. Since the
+  merge of 2026-11-26 it is stale for `buried_objects` (D-212: `penetration: fluid`), and the Popoto
+  and flank scenes' surface reverberation fell about 1 dB (D-216) without a re-measurement; a GPU
+  gallery job is due (`docs/STATUS.md`, the list of stale generated files).
 - Not in either suite: the generator's self-tests. Last recorded result 42 of 42 on both
   engines for the six builds (D-143, 2026-11-19); since then only checked that every
   deploy and build file is accepted by both engines (D-166, D-177).
@@ -341,9 +344,10 @@ Numbers are in the `DECISIONS.md` entries. Issues named here are open in `bd` un
 | D-194 | Stale simulator statements corrected (the TR 0702 matrix, RESULTS, SCENARIOS, SIMULATION, REFERENCES) | none |
 | D-196 | The K shape of reverberation from a density per cell (opt-in) | No density is known for any seabed; texture correlation between cells and pings not modelled (`sonar-6fc`) |
 | D-197, D-199 | The eigenray tier against Bellhop3D's N × 2-D mode explained | The fjord beds kept; whether the 2-row scenario keeps its 12-arrival limit is the owner's (`sonar-2e9e`) |
-| D-198 | `flank_patrol`'s small vehicle is below the scene's reverberation; left as a hard target | The link budget and coverage model have no reverberation term (`sonar-w2w3`, P1) |
+| D-198 | `flank_patrol`'s small vehicle is below the scene's reverberation; left as a hard target | The link budget and coverage model had no reverberation term; since D-221 the term exists, but no shipped site states scattering |
 | D-201 | Image sources off a tilted bed and walls as any plane (opt-in); four multipath scenes | The FLS chain tracks multipath ghosts as objects (`sonar-izys`); SAS sharpness falls to a third with bed multipath, and every other SAS scene is free field (`sonar-ya2c`); wall coefficients are placeholders; no diagrams of walls (`sonar-ttr1`) |
-| (2026-11-26) | The opt-in `eigenray3d` tier (Bellhop3D), the cross-slope warning, one top-level `bathymetry`, `flank_seamount_3d` (`docs/tasks/PROPAGATION_3D.md` P1 to P6) | No reverberation over relief at that tier; its acceptance test takes 8 minutes and runs only with `GPUSONAR_SLOW_ORACLES=1`; the decision entry is to be written |
+| (2026-11-26) | The opt-in `eigenray3d` tier (Bellhop3D), the cross-slope warning, one top-level `bathymetry`, `flank_seamount_3d` (`docs/tasks/PROPAGATION_3D.md` P1 to P6) | No reverberation over relief at that tier; its acceptance test takes 8 minutes and runs only with `GPUSONAR_SLOW_ORACLES=1` (the entry is D-202) |
+| D-204 to D-225 (2026-11-26) | Five 3-D scenes; the general image construction in C++; the conformance alignments applied (grain-size relations, the fit's small-slope and prior, elastic rock in the simulator, Bellhop and the live chain, `dahl_1997` and the geometric-mean bistatic rule, the large-scale slope law); `penetration: fluid` (the two buried scenes) and `rough`; the engine never silent and recorded; the link budget's reverberation term; four papers and five site rows | Surface reverberation about 1 dB lower in multipath scenes; SPACE'08 steep tails 1.89 measured over model, the Kirchhoff tail rejected as the cause; rock shear unconfirmed; `rough` costly on large scenes; design budgets noise-only (no site states scattering); three fit tests and two other tests weakened (D-216, D-223, D-225); gallery and `sst_validation` stale |
 
 **Tooling and configuration**
 
@@ -364,7 +368,7 @@ it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documen
 | --- | --- |
 | Waiting on the owner | `sonar-o7m` (P1) vehicle adapters: board samples and navigation; `sonar-sul` (P1) calibration and the live chain on real data; `sonar-9a2` (P2) board timing: capture-start stamping, clock rates, the channel map; `sonar-68e` (P2) the grating lobe beyond ±42° at 6 kHz; `sonar-2e9e` (P3) the fjord beds' 12-arrival limit; `sonar-ya2c` (P2) whether SAS scenes carry bed multipath |
 | Milestones not closed | `sonar-l59` (P1) M11 Holoscan integration; `sonar-3s7` (P1) M13 performance model and Jetson; `sonar-k29` (P1) stacked rows for elevation |
-| Link budget | `sonar-w2w3` (P1) the link budget and the coverage model have no reverberation term |
+| Link budget | `sonar-w2w3` (P1): the reverberation term exists since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`); no shipped site states scattering on this branch, so design figures are noise-only and say so |
 | Hardware design | `sonar-mu3` (P2) sync reference generator, input protection, power, mechanical and depth rating, FLS and SAS front ends, hydrophones; `sonar-68e` (P2) above |
 | Detector and false alarms | `sonar-031` (P3) two-row cell mean 1.26 times its share; `sonar-4xn` (P3) three-row static count; `sonar-xl7` (P3) 9 dB floor on stacked rows; `sonar-gg6` (P4) constants against budget; `sonar-9hy` (P3) leading edge with blanking and burst filter |
 | Tracking and classification at long range | `sonar-tlc` (P3) association among many arrivals in one gate; `sonar-36z` (P3) grouping velocity gate; `sonar-69f` (P3) outlier test power; `sonar-kal` (P3) long-range clutter scene; `sonar-ome` (P3) bounce grouping with multipath on; `sonar-dqc` (P3) parabola fallback; `sonar-2o5` (P3) winter-sand stray detection; `sonar-9b8` (P3) gravel peak and position; `sonar-t4u` (P3) function defaults differ from the chain's; `sonar-i28` (P4) two-ship scene; `sonar-7q0` (P4) SNR-weighted fit; `sonar-bu3` (P4) gallery bearing sigma; `sonar-y7k` (P4) `tracker.ping_interval_s` in configs |
@@ -431,10 +435,11 @@ All three statements still hold.
   pings with ideal clocks: that benchmark and the full-rate one leave board synchronisation
   out. With it, on the Popoto trials' pings: C++ 0.048 / 0.054 / 0.065 s and Python 0.084 /
   0.18 / 0.25 s a ping at 32 / 64 / 96 channels (L4, D-192, D-195; `tools/live_chain_timing.py`).
-- **The link budget has no reverberation term** (`SonarEquation`, the coverage model; D-198,
-  `sonar-w2w3`): the margins above are for noise. Where reverberation dominates they are
-  optimistic: `flank_patrol`'s −3 dB small vehicle at 2.2 km has about 30 dB by the budget and
-  3.8 to 5.1 dB over its background in the simulated data.
+- **The link budget's margins above are for noise.** The term exists (`coverage.reverberation`,
+  `SonarEquation(reverberation_db=...)`, D-221); no shipped site states scattering on this branch,
+  so design figures are noise-only and say so. Where reverberation dominates they are optimistic:
+  `flank_patrol`'s −3 dB small vehicle at 2.2 km had about 30 dB by the noise-only budget (D-198);
+  with the term it is predicted at 9.7 dB over the background against 6.6 dB measured.
 
 ## 11. How to work here
 

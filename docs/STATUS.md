@@ -1192,8 +1192,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   new target scenarios).
 - In `flank_patrol` the −3 dB small vehicle is not detected (D-198: below the scene's bottom
   reverberation, 3.8 to 5.1 dB over its background against the gallery's 12 dB cut; left as a hard
-  target on purpose, the owner's choice; the link budget's ~30 dB for it has no reverberation term,
-  `sonar-w2w3`), and 5 confirmed tracks are
+  target on purpose, the owner's choice; the noise-only link budget's ~30 dB for it; with D-221's reverberation term 9.7 dB is
+  predicted against 6.6 dB measured on the target's beam, `sonar-w2w3`), and 5 confirmed tracks are
   made for 2 objects: 1 mover (the submarine, 1.0 m from its outline since D-178's
   leading-edge range, was 25.8 m), 2 static (one the wreck, 3.5 m off), 2 uncertain.
 

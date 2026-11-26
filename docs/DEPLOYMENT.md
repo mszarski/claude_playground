@@ -1226,8 +1226,10 @@ computed separately):
 | range cell | 0.5 dB | 7.7 dB | the map is computed every 0.25 m for a 0.375 m resolution (4–6 kHz). `multiscale` reads the sample nearest the echo's peak; `mean` averaged it with the other seven samples of a 2 m cell |
 | total | 2.3 dB (measured 2.4) | 9.4 dB (measured 9.4) | |
 
-**The link budget and the coverage model have no reverberation term** (`sonar_equation.SonarEquation`, `coverage.py`;
-D-198, issue `sonar-w2w3`). They compare an echo with noise only; `snr_db` is measured against the detector's
+**The link budget and the coverage model are noise-only in every shipped file.** The reverberation term exists
+since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`, issue `sonar-w2w3`), but no build,
+environment or deployment file states boundary scattering, so they compare an echo with noise only and say so
+(`"reverberation": "not included: …"`); `snr_db` is measured against the detector's
 background, which reverberation sets wherever it is above the noise. Where it is, the budget's prediction is
 noise-limited and optimistic, and `snr_db` can sit tens of dB below it. Example (D-198): `flank_patrol`'s −3 dB
 small vehicle at 2.2 km over a −27 dB Lambert seabed has about 30 dB by the budget; bottom reverberation is

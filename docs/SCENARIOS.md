@@ -598,9 +598,12 @@ perturbed case, not yet imaged with correction).
 | Depth of the sphere's brightest return | top at 0.14 m | 0.14 m | 0.13 m |
 | Cylinder over sediment clutter | — | 21.1 dB | — |
 
-The sediment model is one refracted path with unit transmission: no sediment attenuation,
-no angle-dependent transmission loss, so the clutter level relative to the objects is an
-assumption (the scenario's `rms_amplitude`), not a prediction.
+**Stale since 2026-11-26 (D-212):** the figure and the table above are from the gallery of D-179, when the
+sediment model was one refracted path with unit transmission. The scene now uses `penetration: fluid` with
+medium sand's density ratio and loss at its own 1700 m/s (class values, not a survey): on the CPU the cylinder
+falls 5.2 dB and the sphere 3.6 dB in the full raster, cylinder over clutter 21.12 -> 20.32 dB, depths
+unchanged (the agent's run; a GPU gallery job will regenerate the figure). The clutter level relative to the
+objects is still an assumption (the scenario's `rms_amplitude`), not a prediction.
 
 ## Flank array: `flank_patrol`
 

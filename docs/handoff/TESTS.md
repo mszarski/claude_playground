@@ -3,14 +3,18 @@
 How to run the tests, what each one protects, which decisions they pin, how to recognise a
 failure that is not one, and what is not tested. Written at the tree of `933972b`, decisions to
 D-181; brought to D-201 and the opt-in 3-D tier on 2026-11-26 (counts per file collected then with
-`pytest --collect-only`). Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
+`pytest --collect-only`), and to D-225 (the merge `b88c458`) the same day: the counts in section 1, the
+seventeen new test files in section 2, the decisions D-204 to D-224 in section 3, two pitfalls in
+section 4 (the new files' "Tests" are `def test_` functions counted with grep, not collected). Companions: [SOFTWARE.md](SOFTWARE.md) (architecture and settings),
 [README.md](README.md) (the set).
 
 **What is not known first.** No per-file run time is recorded anywhere in the repository; the
 "class" column in section 2 is a judgement from what each test does. The log of the last full
-GPU run (job `6b078a26d91f621b93096bc7`, D-201) was not read for this file: its 102 skips are
-derived in section 1 from the 93 of D-181's job and the decisions since, not read from its log,
-and which Popoto-rate loopback case was its one expected failure is not in its log.
+GPU run (job `6b07ea74d91f621b930a343d`, D-225) was not read for this file: its 102 skips are
+derived in section 1 from the 93 of D-181's job and the decisions since, not read from its log, and
+its four expected failures are presumably the four strict xfails of D-217 and D-218 (not checked).
+Of the earlier job of D-201 (`6b078a26d91f621b93096bc7`), which Popoto-rate loopback case was its one
+expected failure is not in its log.
 
 ## 1. How to run
 
@@ -115,10 +119,11 @@ GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 GPUSONAR_HOLOSCAN_CPP=1 GPUSONAR_HSB=1 GPUSO
 
 | Run | Result | Source |
 | --- | --- | --- |
+| Full GPU suite, NVIDIA L4, the merged tree of D-204 to D-224 (`b88c458`) | **2763 passed, 102 skipped, 4 xfailed**, none failed (job `6b07ea74d91f621b930a343d`; Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators, Sensor Bridge, `GPUSONAR_REQUIRE_ORACLES=1`, `GPUSONAR_SLOW_ORACLES=1`). Before it, the tree of D-202: 2301 passed, 102 skipped (job `6b079ab0d91f621b93098915`). The batch's earlier suites and their six failures are in D-225 | D-225, D-202 |
 | Full GPU suite, NVIDIA L4, tree of D-201 | **2278 passed, 102 skipped, 1 xfailed**, none failed (job `6b078a26d91f621b93096bc7`; the xfail is one Popoto-rate loopback case, its reason not in the log). The 3-D work after D-201 is covered by a later job. Before it, D-200 over the tree of D-196: 2232 passed, 101 skipped (job `6b077ea0d91f621b930950a5`). Before it, D-195's tree: 2183 passed, 101 skipped (job `6b076d06d91f621b93092f13`). Before it, D-192's tree: 2183 passed, 101 skipped (job `6b07608ed91f621b930918b0`). Before it, D-191's tree: 2180 passed, 101 skipped (job `6b07440eb6a90bbe997e6027`). Before it, D-190's tree: 2180 passed, 100 skipped (job `6b06d64fd91f621b93079be0`). Before it, D-189's tree: 2171 passed, 98 skipped (job `6b06bbda1460ffe1d5ea75b5`). Before it, D-188's tree: 2159 passed, 97 skipped (job `6b0699f4d0582cfbbefe0373`). Before it, D-187's tree: 2155 passed, 97 skipped, 1 xfailed (job `6b06728ad0582cfbbefdb5eb`; the xfail was one Popoto-rate loopback case with a frame damaged at the start, accepted since D-188). Before it, D-186's tree: 2150 passed, 97 skipped, 4 xfailed (job `6b06553a1460ffe1d5e9aa10`). Before it, D-183's tree: 2102 passed, 95 skipped (job `6b060a4b1460ffe1d5e93111`). Before it, D-181's tree: 2078 passed, 93 skipped (job `6b055ee4c97b8ed4fcd799db`), which the skip groups below describe | each decision's entry in `docs/DECISIONS.md`, D-183 to D-201 |
 | Previous | 2065 passed, 93 skipped (D-180); 1925 passed, 93 skipped (D-175 to D-178); 1875 passed, 92 skipped (D-171 to D-173) | the entries named |
-| GoogleTest at this tree | 175 `TEST` cases in 15 binaries (counted in `tests/cpp/*.cpp`; 172 at D-181) | section 2 |
-| pytest at this tree | 1526 test functions in 128 files (counted in `tests/python/test_*.py`, 2026-11-26, with `test_3d_scenarios.py` of `sonar-d7sw`; 1516 in 127 before it; 1375 in 114 at D-181); parametrisation makes them 2381 outcomes on D-201's L4 job (2278 + 102 + 1) | counted |
+| GoogleTest at this tree | 193 `TEST` cases in 15 binaries (counted as lines starting `TEST(` in `tests/cpp/*.cpp`, 2026-11-26 at D-225; 175 at D-203, 172 at D-181) | section 2 |
+| pytest at this tree | 1775 test functions in 145 files (counted as `def test_` lines in `tests/python/test_*.py`, 2026-11-26 at D-225; the same count gives 1526 in 128 at `a64a26f`, as stated before; 1375 in 114 at D-181); parametrisation makes them 2869 outcomes on D-225's L4 job (2763 + 102 + 4) | counted |
 
 No full CPU run of the tree is recorded since D-157 (`605a4e1`); `docs/STATUS.md` ("State of
 verification") records the CPU and GPU runs up to D-157 and the decisions record the GPU runs after.
@@ -150,7 +155,9 @@ and one D-186 says was not looked up); +1 at D-189 (`tools/hsb_host_check.py --h
 (the opt-in `test_frame_path_timing_study` and `tools/hsb_frame_timing.py --help`); +1 at D-191
 (`tools/live_chain_timing.py --help`); +1 between D-200's job (tree of D-196, 101) and D-201's
 (likely D-197's `tools/eigenray_tl_check.py --help`; not checked). The 3-D work adds one more skip by
-design (`GPUSONAR_SLOW_ORACLES`).
+design (`GPUSONAR_SLOW_ORACLES`). D-225's job also reports 102 skips, with `GPUSONAR_SLOW_ORACLES=1` set and
+the batch's new tests (the tests that ask for the C++ engine skip only on a build without it, D-219); not
+itemised from its log.
 
 On a CPU container without the oracles many more tests skip: every CUDA comparison, every
 Bellhop test, the Holoscan and Sensor Bridge tests, and motion estimation when Ceres is absent.
@@ -193,7 +200,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 
 | File | Tests | Protects | Needs | Class | Marks |
 | --- | --- | --- | --- | --- | --- |
-| `test_live_cpp.py` | 58 | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
+| `test_live_cpp.py` | 60 (D-225 count) | the C++ library against the Python stages, both chains' reports, the program, every option's round trip, unknown keys and words | `build/bin/sonar_live` for the program tests | minutes | **parity**, **golden** |
 | `test_live.py` | 8 | one object on simulated pings, a replayed recording, UDP blocks, navigation datagrams, a watched directory | CUDA for one test | minutes | |
 | `test_detect.py` | 27 | MVDR, CFAR, clustering, the tracker (association, detection times, misses), the classes golden | CUDA for one test | minutes | **golden** |
 | `test_detector.py` | 24 | the multiscale detector on both engines: thresholds, false alarms by Monte Carlo, range estimate, resolution | | minutes | **parity**, **golden** |
@@ -263,7 +270,7 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | File | Tests | Protects | Needs | Class |
 | --- | --- | --- | --- | --- |
 | `test_sim.py` | 21 | point targets on every sonar: delay and amplitude against analytic values; CPU against GPU | CUDA for the GPU half | minutes |
-| `test_sim_cpp.py` | 20 | C++ paths and reverberation against the NumPy versions (D-61) | the C++ engine; CUDA for some | minutes |
+| `test_sim_cpp.py` | 31 (D-225 count) | C++ paths and reverberation against the NumPy versions (D-61) | the C++ engine; CUDA for some | minutes |
 | `test_sampled_waveform.py`, `test_sampled_engine.py` | 17, 15 | sampled transmit pulses against TR 0702; the C++ kernel against the NumPy engine (D-74, D-75, D-81) | Bellhop for one each; CUDA for some | minutes |
 | `test_batched.py` | 28 | the batched device formulations against the reference host code (D-122) | CUDA for the device half | minutes |
 | `test_parallel_normal.py` | 8 | threaded normal deviates are bit for bit `rng.standard_normal` | | fast |
@@ -273,14 +280,14 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_long_range.py` | 2 | long-range scenarios at the eigenray tier | Bellhop (whole file) | minutes |
 | `test_ssp_range.py` | 14 | sound speed that changes with range in the Bellhop provider (D-110) | Bellhop for some | minutes |
 | `test_bellhop_nx2d_agreement.py` | 6 | Bellhop 2-D against Bellhop3D's N × 2-D and 3-D modes, beam counts, arrivals against the loss run over a piecewise-linear bed (D-197; characterisations) | each test its oracle: Bellhop, Bellhop3D, KRAKEN, PyRAM (about 45 s in all) | minutes |
-| `test_image_planes.py`, `test_multipath_scenes.py` | 14 (32 collected), 5 | image sources off a tilted bed and walls as any plane against closed forms, both engines; the four multipath scenes' ghost geometry (D-201) | | fast to minutes |
+| `test_image_planes.py`, `test_multipath_scenes.py` | 17, 6 (D-225 counts; every test on both engines since D-205) | image sources off a tilted bed and walls as any plane against closed forms, both engines; the four multipath scenes' ghost geometry (D-201) | | fast to minutes |
 | `test_gallaudet_boundaries.py` | 6 (10 collected) | the bottom and surface models against Gallaudet 2001's printed values at 68 kHz (D-193; characterisations: the bound is what we get plus a small margin) | | fast |
 | `test_kraken_crosscheck.py`, `test_ram_crosscheck.py`, `test_seamount_3d.py` | 2, 2, 4 | rays against normal modes, a parabolic equation and Bellhop3D (D-149); the last file's acceptance of the `eigenray3d` tier (8 minutes) runs only with `GPUSONAR_SLOW_ORACLES=1` | Bellhop with KRAKEN, PyRAM, Bellhop3D | minutes |
 | `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` | 5, 4 (5 collected), 6, 4 | the N × 2-D cross-slope warning; Bellhop3D's arrivals read and merged; the opt-in `eigenray3d` provider; one bed for a scenario and `flank_seamount_3d` on both engines (sonar-rcq P1 to P6, `docs/tasks/PROPAGATION_3D.md`) | Bellhop3D for some (27 s and 47 s with it) | fast to minutes |
 | `test_3d_scenarios.py` | 22 | the five 3-D scenes and their N × 2-D twins of `sonar-d7sw`: the bed `bathymetry.ridge` and `profile_along`; every file loads and builds its provider; each twin differs only in the tier and its bed is the 3-D bed along the target's bearing; what the cross-slope warning says of each bed; with the oracles, each scene's headline level (3-D minus Bellhop3D's N × 2-D) and arrival direction (`docs/SCENARIOS.md`, "Flank array over 3-D relief") | Bellhop3D and Bellhop for 5 (the level control, about 40 s); 4 of those also `GPUSONAR_SLOW_ORACLES=1` (2 to 3 minutes each, about 10 minutes in all) | fast; slow with the switch |
 | `test_reverberation.py`, `test_reverb_statistics.py` | 10, 27 (42 collected) | reverberation level within 2 dB of the sonar equation; K statistics (D-37, D-70), the shape from a density per cell (D-196) | | minutes |
 | `test_reverb_bistatic.py`, `test_reverb_motion.py`, `test_reverb_relief.py`, `test_reverb_specular.py` | 23, 10, 16, 6 | bistatic, moving scatterers, relief, near-specular removal (D-69, D-72, D-73, D-123) | CUDA for one; Bellhop for some | minutes |
-| `test_bottom.py`, `test_bottom_models.py`, `test_sediment_table.py`, `test_sediment_literature.py`, `test_sediment_fit.py` | 9, 16, 11, 9, 8 | the bottom model, its regimes, the named sediments against open literature, the fit (D-63, D-66, D-67, D-132) | Bellhop for one | fast |
+| `test_bottom.py`, `test_bottom_models.py`, `test_sediment_table.py`, `test_sediment_literature.py`, `test_sediment_fit.py` | 9, 22, 17, 9, 25 (D-225 counts) | the bottom model, its regimes, the named sediments against open literature, the fit (D-63, D-66, D-67, D-132) | Bellhop for one | fast |
 | `test_surface.py`, `test_surface_models.py`, `test_bubble_layer.py` | 5, 13, 9 | surface backscatter, bubble loss (D-38, D-68, D-87) | Bellhop for one; `arlpy` for one | fast |
 | `test_timespread.py`, `test_coherent_phase.py` | 34, 10 | time, angle and frequency spreading after TR 0702; the coherent arrival's wander (D-62, D-76, D-108) | CUDA for one | minutes |
 | `test_noise.py`, `test_baseband_noise.py`, `test_noise_statistics.py`, `test_noise_fit.py` | 5, 7, 10, 27 | noise spectra, array coherence, K statistics, a fit to a recording (D-103, D-124) | `arlpy` for one; UACR noise for two | minutes |
@@ -291,6 +298,14 @@ no C++ test binary for `libs/motion` or `libs/holoscan_ops`: they are tested fro
 | `test_sst_validation.py` | 24 | two worked examples of APL-UW TR 0702 end to end (D-78, D-144) | | long |
 | `test_simcal.py` | 7 | simulator calibration finds hidden settings in a simulated log (D-56) | | minutes |
 | `test_literature_models.py`, `test_medium_models.py`, `test_lloyd.py` | 11, 13, 21 | formulas against printed values; medium helpers; the surface-image factor (D-126) | `arlpy` for three; Bellhop for one | fast |
+| `test_jackson_2007_bottom.py`, `test_surface_papers_1997.py`, `test_grain_size_relations.py`, `test_surface_dahl_1997.py` | 14, 12, 10, 11 | the book's bottom equalities and the surface papers' equalities; the grain-size relations (the default since D-209); `extinction: dahl_1997` (the default since D-216) (D-206) | | fast |
+| `test_measure.py` | 6 | measurement estimators and error bars for real data (D-207) | | fast |
+| `test_sediment_penetration.py`, `test_sediment_roughness.py` | 16, 16 | the sediment tier's `penetration: fluid` and `rough` on both engines; the two buried scenes name fluid and medium sand (D-212, D-213) | the C++ engine for the parity half | fast to minutes |
+| `test_elastic_bottom.py`, `test_elastic_live.py` | 13, 9 | elastic rock in the simulator, Bellhop and the live chain's models (D-214, D-215) | Bellhop for one | fast |
+| `test_forward_scatter_dahl.py`, `test_asiaex_dahl_2004.py`, `test_kirchhoff_go.py` | 7, 5, 16 | the large-scale slope law, Dahl 2004's ASIAEX scenario, the opt-in exact Kirchhoff tail; four strict xfails between them (D-217, D-218) | | minutes |
+| `test_sim_engine_select.py`, `test_sim_engine_record.py`, `test_sim_engine_arg.py` | 15, 15, 11 | engine selection never silent; the engine note in every record; the engine argument reaching every provider (D-219, D-220) | CUDA for one | fast to minutes |
+| `test_reverb_budget.py` | 7 | the reverberation term of the link budget and the coverage picture against simulated data and the closed form (D-221) | Bellhop (about 7 minutes) | long |
+| `test_mourad_jackson_1989.py` | 12 | the 1989 model against the paper's figures; our volume term against its corrected eq. (39) (D-223) | | fast |
 
 ### Configuration, builds, tools, whole scenes
 
@@ -329,7 +344,7 @@ A golden changes only with a decision entry that says what moved. A gallery rege
 break `test_documented_full_size_classes`: update its expectations honestly, with a comment
 saying what got worse (`docs/HANDOFF.md` section 4).
 
-## 3. Tests that pin a decision (D-155 to D-203)
+## 3. Tests that pin a decision (D-155 to D-225)
 
 Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/cpp/`.
 
@@ -366,7 +381,27 @@ Python tests are in `tests/python/`, C++ tests (written `Suite.Name`) in `tests/
 | D-185 | a board clock's rate: configured, estimated, opt-in discipline (sonar-ubg) | `test_board_clock.py` (the whole file) |
 | D-186 (sonar-ogg, sonar-x8v) | `UdpSourceOp` joins its threads in its destructor too; the Sensor Bridge loopback at a Popoto build's channel count and rate | `test_holoscan_cpp.py::test_an_operator_that_throws_ends_the_application_with_its_reason_not_an_abort` (passed before the fix too: Holoscan 4.6 stops the operators after an exception; no fail-before was found); `test_hsb.py::test_a_popoto_trial_is_framed_at_its_builds_rate_and_its_pings_come_back` (1, 2, 3 rows), `::test_loopback_at_a_popoto_builds_channel_count_and_rate_gives_the_direct_chains_reports` (C++ at 1, 2, 3 rows, Python at 1 and 2; **an expected failure (xfail) with the numbers when frames are lost**, which in the containers so far is nearly every run), `::test_popoto_rate_loopback_study` (`GPUSONAR_HSB_STUDY=1`) |
 | D-187 (sonar-bep, sonar-us7) | the Popoto-rate loss is at the start of the run; the receiver's queue defaults to 4 s of the stream | `test_hsb_receive.py::test_the_receiver_queue_defaults_to_four_seconds_of_the_stream`; `test_hsb.py::test_the_loss_location_places_missing_frames_in_the_pings_cycle`; the Popoto loopback test passes when every missing frame is in the first 0.25 s of stream, none damaged |
-| 3-D work, 2026-11-26 (sonar-rcq P1 to P6; its decision entry not yet written) | the cross-slope warning; Bellhop3D's arrivals read and merged; the `eigenray3d` provider; one top-level bed; the tier against Bellhop3D's converged field | `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` (the whole files); `test_seamount_3d.py::test_eigenray3d_tier_over_the_seamount` (`GPUSONAR_SLOW_ORACLES=1`) |
+| D-225 (the merge) | three sediment-fit tests compared at a stated tolerance, not bit for bit (weakened: FIT_REL 2e-6, FLAT_REL 2e-5; w2 on its limit no longer asserted) | `test_sediment_fit.py::test_the_old_default_named_is_the_same_as_before_the_opt_in_options_and_a10`, `::test_tool_options_for_error_bars_bounds_and_holds`, `::test_a_parameter_on_a_bound_is_in_the_result_and_called_not_measured` |
+| D-224 | five named site rows; the soft rows' range [0.0008, 0.005]; the default model against each paper's figure (differences recorded) | `test_sediment_table.py` (`test_the_jackson_briggs_rows_are_table_v_as_printed`, `test_the_williams_jackson_panama_city_row_is_table_i`, `test_each_site_row_through_the_default_model_against_the_papers_figure` and the rest) |
+| D-223 | Wagner shadowing in `composite` and `combined`; the Mourad-Jackson (1989) model; the volume term pinned to the corrected eq. (39); seven-digit constants | `test_mourad_jackson_1989.py`, `test_bottom_models.py` (+6), `test_grain_size_relations.py`, `test_reverberation.py` (+2), `test_reverb_bistatic.py` (+1); `test_gallaudet_boundaries.py` (the relations' check widened 6e-5 -> 8e-5, the miss pinned) |
+| D-222 | four papers read; no code | none |
+| D-221 (sonar-w2w3) | the reverberation term of the link budget and the coverage picture | `test_reverb_budget.py` (the whole file; Bellhop; about 7 minutes); `test_live_cpp.py::test_coverage_reverberation_is_equal_in_both_engines_and_off_is_as_before`; `CoverageReverb.*` |
+| D-220 | every record names its engines; the engine argument reaches every provider | `test_sim_engine_record.py`, `test_sim_engine_arg.py` (the whole files) |
+| D-219 | an `{axis, position}` wall takes axis 0 or 1; an explicit `cpp` without the C++ simulator raises; a stale module is named | `test_sim_cpp.py` (`test_each_wall_axis_runs_in_cpp_and_matches_numpy`, `test_a_wall_axis_that_is_not_0_or_1_is_refused_in_both_engines`, `test_an_axis_wall_needs_its_axis_and_a_finite_position`, `test_image_source_field_points_must_be_s_by_3`); `Paths.AnAxisWallOtherThanXOrYIsRefused`; `test_sim_engine_select.py` |
+| D-218 | the opt-in exact Kirchhoff tail; Dahl 1996 eq. (13) and Table I kd* (two strict xfails) | `test_kirchhoff_go.py` |
+| D-217 | the large-scale slope by default; `asiaex_dahl_2004` | `test_forward_scatter_dahl.py`, `test_asiaex_dahl_2004.py` (one strict xfail each); `test_timespread.py`; `test_sst_validation.py::test_asiaex_tails_decay_at_the_rule_of_thumb` (the tool's fit window changed); `test_channel_replay.py::test_model_surface_arrival_statistics_match_the_closed_forms` (moved to `slope_law: cox_munk_total`) |
+| D-216 | `dahl_1997` by default, the attenuated facet term, the geometric-mean bistatic rule | `test_surface_dahl_1997.py` (hex pins at rtol 1e-14: weakened), `test_literature_models.py`, `test_gallaudet_boundaries.py`, `test_surface_models.py`; `test_sst_validation.py::test_pursuit_target_is_below_the_reverberation_but_separated_in_doppler` (weakened: the rise over the mean reverberation, not one draw) |
+| D-215 | rock elastic in the live chain's models, both engines | `test_elastic_live.py`; `test_live_cpp.py::test_rock_bottom_is_elastic_and_equal_in_both_engines`; `Rock.*` |
+| D-214 | rock elastic in the simulator and Bellhop | `test_elastic_bottom.py`; `Paths.ElasticRockCoefficient`; elastic cases in `test_sim_cpp.py` |
+| D-213 | `penetration: rough`, both engines | `test_sediment_roughness.py`; `test_sim_cpp.py` (`test_rough_*`, one CUDA-gated); `Paths.SedimentRough*` |
+| D-212 (sonar-zpm6) | `penetration: fluid`; the two buried scenes use it | `test_sediment_penetration.py`; `test_sim_cpp.py`; `test_environment.py::test_every_shipped_scenario_states_its_site_once` (narrowed for `fidelity: sediment`) |
+| D-210, D-211 | the fit's small-slope default; the row's prior by default; sigma2 up to 0.005 | `test_sediment_fit.py` (`test_a10_*`, `test_default_prior_bounds_of_a_row_are_its_grain_sizes_scattering_priors`, `test_tool_applies_the_rows_prior_by_default_and_the_off_switch_gives_the_fit_of_before`, `test_the_sigma2_prior_reaches_the_printed_arafura_fit` and the rest) |
+| D-209 | the relations by default; the soft rows' information keys; the Gallaudet site row | `test_grain_size_relations.py::test_the_default_is_the_relations`; `test_sediment_table.py`; three checks naming `table_linear` |
+| D-207 (sonar-mxsa) | measurement estimators and the fit's opt-in error bars and priors | `test_measure.py`; `test_sediment_fit.py` |
+| D-206 | the book's and the surface papers' equalities; the opt-in relations and `dahl_1997` | `test_jackson_2007_bottom.py`, `test_surface_papers_1997.py`, `test_grain_size_relations.py`, `test_surface_dahl_1997.py` |
+| D-205 (sonar-8qn9, sonar-k9v7) | an `{axis, position}` wall path arrives mirrored in the wall; the general construction in C++ | `test_image_planes.py::test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane` and every test of the file on both engines; `Paths.AWallPathArrivesMirroredInTheWall`, `PlaneImages.*` |
+| D-204 (sonar-d7sw) | the five 3-D scenes and their twins | `test_3d_scenarios.py`; the pinned list in `test_eigenray3d_scenario.py` |
+| D-202, 3-D work, 2026-11-26 (sonar-rcq P1 to P6) | the cross-slope warning; Bellhop3D's arrivals read and merged; the `eigenray3d` provider; one top-level bed; the tier against Bellhop3D's converged field | `test_cross_slope.py`, `test_bellhop3d_reader.py`, `test_bellhop3d_provider.py`, `test_eigenray3d_scenario.py` (the whole files); `test_seamount_3d.py::test_eigenray3d_tier_over_the_seamount` (`GPUSONAR_SLOW_ORACLES=1`) |
 | D-201 (sonar-0nsi) | image sources off tilted planes and walls against closed forms; the four multipath scenes' ghost geometry | `test_image_planes.py`, `test_multipath_scenes.py` (the whole files) |
 | D-200 (sonar-bwu) | every receiver merges per-board streams as the relay in front does | `test_board_streams.py` (the `--listen` and Sensor Bridge cases); `test_holoscan_cpp.py::test_holoscan_merges_per_board_streams_as_the_relay_in_front_does`; `test_hsb.py::test_loopback_of_one_stream_per_board_gives_the_direct_chains_reports` |
 | D-198 (sonar-80b) | `flank_patrol`'s small vehicle is not tracked (below the scene's reverberation) | `test_realistic_scenes.py::test_flank_patrol_detects_and_tracks` |
@@ -393,6 +428,9 @@ The option round trip that every chain key must pass, whatever decision added it
 | `test_study_resume.py::test_gallery_quick_does_not_default_to_the_committed_gallery` fails while that symlink exists | it compares an unresolved path through the symlink | not a failure of the code: remove the symlink and rerun that file |
 | The repository's stop hook reports an untracked file | the same `build` symlink | remove it |
 | Tests fail in the main checkout after a merge, on code that passes elsewhere | the built module `python/gpusonar/_gpusonar*.so` is older than the C++ sources | rebuild (`cmake --build build -j2`) before believing the failure |
+| The C++-engine tests of `test_image_planes.py`, `test_sim_cpp.py`, `test_sediment_penetration.py`, `test_sediment_roughness.py`, `test_elastic_bottom.py` or `test_elastic_live.py` fail with `StaleModuleError: … has no <binding>: it is older than the sources` (or a pybind11 `TypeError` on a keyword such as `roughness=`, or "unknown option coverage_bottom_shear_speed") | a module built before the current sources, e.g. the main checkout's, which lacks `sim_plane_image_eigenrays` (D-219) | rebuild before reading these as regressions |
+| Every test that asks for the `cpp` engine skips, its reason naming the C++ simulator | a module built without the C++ simulator: since D-219 an explicit `cpp` raises `EngineUnavailable` (before, it ran NumPy against NumPy and passed), and `tests/python/conftest.py` turns that into a skip | build with `SONAR_BUILD_PYTHON=ON`; the summary line's skips say how many |
+| A sediment-fit test differs by about 1e-8 relative, or w2 stops just off its 1e-9 limit | another platform's NumPy, SciPy or libm (the GPU job's image); within `least_squares`' tolerance | since D-225 the tests hold fitted values within 2e-6 relative; a larger difference is real |
 | A build or a test dies with a write error, or a job upload fails | the container's disk is small (a few GB free) | remove build directories and uploaded tarballs after use |
 | A GPU job on `a10g-small` hangs at 0 % CPU during the Ceres build | 16 GB of RAM: out of memory | use `l4x1`, or `a10g-large` |
 | Sensor Bridge loopback loses frames or shows receive delays of tens of milliseconds on `a10g-small` | a 3-CPU cgroup quota the CPU affinity does not show; with too many OpenMP threads the receiver waits behind throttling (D-173) | the tests take half of min(affinity, quota); on other hosts pass `--chain-omp-threads` |
@@ -438,7 +476,8 @@ navigation unit or Sensor Bridge hardware (`docs/STATUS.md`, first paragraph).
 | Motion estimation | the acceptance bounds are ours (the paper reports none); lambda 2 on few scenes; along-track surge not implemented; the Ceres solve is CPU only | D-164; `sonar-0bc`, `sonar-7k2` |
 | Propagation | 3-D propagation in the shipped scenarios is N × 2-D at most; the opt-in `eigenray3d` tier is held against Bellhop3D only by the 8-minute test that runs with `GPUSONAR_SLOW_ORACLES=1`, and has no reverberation over relief; APL-UW TR 9407's boundary models are unread and must stay so | D-149, D-197; `docs/tasks/PROPAGATION_3D.md`; STATUS milestone 12 |
 | Boundary models against data | one site, one wind (Gallaudet 2001, 68 kHz); characterisations, not bounds from the paper | D-193; `sonar-64sm` |
-| Link budget | no reverberation term, so no test of a reverberation-limited prediction | D-198; `sonar-w2w3` |
+| Link budget | the reverberation term (D-221) is held against simulated data on `flank_patrol`, two 10 km scenes and `sst_sediment_reverb`; no shipped site states scattering, so no design budget is tested with it; the target margins are held at 5 dB a target | D-221 |
+| New opt-in physics | `penetration: rough` has no imaging test (SAS or 3-D); `kirchhoff_go` and the 1989 model are checked against figure readings; the rock shear values are not measured | D-213, D-218, D-223, D-214 |
 | Multipath in the chains | the FLS chain's ghost tracks measured on one seed, 4 pings, half densities; no rejection tested | D-201; `sonar-izys` |
 | Performance | FLOP/s from hardware counters could not be measured on the jobs | STATUS milestone 13 |
 | The beads hook | the worktree rule of D-177 has no test in `tests/` | D-177 |

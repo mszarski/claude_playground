@@ -2,7 +2,8 @@
 
 For a software engineer or a coding model continuing the code with no conversation history.
 Written at the tree of `933972b` on branch `claude/gpu-sonar-suite-u289p5`, decisions to D-181;
-brought to D-201 and the opt-in 3-D tier on 2026-11-26 (sections 1, 5.1, 5.4, 6 and 8 changed).
+brought to D-201 and the opt-in 3-D tier on 2026-11-26 (sections 1, 5.1, 5.4, 6 and 8 changed), and to
+D-225 the same day (the link-budget row of section 1 and the simulator engine in section 6).
 Every statement was checked against the code at that tree; where a document and the code
 disagree, the code is what is written here and the document is listed in section 10.
 
@@ -62,7 +63,7 @@ not written and the navigation mapping for the vehicle's unit is a template (STA
 | Sensor Bridge loopback | the margin at real time is the receiver's socket buffer; the chain's OpenMP count must be below the CPU quota (D-162, D-173). `--chain-omp-threads` assumes the receive application's single-thread scheduler. The idle stop ran on a GPU only in runs set up for it. `serve` has no `--backend`. At a Popoto build's rate the first 12 to 20 ms of stream are lost while Sensor Bridge's receiver starts (D-187, D-188): a board must stream 0.25 s before the first transmit that matters, and nothing enforces it. A host with Sensor Bridge's own socket setup, and the RoCE receiver, are unmeasured (D-189) | `sonar-vmm`, `sonar-3wd`, `sonar-thu`, `sonar-l6j`, `sonar-e2u`, `sonar-a75`, `sonar-02c`, `sonar-6rs` |
 | Per-board streams | boards aligned by capture start and configured rate only (they must agree with true time to about 0.8 ms); ranges are not corrected for a board's clock rate; through Sensor Bridge every board's frames share one data channel, so the boards must have equal channel counts; the Holoscan application and `receive` ignore `stream_clock_ppm` / `source.clock_ppm` and `source.clock` for a whole-array stream (D-184, D-185, D-200) | `sonar-9a2`, `sonar-pnyv` |
 | Multipath in the FLS chain | with walls and a tilted bed the chain tracks the ghosts as objects and its `multipath` class fires on none (one seed, D-201) | `sonar-izys` |
-| Link budget | `SonarEquation` and the coverage model have no reverberation term: noise-limited and optimistic where reverberation dominates (D-198) | `sonar-w2w3` |
+| Link budget | the reverberation term exists (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`, D-221; both engines); no shipped site states scattering, so design figures are noise-only and say so: optimistic where reverberation dominates. With the term the target margins on `flank_patrol` are off by up to 4.7 dB, cause not established; a coverage refresh with it costs about ten times as much | `sonar-w2w3` |
 | Flank stream receive | a ping-index skip that also lost samples in the gap, and a real loss with jitter beyond half an interval, are still miscounted (D-177) | `sonar-thu` |
 | Wire format | the sample word length is configuration on both ends (the block header has no field); the Holoscan report sink cannot split an over-long report and refuses it | STATUS item 35 |
 | Motion estimation | lambda 2 is tuned on few scenes; `MotionOptions.bathymetry` also moves the DVL seabed; delays read 0.2 to 0.9 % below the model in every window; no along-track surge estimation; the CUDA delay path is slower than the host | `sonar-0bc`, `sonar-dix`, `sonar-oii`, `sonar-7k2`, `sonar-b6r` |
@@ -649,7 +650,11 @@ scenario into ping records plus ground truth. Stages in order, each tappable
 | One-way sources, passive records | `sim/sources.py`, `sim/passive.py` | D-78, D-123 | `test_oneway_sources.py` |
 
 Which implementation the ported parts run on: `sim/engine.py`, `GPUSONAR_SIM_ENGINE=numpy` or
-`cpp`. Calibrating the simulator to real data (`simcal.py`, `tools/calibrate_sim.py`) fits
+`cpp`. Since D-219 an explicit `cpp` without the C++ simulator raises `EngineUnavailable` (the
+default falls back to NumPy with one warning a process) and a module older than the sources raises
+`StaleModuleError` naming the binding it lacks; since D-220 the run's engine reaches every provider
+the simulator builds itself and every record names the engine of each stage
+(`extra_json` `gpusonar.engine`). Calibrating the simulator to real data (`simcal.py`, `tools/calibrate_sim.py`) fits
 strengths, not geometry, and has only been checked on its own simulated logs
 (`docs/SIM_CALIBRATION.md`; `sonar-sul`).
 
