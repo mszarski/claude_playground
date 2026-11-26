@@ -165,6 +165,13 @@ def test_every_shipped_scenario_states_its_site_once():
         if "base" in typed:
             continue                                                          # a variant: its parent is checked
         for key in site_keys["propagation"]:
+            if key == "bottom" and typed.get("fidelity") == "sediment":
+                # The sediment tier's `bottom` is the medium the buried objects lie in, typed beside the tier's own
+                # `sediment_speed` and `interface_z` (which were always typed there). Such a scene has no stated water
+                # depth, and an environment bottom needs one, so the rule is not applied to this key of this tier
+                # (narrowed 2026-11-26 when buried_cylinder and buried_objects took `penetration: fluid`).
+                assert set(typed["propagation"]["bottom"]) <= {"sediment", "speed", "density", "attenuation"}, name
+                continue
             assert key not in (typed.get("propagation") or {}), f"{name}: propagation.{key} is typed; it belongs to the environment"
         # the ocean block may only hold what the environment cannot: a bed whose depth changes with range
         assert set((typed.get("propagation") or {}).get("environment") or {}) <= {"depth", "bathymetry"}, name
