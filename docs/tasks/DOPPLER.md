@@ -593,7 +593,7 @@ background.
    12 km ship read rates scattered over +-3 m/s from ping to ping (true -0.03 to -0.99 m/s; the baseline found the same,
    section 3.3 item 5). On a point (the tests) and on the wreck it is within one step; the small vehicle's one bank
    detection read 2.06 m/s (true 2.00).
-5. **Cost: 22 to 32 times the chain on the scenes' pings, 2.3 to 2.9 times on the Popoto trial pings** (one compression
+5. **Cost: 22 to 51 times the chain (table 9.5; "22 to 32" before a correction of 2026-11-26 left out the far mover, 44 and 51 times) on the scenes' pings, 2.3 to 2.9 times on the Popoto trial pings** (one compression
    and one map per hypothesis; table 9.5; the trial's window is short and its other stages weigh more). Measured on this
    CPU only; nothing ran on a GPU.
 6. **Sidelobes of very strong echoes**: on the test fixture (targets 80 to 90 dB over the noise) the bank adds detections
