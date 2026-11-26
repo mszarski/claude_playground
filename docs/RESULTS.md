@@ -2292,9 +2292,14 @@ coverage model now have a reverberation term (issue `sonar-w2w3`; `gpusonar.reve
 gives the boundaries' scattering; a budget without it is optimistic where reverberation dominates. For
 `flank_patrol` (full size, seed 17, one ping; `tests/python/test_reverb_budget.py`), each target's clean
 echo peak over the mean background on its beam, measured / with the term / noise-only (dB): submarine
-26.3 / 26.3 / 46.5, small vehicle 6.6 / 9.7 / 34.3, wreck 29.1 / 24.4 / 42.2; reverberation over noise
-measured / predicted 20.0 / 20.2, 24.7 / 24.6, 16.9 / 17.7. What remains is the echo's multipath (the
-coverage picture's six rays against Bellhop's 32 arrivals), not the reverberation. D-198's figures (3.8 to
+26.6 / 28.8 / 48.8, small vehicle 6.9 / 10.3 / 34.6, wreck 29.4 / 28.6 / 46.0 (before the echo fix of
+2026-11-26: 26.5, 10.0, 24.7 with the term, worst 4.7 dB, rms 3.3); the same targets as stationary points
+(the submarine one +16 dB point, the vehicle stopped) measure 28.3, 10.2, 29.4, within 0.9 dB of the
+prediction (rms 0.6). Reverberation over noise measured / predicted 19.7 / 19.9, 24.5 / 24.3, 16.7 / 17.4. The six rays
+were not the cause (6 to 1000 arrivals move the predictions by under 0.15 dB): the wreck, 2 m above the bed,
+lost its bottom-reflected paths' interference when they added as power; what is left in the scene as shipped
+is the targets' motion (the vehicle's 2 m/s costs its 1 s LFM 3.4 dB) and extent (the submarine's highlights,
+1.7 dB), which a coverage class does not have. D-198's figures (3.8 to
 5.1 dB, the gallery's 4 m cells and CFAR) are a different measure of the same scene.
 
 Source: `tools/surface_image_validation.py --only-chain` →
@@ -2496,10 +2501,12 @@ for this file.
 
 ## The coverage picture: validation
 
-The coverage picture's reverberation term (`coverage.reverberation`, issue `sonar-w2w3`) is in it only
+The coverage picture's reverberation term (`coverage.reverberation`, issue `sonar-w2w3`) is in it
 where the configuration gives the boundaries' scattering; otherwise the member says
-`"reverberation": "not included: ..."` and its probabilities are noise-limited, optimistic where
-reverberation dominates. No shipped deployment file gives the scattering. Validation of the term:
+`"reverberation": "not included: <reason>"` and its probabilities are noise-limited, optimistic where
+reverberation dominates. Every shipped face and vehicle deployment file now gives it, from its site by the
+one rule (`gpusonar.environment.boundary_scattering`: the illustrative shelf's stated Lambert −27 dB bottom,
+Chapman-Harris at its 5 m/s wind); the rehearsal file says why it is not included. Validation of the term:
 J&R (G.13) for one path each way within 0.2 dB; the rays against the simulator's own integral (image
 sources) within 0.3 dB from 1 to 4 km; reverberation over noise against simulated data within 1.3 dB
 on `flank_patrol` (2.2 to 3.6 km), `flank_target_10km` (−6.5 measured, −5.2 predicted) and

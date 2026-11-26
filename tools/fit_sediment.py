@@ -149,7 +149,7 @@ def main(argv=None) -> int:
     ap.add_argument("--fit-geoacoustic", action="store_true", help="fit rho, nu, delta too (start from the held values)")
     ap.add_argument("--sound-speed", type=float, default=1500.0, help="water sound speed at the bottom, m/s")
     ap.add_argument("--sigma-db", type=float, help="measurement error of every value, dB (overrides a sigma_db column)")
-    ap.add_argument("--roughness-model", default=sediment_fit.DEFAULT_ROUGHNESS_MODEL, choices=bottom.ROUGHNESS_MODELS,
+    ap.add_argument("--roughness-model", default=sediment_fit.DEFAULT_ROUGHNESS_MODEL, choices=bottom.ROUGHNESS_MODELS + bottom.OPT_IN_ROUGHNESS_MODELS,
                     help=f"roughness model of the fit (default {sediment_fit.DEFAULT_ROUGHNESS_MODEL}; "
                          "perturbation was the default before A10)")
     ap.add_argument("--name", default="fitted_sediment", help="name of the output row")

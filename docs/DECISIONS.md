@@ -3906,6 +3906,7 @@ data give about 4 dB over the background. Follow-up filed.
   option; a GPU run.
 
 *Later (pointer added 2026-11-26): the link budget and coverage picture have a reverberation term since D-221 (no shipped site states scattering, so design figures stay noise-only).*
+*Later (pointer added 2026-11-26): since D-227 the shipped planning sites and face deployment files state their scattering; the depth plan and the coverage picture include it.*
 
 ### D-199 Correction to D-197's account of the fjord beds (amends D-197; nothing changed)
 
@@ -4855,3 +4856,151 @@ What is stale or was weakened first:
   `docs/references/CONFORMANCE.md`, the handoff set's state lines, `README.md`, `docs/SCENARIOS.md`'s
   counts, `docs/tasks/SST_GAPS_JACKSON.md` (a closing state section). Scenario files 91; Python test
   files 145 (1775 `def test_` functions); GoogleTest 193 `TEST` cases.
+
+### D-226 Williams-Jackson (1998) and Jackson-Briggs (1992) applied as opt-ins: the published bistatic roughness join, a spectral bistatic volume term, a relief-exponent warning, a 1-D to 2-D relief helper (notes [WJ] 5.1-5.3, 5.6 and [JB] 5.3-5.5; G-15 and G-18 in part; no default moved; Python only)
+
+2026-11-26. Sources: Williams and Jackson (1998) and Jackson and Briggs (1992), confirmed (read from
+the owner's copies; `docs/references/bottom_bistatic_williams_jackson_1998.md`,
+`bottom_backscatter_jackson_briggs_1992.md`); every measured figure here is ours.
+
+- What is still wrong: the default small-slope roughness is 6 to 7 dB above the published bistatic
+  join (eq. (10)) at 20 to 45 degrees for sands (Panama City −6.1 dB at 20°; medium sand −6.8 at 30°),
+  up to 5.3 dB out of plane. Against the one bistatic data set (Table AII, one site, the part the
+  note prints) the default is further from the data than the paper's model: mean bistatic bias +6.1
+  against +3.3 dB, backscatter +1.4 against −0.45 dB. J&R p. 351 say the fluid model overpredicts at
+  that site. The default stays small-slope (D-86; the owner, D-222).
+- What the reference note overstated: its "−1.4 to −1.8 dB at every geometry, also at specular" for
+  very fine silt. Measured against small-slope at 30 and 100 kHz: −0.07 dB at 5° backscatter, −0.59 at
+  10°, 0 at exact specular, −1.15 to −1.86 at 20° and above and out of plane. The note's slope of
+  32.9° used J&R's rounded w2; with Table V's 0.00598 cm^4 it is 33.06° (the paper prints 33°).
+- One printed Table AII entry (9.9, 16.7, 14.3; −36.3 dB) lies 17 to 18 dB below both models.
+- New, opt-in: `roughness_model: williams_jackson_1998` (kept out of `ROUGHNESS_MODELS`, in
+  `OPT_IN_ROUGHNESS_MODELS`, so the fit's model spread does not move; the fit and
+  `tools/fit_sediment.py --roughness-model` take it when named); `volume_model:
+  williams_jackson_1998` (from w3, gamma3 and mu or a site row's `volume_spectral` block; refused for
+  class rows, which have no such values; rho_rk = −1 only); a warning, once per model, for a relief
+  exponent between 3.7 and 4 ([JB] p. 974; no shipped row is above 3.67; values unchanged);
+  `bottom.roughness_2d_from_1d` ([JB] eq. (4)). At exact specular the join returns the Kirchhoff term
+  (eq. (10)), not zero.
+- Visible beyond the new options: `volume_strength` without `sigma2` raises `ValueError`, not
+  `TypeError`; `fit_sediment.py --help` lists one more choice. The fit has no `volume_model` option.
+- Tests: `tests/python/test_williams_jackson_1998.py` (Figs. 7 and 8 within 1 dB; the 1.505 dB rule at
+  the crossing to 1e-6 dB; Table AII's printed part as a recorded characterisation),
+  `test_jackson_briggs_1992.py`. Defaults bit-identical on a grid (sha256, in the package's scratch).
+- Open: the default roughness model against the published join ([WJ] 5.4, the owner's); the general
+  spectral volume form of G-15; a `volume_model` in the fit.
+
+### D-227 The sites' boundary scattering is in the depth plan and the coverage pictures; the term's defects (a) to (e) and (k) fixed (the owner, 2026-11-26: "add boundary scattering to the builds and environment files… fix those wrong things if we need to move a number that is physically justified"; amends D-221, D-198 and STATUS question 40)
+
+2026-11-26. Every figure is ours (simulation and budget); every site value is illustrative.
+
+- What got worse, worst first (`docs/design/popoto_depth_planner.json` before `f5054b4`, after
+  `bf55a7b`; 83 of 117 plans moved; reach at the recommended own depth, before → after):
+
+  | Build | Water | Class | Reach, km | Margin, dB |
+  | --- | --- | --- | --- | --- |
+  | face 3x32 | 100 m shelf | +5 dB `xl_auv` | 9.58 → 2.56 | −3.2 → −4.6 |
+  | face 2x32 | 100 m shelf | `xl_auv` | 8.80 → 2.56 | −4.7 → −5.7 |
+  | face 1x32 | 100 m shelf | `xl_auv` | 8.02 → 2.56 | −7.2 → −7.8 |
+  | face, all three | 200 m winter sand | `xl_auv` | 6.46 to 7.24 → 1.78 | −8.3 → −10.5 (3x32) |
+  | face, all three | 1000 m silt slope | `xl_auv` | 2.56 to 3.34 → 1.00 | |
+  | face | the ladder waters | `xl_auv` | 5.7 to 7.2 → 3.3 to 6.5 | |
+  | static 3x32 / 2x32 | shelf | `xl_auv` | 3.00 → 1.93 | +9.1 → −1.6 / +7.6 → −1.7 |
+  | testauv 1x32 | shelf | `xl_auv` | 2.00 → 1.40 | +11.1 → −0.4 |
+  | static, testauv | shelf | ship, `large_submerged` | unchanged | 32.3 → 21.7, 28.5 → 19.1 (now limited by reverberation) |
+  | face | sea state 5, no bottom | `xl_auv` | 2.7 to 3.3 → 1.7 to 2.7 | |
+
+  The coverage picture of the face deployment files (the shelf, the sector's 60° edge): `xl_auv` from
+  6.37 to 8.10 km to 1.24 to 1.37 km; ship and `large_submerged` stay at 12.7 km, noise-limited. The
+  +25 dB classes stay noise-limited at 12 km in the plan; their margins fall 0.1 to 2.2 dB (shelf
+  face builds 0.6 to 1.4). In deep water at sea state 5 some recommended depths moved with no change
+  of margin (testauv 293 → 113 m): the optimum is flat.
+- Moved, not by reverberation: the echo fix below moves the noise-only picture too (`xl_auv`, face
+  1x32 from 10 m: 6.52 → 6.91 km). Not moved: the free-field link budgets (`derived.json`,
+  `link_budgets.png`, POP-3) have no site and stay noise-only, and say why.
+- Still wrong or left: the first coverage refresh with the term costs 5.5 to 8 s (0.5 to 0.6 s after
+  a change of own depth, by a cache of the candidate depths; 6.3 s every time before); no element
+  patterns or baffle (about 3 dB of reverberation from behind a baffled face); no K-distributed
+  reverberation in the threshold (2.1 to 3.7 dB at shape 3 for 1e-3 to 1e-6); no Doppler separation
+  (D-228); no volume term in C++; range-independent bottoms; the planner's `limited_by` is judged at
+  the range of interest, so it reads "noise" for a class whose reach shrank to reverberation.
+- One rule, `environment.boundary_scattering` (which source applies when is ours): a stated
+  `bottom_scattering` wins (`false` is none); else a named complete fluid row at 10 to 100 kHz uses the
+  fluid-sediment model (Williams and Jackson 1998 pp. 169-170, confirmed); a row with a Lambert
+  parameter uses it; anything else is not included, with the reason, never a default strength. The
+  surface: a stated `surface_scattering`, else Chapman-Harris at the site's wind (fitted 0.4 to 6.4 kHz
+  and to 15 m/s, McDaniel 1993 eq. 27, confirmed; a warning outside), none without a wind. Used by
+  the simulator (`reverberation: site`, opt-in), `depthplan.plan` (on by default;
+  `reverberation=False` is the old plan), `buildspec` and `coverage.site_reverberation`.
+- Site values (illustrative, ours; each is the value of the shipped scene that simulates the same
+  water): `configs/builds/environments/illustrative.yaml` Lambert −27 dB on the shelf and the winter
+  sand, −30 on the silt slope, −35 on the summer mud; `coastal_12c_bellhop_sand` −27. Left without:
+  `coastal_12c_sand` (its scenes type two different laws) and the waters with no bottom.
+- The margin error of D-221 explained and reduced: the echo's four images about the target now add
+  as pressures (the wreck sits 2 m above the bed and its bottom-reflected paths, added as power, lost
+  their interference). `flank_patrol`, peak over background, measured / before / after: submarine 26.6
+  / 26.5 / 28.8; small vehicle 6.9 / 10.0 / 10.3; wreck 29.4 / 24.7 / 28.6 dB. Worst error 4.7 → 3.4,
+  rms 3.3 → 2.5; against the same targets as stationary points worst 0.9, rms 0.6. What is left is
+  the targets: 2 m/s costs the vehicle's 1 s LFM 3.4 dB; eight highlights cost the submarine 1.7 dB.
+  The ray count was not the cause (6 → 1000 arrivals moves the predictions under 0.15 dB): D-225's
+  correction (b) stands and `docs/RESULTS.md`'s "six rays" sentence is amended by this entry.
+- Also: the bounce count by convergence (0.1 dB, at most 160; the old rule was 1.2 dB low at 12.7 km
+  in 30 m); the beam integral at the steering angle (+0.6 / +1.6 / +3.1 dB at 30 / 45 / 60°; a build's
+  coverage states it at the sector's edge, the plan at broadside); a CW pulse through its matched
+  filter's triangle (within 0.7 dB of `sst_sediment_reverb`'s simulated data; the sinc was 0.9 to 1.9
+  high). Stacked rows gain nothing against reverberation (our assumption: it arrives by the echo's
+  own multipath; pessimistic by up to 10 log10(rows)).
+- Tests: `tests/python/test_site_scattering.py` (21), `test_reverb_budget.py` (tolerances tightened:
+  each margin within 4 dB, rms 3.0; stationary points within 1.0), GoogleTest
+  `CoverageReverb.CwTriangleConvergedBouncesNoteAndCandidates`, `test_lloyd.py` (its deep-plan fixture
+  now passes `reverberation=False` because it tests the noise-only decomposition; stated, not a
+  weakening). Simulated records of 10 scenes, the term-off coverage and the term-off plan are
+  bit-identical before and after (sha256). Both chain engines call the one C++ class; no CUDA file.
+- Not regenerated: `examples/live_popoto_12km_report.jsonl` (issue `sonar-tmvu`).
+
+### D-228 Doppler workstream scoped: plan, measured baseline and study tool (issue sonar-u1fu; `docs/tasks/DOPPLER.md`, `docs/tasks/doppler_baseline.json`, `tools/doppler_study.py`; no default, scene, chain or record changed)
+
+2026-11-26. Every number is ours: simulated records, CPU, one seed, a clairvoyant background mean.
+
+- What is wrong first: (1) simulated surface reverberation has no Doppler spread at long range
+  (`scatterer_motion.wind_speed` moves the scatterers vertically only), so every surface-limited gain
+  is an upper bound; no source read in the repository gives a model. (2) The live chain's baseband
+  keeps only the transmitted band (`libs/live/src/chain.cpp` passes no `max_range_rate`): a 1 s CW at
+  8 kHz keeps 8.7 Hz and a 2 m/s echo comes out 92 dB down. Harmless for the shipped sweeps; no
+  shipped long-range scene sends a tone (`popoto_12km` is a 4 to 6 kHz, 1 s sweep). (3) A single
+  tone fades in multipath (18.9 dB less echo energy than the sweep on image-source paths). (4)
+  `source_level_db_rms` scales before the window: a Hann pulse carries 0.39 of the energy.
+- Measured in `flank_patrol`: a Hann CW with a Doppler bank turns the small vehicle's 7.0 dB into
+  39.8 and the submarine's 26.6 into 63.4; the stationary wreck falls from 29.8 to −16.6, so the
+  sweep must stay. No gain at 12 km, where the scenes are noise-limited. A sweep replica bank alone
+  recovers 2 to 6 dB of mismatch.
+- Plan: packages D1 to D9 of `docs/tasks/DOPPLER.md`. The owner agreed (2026-11-26) that the sweep
+  replica bank (D4) and the tone-plus-sweep waveform (D2) go first, the chain's tone path (D3) after.
+  Seven questions for the owner are in its section 5.
+
+### D-229 The merge of D-226 to D-228 and the owner's answers to STATUS questions 36 to 42
+
+2026-11-26.
+
+- Full GPU suite on the second batch's tree (branch `batch2` at `de3717b`; NVIDIA L4, Hugging Face
+  job 6b080457d91f621b930a652a; the same switches as D-225): **2823 passed, 103 skipped, 4 xfailed,
+  none failed**, job exit 0. Before: 2763 passed, 102 skipped (D-225). The one more skip is
+  `test_tools_help.py`'s "not a git checkout" for the new tool. The session branch's later commits
+  were documents and the tracker only; the merge's four conflicts were in documents
+  (`docs/DEPLOYMENT.md`, `docs/handoff/HARDWARE.md`, `docs/handoff/SOFTWARE.md`: the batch's text;
+  `docs/tasks/SST_GAPS_JACKSON.md`: both, with G-15 and G-18 marked done in part).
+- At this tree: 91 scenario files; 148 Python test files (1816 `def test_` functions); GoogleTest 194
+  `TEST` cases.
+- The owner's answers (2026-11-26, "agree" to the orchestrator's recommendations):
+  36: rho, nu and delta are not bounded by default; the library fit takes a row with the tool's
+  default (done on its own branch, not in this merge). 37: the seven-digit constants stay. 38: no
+  environment schema change for fluid rock; the row's numbers are typed; a measured shear speed is
+  still wanted. 39: `penetration: rough` gets a cap that raises an error, never truncates (not yet
+  built). 40: answered by D-227 with illustrative values; real values per site are still wanted. 41:
+  the 1989 model is not extended to unequal angles and no forward shadowing is added. 42: the
+  large-scale slope law stays the default. Also: small-slope stays the bottom roughness default
+  (D-222, repeated after the owner asked for the reasoning).
+- Not in this merge: the library fit's row argument, the sweep replica bank, the tone-plus-sweep
+  waveform and the Popoto trade study (issue `sonar-3983`), each on its own branch.
+- Stale after this merge: `examples/live_popoto_12km_report.jsonl`, the `buried_objects` gallery
+  figure, `docs/figures/sst_validation.{md,json}` and `sst_pursuit.png` (issue `sonar-tmvu`).

@@ -4400,20 +4400,63 @@ centre serves both legs, as there). The coverage picture (C++, `coverage_reverbe
 the coefficients of the boundaries met on the way as powers, as for the target. The two agree within 0.3 dB from 1
 to 4 km in 100 m of isovelocity water (1 dB at 500 m, near the first bottom return). Reverberation in shallow
 water at kilometres arrives by many bounces: three reflections each way gave 8 to 14 dB too little on
-`flank_patrol`; the default is 0.4 x range / water depth (as many as a ray at 22° of grazing makes; ours), and the
-data then agree within 1.3 dB at 2.2 to 10 km.
+`flank_patrol`. The count is found by convergence (ours): from B = 0.4 x range / water depth (3 to 40), the paths are
+traced to B + max(2, B / 4) reflections and B is kept once those above it change no level by more than 0.1 dB, else B
+doubles, to at most 160. The fixed 0.4 rule it replaces was 1.2 dB low at 12.7 km in 30 m of water over sand (0.07 dB in
+100 m); the data agree within 1.3 dB at 2.2 to 10 km.
+
+**The target's echo with the term** (C(a), sonar-w2w3's follow-up). With the term on (and wherever `reverberation` is not
+`false`) the four images about the target, at most one surface and one bottom reflection each way, add as pressures
+through the compressed pulse (`echo_coherent`); before, only the direct and the once-surface-reflected paths did, and a
+target near the bed lost its bottom-reflected paths' interference: `flank_patrol`'s wreck, 2 m above it, read 4.7 dB under
+the simulated data, now 0.9 dB. The number of arrivals was not the cause: 6 to 1000 arrivals and 3 to 40 bounces moved
+the three targets' predictions by under 0.15 dB. Against stationary points (the scene's targets stopped, the submarine
+one point) the three margins agree within 0.9 dB, rms 0.6 dB; the scene as shipped is 2.3 and 3.4 dB above the prediction
+for the submarine and the small vehicle because of the targets themselves: the vehicle's 2 m/s opening costs its 1 s LFM
+3.4 dB of peak, the submarine's eight highlights 1.7 dB against one point (neither is in a coverage class).
+`reverberation: false` keeps the picture exactly as it was.
+
+**A site's scattering, one rule** (`gpusonar.environment.boundary_scattering`): the simulator (`reverberation: site`),
+the depth planner and `buildspec.surface_term` (`depthplan.reverberation_of`) and the coverage picture
+(`coverage.site_reverberation`, `of_build`) take a site's boundaries from what it states. Bottom: `bottom_scattering` when
+stated; else a sediment name whose row is a complete fluid sediment, at 10-100 kHz (Williams and Jackson 1998 pp.
+169-170, confirmed), the fluid-sediment model; a row with a Lambert parameter (rock, pebbles), Lambert's law at it;
+anything else, a bottom as numbers included, is NOT INCLUDED and the outputs say why: never a default strength. Surface:
+`surface_scattering` when stated, else Chapman-Harris at the site's wind (fitted at 0.4-6.4 kHz and to 15 m/s, McDaniel
+1993, confirmed; outside, a warning: an extrapolation, as every shipped FLS scene already uses it); no wind, not included.
+The planning sites (`configs/builds/environments/illustrative.yaml`) give their bottoms as numbers, so each states
+`bottom_scattering`: Lambert's law at the value of the shipped scene that simulates the same water (-27 dB sand, -30 silt,
+-35 mud; illustrative, ours), and every such scene's typed items are the rule's for its site (`test_site_scattering.py`).
+In the planner the rows are taken to gain nothing against reverberation (it arrives by the echo's own multipath; ours):
+margin = -10 log10(10^(-(SNR + G) / 10) + 10^(-SRR / 10)) - T1, G the rows' gain against noise, T1 the one-row threshold.
+
+**Off broadside and CW** (C(d), C(e)). A line's beam widens off broadside about as 1 / cos: Psi is the array's own
+integral at the steering (`coverage_beam_integral`, `reverb_steer`; +0.6, +1.6, +3.1 dB at 30, 45, 60 degrees for 32
+hydrophones at half a wavelength), and a build's coverage picture states it at the sector's edge (60 degrees), its worst
+bearing. A CW pulse's reverberation goes through its matched filter's triangle, (1 - |u| / T)^2, which holds 2 T / 3 where
+the sinc of the band 1 / T holds T: 1.76 dB less on spread reverberation and nothing ahead of the first return; against
+`sst_sediment_reverb`'s simulated CW data within 0.7 dB from the first bottom return to 50 m, where the sinc was 0.9 to
+1.9 dB high.
+
+**Cost** (C(b)). The pair loop makes the absorption and the table lookup once a path (results within 1e-12); the
+coverage picture keeps the recommendation's own depths while the water, the profile and the sonar hold, so a refresh
+after a change of own depth computes the present depth only: 5.5 to 8 s first and 0.5 s after, against 0.7 s for every
+refresh of the picture without the term before (0.07 s after a change of depth now) (popoto_face_1x32 over the 100 m shelf, 4 cores
+shared; the first refresh with the term is still 8 to 11 times the old one; convergence costs 3 to 4 s a call in 30 to 60 m of water).
 
 **Laws.** The scattering strengths are the simulator's: `sim.simulator.reverberation_item_strength` turns a
 `reverberation:` item into its law (the dispatch moved there from the simulator's loop unchanged; records
 bit-identical), and the coverage picture takes them as 2° tables of incident x scattered grazing.
 
 **Not in it.** The reverberation's statistics in the detection probability (the table assumes Gaussian
-background; K-distributed reverberation raises false alarms at a given threshold); the Doppler that separates a
-moving target from reverberation; the elements' vertical patterns and beam sidelobes in elevation in the C++ term
-(the Python reference has the element patterns); for a CW pulse the sinc's sidelobes stand in for the
-autocorrelation's triangle (it overstates reverberation within a few pulse lengths of the first bottom return);
-volume scattering in the coverage picture (refused there; the Python reference has it); a boundary that changes
-with range; the Lambert and empirical laws' own validity.
+background; K-distributed reverberation raises false alarms at a given threshold; no shipped site states a K shape); the
+Doppler that separates a moving target from reverberation (and the echo's own Doppler mismatch loss: 3.4 dB for
+`flank_patrol`'s vehicle); the elements' patterns (vertical and horizontal: a baffled face would take about 3 dB of
+reverberation from behind it out; the simulator's elements are omnidirectional too) and beam sidelobes in elevation in
+the C++ term (the Python reference has the element patterns); volume scattering in the coverage picture (refused
+there; the Python reference has it; no planning site's scene has a volume layer); a boundary that changes with range;
+the Lambert and empirical laws' own validity; the first metres after normal incidence in the C++ term (its fan stops at
+75 degrees of grazing).
 
 ## 33. Bottom scattering after Mourad and Jackson (1989) and Wagner (1967) (C1-C5, C-W1-C-W3) [CONFIRMED formulas; OURS bistatic shadowing]
 
@@ -4471,3 +4514,85 @@ ours to 1e-10 dB without the (k/10)^2 of (32); the corrected (39) equals our vol
 +2.34e-5, nu by -2.6e-5 to 0 (1-9 phi), the normal-incidence loss by at most 0.0023 dB; the pieces meet at
 5.3 phi to 4e-6 (5.1e-5 before). 1.0091 in J&R (11.2) is a misprint, now confirmed by the original;
 0.4566 / 0.4556 in (11.3) stays open ([MJ89] prints no k(Mz)).
+
+### 33.1 After Williams and Jackson (1998) and Jackson and Briggs (1992) ([WJ] 5.1-5.3, [JB] 5.3-5.5) [CONFIRMED formulas; OURS comparisons]
+
+Sources: `docs/references/bottom_bistatic_williams_jackson_1998.md` ([WJ], J. Acoust. Soc. Am. 103, 169-181) and
+`docs/references/bottom_backscatter_jackson_briggs_1992.md` ([JB], J. Acoust. Soc. Am. 92, 962-977), both read
+on the page images. Code: `python/gpusonar/sim/bottom.py`, Python only (still no C++ twin of any bottom
+scattering model: `grep` of `libs/` and `apps/` for the model names and `volume_strength` finds none; both
+reverberation engines take strengths from Python). Tests: `tests/python/test_williams_jackson_1998.py`,
+`test_jackson_briggs_1992.py`, `test_sediment_table.py`, `test_reverberation.py`, `test_reverb_bistatic.py`.
+
+**What is still wrong or unsettled (first).**
+- **Our default roughness model is not the published bistatic model, and it is further from the one bistatic
+  data set.** The default small-slope result lies above the published join of [WJ] (10) by 6-7 dB at 20-45 deg
+  backscatter for sands (Panama City, 40 kHz: -6.1 dB at 20 deg, -2.8 at 45; medium sand: -5.1 at 20, -6.8 at
+  30, -3.0 at 45, the same within 0.1 dB at 30, 40 and 100 kHz; sandy gravel -4.1 / -4.3 at 20 / 45 deg), out
+  of plane by up to 5.3 dB (20/20 deg, phi 90), and they agree within 0.2 dB at 5 deg and at specular for sands
+  (ours, roughness only). Against Table AII (Panama City, 142 values, the note's scratch `wj_data.py`, with the
+  paper's volume term) the published model is -0.45 / rms 1.31 dB in backscatter and +3.34 / 4.85 dB bistatic,
+  small-slope +1.36 / 1.73 and +6.08 / 7.11 dB (ours; bottom.py's new model equals the note's re-typing to
+  1.4e-13 dB, so these carry over). On the part of Table AII the note prints (in the test): published -0.46 /
+  1.21 and +2.33 / 5.73 dB, small-slope +1.31 / 1.62 and +5.49 / 7.30 dB. **One site, and J&R (2007) p. 351 say
+  the fluid model overpredicts at Panama City** (poroelastic effects, the same sign as our bias), so a lower
+  roughness term may be fitting a fluid-model error; J&R recommend small-slope (p. 336). The default stays
+  small-slope (D-86); the choice is the owner's ([WJ] 5.4).
+- Where the Kirchhoff and perturbation terms are equal, (10) with eta = -2 is 10 log10(2) / 2 = 1.5 dB below
+  both: very fine silt from 20 deg on and out of plane (1.2-1.9 dB below small-slope at 30 and 100 kHz; at 5 and
+  10 deg backscatter, where Kirchhoff is 7.5 and 2.5 dB above perturbation, only 0.1 and 0.6 dB; in the exact
+  specular direction 0, since the perturbation term is infinite there), Panama City near 10 deg backscatter (1.47
+  dB below the smaller term). That is the printed rule ("the smaller
+  cross section takes precedence"), with no physical basis beyond it.
+- The spectral volume term has no class values: w3, gamma3, mu exist for two sites ([WJ] Table I; Eckernfoerde,
+  a gassy mud whose parameters the paper calls phenomenological, with w3 adjusted, has no row). It is J&R (14.10)
+  with rho_rk = -1 only; the general (14.10) of plan G-15 (rho_rk, L_c, Lambda) is not implemented.
+- The intercept rule of [JB] (4) reproduces six of seven Table V rows; San Francisco pre-storm along strike
+  gives 0.000885 against the printed 0.000846 (+4.6 %): which is misprinted is not known (recorded, not changed).
+- The published monostatic scheme ([JB] p. 977: composite below about 80 deg, Kirchhoff above, switched where
+  Kirchhoff has fallen 15 dB below its peak, the volume term slope-averaged and shadowed) is the 1989 model of
+  Sec. 33 above; it is not our default either.
+
+**The published bistatic roughness model** ([WJ] 5.1): `roughness_model="williams_jackson_1998"`,
+sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), [WJ] (10) with eta = -2, sigma_k our `kirchhoff_strength` ([WJ]
+(11)-(15), R at the facet angle arcsin(Delta)), sigma_p our `perturbation_strength` ((16)-(19)); both equal the
+print to 1e-13 dB. Any geometry; at exact specular it is the Kirchhoff term; warns once outside 10-100 kHz; no
+shadowing, no slope average. Reproduces the note's ten test vectors to 1e-4 dB (Panama City, 40 kHz:
+-40.157 / -31.870 / -29.799 / -28.154 / -22.240 dB at 5 / 10 / 20 / 35 / 60 deg backscatter; the Kirchhoff
+integral by direct quadrature gives the same). The smooth minimum the `combined` paragraph of the module
+docstring rejected was Kirchhoff with *composite*; the published one is Kirchhoff with *perturbation*, and the
+"up to 6 dB" lowering that paragraph names is exactly what it does. Offered by the sediment fit and
+`tools/fit_sediment.py`, kept out of `ROUGHNESS_MODELS` so the fit's model spread does not change.
+
+**The spectral bistatic volume term** ([WJ] 5.3, plan G-15 in part): `volume_model="williams_jackson_1998"`,
+sigma_v = (pi/2) k^4 |mu kappa^2 + cos ti cos ts cos phi - P_i P_s|^2 W_rr(Delta k), Delta k = k |4 Delta_t^2 +
+{Re(P_i + P_s)}^2|^(1/2), W_rr = w3 / k^gamma3 ([WJ] (21)-(22)), through our flat-interface transmission, which is
+[WJ] (20). The paper's mu is signed (negative); with mu' = -mu and rho_rk = -1 it is J&R (14.10) (to 1e-12). The
+bracket vanishes near one azimuth: at Eckernfoerde 42.8 / 39.3 / 32.4 / 18.4 deg for 5 / 10 / 15 / 20 deg
+grazing; the isotropic sigma2 term has no null. For a sigma_v independent of angle it is our default term with
+sigma2 = sigma_v / (attenuation in dB/m). Parameters from the item, or from a site row's `volume_spectral:`
+block (`bottom.volume_spectral`; today `williams_jackson_1998_panama_city`); class rows are refused. With both
+keys and Table I the model reproduces every Fig. 7-8 reading of the note within 1 dB (figure) and the note's
+values to 0.05 dB; the Panama City row through it is within 0.3 dB of the Fig. 7 backscatter readings, where
+our default is 1.2-5.8 dB above them. Panama City's volume term at 20 deg is an equivalent sigma2 of 7e-5, 14.6
+dB below the grain-size rule's 0.002 (roughness dominates there, so the total moves 0.4 dB).
+
+**The large-exponent warning** ([JB] 5.3): for 3.7 < gamma2 < 4, `small_slope` (also as the default),
+`composite`, `combined` and `williams_jackson_1998` warn once each; values unchanged. [JB] p. 974: an exponent
+near 4 extrapolated below the measured wavenumbers gives an unrealistic large-scale slope (Quinault along
+strike, gamma2 3.92: 33 deg at 35 kHz; ours 33.06 with Table V's w2) and too strong scattering; past fits had
+exponents below 3.7. With those inputs our small-slope roughness is 5.6 / 10.3 dB above the across-strike
+(3.67) result at 30 / 40 deg, 35 kHz: the anisotropy the paper's model predicts and its data (isotropic within
++-1 dB) do not show.
+
+**The composite cut-off is printed three ways** ([JB] 5.4): J&R (13.72)-(13.75) k h_s = 1/2 (our
+`small_scale_kh` default), [JB] (A8) k h_s = 2^(-1/2) (`small_scale_kh=0.7071` reproduces (A8) to 5 digits, and
+it is [MJ89] (18)'s), [JB]'s text k h_s = 1. On our `composite` at 5 deg: -1.2 to -1.4 dB (0.707) and -2.0 to
+-2.8 dB (1.0) for medium sand and sandy gravel at 30 and 100 kHz, under 0.2 dB at 20 deg (the note, `kh.py`).
+`composite` is opt-in; the default split is unchanged.
+
+**1-D to 2-D strength** ([JB] 5.5, plan G-18 in part): `bottom.roughness_2d_from_1d(intercept_cm3, slope)`, [JB]
+(4), the corrected J&R (D.19)/(D.23); Table III -> Table V within 0.11 % for six rows.
+
+Sec. 23.2 (later, 2026-11-26): the published bistatic model ([WJ] (10)) is up to 6-7 dB below our default at
+20-45 deg backscatter for sands; see the first item above.

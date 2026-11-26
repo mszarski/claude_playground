@@ -41,6 +41,9 @@ chain:
       - {name: xl_auv, ts_db: 5.0, depth_m: [20.0, 200.0]}
       - {name: large_submerged, ts_db: 25.0, depth_m: [30.0, 300.0]}
     budget: {source_level_db: 197.0, noise_spectrum_db: 51.46, array_gain_db: 15.05, absorption_db_per_km: 0.32}
+    # The rehearsal scene simulates no reverberation, so its picture leaves it out and says why (a deployment states the
+    # site's scattering: configs/deploy/popoto_vehicle.yaml).
+    reverberation: {note: "not included: the rehearsal scene (popoto_elevation_rehearsal) simulates no reverberation"}
     own_depth_limits_m: [5.0, 500.0]
     bottom_clearance_m: 10.0
 

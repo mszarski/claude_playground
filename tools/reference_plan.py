@@ -323,9 +323,11 @@ def twelve_km() -> list:
     noise = p3["noise_spectrum_db"]
     L.append(f"**Link budget at 12 km.** {p3['assumptions']}; noise spectrum level {noise:.1f} dB re 1 µPa²/Hz at {d3['centre_hz'] / 1e3:g} kHz. Blind inside {d3['blind_range_m']:g} m (the pulse); a ping every {d3['ping_interval_s']:.1f} s "
              f"for the {d3['window_m'][0]:g}–{d3['window_m'][1]:g} m window ({60.0 / d3['ping_interval_s']:.1f} a minute). "
-             "**The budget is noise-only**: the build gives no boundary scattering for its site, so the reverberation term (issue `sonar-w2w3`; `gpusonar.reverb_budget`, "
-             "used wherever a scenario or `chain.coverage.reverberation` gives the scattering) is not in it, and its margins and reaches are optimistic wherever reverberation "
-             "dominates (`flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only, 9.7 dB with the term, 6.6 dB in the simulated data).\n")
+             "**This free-field budget is noise-only** (no site: spherical spreading, nothing to scatter). At the build's site, the illustrative 100 m shelf over sand "
+             "(`shelf_100m_sand`, its Lambert −27 dB bottom stated and Chapman-Harris at its 5 m/s wind: `gpusonar.environment.boundary_scattering`), the depth plan and the "
+             "coverage picture below include the boundaries' reverberation (issue `sonar-w2w3`): it leaves the +25 dB classes noise-limited at 12 km (0.6 dB off their margin) and "
+             "limits the +5 dB class to a few kilometres (*Surface interference, own depth, and target classes*). `flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over "
+             "background on its beam: 34.3 dB noise-only, 10.3 dB with the term, 6.9 dB in the simulated data (10.2 dB with the vehicle stopped).\n")
     L.append(f"SNRs are one row's. *Needed* is what that option's own detector needs of it for a detection probability of {p3['detection']['probability']:g} on one ping, its rows added "
              f"(`buildspec.detection`, from the chain's settings in the build's deployment file; for {p3['detection']['probability_high']:g} add {p3['detection']['threshold_high_db'] - p3['detection']['threshold_db']:.1f} dB). "
              f"It holds the aperture window ({p3['detection']['window_loss_db']:.1f} dB), where the echo falls between the map's samples ({p3['detection']['straddle_loss_db']:.1f} dB), the false-alarm budget "

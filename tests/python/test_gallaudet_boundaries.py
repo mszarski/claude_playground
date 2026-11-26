@@ -131,13 +131,14 @@ def test_table_vi_geoacoustic_ratios_are_our_grain_size_interpolation():
     assert ours["gamma2"] == 3.25 and ours["sigma2"] == 0.001
 
 
-@pytest.mark.parametrize("model", bottom.ROUGHNESS_MODELS)
+@pytest.mark.parametrize("model", bottom.ROUGHNESS_MODELS + bottom.OPT_IN_ROUGHNESS_MODELS)
 def test_bottom_model_with_the_site_fit_against_the_printed_band_means(model):
     """`fluid_sediment` with Table VI as its six inputs, every roughness model, band means:
       SF2 (48-66 deg): ours -22.8 dB, printed -22.6 dB: 0.2 dB low.
       SF3 (29-37 deg): ours -24.8 dB, printed -28.7 dB: 3.9 dB HIGH.
     Both are inside the source's own systematic uncertainty (up to -9 dB from the transmit
-    pattern, plus reverberation in both bands). The five roughness models give the same numbers
+    pattern, plus reverberation in both bands). The five roughness models (and the opt-in williams_jackson_1998,
+    [WJ] 5.1 of docs/references/bottom_bistatic_williams_jackson_1998.md) give the same numbers
     (within 0.05 dB) because at this site the roughness term is 20 to 30 dB below the volume term
     off the specular direction: for a sediment slower than water (nu = 0.986) with density
     ratio 1.15 the interface barely scatters, so these data cannot tell the roughness models

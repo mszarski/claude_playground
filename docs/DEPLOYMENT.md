@@ -681,8 +681,16 @@ One member of the report line says what the sonar can see from where it is (keys
   before a deployment (see "From a build spec").
 - Before a mission: `tools/coverage_map.py --build <build> --environment <name> --own-depth <m> [--profile built:LO-HI]
   [--figure out.png]` draws the same numbers against range and target depth.
+- **Reverberation is in it where the site's scattering is known** (`coverage.reverberation`; every shipped face and vehicle
+  deployment file has the shelf's: a Lambert −27 dB bottom, Chapman-Harris at 5 m/s, the beam's integral at the sector's
+  60° edge, the rows gaining nothing against it). Each class then also says `max_range_noise_only_m` and `limited_by`.
+  What it costs the shelf's classes from 50 m with one row: the +5 dB `xl_auv` reaches about 1.4 km where noise alone
+  would allow about 6.5 km; the +25 dB classes stay noise-limited to the end of the window. A site whose scattering
+  does not follow from what it states says `"reverberation": "not included: <reason>"` (the rehearsal file: its scene
+  simulates none).
 - It costs time only when it is refreshed: 0.03 s in deep water without a bottom, 0.3 to 0.8 s with a bottom or an
-  ensemble (one core, ten own depths tried).
+  ensemble (one core, ten own depths tried); with reverberation 5 to 8 s the first time and about 0.5 s after a change
+  of own depth (the other own depths are kept while the water holds).
 
 ## A trial in a fjord or a harbour: what to expect and how to configure
 
@@ -1226,15 +1234,17 @@ computed separately):
 | range cell | 0.5 dB | 7.7 dB | the map is computed every 0.25 m for a 0.375 m resolution (4–6 kHz). `multiscale` reads the sample nearest the echo's peak; `mean` averaged it with the other seven samples of a 2 m cell |
 | total | 2.3 dB (measured 2.4) | 9.4 dB (measured 9.4) | |
 
-**The link budget and the coverage model are noise-only in every shipped file.** The reverberation term exists
-since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`, issue `sonar-w2w3`), but no build,
-environment or deployment file states boundary scattering, so they compare an echo with noise only and say so
-(`"reverberation": "not included: …"`); `snr_db` is measured against the detector's
-background, which reverberation sets wherever it is above the noise. Where it is, the budget's prediction is
-noise-limited and optimistic, and `snr_db` can sit tens of dB below it. Example (D-198): `flank_patrol`'s −3 dB
-small vehicle at 2.2 km over a −27 dB Lambert seabed has about 30 dB by the budget; bottom reverberation is
-21.9 dB above the noise there, the vehicle's cell stands 3.8 to 5.1 dB over its background, and the live
-chain's defaults miss it by 0.8 dB. The table above accounts for the budget against `snr_db` in noise only.
+**The table above is noise-only; the coverage picture now has the site's reverberation.** `snr_db` is measured
+against the detector's background, which reverberation sets wherever it is above the noise; this budget compares an
+echo with noise only, so where reverberation dominates it is optimistic and `snr_db` can sit tens of dB below it.
+The reverberation term (issue `sonar-w2w3`; `gpusonar.reverb_budget`, `SonarEquation(reverberation_db=...)`,
+`coverage.reverberation`) is in the coverage picture of every shipped face deployment file: their site, the
+illustrative 100 m shelf, states a Lambert −27 dB bottom and a 5 m/s wind, and the one rule
+(`gpusonar.environment.boundary_scattering`) makes Chapman-Harris of the wind. Example (D-198): `flank_patrol`'s
+−3 dB small vehicle at 2.2 km over a −27 dB Lambert seabed has 34.3 dB of peak over background on its beam by the
+noise-only budget, 10.3 dB with the term and 6.9 dB in the simulated data (10.2 dB with the vehicle stopped: its 2 m/s
+costs its 1 s LFM 3.4 dB); the vehicle's 4 m cell stands 3.8 to 5.1 dB over its background in the gallery, and the
+live chain's defaults miss it by 0.8 dB.
 
 ### The detector
 

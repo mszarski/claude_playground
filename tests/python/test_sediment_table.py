@@ -391,7 +391,7 @@ def test_the_jackson_briggs_rows_name_their_choices_and_caveats():
 
 def test_the_williams_jackson_panama_city_row_is_table_i():
     """[WJ] 5.5: rho, nu, delta, gamma2, w2 as printed in Table I; the printed spectral volume parameters in
-    `volume_spectral:` (carried, read by no model yet: [WJ] 5.3); `sigma2` is OUR equivalent (the paper prints none),
+    `volume_spectral:` (read by `volume_model="williams_jackson_1998"` only: [WJ] 5.3); `sigma2` is OUR equivalent (the paper prints none),
     so it is `unconfirmed_fields: [sigma2]` and warns, while the reflection numbers do not."""
     entry = bottom.sediment_table()["williams_jackson_1998_panama_city"]
     p = WJ_PANAMA_CITY
@@ -484,3 +484,18 @@ def test_each_site_row_through_the_default_model_against_the_papers_figure(name)
         for label, f, angle, reading, (low, high) in RECORDED_DIFFERENCES.get(name, []):
             got = float(bottom.named_backscattering_strength_db(name, np.radians([float(angle)]), f, 1500.0)[0])
             assert low < got - reading <= high, (label, got - reading)
+
+
+def test_the_williams_jackson_panama_city_row_through_the_papers_own_model_reproduces_fig_7():
+    """[WJ] 5.2: the same row through the paper's model, `roughness_model` and `volume_model` "williams_jackson_1998"
+    (the volume spectrum from the row's `volume_spectral:` block), at c 1500 m/s: within +-1 dB of the Fig. 7 readings
+    in backscatter, -40.0 / -31.6 / -29.5 / -27.6 / -21.9 dB at 5 / 10 / 20 / 35 / 60 deg (figure), and equal to the
+    note's re-typed model, -40.1 / -31.9 / -29.7 / -27.9 / -22.1 (ours, +-0.051 dB). Where our default model with this
+    row is 1.2-5.8 dB above the same readings (RECORDED_DIFFERENCES above), the paper's model is a figure test."""
+    angles, readings = np.radians([5.0, 10.0, 20.0, 35.0, 60.0]), np.array([-40.0, -31.6, -29.5, -27.6, -21.9])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                                 # the row's sigma2 (not used here) is unconfirmed
+        got = bottom.named_backscattering_strength_db("williams_jackson_1998_panama_city", angles, 40e3, 1500.0,
+                                                      roughness_model="williams_jackson_1998", volume_model="williams_jackson_1998")
+    assert got == pytest.approx(np.array([-40.1, -31.9, -29.7, -27.9, -22.1]), abs=0.051)
+    assert np.all(np.abs(got - readings) <= 1.0), got - readings
