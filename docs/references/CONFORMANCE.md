@@ -1,5 +1,13 @@
 # Conformance of code, examples and expectations to the read references
 
+**State 2026-11-26, after the merge `b88c458` (full GPU suite 2763 passed, 102 skipped, 4 xfailed; job
+6b07ea74d91f621b930a343d):** the apply list is applied, A1-A10 and the first item of A13, except A11 (the matrix
+wording of `docs/figures/sst_validation.md`, not done). Each item below carries its commit and decision; the
+decisions are D-208 to D-225 in `docs/DECISIONS.md`. Three statements of this file were wrong and are corrected
+at their items (A3, A4, A8). Matrix rows changed by the later reading of Mourad and Jackson (1989), Wagner (1967),
+Williams and Jackson (1998) and Jackson and Briggs (1992) (D-222) are marked "2026-11-26 later"; the counts
+below are the audit's and were not recounted.
+
 Written 2026-11-26 on branch `conform` (issue `sonar-jbnm`), after the owner's instruction "make sure our code and
 examples and expectations match the references everywhere", amended the same day: "apply every alignment without
 asking using your judgment to calibrate to real parameters, scenes, references". This file has three parts:
@@ -53,6 +61,7 @@ suite before merge.
 ### 1.1 The items, in the recommended order
 
 **A1. `bubble_layer_surface`: `dahl_1997` becomes the default extinction** (set S1).
+**Applied 2026-11-26: `be5c72b`, D-216.**
 - Change: `surface.bubble_layer_optical_depth(..., extinction="apl_1994")` -> default `"dahl_1997"`; the same default
   in `bubble_backscatter`, `bubble_layer_surface_db`, `bubble_layer_surface_strength` and wherever
   `sim/simulator.py` passes the item's `extinction` (only the default of the keyword; the scenario key stays).
@@ -78,6 +87,7 @@ suite before merge.
   `docs/handoff/SIMULATION.md` "Boundary models" row. GPU: nothing (Python strengths); run the suite.
 
 **A2. Bubble attenuation of the facet term** (set S1, after A1).
+**Applied 2026-11-26: `5ac3d09`, D-216** (key `facet_attenuation`).
 - Change: `bubble_layer_surface_db`: total = bubble term + facet x exp(-2 beta_I / sin(t)) (the same beta_I as the
   bubble term).
 - Reference: [D97] Sec. VI and [D99] eqs. (11)-(12) (printed). The exponent is one crossing per leg, the
@@ -91,6 +101,7 @@ suite before merge.
   check; under 0.2 dB at 3 m/s). Documents: as A1.
 
 **A3. Bistatic surface strengths: the geometric mean of the two backscattering strengths** (set S1, after A2).
+**Applied 2026-11-26: `ede3110`, D-216. Correction: "every monostatic use is unchanged / bit-identical" below is wrong:** the strength is evaluated for every pair of eigenrays, and a monostatic sonar over a bottom has pairs that meet the surface at two angles (a direct path out, a bottom-bounced path back); surface reverberation fell in every shipped scene with a surface law and multipath (`popoto_12km` -1.28 dB, `popoto_env_gravel_30m` -0.98, `flank_patrol` -0.91, `flank_sst_shallow` -0.08 overall and -1.43 in its worst twentieth, FLS scenes under 0.35 dB; one ping each). `sst_pursuit` streak 16.7 -> 15.6 dB.
 - Change: `surface.empirical_surface_strength` (both laws, capped and not), `kraus_surface_strength`,
   `bubble_layer_surface_strength`, `searay_bottom_strength`: sigma(g_in, g_out) = sqrt(sigma(g_in) sigma(g_out))
   instead of sigma((g_in + g_out) / 2). Equal when g_in = g_out, so every monostatic use is bit-identical.
@@ -111,6 +122,7 @@ suite before merge.
   backend, so no C++ change; the GPU suite re-measures the pursuit records.
 
 **A4. Forward scatter: the large-scale slope replaces the total Cox-Munk slope in time spreading** (set S2).
+**Applied 2026-11-26: `1738009`, D-217.** Correction: the slope ratio is 0.477 at the fitted 9.14 m/s, not inside "0.55-0.74 at 3-9 m/s". The SPACE'08 residual above 12 degrees became 1.89 (re-simulated; "about 2" predicted); D-218 rejected the exact Kirchhoff tail as its cause.
 - Change: new `acoustics.large_scale_mean_square_slope(U) = 0.0046 ln(2.1 U^2)` (U10 in m/s; clamp below at its
   1.5 m/s value 0.0071 with a warning, since it is negative below 0.69 m/s), and in
   `timespread.boundary_parameters` the `mean_square_slope` from `wind_speed` becomes this one. An explicit
@@ -159,6 +171,7 @@ suite before merge.
   the per-ray Doppler and the full suite; the time spreading itself is Python (taps to both engines).
 
 **A5. Grain-size input: the printed relations become the default between table points** (set S3).
+**Applied 2026-11-26: `efd2aff`, D-209.** Correction: a second tolerance (delta, 2e-5) would also have failed; no tolerance was widened: the strict check names `table_linear` and the relations got their own checks. C5 (D-223) later moved rho to 7.5e-5 off and widened that check from 6e-5 to 8e-5.
 - Change: `bottom.sediment_from_grain_size(phi, method="table_linear")` -> default `method="relations"`
   (`apl_grain_size_relations`, with 1.0019 and 0.4556, the two printed constants read as misprints).
   `"table_linear"` stays selectable.
@@ -179,6 +192,7 @@ suite before merge.
   if it names the method, `docs/PHYSICS_NOTES.md` Sec. 23.1. GPU: nothing.
 
 **A6. The seven soft rows: keep the class values, add explicit ranges and named site rows** (set S3, after A5).
+**Applied 2026-11-26: `0f02a2c`, D-209;** the range became [0.0008, 0.005] with Jackson and Briggs (1992) Table V's printed fits (`9585adc`, D-224).
 - Change, per `docs/tasks/SEDIMENT_DEFAULTS_DECISION.md` option E: each of `medium_silt`, `sandy_mud`, `fine_silt`,
   `sandy_clay`, `very_fine_silt`, `silty_clay`, `clay` keeps sigma2 0.001 (0.000986 for `very_fine_silt`) and the
   w2 rule, and gains `sigma2_range: [0.0008, 0.0037]` with a `basis:` naming the five J&R Table 14.1 sites
@@ -199,6 +213,7 @@ suite before merge.
 
 **A7. A second ASIAEX scenario with the geometry and sea Dahl 2004 prints** (set S4). `sst_asiaex` stays TR 0702's
 example with its quoted winds (3 m/s as used, 4 m/s as quoted).
+**Applied 2026-11-26: `e0f97aa`, D-217.**
 - Change: new `configs/scenarios/asiaex_dahl_2004.yaml`: source 25 m, one receiver at 52 m (the lower array, where
   the surface arrival is clear of the direct path) and optionally a second run at 26 m, horizontal range 467 m
   (Fig. 4 caption; 467 m reproduces the printed 9.4 degree iso-speed angle: 9.36 computed), water 105 m, 8 kHz
@@ -222,6 +237,7 @@ example with its quoted winds (3 m/s as used, 4 m/s as quoted).
   scenario (`test_yaml_numbers.py`, scenario-listing tests: re-run). GPU: the suite runs every scenario test.
 
 **A8. `rock`: elastic flat-interface reflection** (set S5, after G-3 and S3).
+**Applied 2026-11-26: `e6020b5` (simulator, Bellhop; D-214) and `1013fea` (the live chain; D-215).** Corrections: the shear used is the printed generic rock of arXiv:1601.06078 Table II, 1900 m/s and 0.085 (1900/3820 = 0.50), not "0.5 V_p" by our choice; the "peak 16.7 dB at 35.7 degrees" below is the loss AT 35.7 degrees: the peak for this item's case is 28.76 dB at 33.43 degrees (for the row 27.9 dB at 33.1 degrees); Fig. 9.3 differs from ours by up to 0.506 dB (36.1 degrees), not under 0.5.
 - Change: `configs/sediments.yaml` `rock` gains `shear_speed_ratio: 1.25` (V_s = 0.5 V_p = 1910 m/s on 1528 m/s
   water) and `shear_delta: 0.085`, both `unconfirmed_fields: [shear]` with the basis "class choice: middle of J&R
   Sect. 5.6's 40-60 % of V_p; shear loss parameter as the generic rock the notes attribute to Olson et al. (not
@@ -250,6 +266,7 @@ example with its quoted winds (3 m/s as used, 4 m/s as quoted).
 also switch `buried_cylinder` and `buried_objects`). Before -> after from [N3] WP1 (agents' computation): targets
 -6 dB two-way at 20 kHz, -9 dB at 30 kHz for 0.3 m of medium sand; the G-3 agent brings the scenes' own numbers.
 Nothing to add here except: the scenes give a bare speed (1700 m/s); naming a sediment row is part of that switch.
+**Applied 2026-11-26: `685ef49` (opt-in `penetration: fluid`) and `0935d88` (both buried scenes switched, the owner's decision); D-212.**
 
 **A10. Sediment fit tool: small-slope as its default roughness model** (set S6, after G-9). `tools/fit_sediment.py`
 and `sim/sediment_fit.py` default `roughness_model` -> `small_slope` (the simulator's default, D-86). J&R used
@@ -257,8 +274,10 @@ perturbation for its own fits and shows the two overlap below about 70 degrees f
 fit angles below 70 degrees the fitted values move little; above, small-slope is the valid one. The error-bar
 default stays the book's rule (G.2.3: sigma_dB = 10 log10(1 + 1/sqrt(N))), with any corrected rule opt-in.
 Exposure: `tests/python/test_sediment_fit.py` (the G-9 agent's), `docs/CONFIGURATION.md` fit-tool rows.
+**Applied 2026-11-26: `a2e7fbe`, D-210;** the tool also applies the row's grain-size prior by default with sigma2 up to 0.005 (`e841add`, `1269be6`; D-211).
 
 **A11. TR 0702 matrix wording** (set S7, after S2; `tools/sst_validation.py` writes `docs/figures/sst_validation.md`).
+**Not applied (2026-11-26):** row "Sec. 6.4.2" of `docs/figures/sst_validation.md` still says "Chapman-Harris at the MEAN grazing angle", false since A3; it waits for a regeneration of that file.
 - Row "Sec. 6.4.2": after A3, "the geometric mean of the two strengths, as TR 0702 states"; before A3 it should
   read "Chapman-Harris at the MEAN grazing angle; TR 0702's geometric mean is 0 to 5.9 dB lower for the angle pairs
   of `docs/references/CONFORMANCE.md` A3" (it now says "not checked numerically").
@@ -268,8 +287,10 @@ Exposure: `tests/python/test_sediment_fit.py` (the G-9 agent's), `docs/CONFIGURA
   them (asiaex_dahl_2004.yaml, A7)".
 
 **A12. Documents the orchestrator owns** (set S7). Proposed text in section 3.3.
+**Done 2026-11-26 by the documentation commits after the merge (D-225).**
 
 **A13. Blocked or not applied, with the reason** (no change):
+**First item done 2026-11-26** (Wagner 1967 read, the sign settled, C1 `e037abd`, D-223); the last item (the link budget's reverberation term) done as `sonar-w2w3` (D-221); the others kept as stated.
 - Composite and combined roughness without Wagner's shadowing: blocked on Wagner (1967) (not read; J&R's printed
   (13.82) is suspected of a sign error in pi^(1/2)). Stays as it is. Exposure 0 (no shipped item uses `composite`
   or `combined`).
@@ -352,14 +373,15 @@ names the commit of section 3.
 | Small-slope (13.11) | J&R; [D99] (5)-(6) | default `small_slope` | MATCHES (G-1 test); [D99]'s g identity to 7e-16 ([NB 3.1]) | default for every `fluid_sediment` item (4 shipped files) | NONE |
 | Default = book's SSA + volume | J&R tables [N4 3.2] | same | MATCHES under 0.001 dB: `test_default_model_equals_the_books_small_slope_plus_volume` | as above | NONE |
 | Structure constant (D.11)-(D.13), `w2_from_cm4` (D.1.3) | J&R [N2 2.1] | same | MATCHES: `test_roughness_spectrum_conventions_structure_constant_and_unit_conversion` | all | NONE |
-| (D.19), (D.23) as printed | misprinted (gamma2 - 2 for gamma2 - 1; F^(gamma1 - 1)) [N2 2.1] | not used | SOURCE MISPRINT (ours does not use them; quadrature to 1e-10 in [N2]) | - | NONE (G-18 must use the corrected forms) |
-| Cut-off (13.72)-(13.75), large-scale slope (13.76)-(13.77) | J&R, attributed to D. Jackson et al. 1986a | `large_scale_slope` | MATCHES: per-axis rms slopes 0.0227 / 0.0595 / 0.1432 of Fig. 13.19 (`check2.py`: 2 s^2 = 0.00103, 0.00707, 0.0410); `test_composite_cut_off_and_large_scale_slope_13_72_to_13_77` | `composite`, `combined` | REFERENCES FIXED HERE |
-| Composite shadowing (13.81)-(13.83) | J&R prints Wagner's factor | none | DIFFERS: ours +0.9 to +6.5 dB at 5 degrees ([N4 3.4]); ours re-computed here: medium sand -41.6 / -32.9 dB at 30 / 100 kHz, sandy gravel -21.4 dB at 100 kHz (`check2.py`, the plan's "before") | 0 shipped (all four `fluid_sediment` items use the default) | A13: blocked on Wagner 1967 |
-| (13.82) pi^(+1/2) | probably pi^(-1/2) [N4 6] | - | SOURCE MISPRINT (suspected; not settled) | - | blocked (G-11) |
+| (D.19), (D.23) as printed | misprinted (gamma2 - 2 for gamma2 - 1; F^(gamma1 - 1)) [N2 2.1] | not used | SOURCE MISPRINT (ours does not use them; quadrature to 1e-10 in [N2]). 2026-11-26 later: the corrected forms are confirmed by Jackson and Briggs (1992) eq. (4) (Table V from Table III to 0.1 % in 6 of 7 rows) | - | NONE (G-18 must use the corrected forms) |
+| Cut-off (13.72)-(13.75), large-scale slope (13.76)-(13.77) | J&R, attributed to D. Jackson et al. 1986a | `large_scale_slope` | MATCHES: per-axis rms slopes 0.0227 / 0.0595 / 0.1432 of Fig. 13.19 (`check2.py`: 2 s^2 = 0.00103, 0.00707, 0.0410); `test_composite_cut_off_and_large_scale_slope_13_72_to_13_77`. 2026-11-26 later: three prints differ: Mourad and Jackson (1989) eq. (18) implies 2^(-1/2), Jackson and Briggs (1992) text 1 and (A8) 2^(-1/2); at 5 degrees `composite` moves -1.2 to -1.4 dB (2^(-1/2)) or -2.0 to -2.8 dB (1); ours 1/2 kept | `composite`, `combined` | REFERENCES FIXED HERE |
+| Composite shadowing (13.81)-(13.83) | J&R prints Wagner's factor | none; 2026-11-26 later: Wagner's R inside `composite` and `combined` | DIFFERS: ours +0.9 to +6.5 dB at 5 degrees ([N4 3.4]; computed with the misprinted pi^(+1/2)); ours re-computed here: medium sand -41.6 / -32.9 dB at 30 / 100 kHz, sandy gravel -21.4 dB at 100 kHz (`check2.py`, the plan's "before"). 2026-11-26 later: MATCHES Wagner (1967) (49), (20)-(22) with pi^(-1/2): -41.58 -> -41.69, -32.88 -> -33.56, -21.37 -> -23.75 dB; -0.05 to -2.39 dB at 5 degrees for sands and gravel (the plan's -42.5 / -35.9 / -27.8 used the misprint) | 0 shipped (all four `fluid_sediment` items use the default) | A13: blocked on Wagner 1967. 2026-11-26 later: DONE (C1, `e037abd`, D-223; `shadowing: none` the old models) |
+| (13.82) pi^(+1/2) | probably pi^(-1/2) [N4 6] | - | SOURCE MISPRINT (suspected; not settled). 2026-11-26 later: SOURCE MISPRINT, settled: Wagner (1967) eq. (22) and Mourad and Jackson (1989) eq. (25) print pi^(-1/2) | - | blocked (G-11). 2026-11-26 later: done (D-223) |
 | Composite validity (13.78) | sigma_sL < 0.1, theta < 70 degrees | not checked in code | DIFFERS (no warning; [N4 3.1] values 0.157-0.367 exceed it) | 0 shipped | PACKAGE G-11 warning part (opt-in, moves nothing) |
 | Composite docstring "the recipe below is ours" | J&R (13.80) has the structure | - | DIFFERS (docstring outdated) | docstring | FIXED HERE (8b573ea) |
-| `combined` | not in any source | ours | NO SOURCE READ (Williams-Jackson interpolation or Mourad-Jackson would replace it) | 0 shipped | NONE |
-| Interpolation Kirchhoff/composite | not printed (J&R p. 349; [McD93] none) | small-slope in its place (D-86) | NO SOURCE READ (the book recommends SSA, p. 336) | - | NONE |
+| `combined` | not in any source | ours | NO SOURCE READ (Williams-Jackson interpolation or Mourad-Jackson would replace it). 2026-11-26 later: DIFFERS: the Williams and Jackson (1998) join (eq. (10), eta = -2) is printed; ours (small-slope based) is -0 to +6.8 dB above it at 20-45 degrees for sands | 0 shipped | NONE. 2026-11-26 later: opt-in Williams-Jackson model (in progress, not merged) |
+| Interpolation Kirchhoff/composite | not printed (J&R p. 349; [McD93] none) | small-slope in its place (D-86) | NO SOURCE READ (the book recommends SSA, p. 336). 2026-11-26 later: printed in Mourad and Jackson (1989) eqs. (33)-(37) and, for the bistatic case, Williams and Jackson (1998) eq. (10): DIFFERS by design (small-slope kept as the default, the owner); the 1989 model is +1.6 to +11.5 dB above ours at 5 degrees for sands and gravel | - | NONE. 2026-11-26 later: the 1989 model as an opt-in (C4, `deee6f8`, D-223) |
+| Composite / small-slope with gamma2 > 3.7 (2026-11-26 later: new row) | Jackson and Briggs (1992) p. 974: such exponents are unreliable | no warning | DIFFERS: +5.6 dB at 30 degrees, +10.3 at 40 against across strike at Quinault along strike (gamma2 3.92, 35 kHz; ours) | the Quinault along-strike values are only in a comment | a warning ([JB] 5.3), not done |
 | (L.34)/(L.35) high-frequency Kirchhoff | J&R prints two forms; [McD86]+erratum and energy settle (13.62)/(13.63) | `reverb_specular.facet_lobe` = (13.62)/(13.63) | SOURCE MISPRINT ((L.34)/(L.35); ours follows (13.62)/(13.63), 5e-13 dB, [NB 3.4]) | `exclude_specular` (0 shipped) | REFERENCES Sec. 11 FIXED HERE |
 | Medium sand row = Fig. 13.2 | J&R Fig. 13.2 "typical medium sand" | `medium_sand` | MATCHES: `test_medium_sand_row_is_fig_13_2` | `sst_sediment_reverb`, `sas_auv_multipath` | scenario comment FIXED HERE (1936f86) |
 | Reciprocity, energy bound (2.18), (2.20) | J&R | small-slope | MATCHES (hemisphere 0.902-1.031 of |V|^2, below the bound, G-1) | - | NONE |
@@ -370,26 +392,29 @@ names the commit of section 3.
 | Item | Source says | Ours | Verdict | Exposure | Action |
 |---|---|---|---|---|---|
 | Volume term (14.7)-(14.9) with (8.26) | J&R [N4 2.9] | `volume_strength` | MATCHES to 1e-11 (G-1); Fig. 14.2 by eye within 1 dB | all `fluid_sediment` items | REFERENCES FIXED HERE |
-| Volume term isotropic in bistatic angle | J&R (14.10) pattern from heterogeneity spectra | isotropic | DIFFERS: +4 dB (rho_rk -1) or -10.6 dB (rho_rk 0) at 20 degrees forward ([N4 3.6]) | 0 shipped bistatic sediment items | A13 (no class value); PACKAGE G-15 |
-| Volume slope and shadow corrections | Sect. 14.1.2; Siemes 2009 | none | DIFFERS (not quantified) | - | PACKAGE G-16 (after G-11) |
-| Mud sigma2 0.001 (7 rows, 5.5-9 phi) | printed class value (Snellen 2011, 2013; arXiv:1809.08459); sites imply 0.0008-0.0037 (J&R Table 14.1, agents' (14.10)), Gallaudet fit 0.003 | 0.001 | MATCHES the printed class value; the sites differ by -1.0 to +5.7 dB (range, not a class value) | 0 shipped rows 3 phi or finer (G-5 doc) | A6 (range and named site rows; values kept) |
+| Volume term isotropic in bistatic angle | J&R (14.10) pattern from heterogeneity spectra | isotropic | DIFFERS: +4 dB (rho_rk -1) or -10.6 dB (rho_rk 0) at 20 degrees forward ([N4 3.6]). 2026-11-26 later: Williams and Jackson (1998) (21)-(22) is (14.10) with rho_rk = -1 and their Table I mu negative; an Eckernfoerde volume null at phi = 39.3 degrees for 10/10 degrees (ours; Fig. 8 dips there) | 0 shipped bistatic sediment items | A13 (no class value); PACKAGE G-15 (in progress, not merged) |
+| Volume slope and shadow corrections | Sect. 14.1.2; Siemes 2009 | none | DIFFERS (not quantified). 2026-11-26 later: quantified at 5 degrees: +3.9 / +9.6 dB for medium sand at 20 / 100 kHz, +7.9 / +12.2 dB for sandy gravel, under 0.3 dB for silts; Mourad and Jackson's printed recipe (38) available as the opt-in `volume_model: mourad_jackson_1989` (monostatic) | - | PACKAGE G-16 (after G-11). 2026-11-26 later: done in part (C4, D-223); a bistatic slope-averaged volume term open |
+| Mud sigma2 0.001 (7 rows, 5.5-9 phi) | printed class value (Snellen 2011, 2013; arXiv:1809.08459); sites imply 0.0008-0.0037 (J&R Table 14.1, agents' (14.10)), Gallaudet fit 0.003 | 0.001 | MATCHES the printed class value; the sites differ by -1.0 to +5.7 dB (range, not a class value). 2026-11-26 later: Jackson and Briggs (1992) Table V prints fits of 0.005 (Arafura) and 0.002 (San Francisco), +7.0 / +3.0 dB against 0.001, one site each, superseding the agents' derived 0.0031 / 0.0037; the range is [0.0008, 0.005] | 0 shipped rows 3 phi or finer (G-5 doc) | A6 (range and named site rows; values kept): applied (D-209, D-224) |
 | Gallaudet 0.003 as evidence | his two band means | - | NOT CHECKED here (the fit-tool agent's finding, recorded): cannot separate volume from roughness; independent only under volume dominance | - | A6 note |
-| Medium sand sigma2 0.001 (D-90) | no class value printed; range 0.0001-0.004 (J&R p. 382) | 0.001 (arXiv:1809.08459) | NO SOURCE READ for a class value; inside the printed range | `sst_sediment_reverb` | NONE |
+| Medium sand sigma2 0.001 (D-90) | no class value printed; range 0.0001-0.004 (J&R p. 382) | 0.001 (arXiv:1809.08459) | NO SOURCE READ for a class value; inside the printed range. 2026-11-26 later: Jackson and Briggs (1992) fit 0.001 at Quinault fine sand (one site; the fit insensitive): weak support | `sst_sediment_reverb` | NONE |
 
 ### 2.5 Sediment table and grain-size relations
 
 | Item | Source says | Ours | Verdict | Exposure | Action |
 |---|---|---|---|---|---|
 | `GRAIN_SIZE_TABLE` 20 rows | J&R (11.1)-(11.3) at the points | table | MATCHES (rho 5e-4, nu 1e-4, delta 0.5 %): `test_grain_size_table_is_11_1_to_11_3_at_its_points`, `test_the_relations_reproduce_every_tabulated_row` | named sediments | NONE |
-| (11.2) constant 1.0091 | printed; 1.0019 meant (continuity, rows) | 1.0019 | SOURCE MISPRINT: `test_density_and_speed_are_continuous_at_the_joins_and_1_0091_is_not_used` | - | NONE |
+| (11.2) constant 1.0091 | printed; 1.0019 meant (continuity, rows) | 1.0019 | SOURCE MISPRINT: `test_density_and_speed_are_continuous_at_the_joins_and_1_0091_is_not_used`. 2026-11-26 later: confirmed by the original, Mourad and Jackson (1989) eq. (2): 1.0018916; the relations take its seven-digit constants (C5, `6b3bafb`, D-223) | - | NONE |
 | (11.3) constant 0.4566 | printed; 0.4556 meant (rows at -1, -0.5 phi agree to 2.5e-4 against 2.4e-3) | 0.4556 | SOURCE MISPRINT (G-6) | - | NONE |
 | (11.3) steps at 2.6, 4.5, 6.0 phi (C2) | printed pieces | kept | MATCHES the print: +0.0022, -0.0009, +0.0013 (`test_the_printed_steps_of_11_3_contradiction_c2`); C2 settled for [N1] | - | NONE |
-| Interpolation between rows (default) | the relations | linear in the table | DIFFERS up to 0.68 dB (5.3 phi) | no caller (grep) | A5 |
+| Interpolation between rows (default) | the relations | linear in the table; 2026-11-26 later: the relations (A5) | DIFFERS up to 0.68 dB (5.3 phi). 2026-11-26 later: MATCHES (the default since A5) | no caller (grep) | A5: applied (`efd2aff`, D-209) |
 | Fig. 11.2 normal-incidence loss | figure | relations + fluid reflection | MATCHES within figure reading: 6.12 / 14.77 / 22.15 dB at 0 / 3 / 5 phi (`test_fig_11_2_normal_incidence_loss`) | - | NONE |
-| Gallaudet Table VI ratios = our grain size | printed 1.1483 / 0.9864 / 0.0033 | 1.14828 / 0.986436 / 0.003284 | MATCHES within 4e-5 (`test_table_vi_geoacoustic_ratios_are_our_grain_size_interpolation`; recomputed) | - | A5 changes rho by 3e-5 |
+| Gallaudet Table VI ratios = our grain size | printed 1.1483 / 0.9864 / 0.0033 | 1.14828 / 0.986436 / 0.003284 | MATCHES within 4e-5 (`test_table_vi_geoacoustic_ratios_are_our_grain_size_interpolation`; recomputed). 2026-11-26 later: with `method="table_linear"` only; the default relations miss rho by 5.08e-5 (A5) and 7.53e-5 (C5), delta by 3.3e-5 | - | A5 changes rho by 3e-5 (applied; the check of the relations is 8e-5 since C5, a widening) |
 | w2 rule for silts and clays | Briggs' spectra (J&R Table 6.1) | Snellen 2013 rule | DIFFERS: 1-7 dB below at 10-100 kHz ([N2 3.2]); under 0.45 dB on the total below 60 degrees (G-5 doc) | 0 shipped | A6 (range note; rule kept) |
 | Sands' w2 | Table 6.1 median | rule | MATCHES within 1.4 dB ([N2 3.2], not recomputed) | many scenes | NONE |
-| Gamma2 3.25 for all | Snellen 2011 "works well" | 3.25 | MATCHES the secondary; NO SOURCE READ for a per-class value | all | NONE |
+| Gamma2 3.25 for all | Snellen 2011 "works well" | 3.25 | MATCHES the secondary; NO SOURCE READ for a per-class value. 2026-11-26 later: MATCHES the original, Mourad and Jackson (1989) eq. (5) | all | NONE |
+| Mourad and Jackson (1989) eq. (39), the volume term (2026-11-26 later: new row) | prints abs(1 - R)^2 | abs(1 - R^2)^2 (`volume_strength`) | SOURCE MISPRINT: the paper's own figures and J&R (14.8) use our form; ours equals the corrected (39) to 2e-14 dB | all `fluid_sediment` items | C3 pins it (`8fd1ec3`) |
+| sigma2 step at 5.0 phi ([MJ89] (4)) against 5.5 phi (ours, Snellen) (2026-11-26 later: new row) | [MJ89] (4) steps at 5.0; its own Fig. 8 and the later prints use 5.5 | 5.5 | DIFFERS for `sandy_silt` only (-3.0 dB) | 0 shipped | NONE (kept) |
+| Named site rows (2026-11-26 later: new row) | Jackson and Briggs (1992) Table V; Williams and Jackson (1998) Table I | `jackson_briggs_1992_quinault`, `_arafura`, `_san_francisco`, `williams_jackson_1998_panama_city` (sigma2 ours) | MATCHES the prints; our default model is within 0.2 dB of [JB] Fig. 15 (San Francisco) and 1 dB at Quinault and Arafura where the notes say it agrees; Panama City +5.8 dB above [WJ] Fig. 7 at 20 degrees (the published join) | used only when named | [JB] 5.1, 5.2, [WJ] 5.5 applied (`249cb07`, `9585adc`, D-224); Eckernfoerde not added (no printed sigma2) |
 | Table 5.3 / 5.4 / 5.6 / (5.8) / Fig. 5.28 / Fig. 11.2 caption misprints | [N1 6] | not used | SOURCE MISPRINT (none used by us) | - | NONE (G-23 must avoid them) |
 | `rock` row ratios 2.5 / 2.5 | Cintron Table 1; J&R p. 169: igneous 5-6 km/s, sedimentary 2-6 | 3820 m/s | MATCHES the secondary's class value; within J&R's sedimentary range | 0 shipped | NONE |
 
