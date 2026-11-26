@@ -11,6 +11,18 @@ could not be made, that is stated.
 
 ## Performance
 
+**The live chain with board synchronisation, on the Popoto trials' pings (D-190 to D-192, D-195).** L4,
+`tools/live_chain_timing.py`, 4 OpenMP threads, chain time a ping after the first, median: C++
+0.048 / 0.054 / 0.065 s and Python 0.084 / 0.18 / 0.25 s at 32 / 64 / 96 channels (the one-row build
+decimates first: D-195, job 6b076cffb6a90bbe997ea8e8; 64 and 96 channels at the full rate: D-192, job
+6b076087b6a90bbe997e9449). Before D-191 the C++ engine took 1.05 to 1.12 s a ping at 64 channels and
+1.64 to 1.83 s at 96 through Sensor Bridge, almost all of it the board resampler. Every output was the
+same to the bit through these changes. The device figures below, and every benchmark file under
+`docs/benchmarks/`, are of pings with ideal clocks and no board synchronisation stage
+(`tools/gpu_benchmark_all.py` and `tools/live_chain_ablation.py` leave `sync` out): D-190 to D-195
+changed only that stage, the decimate-first correction and the receive path, so those files were not
+re-measured and still stand for the work they measure.
+
 **Multiscale statistic on the device (D-150).** L4, `tools/live_chain_ablation.py --backend cuda`,
 median of three repeats, ms a ping, as deployed, 1 / 2 / 3 rows: 16.01 / 29.53 / 40.64 before
 (tree `1368f3d`, job 6b01109defaf5e14f4b45051), 12.73 / 25.92 / 37.52 after (tree `b2a918e`,
@@ -258,7 +270,8 @@ ten-seed evaluation (`classify_rules_eval` on the D-172 captures, tree `7e1d265`
   (centre 26.1 -> 2.6 m), velocity 2.94, −0.23 -> 2.98, 0.02 m/s (true 3.0, 0), wreck 5.8 -> 3.5 m.
 - New: `flank_patrol` is classified (D-178): 5 tracks, 1 mover (the submarine, 3.02 ± 0.02 m/s),
   2 static (one the wreck), 2 uncertain, no mover off a moving object; the small vehicle has no
-  detection. Each Popoto and flank entry of `gallery.json` records `range_estimate: first`.
+  detection (D-198: it is below the scene's bottom reverberation, 3.8 to 5.1 dB over its background
+  against the 12 dB cut, and is left as a hard target on purpose; `SCENARIOS.md`, `flank_patrol`). Each Popoto and flank entry of `gallery.json` records `range_estimate: first`.
 - Unchanged: every other scene, to GPU rounding (largest relative change 4e-4, on a 0.009 m/s
   track velocity; every count and class equal), and so D-175 moved nothing in the gallery; every
   detection count, also in the moved scenes; every animation (at most 2 grey levels); in the moved
@@ -326,6 +339,8 @@ mover on 3 of 10 seeds (one mover on 10 of 10 since D-155's grouping and scoring
 `classify_rules_eval_a479519.json`); the `summer_mud` and `deep_silt` ships are never tracked.
 
 ## SAS with known navigation
+
+**Every shipped SAS scene except `sas_auv_multipath` is free field** (no surface or bed multipath; D-201): with bed multipath the bed-bounce copy of a target above the bed is its brightest echo, 2.7 to 6.6 dB over the direct one, and the gallery's sharpness measure falls from 178,767 to 63,747 (`sas_auv_multipath` against its free-field twin; issue `sonar-ya2c`). The SAS numbers below are the free-field case.
 
 Source: `tests/python/test_sas.py`, scenarios `stripmap_points` and `rail_points`. CPU.
 Widths are −3 dB. Navigation is the simulator's truth.
@@ -463,7 +478,7 @@ board, plus 20 ns of jitter. Shared reference: two out-of-band chirp bursts per 
 - The 1PPS and direct-path methods recover offsets in their tests (to 1 ns and 0.5 µs);
   they do not measure drift within a ping.
 
-## Propagation, reverberation and noise (milestone 12, in progress)
+## Propagation, reverberation and noise (milestone 12; closed 2026-11-25 as done as far as open literature allows)
 
 Source: `tests/python/test_propagation.py` (needs Bellhop, an external GPL-3 program run
 as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
@@ -652,6 +667,8 @@ and heave of 4 mm RMS. Navigation reports a straight level line; the DVL altitud
 
 ## SAS on an extended scene with unknown motion (`wreck_sas`)
 
+Free field, as every shipped SAS scene but `sas_auv_multipath` ("SAS with known navigation").
+
 Source: scenario `wreck_sas`; `tests/python/test_scene_objects.py` (the end-to-end test
 runs only where there is a CUDA device; the figures below are from a CPU run of the same
 steps). A 3 × 1 × 1 m box on a seafloor of 7500 Lambert scatterers, 80 pings at 0.24 m,
@@ -754,6 +771,8 @@ Source: `tests/python/test_sim.py`.
 | Doppler shift, 5 m/s closing target, 8 kHz | within 0.2% of 53.5 Hz |
 
 ## MINSAS-class SAS: resolution on a simulated point target
+
+Free field, as every shipped SAS scene but `sas_auv_multipath` ("SAS with known navigation").
 
 Source: `tests/python/test_minsas_resolution.py`; survey geometry (12 m altitude, 45 to 50 m
 ground range, 64 pings), `sas_minsas120`.
@@ -1758,6 +1777,27 @@ damaged at 1 / 2 / 3 rows (most frames lost in a run):
   accounted for, no malformed frame, the chain within the ping interval, reports equal to the direct
   chain's on the pings that came through) and ends as an expected failure with the numbers when frames
   were lost or the worst receive delay reached 5 ms (`DEPLOYMENT.md`, "Through Holoscan Sensor Bridge's receiver").
+- **Since (D-188 to D-192, D-200; the numbers are those decisions', all on an L4).** The receiver names
+  its damaged frames (`damaged_frames`); a frame missing or damaged in the first 0.25 s of stream is
+  start-up loss and the test passes (40 of 40 runs, job 6b0693c6d0582cfbbefdf55e; D-188). The frame
+  path decodes only the rows a window takes and the boards' rows are resampled together (D-190 to
+  D-192), every output the same to the bit. Chain time a ping after the first through Sensor Bridge:
+
+  | Engine, channels | the table above (a10g-large) | D-190 (L4) | D-191 | D-192 |
+  |---|---|---|---|---|
+  | C++, 64 | 1.40 s | 1.05 to 1.12 s | 0.09 to 0.11 s | 0.06 to 0.07 s |
+  | C++, 96 | 2.17 s | 1.64 to 1.83 s | 0.13 to 0.17 s | 0.08 to 0.11 s |
+  | Python, 64 | 1.69 s | 0.27 to 0.30 s | (unchanged) | 0.18 to 0.22 s |
+  | Python, 96 | 2.64 s | 0.42 to 0.47 s | (unchanged) | 0.28 to 0.32 s |
+
+  On an L4 the Python engine was already real time at 96 channels with the 4 s queue (2.1 s a ping
+  before D-190); the (3, python) case is in the suite since D-190. The first run of a job's first
+  32-channel C++ case has shown a worst receive delay of 6.4 to 10.8 ms with no frame lost (D-190 to
+  D-192; issue `sonar-6rs`). One stream per board through Sensor Bridge (D-200) ran only at
+  `flank_32`'s rate; on this container's CPU its frame path costs 0.36 to 0.37 s of a 3 s ping
+  interval with 400-sample frames at 96 channels, Sensor Bridge's own cost a frame not included. Still
+  not measured: a host with Sensor Bridge's own socket setup (D-189, issue `sonar-02c`), the RoCE
+  receiver, per-board frames at a Popoto build's rate.
 
 ## Sampled pulses and per-ray Doppler in the C++ engine
 
@@ -2045,7 +2085,9 @@ The live-chain row is not the current figure. `docs/benchmarks/gpu_benchmark_all
 and 0.0155 s on the device for one row (9.8×, rel. rms 3.4e-7), 0.0282 s for two rows and
 0.0395 s for three. With the multiscale statistic on the device (D-150) the chain as
 deployed takes 12.73 / 25.92 / 37.52 ms a ping
-(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`; "Performance", first paragraph).
+(`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`; "Performance"). These live-chain cases leave
+the board synchronisation stage out (ideal clocks); with it, on the Popoto trials, see "Performance",
+first paragraph (D-191, D-192, D-195).
 
 Small cases are slower on the device (the 20-point ping above): the transfer costs more
 than the work.
@@ -2243,6 +2285,12 @@ Other consequences, from the same files:
   after the first whole-suite run").
 
 ## The link budget against the chain: where the gap went
+
+**The link budget has no reverberation term** (`SonarEquation`, the coverage model; D-198, issue
+`sonar-w2w3`): this section is a point target in free field and noise. Where reverberation dominates,
+the budget's margins and ranges are noise-limited and optimistic: for `flank_patrol`'s −3 dB small
+vehicle at 2.2 km it gives about 30 dB, the simulated data 3.8 to 5.1 dB over a background that bottom
+reverberation (Lambert −27 dB) holds 21.9 dB above the noise.
 
 Source: `tools/surface_image_validation.py --only-chain` →
 `docs/design/surface_image_validation.json` (`through_chain`); a point target at 12 km in
@@ -2442,6 +2490,9 @@ These rows are from the stage-2 work package's report; they were not re-read fro
 for this file.
 
 ## The coverage picture: validation
+
+The coverage picture has no reverberation term (as the link budget, D-198): its probabilities are
+noise-limited, optimistic where reverberation dominates (`STATUS.md` item 24).
 
 Source: `tests/python/test_coverage.py`, `test_refraction_rays.py`.
 
@@ -3376,13 +3427,30 @@ power map brought back from the device every ping; `mean` runs `detect::cfar` on
 chain's backend. On the host the same variants are within the run-to-run spread (±20 ms on a
 300 ms ping here). All variants report the same 3 detections on the last ping.
 
+## Measured in D-193 to D-201 and the 3-D work (a summary; the entries and files named hold the rest)
+
+| What | Result | Source |
+| --- | --- | --- |
+| Boundary models against Gallaudet (2001), printed band means, 68 kHz, 3 m/s wind | **`bubble_layer_surface` lies above the data**: +3.4 dB at 44-66° grazing, +13.0 dB at 27-38° (so "a lower bound" is not said of it against data); `hall_novarini` +12.6 / +22.2, `chapman_harris` +15.1 / +19.9 (outside its range), `kraus_surface` +10.7 / +15.8 dB. Bottom, `fluid_sediment` with the site's fitted inputs: −0.2 dB at 48-66°, +3.9 dB at 29-37°; the five roughness models agree to 0.001 dB there; class default `fine_silt` 5.0 and 0.8 dB low. The site is a silt-sand mixture (6.36 phi) | D-193; `tests/python/test_gallaudet_boundaries.py` (characterisations) |
+| K reverberation shape from a density per cell (Abraham and Lyons 2002) | our `shape` is the paper's alpha (moments 1 to 6 to 1e-12); its worked example recomputed: 1.685 dB above Rayleigh at alpha 10 (printed 1.7), 2.694 dB at alpha 5 (printed 2.7) at a false-alarm probability of 1e-6; with `shape` given, outputs unchanged to the bit | D-196; `tests/python/test_reverb_statistics.py` |
+| Bellhop 2-D against Bellhop3D's N × 2-D mode, level bed, 8 kHz | 0.001 dB at equal beams; the 1.0 dB at 7 km recorded with D-149 was the oracle's 121 Gaussian elevation beams (1.12 dB too quiet; 0.00 at 481); our provider within 0.19 dB of image sources from 2 to 7 km | D-197; `tests/python/test_bellhop_nx2d_agreement.py` |
+| The fjord beds (piecewise linear), one-way loss at the target, 2-row / 3-row / 1-row | shipped 58.29 / 40.03 / 50.63 dB; every arrival summed 55.77 / 40.03 / 50.48; Bellhop's own loss run 55.57 / 39.71 / 49.38 (the 2-row's 2.7 dB is its 12-arrival limit) | D-199 (corrects D-197); `docs/tasks/PROPAGATION_3D.md` section 2 |
+| Image sources off a tilted bed and walls (opt-in), `fls_120k_quay_multipath` | the sphere's bed ghost at +2.58 m and 8.10° (geometry +2.54 m, 8.13°), −6.6 dB on the direct echo; the 5° cross-slope moves it 1.44°; the wall ghost at +4.80 m, 35.5° (geometry +4.75, 35.36), −7.1 dB. The FLS chain tracks the ghosts as objects; its `multipath` class fires on none (4 pings, one seed) | D-201; `tests/python/test_image_planes.py`, `test_multipath_scenes.py`; issue `sonar-izys` |
+| SAS with bed multipath, `sas_auv_multipath` against `sas_auv_multipath_free` | bed-bounce copy 2.7 to 6.6 dB over the direct echo; seabed median +2.9 dB; sharpness 178,767 -> 63,747 | D-201; issue `sonar-ya2c` |
+| The `eigenray3d` tier over the seamount (hat 241 × 181) against Bellhop3D's converged 3-D field, bearings −24, −4, 16, 36° | ours − 3-D −0.01, −0.10, −1.17, +0.01 dB (bound 1.5 dB); ours − N × 2-D −0.45, +3.37, +2.24, −0.71 dB | `docs/tasks/PROPAGATION_3D.md` P4; `test_seamount_3d.py::test_eigenray3d_tier_over_the_seamount` (`GPUSONAR_SLOW_ORACLES=1`, 8 minutes) |
+| The `eigenray3d` tier's cost, shared 4-core CPU | a level bed 3.3 s a run; the seamount 19 to 219 s a run; `flank_seamount_3d` 231 s (four runs of 57 s), arrival files under 1 kB; 3.6 to 4.8 kB a receiver binary | `docs/tasks/PROPAGATION_3D.md`, "Cost of the eigenray3d tier" |
+| `flank_patrol`'s small vehicle | 3.8 to 5.1 dB over its local background (median 4.4, 28 pings) against the 12 dB cut; bottom reverberation 21.9 dB over the noise at 2.2 km; the link budget's ~30 dB has no reverberation term | D-198 |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-181) ran its affected test files. The full GPU suite has run on the tree of D-181
-(`90f7d29`): 2078 passed, 93 skipped, none failed, on an NVIDIA L4 (Hugging Face job
-6b055ee4c97b8ed4fcd799db; `STATUS.md`). Anything on real
+rerun since, and each later package (D-158 to D-201 and the 3-D work) ran its affected test files.
+The full GPU suite last ran on the tree of D-201: 2278 passed, 102 skipped, 1 xfailed, none failed, on
+an NVIDIA L4 (Hugging Face job 6b078a26d91f621b93096bc7; a later job covers the 3-D work). Also not
+measured: Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
+(D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the
+link budget and coverage with reverberation (`sonar-w2w3`). Anything on real
 hardware or in real water: every number in this file is from simulation, from analysis,
 or from other people's published channel soundings.
