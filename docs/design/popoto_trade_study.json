@@ -62,7 +62,7 @@
   },
   {
    "name": "deep_no_bottom_return_sea_state_5",
-   "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+   "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
    "sea_state": 5,
    "bubble_model": "apl_1994"
   },

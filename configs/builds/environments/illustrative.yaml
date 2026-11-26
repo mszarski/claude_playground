@@ -25,7 +25,7 @@ environments:
     title: "Non-ducting: no bottom return, isovelocity, 5 m/s wind"
     wind_speed_m_s: 5.0
   - name: deep_no_bottom_return_sea_state_5
-    title: "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law"
+    title: "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law"
     sea_state: 5
     bubble_model: apl_1994
   - name: shelf_100m_sand

@@ -21,6 +21,7 @@
 #include <complex>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include "sonar/core/vec.hpp"
@@ -30,9 +31,14 @@ namespace sonar::sim {
 struct EigenraySet;
 struct SedimentConfig;
 
-/// The relief and the numerical knobs of `penetration: rough`. Nothing has a default here: the
-/// Python provider states every field (its documented defaults are ours: patch half a water
-/// wavelength, refine 3, floor_db 30 dB, bin a quarter period at the band centre).
+/// The cost cap's default (`SedimentRoughness::max_pairs`): python/gpusonar/sim/penetration.py
+/// DEFAULT_MAX_PAIRS, the same number (ours; that module says how it was chosen).
+inline constexpr std::int64_t kRoughMaxPairs = 1000000;
+
+/// The relief and the numerical knobs of `penetration: rough`. Nothing but `max_pairs` has a
+/// default here: the Python provider states every field (its documented defaults are ours: patch
+/// half a water wavelength, refine 3, floor_db 30 dB, bin a quarter period at the band centre,
+/// max_pairs kRoughMaxPairs).
 struct SedimentRoughness {
   double w2 = std::numeric_limits<double>::quiet_NaN();      ///< spectral strength, m^(4 - gamma2)
   double gamma2 = std::numeric_limits<double>::quiet_NaN();  ///< spectral exponent, 2 < gamma2 < 4
@@ -42,7 +48,16 @@ struct SedimentRoughness {
   double refine = std::numeric_limits<double>::quiet_NaN();    ///< split while nearer than this many sides
   double floor_db = std::numeric_limits<double>::quiet_NaN();  ///< reach of the cells, dB of the sediment leg
   double bin = std::numeric_limits<double>::quiet_NaN();       ///< delay bin, s
+  /// The cost cap (D-213; the owner, D-229: a cap that raises, never truncates): the most ray pairs
+  /// one echo of a sub-critical point may need, estimated as the square of its leg's rays (the
+  /// fluid ray and the delay bins). More raises std::invalid_argument (`rough_cost_message`)
+  /// before any pairing; nothing is ever dropped. >= 1.
+  std::int64_t max_pairs = kRoughMaxPairs;
 };
+
+/// The refusal of the cost cap, word for word python/gpusonar/sim/penetration.py
+/// `rough_cost_message`: point `point` (its index in the points given) has `rays` rays a leg.
+std::string rough_cost_message(std::int64_t rays, std::int64_t point, std::int64_t max_pairs);
 
 /// The complex Gaussian deviate (<|c|^2> = 1) of interface cell (level, i, j) for `seed`:
 /// h = SplitMix64(seed), then h = SplitMix64(h ^ part) for part = level, i, j (two's complement),
@@ -86,6 +101,8 @@ RoughBins rough_point_rays(const SedimentConfig& config, const Vec3d& source, co
 /// point under the interface whose straight line from `source` meets it below the critical angle:
 /// column 0 stays the fluid ray, columns 1.. are the point's bins, the rest are invalid (zero delay
 /// and amplitude, the fluid ray's directions), as SedimentProvider._with_scattered builds them.
+/// Before widening, the cost cap: a point whose leg has n rays with n^2 > roughness.max_pairs
+/// (the first with the most) throws std::invalid_argument(rough_cost_message(...)).
 void add_rough_scattering(const SedimentConfig& config, const Vec3d& source, const double* points,
                           std::int64_t n_points, EigenraySet& set);
 

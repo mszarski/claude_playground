@@ -37,7 +37,8 @@
 //               J&R (G.11)-(G.13) with the pulse length c tau / 2 replaced by the compressed one, c / (2 B): the
 //               processing gain is the target's, so it cancels, and the array gain is not applied (the beam's
 //               integral is). Signal excess is then over the power sum of noise and reverberation.
-//               Stacked rows gain nothing against it (`reverb_rows_gain_db`). What is not in it: the reverberation's
+//               Stacked rows gain nothing against it (`reverb_rows_gain_db`) unless `reverb_rows_gain_against_reverb_db`
+//               (opt-in) says what they gain. What is not in it: the reverberation's
 //               statistics (non-Rayleigh) in the detection probability, a moving target's Doppler separation from
 //               it, beam sidelobes in elevation and the elements' patterns, range-dependent bottoms, volume scattering.
 //   detection   the probability that the chain as configured reports a point echo of that SNR: a table
@@ -132,6 +133,11 @@ struct CoverageOptions {
   /// gain nothing against reverberation, which arrives by the echo's own multipath (ours; gpusonar.depthplan.plan holds
   /// the same): one row's SNR with the term is combine(SNR + G, SRR) - G, so the table's rows gain stays the noise's only.
   double reverb_rows_gain_db = 0.0;
+  /// dB (opt-in; 0, the default: the rows gain nothing against reverberation, as above): what stacked rows DO gain against
+  /// the reverberation, added to one row's echo over reverberation: combine(SNR + G, SRR + g) - G. gpusonar.coverage.of_build
+  /// writes it from a build spec's `operation.coverage.reverberation_rows_gain` (gpusonar.depthplan.rows_gain_against_reverberation:
+  /// `incoherent` is the detector's own rows gain G; a number is used as given, e.g. a measurement).
+  double reverb_rows_gain_against_reverb_db = 0.0;
   std::int64_t reverb_bounce_cap = 160;   ///< the most reflections each way the convergence may reach
   /// What the site's scattering is and how it was had, or why it is not included (gpusonar.coverage.site_reverberation:
   /// environment.boundary_scattering, the one rule). With reverb 1 the member carries it as "reverberation_note"; with

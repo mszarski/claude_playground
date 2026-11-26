@@ -641,7 +641,8 @@ std::string options_json(const ChainOptions& c) {
       .integer("coverage_reverb_rings", v.reverb_rings).integer("coverage_reverb_max_bounces", v.reverb_max_bounces)
       .text("coverage_reverb_note", v.reverb_note).flag("coverage_echo_coherent", v.echo_coherent).num("coverage_reverb_steer", v.reverb_steer)
       .num("coverage_reverb_converge_db", v.reverb_converge_db).integer("coverage_reverb_bounce_cap", v.reverb_bounce_cap)
-      .num("coverage_reverb_rows_gain_db", v.reverb_rows_gain_db);
+      .num("coverage_reverb_rows_gain_db", v.reverb_rows_gain_db)
+      .num("coverage_reverb_rows_gain_against_reverb_db", v.reverb_rows_gain_against_reverb_db);
   j.text("backend", c.backend == Backend::Cuda ? "cuda" : "host");
   return j.str();
 }

@@ -960,11 +960,15 @@ def findings(R: dict) -> list:
     ss5 = next((s for s in R.get("sites", []) if s.get("sea_state") is not None), None)
     if ss5:
         from gpusonar import acoustics
-        out.append(f"- **Sea state 5 is 12.6 m/s in the code, 9.8 m/s in the words.** `{ss5['name']}` states `sea_state: {ss5['sea_state']}` and its title says "
-                   f"\"{ss5.get('title')}\"; `acoustics.sea_state_wind_speed({ss5['sea_state']})` gives {acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s (9.8 m/s is sea state 4 in "
-                   "that table, via secondary: UnderwaterAcoustics.jl), and the planner, `docs/design/popoto_depth_planner.json` (`wind_speed_m_s`) and this study computed with "
-                   f"{acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s. `docs/DESIGN.md` prints the site as \"sea state 5 (9.8 m/s wind)\". Either the title or the state is wrong; "
-                   "at 9.8 m/s the +25 dB classes need less (the sensitivity table: sea state 4). Reproduce: `python3 -c \"from gpusonar import acoustics; print(acoustics.sea_state_wind_speed(5))\"`.")
+        wind = f"{acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s"
+        if wind not in str(ss5.get("title")):
+            out.append(f"- **The sea state's wind in the code is not the one in the words.** `{ss5['name']}` states `sea_state: {ss5['sea_state']}` and its title says "
+                       f"\"{ss5.get('title')}\"; `acoustics.sea_state_wind_speed({ss5['sea_state']})` gives {wind} (via secondary: UnderwaterAcoustics.jl), which is what "
+                       "the planner and this study computed with. Either the title or the state is wrong.")
+        else:
+            out.append(f"- `{ss5['name']}` is computed at {wind}, the table's wind for sea state {ss5['sea_state']} (via secondary: UnderwaterAcoustics.jl). Until 2026-11-26 its "
+                       "title said 9.8 m/s, which is sea state 4 in that table; the owner chose to correct the title, so no number moved. The sensitivity table's "
+                       "sea state 4 row shows what 9.8 m/s would give.")
     a = [m(f"3x32|{b}|1s|197dB", "shelf_100m_sand", "xl_auv") for b in ("1k", "2k", "4k")]
     if all(v is not None for v in a):
         out.append(f"- **A wider band does worse at 12 km in ducted water in this model** (shelf, xl_auv, 3 x 32: 1 kHz {a[0]:+.1f}, 2 kHz {a[1]:+.1f}, 4 kHz {a[2]:+.1f} dB, bound A): "
@@ -1242,7 +1246,9 @@ def main(argv=None) -> int:
     path = out.with_suffix(".json")
     R = json.loads(path.read_text()) if path.exists() and not args.quick else {}
     R.setdefault("what", "Popoto 12 km trade study (sonar-3983): tools/popoto_trade_study.py")
-    R["git_head_when_run"] = git_head()
+    computes = args.grid or args.sensitivity or args.coverage or args.measure_rows or args.crosscheck or args.monostatic_check or args.quick
+    if computes or not R.get("git_head_when_run"):                          # --report alone computes nothing: the stamp stays the run's
+        R["git_head_when_run"] = git_head()
     if args.quick:
         sites = sites[:1] if not args.site else sites
         classes = classes[:1] if not args.cls else classes

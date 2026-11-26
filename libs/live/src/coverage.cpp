@@ -569,6 +569,7 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
   else if (k == "reverb_converge_db") o.reverb_converge_db = option_nonnegative(key, value);
   else if (k == "reverb_bounce_cap") o.reverb_bounce_cap = i();
   else if (k == "reverb_rows_gain_db") o.reverb_rows_gain_db = option_nonnegative(key, value);
+  else if (k == "reverb_rows_gain_against_reverb_db") o.reverb_rows_gain_against_reverb_db = option_nonnegative(key, value);
   else if (k == "echo_coherent") o.echo_coherent = on();
   else return false;
   return true;
@@ -682,8 +683,11 @@ double coverage_snr_db(const CoverageOptions& o, const CoverageSonar& sonar, dou
   const double tl = 20.0 * std::log10(std::max(slant, 1.0)) + o.absorption_db_per_km * slant / 1000.0;
   const double echo = o.source_level_db - 2.0 * tl + ts_db + factor_db;
   const double noise = echo - noise_only;          // the noise after processing, in the echo's units
-  // combine(SNR + G, SRR) - G with G the rows' gain against noise (CoverageOptions::reverb_rows_gain_db; 0: as one row)
-  return noise_only - 10.0 * std::log10(1.0 + std::pow(10.0, (o.source_level_db + reverb_db - noise + o.reverb_rows_gain_db) / 10.0));
+  // combine(SNR + G, SRR + g) - G with G the rows' gain against noise (CoverageOptions::reverb_rows_gain_db; 0: as one row)
+  // and g their gain against reverberation (reverb_rows_gain_against_reverb_db; 0, the default: none, and the sum as before)
+  double excess = o.source_level_db + reverb_db - noise + o.reverb_rows_gain_db;
+  if (o.reverb_rows_gain_against_reverb_db != 0.0) excess -= o.reverb_rows_gain_against_reverb_db;
+  return noise_only - 10.0 * std::log10(1.0 + std::pow(10.0, excess / 10.0));
 }
 
 double coverage_pd(const CoverageOptions& o, double snr_db) {
