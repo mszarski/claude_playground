@@ -204,6 +204,29 @@ def w2_from_cm4(strength_cm4: float, gamma2: float) -> float:
     return float(strength_cm4) * 10.0 ** (2.0 * float(gamma2) - 8.0)
 
 
+def roughness_2d_from_1d(intercept_cm3: float, slope: float) -> dict:
+    """{gamma2, w2_cm4} of the isotropic 2-D relief spectrum W(K) = w2 (h0 K)^-gamma2 (h0 = 1 cm, K in rad/cm: the
+    convention of `w2_from_cm4`) from a 1-D spectrum measured along a line and fitted as a power law in spatial
+    frequency, Phi_1(f) = intercept x f^slope, f in cycles/cm, intercept in cm^3 at 1 cycle/cm, two-sided (as Jackson
+    and Briggs 1992 Table III prints it). Their eq. (4) (confirmed, docs/references/
+    bottom_backscatter_jackson_briggs_1992.md Sec. 2):
+
+        gamma2 = 1 - slope,   w2 = (2 pi)^(gamma2 - 2) intercept h0 Gamma(gamma2 / 2) / [pi^(1/2) Gamma((gamma2 - 1) / 2)].
+
+    It reproduces their Table V from Table III for six of seven rows within 0.11 %; the seventh (San Francisco
+    pre-storm along strike) gives 0.000885 against the printed 0.000846, a probable misprint of one of the two
+    (recorded, tests/python/test_jackson_briggs_1992.py). This is J&R (2007) (D.19) and (D.23) in their corrected
+    forms (plan G-18; the printed (D.19) would give 14-37 % less). The 1-D law has an integral over the cross
+    wavenumber only for gamma2 > 1 (slope < 0); a 2-D model needs 2 < gamma2 < 4 besides (checked by the models)."""
+    slope = float(slope)
+    if not slope < 0.0:
+        raise ValueError(f"roughness_2d_from_1d: slope {slope:g} must be negative (gamma2 = 1 - slope > 1)")
+    gamma2 = 1.0 - slope
+    w2 = (2.0 * math.pi) ** (gamma2 - 2.0) * float(intercept_cm3) * math.gamma(0.5 * gamma2) / (
+        math.sqrt(math.pi) * math.gamma(0.5 * (gamma2 - 1.0)))
+    return {"gamma2": gamma2, "w2_cm4": w2}
+
+
 def parameters_from_physical(*, density: float, sound_speed: float, attenuation_db_per_m: float,
                              attenuation_frequency: float, w2: float, gamma2: float, volume_strength_db: float,
                              water_density: float, water_sound_speed: float) -> dict:
