@@ -336,6 +336,7 @@ void bind_refraction(py::module_& m) {
     s.f_centre = d["f_centre"].cast<double>();
     s.bandwidth = d["bandwidth"].cast<double>();
     s.pulse = d["pulse"].cast<double>();
+    if (d.contains("beam_integral")) s.beam_integral = d["beam_integral"].cast<double>();
     return s;
   };
   m.def(
@@ -365,14 +366,40 @@ void bind_refraction(py::module_& m) {
         std::copy(f.direct.begin(), f.direct.end(), direct.mutable_data());
         d["direct"] = direct;
         py::array_t<double> snr({n_d, n_r});
-        for (std::size_t i = 0; i < f.factor_db.size(); ++i) snr.mutable_data()[i] = live::coverage_snr_db(o, s, f.slant[i], 0.0, f.factor_db[i]);
+        for (std::size_t i = 0; i < f.factor_db.size(); ++i) snr.mutable_data()[i] = live::coverage_snr_db(o, s, f.slant[i], 0.0, f.factor_db[i], f.reverb_db[i]);
         d["snr_0db_target_db"] = snr;
+        if (o.reverb == 1) {             // the reverberation term (coverage.hpp): its level and the noise-only figure beside it
+          py::array_t<double> noise({n_d, n_r});
+          for (std::size_t i = 0; i < f.factor_db.size(); ++i) noise.mutable_data()[i] = live::coverage_snr_db(o, s, f.slant[i], 0.0, f.factor_db[i]);
+          d["snr_noise_only_0db_target_db"] = noise;
+          d["reverb_db"] = grid(f.reverb_db);
+          d["delay"] = grid(f.delay);
+        }
         return d;
       },
       py::arg("water"), py::arg("water_depth"), py::arg("array_depth"), py::arg("projector_depth"), py::arg("ranges"), py::arg("depths"),
       py::arg("options"), py::arg("sonar"),
       "The two-way propagation factor of the coverage picture on target depths x horizontal ranges (coverage.hpp): factor_db, the one-way coherent and "
       "incoherent figures, where a direct path exists, and one row's link-budget SNR of a 0 dB target.");
+  m.def("coverage_beam_integral", py::overload_cast<const std::vector<double>&, const std::vector<double>&, double, double, double, std::int64_t>(&live::coverage_beam_integral),
+        py::arg("x"), py::arg("y"), py::arg("frequency"), py::arg("sound_speed"), py::arg("steer"), py::arg("n") = 8192,
+        "Psi (rad): an unweighted beam's integral of |AF|^2 over azimuth re its axis (coverage.hpp).");
+  m.def("coverage_beam_integral_of", py::overload_cast<const PingRecord&>(&live::coverage_beam_integral), py::arg("record"),
+        "Psi (rad) of a record's array at broadside, at the band centre (what the chain's coverage picture uses).");
+  m.def("sine_integral", &live::sine_integral, py::arg("x"));
+  m.def("compressed_power_average", &live::compressed_power_average, py::arg("x"), py::arg("width"), py::arg("bandwidth"));
+  m.def(
+      "coverage_reverberation_db",
+      [coverage_options, coverage_sonar](const py::dict& water, double water_depth, double array_depth, double projector_depth, const std::vector<double>& delays,
+                                         const py::dict& options, const py::dict& sonar, double psi) {
+        const live::CoverageOptions o = coverage_options(options);
+        const live::CoverageSonar s = coverage_sonar(sonar);
+        const live::MultipathProfile w = multipath_profile(water);
+        py::gil_scoped_release release;
+        return live::coverage_reverberation_db(w, water_depth, array_depth, projector_depth, delays, o, s, psi);
+      },
+      py::arg("water"), py::arg("water_depth"), py::arg("array_depth"), py::arg("projector_depth"), py::arg("delays"), py::arg("options"), py::arg("sonar"),
+      py::arg("psi"), "Reverberation level re the source level (dB) at two-way delays: the coverage picture's term (coverage.hpp).");
   py::class_<live::Coverage>(m, "Coverage")
       .def(py::init([coverage_options](const py::dict& options) { return live::Coverage(coverage_options(options)); }), py::arg("options") = py::dict(),
            "Options as gpusonar.coverage.cpp_options makes them.")
