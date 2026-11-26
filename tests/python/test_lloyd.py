@@ -282,7 +282,20 @@ def deep_plan():
     spec = bs.load("popoto_face_3x32")
     d = bs.derive(spec)
     env = depthplan.load_environments("illustrative")[0]
-    return d, env, depthplan.plan(d, env, bs.target_classes_of(spec))
+    # The surface image's tests hold the noise-only decomposition margin = free field + factor; the site's surface
+    # reverberation (sonar-w2w3, the one rule: Chapman-Harris at 5 m/s, no bottom) is held apart below.
+    return d, env, depthplan.plan(d, env, bs.target_classes_of(spec), reverberation=False)
+
+
+def test_deep_water_surface_reverberation_moves_the_ship_plan_by_nothing(deep_plan):
+    """Non-ducting water (no bottom) at 12 km: the site's surface reverberation is included (deep_no_bottom_return states a
+    5 m/s wind) and costs the ship's recommended margin under 0.01 dB; its own depth stays."""
+    d, env, P = deep_plan
+    spec = bs.load("popoto_face_3x32")
+    R = depthplan.plan(d, env, bs.target_classes_of(spec), own_depths=P["own_depths_m"])
+    assert R["reverberation"]["included"] and "bottom: not included" in R["reverberation"]["note"]
+    a, b = P["classes"]["ship"]["recommended"], R["classes"]["ship"]["recommended"]
+    assert 0.0 <= a["margin_db"] - b["margin_db"] < 0.01 and a["own_depth_m"] == b["own_depth_m"]
 
 
 def test_plan_recommends_the_first_lobe_for_the_ship_and_shows_the_loss_at_ten_metres(deep_plan):

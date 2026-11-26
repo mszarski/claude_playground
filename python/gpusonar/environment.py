@@ -81,6 +81,13 @@ FIELDS = {
     "own_depth_limits_m": ("[shallowest, deepest]", "m", False, "depths the platform may operate at in this water (a static frame: depths it can be hung at); never deeper than the build's platform.max_depth_m", "the operating rules",
                            "5 m to the build's platform.max_depth_m (300 m when that is not given: a placeholder, flagged)"),
     "bottom_clearance_m": ("num", "m", False, "how close to the bottom the platform may come", "operating rules", "10: a placeholder, flagged"),
+    "bottom_scattering": ("map or false", "", False, "the sea bed's scattering for reverberation, in the form of a scenario's `reverberation:` item without its boundary: {model: lambert, mu_db: -27.0}, "
+                          "{model: fluid_sediment, sediment: <name>}, {sediment: rock}, {model: searay_bottom, bottom_type: sand}; false: the site's bottom does not scatter. Left out: derived from "
+                          "`bottom` by `boundary_scattering` (a sediment name: its fluid-sediment row at 10-100 kHz, else its Lambert parameter)", "backscatter measurement at the site",
+                          "derived from `bottom`; where it cannot be, reverberation from the bottom is NOT INCLUDED and every output says why"),
+    "surface_scattering": ("map or false", "", False, "the sea surface's scattering for reverberation, as `bottom_scattering`: {model: chapman_harris}, {model: bubble_layer_surface}, ...; the wind is "
+                           "the site's (`wind_speed_m_s`). false: none. Left out: Chapman-Harris at the site's wind (`boundary_scattering`)", "",
+                           "Chapman-Harris at the site's wind; without a wind, reverberation from the surface is NOT INCLUDED and every output says why"),
     "illustrative": ("bool", "", False, "true: nobody measured this environment; it is an example", "", "true"),
     "note": ("str", "", False, "where the values come from, in words", "", "leave it out"),
     "overrides": ("map", "", False, "{field: reason}: fields of this environment stated on purpose although another field implies a different value (a nominal sound speed beside a temperature)", "", "leave it out"),
@@ -93,7 +100,7 @@ FIELDS = {
 # {family: linear, surface_speed_m_s, gradient_per_s}.
 # The fields the depth planner reads (the build layer's guide lists these; gpusonar.depthplan.ENVIRONMENT_FIELDS).
 PLANNING_FIELDS = ("name", "title", "water_depth_m", "bottom", "wind_speed_m_s", "sea_state", "rms_wave_height_m", "bubble_model", "sound_speed_m_s",
-                   "profile", "own_depth_limits_m", "bottom_clearance_m", "illustrative", "note")
+                   "profile", "own_depth_limits_m", "bottom_clearance_m", "bottom_scattering", "surface_scattering", "illustrative", "note")
 # Older spellings of the scenario layer, accepted everywhere an environment is read.
 ALIASES = {"water_depth": "water_depth_m", "sound_speed": "sound_speed_m_s", "temperature": "temperature_c", "salinity": "salinity_psu",
            "wind_speed": "wind_speed_m_s", "rms_wave_height": "rms_wave_height_m", "depth": "reference_depth_m"}
@@ -202,6 +209,8 @@ def _with_base(env: dict, _seen=()) -> dict:
         out.pop("wind_speed_m_s", None)
     if "profile" in env and "sound_speed_m_s" not in env:
         out.pop("sound_speed_m_s", None)
+    if "bottom" in env and "bottom_scattering" not in env:      # the parent's bed scattered as the parent's bed: a new bed is derived anew
+        out.pop("bottom_scattering", None)
     if "profiles_by_range" in env:                               # the child's water replaces the parent's, however the parent wrote it
         if "sound_speed_m_s" not in env:
             out.pop("sound_speed_m_s", None)
@@ -290,6 +299,8 @@ def problems(envs, named: bool = True) -> list:
                     out.append((f"{where}.bottom", f"{bottom!r} is not a sediment of configs/sediments.yaml ({exc})"))
             elif not (isinstance(bottom, dict) and all(_num(bottom.get(k)) for k in ("speed", "density"))):
                 out.append((f"{where}.bottom", "give a sediment name of configs/sediments.yaml or {speed (m/s), density (re water), attenuation (dB/wavelength)}"))
+        for side in ("bottom", "surface"):
+            out += [(f"{where}.{side}_scattering", m) for m in _scattering_problems(side, e.get(f"{side}_scattering"), e)]
         if e.get("sea_state") is not None and e.get("wind_speed_m_s") is not None:
             out.append((f"{where}.sea_state", "give sea_state or wind_speed_m_s, not both"))
         if e.get("sea_state") is not None:
@@ -335,6 +346,27 @@ def problems(envs, named: bool = True) -> list:
             out.append((f"{where}.absorption", f"{e['absorption']!r}: one of {', '.join(acoustics._MODELS)}, none"))
         if e.get("overrides") is not None and not (isinstance(e["overrides"], dict) and all(k in FIELDS for k in e["overrides"])):
             out.append((f"{where}.overrides", "a mapping {field: reason} of this environment's own fields"))
+    return out
+
+
+def _scattering_problems(side: str, value, env: dict) -> list:
+    """What is wrong with a `bottom_scattering` / `surface_scattering` value (messages; empty: nothing)."""
+    if value is None or value is False:
+        return []
+    models = BOTTOM_REVERB_MODELS if side == "bottom" else SURFACE_REVERB_MODELS
+    if not isinstance(value, dict):
+        return [f"give a mapping in the form of a `reverberation:` item ({{model: {models[0]}, ...}}) or false; got {value!r}"]
+    out = []
+    model = value.get("model", "lambert" if side == "bottom" else None)
+    if model not in models:
+        out.append(f"model {model!r}: on the {side}, one of {', '.join(models)}")
+    banned = sorted({"boundary", "boundary_z", "bathymetry"} & set(value)) + (["wind_speed"] if side == "surface" and "wind_speed" in value else [])
+    if banned:
+        out.append(f"{', '.join(banned)}: the site gives {'the wind' if banned == ['wind_speed'] else 'where its boundaries are'}; leave them out")
+    if side == "bottom" and model == "lambert" and "mu_db" not in value and "sediment" not in value:
+        out.append("a Lambert bottom needs mu_db (dB) or a sediment with a Lambert parameter (rock, pebbles): there is no default strength")
+    if side == "bottom" and env.get("bottom") is None:
+        out.append("bottom scattering needs the site's bottom and water_depth_m")
     return out
 
 
@@ -442,6 +474,102 @@ def coverage_site(env: dict, where: str = "environment") -> dict:
     return {"water_depth_m": float(env["water_depth_m"]), "bottom": bottom, "wind_speed_m_s": float(wind)}
 
 
+# --- the boundaries' scattering: ONE rule for the simulator, the link budget and the coverage picture --------------------
+# Sources (status words of docs/REFERENCES.md):
+# - the fluid-sediment model (sim/bottom.py) holds 10-100 kHz: Williams and Jackson (1998) pp. 169-170, confirmed
+#   (docs/references/bottom_bistatic_williams_jackson_1998.md); Jackson and Briggs (1992), confirmed (its note, Sec. 2).
+# - Chapman-Harris was fitted at 400-6400 Hz with winds to 15 m/s: McDaniel (1993) eq. (27) and its stated range,
+#   confirmed (docs/references/CONFORMANCE.md, the Chapman-Harris rows). Every shipped scenario with a surface item uses
+#   it, at every band (4 to 345 kHz); outside the fit it is an extrapolation (CONFORMANCE A13), said here by a warning.
+# - The Lambert parameters of `rock` and `pebbles` are the table's (configs/sediments.yaml, D-88).
+# The rule itself (which source applies when) is ours.
+FLUID_SEDIMENT_BAND_HZ = (10.0e3, 100.0e3)
+CHAPMAN_HARRIS_BAND_HZ = (400.0, 6400.0)
+CHAPMAN_HARRIS_MAX_WIND_M_S = 15.0
+_SCATTER_TOLD: set = set()
+
+
+def boundary_scattering(env: dict, frequency: float, where: str = "environment") -> dict:
+    """The boundaries' scattering of a site at `frequency` (Hz, the band centre), by one rule:
+
+    bottom   `bottom_scattering` when the environment states it (false: none); else from `bottom`: a sediment name whose
+             row of configs/sediments.yaml is a complete fluid sediment, at 10-100 kHz -> {model: fluid_sediment,
+             sediment: name}; a row with a Lambert parameter (rock, pebbles) -> {sediment: name}, Lambert's law at it;
+             anything else (a bottom given as numbers, a reflection-only row, a fluid sediment outside 10-100 kHz) ->
+             NOT INCLUDED, with the reason. Never a default strength.
+    surface  `surface_scattering` when stated (false: none), at the site's wind; else Chapman-Harris at the site's wind
+             (`wind_speed_m_s` or `sea_state`), with a warning outside its fitted 0.4-6.4 kHz or above 15 m/s; no wind ->
+             NOT INCLUDED, with the reason.
+
+    Returns {items: the scenario's `reverberation:` items (each with `boundary`), notes: {bottom, surface}: None when
+    included, else "not included: <reason>", sources: {bottom, surface}: how each was had, in words}. `env`: an environment
+    under either spelling, or a resolved one (gpusonar.environment.resolve)."""
+    e = normalise(env, where, strict=False)
+    fc = float(frequency)
+    items, notes, sources = [], {"bottom": None, "surface": None}, {"bottom": None, "surface": None}
+    depth = e.get("water_depth_m", e.get("site_water_depth"))
+    bottom, stated = e.get("bottom"), e.get("bottom_scattering")
+    if stated is False:
+        notes["bottom"] = "not included: the environment states that its bottom does not scatter (bottom_scattering: false)"
+    elif bottom is None or depth is None:
+        notes["bottom"] = "not included: the environment states no bottom" + ("" if depth is not None else " (no water_depth_m)")
+    elif stated is not None:
+        items.append({**copy.deepcopy(stated), "boundary": "bottom"})
+        sources["bottom"] = "stated (bottom_scattering)"
+    elif isinstance(bottom, str):
+        from .sim import bottom as bottom_model
+        entry = bottom_model._entry(bottom)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")             # the row's status is said where it is used (the simulator's loader)
+                bottom_model.sediment(bottom)
+            complete = True
+        except ValueError:
+            complete = False
+        if complete and FLUID_SEDIMENT_BAND_HZ[0] <= fc <= FLUID_SEDIMENT_BAND_HZ[1]:
+            items.append({"model": "fluid_sediment", "sediment": bottom, "boundary": "bottom"})
+            sources["bottom"] = f"derived: the fluid-sediment model of {bottom!r} (configs/sediments.yaml)"
+        elif "empirical_backscatter" in entry:
+            items.append({"sediment": bottom, "boundary": "bottom"})
+            sources["bottom"] = f"derived: Lambert's law at {bottom!r}'s parameter (configs/sediments.yaml)"
+        elif complete:
+            notes["bottom"] = (f"not included: the fluid-sediment model of {bottom!r} holds 10-100 kHz (Williams and Jackson 1998) and the band centre is "
+                               f"{fc / 1e3:.3g} kHz; state bottom_scattering")
+        else:
+            notes["bottom"] = f"not included: {bottom!r} has no scattering parameters in configs/sediments.yaml (reflection only); state bottom_scattering"
+    else:
+        notes["bottom"] = ("not included: the bottom is given as numbers (speed, density, attenuation), from which no scattering strength follows; "
+                           "name a sediment of configs/sediments.yaml or state bottom_scattering")
+    stated, wind = e.get("surface_scattering"), wind_speed(e)
+    if stated is False:
+        notes["surface"] = "not included: the environment states that its surface does not scatter (surface_scattering: false)"
+    elif wind is None:
+        notes["surface"] = "not included: the environment states no wind (wind_speed_m_s or sea_state)"
+    else:
+        item = {"model": "chapman_harris"} if stated is None else copy.deepcopy(stated)
+        items.append({**item, "wind_speed": float(wind), "boundary": "surface"})
+        sources["surface"] = ("stated (surface_scattering)" if stated is not None else "derived: Chapman-Harris") + f" at the wind of the site, {float(wind):g} m/s"
+        if item.get("model") == "chapman_harris":
+            outside = [w for w, bad in ((f"{fc / 1e3:.3g} kHz is outside its fitted 0.4-6.4 kHz", not CHAPMAN_HARRIS_BAND_HZ[0] <= fc <= CHAPMAN_HARRIS_BAND_HZ[1]),
+                                        (f"{float(wind):g} m/s is above its 15 m/s", float(wind) > CHAPMAN_HARRIS_MAX_WIND_M_S)) if bad]
+            if outside:
+                sources["surface"] += " (an extrapolation: " + "; ".join(outside) + ")"
+                key = (round(fc), round(float(wind), 3))
+                if key not in _SCATTER_TOLD:
+                    _SCATTER_TOLD.add(key)
+                    warnings.warn(f"{where}: surface reverberation by Chapman-Harris, an extrapolation: {'; '.join(outside)} (McDaniel 1993; "
+                                  "docs/references/CONFORMANCE.md, A13)", stacklevel=2)
+    return {"items": items, "notes": notes, "sources": sources}
+
+
+def scattering_note(found: dict) -> str:
+    """One line for an output from `boundary_scattering`'s result: what is included and how, what is not and why."""
+    parts = []
+    for side in ("bottom", "surface"):
+        parts.append(f"{side}: {found['notes'][side] if found['notes'][side] else 'included, ' + found['sources'][side]}")
+    return "; ".join(parts)
+
+
 def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environment") -> dict:
     """The environment the simulator works with, from what a scenario or a caller gave (a name, a mapping under
     either spelling, or an already resolved mapping): the keys the simulator has always used (`sound_speed`, and
@@ -463,7 +591,8 @@ def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environ
     defaulted = []
     legacy = {"temperature_c": "temperature", "salinity_psu": "salinity", "reference_depth_m": "depth", "ph": "ph",
               "water_depth_m": "water_depth", "frame_origin_lla": "frame_origin_lla", "rms_wave_height_m": "rms_wave_height",
-              "bottom": "bottom", "bubble_model": "bubble_model", "absorption": "absorption", "shipping": "shipping", "name": "name"}
+              "bottom": "bottom", "bubble_model": "bubble_model", "absorption": "absorption", "shipping": "shipping", "name": "name",
+              "bottom_scattering": "bottom_scattering", "surface_scattering": "surface_scattering"}
     for canon, key in legacy.items():
         if e.get(canon) is not None:
             out[key] = copy.deepcopy(e[canon])
@@ -666,6 +795,20 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         if tier == "eigenray3d":
             site.take(prop, "bathymetry", cfg.get("bathymetry"), "propagation.bathymetry", "bathymetry")
         cfg["propagation"] = prop
+
+    # `reverberation: site`: the items follow from the environment's bottom and wind by the one rule (`boundary_scattering`),
+    # what is not included is said. Opt-in: a scenario that types its items (or none) is read as before.
+    if isinstance(cfg.get("reverberation"), str):
+        if cfg["reverberation"] != "site":
+            raise EnvironmentError(f"scenario {cfg.get('name', '')!r}: reverberation: {cfg['reverberation']!r}; give a list of items, or `site` (the environment's boundaries)")
+        if sonar is None:
+            raise EnvironmentError(f"scenario {cfg.get('name', '')!r}: reverberation: site needs the sonar (its band centre)")
+        found = boundary_scattering(env, float(sonar.center_frequency), f"scenario {cfg.get('name', '')!r}")
+        for side in ("bottom", "surface"):
+            if found["notes"][side]:
+                warnings.warn(f"scenario {cfg.get('name', '')!r}: {side} reverberation {found['notes'][side]}", stacklevel=3)
+        cfg["reverberation"] = found["items"]
+        site.filled.append("reverberation")
 
     # One bed (`bathymetry`, a sim/bathymetry.py description at the top of a scenario; D-73's "one description"):
     # the eigenray3d provider (above), every reverberation item on the bottom and every point-scatterer seafloor take

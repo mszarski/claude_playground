@@ -41,6 +41,16 @@ chain:                           # gpusonar/live.py; anything left out keeps its
       - {name: xl_auv, ts_db: 5.0, depth_m: [20.0, 200.0]}
       - {name: large_submerged, ts_db: 25.0, depth_m: [30.0, 300.0]}
     budget: {source_level_db: 197.0, noise_spectrum_db: 51.46, array_gain_db: 15.05, absorption_db_per_km: 0.32}
+    # The site's boundary scattering (the reverberation term), as the generator writes it from the site by one rule
+    # (gpusonar.environment.boundary_scattering): the shelf's stated Lambert bottom (the popoto_12km scenario's -27 dB,
+    # illustrative) and Chapman-Harris at its 5 m/s wind; the beam's integral at the sector's edge (60 degrees).
+    reverberation:
+      items:
+        - {model: lambert, mu_db: -27.0, boundary: bottom}
+        - {model: chapman_harris, wind_speed: 5.0, boundary: surface}
+      frequency_hz: 5000.0
+      note: "bottom: included, stated (bottom_scattering); surface: included, derived: Chapman-Harris at the wind of the site, 5 m/s"
+      steer_deg: 60.0
     own_depth_limits_m: [5.0, 500.0]
     bottom_clearance_m: 10.0
 

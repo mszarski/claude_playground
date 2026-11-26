@@ -4400,20 +4400,63 @@ centre serves both legs, as there). The coverage picture (C++, `coverage_reverbe
 the coefficients of the boundaries met on the way as powers, as for the target. The two agree within 0.3 dB from 1
 to 4 km in 100 m of isovelocity water (1 dB at 500 m, near the first bottom return). Reverberation in shallow
 water at kilometres arrives by many bounces: three reflections each way gave 8 to 14 dB too little on
-`flank_patrol`; the default is 0.4 x range / water depth (as many as a ray at 22° of grazing makes; ours), and the
-data then agree within 1.3 dB at 2.2 to 10 km.
+`flank_patrol`. The count is found by convergence (ours): from B = 0.4 x range / water depth (3 to 40), the paths are
+traced to B + max(2, B / 4) reflections and B is kept once those above it change no level by more than 0.1 dB, else B
+doubles, to at most 160. The fixed 0.4 rule it replaces was 1.2 dB low at 12.7 km in 30 m of water over sand (0.07 dB in
+100 m); the data agree within 1.3 dB at 2.2 to 10 km.
+
+**The target's echo with the term** (C(a), sonar-w2w3's follow-up). With the term on (and wherever `reverberation` is not
+`false`) the four images about the target, at most one surface and one bottom reflection each way, add as pressures
+through the compressed pulse (`echo_coherent`); before, only the direct and the once-surface-reflected paths did, and a
+target near the bed lost its bottom-reflected paths' interference: `flank_patrol`'s wreck, 2 m above it, read 4.7 dB under
+the simulated data, now 0.9 dB. The number of arrivals was not the cause: 6 to 1000 arrivals and 3 to 40 bounces moved
+the three targets' predictions by under 0.15 dB. Against stationary points (the scene's targets stopped, the submarine
+one point) the three margins agree within 0.9 dB, rms 0.6 dB; the scene as shipped is 2.3 and 3.4 dB above the prediction
+for the submarine and the small vehicle because of the targets themselves: the vehicle's 2 m/s opening costs its 1 s LFM
+3.4 dB of peak, the submarine's eight highlights 1.7 dB against one point (neither is in a coverage class).
+`reverberation: false` keeps the picture exactly as it was.
+
+**A site's scattering, one rule** (`gpusonar.environment.boundary_scattering`): the simulator (`reverberation: site`),
+the depth planner and `buildspec.surface_term` (`depthplan.reverberation_of`) and the coverage picture
+(`coverage.site_reverberation`, `of_build`) take a site's boundaries from what it states. Bottom: `bottom_scattering` when
+stated; else a sediment name whose row is a complete fluid sediment, at 10-100 kHz (Williams and Jackson 1998 pp.
+169-170, confirmed), the fluid-sediment model; a row with a Lambert parameter (rock, pebbles), Lambert's law at it;
+anything else, a bottom as numbers included, is NOT INCLUDED and the outputs say why: never a default strength. Surface:
+`surface_scattering` when stated, else Chapman-Harris at the site's wind (fitted at 0.4-6.4 kHz and to 15 m/s, McDaniel
+1993, confirmed; outside, a warning: an extrapolation, as every shipped FLS scene already uses it); no wind, not included.
+The planning sites (`configs/builds/environments/illustrative.yaml`) give their bottoms as numbers, so each states
+`bottom_scattering`: Lambert's law at the value of the shipped scene that simulates the same water (-27 dB sand, -30 silt,
+-35 mud; illustrative, ours), and every such scene's typed items are the rule's for its site (`test_site_scattering.py`).
+In the planner the rows are taken to gain nothing against reverberation (it arrives by the echo's own multipath; ours):
+margin = -10 log10(10^(-(SNR + G) / 10) + 10^(-SRR / 10)) - T1, G the rows' gain against noise, T1 the one-row threshold.
+
+**Off broadside and CW** (C(d), C(e)). A line's beam widens off broadside about as 1 / cos: Psi is the array's own
+integral at the steering (`coverage_beam_integral`, `reverb_steer`; +0.6, +1.6, +3.1 dB at 30, 45, 60 degrees for 32
+hydrophones at half a wavelength), and a build's coverage picture states it at the sector's edge (60 degrees), its worst
+bearing. A CW pulse's reverberation goes through its matched filter's triangle, (1 - |u| / T)^2, which holds 2 T / 3 where
+the sinc of the band 1 / T holds T: 1.76 dB less on spread reverberation and nothing ahead of the first return; against
+`sst_sediment_reverb`'s simulated CW data within 0.7 dB from the first bottom return to 50 m, where the sinc was 0.9 to
+1.9 dB high.
+
+**Cost** (C(b)). The pair loop makes the absorption and the table lookup once a path (results within 1e-12); the
+coverage picture keeps the recommendation's own depths while the water, the profile and the sonar hold, so a refresh
+after a change of own depth computes the present depth only: 5.5 to 8 s first and 0.5 s after, against 0.7 s for every
+refresh of the picture without the term before (0.07 s after a change of depth now) (popoto_face_1x32 over the 100 m shelf, 4 cores
+shared; the first refresh with the term is still 8 to 11 times the old one; convergence costs 3 to 4 s a call in 30 to 60 m of water).
 
 **Laws.** The scattering strengths are the simulator's: `sim.simulator.reverberation_item_strength` turns a
 `reverberation:` item into its law (the dispatch moved there from the simulator's loop unchanged; records
 bit-identical), and the coverage picture takes them as 2° tables of incident x scattered grazing.
 
 **Not in it.** The reverberation's statistics in the detection probability (the table assumes Gaussian
-background; K-distributed reverberation raises false alarms at a given threshold); the Doppler that separates a
-moving target from reverberation; the elements' vertical patterns and beam sidelobes in elevation in the C++ term
-(the Python reference has the element patterns); for a CW pulse the sinc's sidelobes stand in for the
-autocorrelation's triangle (it overstates reverberation within a few pulse lengths of the first bottom return);
-volume scattering in the coverage picture (refused there; the Python reference has it); a boundary that changes
-with range; the Lambert and empirical laws' own validity.
+background; K-distributed reverberation raises false alarms at a given threshold; no shipped site states a K shape); the
+Doppler that separates a moving target from reverberation (and the echo's own Doppler mismatch loss: 3.4 dB for
+`flank_patrol`'s vehicle); the elements' patterns (vertical and horizontal: a baffled face would take about 3 dB of
+reverberation from behind it out; the simulator's elements are omnidirectional too) and beam sidelobes in elevation in
+the C++ term (the Python reference has the element patterns); volume scattering in the coverage picture (refused
+there; the Python reference has it; no planning site's scene has a volume layer); a boundary that changes with range;
+the Lambert and empirical laws' own validity; the first metres after normal incidence in the C++ term (its fan stops at
+75 degrees of grazing).
 
 ## 33. Bottom scattering after Mourad and Jackson (1989) and Wagner (1967) (C1-C5, C-W1-C-W3) [CONFIRMED formulas; OURS bistatic shadowing]
 

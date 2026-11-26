@@ -571,6 +571,14 @@ def _face_12km():
     return pd, "; ".join(out), snr
 
 
+def _coverage_reach(name: str) -> str:
+    """'X km (Y km on noise alone)': the coverage picture's reach for a class of popoto_face_1x32 from 50 m at its deployment file's site."""
+    import coverage_map
+    R = coverage_map.run("popoto_face_1x32", "shelf_100m_sand", 50.0)
+    c = next(k for k in R["summary"]["classes"] if k["name"] == name)
+    return f"{c['max_range_m'] / 1e3:.1f} km ({c.get('max_range_noise_only_m', c['max_range_m']) / 1e3:.1f} km on noise alone)"
+
+
 def _surface_line() -> str:
     """One line for the trade space from the depth plan (docs/design/popoto_depth_planner.json)."""
     path = ROOT / "docs" / "design" / "popoto_depth_planner.json"
@@ -1014,8 +1022,8 @@ def write_report(D, reqs, out_md):
     L.append("## 5. Link budgets\n")
     L.append("![Link budgets](design/link_budgets.png)\n")
     L.append("Output SNR = SL − 2 TL + TS − NL + array gain + 10 log10(T), with spherical spreading plus Francois–Garrison\n"
-             f"absorption and the four-term ambient-noise fit at {WIND:.0f} m/s wind (`gpusonar.sonar_equation`). Noise only: no boundary scattering is given for\n"
-             "these budgets, so reverberation is not in them (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, adds it where a scene gives the scattering).\n")
+             f"absorption and the four-term ambient-noise fit at {WIND:.0f} m/s wind (`gpusonar.sonar_equation`). Noise only: these are free-field budgets with no\n"
+             "site, so there is no boundary to scatter (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, add it at a site; the Popoto builds' sites do: Sec. 3).\n")
     L.append("| Quantity | " + " | ".join(f"`{n}`" for n in DESIGN_SONARS) + " |\n| --- |" + " --- |" * len(DESIGN_SONARS))
     for label, key, dig in [("Source level (dB re 1 µPa at 1 m)", "source_level_db", 0), ("Absorption (dB/km)", "absorption_db_per_km", 1),
                             ("Noise spectrum level (dB re 1 µPa²/Hz)", "noise_spectrum_db", 1), ("Target strength assumed (dB)", "target_strength_db", 0),
@@ -1075,8 +1083,8 @@ def write_report(D, reqs, out_md):
     L.append("- The boards sample at 102.4 kHz and need no change for this band; the hydrophones, the projector and its power\n"
              "  amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.\n")
     L.append("- These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short\n"
-             "  and medium range. With the scenarios' boundaries (Lambert −27 dB bottom, Chapman-Harris surface at 5 m/s) in 100 m of water over sand, the coverage\n"
-             "  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m falls from 6.5 to 2.4 km; the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).\n- Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.\n"
+             "  and medium range. At the builds' site (100 m over sand, its stated Lambert −27 dB bottom and Chapman-Harris at 5 m/s: the deployment files now carry it), the coverage\n"
+             f"  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m is {_coverage_reach('xl_auv')}; the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).\n- Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.\n"
              "- For the Popoto array the simulation uses Bellhop multipath, which in shallow water carries more energy to long\n"
              "  range than spherical spreading (see `RESULTS.md`).\n")
     L.append("## 6. Scenario geometry\n")

@@ -11,6 +11,15 @@
 # a soft bottom (silt, clay, mud: no critical angle), or a downward-refracting profile over such a bottom. The others
 # are ducted: shallow against the range over a hard bottom (sand, gravel), where many bounces arrive nearly unattenuated.
 # With a `profile` the factor comes from Bellhop, and the answer changes with it.
+#
+# Boundary scattering (the reverberation term of the link budget, the depth planner and the coverage picture): derived by
+# ONE rule from what each site states (gpusonar.environment.boundary_scattering). The surface: Chapman-Harris at the site's
+# wind (fitted at 0.4-6.4 kHz: these builds' 4-6 kHz band is inside it). The bottom: the bottoms here are given as numbers,
+# from which no scattering follows, so each states `bottom_scattering`: Lambert's law at the value of the shipped scenario
+# that simulates the same water (named on each line), so that the budget and the simulated scene use one law. These Lambert
+# values are ILLUSTRATIVE (ours): no site was measured. For scale, Mackenzie (1961), as quoted by Muggleworth (1994), is
+# -29 dB at 0.5-1 kHz in deep water (docs/REFERENCES.md, confirmed via that print); Jackson and Richardson's Ch. 12 fits at
+# 10-140 kHz are -20.2 dB (sand) and -19.7 dB (mud), above the band here. The deep sites state no bottom: surface only.
 environments:
   - name: deep_no_bottom_return
     title: "Non-ducting: no bottom return, isovelocity, 5 m/s wind"
@@ -24,6 +33,7 @@ environments:
     water_depth_m: 100.0
     bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
     wind_speed_m_s: 5.0
+    bottom_scattering: {model: lambert, mu_db: -27.0}      # popoto_12km (and its _2row, _3row, _two_ships)'s (illustrative)
     bottom_clearance_m: 10.0
   - name: slope_1000m_silt_profile
     title: "1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop"
@@ -31,12 +41,14 @@ environments:
     bottom: {speed: 1575.0, density: 1.7, attenuation: 1.0}
     profile: {depth_m: [0.0, 50.0, 200.0, 600.0, 1000.0], speed_m_s: [1510.0, 1509.0, 1492.0, 1486.0, 1492.0]}
     wind_speed_m_s: 5.0
+    bottom_scattering: {model: lambert, mu_db: -30.0}      # popoto_env_deep_silt_1000m's (illustrative)
   - name: winter_200m_sand_profile
     title: "200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop"
     water_depth_m: 200.0
     bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
     profile: {depth_m: [0.0, 200.0], speed_m_s: [1480.0, 1483.4]}
     wind_speed_m_s: 5.0
+    bottom_scattering: {model: lambert, mu_db: -27.0}      # popoto_env_winter_sand_200m's (illustrative)
     bottom_clearance_m: 10.0
   - name: summer_60m_mud_profile
     title: "60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop"
@@ -44,4 +56,5 @@ environments:
     bottom: {speed: 1500.0, density: 1.5, attenuation: 0.2}
     profile: {depth_m: [0.0, 15.0, 30.0, 60.0], speed_m_s: [1522.0, 1520.0, 1492.0, 1490.0]}
     wind_speed_m_s: 5.0
+    bottom_scattering: {model: lambert, mu_db: -35.0}      # popoto_env_summer_mud_60m's (illustrative)
     bottom_clearance_m: 5.0

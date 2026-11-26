@@ -445,11 +445,14 @@ their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 
 not measured: with three rows it reads 8 to 35 m for a true 4 m (D-160), and the depth
 sigma there is 2960 to 3010 m (`RESULTS.md`, "The 12 km study, rerun").
 
-**The table below is noise-only** (`SonarEquation` without `reverberation_db`; the build gives no
-boundary scattering): it is optimistic wherever reverberation dominates. The term exists (issue
-`sonar-w2w3`, `gpusonar.reverb_budget`) and is used where a scene gives the scattering. Example:
+**The table below is noise-only** (`SonarEquation` without `reverberation_db`: a free-field budget
+has no site and nothing to scatter): it is optimistic wherever reverberation dominates. At the builds' site
+the depth plan (`docs/design/popoto_depth_planner.json`) and the coverage picture of the deployment files
+include it (issue `sonar-w2w3`; the site's scattering by `gpusonar.environment.boundary_scattering`): the
++5 dB class over the 100 m shelf reaches 1.2 to 1.4 km in the coverage picture (6.4 to 8.1 km before) and 2.6 km in
+the depth plan (8.0 to 9.6 km before). Example:
 `flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only,
-9.7 dB with the term, 6.6 dB in the simulated data (D-198's 3.8 to 5.1 dB are the gallery's 4 m cells;
+10.3 dB with the term, 6.9 dB in the simulated data (D-198's 3.8 to 5.1 dB are the gallery's 4 m cells;
 section 1.7).
 
 Link budget, free field, spherical spreading, steady point echo in noise. Source:

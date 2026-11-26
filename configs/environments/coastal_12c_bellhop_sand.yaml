@@ -6,3 +6,7 @@ name: coastal_12c_bellhop_sand
 title: "Sea water at 12 deg C over the Bellhop provider's sand (1600 m/s, 1.8, 0.5 dB/wavelength)"
 base: coastal_12c
 bottom: {speed: 1600.0, density: 1.8, attenuation: 0.5}
+# Its bottom's scattering for the one rule (gpusonar.environment.boundary_scattering; a bottom given as numbers gives none):
+# Lambert's law at -27 dB, the value every shipped scene on this bed types (flank_patrol, flank_target_*km,
+# popoto_far_mover, popoto_trial_*). ILLUSTRATIVE (ours): no site was measured. Those scenes keep their own items.
+bottom_scattering: {model: lambert, mu_db: -27.0}
