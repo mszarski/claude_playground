@@ -542,6 +542,44 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
       }
     }
   }
+  // 3b. Leakage: the tone's own spectral sidelobes. A cell is not a detection when its power is no more than
+  //     `leak_margin_db` above what a stronger cell of the same beam and lag leaks into it through the matched filter's
+  //     spectrum: the ridge (the strongest notched hypothesis: the stationary reverberation and every still target) and
+  //     every stronger flagged cell. The leak at d hypotheses is the stronger power times the envelope of the window's
+  //     normalised power spectrum, |sum w[m] exp(-i 2 pi d dnu m / fs)|^2 / (sum w)^2 (dnu: the hypotheses' spacing in Hz),
+  //     its running maximum outward (ours; the detector's sidelobe rule along range and bearing, detector.hpp, along rate).
+  if (!flagged.empty()) {
+    const double dnu = 2.0 * p.step * p.frequency / c;
+    std::vector<double> env(static_cast<std::size_t>(J + 1), 0.0);
+    for (std::int64_t d = 0; d <= J; ++d) {
+      std::complex<double> acc(0.0, 0.0);
+      for (std::int64_t m = 0; m < L; ++m) {
+        const double ph = -2.0 * kPi * static_cast<double>(d) * dnu * static_cast<double>(m) / st.fs;
+        acc += win[static_cast<std::size_t>(m)] * std::complex<double>(std::cos(ph), std::sin(ph));
+      }
+      env[static_cast<std::size_t>(d)] = std::norm(acc) / (sw * sw);
+    }
+    for (std::int64_t d = J - 1; d >= 0; --d) env[static_cast<std::size_t>(d)] = std::max(env[static_cast<std::size_t>(d)], env[static_cast<std::size_t>(d + 1)]);
+    const double margin = std::pow(10.0, 0.1 * options.tone.leak_margin_db);
+    const auto pw = [&](std::int64_t b, std::int64_t j, std::int64_t l) { return static_cast<double>(power[static_cast<std::size_t>((b * J + j) * NL + l)]); };
+    std::vector<std::array<std::int64_t, 3>> kept;
+    for (const auto& f : flagged) {
+      const std::int64_t b = f[0], j = f[1] - p.first[static_cast<std::size_t>(b)], l = f[2];
+      const double me = pw(b, j, l);
+      double leak = 0.0;
+      for (std::int64_t q = 0; q < J; ++q) {
+        if (q == j) continue;
+        const bool source = notched[static_cast<std::size_t>(b * J + q)] != 0 ||
+                            static_cast<double>(ratio[static_cast<std::size_t>((b * J + q) * NL + l)]) > 0.0;   // tested cells only: flagged ones are among them
+        if (!source) continue;
+        const double other = pw(b, q, l);
+        if (other <= me) continue;
+        leak = std::max(leak, other * env[static_cast<std::size_t>(std::abs(q - j))]);
+      }
+      if (me > margin * leak) kept.push_back(f);
+    }
+    flagged = std::move(kept);
+  }
   // 4. Groups of touching flagged cells (beam, global hypothesis, lag), one detection each.
   const std::size_t F = flagged.size();
   std::vector<std::size_t> parent(F);

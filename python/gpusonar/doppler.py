@@ -55,10 +55,12 @@ DEFAULTS = {
     "tone_gate_bearing_deg": None,  # ... and this close in bearing; None: 2 degrees
     "tone_range_sigma_m": None,     # the tracker's range sigma for a tone-only detection; None: c T / 8
     "tone_sidelobe_db": None,       # None: -25 dB with the Hann aperture, -7 dB rectangular
+    "tone_leak_margin_db": 10.0,    # a cell no more than this above a stronger cell's leak through the tone's spectrum is dropped
 }
 TONES = ("off", "bank")
 TONE_KEYS = ("frequency_hz", "start_s", "duration_s", "window_alpha", "max_range_rate_m_s", "step_m_s", "hop", "notch_m_s", "notch_cells",
-             "guard", "train", "false_alarms_per_ping", "gate_range_m", "gate_bearing_deg", "range_sigma_m", "sidelobe_db")
+             "guard", "train", "false_alarms_per_ping", "gate_range_m", "gate_bearing_deg", "range_sigma_m", "sidelobe_db",
+             "leak_margin_db")
 
 
 def merged(cfg: dict | None) -> dict:

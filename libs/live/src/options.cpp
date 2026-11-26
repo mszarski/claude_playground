@@ -211,6 +211,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("doppler_tone_gate_bearing_deg")) c.doppler.tone.gate_bearing = v() * kDeg;
   else if (is("doppler_tone_range_sigma_m")) c.doppler.tone.range_sigma = v();
   else if (is("doppler_tone_sidelobe_db")) c.doppler.tone.sidelobe_db = v();
+  else if (is("doppler_tone_leak_margin_db")) c.doppler.tone.leak_margin_db = v();
   else if (is("doppler_report")) c.doppler.report = on();
   else if (is("range_doppler")) c.range_doppler = parse_range_doppler(value);   // off | ownship | full (sonar-fyj)   // centroid | first (D-157); unset: chain_range_estimate (D-158)
   // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
@@ -543,7 +544,8 @@ std::string options_json(const ChainOptions& c) {
       .num("doppler_tone_notch_m_s", tone.notch).num("doppler_tone_notch_cells", tone.notch_cells).integer("doppler_tone_guard", tone.guard)
       .integer("doppler_tone_train", tone.train).num("doppler_tone_false_alarms_per_ping", tone.false_alarms_per_ping)
       .num("doppler_tone_gate_range_m", tone.gate_range).num("doppler_tone_gate_bearing_deg", tone.gate_bearing / kDeg)
-      .num("doppler_tone_range_sigma_m", tone.range_sigma).num("doppler_tone_sidelobe_db", tone.sidelobe_db);
+      .num("doppler_tone_range_sigma_m", tone.range_sigma).num("doppler_tone_sidelobe_db", tone.sidelobe_db)
+      .num("doppler_tone_leak_margin_db", tone.leak_margin_db);
   j.num("min_snr_db", c.min_snr_db).text("doa", c.doa).integer("gate_fft", c.gate_fft).num("sbl_grid_step_deg", c.sbl_grid_step_deg)
       .integer("sbl_max_gates", c.sbl_max_gates).num("sbl_min_contrast_db", c.sbl_min_contrast_db).integer("sbl_max_iterations", c.sbl.max_iterations)
       .num("sbl_tolerance", c.sbl.tolerance).integer("sbl_max_sources", c.sbl.max_sources).num("sbl_dynamic_range_db", c.sbl.dynamic_range_db)

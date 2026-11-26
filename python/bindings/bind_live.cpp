@@ -144,6 +144,7 @@ live::DopplerOptions doppler_options(const Keys& d) {
   }
   number(d, "doppler_tone_range_sigma_m", o.tone.range_sigma);
   number(d, "doppler_tone_sidelobe_db", o.tone.sidelobe_db);
+  number(d, "doppler_tone_leak_margin_db", o.tone.leak_margin_db);
   if (d.contains("doppler_report")) o.report = d["doppler_report"].cast<bool>();
   return o;
 }

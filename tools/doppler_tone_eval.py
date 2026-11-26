@@ -4,7 +4,7 @@ its path (sweep, tone, both), range rate and range error, its track, the tone's 
 scene's background, and the cost a ping.
 
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
-                               [--alternate HZ] [--json FILE]
+                               [--alternate HZ] [--cache DIR] [--json FILE]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -14,7 +14,7 @@ scene's train (gpusonar.doppler.tone_from_sonar; nothing for a CW record).
 
 `--alternate HZ`: alternating pings instead. The scene (a sweep scene such as flank_patrol) is simulated twice with twice
 its pings: as shipped, and with its transmit replaced by a 1 s Hann tone at HZ alone carrying the sweep's whole energy
-(a one-segment train, `source_energy_db` the sweep's); the records are taken in turn, tone first (even pings from the
+(the analytic CW, its source level set for the sweep's energy); the records are taken in turn, tone first (even pings from the
 tone run, odd ones from the sweep run: the scene's clock and targets are the same in both). Each ping then has the
 whole energy of one waveform and the pair takes two ping intervals.
 
@@ -60,10 +60,29 @@ def say(text: str) -> None:
     print(text, flush=True)
 
 
-def simulate(cfg: dict):
+CACHE = None          # --cache DIR: simulated records kept as container files, read back on the next run of the same scene
+
+
+def simulate(cfg: dict, tag: str = "scene"):
+    path = None
+    if CACHE is not None:
+        key = f"{cfg.get('name', 'scene')}_{tag}_{int(cfg.get('pings', {}).get('count', 1))}_{int(cfg.get('seed', 0))}.h5"
+        path = Path(CACHE) / key
+        if path.exists():
+            from gpusonar.sources.container import ContainerSource
+            with ContainerSource(str(path)) as src:
+                return list(src)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return run_scenario(copy.deepcopy(cfg)).records
+        records = run_scenario(copy.deepcopy(cfg)).records
+    if path is not None:
+        from gpusonar import core
+        Path(CACHE).mkdir(parents=True, exist_ok=True)
+        writer = core.RecordWriter(str(path))
+        for r in records:
+            writer.write(r)
+        writer.close()
+    return records
 
 
 def tone_keys(cfg: dict) -> dict:
@@ -148,14 +167,13 @@ def alternate_records(cfg: dict, hz: float, pings: int):
     sweep_cfg = copy.deepcopy(cfg)
     sweep_cfg["pings"] = dict(cfg.get("pings", {}), count=2 * pings)
     tone_cfg = copy.deepcopy(sweep_cfg)
-    wave = {"type": "sampled", "source": "train", "f_start": hz - 100.0, "f_stop": hz + 100.0, "source_level_db_rms": None,
-            "segments": [{"kind": "cw", "frequency": hz, "duration": 1.0, "window_alpha": 1.0}]}
-    if energy is not None:
-        wave["source_energy_db"] = energy
+    # The analytic CW (fast to synthesise; the record a CW, the chain's tone-only ping): a Hann taper carries 0.375 of a
+    # constant envelope's energy and `source_level_db_rms` scales the amplitude before the taper (DOPPLER.md D2).
+    wave = {"type": "cw", "f_start": hz, "f_stop": hz, "duration": 1.0, "window_alpha": 1.0,
+            "source_level_db_rms": float(energy - 10.0 * np.log10(0.375 * 1.0))}
     tone_cfg.setdefault("sonar_overrides", {}).setdefault("transmit", {})["waveform"] = wave
-    tones, sweeps = simulate(tone_cfg), simulate(sweep_cfg)
-    return [tones[i] if i % 2 == 0 else sweeps[i] for i in range(2 * pings)], {"tone": "bank", "tone_frequency_hz": hz, "tone_start_s": 0.0,
-                                                                                 "tone_duration_s": 1.0, "tone_window_alpha": 1.0}, energy, sweep_cfg
+    tones, sweeps = simulate(tone_cfg, f"tone{hz:.0f}"), simulate(sweep_cfg, "sweep")
+    return [tones[i] if i % 2 == 0 else sweeps[i] for i in range(2 * pings)], {"tone": "bank"}, energy, sweep_cfg
 
 
 def main(argv=None) -> int:
@@ -167,7 +185,10 @@ def main(argv=None) -> int:
     ap.add_argument("--max-rate", type=float, default=3.0)
     ap.add_argument("--alternate", type=float, help="Hz: alternate tone-only (at this frequency) and sweep-only pings of SCENE")
     ap.add_argument("--json")
+    ap.add_argument("--cache", help="a directory: keep the simulated records there and read them back on the next run")
     a = ap.parse_args(argv)
+    global CACHE
+    CACHE = a.cache
     cfg = load_scenario_config(a.scene, expand=False)
     t0 = time.time()
     energy = None
@@ -233,7 +254,7 @@ def main(argv=None) -> int:
         bcfg["scene"] = []
         bcfg["pings"] = dict(bcfg.get("pings", {}), count=int(a.background))
         bcfg["seed"] = int(cfg.get("seed", 0)) + 1000
-        back = simulate(bcfg)
+        back = simulate(bcfg, "background")
         for budget in (None, 3.0):
             row = {}
             for name, t in (("off", None), ("on", tone)):

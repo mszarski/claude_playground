@@ -86,6 +86,10 @@ struct ToneOptions {
   double gate_bearing = kDerive;      ///< rad: ... and this close in bearing; NaN: 2 degrees
   double range_sigma = kDerive;       ///< m: the tracker's range sigma for a tone-only detection; NaN: c T / 8
   double sidelobe_db = kDerive;       ///< a weaker group under a stronger one's bearing sidelobes; NaN: -25 dB (Hann), -7 dB (rect)
+  /// dB: a cell no more than this above what a stronger cell of its beam and lag (the ridge in the notch, or a stronger
+  /// tested cell) leaks into it through the tone's spectrum is not a detection (tone_stage step 3b). 10: the detector's
+  /// sidelobe margin (detector.hpp).
+  double leak_margin_db = 10.0;
 };
 
 struct DopplerOptions {
@@ -206,6 +210,9 @@ void normalised_map(const NormalisedFold& fold, std::vector<float>& fine, std::v
 //      a = N (pfa^(-1/N) - 1) (exponential power; N the training cells times step / (enbw x resolution), enbw the
 //      window's equivalent noise bandwidth in bins: neighbouring hypotheses are not independent; ours), with pfa the
 //      budget over every cell tested (the union bound: on the safe side, cells overlap);
+//   6b. a flagged cell no more than `leak_margin_db` above what a stronger cell of its beam and lag leaks into it through
+//      the matched filter's own spectrum (the window's power spectrum, its envelope) is dropped: the ridge's leakage (a
+//      strong still echo or the near reverberation outside the notch) and a strong mover's own Doppler sidelobes;
 //   7. flagged cells touching in (beam, hypothesis, lag) are one detection at its strongest cell, rate, bearing and lag
 //      refined by a parabola through the log power of the neighbours; a group no stronger than `sidelobe_db` under a
 //      stronger one's power at a nearby rate and lag is that one's bearing sidelobe and dropped.

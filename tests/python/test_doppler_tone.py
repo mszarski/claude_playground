@@ -169,6 +169,20 @@ def test_a_still_target_is_not_given_a_doppler(engine):
 
 
 @pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_a_strong_still_echo_leaks_no_detection_out_of_the_notch(engine):
+    """A still target 60 dB over the noise after the bank: the Hann tone's spectral sidelobes put its power outside the
+    three-cell notch far above the noise (the cells next to the notch are 30 dB down, the noise 60). Without the leakage
+    rule (tone_leak_margin_db -300) the CFAR along rate reports them; with it (10 dB over the window's own spectrum,
+    the default) nothing is reported: on flank_patrol's tone pings this took the tone path from 43 to 50 false detections
+    a ping to one (DOPPLER.md D3)."""
+    rec = ping(CW, targets=(((0.0, 500.0, 0.0), (0.0, 0.0, 0.0)),), ts_db=20.0)
+    (leaky,) = run(dict(CHAIN, engine=engine, doppler=dict(TONE, tone_leak_margin_db=-300.0)), [rec])
+    (on,) = run(dict(CHAIN, engine=engine, doppler=TONE), [rec])
+    assert len(leaky["detections"]) >= 1
+    assert on["detections"] == []
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
 def test_a_train_with_the_tone_above_the_band_gives_the_mover_the_sweeps_range_and_the_tones_rate(engine):
     """A Hann tone at 10.5 kHz then the 6-10 kHz sweep: a mover opening at 1.5 m/s at 500 m, a still target at 400 m and
     -20 degrees. The still one is the sweep's alone (path sweep, no rate); the mover is ONE detection, at the range the
