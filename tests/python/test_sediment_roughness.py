@@ -7,6 +7,9 @@ field (15.1), the first-order field (15.2)-(15.4), the sinusoidal ripple (15.5)-
 spectrum (D.7) from 02_roughness_heterogeneity_statistics.md ([N2]) Sec. 2.1. Values read off the book's figures
 are labelled `figure` and carry the reading's own width plus the note's 0.5-1.5 dB reading error, never less;
 values we computed are labelled `ours`.
+
+The provider tests run on the engine sim/engine.py selects (GPUSONAR_SIM_ENGINE=numpy or cpp; the C++ one by
+default when built): run the file under both. tests/python/test_sim_cpp.py holds the two engines equal.
 """
 
 import warnings
@@ -35,7 +38,7 @@ def sax99_bottom(c=C_SAX):
 
 def rough(c=C_SAX, f=20e3, rough_par=None, **kw):
     b = sax99_bottom(c)
-    return SedimentProvider(c, b["speed"], 0.0, penetration="rough", bottom=b, frequency=f, engine="numpy",
+    return SedimentProvider(c, b["speed"], 0.0, penetration="rough", bottom=b, frequency=f,
                             roughness=dict(SAX99_ROUGH if rough_par is None else rough_par), **kw)
 
 
@@ -234,7 +237,7 @@ def _cw(e, f, cols=slice(None)):
 
 def test_points_above_critical_get_exactly_the_fluid_rays():
     pts = np.array([[0.0, 0.0, 0.3], [3.0, 1.0, 0.2], [0.0, 0.0, -2.0]])      # steep, steep, in the water
-    a, b = rough().eigenrays(SRC, pts), fluid(engine="numpy").eigenrays(SRC, pts)
+    a, b = rough().eigenrays(SRC, pts), fluid().eigenrays(SRC, pts)
     for name in ("delay", "amplitude", "launch", "arrival", "n_surface", "n_bottom", "valid"):
         np.testing.assert_array_equal(getattr(a, name), getattr(b, name))
 
@@ -243,7 +246,7 @@ def test_sub_critical_points_keep_the_fluid_ray_and_gain_the_scattered_rays():
     pts = np.array([[0.0, 0.0, 0.3], _sub_point()])
     with pytest.warns(RuntimeWarning, match="roughness-scattered"):
         a = rough().eigenrays(SRC, pts)
-    b = quiet(fluid(engine="numpy").eigenrays, SRC, pts)
+    b = quiet(fluid().eigenrays, SRC, pts)
     for name in ("delay", "amplitude", "launch", "arrival"):
         np.testing.assert_array_equal(getattr(a, name)[:, 0], getattr(b, name)[:, 0])
     assert not a.valid[0, 1:].any() and a.valid[1, 1:].sum() > 5
@@ -263,8 +266,8 @@ def test_zero_relief_is_exactly_fluid():
     assert np.all(a.amplitude[:, 1:] == 0)
     rx = SRC + np.array([0.3, 0.0, 0.0])
     amps = np.array([1.0, 0.5])
-    q1, p1, m1, _, _ = quiet(two_way_paths, rough(rough_par=zero), SRC, rx, pts, amps, engine="numpy")
-    q2, p2, m2, _, _ = quiet(two_way_paths, fluid(engine="numpy"), SRC, rx, pts, amps, engine="numpy")
+    q1, p1, m1, _, _ = quiet(two_way_paths, rough(rough_par=zero), SRC, rx, pts, amps)
+    q2, p2, m2, _, _ = quiet(two_way_paths, fluid(), SRC, rx, pts, amps)
     np.testing.assert_array_equal(m1, m2)
     np.testing.assert_array_equal(q1, q2)
     np.testing.assert_array_equal(p1, p2)
@@ -319,7 +322,7 @@ def test_reciprocal_under_swapping_transmitter_and_receiver():
     amps = np.array([1.0, 0.7 + 0.2j])
 
     def h(tx, rx):
-        q, p, m, _, _ = quiet(two_way_paths, rough(), tx, rx, pts, amps, engine="numpy")
+        q, p, m, _, _ = quiet(two_way_paths, rough(), tx, rx, pts, amps)
         tau = (np.linalg.norm(q - tx, axis=1) + np.linalg.norm(p - rx, axis=1)) / C_SAX
         return np.sum(m * np.exp(-2j * np.pi * 20e3 * tau))
     np.testing.assert_allclose(h(a, b), h(b, a), rtol=1e-12)
@@ -327,10 +330,7 @@ def test_reciprocal_under_swapping_transmitter_and_receiver():
 
 def test_refusals_and_keys():
     b = sax99_bottom()
-    base = dict(penetration="rough", bottom=b, frequency=2e4, engine="numpy")
-    if engine.HAVE_CPP:
-        with pytest.raises(ValueError, match="not implemented in the C\\+\\+ engine"):
-            SedimentProvider(C_SAX, b["speed"], 0.0, **dict(base, engine="cpp"), roughness=dict(SAX99_ROUGH))
+    base = dict(penetration="rough", bottom=b, frequency=2e4)
     with pytest.raises(ValueError, match="needs `roughness`"):
         SedimentProvider(C_SAX, b["speed"], 0.0, **base)
     with pytest.raises(ValueError, match="roughness.K0 is needed"):
@@ -346,7 +346,7 @@ def test_refusals_and_keys():
     with pytest.raises(ValueError, match="penetration"):
         make_provider("sediment", C_SAX, {"interface_z": 0.0, "penetration": "ruff"})
     # roughness from a named sediment: w2 and gamma2 of its row in configs/sediments.yaml (w2 in m^(4 - gamma2))
-    p = make_provider("sediment", C_SAX, {"interface_z": 0.0, "penetration": "rough", "engine": "numpy", "frequency": 2e4,
+    p = make_provider("sediment", C_SAX, {"interface_z": 0.0, "penetration": "rough", "frequency": 2e4,
                                           "bottom": {"sediment": "medium_sand"},
                                           "roughness": {"sediment": "medium_sand", "K0": 10.0, "seed": 3}})
     row = bottom_model.sediment("medium_sand")
@@ -362,15 +362,14 @@ def _small(name, **prop):
     return cfg
 
 
-def test_scenario_rough_equals_fluid_where_nothing_is_sub_critical():
+@pytest.mark.parametrize("eng", ["numpy", "cpp"])
+def test_scenario_rough_equals_fluid_where_nothing_is_sub_critical(eng):
     """buried_cylinder at nadir: every buried point is above the critical angle, so `rough` gives `fluid`'s record
-    bit for bit (both on the NumPy engine); the C++ engine refuses `rough`."""
+    bit for bit, on either engine (the C++ engine runs `rough` since the G-13 port)."""
+    if eng == "cpp" and not engine.HAVE_CPP:
+        pytest.skip("extension module built without the C++ simulator parts")
     medium = {"speed": 1700.0, "density": 1.845, "attenuation": bottom_model.fluid_halfspace("medium_sand", 1500.0)["attenuation"]}
-    on = run_scenario(_small("buried_cylinder", penetration="fluid", bottom=medium, engine="numpy")).records[0].samples.array
-    r = run_scenario(_small("buried_cylinder", penetration="rough", bottom=medium, engine="numpy",
+    on = run_scenario(_small("buried_cylinder", penetration="fluid", bottom=medium, engine=eng)).records[0].samples.array
+    r = run_scenario(_small("buried_cylinder", penetration="rough", bottom=medium, engine=eng,
                             roughness={"sediment": "medium_sand", "K0": 10.0})).records[0].samples.array
     np.testing.assert_array_equal(np.asarray(on), np.asarray(r))
-    if engine.HAVE_CPP:
-        with pytest.raises(Exception, match="C\\+\\+ engine"):
-            run_scenario(_small("buried_cylinder", penetration="rough", bottom=medium, engine="cpp",
-                                roughness={"sediment": "medium_sand", "K0": 10.0}))

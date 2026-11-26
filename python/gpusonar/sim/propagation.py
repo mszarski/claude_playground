@@ -658,7 +658,9 @@ class SedimentProvider(EigenrayProvider):
       `patch`, `refine`, `floor_db`, `bin` have documented defaults. Points above the critical
       angle get exactly the `fluid` ray (the scattered field there is at least 20 dB under the
       zeroth order, tests/python/test_sediment_roughness.py). `subcritical` must be absent or
-      `evanescent`. NumPy only: the C++ engine refuses it (select `engine: numpy`).
+      `evanescent`. Both engines: C++ `sediment_eigenrays` with `penetration.cpp`, the same
+      interface for a seed (an explicit SplitMix64 hash, no generator) and the same arithmetic
+      (tests/python/test_sim_cpp.py: equal to rounding).
     """
 
     tier = "sediment"
@@ -732,15 +734,12 @@ class SedimentProvider(EigenrayProvider):
         self.transmission = complex(1.0)
         self._warned = False
         if penetration == "rough":
-            # G-13: the roughness-scattered field of the sub-critical points (sim/penetration.py). NumPy only.
+            # G-13: the roughness-scattered field of the sub-critical points (sim/penetration.py; C++
+            # libs/sim/src/penetration.cpp).
             from . import penetration as pen
             if policy != "evanescent":
                 raise ValueError(f"sediment: penetration: rough adds the roughness-scattered field to the evanescent zeroth "
                                  f"order; subcritical {policy!r} does not apply (leave it out)")
-            if _engine.resolve(engine) == "cpp":
-                raise ValueError("sediment: penetration: rough is not implemented in the C++ engine (G-13 follow-up); "
-                                 "select the NumPy engine for this tier (propagation.engine: numpy, or "
-                                 "GPUSONAR_SIM_ENGINE=numpy)")
             if roughness is None:
                 raise ValueError("sediment: penetration: rough needs `roughness` ({w2, gamma2, K0} or {sediment: name, K0}); "
                                  "none is assumed")
@@ -785,15 +784,13 @@ class SedimentProvider(EigenrayProvider):
         fluid = self.penetration in ("fluid", "rough")
         if fluid:
             self._check_subcritical(source, points)
-        if self.rough is not None and _engine.resolve(self.engine) == "cpp":
-            raise ValueError("sediment: penetration: rough is not implemented in the C++ engine (G-13 follow-up); "
-                             "select the NumPy engine for this tier (propagation.engine: numpy, or GPUSONAR_SIM_ENGINE=numpy)")
         if _cpp_points(self.engine, points):
             if fluid:
                 return EigenraySet(**core.sim_sediment_eigenrays(
                     self.sound_speed, self.sediment_speed, self.interface_z, self.transmission, _source3(source), points,
                     bottom=_fluid_bottom(**self.bottom), frequency=self.frequency,
-                    evanescent=self.subcritical == "evanescent"))
+                    evanescent=self.subcritical == "evanescent",
+                    roughness=None if self.rough is None else self.rough.cpp_args()))
             return EigenraySet(**core.sim_sediment_eigenrays(self.sound_speed, self.sediment_speed, self.interface_z,
                                                              self.transmission, _source3(source), points))
         t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,

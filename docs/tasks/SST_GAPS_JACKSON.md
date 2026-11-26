@@ -431,12 +431,14 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   peak 133-141 dB at 5-40 cm); h -> 0 gives zero; above critical the zeroth order dominates.
 - Depends on G-3. Must not: use the coherent flat transmission below the critical angle.
 
-#### G-13 done (opt-in, NumPy engine only; no scene switched)
+#### G-13 done (opt-in, both engines since the C++ port; no scene switched)
 
 - What is still wrong: one seeded realisation of a frozen interface, too coherent across a long aperture (a cell's
   deviate ignores the Bragg change with geometry); first order, single scattering, isotropic spectrum, flat mean
-  interface, band-centre cross section; the zeroth order not reduced by the scattered energy; the C++ engine refuses
-  the option (follow-up). `docs/PHYSICS_NOTES.md` section 31 lists it all.
+  interface, band-centre cross section; the zeroth order not reduced by the scattered energy. The C++ engine runs it
+  since the port (`libs/sim/src/penetration.cpp`), equal to NumPy to rounding, not bit for bit (amplitudes 2.6e-12 of
+  a point's largest scattered ray, `tests/python/test_sim_cpp.py`); a sub-critical point adds 100-200 rays a leg, so
+  10^4 pairs or more an echo. `docs/PHYSICS_NOTES.md` section 31 lists it all.
 - Disagreements with the note (ours, not settled on the page): (15.11) as retyped lacks the obliquity factor
   |beta_p(K_s) / beta_w(K_s)|^2 that (15.2)-(15.3) give by stationary phase; with it Fig. 15.8 is reproduced (141.6 to
   133.5 dB at 5-40 cm against the reading 133-141), without it 146.7 dB at 5 cm. (15.13) is used with k_p', not k_w.
@@ -444,8 +446,11 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   = i k_w A_wp / beta_w(K_s), to 1e-12.
 - What exists: `propagation.penetration: rough` with `roughness: {w2, gamma2 | sediment, K0, seed, patch, refine,
   floor_db, bin}` (`sim/penetration.py`: `a_wp`, `sigma_wp`, `roughness_spectrum`, `ripple_*`, `mean_square_field`,
-  `RoughPatches`); `fluid` and the default bit-identical (sha256 of eigenrays and of one ping of `buried_cylinder`,
-  `buried_objects`, both engines, before and after); tests `tests/python/test_sediment_roughness.py` (18).
+  `RoughPatches`; C++ `sonar/sim/penetration.hpp`, through `sediment_eigenrays`); `fluid` and the default bit-identical (sha256 of eigenrays and of one ping of `buried_cylinder`,
+  `buried_objects`, both engines, before and after, again at the C++ port); tests
+  `tests/python/test_sediment_roughness.py` (19, run under GPUSONAR_SIM_ENGINE=numpy and =cpp), the `rough` tests of
+  `tests/python/test_sim_cpp.py` (engine parity, synthesis, CUDA) and `Paths.SedimentRough*` in
+  `tests/cpp/test_sim_paths.cpp`.
 - One-way level re the incident field at the interface, source 10 m up, medium sand / SAX99, 0.17-0.30 m, 10-40 kHz,
   10-20 deg: default tier -0.1 to +0.5 dB; `fluid` -18 to -217 dB; `rough` -17.0 to -30.6 dB; the note's
   measured/figure range 5-31 dB below (Figs. 15.3, 15.6, 15.8, 15.11).

@@ -4041,7 +4041,14 @@ wrong or unverified:
 - **Points above the critical angle get no scattered term** (exactly `fluid`); there the mean scattered intensity is
   21-24 dB under the zeroth order (SAX99, 20 kHz, 40-90 deg, 17 and 30 cm, ours), so leaving it out costs under
   0.04 dB in mean intensity. The jump at the criterion of `fluid` remains on the zeroth order.
-- **Python only.** The C++ engine refuses `rough` (follow-up); the zeroth-order column is the NumPy `fluid` ray.
+- **The two engines are equal to rounding, not bit for bit.** NumPy's vectorised exp, log, pow, hypot, |z| and
+  complex product (its own polynomials and fused multiply-adds) differ from libm and plain products by about an ulp;
+  the delay bins' weighted mean delays inherit that (6.4e-16 relative at worst) and the merge's phase
+  w0 (t - t_b) turns it into 2.6e-12 of a point's largest scattered amplitude (20 kHz; `test_sim_cpp.py`, 20 cases).
+  The cells, the hash and the bins are integers and agree exactly, so both engines see the same interface.
+- **Cost.** About 100-200 rays a leg for a sub-critical point (SAX99, 20-40 kHz, defaults), and the pairing takes
+  every outbound ray with every return ray, so a sub-critical point's echo has 10^4 or more pairs. Eigenrays: 0.24 ms
+  a point in C++, 1.1 ms in NumPy (one thread, 200 points, ours, 2026-11-26).
 - **Realisation average 0.6 dB above the quadrature** of (15.14) at 15 deg, 0.3 m, 20 kHz (160 seeds; sampling
   1 sigma about 0.35 dB, the rest the cell-centre discretisation; ours, tested to 1 dB).
 
@@ -4120,4 +4127,14 @@ same operations in the same order: amplitudes agree to 2.9e-14 (refracted rays) 
 exp(-x) with x up to about 60) in `test_sim_cpp.py::test_sediment_fluid_penetration_matches`. There is no CUDA copy:
 eigenrays are computed on the host whatever `backend` the synthesis uses. The default (`penetration: constant`) is
 bit-identical to before on both engines (sha256 of eigenrays and of one ping of each buried scene and of two
-scenes of other tiers, before and after).
+scenes of other tiers, before and after). `rough` has a C++ copy too (`libs/sim/src/penetration.cpp`, called from
+`sediment_eigenrays` when `SedimentConfig::rough`): the quadtree (`rough_quadtree_cells`), the reach
+(`rough_sediment_radius`), the deviates (`rough_patch_coefficient`), the cross section (`rough_sigma_wp`) and the
+bins, the same operations in the same order as `sim/penetration.py`. The interface is engine independent: a cell
+(level, i, j) carries c = sqrt(-ln u1) exp(2 pi i u2), u1 = ((h >> 11) + 0.5) / 2^53, u2 = (h2 >> 11) / 2^53, h the
+SplitMix64 chain over (seed, level, i, j) and h2 = SplitMix64(h) (ours; no random generator, so both engines draw
+it bit for bit apart from the last ulp of the logarithm). The cells, the radius and the bins agree exactly; the
+deviates to 2.3e-16, the cross section to 3.1e-15, the eigenrays as above (`test_rough_parts_match`,
+`test_rough_penetration_matches`). Also host only: the extra rays reach a CUDA synthesis as ordinary pairs
+(`synth_cuda.cu` runs channels x paths, with no number of rays per point anywhere;
+`test_cuda_synthesis_takes_the_rough_rays`, run in the GPU job).

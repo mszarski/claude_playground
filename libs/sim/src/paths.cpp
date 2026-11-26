@@ -645,6 +645,7 @@ EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source
     }
     out.amplitude[i] = divide(below ? config.transmission : cd{1.0, 0.0}, config.sound_speed * out.delay[i]);
   });
+  if (config.rough) add_rough_scattering(config, source, points, n_points, out);  // G-13, penetration.cpp
   return out;
 }
 

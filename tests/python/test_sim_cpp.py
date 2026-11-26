@@ -184,6 +184,146 @@ def _nothing():
     return contextlib.nullcontext()
 
 
+# --- penetration: rough (G-13) --------------------------------------------------------------------------------
+# NumPy's exp, log, pow, hypot, |z| and complex product are vectorised (its own polynomials, fused multiply-adds)
+# and differ from libm and plain products by about an ulp, so the two engines do not agree bit for bit here. The
+# integers (cells, hash, delay bins) agree exactly, so the shapes and validity masks are equal.
+
+ROUGH_LN10 = np.log(10.0)
+SAX99_BOTTOM = {"speed": 1.16 * 1530.0, "density": 2.0, "attenuation": 0.010 * 40 * np.pi / ROUGH_LN10}
+MEDIUM_SAND = {"speed": 1767.0, "density": 1.845, "attenuation": 0.886}
+
+
+def _rough_pair(c, bottom, f, roughness, source, pts):
+    import warnings
+    kw = dict(penetration="rough", bottom=bottom, frequency=f, roughness=dict(roughness))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        a = SedimentProvider(c, bottom["speed"], 0.0, engine="cpp", **kw).eigenrays(source, pts)
+        b = SedimentProvider(c, bottom["speed"], 0.0, engine="numpy", **kw).eigenrays(source, pts)
+    return a, b
+
+
+def _rough_points(source, rng, n_sub=6):
+    """Points below the critical angle on the straight line from `source` (10-20 deg, 0.05-0.4 m deep, any azimuth),
+    two steep ones above it and one in the water."""
+    deg = rng.uniform(10.0, 20.0, n_sub)
+    depth = rng.uniform(0.05, 0.4, n_sub)
+    az = rng.uniform(0.0, 2 * np.pi, n_sub)
+    r = (depth - source[2]) / np.tan(np.radians(deg))
+    sub = np.column_stack([source[0] + r * np.cos(az), source[1] + r * np.sin(az), depth])
+    return np.vstack([sub, [source[0] + 0.5, source[1] - 0.3, 0.3], [source[0], source[1], 0.1],
+                      [source[0] + 3.0, source[1], -2.0]])
+
+
+# Measured over the 20 cases of test_rough_penetration_matches (2026-11-26; `rough_difference`): delays 6.4e-16
+# relative at worst (a bin's delay is the intensity-weighted mean of its cells', and the weights differ by an ulp);
+# amplitudes 2.6e-12 of the point's largest scattered ray, nearly all of it the phase w0 (t - t_b) of the merge
+# taking that delay's rounding (w0 x 1e-17 s = 1.5e-12 rad at 20 kHz); directions 7.2e-15. Column 0 (`fluid`'s
+# ray) 2.5e-16. The tolerances are two to three times the worst measured.
+ROUGH_DELAY_RTOL = 2e-15
+ROUGH_AMP_ATOL = 6e-12      # of the largest scattered amplitude of the same point
+ROUGH_DIR_ATOL = 2e-14
+
+
+def _assert_rough_equal(a, b):
+    assert a.delay.shape == b.delay.shape, (a.delay.shape, b.delay.shape)
+    np.testing.assert_array_equal(a.valid, b.valid)
+    np.testing.assert_array_equal(a.n_surface, b.n_surface)
+    np.testing.assert_array_equal(a.n_bottom, b.n_bottom)
+    # column 0 is `fluid`'s ray: the tolerance of test_sediment_fluid_penetration_matches
+    np.testing.assert_allclose(a.delay[:, 0], b.delay[:, 0], rtol=RTOL)
+    np.testing.assert_allclose(a.amplitude[:, 0], b.amplitude[:, 0], rtol=1e-12)
+    np.testing.assert_allclose(a.launch[:, 0], b.launch[:, 0], rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(a.arrival[:, 0], b.arrival[:, 0], rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(a.delay[:, 1:], b.delay[:, 1:], rtol=ROUGH_DELAY_RTOL, atol=0.0)
+    scale = np.abs(b.amplitude[:, 1:]).max(axis=1, keepdims=True) if b.delay.shape[1] > 1 else 1.0
+    assert np.all(np.abs(a.amplitude[:, 1:] - b.amplitude[:, 1:]) <= ROUGH_AMP_ATOL * scale)
+    np.testing.assert_allclose(a.launch[:, 1:], b.launch[:, 1:], rtol=0.0, atol=ROUGH_DIR_ATOL)
+    np.testing.assert_allclose(a.arrival[:, 1:], b.arrival[:, 1:], rtol=0.0, atol=ROUGH_DIR_ATOL)
+
+
+def rough_difference(a, b):
+    """(largest relative delay difference, largest amplitude difference re the point's largest ray, largest direction
+    difference) over the scattered columns: what the tolerances above are set from."""
+    if a.delay.shape[1] == 1:
+        return 0.0, 0.0, 0.0
+    v = b.valid[:, 1:]
+    dd = np.abs(a.delay[:, 1:] - b.delay[:, 1:])[v] / b.delay[:, 1:][v]
+    scale = np.abs(b.amplitude[:, 1:]).max(axis=1, keepdims=True)
+    da = (np.abs(a.amplitude[:, 1:] - b.amplitude[:, 1:]) / np.where(scale > 0, scale, 1.0))[v]
+    dl = max(np.abs(a.launch[:, 1:] - b.launch[:, 1:]).max(), np.abs(a.arrival[:, 1:] - b.arrival[:, 1:]).max())
+    return float(dd.max()), float(da.max()), float(dl)
+
+
+@pytest.mark.parametrize("seed", [0, 1, 7, 2**63 + 5, -3])
+@pytest.mark.parametrize("spectrum", [dict(w2=0.0000433, gamma2=3.04, K0=10.0),     # SAX99, von Karman (D.7)
+                                      dict(w2=0.00002, gamma2=3.25, K0=0.0)])        # a pure power law
+@pytest.mark.parametrize("site", ["sax99", "medium_sand"])
+def test_rough_penetration_matches(seed, spectrum, site):
+    """`penetration: rough` on both engines: the same cells, deviates and delay bins (shapes, validity equal), the
+    `fluid` ray in column 0, the scattered rays to the measured rounding above; points below and above the critical
+    angle and in the water, a source off the origin, several seeds (one beyond 2^63 and one negative: the hash takes
+    the 64-bit pattern), two spectra and two sediments."""
+    c, bottom, f = (1530.0, SAX99_BOTTOM, 20e3) if site == "sax99" else (C, MEDIUM_SAND, 30e3)
+    source = np.array([1.5, -2.0, -10.0])
+    pts = _rough_points(source, np.random.default_rng(abs(seed) % 1000 + (0 if site == "sax99" else 50)))
+    a, b = _rough_pair(c, bottom, f, dict(spectrum, seed=seed), source, pts)
+    assert b.valid[:6, 1:].sum(axis=1).min() > 5 and not b.valid[6:, 1:].any()
+    _assert_rough_equal(a, b)
+
+
+def test_rough_numerical_knobs_and_refinement_match():
+    """Coarser and finer cells, other bins and reach, on both engines: the knobs reach the C++ engine."""
+    source = np.array([0.0, 0.0, -6.0])
+    pts = _rough_points(source, np.random.default_rng(11), n_sub=3)
+    for knobs in (dict(patch=0.02, refine=2.0, floor_db=20.0, bin=2e-5), dict(patch=0.1, refine=5.0, floor_db=40.0),
+                  dict(bin=1e-6)):
+        a, b = _rough_pair(1530.0, SAX99_BOTTOM, 20e3, dict(w2=0.0000433, gamma2=3.04, K0=10.0, seed=4, **knobs),
+                           source, pts)
+        _assert_rough_equal(a, b)
+
+
+def test_rough_parts_match():
+    """The parts one by one: the quadtree's cells exactly (integers and centres), the radius exactly, the deviates and
+    the cross section to their rounding, so that a disagreement above can be traced."""
+    from gpusonar.sim import penetration as pen
+    for args in ((10.0, 0.0, 1.5, 0.04, 3.0), (-3.3, 7.1, 6.0, 0.0375, 3.0), (0.01, -0.02, 0.3, 0.05, 2.0)):
+        got, want = core.sim_rough_quadtree_cells(*args), pen.quadtree_cells(*args)
+        for g, w in zip(got, want):
+            np.testing.assert_array_equal(g, w)
+    for depth, k_loss, floor in ((0.3, 0.8, 30.0), (0.05, 3.0, 20.0), (0.4, 0.0, 40.0)):
+        assert core.sim_rough_sediment_radius(depth, k_loss, floor) == pen._sediment_radius(np.float64(depth), k_loss, floor)
+    rng = np.random.default_rng(5)
+    lv, i, j = rng.integers(0, 8, 5000), rng.integers(-10**6, 10**6, 5000), rng.integers(-10**6, 10**6, 5000)
+    for seed in (0, 7, 2**64 - 1):
+        np.testing.assert_allclose(core.sim_rough_patch_coefficients(seed, lv, i, j), pen.patch_coefficients(seed, lv, i, j),
+                                   rtol=5e-16, atol=0.0)          # measured 2.3e-16 (NumPy's log, 14 of 5000)
+    k = 2 * np.pi * 20e3 / 1530.0
+    K_i = np.column_stack([k * np.cos(rng.uniform(0.1, 0.5, 2000)), np.zeros(2000)])
+    phi, ks = rng.uniform(0, 2 * np.pi, 2000), rng.uniform(0.0, 0.999, 2000) * k / 1.16
+    K_s = np.column_stack([ks * np.cos(phi), ks * np.sin(phi)])
+    for K0 in (10.0, 0.0):
+        args = (k, 2.0, 1.16, 0.010, 0.0000433, 3.04, K0)
+        np.testing.assert_allclose(core.sim_rough_sigma_wp(K_s, K_i, *args), pen.sigma_wp(K_s, K_i, *args), rtol=1e-14)  # measured 3.1e-15
+
+
+def test_rough_zero_relief_is_fluid_on_the_cpp_engine():
+    """w2 = 0 on the C++ engine: every scattered amplitude exactly 0, and column 0 `fluid`'s ray bit for bit."""
+    import warnings
+    source = np.array([0.0, 0.0, -10.0])
+    pts = _rough_points(source, np.random.default_rng(2), n_sub=3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        a = SedimentProvider(1530.0, SAX99_BOTTOM["speed"], 0.0, engine="cpp", penetration="rough", bottom=SAX99_BOTTOM,
+                             frequency=20e3, roughness=dict(w2=0.0, gamma2=3.04, K0=10.0)).eigenrays(source, pts)
+        b = SedimentProvider(1530.0, SAX99_BOTTOM["speed"], 0.0, engine="cpp", penetration="fluid", bottom=SAX99_BOTTOM,
+                             frequency=20e3).eigenrays(source, pts)
+    assert np.all(a.amplitude[:, 1:] == 0) and a.valid[:3, 1:].any()
+    for name in ("delay", "amplitude", "launch", "arrival", "valid"):
+        np.testing.assert_array_equal(getattr(a, name)[:, :1], getattr(b, name))
+
+
 class MaskedProvider(EigenrayProvider):
     """Image-source eigenrays with some rays marked invalid, as a ray tracer returns them."""
 
@@ -472,6 +612,43 @@ def test_cuda_reverberation_matches_numpy():
     assert state_cpp == state_np
     worst, rms = relative_difference(x_cpp, x_np)
     assert worst < 1e-4 and rms < 1e-4, (worst, rms)
+
+
+def _rough_ping(backend, penetration="rough"):
+    """One subbottom ping at 1.5 m over medium sand with five buried points 10-20 deg grazing from the sonar (below
+    the 30.9 deg critical angle): `rough` gives each 1 + about 100 eigenrays a leg, so about 10^4 pairs a point."""
+    import warnings
+    sonar = SonarModel.load("subbottom", {"receive": {"window": {"range": [4.0, 9.5]}}})
+    rng = np.random.default_rng(8)
+    deg, depth, az = rng.uniform(10.0, 20.0, 5), rng.uniform(0.1, 0.3, 5), rng.uniform(0, 2 * np.pi, 5)
+    r = (1.5 + depth) / np.tan(np.radians(deg))
+    scene = Scene().add_points(np.column_stack([r * np.cos(az), r * np.sin(az), depth]), amplitude=np.ones(5))
+    kw = dict(penetration=penetration, bottom=MEDIUM_SAND, frequency=20e3)
+    if penetration == "rough":
+        kw["roughness"] = {"sediment": "medium_sand", "K0": 10.0, "seed": 2}
+    provider = SedimentProvider(C, MEDIUM_SAND["speed"], 0.0, engine="cpp", **kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return simulate_ping(sonar, make_pose(position=(0.0, 0.0, -1.5)), scene, environment={"sound_speed": C},
+                             provider=provider, adc=False, backend=backend).samples.array
+
+
+def test_rough_echo_reaches_the_synthesis():
+    """The scattered rays are ordinary eigenrays to the pairing and the synthesis: the ping is not `fluid`'s and is
+    far louder: measured 32.0 dB in peak (ours, seed 2); the bound is 20 dB."""
+    rough, fluid = _rough_ping(core.Backend.Host), _rough_ping(core.Backend.Host, "fluid")
+    assert np.abs(rough).max() > 10.0 * np.abs(fluid).max() > 0
+
+
+@needs_cuda
+def test_cuda_synthesis_takes_the_rough_rays():
+    """Eigenrays, `rough`'s included, are computed on the host for every backend (libs/sim/src/paths.cpp,
+    penetration.cpp) and paired on the host (two_way_paths); the device synthesises the flat list of pairs
+    (libs/sim/src/synth_cuda.cu: channels x paths, no number of rays per point anywhere), so the ping is the host's
+    to the order of the float32 atomic additions (tolerance of test_sim.py's test_gpu_forward_model_matches_cpu)."""
+    host, cuda = _rough_ping(core.Backend.Host), _rough_ping(core.Backend.Cuda)
+    assert np.abs(host).max() > 0
+    assert np.abs(cuda - host).max() < 1e-5 * np.abs(host).max()
 
 
 @needs_cuda

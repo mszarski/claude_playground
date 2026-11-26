@@ -32,6 +32,14 @@ spectrum W(K) = w2 / (K^2 + K0^2)^(gamma2 / 2) (D.7) with w2 in m^(4 - gamma2) (
 [N4] Sec. 6; `configs/sediments.yaml` uses the same), K0 = 0 the pure power law (6.8). The perturbation amplitude
 A_wp (15.4) equals the sediment-side amplitude of `bottom.py`'s first-order solution (B = i k_w A_wp / beta_w(K_s),
 to 1e-15: `test_our_perturbation_sediment_amplitude_is_a_wp`).
+
+Engines: `RoughPatches`, `quadtree_cells`, `patch_coefficients`, `_sediment_radius` and `sigma_wp` (obliquity=True)
+have a C++ counterpart in libs/sim/src/penetration.cpp (sonar/sim/penetration.hpp) with the same operations in the
+same order; `SedimentProvider` uses it with the C++ engine. The interface is the same on both for a seed: the cell
+deviates come from an explicit SplitMix64 chain over (seed, level, i, j) and a polar Box-Muller step, no random
+generator. The two differ only by the rounding of NumPy's vectorised exp, log, pow, hypot and complex product
+(tests/python/test_sim_cpp.py measures it). Not ported (no caller in the simulator, tests only): `sigma_wp` with
+one-dimensional wave numbers or obliquity=False, `ripple_*`, `mean_square_field`.
 """
 
 from __future__ import annotations
@@ -207,7 +215,13 @@ def _splitmix(x):
 
 def patch_coefficients(seed: int, level, i, j):
     """Complex Gaussian deviates with <|c|^2> = 1, one per interface cell (level, i, j), the same wherever and
-    whenever the cell is used (a frozen interface): a hash of (seed, level, i, j)."""
+    whenever the cell is used (a frozen interface): a hash of (seed, level, i, j), engine independent.
+
+    h = SplitMix64(seed mod 2^64), then h = SplitMix64(h xor part) for part = level, i, j (as 64-bit two's
+    complement), h2 = SplitMix64(h); u1 = ((h >> 11) + 0.5) / 2^53 in (0, 1), u2 = (h2 >> 11) / 2^53 in [0, 1);
+    c = sqrt(-ln u1) exp(2 pi i u2): |c|^2 is exponential with mean 1 and the phase uniform (Box-Muller in polar
+    form). SplitMix64 with its usual published constants (unconfirmed: the source was not reread; the constants are
+    the ones in the code, and both engines use these, so the realisation is fixed whatever their origin). The C++ copy: libs/sim/src/penetration.cpp `rough_patch_coefficient`."""
     with np.errstate(over="ignore"):
         key = np.uint64(int(seed) & 0xFFFFFFFFFFFFFFFF)
         h = _splitmix(key)
@@ -303,6 +317,12 @@ class RoughPatches:
         self.bin = float(bin) if bin is not None else 1.0 / (4.0 * frequency)           # a quarter period (ours)
         self.k_w = 2.0 * np.pi * self.frequency / self.c_w
         self.k_loss = self.k_w * self.delta / self.nu
+
+    def cpp_args(self) -> tuple:
+        """(w2, gamma2, K0, seed, patch, refine, floor_db, bin) for the C++ engine's `sim_sediment_eigenrays`
+        (libs/sim/src/penetration.cpp), every value stated; the seed as its 64-bit pattern, as the hash takes it."""
+        return (self.w2, self.gamma2, self.K0, self.seed & 0xFFFFFFFFFFFFFFFF, self.patch, self.refine, self.floor_db,
+                self.bin)
 
     def point_rays(self, source, point):
         """(delay [B], amplitude [B] complex, launch [B, 3], arrival [B, 3]) of the delay bins for one point."""

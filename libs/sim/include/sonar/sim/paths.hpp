@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "sonar/core/vec.hpp"
+#include "sonar/sim/penetration.hpp"
 
 namespace sonar::sim {
 
@@ -222,6 +223,11 @@ struct SedimentConfig {
   /// grazing angle theta_d, V_wp(theta_d) / sqrt(a_rho) exp(-k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} d),
   /// d its depth under the interface, instead of the least-time ray's leg. False: the ray's.
   bool evanescent = false;
+  /// Opt-in (G-13, `penetration: rough`; needs `fluid` and `evanescent`): the points of the
+  /// evanescent branch also get one seeded realisation of the first-order roughness-scattered field,
+  /// as further eigenrays, one per delay bin (sonar/sim/penetration.hpp, `add_rough_scattering`).
+  bool rough = false;
+  SedimentRoughness roughness;  ///< every field stated when `rough`
 };
 
 /// One refracted eigenray per point. Amplitude: spreading over the travel-time distance
@@ -232,6 +238,8 @@ struct SedimentConfig {
 /// evenly between the two legs of an echo), L the length of the sediment leg and
 /// k_p'' = k_w delta / nu ((8.18), (8.26)). The same operations in the same order as
 /// propagation.SedimentProvider (penetration: fluid), which also says what is still approximate.
+/// With `rough`: [S, 1 + B] rays, column 0 the above, columns 1.. the scattered bins of the
+/// sub-critical points (`add_rough_scattering`); [S, 1] when no point is sub-critical.
 EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source, const double* points,
                                std::int64_t n_points);
 
