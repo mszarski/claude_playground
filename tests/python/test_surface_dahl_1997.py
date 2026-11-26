@@ -196,20 +196,27 @@ BEFORE = {
 }
 
 
-def test_apl_1994_path_is_bit_identical_when_named():
-    """`apl_1994` (the default until A1) and `hall_novarini`, when named, give exactly the values the
-    default and `hall_novarini` gave before `dahl_1997` was added, bit for bit, through
-    `bubble_layer_surface_db` (with `facet_attenuation=False`, the model before A2) and
-    `bubble_layer_optical_depth`. (Until A1 this test also held the unnamed default to these values;
-    the default is now `dahl_1997`: `test_dahl_1997_is_the_default_extinction`.)"""
+def test_apl_1994_path_is_unchanged_when_named():
+    """`apl_1994` (the default until A1) and `hall_novarini`, when named, give the values the default
+    and `hall_novarini` gave before `dahl_1997` was added, through `bubble_layer_surface_db` (with
+    `facet_attenuation=False`, the model before A2) and `bubble_layer_optical_depth`. (Until A1 this
+    test also held the unnamed default to these values; the default is now `dahl_1997`:
+    `test_dahl_1997_is_the_default_extinction`.)
+
+    WEAKENED from bit equality to a relative tolerance of 1e-14: the pinned hex values are this
+    machine's, and the GPU job's image (another Python, NumPy and libm) gave one value 1 ulp away
+    (85 degrees, 15 m/s, 120 kHz: -0x1.42a1777b0ee9ap-2 against -0x1.42a1777b0ee9cp-2). The pins are
+    kept; 1e-14 is about 45 ulp, far below any change of the model."""
     g = np.radians([5.0, 17.0, 30.0, 45.0, 60.0, 85.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for (u, f), (levels, apl, hn) in BEFORE.items():
-            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994",
-                                                                              facet_attenuation=False)] == list(levels)
-            assert float(surface.bubble_layer_optical_depth(u, f, extinction="apl_1994")).hex() == apl
-            assert float(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini")).hex() == hn
+            np.testing.assert_allclose(surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994", facet_attenuation=False),
+                                       [float.fromhex(x) for x in levels], rtol=1e-14, atol=0)
+            np.testing.assert_allclose(surface.bubble_layer_optical_depth(u, f, extinction="apl_1994"), float.fromhex(apl),
+                                       rtol=1e-14, atol=0)
+            np.testing.assert_allclose(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini"), float.fromhex(hn),
+                                       rtol=1e-14, atol=0)
 
 
 def test_unknown_extinction_is_refused_naming_the_three():
