@@ -4354,3 +4354,58 @@ deviates to 2.3e-16, the cross section to 3.1e-15, the eigenrays as above (`test
 `test_rough_penetration_matches`). Also host only: the extra rays reach a CUDA synthesis as ordinary pairs
 (`synth_cuda.cu` runs channels x paths, with no number of rays per point anywhere;
 `test_cuda_synthesis_takes_the_rough_rays`, run in the GPU job).
+
+## 32. Reverberation in the link budget and the coverage picture (issue `sonar-w2w3`) [CONFIRMED formula via the J&R notes; OURS assembly]
+
+What was wrong first: `SonarEquation` and the coverage picture were noise-only. For `flank_patrol`'s −3 dB small
+vehicle at 2.2 km they gave 34.3 dB of peak over background on its beam where the simulated data give 6.6 dB
+(D-198 measured 3.8 to 5.1 dB in the gallery's 4 m cells).
+
+**The term.** The scattering-function integral the simulator itself uses (`sim/reverb.py` `reverberation_power`;
+SST's method, TR 0702 Sec. 6; Jackson and Richardson 2007 (G.4), `docs/references/jackson_richardson_2007/03`,
+Sec. 2.9): the boundary is cut into rings of radius rho and width d rho about the sonar; every pair of paths, out
+from the projector and back to the array, that reaches a ring travelling towards its boundary adds
+
+    p = |a_out|^2 |a_back|^2 S(g_in, g_out) rho d rho 10^(-alpha c t / 10)      at delay t = t_out + t_back
+
+per radian of azimuth for a unit source. Through the compressed pulse (the |sinc(B tau)|^2 of the band that the
+coverage picture puts the target's arrivals through, averaged over each delay bin with the sine integral,
+Int_0^y sinc^2 = (Si(2 pi y) − sin^2(pi y) / (pi y)) / pi) and the beam's azimuthal integral
+Psi = Int |b_rx b_tx|^2 dphi / |b_rx b_tx|^2 on axis (J&R (G.12)):
+
+    RL − SL = 10 log10( Psi sum_bins P_k <sinc^2(B (T − t_k))>_k )
+
+For one direct path each way over a Lambert bottom this is J&R (G.11)-(G.13), monostatic,
+RL = SL + S_b − 30 log r − 2 alpha r + 10 log10(Psi c tau / 2) re 1 m, with the pulse length tau replaced by the
+compressed one, 1 / B (for a CW pulse B = 1/T: (G.13) itself; the note's reading of the printed "−2 alpha_p r_t"
+as water absorption is used). Held: 0.2 dB from 1 to 4 km in both implementations (`test_reverb_budget.py`,
+GoogleTest `CoverageReverb.LambertBottomIsJacksonAndRichardsonG13`).
+
+**Units and processing gain.** The echo is SL − 2 TL + TS (+ the coverage picture's two-way factor) after the same
+compression: the matched filter's gain 10 log BT applies to echo and reverberation alike and cancels; the noise
+keeps its budget NL − 10 log BT − AG. The array gain against isotropic noise is not applied to reverberation; the
+beam's Psi is. An aperture window widens Psi by the factor it lowers the noise gain by (1.76 dB for Hann on 32
+elements, within 0.3 dB), so the detection table's window loss applies to both. Signal excess is
+−10 log10(10^(−SNR_noise/10) + 10^(−SRR/10)); zero scattering gives the noise-only figure exactly, and a
+reverberation-limited SNR does not depend on the source level.
+
+**Paths.** The Python reference (`gpusonar.reverb_budget.level_db`) calls `reverberation_power` with any eigenray
+provider (image sources, Bellhop): the simulator's own integral, monostatic (one eigenray set from the array
+centre serves both legs, as there). The coverage picture (C++, `coverage_reverberation_db`) uses its own rays with
+the coefficients of the boundaries met on the way as powers, as for the target. The two agree within 0.3 dB from 1
+to 4 km in 100 m of isovelocity water (1 dB at 500 m, near the first bottom return). Reverberation in shallow
+water at kilometres arrives by many bounces: three reflections each way gave 8 to 14 dB too little on
+`flank_patrol`; the default is 0.4 x range / water depth (as many as a ray at 22° of grazing makes; ours), and the
+data then agree within 1.3 dB at 2.2 to 10 km.
+
+**Laws.** The scattering strengths are the simulator's: `sim.simulator.reverberation_item_strength` turns a
+`reverberation:` item into its law (the dispatch moved there from the simulator's loop unchanged; records
+bit-identical), and the coverage picture takes them as 2° tables of incident x scattered grazing.
+
+**Not in it.** The reverberation's statistics in the detection probability (the table assumes Gaussian
+background; K-distributed reverberation raises false alarms at a given threshold); the Doppler that separates a
+moving target from reverberation; the elements' vertical patterns and beam sidelobes in elevation in the C++ term
+(the Python reference has the element patterns); for a CW pulse the sinc's sidelobes stand in for the
+autocorrelation's triangle (it overstates reverberation within a few pulse lengths of the first bottom return);
+volume scattering in the coverage picture (refused there; the Python reference has it); a boundary that changes
+with range; the Lambert and empirical laws' own validity.

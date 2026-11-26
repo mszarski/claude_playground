@@ -44,6 +44,101 @@ def absorption_table(sonar: SonarModel, env: dict, model: str):
     return lo, hi, [float(x) for x in np.broadcast_to(table, f.shape)]
 
 
+def reverberation_item_strength(item: dict, fc: float, env: dict, provider=None):
+    """(item, strength, offset) of one `reverberation` item as the simulator uses it: the item with what its model
+    fills in (a Lambert item's `mu_db`, a volume layer's `boundary_z`), the scattering strength as a function of the
+    incident and scattered grazing angles (rad; linear, per unit area), or None for a Lambert item (then `mu_db` is
+    the law; `offset_db` is not in it), and the item's `offset_db`. `env`: the scenario's environment (its
+    `sound_speed`). `provider`: the eigenray provider, needed by `exclude_specular` only.
+    The one place where an item becomes a law: the simulator below and the link budget's reverberation term
+    (gpusonar/reverb_budget.py) both call it."""
+    from . import reverb
+    strength = None
+    if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
+        # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
+        # bubble_saturation][, bistatic_rule: geometric_mean (default) | mean_angle]}; the rule for a
+        # pair of grazing angles is the same key for searay_bottom and bubble_layer_surface
+        # (sim/surface.py, A3). Without `cap` the law is unchanged and a warning is given once
+        # where it lies above the bubble layer's saturation level (sim/surface.py, D-87).
+        from . import surface as surface_model
+        strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"),
+                                                            item.get("bistatic_rule", "geometric_mean"))
+    elif item.get("model") == "searay_bottom":
+        # Empirical bottom law by type (sim/surface.py): {model: searay_bottom, bottom_type: mud|sand|gravel|rock}.
+        from . import surface as surface_model
+        strength = surface_model.searay_bottom_strength(fc, item["bottom_type"], item.get("bistatic_rule", "geometric_mean"))
+    elif item.get("model") == "bubble_layer_surface":
+        # {model: bubble_layer_surface, wind_speed, extinction: dahl_1997 (default) | apl_1994 | hall_novarini,
+        # facet_attenuation: true (default) | false}: the bubble-layer and facet terms of the published
+        # high-frequency surface model, the facets attenuated by the layer (sim/surface.py).
+        from . import surface as surface_model
+        strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env["sound_speed"],
+                                                               item.get("extinction", "dahl_1997"),
+                                                               bool(item.get("facet_attenuation", True)),
+                                                               item.get("bistatic_rule", "geometric_mean"))
+    elif item.get("model") == "fluid_sediment":
+        # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
+        # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
+        # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
+        # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
+        # composite | combined),
+        # small_scale_kh.
+        from . import bottom as bottom_model
+        keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
+        if "sediment" in item:
+            item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
+        missing = [k for k in keys if k not in item]
+        if missing:
+            raise ValueError(f"fluid_sediment reverberation needs {missing}")
+        extra = {k: (item[k] if k == "roughness_model" else float(item[k])) for k in ("roughness_model", "small_scale_kh") if k in item}
+        if item.get("geometry", "monostatic") == "bistatic":
+            # The model at the true bistatic azimuth of each cell (pi is backscatter).
+            strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
+                g_in, g_out, fc, env["sound_speed"], azimuth=azimuth, **_p)
+        else:
+            strength = bottom_model.reverberation_strength(fc, env["sound_speed"], **{k: float(item[k]) for k in keys}, **extra)
+    elif item.get("model") == "volume":
+        # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
+        # (fish, plankton, bubbles), as a sheet at its centre depth.
+        top, bottom = (float(v) for v in item["layer"])
+        strength = reverb.volume_layer_strength(float(item["sv_db"]), abs(bottom - top))
+        item = dict(item, boundary_z=0.5 * (top + bottom))
+    elif item.get("model", "lambert") != "lambert":
+        raise ValueError(f"unknown reverberation model {item['model']!r}")
+    elif "sediment" in item and "mu_db" not in item:
+        # {boundary_z, sediment: rock | pebbles}: Lambert's law with the measured parameter
+        # of a table entry that is not a fluid sediment (configs/sediments.yaml, D-88).
+        from . import bottom as bottom_model
+        item = dict(item, mu_db=bottom_model.named_lambert_mu_db(item["sediment"], item.get("sediment_file")))
+    elif "mu_db" not in item:
+        # A Lambert boundary with nothing said about its strength: -29 dB, the low-frequency
+        # deep-water value (bottom.DEFAULT_LAMBERT_MU_DB, D-89; -27 dB before); warns once at
+        # 10 kHz and above.
+        from . import bottom as bottom_model
+        item = dict(item, mu_db=bottom_model.default_lambert_mu_db(fc))
+    # `offset_db` moves the boundary's strength up or down whatever its model: what
+    # calibration against a real log adjusts (gpusonar/simcal.py).
+    offset = float(item.get("offset_db", 0.0))
+    if strength is not None and offset != 0.0:
+        base, scale = strength, 10.0 ** (offset / 10.0)
+        if reverb.reverb_bistatic.takes_azimuth(base):
+            strength = lambda g_in, g_out, azimuth=np.pi, _b=base, _s=scale: _s * _b(g_in, g_out, azimuth)  # noqa: E731
+        else:
+            strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
+    # `exclude_specular: true` (or {mean_square_slope, rms_height, reflection}), bistatic items:
+    # take out of the strength the near-specular part that time spreading already carries
+    # as the tail of each bounce eigenray (sim/reverb_specular.py; TR 0702 Sec. 12.4).
+    if item.get("exclude_specular"):
+        from . import reverb_specular
+        part = reverb_specular.boundary_part(item, provider, fc, env["sound_speed"])
+        if part is not None:
+            if strength is None:
+                mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
+                strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)   # noqa: E731
+            strength = reverb_specular.exclude(strength, part)
+    return item, strength, offset
+
+
 def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   environment: dict | None = None, provider: EigenrayProvider | None = None,
                   sequence: int = 0, sub_sequence: int = 0, time_ns: int = 0,
@@ -171,89 +266,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         w = sonar.waveform_config
         fc = 0.5 * (float(w["f_start"]) + float(w.get("f_stop", w["f_start"])))
         alpha = float(acoustics.absorption(fc, *site.water(env), absorption_model))
-        strength = None
-        if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
-            # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
-            # bubble_saturation][, bistatic_rule: geometric_mean (default) | mean_angle]}; the rule for a
-            # pair of grazing angles is the same key for searay_bottom and bubble_layer_surface
-            # (sim/surface.py, A3). Without `cap` the law is unchanged and a warning is given once
-            # where it lies above the bubble layer's saturation level (sim/surface.py, D-87).
-            from . import surface as surface_model
-            strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"),
-                                                                item.get("bistatic_rule", "geometric_mean"))
-        elif item.get("model") == "searay_bottom":
-            # Empirical bottom law by type (sim/surface.py): {model: searay_bottom, bottom_type: mud|sand|gravel|rock}.
-            from . import surface as surface_model
-            strength = surface_model.searay_bottom_strength(fc, item["bottom_type"], item.get("bistatic_rule", "geometric_mean"))
-        elif item.get("model") == "bubble_layer_surface":
-            # {model: bubble_layer_surface, wind_speed, extinction: dahl_1997 (default) | apl_1994 | hall_novarini,
-            # facet_attenuation: true (default) | false}: the bubble-layer and facet terms of the published
-            # high-frequency surface model, the facets attenuated by the layer (sim/surface.py).
-            from . import surface as surface_model
-            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env["sound_speed"],
-                                                                   item.get("extinction", "dahl_1997"),
-                                                                   bool(item.get("facet_attenuation", True)),
-                                                                   item.get("bistatic_rule", "geometric_mean"))
-        elif item.get("model") == "fluid_sediment":
-            # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
-            # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
-            # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
-            # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
-            # composite | combined),
-            # small_scale_kh.
-            from . import bottom as bottom_model
-            keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
-            if "sediment" in item:
-                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
-            missing = [k for k in keys if k not in item]
-            if missing:
-                raise ValueError(f"fluid_sediment reverberation needs {missing}")
-            extra = {k: (item[k] if k == "roughness_model" else float(item[k])) for k in ("roughness_model", "small_scale_kh") if k in item}
-            if item.get("geometry", "monostatic") == "bistatic":
-                # The model at the true bistatic azimuth of each cell (pi is backscatter).
-                strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
-                    g_in, g_out, fc, env["sound_speed"], azimuth=azimuth, **_p)
-            else:
-                strength = bottom_model.reverberation_strength(fc, env["sound_speed"], **{k: float(item[k]) for k in keys}, **extra)
-        elif item.get("model") == "volume":
-            # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
-            # (fish, plankton, bubbles), as a sheet at its centre depth.
-            top, bottom = (float(v) for v in item["layer"])
-            strength = reverb.volume_layer_strength(float(item["sv_db"]), abs(bottom - top))
-            item = dict(item, boundary_z=0.5 * (top + bottom))
-        elif item.get("model", "lambert") != "lambert":
-            raise ValueError(f"unknown reverberation model {item['model']!r}")
-        elif "sediment" in item and "mu_db" not in item:
-            # {boundary_z, sediment: rock | pebbles}: Lambert's law with the measured parameter
-            # of a table entry that is not a fluid sediment (configs/sediments.yaml, D-88).
-            from . import bottom as bottom_model
-            item = dict(item, mu_db=bottom_model.named_lambert_mu_db(item["sediment"], item.get("sediment_file")))
-        elif "mu_db" not in item:
-            # A Lambert boundary with nothing said about its strength: -29 dB, the low-frequency
-            # deep-water value (bottom.DEFAULT_LAMBERT_MU_DB, D-89; -27 dB before); warns once at
-            # 10 kHz and above.
-            from . import bottom as bottom_model
-            item = dict(item, mu_db=bottom_model.default_lambert_mu_db(fc))
-        # `offset_db` moves the boundary's strength up or down whatever its model: what
-        # calibration against a real log adjusts (gpusonar/simcal.py).
-        offset = float(item.get("offset_db", 0.0))
-        if strength is not None and offset != 0.0:
-            base, scale = strength, 10.0 ** (offset / 10.0)
-            if reverb.reverb_bistatic.takes_azimuth(base):
-                strength = lambda g_in, g_out, azimuth=np.pi, _b=base, _s=scale: _s * _b(g_in, g_out, azimuth)  # noqa: E731
-            else:
-                strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
-        # `exclude_specular: true` (or {mean_square_slope, rms_height, reflection}), bistatic items:
-        # take out of the strength the near-specular part that time spreading already carries
-        # as the tail of each bounce eigenray (sim/reverb_specular.py; TR 0702 Sec. 12.4).
-        if item.get("exclude_specular"):
-            from . import reverb_specular
-            part = reverb_specular.boundary_part(item, provider, fc, env["sound_speed"])
-            if part is not None:
-                if strength is None:
-                    mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
-                    strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)   # noqa: E731
-                strength = reverb_specular.exclude(strength, part)
+        item, strength, offset = reverberation_item_strength(item, fc, env, provider)
         # New keys, all optional (sim/reverb.py, sim/reverb_bistatic.py): `geometry: bistatic`
         # (the transmitter's and receiver's own positions and velocities, arrival elevation),
         # with it `n_elevation`, `azimuth_subsamples` and `strength_map: {range, offset_db,

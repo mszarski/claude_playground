@@ -445,10 +445,12 @@ their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 
 not measured: with three rows it reads 8 to 35 m for a true 4 m (D-160), and the depth
 sigma there is 2960 to 3010 m (`RESULTS.md`, "The 12 km study, rerun").
 
-**The link budget has no reverberation term** (`SonarEquation`; D-198, issue `sonar-w2w3`): the
-table below is noise-limited and optimistic wherever reverberation dominates. Example: it gives
-`flank_patrol`'s −3 dB small vehicle at 2.2 km about 30 dB, where the simulated data give 3.8 to 5.1
-dB over a background of bottom reverberation 21.9 dB above the noise (section 1.7).
+**The table below is noise-only** (`SonarEquation` without `reverberation_db`; the build gives no
+boundary scattering): it is optimistic wherever reverberation dominates. The term exists (issue
+`sonar-w2w3`, `gpusonar.reverb_budget`) and is used where a scene gives the scattering. Example:
+`flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only,
+9.7 dB with the term, 6.6 dB in the simulated data (D-198's 3.8 to 5.1 dB are the gallery's 4 m cells;
+section 1.7).
 
 Link budget, free field, spherical spreading, steady point echo in noise. Source:
 `docs/design/derived.json`, `requirements` entry `POP-3` (written by

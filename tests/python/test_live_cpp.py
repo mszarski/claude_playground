@@ -1540,3 +1540,47 @@ def test_rock_bottom_is_elastic_and_equal_in_both_engines():
     # the elastic rock returns less than the fluid one: the class is seen less far (755 against 897 m when written)
     reach = {name: got["cpp", name][0]["coverage"]["classes"][0]["max_range_m"] for name in ("rock", "fluid")}
     assert reach["rock"] < reach["fluid"] - 50.0, reach
+
+
+def test_coverage_reverberation_is_equal_in_both_engines_and_off_is_as_before():
+    """The coverage picture's reverberation term (sonar-w2w3): 100 m of water over sand, one row at 30 m, a Lambert
+    -27 dB bottom and a Chapman-Harris surface at 5 m/s. Both engines print the same member (exactly: one C++ class),
+    with `reverberation: included`, each class's noise-only reach beside its reach and which limits; the tables reach
+    the program's key=value text. Without `coverage.reverberation` the member says the term is not included; with
+    `false` it is the member as before the term existed (the same text less that one key)."""
+    import warnings
+
+    from gpusonar import live
+    from gpusonar.sim import run_scenario
+    from test_multipath_depth import scenario
+    cfg = scenario(30.0, 50.0, 1000.0, ts=20.0, bottom_z=100.0, pings=2)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        records = run_scenario(cfg, engine="cpp").records
+    cov = {"classes": [{"name": "sub", "ts_db": -10.0, "depth_m": [20.0, 90.0]}, {"name": "ship", "ts_db": 20.0, "depth_m": [2.0, 6.0]}],
+           "budget": {"source_level_db": 197.0, "noise_spectrum_db": 51.46, "array_gain_db": 15.05, "absorption_db_per_km": 0.32},
+           "water_depth_m": 100.0, "bottom": {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}}
+    items = [{"mu_db": -27.0}, {"model": "chapman_harris", "wind_speed": 5.0}]
+    base = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host"}
+    chains = {"on": dict(base, coverage=dict(cov, reverberation={"items": items, "frequency_hz": 5000.0})),
+              "unsaid": dict(base, coverage=cov), "off": dict(base, coverage=dict(cov, reverberation=False))}
+    flat = live.program_options(chains["on"])
+    text = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
+    assert text["coverage_reverb"] == 1 and len(text["coverage_reverb_bottom_strength"]) == len(text["coverage_reverb_grazing"]) ** 2
+    assert text["coverage_reverb_surface_strength"] == pytest.approx([float(v) for v in flat["coverage_reverb_surface_strength"].split(",")], rel=1e-9)
+    got = {}
+    for engine in ("cpp", "python"):
+        for name, chain in chains.items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with LiveChain(dict(chain, engine=engine)) as c:
+                    got[engine, name] = [r["coverage"] for r in c.run([r.copy() for r in records])]
+    for name in chains:
+        assert got["cpp", name] == got["python", name], name
+    on = got["cpp", "on"][0]
+    assert on["reverberation"] == "included" and on["beam_integral_deg"] > 0.0
+    for c in on["classes"]:
+        assert c["limited_by"] in ("noise", "reverberation") and c["max_range_m"] <= c["max_range_noise_only_m"]
+    assert got["cpp", "unsaid"][0]["reverberation"].startswith("not included")
+    assert "reverberation" not in got["cpp", "off"][0]
+    assert all({k: v for k, v in a.items() if k != "reverberation"} == b for a, b in zip(got["cpp", "unsaid"], got["cpp", "off"]))

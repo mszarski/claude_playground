@@ -752,7 +752,7 @@ For that to hold: a projector that delivers the source level in this band (none 
 well inside the 750 m blind range; noise, not reverberation, limiting at 12 km (below); for elevation, boards of different rows synchronised to 0.87 µs and the roll known as stated;
 for depth in metres, a sound-speed profile along the path. Spreading at least as kind as spherical (in shallow water it is kinder: below).
 
-**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.8 dB of one row's SNR with 3 rows added (13.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute). **The budget has no reverberation term** (D-198, issue `sonar-w2w3`): its margins and reaches are noise-limited and optimistic wherever reverberation dominates (for `flank_patrol`'s −3 dB small vehicle at 2.2 km it gives about 30 dB where the simulated data give about 4 dB over the background).
+**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.8 dB of one row's SNR with 3 rows added (13.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute). **The budget is noise-only**: the build gives no boundary scattering for its site, so the reverberation term (issue `sonar-w2w3`; `gpusonar.reverb_budget`, used wherever a scenario or `chain.coverage.reverberation` gives the scattering) is not in it, and its margins and reaches are optimistic wherever reverberation dominates (`flank_patrol`'s −3 dB small vehicle at 2.2 km, peak over background on its beam: 34.3 dB noise-only, 9.7 dB with the term, 6.6 dB in the simulated data).
 
 SNRs are one row's. *Needed* is what that option's own detector needs of it for a detection probability of 0.5 on one ping, its rows added (`buildspec.detection`, from the chain's settings in the build's deployment file; for 0.9 add 1.6 dB). It holds the aperture window (1.8 dB), where the echo falls between the map's samples (0.5 dB), the false-alarm budget (0.001 a ping over this window) and the rows; the budget holds the pulse's matched-filter gain and one row's gain against sea noise. Nothing is in both.
 
@@ -952,7 +952,8 @@ front end with digital down-conversion would deliver; the ADC rates above are fo
 ![Link budgets](design/link_budgets.png)
 
 Output SNR = SL − 2 TL + TS − NL + array gain + 10 log10(T), with spherical spreading plus Francois–Garrison
-absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_equation`).
+absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_equation`). Noise only: no boundary scattering is given for
+these budgets, so reverberation is not in them (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, adds it where a scene gives the scattering).
 
 | Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | `popoto_long_range` |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1015,7 +1016,8 @@ From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 15.8 dB at one row
   amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.
 
 - These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short
-  and medium range.
+  and medium range. With the scenarios' boundaries (Lambert −27 dB bottom, Chapman-Harris surface at 5 m/s) in 100 m of water over sand, the coverage
+  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m falls from 6.5 to 2.4 km; the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).
 - Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.
 - For the Popoto array the simulation uses Bellhop multipath, which in shallow water carries more energy to long
   range than spherical spreading (see `RESULTS.md`).

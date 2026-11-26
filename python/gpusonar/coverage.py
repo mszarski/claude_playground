@@ -35,6 +35,16 @@ Configuration (`chain.coverage`; a key the C++ options do not have is an error):
                                 reach it are dropped. That is a statement about deep water, made by the caller)
     rays:              {fan: 720, max_bounces: 3, max_arrivals: 6}
     null_db:           -10      a surface-image null: the two-way factor below this where the direct path exists
+    reverberation:     null     the boundaries' reverberation in the budget (sonar-w2w3; coverage.hpp says how, and what it
+                       leaves out). {items: [...], frequency_hz: F[, beam_integral_deg: B]}: `items` in the scenario's
+                       `reverberation:` form ({mu_db: -27} a Lambert bottom, {model: chapman_harris, wind_speed: 5}, any
+                       bottom or surface law of sim/simulator.py; `boundary: surface | bottom` where the model does not say),
+                       turned into tables by the simulator's own laws at `frequency_hz` (the band centre); `beam_integral_deg`:
+                       the beam's integral over azimuth (default: the array's at broadside, from the record); `max_bounces`: boundary
+                       reflections a reverberation path may have each way (default: from the range and the water depth, coverage.hpp). Each class's
+                       entry then also gives `max_range_noise_only_m` and `limited_by`. null (not given): noise only, and
+                       the member says "reverberation": "not included: ..." (ranges optimistic where reverberation limits).
+                       false: noise only and nothing said (the picture as before the term existed)
 
 The profile is the one the sound-speed ladder holds (`chain.elevation.profile`; with `ensemble`, each class also gets the
 span of its greatest range over the ensemble's profiles).
@@ -63,7 +73,9 @@ DEFAULTS = {
     "rays": {"fan": 720, "max_bounces": 3, "max_arrivals": 6},
     "null_db": -10.0,
     "surface_z": 0.0,
+    "reverberation": None,
 }
+REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces")
 PD_SNR_DB = np.arange(-20.0, 60.01, 0.5)          # the table's grid: one row's link-budget SNR, dB
 
 
@@ -139,11 +151,37 @@ def cpp_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
     table = bubble_table(s, sound_speed)
     if table is not None:
         o.update(surface_loss_grazing=table[0], surface_loss_table_db=table[1])
+    o.update(reverberation_options(c["reverberation"], sound_speed))
     half = halfspace(c["bottom"], sound_speed)
     if half is not None:
         o.update(bottom=1, bottom_speed=float(half["speed"]), bottom_density=float(half["density"]), bottom_attenuation=float(half.get("attenuation", 0.0)))
         if float(half.get("shear_speed", 0.0)) > 0.0:          # an elastic bottom (rock): a fluid's options are as before
             o.update(bottom_shear_speed=float(half["shear_speed"]), bottom_shear_attenuation=float(half.get("shear_attenuation", 0.0)))
+    return o
+
+
+def reverberation_options(block, sound_speed: float = 1500.0) -> dict:
+    """The C++ options of `coverage.reverberation` (DEFAULTS' comment): reverb 2 (not given: the member says it is not
+    included), 0 (false: as before the term existed) or 1 with the scattering-strength tables of the simulator's laws
+    (gpusonar/reverb_budget.py `strength_tables`) on its grazing grid."""
+    if block is None:
+        return {"reverb": 2}
+    if block is False:
+        return {"reverb": 0}
+    if not isinstance(block, dict) or set(block) - set(REVERBERATION_KEYS) or not {"items", "frequency_hz"} <= set(block):
+        raise ValueError(f"coverage.reverberation: give {{items: [...], frequency_hz: F[, beam_integral_deg: B]}} (or false); got {block!r}")
+    if not block["items"]:
+        return {"reverb": 2}
+    from . import reverb_budget
+    tables = reverb_budget.strength_tables(block["items"], float(block["frequency_hz"]), float(sound_speed))
+    o = {"reverb": 1, "reverb_grazing": [float(v) for v in reverb_budget.GRAZING]}
+    for side in ("bottom", "surface"):
+        if tables[side] is not None:
+            o[f"reverb_{side}_strength"] = [float(v) for v in tables[side].ravel()]
+    if block.get("beam_integral_deg") is not None:
+        o["reverb_beam_integral"] = float(np.radians(float(block["beam_integral_deg"])))
+    if block.get("max_bounces") is not None:
+        o["reverb_max_bounces"] = int(block["max_bounces"])
     return o
 
 

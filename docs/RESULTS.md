@@ -2286,11 +2286,16 @@ Other consequences, from the same files:
 
 ## The link budget against the chain: where the gap went
 
-**The link budget has no reverberation term** (`SonarEquation`, the coverage model; D-198, issue
-`sonar-w2w3`): this section is a point target in free field and noise. Where reverberation dominates,
-the budget's margins and ranges are noise-limited and optimistic: for `flank_patrol`'s −3 dB small
-vehicle at 2.2 km it gives about 30 dB, the simulated data 3.8 to 5.1 dB over a background that bottom
-reverberation (Lambert −27 dB) holds 21.9 dB above the noise.
+**This section is noise-only**: a point target in free field and noise. The link budget and the
+coverage model now have a reverberation term (issue `sonar-w2w3`; `gpusonar.reverb_budget`,
+`SonarEquation(reverberation_db=...)`, `coverage.reverberation`), used where a scene or configuration
+gives the boundaries' scattering; a budget without it is optimistic where reverberation dominates. For
+`flank_patrol` (full size, seed 17, one ping; `tests/python/test_reverb_budget.py`), each target's clean
+echo peak over the mean background on its beam, measured / with the term / noise-only (dB): submarine
+26.3 / 26.3 / 46.5, small vehicle 6.6 / 9.7 / 34.3, wreck 29.1 / 24.4 / 42.2; reverberation over noise
+measured / predicted 20.0 / 20.2, 24.7 / 24.6, 16.9 / 17.7. What remains is the echo's multipath (the
+coverage picture's six rays against Bellhop's 32 arrivals), not the reverberation. D-198's figures (3.8 to
+5.1 dB, the gallery's 4 m cells and CFAR) are a different measure of the same scene.
 
 Source: `tools/surface_image_validation.py --only-chain` →
 `docs/design/surface_image_validation.json` (`through_chain`); a point target at 12 km in
@@ -2491,8 +2496,15 @@ for this file.
 
 ## The coverage picture: validation
 
-The coverage picture has no reverberation term (as the link budget, D-198): its probabilities are
-noise-limited, optimistic where reverberation dominates (`STATUS.md` item 24).
+The coverage picture's reverberation term (`coverage.reverberation`, issue `sonar-w2w3`) is in it only
+where the configuration gives the boundaries' scattering; otherwise the member says
+`"reverberation": "not included: ..."` and its probabilities are noise-limited, optimistic where
+reverberation dominates. No shipped deployment file gives the scattering. Validation of the term:
+J&R (G.13) for one path each way within 0.2 dB; the rays against the simulator's own integral (image
+sources) within 0.3 dB from 1 to 4 km; reverberation over noise against simulated data within 1.3 dB
+on `flank_patrol` (2.2 to 3.6 km), `flank_target_10km` (−6.5 measured, −5.2 predicted) and
+`popoto_env_deep_silt_1000m` (−15.1, −15.4); signal over reverberation on `sst_sediment_reverb` (fluid
+sediment) within 0.6 dB at 50 to 120 m (`tests/python/test_reverb_budget.py`).
 
 Source: `tests/python/test_coverage.py`, `test_refraction_rays.py`.
 
