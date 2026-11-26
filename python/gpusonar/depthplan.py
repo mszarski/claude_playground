@@ -40,6 +40,39 @@ def _local_water(env: dict) -> tuple:
     return env, False
 
 
+ROWS_GAIN_WHAT = {
+    "none": "rows gain nothing against reverberation (bound A, the default: it arrives by the echo's own multipath; ours)",
+    "incoherent": "rows gain against reverberation what the build's detector gains from them against noise (buildspec.detection "
+                  "rows_gain_db): the rows' reverberation taken to be independent looks, as the noise is; the most the chain's power sum of "
+                  "the rows' maps can gain (ours)",
+    "number": "rows gain the stated dB against reverberation (an input: e.g. a measurement; docs/design/popoto_trade_study.md Sec. 5 "
+              "measured 2.47 dB for 2 rows and 3.38 dB for 3 on the shelf, ours, one site, 3 pings)",
+}
+
+
+def rows_gain_against_reverberation(setting, det: dict, where: str = "reverberation_rows_gain") -> tuple:
+    """(dB, what) of a `reverberation_rows_gain` setting for a build whose detection is `det` (buildspec.detection): what
+    its stacked rows gain against the site's reverberation, added to one row's echo-over-reverberation ratio.
+
+    - None or "none" (the default): 0 dB (bound A).
+    - "incoherent": `det["rows_gain_db"]`, the build's detector's own gain from its rows against noise: the rows'
+      reverberation as independent looks, as the noise is (the worth of `rows` effective looks to this detector; 3.99 dB
+      for three rows of 32, 2.54 for two). Not 10 log10(rows) (bound B of docs/design/popoto_trade_study.md): adding the
+      rows' maps in power gains less than that even against noise.
+    - a number (dB, >= 0): used as given.
+
+    A build with one row gains nothing, whatever is given."""
+    if setting is None or (isinstance(setting, str) and setting == "none"):
+        return 0.0, ROWS_GAIN_WHAT["none"]
+    if isinstance(setting, str):
+        if setting == "incoherent":
+            return (float(det["rows_gain_db"]) if int(det["rows"]) > 1 else 0.0), ROWS_GAIN_WHAT["incoherent"]
+        raise ValueError(f"{where}: {setting!r} unknown: give none, incoherent or a number of dB (>= 0)")
+    if isinstance(setting, bool) or not isinstance(setting, (int, float, np.integer, np.floating)) or not np.isfinite(float(setting)) or float(setting) < 0.0:
+        raise ValueError(f"{where}: {setting!r}: give none, incoherent or a number of dB (>= 0)")
+    return (float(setting) if int(det["rows"]) > 1 else 0.0), ROWS_GAIN_WHAT["number"]
+
+
 def load_environments(value) -> list:
     """The `environments` value of a build spec as a list: a list as written, or the named file's `environments:` list
     (gpusonar.environment.load_list)."""
@@ -185,7 +218,8 @@ def reverberation_of(d: dict, env: dict, own, rr, absorption_db_per_m: float, ca
 
 
 def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float | None = None,
-         statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True, reverberation: bool = True) -> dict:
+         statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True, reverberation: bool = True,
+         reverberation_rows_gain=None) -> dict:
     """The depth plan of a build (`d`: buildspec.derive / describe) in one environment for resolved target classes
     (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest.
     A margin is over `threshold_db` of ONE row's SNR: by default what the build's own detector needs for the build's design
@@ -198,7 +232,11 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     the rows' gain against noise (`rows_gain_db`), T1 the one-row threshold and SRR the echo over reverberation (the rows
     are taken to gain nothing against reverberation: it comes in by the same multipath as the echo; ours). With nothing
     included, or `reverberation=False`, it is the noise-only margin, computed as before. `reverberation` in the result
-    says which, and why."""
+    says which, and why.
+
+    `reverberation_rows_gain` (opt-in; default None, bound A, the plan exactly as before): what the rows gain against the
+    reverberation, g dB added to SRR (`rows_gain_against_reverberation`: "none", "incoherent" or a number of dB);
+    `reverberation.rows_gain_against_reverberation_db` states the g used."""
     from . import buildspec as bs
     env, ranged = _local_water(env)
     wind = wind_of(env)
@@ -231,6 +269,7 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     f3 = fac[statistic]
     rl, note = reverberation_of(d, env, own, rr, eq.absorption_db_per_m(), cache) if reverberation else (None, "not included: the plan was asked without it")
     gain = float(det["rows_gain_db"])
+    g_rev, g_what = rows_gain_against_reverberation(reverberation_rows_gain, det)
     two_tl = 2.0 * np.asarray(eq.transmission_loss(rr), dtype=float)
 
     def M(fac, ts, i_own=slice(None), i_rng=slice(None)):
@@ -246,6 +285,8 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
         elif np.ndim(fac) == 2 and np.ndim(r) == 1:                           # [own, target depth] at one range
             r = r[:, None]
         srr = fac + ts - two_tl[i_rng] - r
+        if g_rev != 0.0:                                                      # opt-in: the rows' gain against reverberation
+            srr = srr + g_rev
         return reverb_budget.with_reverberation(noise + threshold_db + gain, srr) - threshold_db - gain
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
            "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
@@ -256,8 +297,10 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
            "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
            "free_field_margin_0db_target_db": free.tolist(), "classes": {},
-           "reverberation": {"included": rl is not None, "note": note, "rows_gain_against_reverberation_db": 0.0 if rl is not None else None,
+           "reverberation": {"included": rl is not None, "note": note, "rows_gain_against_reverberation_db": g_rev if rl is not None else None,
                              "level_at_range_re_source_db": None if rl is None else rl[:, i_r].tolist()}}       # [own depth], at the range of interest
+    if reverberation_rows_gain is not None and reverberation_rows_gain != "none":       # opt-in only: the default plan's keys are as before
+        out["reverberation"]["rows_gain_against_reverberation"] = {"setting": reverberation_rows_gain, "what": g_what}
     held_by = {}
     for c in classes:
         lo, hi = c["depth_m"]

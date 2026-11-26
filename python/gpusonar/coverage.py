@@ -41,7 +41,9 @@ Configuration (`chain.coverage`; a key the C++ options do not have is an error):
                        bottom or surface law of sim/simulator.py; `boundary: surface | bottom` where the model does not say),
                        turned into tables by the simulator's own laws at `frequency_hz` (the band centre); `beam_integral_deg`:
                        the beam's integral over azimuth (default: the array's at broadside, from the record); `max_bounces`: boundary
-                       reflections a reverberation path may have each way (default: from the range and the water depth, coverage.hpp). Each class's
+                       reflections a reverberation path may have each way (default: from the range and the water depth, coverage.hpp);
+                       `rows_gain_db`: the rows' gain against noise in the detection table; `rows_gain_against_reverberation_db`
+                       (opt-in, default 0: the rows gain nothing against reverberation): dB added to the echo over reverberation. Each class's
                        entry then also gives `max_range_noise_only_m` and `limited_by`. null (not given): noise only, and
                        the member says "reverberation": "not included: ..." (ranges optimistic where reverberation limits).
                        false: noise only and nothing said (the picture as before the term existed)
@@ -75,7 +77,8 @@ DEFAULTS = {
     "surface_z": 0.0,
     "reverberation": None,
 }
-REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces", "note", "steer_deg", "rows_gain_db")
+REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces", "note", "steer_deg", "rows_gain_db",
+                      "rows_gain_against_reverberation_db")
 PD_SNR_DB = np.arange(-20.0, 60.01, 0.5)          # the table's grid: one row's link-budget SNR, dB
 
 
@@ -193,6 +196,12 @@ def reverberation_options(block, sound_speed: float = 1500.0) -> dict:
         o["reverb_steer"] = float(np.radians(float(block["steer_deg"])))
     if block.get("rows_gain_db") is not None:
         o["reverb_rows_gain_db"] = float(block["rows_gain_db"])
+    if block.get("rows_gain_against_reverberation_db") is not None:      # opt-in: what the rows gain against the reverberation
+        g = block["rows_gain_against_reverberation_db"]
+        if isinstance(g, bool) or not isinstance(g, (int, float)) or not np.isfinite(float(g)) or float(g) < 0.0:
+            raise ValueError(f"coverage.reverberation.rows_gain_against_reverberation_db: {g!r}: a number of dB (>= 0); `incoherent` is "
+                             "resolved where the build's rows are known (a build spec's operation.coverage.reverberation_rows_gain)")
+        o["reverb_rows_gain_against_reverb_db"] = float(g)
     return o
 
 
@@ -238,11 +247,14 @@ def of_build(spec: dict, site: dict) -> dict:
     {environment: the name of one of the spec's `environments`, or an environment mapping (gpusonar.environment.FIELDS)}.
     Water depth, bottom and wind are the site's, none defaulted (environment.coverage_site raises naming what is missing);
     the classes are the spec's targets, the levels `buildspec.budget`'s at the site's wind, the surface's rms height the
-    site's (its `rms_wave_height_m`, else the wind law's, as the depth planner has it)."""
+    site's (its `rms_wave_height_m`, else the wind law's, as the depth planner has it). `site` may also give
+    `reverberation_rows_gain` (opt-in; none, the default, incoherent or a number of dB: depthplan.rows_gain_against_reverberation):
+    written as `reverberation.rows_gain_against_reverberation_db` where it is not 0 dB."""
     from . import buildspec, depthplan, environment
     where = "operation.coverage"
-    if not isinstance(site, dict) or set(site) != {"environment"}:
-        raise ValueError(f"{where}: give {{environment: <one of the build's environments, or an environment mapping>}}; got {site!r}")
+    if not isinstance(site, dict) or "environment" not in site or set(site) - {"environment", "reverberation_rows_gain"}:
+        raise ValueError(f"{where}: give {{environment: <one of the build's environments, or an environment mapping>"
+                         f"[, reverberation_rows_gain: none | incoherent | dB]}}; got {site!r}")
     env = site["environment"]
     if isinstance(env, str):
         known = buildspec.environments_of(spec)
@@ -254,6 +266,7 @@ def of_build(spec: dict, site: dict) -> dict:
     facts = environment.coverage_site(env, f"{where}.environment" + (f" ({env['name']})" if env.get("name") else ""))
     d = buildspec.describe(buildspec.sonar_config(spec))                    # without the deployment file: this is part of it
     classes = classes_of(buildspec.target_classes_of(spec, range_m=float(d["window_m"][1])))
+    g_rev = depthplan.rows_gain_against_reverberation(site.get("reverberation_rows_gain"), buildspec.detection(d), f"{where}.reverberation_rows_gain")[0]
     if not classes:
         raise ValueError(f"{where}: the build has no target classes (`targets:`); the coverage picture is stated per class")
     surf = depthplan.surface_of(env)
@@ -266,6 +279,8 @@ def of_build(spec: dict, site: dict) -> dict:
         gain = float(buildspec.detection(d)["rows_gain_db"])          # the rows gain against noise only (coverage.hpp reverb_rows_gain_db)
         if gain > 0.0:
             block["reverberation"]["rows_gain_db"] = round(gain, 2)
+        if g_rev > 0.0:                                              # opt-in (coverage.hpp reverb_rows_gain_against_reverb_db)
+            block["reverberation"]["rows_gain_against_reverberation_db"] = round(g_rev, 2)
     if surf.bubble_model:
         block["surface"].update(bubble_model=surf.bubble_model, wind_speed_m_s=float(surf.wind_speed), frequency_hz=float(d["centre_hz"]))
     limit = (spec.get("platform") or {}).get("max_depth_m")

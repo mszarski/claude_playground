@@ -161,7 +161,9 @@ SCHEMA = {
                       "laid under `operation.chain`. Stacked rows there also need a cast for their depth: `sound_speed.rung: profile` with the site's profile, which is site data and "
                       "has no default (a warning says so)", "the trial plan", "open: nothing changes"),
         "coverage": ("map", "", False, "{environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see "
-                     "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default", "the site the build is deployed at",
+                     "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default. Optional "
+                     "`reverberation_rows_gain`: none (the default: the rows gain nothing against reverberation), incoherent, or a number of dB "
+                     "(depthplan.rows_gain_against_reverberation)", "the site the build is deployed at",
                      "leave it out: no coverage picture"),
         "detection_probability": ("num", "", False, "the probability of detecting a steady point echo on one ping that the link budget's thresholds, margins and reaches are stated for "
                                   "(the threshold follows from the chain's detector for it: buildspec.detection)", "requirement", "0.5 (buildspec.DESIGN_DETECTION_PROBABILITY)"),
@@ -1475,13 +1477,16 @@ def budget(d: dict, wind: float = 5.0, target_strength_db: float = 0.0):
 
 
 def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
-                gradient_sigma: float | None = None, environment: dict | None = None, own_depth_m: float | None = None, classes: list | None = None) -> dict:
+                gradient_sigma: float | None = None, environment: dict | None = None, own_depth_m: float | None = None, classes: list | None = None,
+                reverberation_rows_gain=None) -> dict:
     """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
     docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
     `wind` m/s) with the row's gain against isotropic noise, held against what the build's own detector needs
     (`detection`): thresholds, margins, detection probabilities and reaches; and the elevation bounds of the stacked rows.
     `row_snr_db` is the SNR of one row; `margin_db` = row_snr_db - detection.threshold_db;
-    `rows_detection_gain_db` is what the rows are worth at the detector (already inside the threshold: add it to nothing)."""
+    `rows_detection_gain_db` is what the rows are worth at the detector (already inside the threshold: add it to nothing).
+    `reverberation_rows_gain` (opt-in; with `environment`): what the rows gain against the site's reverberation in
+    `surface` (depthplan.rows_gain_against_reverberation: none, the default, incoherent or a number of dB)."""
     c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
     n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
     _, g = budget(d, wind)
@@ -1526,12 +1531,12 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
         out["multipath_note"] = ("not in any sigma: in a shallow channel an echo that bounced once arrives within the pulse's range sidelobes of the direct one and pulls the "
                                  "elevation by tenths of a degree (docs/DESIGN.md Sec. 3)")
     if environment is not None:
-        out["surface"] = surface_term(d, environment, own_depth_m, classes, ranges)
+        out["surface"] = surface_term(d, environment, own_depth_m, classes, ranges, reverberation_rows_gain=reverberation_rows_gain)
     return out
 
 
 def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, classes: list | None = None, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0),
-                 threshold_db: float | None = None) -> dict:
+                 threshold_db: float | None = None, reverberation_rows_gain=None) -> dict:
     """What the free-field figures of `performance` leave out, for one environment (depthplan.ENVIRONMENT_FIELDS) and one
     own depth (default: the shallowest allowed): the two-way propagation factor of gpusonar.lloyd (surface image, roughness,
     bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.
@@ -1547,10 +1552,14 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
     out = {"environment": environment.get("name"), "own_depth_m": own, "wind_speed_m_s": depthplan.wind_of(environment), "rms_wave_height_m": depthplan.surface_of(environment).height(),
            "threshold_db": threshold_db, "ranges_m": rr.tolist(), "classes": {}}
     # The site's reverberation (depthplan.reverberation_of: the one rule's scattering, the coverage picture's term), with the
-    # rows gaining nothing against it (depthplan.plan says why): snr_db and margin_db are over noise and reverberation
-    # where it is included; the noise-only figures beside them.
+    # rows gaining nothing against it by default (depthplan.plan says why; `reverberation_rows_gain`, opt-in, as the
+    # planner's: depthplan.rows_gain_against_reverberation): snr_db and margin_db are over noise and reverberation
+    # where it is included; the noise-only figures beside them. srr_db stays one row's.
     rl, note = depthplan.reverberation_of(d, environment, [own], rr, eq.absorption_db_per_m())
     out["reverberation"] = note
+    g_rev = depthplan.rows_gain_against_reverberation(reverberation_rows_gain, detection(d))[0]
+    if reverberation_rows_gain is not None and reverberation_rows_gain != "none":       # opt-in only: the default's keys are as before
+        out["rows_gain_against_reverberation_db"] = g_rev
     gain, two_tl = float(gains["rows_detection_gain_db"]), 2.0 * np.asarray(eq.transmission_loss(rr), dtype=float)
     for c in items:
         lo, hi = c["depth_m"]
@@ -1571,9 +1580,10 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
                  "snr_free_field_db": by_range(free), "snr_db": by_range(snr), "margin_db": by_range(snr - threshold_db)}
         if rl is not None:
             srr = c["ts_db"][0] + worst - two_tl - rl[0]
-            with_r = reverb_budget.with_reverberation(snr + gain, srr) - gain
+            srr_rows = srr + g_rev if g_rev != 0.0 else srr                 # the rows' gain against reverberation (opt-in)
+            with_r = reverb_budget.with_reverberation(snr + gain, srr_rows) - gain
             entry.update(snr_noise_only_db=entry["snr_db"], margin_noise_only_db=entry["margin_db"], srr_db=by_range(srr), snr_db=by_range(with_r),
-                         margin_db=by_range(with_r - threshold_db), limited_by=by_range(np.where(snr + gain - srr > 3.0, 1.0, 0.0)))
+                         margin_db=by_range(with_r - threshold_db), limited_by=by_range(np.where(snr + gain - srr_rows > 3.0, 1.0, 0.0)))
             entry["limited_by"] = {k: ("reverberation" if v else "noise") for k, v in entry["limited_by"].items()}
         out["classes"][c["name"]] = entry
     return out
