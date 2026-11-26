@@ -5004,3 +5004,7 @@ the owner's copies; `docs/references/bottom_bistatic_williams_jackson_1998.md`,
   waveform and the Popoto trade study (issue `sonar-3983`), each on its own branch.
 - Stale after this merge: `examples/live_popoto_12km_report.jsonl`, the `buried_objects` gallery
   figure, `docs/figures/sst_validation.{md,json}` and `sst_pursuit.png` (issue `sonar-tmvu`).
+- Corrections found by the document sweep (same day): the example report is at
+  `docs/handoff/examples/live_popoto_12km_report.jsonl` (D-227 and this entry wrote `examples/…`);
+  D-227's "`test_site_scattering.py` (21)" is the collected count (7 test functions); the default
+  roughness model that D-226 lists as open is the owner's answer recorded above (small-slope stays).

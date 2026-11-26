@@ -3,7 +3,8 @@
 For a software engineer or a coding model continuing the code with no conversation history.
 Written at the tree of `933972b` on branch `claude/gpu-sonar-suite-u289p5`, decisions to D-181;
 brought to D-201 and the opt-in 3-D tier on 2026-11-26 (sections 1, 5.1, 5.4, 6 and 8 changed), and to
-D-225 the same day (the link-budget row of section 1 and the simulator engine in section 6).
+D-225 the same day (the link-budget row of section 1 and the simulator engine in section 6), and to
+D-229 the same day (the Doppler row of section 1).
 Every statement was checked against the code at that tree; where a document and the code
 disagree, the code is what is written here and the document is listed in section 10.
 
@@ -50,6 +51,7 @@ not written and the navigation mapping for the vehicle's unit is a template (STA
 | Detector constants | measured on a few maps; at the default budget the detector runs 0.73 to 1.01 of its budget (D-168). The two-row cell mean runs 1.26 times its share; the 9 dB `min_snr_db` floor drops 33 % and 54 % of two- and three-row noise detections. The -40 dB sidelobe floor is an assumption | `sonar-031`, `sonar-xl7`, `sonar-gg6`, `sonar-4xn` |
 | Echo grouping | the velocity gate is sensitive to one point; bounce grouping (D-175) is not measured on captures with `multipath` on; in the two-ship scene ship B's object is a later arrival on 2 seeds | `sonar-36z`, `sonar-ome`, `sonar-i28` |
 | LFM range-Doppler correction | opt-in and held by tests only; not measured through the live chain on the gallery scenes (D-181) | D-181 |
+| No Doppler path | the chain's baseband keeps only the transmitted band (`libs/live/src/chain.cpp` passes no `max_range_rate`): a 1 s CW at 8 kHz keeps 8.7 Hz and a 2 m/s echo comes out 92 dB down; harmless for the shipped sweeps (no shipped long-range scene sends a tone); a sweep replica bank alone recovers 2 to 6 dB of mismatch in `flank_patrol` (D-228, ours; the bank D4 and the tone-plus-sweep waveform D2 are on their own branches, D-229) | `sonar-u1fu`; `docs/tasks/DOPPLER.md` |
 | Sparse Bayesian bearings | the kernels take at most 64 channels (`kSblMaxChannels`, `libs/live/include/sonar/live/sbl_kernel.hpp`). Passive listening on stacked rows without `elevation=1` takes all channels as one line: wrong bearings | `docs/ARCHITECTURE.md` |
 | Passive | exists in the C++ library and program only; the Python chain has no listen mode | `docs/ARCHITECTURE.md` |
 | Depth | two rows in shallow water give a depth sigma too wide to use at 1 km; the ship's depth at 12 km with three rows reads 8 to 35 m for a true 4 m (ambiguous elevation, D-160) | `sonar-d91` |

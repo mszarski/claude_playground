@@ -102,7 +102,7 @@ ctest --test-dir <build dir> -R 'Tracker\.' --output-on-failure    # one GoogleT
 | `GPUSONAR_REQUIRE_ORACLES=1` | an oracle test that would skip fails instead (`tests/python/oracle_gate.py`) |
 | `GPUSONAR_SLOW_ORACLES=1` | the slow `eigenray3d` acceptance against Bellhop3D (not part of the suite) |
 | `GPUSONAR_HSB_STUDY=1`, `GPUSONAR_HSB_TIMING=1` | Sensor Bridge measurements in `test_hsb.py` (opt-in studies, not tests) |
-| `GPUSONAR_SIM_ENGINE=numpy` or `cpp` | which simulator engine the tests use |
+| `GPUSONAR_SIM_ENGINE=numpy` or `cpp` | which simulator engine the tests use (unset: C++ when built, else NumPy with one warning); `cpp` on a module without the C++ simulator raises `EngineUnavailable`, which the tests turn into a skip (`sim/engine.py`, `tests/python/conftest.py`) |
 | `GPUSONAR_ORACLES=1` (GPU job) | build Bellhop, Bellhop3D, KRAKEN, install PyRAM 1.3.0, set `GPUSONAR_REQUIRE_ORACLES=1` |
 | `GPUSONAR_CERES=1` (GPU job) | build Ceres without SuiteSparse, so motion estimation is built and tested |
 | `GPUSONAR_HOLOSCAN_CPP=1` (GPU job) | install the Holoscan C++ package and build the C++ operators |

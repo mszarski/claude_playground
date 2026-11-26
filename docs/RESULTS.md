@@ -2296,7 +2296,7 @@ echo peak over the mean background on its beam, measured / with the term / noise
 2026-11-26: 26.5, 10.0, 24.7 with the term, worst 4.7 dB, rms 3.3); the same targets as stationary points
 (the submarine one +16 dB point, the vehicle stopped) measure 28.3, 10.2, 29.4, within 0.9 dB of the
 prediction (rms 0.6). Reverberation over noise measured / predicted 19.7 / 19.9, 24.5 / 24.3, 16.7 / 17.4. The six rays
-were not the cause (6 to 1000 arrivals move the predictions by under 0.15 dB): the wreck, 2 m above the bed,
+were not the cause (D-227: 6 to 1000 arrivals move the predictions by under 0.15 dB): the wreck, 2 m above the bed,
 lost its bottom-reflected paths' interference when they added as power; what is left in the scene as shipped
 is the targets' motion (the vehicle's 2 m/s costs its 1 s LFM 3.4 dB) and extent (the submarine's highlights,
 1.7 dB), which a coverage class does not have. D-198's figures (3.8 to

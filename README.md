@@ -17,14 +17,16 @@ the CUDA backend has been run and benchmarked on rented GPUs. The long-range des
 honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector, depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite ran on the merged tree of decisions D-204 to D-225
-(2763 passed, 102 skipped, 4 xfailed, none failed, on an NVIDIA L4; Hugging Face job
-6b07ea74d91f621b930a343d), the opt-in 3-D propagation tier and the slow Bellhop3D checks included; the
+(the depth sigma now says so). The full GPU suite last ran on the tree of the second 2026-11-26
+batch, decisions D-226 to D-228 (2823 passed, 103 skipped, 4 xfailed, none failed, on an NVIDIA L4;
+Hugging Face job 6b080457d91f621b930a652a; D-229), the opt-in 3-D propagation tier and the slow
+Bellhop3D checks included; the
 whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
-entries). The link budget and the coverage model have a reverberation term since D-221, but no shipped site
-states its scattering, so the design margins and ranges are noise-only and optimistic where
-reverberation dominates, and say so. On 2026-11-26 the boundary models, the sediment tier and time
+entries). Since D-227 the shipped sites state their boundary scattering (illustrative values) and the
+depth plan and the coverage pictures include it: the +5 dB class over the 100 m shelf now reaches
+2.56 km in the plan (8.02 to 9.58 km before) and the +25 dB classes stay noise-limited at 12 km; the
+free-field link budgets have no site and stay noise-only, and say so. On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
 got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
 scenes, D-216). Every shipped SAS scene
@@ -397,11 +399,13 @@ and checklists are generated from it, and seven self-tests run the generated cha
 simulated pings. `docs/REFERENCE_DESIGN.md` walks through it; `docs/DEPLOYMENT.md` says
 what each report field means. The link budget's threshold is the chain's own detector's
 (`docs/DECISIONS.md` D-117, D-134), so margins and the chain agree to about half a dB in noise.
-The shipped budgets are noise-only: the reverberation term exists (`coverage.reverberation`,
-`SonarEquation(reverberation_db=...)`, D-221) but no shipped site states scattering, so where
-reverberation dominates the budget is optimistic (for `flank_patrol`'s small vehicle about 30 dB by
-the noise-only budget, where the simulated data give about 4 dB over the background, D-198; with the
-term 9.7 dB predicted against 6.6 dB measured, D-221).
+The free-field link budgets are noise-only (no site, nothing to scatter). The depth plan and the
+coverage picture include the site's boundary scattering since D-227 (`coverage.reverberation`,
+`SonarEquation(reverberation_db=...)`, D-221; one rule, `environment.boundary_scattering`; every site
+value illustrative), which shortened the +5 dB class's reach most (over the 100 m shelf 2.56 km
+against 8.02 to 9.58 km before). For `flank_patrol`'s small vehicle the noise-only budget gives about
+30 dB, where the simulated data give about 4 dB over the background (D-198); with the term 10.3 dB is
+predicted against 6.9 dB measured (D-227).
 
 ## Run a whole chain from one YAML file
 

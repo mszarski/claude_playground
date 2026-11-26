@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the gallery is unchanged since; the text was brought to D-201 on 2026-11-26): the gallery pictures, the headline numbers with their sources, what a
+decision D-181 (the gallery is unchanged since; the text was brought to D-201 on 2026-11-26 and to D-229 the same day): the gallery pictures, the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -292,8 +292,9 @@ Two depth slices (at the cylinder's top, 0.25 m, and the sphere's top, 0.14 m) a
   closed; the owner chose to leave it): it is below the scene's bottom reverberation, its 4 m
   cell 3.8 to 5.1 dB over the local background against the gallery's 12 dB cut; the live chain's
   defaults miss it by 0.8 dB; the opt-in `cfar.integrate_cells: [1, 4, 16]` detects it at the cost
-  of one extra detection a ping. The link budget predicts about 30 dB for it because it has no
-  reverberation term (`sonar-w2w3`). [`SCENARIOS.md`](../SCENARIOS.md), `flank_patrol`.
+  of one extra detection a ping. The noise-only link budget predicts about 30 dB for it; with the
+  reverberation term (`sonar-w2w3`, D-221, D-227) the coverage picture predicts 10.3 dB against
+  6.9 dB measured on its beam, the rest mostly its 2 m/s against the 1 s LFM (3.4 dB, D-227). [`SCENARIOS.md`](../SCENARIOS.md), `flank_patrol`.
 - 5 tracks for two objects: multipath splits the wreck's echo into several clusters and
   each starts a track; 2 tracks are `uncertain`.
 - The outcome rests on an assumed seabed (-27 dB Lambert), wind (5 m/s) and noise (45 dB);
