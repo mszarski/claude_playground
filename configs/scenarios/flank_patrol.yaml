@@ -27,6 +27,9 @@ scene:
                 [-596.0, 2900.0, 60.0], [-588.0, 2900.0, 60.0], [-580.0, 2900.0, 60.0], [-572.0, 2900.0, 60.0]]
     target_strength_db: 7.0
     velocity: [3.0, 0.0, 0.0]
+  # The small vehicle is a hard target on purpose (D-198, the owner's choice): its 4 m cell is 3.8 to 5.1 dB over
+  # the bottom reverberation (Lambert -27 dB, 21.9 dB over the noise at 2.2 km) against the gallery's 12 dB cut, so it
+  # is never detected; the link budget's ~30 dB has no reverberation term (sonar-w2w3). docs/SCENARIOS.md, flank_patrol.
   - {type: points, label: small_vehicle, positions: [[900.0, 2000.0, 40.0]], target_strength_db: -3.0, velocity: [0.82, 1.82, 0.0]}
   - {type: points, label: wreck, positions: [[1500.0, 3270.0, 98.0]], target_strength_db: 12.0}
 reverberation:
