@@ -1073,14 +1073,19 @@ def apl_grain_size_relations(phi: float, water_sound_speed: float = GRAIN_SIZE_W
     relations as printed in Jackson and Richardson, "High-Frequency Seafloor Acoustics" (2007), eqs.
     (11.1)-(11.3), pp. 313-314 (first given by Mourad and Jackson 1989 and expanded in APL-UW TR 9407;
     (11.3) taken from Hamilton 1972). The book calls (11.1)-(11.2) "ad hoc" expressions to improve
-    model-data fits, not geoacoustic regressions (p. 314):
+    model-data fits, not geoacoustic regressions (p. 314). The constants of the 1 to 9 phi pieces are
+    those of the first print, Mourad and Jackson (1989) [MJ89] eqs. (1)-(2) (confirmed,
+    docs/references/bottom_mourad_jackson_1989.md Sec. 2.2; "for internal consistency to four decimal
+    places", p. 1170), of which J&R print four decimals (3.0455, 1.3425, 1.1565, 1.0019) (C5 of that note;
+    rho moves by -2.45e-5 to +2.34e-5, nu by -2.6e-5 to 0, and the pieces meet at 5.3 phi to 4e-6 instead
+    of 5.1e-5). The -1 <= Mz < 1 pieces are J&R's ([MJ89] does not print them; its 0.84 phi site follows them):
 
         rho = 0.007797 Mz^2 - 0.17057 Mz + 2.3139                          -1 <= Mz < 1
-            = -0.0165406 Mz^3 + 0.2290201 Mz^2 - 1.1069031 Mz + 3.0455      1 <= Mz < 5.3
-            = -0.0012973 Mz + 1.1565                                        5.3 <= Mz <= 9     (11.1)
+            = -0.0165406 Mz^3 + 0.2290201 Mz^2 - 1.1069031 Mz + 3.0455234   1 <= Mz < 5.3
+            = -0.0012973 Mz + 1.1564755                                     5.3 <= Mz <= 9     (11.1)
         nu  = 0.002709 Mz^2 - 0.056452 Mz + 1.2778                          -1 <= Mz < 1
-            = -0.0014881 Mz^3 + 0.0213937 Mz^2 - 0.1382798 Mz + 1.3425      1 <= Mz < 5.3
-            = -0.0024324 Mz + 1.0019                                        5.3 <= Mz <= 9     (11.2)
+            = -0.0014881 Mz^3 + 0.0213937 Mz^2 - 0.1382798 Mz + 1.3424740   1 <= Mz < 5.3
+            = -0.0024324 Mz + 1.0018916                                     5.3 <= Mz <= 9     (11.2)
         k   = 0.4556                                                        -1 <= Mz < 0
             = 0.0245 Mz + 0.4556                                            0 <= Mz < 2.6
             = 0.1245 Mz + 0.1978                                            2.6 <= Mz < 4.5
@@ -1091,22 +1096,23 @@ def apl_grain_size_relations(phi: float, water_sound_speed: float = GRAIN_SIZE_W
     k in dB m^-1 kHz^-1; delta = k nu c_w ln 10 / (40 000 pi), the book's (2.6) with alpha = k f_kHz,
     c_w = `water_sound_speed` (1528 m/s, the table's water).
 
-    Two printed constants are NOT used, as misprints (the notes' argument; the original papers were not
-    read): the book prints 1.0091 in the last piece of (11.2), which jumps by 0.0072 at 5.3 phi and misses
-    the tabulated rows from 5.5 to 9 phi by 0.0072; 1.0019 is continuous with the cubic (0.98901) and
-    gives the rows. It prints 0.4566 in the first piece of (11.3); the next piece starts at 0.4556 and the
-    rows at -1 and -0.5 phi follow 0.4556. (11.3) has steps as printed (+0.0022 at 2.6, -0.0009 at 4.5,
+    Two printed constants are NOT used, as misprints: the book prints 1.0091 in the last piece of (11.2),
+    which jumps by 0.0072 at 5.3 phi and misses the tabulated rows from 5.5 to 9 phi by 0.0072; 1.0019 is
+    continuous with the cubic (0.98901) and gives the rows, and [MJ89] (2) prints 1.0018916 (the misprint is
+    confirmed in the original). It prints 0.4566 in the first piece of (11.3); the next piece starts at
+    0.4556 and the rows at -1 and -0.5 phi follow 0.4556 (still the notes' argument: [MJ89] prints no k(Mz)). (11.3) has steps as printed (+0.0022 at 2.6, -0.0009 at 4.5,
     +0.0013 at 6.0 phi), kept. Tests: tests/python/test_grain_size_relations.py."""
     mz = _check_grain_size(phi)
     if mz < 1.0:
         rho = 0.007797 * mz**2 - 0.17057 * mz + 2.3139
         nu = 0.002709 * mz**2 - 0.056452 * mz + 1.2778
     elif mz < 5.3:
-        rho = -0.0165406 * mz**3 + 0.2290201 * mz**2 - 1.1069031 * mz + 3.0455
-        nu = -0.0014881 * mz**3 + 0.0213937 * mz**2 - 0.1382798 * mz + 1.3425
+        # The constants to the original's seven digits ([MJ89] (1)-(2); J&R print 3.0455 and 1.3425): C5.
+        rho = -0.0165406 * mz**3 + 0.2290201 * mz**2 - 1.1069031 * mz + 3.0455234
+        nu = -0.0014881 * mz**3 + 0.0213937 * mz**2 - 0.1382798 * mz + 1.3424740
     else:
-        rho = -0.0012973 * mz + 1.1565
-        nu = -0.0024324 * mz + 1.0019                      # printed 1.0091: a misprint (docstring)
+        rho = -0.0012973 * mz + 1.1564755                  # J&R print 1.1565
+        nu = -0.0024324 * mz + 1.0018916                   # J&R print 1.0091: a misprint (docstring); [MJ89] (2) 1.0018916
     if mz < 0.0:
         k = 0.4556                                         # printed 0.4566: a misprint (docstring)
     elif mz < 2.6:
@@ -1133,8 +1139,8 @@ def sediment_from_grain_size(phi: float, method: str = "relations") -> dict:
     `method="relations"` (the default since the conformance item A5, docs/references/CONFORMANCE.md
     Sec. 1.1: a printed reference outranks our interpolation): rho, nu and delta from the relations
     themselves, `apl_grain_size_relations` (J&R 2007 eqs. (11.1)-(11.3), printed; with the constants
-    1.0019 and 0.4556 for two printed misprints), which give the table at its points (rho 5e-4,
-    nu 1e-4, delta 0.5 %).
+    1.0019 and 0.4556 for two printed misprints, and since C5 the seven-digit constants of Mourad and
+    Jackson 1989), which give the table at its points (rho 5e-4, nu 1e-4, delta 0.5 %).
     `method="table_linear"` (the default before A5; selectable): rho, nu and delta are interpolated
     linearly between the tabulated classes of `GRAIN_SIZE_TABLE` (every half phi). The interpolation is
     ours; the table is piecewise (the density ratio drops from 2.151 to 1.615 between 1 and 2 phi), so
@@ -1142,7 +1148,8 @@ def sediment_from_grain_size(phi: float, method: str = "relations") -> dict:
     Between the points the two differ by at most 0.68 dB in the normal-incidence reflection
     coefficient (at 5.3 phi), under 0.1 dB outside 5-6 phi; rho by up to 0.0106 (1.25 phi), delta by up
     to 7.6 % (near 5.8 phi). At Gallaudet's 6.36 phi (his Table VI prints 1.1483, 0.9864, 0.0033) the
-    relations give 1.148249, 0.986430, 0.003267 and the interpolation 1.14828, 0.986436, 0.003284
+    relations give 1.148225, 0.986422, 0.003267 (1.148249, 0.986430 before C5: his rho follows J&R's
+    rounded constant, not the original's) and the interpolation 1.14828, 0.986436, 0.003284
     (tests/python/test_gallaudet_boundaries.py). w2, gamma2 and sigma2 are `grain_size_scattering`
     either way."""
     if method not in GRAIN_SIZE_METHODS:
