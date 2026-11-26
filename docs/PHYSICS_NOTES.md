@@ -844,8 +844,8 @@ before use".
 | Sound speed | table only | Mackenzie (1981) nine-term equation or Chen-Millero/TEOS-10 | - |
 | Bottom forward loss | "lossy Rayleigh coefficient" (no formula) | Rayleigh fluid-fluid reflection coefficient with complex sediment sound speed | `V = (m sin th - P)/(m sin th + P)`, `P = sqrt(kappa^2 - cos^2 th)`, `m = rho_sed/rho_w`, `kappa = (1 + i delta)/nu`, `c_sed = c/(1 + i delta)`, th = grazing angle (checked against open sources: `docs/REFERENCES.md` Sec. 12.4; correction 2026-11-20, the row was from memory and wrote the index inverted). Sign of the imaginary part depends on the time convention; SST uses exp(+2 pi i f t). |
 | Bottom backscatter / bistatic | pointer to Jackson models | (a) Lambert's law as a floor; (b) Jackson rough-interface + sediment-volume model (Jackson et al. 1986; Mourad & Jackson 1989; Williams & Jackson 1998; Jackson & Richardson, *High-Frequency Seafloor Acoustics*, 2007) | Lambert, from memory, verify before use: `sigma = mu sin(th_i) sin(th_s)`, `10 log10 mu` ~ -27 dB (Mackenzie value) as a classic default. Correction 2026-11-20: the code's default is -29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`, D-89), the one printed value found (Muggleworth, NPS 1994, hdl 10945/28529, p. 34, quoting Mackenzie 1961 for deep water at 530 and 1030 Hz); -27 dB was from memory. Either is a low-frequency value, not one for a sonar band. |
-| Surface backscatter | pointer to TR 9407 / McDaniel / Gilbert | Chapman & Harris (JASA 34, 1962) empirical formula for low-mid frequency; a bubble-layer + roughness model for > 10 kHz (Dahl; McDaniel 1993 review) | Chapman-Harris coefficients not reproduced here; take from the paper. |
-| Surface forward loss, coherent part | "simple model of surface roughness" | Rayleigh-parameter coherent reflection | From memory, verify before use: `|R_coh| = exp(-2 k^2 h_rms^2 sin^2 th)`. This is consistent with the TR's qualitative rule (rmsHeight vs lambda/sin th) but the TR does not give it. |
+| Surface backscatter | pointer to TR 9407 / McDaniel / Gilbert | Chapman & Harris (JASA 34, 1962) empirical formula for low-mid frequency; a bubble-layer + roughness model for > 10 kHz (Dahl; McDaniel 1993 review) | Chapman-Harris coefficients not reproduced here; take from the paper. (Since 2026-11-26: the formula is McDaniel 1993 eq. (27), via secondary, range 400-6400 Hz, to 15 m/s, low grazing angles; `acoustics.chapman_harris_db`.) |
+| Surface forward loss, coherent part | "simple model of surface roughness" | Rayleigh-parameter coherent reflection | From memory, verify before use: `|R_coh| = exp(-2 k^2 h_rms^2 sin^2 th)`. This is consistent with the TR's qualitative rule (rmsHeight vs lambda/sin th) but the TR does not give it. (Since 2026-11-26: confirmed, Jackson and Richardson 2007 eq. (13.14), p. 335.) |
 | Surface loss, bubbles | "fraction absorbed by bubbles" | APL-UW bubble-layer surface loss (TR 9407 family) or the Hall-Novarini bubble population model (Hall 1989; Novarini et al. 1998) with Ainslie (2005) surface-loss treatment | No formula reproduced. |
 | Surface wave statistics | computed inside `McDanielSurface` from wind speed | Pierson-Moskowitz spectrum for rms height; Cox & Munk (1954) for mean-square slope | From memory, verify before use: PM `h_rms ~ 0.0053 U^2` (U at 19.5 m, SI); Cox-Munk `mss ~ 0.003 + 0.00512 U` (U at 12.5 m). |
 | Time-spread intensity impulse response | pointer to TR 9407 II.7a | Dahl's forward-scatter model (JASA 100, 1996; JASA 105, 1999; IEEE JOE 26, 2001 - all cited by TR 0702) | Use the TR's own rule of thumb (3.6) for the decay time until Dahl's expressions are checked. |
@@ -1351,7 +1351,12 @@ range walk, the "short pulse" assumption of Sec. 11.2.1), the first receive elem
 pattern for all, and the sector must be narrow compared with the transmitter's
 height over the boundary where the transmitter is far from the receiver
 (`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
-grazing angle whatever the bistatic azimuth.
+grazing angle whatever the bistatic azimuth. TR 0702 Sec. 6.4.2 makes a monostatic model bistatic
+by the geometric mean of the two backscattering strengths instead; for Chapman-Harris at 9.9 kHz and
+8 m/s (`sst_pursuit`) the mean-angle rule is 0 / +1.7 / +3.6 / +5.9 dB above it for the pairs 5/5,
+5/20, 5/40, 5/80 degrees (`docs/references/CONFORMANCE.md`; the two are equal for equal angles, so only
+legs with a bottom bounce differ there). Dahl (1999) eq. (13) is a published bistatic bubble term; the
+geometric mean is the closer of the two rules to it (0.3-5 dB), neither reproduces it.
 
 ### 14.3 Range-varying boundary (`strength_map`)
 
@@ -2931,7 +2936,8 @@ Cox-Munk: upwind 3.16e-3 U, crosswind 3e-3 + 1.92e-3 U at 12.5 m, 1 to 14 m/s
 (arXiv:2210.05456, eq. (12)); the sum is 0.8 % below our total 0.003 + 0.00512 U. Added:
 `acoustics.mean_square_slope_components`. The sea is steeper along the wind than across it
 by 1.2 to 1.5; the time-spreading model takes it isotropic. Chapman-Harris's formula and
-range could not be confirmed (no open copy).
+range could not be confirmed (no open copy); since 2026-11-26 both are via secondary in McDaniel 1993
+eq. (27) (end of Sec. 23.7).
 
 ### 23.4 Time, angle and Doppler spreading of forward scatter
 
@@ -2958,6 +2964,25 @@ be opened: publisher challenge pages, no open copies listed. What was found:
 
 Recommendation: none from the literature beyond what Sec. 21 already proposes; the wanted
 list names the pages that would settle each point.
+
+*Added 2026-11-26.* Dahl 1996, 1999 and 2004 were since supplied by the owner and read on the page
+images (`docs/references/surface_forward_scatter_dahl_1996_2004.md`,
+`docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md`). What they change in the points above:
+- Angle spread: our facet model's geometry is theirs (Dahl 1996 eq. (15), sigma_theta_h = q s_L
+  sin(g) / (1 + RD/SD); ours has q = sqrt(2) against the fitted 1.348). Its slope is not: the papers
+  use the large-scale slope (Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2); Dahl 1999 s_L^2 = 0.017 at 4 m/s),
+  ours the Cox-Munk total, 1.4 to 2.2 times larger. Our coherence lengths across the path come out
+  21-39 % short at five of Dahl 1996's six sets and 67 % short at 1.5 m/s; with s_LA they match within
+  0-19 %. Dahl 1999's measured angle spreads imply a smaller slope still (0.008-0.011 at 4 m/s): open.
+- Decay time: two measured decays exist only as figures (Dahl 1996 Fig. 2, Dahl 2004 Fig. 3c, +-1 dB).
+  Both reject the rule of thumb by 8-16 dB at 5-14 ms after the pulse and put our facet tail 4-10 dB too
+  slow; the large-scale slope and the exact Kirchhoff geometry together bring it within 1-4 dB.
+- Coherent fraction: not measured in any of them (they work at chi >> 1). Scintillation: "approximately
+  exponentially distributed" for one set (index about 1). Doppler spread: not given.
+- Vertical coherence at 6-11 degrees (Dahl 2004, ASIAEX): our facet model and geometric optics are both
+  about 2 times short; Dahl's small-slope model fits.
+- Bubble attenuation per bounce: Dahl 1996 eq. (17) prints twice our exponent; Dahl 1999 eq. (12) has
+  ours and calls the 1996 equation misprinted.
 
 ### 23.5 Reverberation statistics
 
