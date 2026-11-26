@@ -112,6 +112,10 @@ medium_sand:
     mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sand or Medium Sand", bulk grain size index 1.5)'
     w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.406e-4 at 1.5 phi)"
     gamma2: "tabulated (arXiv:1809.08459 Table 1)"
+    # A further print of rho, nu, delta, w2 and gamma2: Jackson and Richardson (2007), Fig. 13.2, p. 337,
+    # inputs "typical of a medium sand seafloor": a_rho 1.845, nu_p 1.1782, delta_p 0.01624,
+    # w2 0.000141 m^0.75, gamma2 3.25 (the book does not say they are TR 9407's; it prints no sigma2 for
+    # medium sand). Held by tests/python/test_jackson_2007_bottom.py.
     sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength): 0.001. The grain-size rule gives 0.002; the difference is known and the tabulated value is kept (D-90: a sourced tabulated value outranks a rule), see note"
   note: >-
     Volume parameter: the paper's -20.0 dB/m with 10.0 dB/m of attenuation is sigma2 = 0.0010.
@@ -218,6 +222,10 @@ rock:
       Lambertian: -33 to -26 dB at 20 degrees (arXiv:1601.06078). mu_db is the middle of the
       published range, our choice of a representative value; give the site's own where known.
       Energy conservation limits mu to 10 log10(1 / pi) = -5 dB.
+    # A further reference, not used: Jackson and Richardson (2007), Ch. 12 (pp. 324-326), fit Lambert's
+    # law to rock data at mu = -5.6 dB (10.4 dB above mu_db here), with the book's caveat that its rock
+    # data are sparse and older and include TR 9407 levels that exceed the energy bound (-4.97 dB).
+    # (docs/references/jackson_richardson_2007/04_scattering_models.md Sec. 3.5)
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:115, "Rock"; attributed there to APL-UW
@@ -244,6 +252,10 @@ pebbles:
       Ward 2015 and Trzcinska et al. 2021, neither opened), i.e. mu = -10 to -8 dB. One angle
       and a narrative statement, not a measured curve: unconfirmed below about 150 kHz and
       away from 45 degrees.
+    # A further reference, not used: Jackson and Richardson (2007), Ch. 12 (pp. 324-326), fit Lambert's
+    # law to gravel data at mu = -11.7 dB (2.7 dB below mu_db here), from sparse, older data; the book
+    # says no experiment has characterised a gravel or rock seafloor (p. 362).
+    # (docs/references/jackson_richardson_2007/04_scattering_models.md Sec. 3.5)
   unconfirmed_fields: [empirical_backscatter]
   status: confirmed
   source: >-
