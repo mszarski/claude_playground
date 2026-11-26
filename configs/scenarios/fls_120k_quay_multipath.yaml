@@ -1,0 +1,55 @@
+# 120 kHz forward-looking sonar running along a quay, for multipath off a wall and a sloping bed (sonar-0nsi).
+# The sonar is 3 m deep, tilted 10 degrees down, at 1 m/s. The quay wall stands 20 m to starboard along the run;
+# the bed is 12 m deep under the sonar and deepens towards the wall at 5 degrees (a slope ACROSS the look
+# direction: depth = 12 + 0.0875 y). In front: a moored sphere in mid-water and a block on the bed.
+# The image-source tier has the surface, the tilted bed (`bottom_slope`) and the wall as a plane given by a
+# point and a normal, one bounce off the surface or bed and one off the wall per leg. The scene's seabed lies on
+# the same tilted plane (`slope`), so its scatterers and the propagation's bed agree.
+# What it shows: the wall's own echo, the objects, and the sphere's ghosts: via the wall (a mirror image 24 m
+# across, behind the wall) and via the bed, whose cross-slope turns the bounce path out of its vertical plane, so
+# that ghost lies at a different bearing than over a level bed (truth below; tests/python/test_multipath_scenes.py).
+# Placeholders, ours: the wall's reflection coefficient 0.7 (a normal-incidence fluid estimate for concrete,
+# 2.4 g/cm3 and 3500 m/s, not measured); the sand of coastal_12c_sand (illustrative); all strengths.
+# Not modelled: diffraction at the wall's ends (the wall is an infinite plane), scattering from the wall's
+# face beyond Lambert's law, shadowing of a bounce path by an object (straight lines, as for direct paths).
+name: fls_120k_quay_multipath
+sonar: fls_120k
+fidelity: image_source
+sonar_overrides:
+  fov: {tilt_up_deg: -10.0}
+  receive: {kind: baseband, sample_rate: 40000.0, window: {range: [10.0, 80.0]}}
+environment: {base: coastal_12c_sand, water_depth_m: 12.0, absorption: francois_garrison}
+propagation:
+  max_order: 1
+  bottom_slope: [0.0, 0.0875]          # tan(5 deg): deeper to starboard; the depth at x = y = 0 is the water depth
+  wall_order: 1
+  walls:
+    - {point: [0.0, 20.0, 0.0], normal: [0.0, -1.0, 0.0], coefficient: 0.7}
+platform:
+  position: [0, 0, 3.0]
+  rpy: [0, 0, 0]
+  velocity: [1.0, 0, 0]
+pings: {count: 6, interval: 0.5}
+scene:
+  - {type: plate, label: quay_wall, origin: [15.0, 20.0, 0.0], edge_u: [70.0, 0, 0], edge_v: [0, 0, 13.75], density: 4.0, mu_db: -20.0}
+  - {type: seafloor, label: seabed, x_range: [10.0, 85.0], y_range: [-35.0, 20.0], density: 1.0, lambert_mu_db: -27.0, depth: 12.0,
+     slope: [0.0, 0.0875]}
+  - {type: sphere, label: moored_sphere, centre: [45.0, 8.0, 6.0], radius: 0.5, density: 200.0, mu_db: -5.0}
+  - {type: box, label: block, min: [59.5, -6.5, 10.6], max: [60.5, -5.5, 11.45], density: 200.0, mu_db: -10.0}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}
+truth:
+  # Where the sphere's echoes land at the first ping (sonar at [0, 0, 3]), from the image geometry: range is half
+  # the two-way path, bearing the cone angle asin(u_y) the line array measures, of the direction the return leg
+  # arrives from. "mixed": out one way, back the other. tests/python/test_multipath_scenes.py recomputes these.
+  sphere: {position: [45.0, 8.0, 6.0], range_m: 45.80, bearing_deg: 10.06}
+  ghosts:
+    - {via: wall, path: mixed, range_m: 50.55, bearing_deg: 35.36}     # out direct, back off the wall
+    - {via: wall, path: mixed, range_m: 50.55, bearing_deg: 10.06}     # out off the wall, back direct: the sphere's bearing
+    - {via: wall, path: both, range_m: 55.30, bearing_deg: 35.36}
+    - {via: bed, path: mixed, range_m: 47.08, bearing_deg: 8.13}
+    - {via: bed, path: mixed, range_m: 47.08, bearing_deg: 10.06}
+    - {via: bed, path: both, range_m: 48.35, bearing_deg: 8.13}
+    - {via: level_bed, path: both, range_m: 48.10, bearing_deg: 9.57, note: "the same bounce over a level bed 12 m deep, for comparison"}
+seed: 2301

@@ -595,6 +595,14 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
     if engine is not None and hasattr(provider, "engine"):
         provider.engine = engine
+    if any(getattr(provider, "bottom_slope", None) or ()):
+        # The scattering-function reverberation lies on a flat boundary at its boundary_z; under a tilted bottom
+        # it would be laid on the wrong plane. A sloping bed is put in the scene instead (a `seafloor` with `slope`).
+        for item in cfg.get("reverberation") or []:
+            if site._reverb_boundary(item) == "bottom" or (item.get("boundary_z") is not None and provider.bottom_z is not None
+                                                            and abs(float(item["boundary_z"]) - float(provider.bottom_z)) < 1e-6):
+                raise ValueError("reverberation on the bottom with propagation.bottom_slope: the reverberation model takes a flat "
+                                 "bottom; give the sloping bed as a scene `seafloor` with the same `slope`")
     if cfg.get("time_spread"):
         from . import timespread
         spread = dict(cfg["time_spread"])

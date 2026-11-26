@@ -1,0 +1,43 @@
+# Stripmap SAS with surface and bottom multipath (sonar-0nsi): the image-source tier under the same sonar and
+# track as stripmap_points, against its free-field twin sas_auv_multipath_free (the same file with fidelity
+# free_field). Frame: z down from the sea SURFACE (not the seafloor, as in stripmap_points): the sonar flies 10 m
+# deep in 25 m of water, 15 m above a flat bed of medium sand (configs/sediments.yaml), along +x at 1.6 m/s with
+# known navigation. Bounce orders by the energy rule (D-105; 3 here).
+# Targets: point targets 1 m and 3 m above the bed and 8 m above it (moored), a sphere on the bed, and a seabed of
+# Lambert scatterers laid on the plane with their normal (`slope: [0, 0]`), so that a scatterer ON the bed does not
+# also return through its own coincident bed image (its Lambert weight along that path is zero) and the seabed
+# level is that of the free-field twin.
+# What it shows: each target above the bed comes with copies further out in ground range: via the bed (the image
+# of the target in the bed: out direct and back via the bed, and via the bed both ways) and, much weaker, via the
+# surface, where the path arrives far above the elevation beam. The direct echo itself is laid over towards the
+# sonar by its height (truth below; tests/python/test_multipath_scenes.py).
+# Placeholders: strengths; the sand is the table's medium_sand. Straight rays, isovelocity water, a flat sea surface
+# (coefficient -1).
+name: sas_auv_multipath
+sonar: sas_auv
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 100.0e+3, window: {range: [38.0, 52.0]}}
+environment: {base: coastal_12c, water_depth_m: 25.0, bottom: medium_sand, absorption: none}
+platform:
+  position: [0, 0, 10.0]
+  rpy: [0, 0, 0]
+  velocity: [1.6, 0, 0]            # 0.32 m per ping: half the receive array length
+pings: {count: 90, interval: 0.2}
+scene:
+  - {type: seafloor, label: seabed, x_range: [-3.0, 32.0], y_range: [34.0, 52.0], density: 4.0, lambert_mu_db: -27.0, depth: 25.0,
+     slope: [0.0, 0.0]}
+  - {type: points, label: point_1m, positions: [[8.0, 38.0, 24.0]], target_strength_db: 0.0}
+  - {type: points, label: point_3m, positions: [[14.0, 44.0, 22.0]], target_strength_db: 0.0}
+  - {type: points, label: point_8m, positions: [[22.0, 40.0, 17.0]], target_strength_db: 0.0}
+  - {type: sphere, label: sphere_on_bed, centre: [18.0, 47.0, 24.6], radius: 0.4, density: 300.0, mu_db: -12.0}
+receiver: {noise_rms: 0.0, adc: false}
+truth:
+  # Where each point target images on the bed plane (z = 25): along track at its x; ground range y from the
+  # slant range rho (half the two-way path) as sqrt(rho^2 - 15^2). "direct": laid over by its height; "mixed":
+  # out direct, back via the bed (or the other way); "both": via the bed both ways; "surface_mixed": out direct,
+  # back via the surface. tests/python/test_multipath_scenes.py recomputes these.
+  point_1m: {x_m: 8.0, direct_y_m: 37.62, mixed_y_m: 38.01, both_y_m: 38.41, surface_mixed_y_m: 43.21}
+  point_3m: {x_m: 14.0, direct_y_m: 43.07, mixed_y_m: 44.09, both_y_m: 45.11, surface_mixed_y_m: 47.70}
+  point_8m: {x_m: 22.0, direct_y_m: 37.74, mixed_y_m: 40.70, both_y_m: 43.63, surface_mixed_y_m: 41.83}
+seed: 2302

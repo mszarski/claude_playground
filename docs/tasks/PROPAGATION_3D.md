@@ -27,7 +27,9 @@ section 3):
   out of its vertical plane by φ = atan(tan g · sin 2α). This is ours; the derivation is in
   section 3. FLS bounce paths to the bed reach it at 15 to 58° grazing (sonar 20 m deep in 60 m,
   ranges 50 to 300 m). A 5° cross-slope at those angles gives φ = 3.6 to 9.9°, which is 4 to 11
-  FLS beamwidths. A vertical quay or canyon wall is the extreme case. In water of one sound speed,
+  FLS beamwidths. (Corrected 2026-11-26, `sonar-0nsi`: 3.6 and 9.9° are the formula's values at 20 and
+  45°, as in the table of section 3; at 15 and 58° it gives 2.7 and 15.5°, 3 to 17 beamwidths. The
+  formula itself was re-derived and is held by `tests/python/test_image_planes.py`.) A vertical quay or canyon wall is the extreme case. In water of one sound speed,
   **this is exactly an image source off a tilted plane, not something to ray-trace.** Bellhop3D
   is the wrong tool for it. Its seabed is one depth per (x, y) (`ReadBTY3D`, read for the format
   in `tests/python/bellhop3d_oracle.py`), so it cannot represent a vertical wall. Its cost is set
@@ -39,7 +41,11 @@ section 3):
     (`SIMULATION.md` section 1).
   - FLS scenes have no bounce paths to objects, and the pool scenes have no wall multipath,
     although `ImageSourceProvider` already takes axis-aligned vertical walls (`SCENARIOS.md`,
-    "What no scenario has yet"; `sim/propagation.py`).
+    "What no scenario has yet"; `sim/propagation.py`). (Corrected 2026-11-26, `sonar-0nsi`: the
+    four FLS scenes at `image_source`, `fls_120k_transit`, `_170k_transit`, `_330k_transit` and
+    `fls_170k_traffic`, do give their objects first-order surface and bottom bounce paths (three
+    eigenrays a leg, nine pairs a scatterer); the free-field FLS scenes do not. `SCENARIOS.md` said
+    otherwise.)
   - SAS scenes are `free_field`, with no surface or bottom multipath at all.
   - There are 78 false movers from a rough surface over ten seeds, and small targets such as
     the kayak are missed (`docs/handoff/README.md`, risk 7).
@@ -368,7 +374,7 @@ Beams and resolution cells (ours, λ / aperture at band centre):
 
 | Family (scenarios) | Tier | Band | Ranges | Depth, geometry | Relief in the scenario | 3-D effect as shipped | Over relief in real water | Basis |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| FLS sea: `fls_120k_transit`, `_170k_transit`, `_330k_transit`, `_170k_traffic` | `image_source`, `max_order: 1` | 110–130, 160–180, 315–345 kHz | 20–450 m | 60 m, sonar 20 m deep | flat bed; a pinnacle of rocks as scatterers | none | Bounce paths off a bed tilted 5° across the bearing land 3.6 to 9.9° off (4 to 11 beams) at 15–58° grazing; from 0 dB (no bounce paths to objects today) to the level of a first-order bounce. Refraction: below 0.6° and 1.5 m vertical (2-D); horizontal 0.06° | formula above; geometry from the scenario files; refraction from c/G |
+| FLS sea: `fls_120k_transit`, `_170k_transit`, `_330k_transit`, `_170k_traffic` | `image_source`, `max_order: 1` | 110–130, 160–180, 315–345 kHz | 20–450 m | 60 m, sonar 20 m deep | flat bed; a pinnacle of rocks as scatterers | none | Bounce paths off a bed tilted 5° across the bearing land 3.6 to 9.9° off (4 to 11 beams) at 15–58° grazing; at the level of a first-order bounce (the objects already have first-order bounce paths over the level bed; "no bounce paths to objects" was wrong, corrected by `sonar-0nsi`). Refraction: below 0.6° and 1.5 m vertical (2-D); horizontal 0.06° | formula above; geometry from the scenario files; refraction from c/G |
 | FLS free-field: `fls_120k_cluttered_seabed`, `_rough_surface`, `seafloor_objects_fls`, `fls_glints_on_sediment`, `fls_highlight_target_aspect`, `harbour_fls_750k`, pool scenes (`pool_fls_*`, `pool_wires_l12_5d`) | `free_field` | 110 kHz to 6.25 MHz | 0.4–300 m | 40–60 m, harbour and pool | quay wall, pool walls as scatterers | none (no multipath at all) | Wall multipath: ghost targets "in the fan" (`SCENARIOS.md`). An image source off the wall, exact in water of one speed | `SCENARIOS.md` "What no scenario has yet" |
 | SAS: `wreck_sas`, `minefield_sas`, `stripmap_points`, `sas_minsas_*` (4), rail scenes (4) | `free_field` | 180–220 and 310–350 kHz | 38–68 m slant | 12–15 m altitude, 10–23° grazing; the surface is not modelled | flat seabed (a `seafloor` can take `bathymetry`, unused here) | none | Direct paths: relief is in the scatterer positions already (D-73, one description). Multipath off a sloping bank: an image off a tilted plane. Refraction: delay error below 1e-10 s over 50 m | formula; c/G |
 | Buried: `buried_cylinder`, `buried_objects` | `sediment` | 10–30 kHz | a few m | flat interface | none | none | Not a propagation-3-D question (a refracted ray into sediment) | — |
@@ -539,6 +545,16 @@ in NumPy and C++ (`libs/sim` `paths.cpp`). No shipped scene uses it.
   coefficient at the local grazing angle. Exact in water of one speed. It is the right mechanism
   for quay walls, pool walls, canyon sides and a sloping bank under a SAS or FLS.
 - **Licence:** ours. **Size:** M. It would need its own issue (see "Follow-ups").
+- **Done (2026-11-26, `sonar-0nsi`), opt-in.** `propagation.bottom_slope: [dz/dx, dz/dy]` tilts the
+  bottom and a wall may be `{point, normal, coefficient[, bounds]}`; either turns on one image
+  construction over every plane with validity checks (specular point on the face, every vertex in the
+  water, no leg through a bounded wall), Rayleigh at each bounce's own grazing angle to the tilted bed,
+  `wall_order` for wall bounces (`docs/PHYSICS_NOTES.md` section 30; `CONFIGURATION.md`). NumPy only: the
+  C++ provider keeps axis walls and a flat bottom. New scenes, nothing shipped changed:
+  `fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath` and `sas_auv_multipath_free`
+  (`SCENARIOS.md`). Not done: a wall's coefficient from a material (each is a constant, a placeholder);
+  roughness (time spreading) on these paths; reverberation over a tilted bed; the arrival direction of
+  the old `{axis, position}` walls, which is wrong in the horizontal (follow-up).
 
 ### Recommendation
 

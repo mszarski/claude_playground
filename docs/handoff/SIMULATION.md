@@ -30,7 +30,7 @@ placeholder or a class default until then.
 | --- | --- | --- |
 | Objects are clouds of point scatterers on their surfaces (`sim/scene.py`, D-41) | Highlights, shadows, layover and speckle are there; specular glints, diffraction and resonances are not. Smooth spheres, cylinders, plates and discs that glint exist (`sim/targets.py`, D-65) and no gallery scene uses them | `STATUS.md` "Simulator limits so far"; `SCENARIOS.md` "What no scenario has yet" |
 | Target strengths are assumed | The ship's +25 dB, every class in `configs/builds/targets/reference_classes.yaml`: placeholders. Detection ranges scale with them directly | `STATUS.md` open question 7 |
-| Four propagation tiers, none with 3-D refraction | `free_field`, `image_source` (isovelocity, flat boundaries), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149) | `sonar-6c8` (open): our Bellhop runs and Bellhop3D's N×2-D mode differ by 1 to 2.5 dB |
+| Four propagation tiers, none with 3-D refraction | `free_field`, `image_source` (isovelocity; flat boundaries, and opt-in since `sonar-0nsi` a tilted bed and walls as any plane, exact for straight rays, no roughness or diffraction on those paths, NumPy only), `sediment` (one refracted ray), `eigenray` (Bellhop, 2-D). Over a seamount the 2-D tier is 3.8 dB too loud on the flanks at 8 kHz against Bellhop3D (`tests/python/test_seamount_3d.py`, D-149) | `sonar-6c8` (open): our Bellhop runs and Bellhop3D's N×2-D mode differ by 1 to 2.5 dB |
 | Range-dependent water is rings about the sonar (D-110) | A front lying across a map, and horizontal refraction, are not modelled. Only the `eigenray` tier has it; the other tiers use the local speed and warn | item 26 |
 | Arrivals are cut by energy with a cap (D-105, D-137) | `popoto_12km` leaves out 1.4 % of a point's arrival energy at the cap of 64 (measured in `EXAMPLES.md` example 5; `SCENARIOS.md` says 1.5 %), `popoto_env_gravel_30m` 14 % | item 22; `sonar-9b8` (open): the rule lowers the gravel-water peak 3.3 dB |
 | 9 Bellhop scenarios reflect eigenrays from a flat surface in a windy sea; 21 simulate a bottom the record does not mention | Kept on purpose so records did not change; each is named under `environment_overrides` in its file (D-101) | item 21 |
@@ -46,7 +46,7 @@ placeholder or a class default until then.
 | Direct sound and receiver overload (D-125) | The model exists; no hardware value in it is measured | `SCENARIOS.md`, direct-overload group |
 | `fls_300k` analogue gain ramp | A placeholder so that a 300 m echo registers in 16 bits; flagged unconfirmed in its config | `STATUS.md` |
 | Navigation errors | Sway and heave unknown to navigation, DVL altitude noise, rail position errors and attitude rates are simulated. An along-track (surge) error is not simulated (estimating one is issue `sonar-7k2`), nor a drifting INS, nor a navigation-to-sonar clock offset | `sim/simulator.py` `simulate_collection` |
-| What no scenario has | Wall multipath in the pool scenes; bounce paths to objects in the FLS sea scenes; waves that move as waves; a long-range clutter scene (`sonar-kal`); a sampled transmit pulse in a shipped scenario | `SCENARIOS.md` "What no scenario has yet" |
+| What no scenario has | Wall multipath in the gallery pool scenes (`pool_fls_p4_2v_walls`, not in the gallery, has it); bounce paths to objects in the free-field FLS sea scenes (the four at `image_source` have first-order ones); multipath in a gallery SAS scene (`sas_auv_multipath` has it); waves that move as waves; a long-range clutter scene (`sonar-kal`); a sampled transmit pulse in a shipped scenario | `SCENARIOS.md` "What no scenario has yet" |
 | Parts still in NumPy | Ambient noise (2.0 s of a 15 to 31 s ping), the reverberation's random draws, time spreading's taps, scene modifiers, ADC, board clocks. Path pairing has no CUDA backend | `RESULTS.md` "What in the simulator still runs in NumPy" |
 
 Open issues that carry simulator work: `sonar-dzu` (milestone 12, realistic propagation and
@@ -98,7 +98,7 @@ Notes on the diagram, each checked in `simulator.py`:
 
 - **Bellhop is never linked.** It is an external program run as a separate process
   (`GPUSONAR_BELLHOP` names it; `tools/build_oracles.sh` builds it). It has two roles: the ray
-  tracer of the `eigenray` tier (22 of the 76 shipped scenarios; without it they and their tests skip), and
+  tracer of the `eigenray` tier (22 of the 80 shipped scenarios; without it they and their tests skip), and
   the oracle the `image_source` tier is tested against. KRAKEN, Bellhop3D and PyRAM are oracles
   only (`tests/python/kraken_oracle.py`, `bellhop3d_oracle.py`, `test_ram_crosscheck.py`).
 - **Two engines.** Path pairing, reverberation and sampled-pulse synthesis exist in NumPy and in
@@ -124,7 +124,7 @@ unless marked "measured here" (run for `EXAMPLES.md` on this tree, CPU).
 | --- | --- | --- | --- | --- | --- | --- |
 | Echo synthesis: delay, Doppler, spreading, both directivities | `libs/sim` kernel via `core.synthesize_into`; sampled pulses `sim/waveform.py` | PN 3 (one-way chain, variable delay), 15, 19 | TR 0702 Sec. 8-9: confirmed; the analytic-pulse kernel and the four-pass arrival-time solve: ours (D-83) | `sonar` config `transmit.waveform`; `synthesis.beam_floor_db` (off) | `test_sim.py`, `test_sampled_waveform.py`, `test_sampled_engine.py` | delay within 0.01 carrier period; amplitude 0.5 %; arrival time with a 30 m/s receiver within 0.2 µs; Doppler within 0.2 % (RES "Simulator") |
 | Free field | `propagation.FreeFieldProvider` | direct path, 1/r | standard | `fidelity: free_field` (the default when `fidelity` is left out) | `test_sim.py` | flank echo level at 1 km against SL − 2TL + TS within 0.7 dB |
-| Isovelocity images | `propagation.ImageSourceProvider` | PN 2.2 (straight-line model) | TR 0702 Sec. 5.4: confirmed; Rayleigh fluid-bottom coefficient: standard; the energy rule for bounce order: ours (D-105) | `fidelity: image_source`; `propagation: {surface_z: 0, bottom_z, bottom \| bottom_coefficient (no default, D-104), max_order \| arrival_floor_db: 20, max_order_cap: 8, walls}` | `test_propagation.py` against Bellhop, Pekeris waveguide; `test_propagation_defaults.py` | coherent TL 0.06 dB median, 0.4 dB worst; first four delays within 2 µs (RES); measured here: 0.062 / 0.392 dB, 1.92 µs (`EXAMPLES.md` example 11) |
+| Isovelocity images | `propagation.ImageSourceProvider` | PN 2.2 (straight-line model) | TR 0702 Sec. 5.4: confirmed; Rayleigh fluid-bottom coefficient: standard; the energy rule for bounce order: ours (D-105) | `fidelity: image_source`; `propagation: {surface_z: 0, bottom_z, bottom \| bottom_coefficient (no default, D-104), max_order \| arrival_floor_db: 20, max_order_cap: 8, walls}`; opt-in (`sonar-0nsi`, ours): `bottom_slope`, walls as `{point, normal, coefficient[, bounds]}`, `wall_order` (`PHYSICS_NOTES.md` section 30) | `test_propagation.py` against Bellhop, Pekeris waveguide; `test_propagation_defaults.py` | coherent TL 0.06 dB median, 0.4 dB worst; first four delays within 2 µs (RES); measured here: 0.062 / 0.392 dB, 1.92 µs (`EXAMPLES.md` example 11) |
 | Refraction into sediment | `propagation.SedimentProvider`, `snell_crossing` | one refracted ray through a flat fluid interface | standard (Snell); ours as a tier | `fidelity: sediment`; `propagation: {sediment_speed, interface_z, ...}` | `test_scene_objects.py`; RES "3D near-field imaging of a buried object" | see RES |
 | Eigenrays in a profile | `sim/bellhop.py` `BellhopProvider`, `OceanEnvironment` | PN 2.3-2.5, 27 (range-dependent speed) | Bellhop (Acoustics Toolbox, GPL-3, external): the community reference code, "not independently re-validated" (`OPEN_SOURCE.md`); our lookup grid and delay correction: ours | `fidelity: eigenray`; `propagation: {max_range, range_step (max_range / 200), depth_step, max_arrivals \| arrival_floor_db: 20, max_arrivals_cap: 64, wind_speed: 0, angles: (-80, 80), environment: {...}}` | `test_kraken_crosscheck.py` (normal modes), `test_ram_crosscheck.py` (parabolic equation), `test_seamount_3d.py`, `test_ssp_range.py`, `test_long_range.py` | Bellhop's own rays (not the provider) minus modes at 8 kHz: at most 0.21 dB over 1 to 10 km (RES; asserted: under 0.5 dB, under 0.1 dB from 2 km); the provider with 80 arrivals within 0.5 dB of the modes (asserted); against PyRAM in 500 m windows: largest 1.42 dB, depth mean at most 0.44 dB (test docstring; also in RES "Rays against normal modes at 8 kHz"); lookup between grid nodes: delays within 20 µs |
 | Absorption | `acoustics.absorption` | PN 6.1 | Francois-Garrison, Ainslie-McColm: via secondary (within 0.6 % and 3 % of 21 published values); Thorp: confirmed (TR 0702 eq. 42) | `environment.absorption: francois_garrison` (default) \| `ainslie_mccolm` \| `thorp` \| `none`; water from `temperature_c: 10`, `salinity_psu: 35`, `ph: 8` | `test_medium_models.py`, `test_literature_models.py` | as in the status column |
@@ -151,8 +151,9 @@ checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in f
 
 ## 4. The scenario catalogue
 
-`configs/scenarios/` holds **76 files**. `docs/SCENARIOS.md` says 75: it predates
-`popoto_12km_two_ships` (added with D-172), which it does not list.
+`configs/scenarios/` holds **80 files**: the 76 described before `sonar-0nsi` and its four multipath scenes
+(`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`).
+`docs/SCENARIOS.md` lists all 80.
 
 Columns: **tier** is `fidelity`; **used by** names the tests under `tests/python/` (without the
 `test_` prefix and `.py`) and tools that load the file by name; **gallery** means
@@ -179,7 +180,7 @@ at the `eigenray` tier needs Bellhop.
 | `rail_points` | `sas_rail` | free | rail SAS past points, 151 stop-and-go pings | `sas` | not recorded |
 | `rail_position_errors` | (base `rail_points`) | free | the carriage a fraction of a millimetre off; shows `base:` | `scene_objects` | not recorded |
 
-### Forward-looking sonar (12)
+### Forward-looking sonar (14)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -195,8 +196,10 @@ at the `eigenray` tier needs Bellhop.
 | `fls_170k_traffic` | `fls_170k` | image | three boats: closing, crossing, at anchor | gallery; `realistic_scenes` | CPU 2 min; L4 14.5 s |
 | `fls_glints_on_sediment` | `fls_300k` | free | specular sphere and cylinder on a model-driven seabed | `scene_targets`; `gpu_benchmark_all.py` | not recorded |
 | `fls_highlight_target_aspect` | `fls_120k` | free | a five-highlight target, strength against aspect | `scene_targets` | not recorded |
+| `fls_120k_quay_multipath` | `fls_120k` | image (tilted bed, a `{point, normal}` wall) | a quay wall and a bed sloping 5 degrees across the look; a moored sphere's ghosts via the wall and the bed; 6 pings | `multipath_scenes` | sphere alone, one ping: 10 s on the CPU (measured here) |
+| `pool_fls_p4_2v_walls` | `p4_2v` | image (three `{point, normal}` walls, no surface or floor) | a 4 m lane: ghost floats in the side walls | `multipath_scenes` | 0.1 of the densities: 35 s on the CPU (measured here) |
 
-### Synthetic aperture sonar and buried objects (10)
+### Synthetic aperture sonar and buried objects (12)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -210,6 +213,8 @@ at the `eigenray` tier needs Bellhop.
 | `rail_cylinder_glint` | `sas_rail` | free | a smooth rod: one glint per ping | `scene_targets`; `gpu_benchmark_all.py` | not recorded |
 | `buried_cylinder` | `subbottom` | sediment | refraction into the sediment, one cylinder | `scene_objects` | not recorded |
 | `buried_objects` | `subbottom` | sediment | cylinder and sphere under a rough interface; raster of 625 positions | gallery; `realistic_scenes` | CPU 109 s; L4 19.5 s |
+| `sas_auv_multipath` | `sas_auv` | image (flat, medium sand, energy rule: 3 bounces) | surface and bottom multipath of targets 1, 3 and 8 m above the bed; 90 pings | `multipath_scenes` | CPU 48 s to simulate with half the seabed (measured here) |
+| `sas_auv_multipath_free` | `sas_auv` | free | its free-field twin | `multipath_scenes` | CPU 10 s with half the seabed (measured here) |
 
 ### Flank array, 32 hydrophones, 6 to 10 kHz (6)
 

@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 76 scenario files; the twenty-one named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 80 scenario files; the twenty-five named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -316,6 +316,69 @@ is seen further down the beam.
   tracker joined it to its wake. The most-probable-pair association (D-141) was made for
   this boat (`DECISIONS.md`).
 
+### Multipath off a quay and a cross-slope: `fls_120k_quay_multipath` (`sonar-0nsi`)
+
+Not in the gallery; no figure. Measured on the CPU (host backend) on 2026-11-26, as below; the chain is the
+transit scenes' (`tools/gallery.py` `run_fls_transit`, settings unchanged, window 12 to 78 m), on the scene
+with half its densities and 4 pings. **What got worse with multipath: the chain tracks the ghosts as objects.**
+
+The 120 kHz sonar 3 m deep, tilted 10 degrees down, runs at 1 m/s along a quay wall 20 m to starboard. The bed
+is 12 m deep under it and deepens towards the wall at 5 degrees, a slope across the look direction. The tier is
+`image_source` with the surface, the tilted bed (`bottom_slope`) and the wall as a `{point, normal}` plane, one
+surface or bed bounce and one wall bounce a leg. A moored sphere stands in mid-water 45 m ahead, 8 m to
+starboard, 6 m deep; a block sits on the bed. The wall's coefficient (0.7) is a placeholder.
+
+The sphere's echoes against the image geometry (one ping; the sphere alone; peaks of the fan image; levels re the
+sphere's direct echo; "mixed" is out one way and back the other; ranges are 0.55 m short of the centre's for
+every path, the sphere's radius, so the table gives the offset from the direct echo):
+
+| Path | Geometry: range beyond direct, bearing | Image peak | Level |
+| --- | --- | --- | --- |
+| direct | 0, 10.06 deg | 0, 10.10 deg | 0 dB |
+| bed, mixed (back via the bed) | +1.27 m, 8.13 deg | +1.35 m, 8.10 deg | -3.1 dB |
+| bed, mixed (out via the bed) | +1.27 m, 10.06 deg | +1.35 m, 10.20 deg | -4.2 dB |
+| bed, both legs | +2.54 m, 8.13 deg | +2.58 m, 8.10 deg | -6.6 dB |
+| the same over a level bed | +2.30 m, 9.57 deg | +2.31 m, 9.60 deg | -4.6 dB |
+| wall, mixed (back via the wall) | +4.75 m, 35.36 deg | +4.80 m, 35.50 deg | -7.1 dB |
+| wall, mixed (out via the wall) | +4.75 m, 10.06 deg | +4.80 m, 10.30 deg | -7.7 dB |
+| wall, both legs | +9.50 m, 35.36 deg | +9.66 m, 35.60 deg | -11.4 dB |
+
+- The cross-slope moves the bed ghost 1.44 degrees (1.5 beams of 0.93 degrees) off where a level bed puts it:
+  the image of a point h above a bed tilted by alpha lies 2 h sin(alpha) across the bearing (`PHYSICS_NOTES.md`
+  section 30). The bearing is the cone angle the line array measures, asin of the direction's component along
+  the array, which differs from the azimuth for paths that arrive from below (9.57 against 10.06 degrees over the
+  level bed is that alone). In free field none of these peaks is there (below -55 dB).
+- The bed ghosts are strong: the sand reflects at nearly 1 below its critical angle (about 25 degrees; the path
+  meets the bed at about 20 degrees).
+- The wall ghost lies behind the quay wall, 24 m across from the sphere.
+- The chain (CFAR, clusters, world tracker, classifier) on the full scene: 83 to 103 detections a ping and 86
+  confirmed tracks as shipped, 92 to 109 and 94 in free field; the seabed's scatterers make most of both. Tracks
+  within 3 m of a ghost: as shipped, one on the wall ghost behind the wall (41.6, 29.3), one on the
+  out-via-the-wall copy on the sphere's bearing (52.5, 7.6), and three on the bed ghosts 1 to 3 m beyond the
+  sphere; in free field only the sphere's own two tracks. The classifier calls none of them `multipath` (that
+  class is 0 in every variant); the sphere is `static` in every variant. Movers not on a moving object: 2 as
+  shipped, 0 with a level bed, 0 without the wall, 1 in free field (four pings; not attributed to multipath).
+  Reported, not fixed: the chain has no ghost rejection for wall or bed multipath.
+
+### Ghosts in a pool lane: `pool_fls_p4_2v_walls` (`sonar-0nsi`)
+
+Not in the gallery; no figure. CPU, host backend, one ping, 2026-11-26. The P4-2v probe of `pool_fls_p4_2v`
+in a 4 m lane: side walls at y = -2 and +2 and the far wall at 9.5 m are scatterers and mirrors (coefficient 0.8, a
+placeholder; one wall bounce a leg; floor and surface left out as in the gallery pool scenes). The floats' ghosts
+against the image geometry (floats alone; levels re the float at y = +0.6 m):
+
+| Ghost | Geometry: range, bearing | Image peak | Level |
+| --- | --- | --- | --- |
+| float_3 via the starboard wall, mixed | 7.88 m, 24.39 deg | 7.83 m, 24.6 deg | -5.1 dB |
+| float_3, both legs | 8.23 m, 24.39 deg | 8.19 m, 24.4 deg | -10.3 dB |
+| float_2, both legs | 8.50 m, 28.07 deg | 8.46 m, 28.2 deg | -10.6 dB |
+| float_1 via the port wall, mixed | 7.88 m, -24.39 deg | 7.83 m, -24.6 deg | -2.3 dB |
+| float_1, both legs | 8.23 m, -24.39 deg | 8.18 m, -24.4 deg | -7.8 dB |
+
+The peaks are 0.05 m short of the centres, the floats' radius. In the full scene at a tenth of its densities the
+ghosts stand 58 to 64 dB over the image median and the median itself rises: the floats stand 67.4 dB over it
+with walls and 83.2 dB in free field (the walls' own echoes come back through the other walls).
+
 ## Synthetic aperture sonar
 
 ### `wreck_sas` and `minefield_sas`
@@ -466,6 +529,41 @@ the same density on their surfaces.
   seabed with developed speckle the copies are covered (`sas_minsas_speckle`, above). More elements do not
   help much further: the receive element narrows with the pitch, and the projector's
   sidelobes fall slowly.
+
+### Surface and bottom multipath: `sas_auv_multipath` and `sas_auv_multipath_free` (`sonar-0nsi`)
+
+Not in the gallery; no figure. CPU, host backend, full scene, 90 pings, known navigation, image on the bed plane
+at 2.5 cm, 2026-11-26 (simulation 70 s with multipath, 17 s without). The `sas_auv` sonar 10 m deep and 15 m
+above a flat bed of medium sand in 25 m of water, under a flat surface; `image_source` with the energy rule (3
+bounces). **What got worse with multipath: the image's contrast.** The seabed median rises 2.9 dB (its
+scatterers' surface-reflected paths), and the gallery's sharpness measure falls from 178,767 to 63,747.
+
+| Point target | Copy | Ground range: geometry, image | dB over the median: multipath (free field) |
+| --- | --- | --- | --- |
+| 1 m above the bed | direct (laid over) | 37.62, 37.625 m | 80.2 (83.2) |
+| | via the bed, mixed | 38.01, 38.000 m | 82.9 (none: 45.3) |
+| | via the bed, both legs | 38.41, 38.400 m | 79.1 (none) |
+| | via the surface, mixed | 43.21, 43.225 m | 56.2 (none) |
+| 3 m above | direct | 43.07, 43.075 m | 77.5 (80.5) |
+| | bed, mixed | 44.09, 44.100 m | 82.4 (none) |
+| | bed, both | 45.11, 45.100 m | 75.2 (none) |
+| | surface, mixed | 47.70, 47.700 m | 57.6 (none) |
+| 8 m above (moored) | direct | 37.74, 37.725 m | 62.0 (65.0) |
+| | bed, mixed | 40.70, 40.700 m | 68.6 (none) |
+| | bed, both | 43.63, 43.625 m | 60.0 (none) |
+| | surface, mixed | 41.83, 41.825 m | 50.0 (42.6, the direct echo's defocused smear) |
+
+All at the target's own along-track position. "None": the free-field value is the background or a sidelobe there.
+
+- The bed's copies land further out in ground range, one at half and one at the whole of the extra bed path.
+  The mixed copy (two pairs, out and back exchanged, adding in phase) is the BRIGHTEST echo of every target
+  above the bed: 2.7 to 6.6 dB over the direct echo. Its range history is the mean of the target's and its
+  image's, about that of the target's foot on the bed, so it focuses on the bed plane, where the direct echo of
+  a target above the bed is laid over towards the sonar and defocused. A SAS image of objects above a reflecting
+  bed shows the object where its foot is, with a fainter copy closer in and another further out.
+- The surface copies are 12 to 24 dB below the direct echo: the path arrives far above the elevation beam.
+- Seabed scatterers carry the bed's normal (`slope: [0, 0]`), so their coincident bed image adds nothing; the
+  sphere on the bed is a Lambert surface for the same reason.
 
 ### Rail SAS: `rail_objects`
 
@@ -719,13 +817,15 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 76 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 80 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Twenty-one files have no geometry diagram in `docs/scenarios/` yet: the nine of the
+set. Twenty-five files have no geometry diagram in `docs/scenarios/` yet: the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
-`popoto_testauv_direct_overload*`, the three `fjord_*` and the three `ssp_*`
-(`tools/scenario_diagrams.py` has not been run since they were added).
+`popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
+scenes of `sonar-0nsi` (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`,
+`sas_auv_multipath_free`; `tools/scenario_diagrams.py` has not been run since they were added, and it
+does not draw walls or a tilted bed).
 
 Since `DECISIONS.md` D-100 a scenario states its water once, in an `environment` block
 that may name a site in `configs/environments/`; a typed value that contradicts the site
@@ -780,6 +880,8 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). |
 | `fls_glints_on_sediment` | A smooth sphere and cylinder that glint, on a seabed whose scatterers follow the bottom scattering model. |
 | `fls_highlight_target_aspect` | A five-highlight target crossing ahead while turning, strength against aspect from an illustrative table. |
+| `fls_120k_quay_multipath` | The 120 kHz design along a quay wall over a bed sloping 5 degrees across the look direction (image sources off the wall and the tilted bed, `sonar-0nsi`): a moored sphere and its ghosts, a block on the bed; truth entries for the ghosts. |
+| `pool_fls_p4_2v_walls` | The P4-2v in a 4 m pool lane whose side and far walls are mirrors (`sonar-0nsi`): ghost floats in the side walls; truth entries for them. |
 
 ### Synthetic aperture sonar and buried objects
 
@@ -795,6 +897,8 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `rail_cylinder_glint` | A smooth rigid rod parallel to the rail, a specular target seen as one glint per ping. |
 | `buried_cylinder` | 3D near-field imaging of one cylinder 0.3 m below a flat sediment interface, with refraction. |
 | `buried_objects` | Gallery. A buried cylinder and sphere under a rough interface with sediment clutter. |
+| `sas_auv_multipath` | Stripmap SAS 15 m above a flat bed of medium sand under a flat surface (image sources, energy rule; `sonar-0nsi`): point targets 1, 3 and 8 m above the bed, a sphere on it, a Lambert seabed; truth entries for the multipath copies. |
+| `sas_auv_multipath_free` | The same in free field (`base: sas_auv_multipath`), for the difference. |
 
 ### Flank array (32 hydrophones, 6 to 10 kHz)
 
@@ -899,11 +1003,21 @@ after the first whole-suite run"), `docs/figures/fjord_rehearsal.md`,
 
 ## What no scenario has yet
 
-- Multipath in the pool scenes. Surface and floor bounces arrive well outside the probes'
-  narrow elevation beams, but bounces off the side walls lie in the fan and would show as
-  ghost targets; the image-source tier can model walls and is not used here yet.
-- Surface or bottom bounce paths to the objects in the forward-looking sea scenes (direct
-  paths only; reverberation is statistical).
+- Multipath in the gallery pool scenes. Surface and floor bounces arrive well outside the probes'
+  narrow elevation beams; bounces off the side walls lie in the fan and show as ghost targets,
+  which `pool_fls_p4_2v_walls` now has (`sonar-0nsi`); the gallery scenes `pool_fls_l12_5d` and
+  `pool_fls_p4_2v` are unchanged and free field.
+- Surface or bottom bounce paths to the objects in the free-field forward-looking sea scenes
+  (`fls_120k_cluttered_seabed`, `fls_120k_rough_surface`, `seafloor_objects_fls`,
+  `harbour_fls_750k`, `fls_glints_on_sediment`, `fls_highlight_target_aspect`). The four FLS
+  scenes at `image_source` (`fls_120k_transit`, `_170k_transit`, `_330k_transit`,
+  `fls_170k_traffic`) DO give their objects first-order surface and bottom bounce paths (three
+  eigenrays a leg, nine pairs a scatterer); this list said otherwise until `sonar-0nsi`.
+  Reverberation is statistical in all of them.
+- Multipath in a gallery SAS scene: all are free field; `sas_auv_multipath` (not in the gallery)
+  has surface and bottom multipath.
+- Reverberation (the scattering-function model) over a tilted bed: refused; a sloping bed is
+  given as scene scatterers (`fls_120k_quay_multipath`).
 - Waves that move as waves do, breaking, or a bubble layer; a wake that grows.
 - A range-dependent ocean in a gallery scene. Three trial scenarios have a sound speed
   that changes with range (`ssp_*`) and three a seabed section with sills (`fjord_*`),

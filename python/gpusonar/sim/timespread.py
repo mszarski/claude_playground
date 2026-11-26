@@ -850,6 +850,9 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
      angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce, tap_shape, texture_rate,
      tail_quantile, coherent_phase: {...}};
     the surface section also takes `rms_height` beside `wind_speed`, and `height_scale`."""
+    if getattr(provider, "general", False):
+        raise ValueError("time_spread: not with an image_source provider that has bottom_slope or a {point, normal} wall: the "
+                         "spreading places each bounce on a flat surface and bottom")
     surface = boundary_parameters(cfg.get("surface"), surface=True, frequency=float(cfg.get("frequency", frequency)))
     bottom = boundary_parameters(cfg.get("bottom"), surface=False)
     surface_z = getattr(provider, "surface_z", 0.0)

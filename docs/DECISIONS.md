@@ -3922,3 +3922,50 @@ What differs or costs, first:
 - Full GPU suite on this change over the tree of D-196: **2232 passed, 101 skipped**, none failed
   (NVIDIA L4, HF job 6b077ea0d91f621b930950a5, 49 min 30 s). That tree lacked D-197's oracle tests and
   D-198's assertion; a later job covers them.
+
+### D-201 Image sources off a tilted bed and walls as any plane, opt-in; four multipath scenes; what multipath does to the FLS chain and to a SAS image (issue sonar-0nsi; no shipped record, default or expected value changed)
+
+What is wrong first, found by this work:
+- The FLS chain tracks multipath ghosts as objects. In `fls_120k_quay_multipath` it holds tracks on the
+  wall ghost behind the quay, on the copy that went out by the wall, and on the bed ghosts 1 to 3 m
+  beyond the sphere; its `multipath` class fires on none (4 pings, half densities, one seed: an
+  indication, not a rate). Follow-up filed.
+- With bed multipath the brightest echo of every SAS target above the bed is the bed-bounce copy, 2.7
+  to 6.6 dB over the direct echo (it focuses at the target's foot; the direct echo is laid over and
+  defocused); the seabed median rises 2.9 dB and the gallery's sharpness measure falls from 178,767 to
+  63,747. Every shipped SAS scene is free field.
+- The existing wall form `{axis, position, coefficient}` mirrors only the vertical part of the arrival
+  direction on wall paths, in both engines, so Lambert weights are wrong there. No shipped scene has
+  walls. Not changed (it is existing behaviour and a C++ change): follow-up filed for the owner.
+- Our documents said FLS objects get direct paths only. In the four FLS scenes at `image_source` every
+  scatterer already gets first-order surface and bottom bounces (9 path pairs). Corrected in
+  `SCENARIOS.md`, `handoff/SIMULATION.md` and `tasks/PROPAGATION_3D.md`; in the last, the turn at 15
+  and 58 degrees grazing over a 5 degree cross-slope is 2.7 and 15.5 degrees (3.6 and 9.9 are the
+  values at 20 and 45).
+
+- New keys of the `image_source` tier: `bottom_slope: [dz/dx, dz/dy]`; a wall as `{point, normal,
+  coefficient[, bounds]}`; `wall_order` (wall bounces a path, default 1). Either of the first two turns
+  on one image construction over every plane, each path checked (specular points on the faces, every
+  point on the water side of every plane, no leg through a bounded wall), each bed bounce with the
+  Rayleigh coefficient at its own grazing angle to the tilted bed. Refused: the two wall forms
+  together, `time_spread` or bottom reverberation with the new form, unknown keys (nearest named).
+- Limits: isovelocity water and straight rays; perfect mirrors of one coefficient (every wall
+  coefficient here is a placeholder: 0.7 for the quay, 0.8 for the pool); no roughness, diffraction or
+  shadowing by objects on these paths; NumPy on both engines (the C++ provider keeps to axis walls and
+  a flat bottom; pairing and synthesis run as before).
+- Held: at zero tilt the construction gives the flat bottom (delays, directions and bounce counts to
+  the bit, amplitudes to 1e-14) on both engines; a single tilted plane against direct geometry; the
+  out-of-plane turn atan(tan g sin 2 alpha); a rotated wall; a right-angle corner; reciprocity. One
+  ping of `fls_120k_transit`, `fls_170k_traffic`, `sst_echo_level` and `stripmap_points` has the same
+  sha256 before and after.
+- New scenes (80 scenario files now): `fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`,
+  `sas_auv_multipath` and its twin `sas_auv_multipath_free`, each with the ghosts' geometry in its
+  truth. Quay: the sphere's bed ghost at +2.58 m and 8.10 degrees (geometry +2.54 m, 8.13), -6.6 dB on
+  the direct echo; the 5 degree cross-slope moves it 1.44 degrees (1.5 beams); the wall ghost at
+  +4.80 m, 35.5 degrees (geometry +4.75, 35.36), -7.1 dB. No diagrams (the tool does not draw walls or
+  a tilted bed).
+- Tests: `tests/python/test_image_planes.py` (32), `tests/python/test_multipath_scenes.py` (5).
+- Full GPU suite on this tree: **2278 passed, 102 skipped, 1 xfailed**, none failed (NVIDIA L4, HF job
+  6b078a26d91f621b93096bc7, 49 min 55 s). First GPU run of D-197's six oracle tests (passed). The
+  expected failure is one of the six Popoto-rate Sensor Bridge loopback cases; the log does not print
+  its reason (D-188's and D-192's kind: a damaged or late frame outside the bounds).

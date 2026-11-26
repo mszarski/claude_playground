@@ -9,7 +9,9 @@ return eigenrays (as in SST; `two_way_paths`). The providers, by fidelity tier
 - ImageSourceProvider (`image_source`): constant sound speed, flat surface and bottom
   and optional vertical walls; the bottom is a fluid half-space (Rayleigh coefficient
   at each ray's grazing angle) or an explicit constant, never assumed (D-104); bounce
-  orders kept by energy with a cap that warns (D-105).
+  orders kept by energy with a cap that warns (D-105). Opt-in (sonar-0nsi): a bottom
+  sloping in x and y (`bottom_slope`) and walls as arbitrary planes ({point, normal}),
+  with every image path checked for validity (`_PlaneImages`).
 - SedimentProvider (`sediment`): one refracted ray per point into a fluid sediment
   under a flat interface (Snell's law), for buried objects.
 - sim.bellhop.BellhopProvider (`eigenray`): arrivals from Bellhop, an external program
@@ -143,6 +145,21 @@ class ImageSourceProvider(EigenrayProvider):
     point has an arrival within `arrival_floor_db` (20 dB) of its strongest, up to `max_order_cap` (8). When the cap
     cuts off an order that is still above the floor, a warning says by how much, once per provider, and
     `truncation` holds it; `order_used` is the order of the last call.
+
+    Walls, two forms. {axis: 0 | 1, position, coefficient}: a vertical plane x or y = position, applied once on top
+    of every image of the surface and bottom series, with no check that the path meets the wall or stays in the
+    water (the form before sonar-0nsi; unchanged, and the only form the C++ provider takes).
+    {point: [x, y, z], normal: [nx, ny, nz], coefficient[, bounds: {x: [lo, hi], y: [..], z: [..]}]}: any plane,
+    `normal` pointing into the water. Opt-in with it (or with `bottom_slope`), every plane becomes a mirror of
+    one general construction (`_PlaneImages`): the surface, the bottom (tilted by `bottom_slope` = [dz/dx, dz/dy],
+    the depth at x = y = 0 being `bottom_z`, the convention of a scene `seafloor`'s `slope`) and the walls; image
+    paths are the bounce sequences with at most `max_order` (or the energy rule's order) surface and bottom
+    bounces and at most `wall_order` (1) wall bounces, and a path is valid only where every specular point lies on
+    its plane's face (inside `bounds`), the source, the field point and every specular point are on the water side
+    of every unbounded plane, and no leg crosses a bounded wall. Invalid paths are masked (`valid`, amplitude 0).
+    Each bounce off the bottom takes the Rayleigh coefficient at its own grazing angle to the tilted bed. These
+    run in NumPy whatever the engine (the C++ provider has neither tilted planes nor validity checks); the pairing
+    and synthesis that follow still run in C++ (or CUDA).
     """
 
     tier = "image_source"
@@ -153,7 +170,8 @@ class ImageSourceProvider(EigenrayProvider):
                  bottom_z: float | None = None, surface_coefficient: complex = -1.0,
                  bottom_coefficient: complex | None = None, max_order: int | None = None,
                  walls: list[dict] | None = None, bottom: dict | None = None,
-                 engine: str | None = None, arrival_floor_db: float | None = None, max_order_cap: int | None = None):
+                 engine: str | None = None, arrival_floor_db: float | None = None, max_order_cap: int | None = None,
+                 bottom_slope=None, wall_order: int | None = None):
         self.sound_speed = float(sound_speed)
         self.engine = engine
         self.surface_z = surface_z
@@ -186,6 +204,29 @@ class ImageSourceProvider(EigenrayProvider):
         # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
         # Walls are applied to first order only, on top of the vertical image series.
         self.walls = walls or []
+        for i, wall in enumerate(self.walls):
+            _check_wall(wall, i)
+        # Opt-in (sonar-0nsi): tilted bottom and walls as arbitrary planes, through `_PlaneImages`.
+        self.bottom_slope = None if bottom_slope is None else tuple(float(v) for v in bottom_slope)
+        if self.bottom_slope is not None and len(self.bottom_slope) != 2:
+            raise ValueError("image_source: bottom_slope is [dz/dx, dz/dy] (two numbers)")
+        self.general = self.bottom_slope is not None or any("normal" in w for w in self.walls)
+        self.wall_order = None if wall_order is None else int(wall_order)
+        self._planes = None
+        if self.general:
+            if any("axis" in w for w in self.walls):
+                raise ValueError("image_source: with bottom_slope or a wall given as {point, normal}, give every wall as "
+                                 "{point, normal, coefficient}: an {axis, position} wall does not say which side is water")
+            if self.bottom_slope is not None and bottom_z is None:
+                raise ValueError("image_source: bottom_slope tilts the bottom, and there is no bottom (bottom_z)")
+            if self.wall_order is None:
+                self.wall_order = 1
+            if self.wall_order < 0:
+                raise ValueError("image_source: wall_order must be 0 or more")
+            self._planes = _PlaneImages(self)
+        elif self.wall_order is not None:
+            raise ValueError("image_source: wall_order applies to walls given as {point, normal, coefficient} (or with "
+                             "bottom_slope); {axis, position} walls are applied once")
 
     def _order_for(self, source, points) -> int:
         """The bounce order of this call: `max_order` when it was given, else the energy criterion of the class
@@ -195,7 +236,8 @@ class ImageSourceProvider(EigenrayProvider):
         if self.surface_z is None and self.bottom_z is None:
             return 0
         pts = points if len(points) <= 256 else points[np.unique(np.linspace(0, len(points) - 1, 256).astype(int))]
-        probe = self._eigenrays_numpy(source, pts, self.max_order_cap + 1, walls=False)
+        probe = (self._planes.eigenrays(source, pts, self.max_order_cap + 1, 0) if self.general
+                 else self._eigenrays_numpy(source, pts, self.max_order_cap + 1, walls=False))
         mag = np.abs(probe.amplitude)
         rel = mag / np.maximum(mag.max(axis=1, keepdims=True), 1e-300)
         bounces = (probe.n_surface + probe.n_bottom)[0]
@@ -245,6 +287,8 @@ class ImageSourceProvider(EigenrayProvider):
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         order = self._order_for(source, points)
+        if self.general:
+            return self._planes.eigenrays(source, points, order, self.wall_order)
         if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
             return EigenraySet(**core.sim_image_source_eigenrays(
@@ -300,6 +344,208 @@ class ImageSourceProvider(EigenrayProvider):
 def _fluid_bottom(speed: float, density: float, attenuation: float = 0.0, water_density: float = 1.0):
     """A sediment mapping as the tuple the C++ provider takes (the arguments of `rayleigh_reflection`)."""
     return float(speed), float(density), float(attenuation), float(water_density)
+
+
+_AXIS_WALL_KEYS = ("axis", "position", "coefficient")
+_PLANE_WALL_KEYS = ("point", "normal", "coefficient", "bounds")
+
+
+def _refuse_unknown(given: dict, known, where: str) -> None:
+    """A key not in `known` is refused by name with the nearest known key (the rule of D-166/D-177)."""
+    import difflib
+    for key in given:
+        if key not in known:
+            near = difflib.get_close_matches(str(key), [str(k) for k in known], n=1)
+            raise ValueError(f"{where}{key}: unknown key" + (f"; did you mean {near[0]!r}?" if near else f" (known: {', '.join(known)})"))
+
+
+def _check_wall(wall: dict, i: int) -> None:
+    """A wall is {axis, position, coefficient} or {point, normal, coefficient[, bounds]}; anything else is refused."""
+    where = f"image_source: walls[{i}]."
+    if "point" in wall or "normal" in wall:
+        _refuse_unknown(wall, _PLANE_WALL_KEYS, where)
+        for key in ("point", "normal"):
+            if key not in wall or np.shape(wall[key]) != (3,):
+                raise ValueError(f"{where}{key}: three numbers needed")
+        if not np.linalg.norm(np.asarray(wall["normal"], dtype=float)) > 0.0:
+            raise ValueError(f"{where}normal: a zero vector")
+        bounds = wall.get("bounds")
+        if bounds is not None:
+            _refuse_unknown(bounds, ("x", "y", "z"), where + "bounds.")
+            for key, span in bounds.items():
+                if np.shape(span) != (2,) or not float(span[0]) <= float(span[1]):
+                    raise ValueError(f"{where}bounds.{key}: [low, high] needed")
+    else:
+        _refuse_unknown(wall, _AXIS_WALL_KEYS, where)
+
+
+PLANE_TOLERANCE_M = 1e-6     # a point this close to a plane is on it (scatterers laid on a boundary are)
+
+
+class _Plane:
+    """One mirror: points x with n . (x - point) = 0, `normal` n (unit) pointing into the water."""
+
+    def __init__(self, kind: str, point, normal, coefficient=None, bounds=None):
+        self.kind = kind                                      # "surface", "bottom" or "wall"
+        self.point = np.asarray(point, dtype=float)
+        n = np.asarray(normal, dtype=float)
+        self.normal = n / np.linalg.norm(n)
+        self.coefficient = coefficient
+        self.bounds = None if not bounds else [("xyz".index(k), float(v[0]), float(v[1])) for k, v in bounds.items()]
+        # A plane normal to an axis mirrors as 2 c - x on that axis: the arithmetic of the flat series, so a level
+        # bottom (`bottom_slope: [0, 0]`) gives its images to the bit.
+        on_axis = np.flatnonzero(self.normal != 0.0)
+        self.axis = int(on_axis[0]) if len(on_axis) == 1 else None
+
+    def distance(self, x):
+        """Signed distance of points [..., 3] from the plane, positive on the water side."""
+        return (x - self.point) @ self.normal
+
+    def mirror(self, x):
+        if self.axis is not None:
+            y = np.array(x, dtype=float, copy=True)
+            y[..., self.axis] = 2.0 * self.point[self.axis] - y[..., self.axis]
+            return y
+        return x - 2.0 * self.distance(x)[..., None] * self.normal
+
+    def on_face(self, x):
+        """[S] bool: points (on the plane) inside its bounds; every point for an unbounded plane."""
+        ok = np.ones(x.shape[0], dtype=bool)
+        for axis, lo, hi in self.bounds or []:
+            ok &= (x[:, axis] >= lo - PLANE_TOLERANCE_M) & (x[:, axis] <= hi + PLANE_TOLERANCE_M)
+        return ok
+
+    def blocks(self, a, b):
+        """[S] bool: the segment a -> b passes through the plane's face (strictly: both ends off the plane)."""
+        da, db = self.distance(a), self.distance(b)
+        cross = ((da > PLANE_TOLERANCE_M) & (db < -PLANE_TOLERANCE_M)) | ((da < -PLANE_TOLERANCE_M) & (db > PLANE_TOLERANCE_M))
+        if not cross.any():
+            return cross
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t = np.where(cross, da / (da - db), 0.0)
+        return cross & self.on_face(a + t[:, None] * (b - a))
+
+
+class _PlaneImages:
+    """Image sources for any set of planes in water of one sound speed (sonar-0nsi; opt-in through
+    `ImageSourceProvider(bottom_slope=..)` or a wall given as {point, normal}).
+
+    A path from the source S to the field point P meeting planes p1, ..., pn in that order has the image
+    I = R1(R2(...Rn(P))) (R: the mirror in a plane), and its length is |I - S|. The sequences are grown from P
+    outwards, a mirror being applied only where the image so far lies on the water side of that plane (otherwise no
+    path through it can exist), with no plane twice in a row, at most `order` surface and bottom bounces and at most
+    `wall_order` wall bounces. Each sequence is then traced back from S: the straight line to the current image
+    meets the next plane between its ends (the specular point), on its face; the source, P and every specular point
+    lie on the water side of every unbounded plane (the water they bound is convex, so each leg then stays in it);
+    no leg passes through a bounded wall. A path that fails any of these is invalid for that point (`valid` False,
+    amplitude 0). One reflection off one plane is exact; between non-parallel planes (a wedge, a corner) the number
+    of valid images is finite and the checks find them. Not modelled: diffraction at a face's edge (a bounded wall's
+    end), and a path's shadowing by scene objects (as for direct paths, `Scene.visible` uses the straight line).
+
+    Coefficients: the surface's, a wall's constant `coefficient`, and the bottom's (the Rayleigh coefficient of its
+    fluid half-space at that bounce's own grazing angle to the tilted bed, or its constant)."""
+
+    def __init__(self, provider: "ImageSourceProvider"):
+        self.provider = provider
+        planes = []
+        if provider.surface_z is not None:
+            planes.append(_Plane("surface", (0.0, 0.0, float(provider.surface_z)), (0.0, 0.0, 1.0), provider.surface_coefficient))
+        if provider.bottom_z is not None:
+            sx, sy = provider.bottom_slope or (0.0, 0.0)
+            planes.append(_Plane("bottom", (0.0, 0.0, float(provider.bottom_z)), (sx, sy, -1.0)))
+        for wall in provider.walls:
+            planes.append(_Plane("wall", wall["point"], wall["normal"], complex(wall["coefficient"]), wall.get("bounds")))
+        self.planes = planes
+
+    def _reflection(self, plane: _Plane, sin_grazing):
+        p = self.provider
+        if plane.kind == "bottom":
+            if p.bottom is not None:
+                return rayleigh_reflection(np.arcsin(sin_grazing), p.sound_speed, **p.bottom)
+            return np.full(len(sin_grazing), p.bottom_coefficient)
+        return np.full(len(sin_grazing), plane.coefficient, dtype=complex)
+
+    def sequences(self, points, order: int, wall_order: int):
+        """[(plane indices in the order met from the source, image [S, 3], possible [S] bool)], the direct path first."""
+        planes = self.planes
+        tol = PLANE_TOLERANCE_M
+        water = np.ones(len(points), dtype=bool)
+        for plane in planes:
+            if plane.bounds is None:
+                water &= plane.distance(points) >= -tol
+        nodes = [((), points, water)]
+        frontier = nodes[:]
+        while frontier:
+            grown = []
+            for seq, img, ok in frontier:
+                n_wall = sum(planes[k].kind == "wall" for k in seq)
+                n_vert = len(seq) - n_wall
+                for k, plane in enumerate(planes):
+                    if seq and seq[0] == k:
+                        continue
+                    if (n_wall + 1 > wall_order) if plane.kind == "wall" else (n_vert + 1 > order):
+                        continue
+                    m = ok & (plane.distance(img) >= -tol)
+                    if m.any():
+                        grown.append(((k,) + seq, plane.mirror(img), m))
+            nodes += grown
+            frontier = grown
+        return nodes
+
+    def eigenrays(self, source, points, order: int, wall_order: int) -> EigenraySet:
+        source = np.asarray(source, dtype=float)
+        points = np.atleast_2d(np.asarray(points, dtype=float))
+        c = self.provider.sound_speed
+        planes = self.planes
+        tol = PLANE_TOLERANCE_M
+        unbounded = [p for p in planes if p.bounds is None]
+        bounded = [p for p in planes if p.bounds is not None]
+        source_in_water = all(p.distance(source) >= -tol for p in unbounded)
+        nodes = self.sequences(points, order, wall_order)
+        s, k = len(points), len(nodes)
+        out = EigenraySet(
+            delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
+            launch=np.zeros((s, k, 3)), arrival=np.zeros((s, k, 3)),
+            n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int),
+            valid=np.zeros((s, k), dtype=bool), sound_speed=c)
+        for j, (seq, image, possible) in enumerate(nodes):
+            r, u = _direct(source, image, c)
+            valid = possible & source_in_water
+            a = np.broadcast_to(source, image.shape)
+            target = image
+            direction = u.copy()
+            coef = np.ones(s, dtype=complex)
+            vertices = [a]
+            for idx in seq:
+                plane = planes[idx]
+                da, dt = plane.distance(a), plane.distance(target)
+                denom = da - dt
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    t = np.where(denom > 0.0, da / np.where(denom > 0.0, denom, 1.0), -1.0)
+                valid &= (denom > 0.0) & (t >= -1e-9) & (t <= 1.0 + 1e-9)
+                x = a + t[:, None] * (target - a)
+                valid &= plane.on_face(x)
+                cos_n = direction @ plane.normal                    # negative: travelling into the plane
+                coef = coef * self._reflection(plane, np.clip(np.abs(cos_n), 0.0, 1.0))
+                direction = direction - 2.0 * cos_n[:, None] * plane.normal
+                target = plane.mirror(target)                       # the image of P for the bounces still to come
+                vertices.append(x)
+                a = x
+            vertices.append(points)
+            for v in vertices[1:-1]:
+                for plane in unbounded:
+                    valid &= plane.distance(v) >= -tol
+            for plane in bounded:
+                for v0, v1 in zip(vertices[:-1], vertices[1:]):
+                    valid &= ~plane.blocks(np.broadcast_to(v0, points.shape), v1)
+            out.delay[:, j] = r / c
+            out.amplitude[:, j] = np.where(valid, coef / r, 0.0)
+            out.launch[:, j] = u
+            out.arrival[:, j] = direction
+            out.n_surface[:, j] = sum(planes[i].kind == "surface" for i in seq)
+            out.n_bottom[:, j] = sum(planes[i].kind == "bottom" for i in seq)
+            out.valid[:, j] = valid
+        return out
 
 
 def snell_crossing(source, points, c_water: float, c_sediment: float, interface_z: float,

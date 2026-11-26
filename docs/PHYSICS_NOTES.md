@@ -3871,3 +3871,71 @@ against 10 to 20 measured). If the sample test's count grew only as sqrt(u) beyo
 smooth), the detector would be about 1.3 times under its budget; the three-row cell mean, by its measured trend, could
 be 1.5 times over its share. Neither is corrected. The constants belong to this map (bearings every 0.5 degrees, 8
 samples per 2 m cell, Hann aperture, 15 m merge): another map needs the tool run again.
+
+## 30. Image sources off tilted planes and walls [OURS]
+
+Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages`; tests `tests/python/test_image_planes.py` (closed forms) and
+`tests/python/test_multipath_scenes.py` (the three scenes). Opt-in: `propagation.bottom_slope` or a wall given as
+`{point, normal, coefficient[, bounds]}`. Without either, nothing in this section runs.
+
+**Limits first.**
+
+- Water of one sound speed and straight rays. Each plane is a perfect mirror with one coefficient per bounce (the
+  surface's; a wall's constant, a placeholder in every shipped scene; the bottom's Rayleigh coefficient at that
+  bounce's grazing angle to the tilted bed). No roughness on these paths (time spreading refuses a tilted bed), no
+  diffraction at the edge of a bounded wall or at the line where two planes meet, no shadowing of a bounce path by a
+  scene object (`Scene.visible` uses the straight line from the sonar, as for direct paths).
+- Orders: at most `max_order` (or the energy rule's order, D-105) surface and bottom bounces and at most
+  `wall_order` (default 1) wall bounces a path. Between two non-parallel planes the series is finite (below); between
+  parallel ones it is cut there.
+- The scattering-function reverberation keeps its flat boundary: a bottom reverberation item with a non-zero
+  `bottom_slope` is refused; a sloping bed goes into the scene as a `seafloor` with the same `slope`.
+- A Lambert scatterer lying ON a plane gets that plane's coincident image as a path too, as over a flat bottom; its
+  weight along it is zero when the scatterer has the plane's normal (the path arrives from the wrong side), so a scene
+  `seafloor` with `slope` (even `[0, 0]`) does not count it. A point target (no normal) on a plane does: its echo
+  rises by |1 + R|^2 both ways together.
+- The C++ provider has none of this (axis-aligned walls and a flat bottom only): the general construction is NumPy
+  for both engines; the pairing and synthesis after it run in C++ or CUDA as before.
+
+**Construction.** A plane is a point Q and a unit normal n into the water; its mirror is R(x) = x - 2 ((x - Q).n) n
+(on an axis normal, 2 Q_i - x_i: the flat series' arithmetic, so `bottom_slope: [0, 0]` gives the flat bottom's
+delays and directions to the bit, amplitudes to rounding: 1e-14 relative, from multiplying the coefficients in path
+order). A path from S to P meeting planes p1, ..., pn in that order has the image I = R1(R2(...Rn(P))) and length
+|I - S|; it leaves S along (I - S)/|I - S| and arrives at P along H_n...H_1 of that (H the reflection of a direction
+in each plane). The sequences are grown from P outwards: plane p is applied to an image only where the image lies on
+p's water side (a path that leaves p into the water heads for it), never twice in a row. Each sequence is then
+checked from S, point by point: the straight line to the current image meets the next plane between its ends (the
+specular point), inside the plane's `bounds`; S, P and every specular point lie on the water side of every unbounded
+plane (the water they bound is convex, so every leg stays in it); no leg passes through a bounded wall. A failed
+check masks the path (`valid` false, amplitude 0); the pairing (`two_way_paths`) and the synthesis skip it.
+
+**The out-of-plane turn.** A ray along x at grazing g, direction (cos g, 0, sin g) with z down, meets a bed whose
+depth grows across x with slope tan(alpha): n = (0, sin alpha, -cos alpha). After the bounce its direction is
+(cos g, sin g sin 2 alpha, -sin g cos 2 alpha): it leaves its vertical plane at the azimuth
+phi = atan(tan g sin 2 alpha) (`docs/tasks/PROPAGATION_3D.md` section 3; re-derived here and held by the test for
+alpha, g = 5, 20; 5, 45; 1, 5; 12, 30; 2, 10 degrees against the arrival direction the provider returns, and against
+the specular point found independently). The grazing angle to the tilted bed is asin(sin g cos alpha), slightly
+below g; the Rayleigh coefficient is taken there. What an array SEES is the direction of the image: for a point h
+above the bed, the image lies 2 h sin(alpha) across the bearing from the point. In `fls_120k_quay_multipath`
+(h = 6.7 m above a bed tilted 5 degrees, 45 m ahead) the bed ghost is 1.44 degrees off the bearing it would have over
+a level bed: 1.5 beams of the 120 kHz array.
+
+**Wedges and corners.** Two planes at angle theta: every image of P lies on the circle about their line of meeting
+through P, and at most 360/theta paths (direct included) are valid however high the order: the test checks both for
+theta = 20, 30 and 45 degrees (surface and a bed sloping along x, 24 bounces allowed). Two walls at 90 degrees give
+three images; the one off both is P turned 180 degrees about the corner's edge, and a monostatic path off both
+returns along its own line reversed in the horizontal (the corner reflector).
+
+**Checked against closed forms** (`test_image_planes.py`): one tilted bed (image position, delay, launch, arrival,
+specular point, Rayleigh coefficient at the local grazing angle); zero tilt against the flat bottom with both
+engines (every ray found and no other); a wall turned about z equals the same wall in turned coordinates; the
+axis-aligned wall in both forms gives the same delays and amplitudes; reciprocity over a tilted bed, a turned wall
+and a bounded wall (two bounces a leg); bounded walls reflect only on their face and block only there; points outside
+the water get no path; the energy rule picks the same order as the flat series at zero tilt, warns at its cap; the
+pairing of masked rays agrees between the engines.
+
+**Found on the way.** The `{axis, position}` walls of both engines (`_eigenrays_numpy`, `paths.cpp`) mirror only
+the vertical part of the arrival direction, so a wall path arrives at the scatterer with its horizontal direction
+unreflected. Delays, amplitudes and launch directions are right; Lambert weights of scatterers with normals and
+anything else that reads `arrival` are not, on wall paths. No shipped scenario has walls; left as it is (an
+existing default) and proposed as a follow-up. The general form mirrors the whole direction.

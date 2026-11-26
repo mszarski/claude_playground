@@ -1,0 +1,51 @@
+# The Phase 2 probe (P4-2v, 2.72 MHz) in a 4 m wide lane of a pool, with multipath off the walls (sonar-0nsi).
+# After pool_fls_p4_2v: the probe 1 m deep looking along the lane at the far wall 9.5 m away, three lane-rope
+# floats across the lane at 7.5 m and a ladder against the starboard wall at 6.5 m; here the two side walls
+# (y = -2 and +2) are in the fan as scatterers AND as mirrors of the image-source tier (each wall a plane given by
+# a point and a normal, one wall bounce a leg). The far wall is a mirror too.
+# What it shows: ghost floats in the side walls at about +-24 and 28 degrees, 0.4 to 1 m beyond the floats
+# (truth below; tests/python/test_multipath_scenes.py), the ladder's ghost beside the ladder, and the far wall
+# seen through the side walls.
+# As in pool_fls_p4_2v the elevation beam is about 2 degrees, so a 0.4 m slab around the probe's depth is
+# modelled; floor and surface lie outside it and are left out (`surface_z: null`, no water depth).
+# Placeholder, ours: the walls' reflection coefficient 0.8 (a smooth concrete or tiled wall; not measured).
+# Not modelled: diffraction at the lane's corners, bounces off two walls on one leg (wall_order 1).
+name: pool_fls_p4_2v_walls
+sonar: p4_2v
+fidelity: image_source
+sonar_overrides:
+  transmit: {waveform: {amplitude: 10000.0}}
+environment: pool_20c_fresh
+propagation:
+  surface_z: null
+  wall_order: 1
+  walls:
+    - {point: [0.0, 2.0, 0.0], normal: [0.0, -1.0, 0.0], coefficient: 0.8}
+    - {point: [0.0, -2.0, 0.0], normal: [0.0, 1.0, 0.0], coefficient: 0.8}
+    - {point: [9.5, 0.0, 0.0], normal: [-1.0, 0.0, 0.0], coefficient: 0.8}
+platform:
+  position: [0, 0, 1.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - {type: plate, label: far_wall, origin: [9.5, -2.0, 0.8], edge_u: [0, 0, 0.4], edge_v: [0, 4.0, 0], density: 12000.0, mu_db: -18.0}
+  - {type: plate, label: wall_starboard, origin: [4.5, 2.0, 0.8], edge_u: [5.0, 0, 0], edge_v: [0, 0, 0.4], density: 12000.0, mu_db: -18.0}
+  - {type: plate, label: wall_port, origin: [4.5, -2.0, 0.8], edge_u: [0, 0, 0.4], edge_v: [5.0, 0, 0], density: 12000.0, mu_db: -18.0}
+  - {type: cylinder, label: ladder_rail_a, start: [6.5, 1.45, 0.8], end: [6.5, 1.45, 1.2], radius: 0.02, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rail_b, start: [6.5, 1.85, 0.8], end: [6.5, 1.85, 1.2], radius: 0.02, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rung, start: [6.5, 1.45, 1.0], end: [6.5, 1.85, 1.0], radius: 0.015, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: sphere, label: float_1, centre: [7.5, -0.6, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+  - {type: sphere, label: float_2, centre: [7.5, 0.0, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+  - {type: sphere, label: float_3, centre: [7.5, 0.6, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+receiver: {noise_rms: 1.0e-3, adc: true}     # about two ADC steps of noise
+truth:
+  # The floats' images in the side walls (probe at [0, 0, 1]; all in the probe's horizontal plane): range is half
+  # the two-way path, bearing the direction the return leg arrives from. "mixed": out one way, back the other.
+  ghosts:
+    - {object: float_3, via: wall_starboard, path: mixed, range_m: 7.88, bearing_deg: 24.39}
+    - {object: float_3, via: wall_starboard, path: both, range_m: 8.23, bearing_deg: 24.39}
+    - {object: float_2, via: wall_starboard, path: both, range_m: 8.50, bearing_deg: 28.07}
+    - {object: float_1, via: wall_port, path: mixed, range_m: 7.88, bearing_deg: -24.39}
+    - {object: float_1, via: wall_port, path: both, range_m: 8.23, bearing_deg: -24.39}
+seed: 12

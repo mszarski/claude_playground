@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-200); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
+(now to D-201); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 29); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -1011,7 +1011,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `flank_sst_shallow`, `flank_sst_spread`, the four validation scenarios `sst_*`, and the
   Popoto build scenarios (`popoto_12km_{2,3}row`, `popoto_elevation_*`, `popoto_static_*`,
   `popoto_face_2row_shallow`, `popoto_testauv_*`, `fjord_*`, `ssp_*`) and
-  `popoto_12km_two_ships` (D-172). All 76 files are
+  `popoto_12km_two_ships` (D-172). All 80 files are
   listed in `SCENARIOS.md`, "Every scenario file".
 - Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
   only to objects in the forward-looking sea scenes; range-independent oceans in the

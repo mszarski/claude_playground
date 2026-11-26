@@ -1,0 +1,5 @@
+# The free-field twin of sas_auv_multipath (sonar-0nsi): the same sonar, track, scene and seed, direct paths only,
+# so that the effect of surface and bottom multipath on the SAS image can be measured by difference.
+base: sas_auv_multipath
+name: sas_auv_multipath_free
+fidelity: free_field
