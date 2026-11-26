@@ -134,7 +134,12 @@ the large-scale rms slope angle, shadowing below it. The handbook's own split an
 interpolation between the Kirchhoff and composite results were not found in an open
 document; the 1989 model they grew from prints both (Mourad and Jackson 1989, eqs. (18) and
 (33)-(37), read since: the opt-in `mourad_jackson_1989`, section comment below; its split is
-k h_s = 1/sqrt(2), not our 1/2). The composite result describes Bragg scattering only: towards the specular
+k h_s = 1/sqrt(2), not our 1/2). The split is printed three ways: J&R (13.72)-(13.75) k h_s = 1/2 (ours),
+Jackson and Briggs (1992) eq. (A8) k h_s = 2^(-1/2) (`small_scale_kh=0.7071` reproduces (A8) to 5 digits) and
+their text (p. 976) k h_s = 1; on our composite at 5 degrees the two others are 1.2-1.4 and 2.0-2.8 dB lower for
+sands (docs/references/bottom_backscatter_jackson_briggs_1992.md Sec. 0 item 2). The published monostatic scheme's
+switch is printed there too (p. 977): Kirchhoff from 90 degrees down to where it has fallen 15 dB below its peak,
+composite below. The composite result describes Bragg scattering only: towards the specular
 direction, where Q falls below Kc, it goes to zero and the Kirchhoff term is the right one.
 
 Validity of the lowest-order small-slope result (`small_slope`), from a comparison with
