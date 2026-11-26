@@ -500,6 +500,17 @@ from it. Tabulate in (grazing, r1/(r1+r2), mss, lever) to keep it cheap.
   1.0); [D96] Fig. 2 within 3.5 dB rms (computed 2.9); Table I kd* within 20 %.
 - This is a model change on top of WP2. Default facet stays; the owner decides.
 - Not to do: tune the slope per figure.
+- **Done 2026-11-26 (opt-in; `sim/timespread.py` option 9, `tests/python/test_kirchhoff_go.py`, PHYSICS_NOTES
+  16.6 and 21.4 item 5).** What failed first: eq. (13) within 0.25 dB does NOT hold at Table I's low-grazing
+  sets for our quadrature (s_LA: -0.35 / -0.62 / -0.40 dB at sets 1 / 2 / 5B; within 0.25 dB at sets 3, 4, 5A
+  and from 20 degrees up; strict xfail; the taps keep the flat mirror's energy). Table I kd* with the wind's
+  eq. (A7) slope: 19-28 % short at sets 2, 3, 5A, 5B (strict xfail); with s_LA within 20 % at all six
+  (-2.9 to -19.6 %). Passing as the note proposed: [D04] Fig. 3c 52 m 1.00 dB rms (S_L 0.15) and 1.38 dB
+  (eq. (A7)), tolerance 2; [D96] Fig. 2 2.92 dB (s_LA) and 2.52 dB (eq. (A7)), tolerance 3.5; GO mean =
+  facet form within 1 % at 45-89 degrees. Table in (grazing, f) per slope, not in mss or lever (the shape is
+  scale-free in r1 + r2). Found on the way: near one end of a long low-grazing path GO is longer than the
+  facet tail (no shadowing). SPACE'08's steep tails are not mended (measured over model above 12 degrees 1.89
+  with facet, 2.10 with GO, long-wave slope).
 
 **WP4 (S): bubble attenuation convention, documentation and a test.** A test that our per-bounce loss equals
 exp(-2 beta_I / sin g), and that `bubble_backscatter`'s bracket equals the path-by-path reconstruction of [D96]
