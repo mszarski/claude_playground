@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 81 scenario files; the twenty-six named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 91 scenario files; the thirty-six named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -51,6 +51,16 @@ pictures, all made from its YAML file:
   along a row of other tracks), multipath (another arrival of an object: within the range, bearing
   and velocity gates of a group grown from an established track, transitively; the object is the
   group's earliest established arrival, D-155), uncertain.
+
+**Which propagation tier each family uses, and why.**
+
+- **FLS** uses `free_field` or `image_source`. At tens to hundreds of metres straight rays are exact to a fraction
+  of a beam. Its 3-D effects are reflections off walls and tilted beds, done by image sources (D-201).
+- **SAS** uses `free_field`, with one multipath scene (`sas_auv_multipath`).
+- **Long-range flank and Popoto scenes** use `eigenray` (Bellhop, 2-D). Every shipped one has a level bed or one
+  range profile on every bearing, where N × 2-D is exact.
+- **`eigenray3d`** (Bellhop3D) is used only by the six illustrative scenes with relief across the bearing. Where it
+  matters and where it does not: "Flank array over 3-D relief".
 
 All of it is simulation. The scenes in the table below are clouds of point scatterers on
 object surfaces (`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle,
@@ -630,6 +640,141 @@ assumption (the scenario's `rms_amplitude`), not a prediction.
   (45 dB); none is measured. Highlights have no aspect dependence, reverberation has no
   Doppler spread, and the platform stands still.
 
+## Flank array over 3-D relief (`sonar-d7sw`)
+
+**Where 3-D matters and where it does not.** The `eigenray3d` tier is kept, opt-in, and used by these five scenes
+and `flank_seamount_3d` only. One-way level at the target, 3-D minus Bellhop3D's own N × 2-D mode (the bed's
+horizontal refraction alone; negative means quieter in 3-D):
+
+| Case | 3-D minus N × 2-D | Matters? |
+| --- | --- | --- |
+| Level bed (`flank_level_3d`) | +0.002 dB (the programs agree to 0.001 to 0.003 dB, D-197) | no |
+| 1° across the look (`flank_bank_3d`) | within 0.02 dB; arrivals 0.4 to 0.5° up-slope; peak moves 0.015° of a 3.6° beam | no |
+| Sill crossing at 45° (`flank_ridge_3d`) | −0.20 dB | no |
+| Within a few water depths, even over a seamount | within 0.07 dB to 1.8 km (D-149) | no |
+| Behind a seamount's flank (`flank_seamount_3d_opening`) | −3.98, −2.33 dB at 4.5, 6 km | **yes** |
+| Down a canyon along the look (`flank_canyon_3d`) | +6.16 dB; arrivals to 13.9° off; peak 2.8 dB lower, the detector misses it | **yes** |
+
+It is the default nowhere. A 3-D scenario takes 3 to 7 minutes on the CPU, against seconds for the 2-D tier's
+eigenrays. It has no reverberation over relief. Its levels rest on a per-receiver scaling to Bellhop3D's loss run
+(up to 10.4 dB, in the canyon). It runs an external GPL-3 program. Every other long-range scenario has a level bed
+or one profile on every bearing, where N × 2-D is exact.
+
+Rule of thumb (ours, from these six scenes): use `eigenray3d` when the target is beyond a few water depths AND the
+bed beside or under the path slopes by several degrees across the bearing (a seamount flank, a canyon or fjord
+wall, a steep bank); otherwise `eigenray`. The cross-slope warning does not yet tell these apart: it flags the
+sill and misses the canyon (an issue is filed). All of this relief is illustrative. More in
+`docs/tasks/PROPAGATION_3D.md` section 0.
+
+Five scenarios at the opt-in `eigenray3d` tier (Bellhop3D, `GPUSONAR_BELLHOP3D`), each paired with an `eigenray`
+twin (Bellhop 2-D, `GPUSONAR_BELLHOP`) that differs only in the tier and in how the bed is spelt: the twin's bed is
+the 3-D bed's profile along the target's bearing (`bathymetry.profile_along`), i.e. what an N × 2-D run sees there.
+All are ILLUSTRATIVE: no relief was measured, the sonar is `flank_32` (itself unconfirmed), every target is +10 dB
+in 45 dB of noise, and **none has reverberation**: over relief the 3-D tier would need a receiver per scattering
+cell, which its disk cap refuses (as `flank_seamount_3d`). No diagram: `tools/scenario_diagrams.py` draws neither a
+3-D bed nor this tier.
+
+**What limits the numbers.** Three references are measured at each target (one-way, the array's leg; tests in
+`tests/python/test_3d_scenarios.py`):
+
+- **3-D**: the `eigenray3d` provider, whose eigenrays are scaled per receiver to Bellhop3D's own incoherent TL.
+- **N × 2-D**: Bellhop3D's N × 2-D mode, same program, same hat-beam fan and bed grid. "3-D minus N × 2-D" is the
+  bed's horizontal refraction alone.
+- **Twin**: our 2-D tier on the twin's profile. It also carries the 2-D tier's own excess over relief (Bellhop's
+  arrivals over a piecewise-linear bed are louder than its TL run, `docs/tasks/PROPAGATION_3D.md` section 2), so
+  "3-D minus twin" is not all 3-D.
+
+Levels read from the simulated records (the beamformed echo peak) differ between the tiers by up to
+0.6 dB over a LEVEL bed, where the eigenray energies agree to 0.003 dB. That is coherent interference between
+arrivals 0.4 ms apart, whose delays differ by up to 8 µs between the programs. Record peaks are therefore quoted,
+not tested. Run times are on the shared 4-core CPU, 2026-11-26. The scenario time is the provider's (its
+Bellhop3D runs, two a source position: arrivals and TL) plus the synthesis.
+
+| Scenario (twin) | Shows | 3-D minus N × 2-D, one-way | 3-D minus twin, one-way / two-way | Arrivals off the bearing, mean / largest strong | Beamformed peak, 3-D and twin, against truth | Above the sonar's resolution? |
+| --- | --- | --- | --- | --- | --- | --- |
+| `flank_level_3d` (`flank_level_nx2d`) | control: a level 100 m bed | +0.002 dB (three targets) | +0.002 / +0.01 dB | 0.0006° | within 0.03°; peaks +0.6 dB (interference, above) | no effect, as it must be |
+| `flank_bank_3d` (`flank_level_nx2d`) | a bed sloping 1° across the look | +0.02, +0.01, −0.00 dB (north, broadside, south) | broadside +0.01 / +0.03 dB; north −0.20, south +0.21 dB (the slope along those bearings, not in the level twin) | 0.41 to 0.48° up-slope / 3.0 to 3.3° | broadside −0.018° and −0.003°; the 3-D shift 0.015° | no: 0.015° against a 3.6° beam, no level change |
+| `flank_seamount_3d_opening` (`_nx2d`) | target opening 1.5 → 6 km behind a seamount's flank | −0.00, −0.18, −3.98, −2.33 dB at 1.5, 3, 4.5, 6 km | +0.07, +0.71, −2.65, −2.06 / +0.18, +1.13, −6.21, −6.75 dB | 0.00, −0.45, −0.36, −1.21° / 0.03, 2.0, 7.3, 7.3° | 3 km: 3-D −3.33°, twin −3.98° (truth −4.00); others within 0.2° | level: yes (4 dB one-way, 6 dB two-way behind the flank); bearing: 0.67° at 3 km, a fifth of the beam |
+| `flank_ridge_3d` (`flank_ridge_nx2d`) | a sill crossing the bearing at 45° | −0.20 dB | −1.86 / −3.36 dB (mostly the twin's own excess) | 0.20° / 0.65° | +0.03° and +0.02° | no: 3-D adds 0.2 dB although the cross-slope warning flags the bearing |
+| `flank_canyon_3d` (`flank_canyon_nx2d`) | a canyon along the look direction | **+6.16 dB** | +6.17 / +12.33 dB | −0.10° / 13.9° | +0.14° and +0.01°; peak −2.8 dB (the energy arrives spread in delay) | level: yes; the warning does not flag it |
+
+Run time and disk (Bellhop3D runs per source position: receivers, seconds for the arrivals run and the TL run,
+binary arrivals file; the scenario's two source positions are the array and the projector 0.5 m below it):
+
+| Scenario | Bellhop3D runs | Provider | Synthesis (4 pings or 1) | Twin, whole run | Energy rescaled to TL (largest) |
+| --- | --- | --- | --- | --- | --- |
+| `flank_level_3d` | 3 receivers: 17.6 s + 17.5 s, 25 kB | 70 s | 119 s | 131 s | 0.0004 dB |
+| `flank_bank_3d` | 3 receivers: 66 + 68 s, 26 kB | 270 s | 138 s | 134 s | 0.00 dB |
+| `flank_seamount_3d_opening` | 4 receivers (one a ping): 90 + 91 s, 5.4 kB | 363 s | 22 s | 38 s | 1.36 dB |
+| `flank_ridge_3d` | 1 receiver: 68 + 80 s, 6.9 kB | 308 s | 9 s | 62 s | 3.28 dB |
+| `flank_canyon_3d` | 1 receiver: 60 + 69 s, 32 kB | 270 s | 4 s | 23 s | **10.4 dB** |
+
+(With the provider's nodes for every ping asked for at once, as the measurement did; `run_scenario` asks ping by
+ping, which can add runs for the mover: not measured.) Every arrivals file was under 33 kB, far below the
+provider's 300 MB cap.
+
+### Control: `flank_level_3d`
+
+Three targets at 5 km (bearings 12° north of broadside, broadside, 12° south) over a level 100 m bed, sonar 30 m,
+targets 50 m deep. Over a level bed the tier must equal the 2-D tier (D-197: within 0.2 dB). Measured: one-way
+energies agree within 0.003 dB, eigenray by eigenray within 0.01 dB in amplitude and 8 µs in delay. Arrivals
+stay in their bearing's plane (0.0006°). Both tiers detect all three targets. The gallery detector (CFAR on
+4 m cells, `tools/gallery.py` `run_flank`) puts them within 0.25° of truth at both tiers. The beamformed peaks are
+within 0.04°.
+
+### Bank: `flank_bank_3d`
+
+The same scene over a bed deepening 1° to the north, across the look direction (`plane`, slope `tan 1°`). Broadside
+runs along a depth contour, so its N × 2-D bed is level and the twin is exact there. Every bottom bounce is turned
+out of its plane towards the deeper side. The document's estimate is 0.17° a bounce at 5° grazing (formula of
+`PROPAGATION_3D.md` section 3); with this scene's numbers, 100 m of water, 5 km and a 20 m source-to-target depth
+offset, the steeper paths bounce more often and at larger angles. Measured: the energy-weighted arrival direction at
+the array is 0.41 to 0.48° on the up-slope (south) side of the true bearing; the strong steep paths are up to 3.3°
+off. **The level does not change** (3-D minus N × 2-D within 0.02 dB). The beamformed peak moves 0.015°. The
+gallery detector's bearings at the 3-D tier are 12.50, 0.25 and −11.84° (truth 12, 0, −12); at the twin 12.00,
+0.15 and −12.15°. The 0.5° is the detector's cluster scatter, which reaches 0.25° over the level bed too, not the
+bed.
+**3-D does not matter here** at this sonar's 3.6° beam, and the cross-slope warning rightly does not fire (0.35° at
+its 10° grazing, under its 1.8°). The ±0.2 dB between the bank's off-broadside targets and the level twin is the
+slope along those bearings; Bellhop3D's N × 2-D mode, which follows it, agrees with the 3-D field.
+
+### Seamount, target opening: `flank_seamount_3d_opening`
+
+The bed of `flank_seamount_3d`. A target 50 m deep opens at 10 m/s along the flank bearing (94°, 4° south of
+broadside) over four pings 150 s apart: 1.5, 3, 4.5 and 6 km. The pings are a time-lapse. The track runs along one
+bearing because the 2-D twin takes one profile on every bearing, so it is exact only on one. Before the seamount
+3-D and N × 2-D agree (0.00 dB). Over the crest (3 km) they still agree (−0.18 dB); arrivals turn up to 2°, and the
+beamformed peak is 0.67° off truth (0.2 of a beam). The twin there is 0.7 dB quieter for its own reasons. Behind
+the flank the 3-D field is 3.98 dB (4.5 km) and 2.33 dB (6 km) below N × 2-D, and 2.65 and 2.06 dB below the
+twin; two-way, 6.2 and 6.8 dB. The record's echo peak at 4.5 km is 4.0 dB lower, its SNR 17.6 against 21.6 dB.
+At 6 km neither tier detects (SNR 11 dB, under the gallery detector's 12 dB).
+
+### Oblique sill: `flank_ridge_3d`
+
+A straight Gaussian ridge (`bathymetry.ridge`) 60 m high in 120 m of water (sigma 250 m), crossing broadside at
+2.5 km at 45°. Sonar and target are 30 m deep, the target 5 km out, 30 m above the crest. The cross-slope warning
+flags the bearing (5.9° across it, 2.1° at its 10° grazing). Measured: **3-D adds only −0.20 dB**; arrivals
+0.20° off on average, at most 0.65°. The twin is 1.86 dB louder, which is our 2-D tier's arrivals over a
+piecewise-linear profile (the `sonar-6c8` mechanism), not horizontal refraction. A warning that fires is not a
+measured effect: here the paths that matter cross the sill near grazing, where the turn is small.
+
+### Canyon along the look: `flank_canyon_3d`
+
+A trough (`bathymetry.ridge` with height −150 m) cut into a 100 m shelf, axis 250 m deep (sigma 400 m), running
+east from under the sonar. Sonar and target are 50 m deep, the target 5 km down the axis. On the axis the bed is
+level, so N × 2-D sees 250 m of water everywhere. The twin equals Bellhop3D's N × 2-D within 0.01 dB. **3-D is
+6.16 dB louder** (one-way; 12.3 dB two-way): the walls (to 12.8°) turn paths back towards the axis, which act as
+a horizontal duct, with arrivals up to 13.9° off the bearing. Uncertain:
+
+- **The cross-slope warning does not see this case.** It reads the slope across the bearing on the bearing, which
+  is zero on the axis.
+- **The split between arrivals is uncertain.** The provider rescaled this receiver's merged hat-beam arrivals by
+  10.4 dB to Bellhop3D's TL run, the largest correction seen (the seamount's 1.4, the ridge's 3.3). The level is
+  Bellhop3D's.
+- **The record's echo peak is 2.8 dB LOWER than the twin's**, and the gallery detector misses the target at the
+  3-D tier (SNR 18.3 dB at the peak; the twin's 21.2 dB is detected). The extra energy arrives spread over many
+  wall paths, not in the peak.
+
 ## Popoto array at long range
 
 ### The owner's design: `popoto_far_mover`
@@ -787,7 +932,8 @@ comparison with the spherical-spreading estimate.
 ## Scenarios for the SST-equivalence work
 
 Nine scenarios were added with the simulator work that closes the gap to SST (APL-UW
-TR 0702; `DECISIONS.md` D-62 to D-78). They are test and validation set-ups, not gallery
+TR 0702; `DECISIONS.md` D-62 to D-78). A tenth, `asiaex_dahl_2004`, holds the forward-scatter geometry
+Dahl (2004) prints (`docs/references/CONFORMANCE.md` A7). They are test and validation set-ups, not gallery
 scenes: `tools/gallery.py` does not run them, so there is no result figure, animation or
 CPU time for them here, except the two validation figures below. They have no geometry
 diagram yet either: `tools/scenario_diagrams.py` has not been run since they were added
@@ -800,10 +946,11 @@ has not been tried).
 | `rail_cylinder_glint` | `sas_rail` (2.72 MHz), 151 pings | a smooth rigid rod, 10 cm long and 2 cm across (ka = 115), parallel to the rail | specular glint by the Kirchhoff approximation, `resolved: true` because the rod is in its own near field (L²/λ = 18 m); each ping sees one glint, and the image shows the line | `test_scene_targets.py`: line at y = 1.8704 m (expected 1.8706), off-rod / on-rod 0.002; the rod turned 20° is −67 dB |
 | `fls_glints_on_sediment` | `fls_300k`, 1 ping, sonar 1 m above the bed | a seabed of point scatterers that follows the bottom scattering model at each ping's grazing angles; a smooth sphere (TS = 10 log10(a²/4) = −16.5 dB at any aspect) and a cylinder across the line of sight | glints from the two shapes; sediment numbers are `bottom.PLACEHOLDER_SAND`, illustrative | `test_scene_targets.py`: sphere image level within 0.5 dB of a²/4; `test_scene_sediment.py` for the seabed |
 | `fls_highlight_target_aspect` | `fls_120k`, 8 pings 2 s apart | a target in the SST manner: five highlights along a 20 m body that crosses ahead while turning, a table of strength against aspect, one highlight that answers late, a small position jitter | the strength follows the table ping by ping as the aspect changes. The table is illustrative, not a measured target | `test_scene_targets.py` |
-| `flank_sst_shallow` | `flank_32`, 4 pings 15 s apart | one target at 1 km in 100 m of isovelocity water | bounce paths time-spread by a wind-roughened surface; bottom reverberation from a rough fluid sediment; surface reverberation (Chapman–Harris); a volume-scattering layer. Sediment, volume strength and bubble loss are placeholders | `test_timespread.py`; added in the earlier part of the round (D-62, D-63) |
-| `flank_sst_spread` | `flank_32`, 4 pings 15 s apart | the same channel | every option beyond SST's time spreading: `angle_spread`, `doppler`, `decay_time: facet`, `multi_bounce: convolve` (the last is the default since D-82). Few taps and lines, because every bounce ray becomes 1 + taps × `doppler_lines` rays each way. Same placeholders | `test_timespread.py`, on both engines |
-| `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise: one-way sources exist (D-123) but TR 0702 gives no level for it, so the file has none. 15 s for one ping in the run behind the committed matrix (4 shared cores, CPU) | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
-| `sst_asiaex` | one `flank_32` hydrophone as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is a radiating source (`sources:`, D-123; until then a −20 dB relay 0.1 m from the projector) and the receiver does not transmit. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`) | the same; figure below |
+| `flank_sst_shallow` | `flank_32`, 4 pings 15 s apart | one target at 1 km in 100 m of isovelocity water | bounce paths time-spread by a wind-roughened surface; bottom reverberation from a rough fluid sediment; surface reverberation (Chapman–Harris, at 6-10 kHz just above its 0.4-6.4 kHz fitted band); a volume-scattering layer. Sediment, volume strength and bubble loss are placeholders. The surface's slope for time spreading is the long-wave slope of Dahl 1996 eq. (A7) from the wind (0.0199 at 6 m/s), the default since `docs/references/CONFORMANCE.md` A4; before it, the Cox-Munk total (0.0337, `slope_law: cox_munk_total`): the facet decay time is now 0.59 times (5.32 -> 3.14 ms mean on the sonar-target surface bounce), the angular spread 0.77 times what the file gave | `test_timespread.py`; added in the earlier part of the round (D-62, D-63) |
+| `flank_sst_spread` | `flank_32`, 4 pings 15 s apart | the same channel | every option beyond SST's time spreading: `angle_spread`, `doppler`, `decay_time: facet`, `multi_bounce: convolve` (the last is the default since D-82). Few taps and lines, because every bounce ray becomes 1 + taps × `doppler_lines` rays each way. Same placeholders, and the same slope change as `flank_sst_shallow` (A4: tails x0.59, angles x0.77) | `test_timespread.py`, on both engines |
+| `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Chapman–Harris at 9.9 kHz is above its fitted 0.4-6.4 kHz, and for a pair of grazing angles it is the geometric mean of the two strengths, TR 0702 Sec. 6.4.2's rule, since A3 (`docs/references/CONFORMANCE.md` Sec. 1.1; before, the law at the mean grazing angle, up to about 6 dB higher on pairs with a bottom-bounced leg; `bistatic_rule: mean_angle` keeps it). Moved by A3 (one run each, seed 2, `tools/sst_validation.py`; mean_angle -> geometric_mean): bottom-bounce streak on its track 16.7 -> 15.6 dB over the run without a bottom, excess after onset 13.8 -> 12.3 dB, median ridge over noise 30.1 -> 29.8 dB, band reverberation over noise 15.6 -> 15.6 dB; the committed `docs/figures/sst_validation.{md,json}` and `sst_pursuit.png` hold the numbers before A3 until regenerated. Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise: one-way sources exist (D-123) but TR 0702 gives no level for it, so the file has none. 15 s for one ping in the run behind the committed matrix (4 shared cores, CPU) | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
+| `sst_asiaex` | one `flank_32` hydrophone as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is a radiating source (`sources:`, D-123; until then a −20 dB relay 0.1 m from the projector) and the receiver does not transmit. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`); the surface slope is the long-wave slope of Dahl 1996 eq. (A7), 0.0135 at 3 m/s (the Cox-Munk total 0.0184 before `docs/references/CONFORMANCE.md` A4: the rule-of-thumb surface tail 2.91 -> 2.14 ms). Dahl (2004) prints a 2001 ASIAEX layout (source 25 m, arrays at 26 and 52 m, 467-500 m, 105 m of water, sets 6-8 at 7 m/s); whether TR 0702's Run/Set 22 used it is not stated, and with it the five arrivals do not fit TR 0702's description (at 26 m the surface arrival overlaps the direct one and the two two-bounce arrivals overlap each other; at 52 m the bottom-surface arrival is at 37 ms, past the 35 ms of the figures), so the file keeps its own depths | the same; figure below |
+| `asiaex_dahl_2004` | one `flank_32` hydrophone at 52 m as the receiver; a one-way source at 25 m, 467 m away; 3 ms CW at 8 kHz (20 kHz by overriding the waveform), 20 pings 5 s apart | the forward-scatter geometry and sea Dahl (2004, Sec. IV.A) prints for the 2001 ASIAEX sets 6-8 (CONFORMANCE.md A7): 105 m of water, the lower array, the range of his Fig. 4 (it gives his printed 9.4-degree iso-speed grazing angle: 9.36 computed), wind 7 m/s and the measured rms wave height 0.3 m in place of the wind law's 0.262 | time spreading of the surface bounce with that height and the long-wave slope of Dahl 1996 eq. (A7) (0.0213); fully rough at 8 kHz (coherent share 3e-5). Arrivals 3.62 ms (surface) and 11.67 ms (bottom) after the direct one in constant 1525 m/s; Dahl's Fig. 3c shows the bottom arrival at about 13.7 ms in refracting water (read from figure): recorded, not fitted. **Ours** (`unconfirmed`): the constant sound speed (his profile is about 1521-1528 m/s), the sediment (medium sand; none printed), the ping interval, the source level and taper. Vertical coherence at 52 m, 20 kHz, 0.30 m: ours 0.12 against 0.69 measured (read from his Fig. 5), an expected failure | `test_asiaex_dahl_2004.py` |
 | `sst_echo_level` | `flank_32` hydrophones, omnidirectional, 1 ping, 2 kHz of band | one highlight of known target strength; a flat surface (coefficient −1) and a flat bottom (0.5), one bounce at most per leg, so six groups of eigenray pairs arrive as six separate pulses | a geometry for a calculation, not a sonar: the compressed echo against the sonar equation and TR 0702 eqs. 36–38, 66, 68. The tool also runs it free-field, and with a sampled m-sequence pulse and a moving target | `test_sst_validation.py`: 0.004 dB free field; 0.005 dB and 0.13 µs in the image medium |
 | `sst_sediment_reverb` | `popoto_8` hydrophones, omnidirectional, 20 m above a flat bed; a 2 ms tone at 20 kHz, 6 pings | a bed of `medium_sand` (`configs/sediments.yaml`) | scattering-function reverberation, direct path only, no absorption, against σ(grazing)·πcT/R³. The tool also runs the same sediment as point scatterers, and LFM pulses of three bandwidths with a point target | `test_sst_validation.py`: mean +0.27 dB, −0.17 to +0.59 dB |
 
@@ -826,19 +973,24 @@ closed form within 0.75 Hz in the median and the bottom-bounce streak starts at 
 ![sst_asiaex: no time spreading, sum, convolve](figures/sst_asiaex.png)
 
 ASIAEX: arrivals at 0, 3.97, 9.20, 20.68 and 30.57 ms within 0.20 µs of the image
-equations; with time spreading the bounce arrivals grow tails (surface −6 dB, bottom
-−15 dB re peak after the pulse) and vary from ping to ping (surface 1.88 dB, bottom
-0.97 dB standard deviation over 20 pings, with SST's Lorentzian Doppler spectrum, D-144).
+equations; with time spreading the bounce arrivals grow tails (surface −8 dB, bottom
+−19 dB re peak 0.3-0.7 ms after the pulse) and vary from ping to ping (surface 2.86 dB, bottom
+1.08 dB standard deviation over 20 pings, with SST's Lorentzian Doppler spectrum, D-144).
+Before `docs/references/CONFORMANCE.md` A4 (the Cox-Munk total slope) these were −6 / −15 dB and
+1.88 / 0.97 dB: the shorter surface tail leaves less of itself under the bottom arrival's window,
+which is why the bottom's numbers move although its own slope (0.045, TR 0702) did not. The
+surface tail fits the rule of thumb at 2.18 ms against 2.14 (2.94 against 2.91 before).
 
 Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
 (about 2 minutes on the CPU).
 
 ## Every scenario file
 
-All 81 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 91 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Twenty-six files have no geometry diagram in `docs/scenarios/` yet: `flank_seamount_3d`, the nine of the
+set. Thirty-six files have no geometry diagram in `docs/scenarios/` yet: `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
+scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
 `popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
 scenes of `sonar-0nsi` (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`,
@@ -890,12 +1042,12 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `pool_fls_p4_2v` | Gallery. Phase 2 pool or dock, 5 to 10 m: wall, steps, ladder, lane floats. |
 | `harbour_fls_750k` | Gallery. Phase 3 harbour: sandy floor, quay wall, six pilings, mooring block, rocks. |
 | `seafloor_objects_fls` | Gallery. A sphere, a box and rocks on a flat seafloor, with shadows. |
-| `fls_120k_transit` | Gallery. The 120 kHz design under way at 2 m/s: boat under way, boat at anchor, buoy, pinnacle; reverberation with ownship Doppler; 10 pings. |
-| `fls_170k_transit` | Gallery. The same objects with the 170 kHz design out to 450 m. |
-| `fls_330k_transit` | Gallery. The same with the 330 kHz design out to 300 m. |
-| `fls_120k_cluttered_seabed` | Gallery. Boat with keel, propeller and wake over sand, boulders, debris and a pipeline. |
+| `fls_120k_transit` | Gallery. The 120 kHz design under way at 2 m/s: boat under way, boat at anchor, buoy, pinnacle; reverberation with ownship Doppler; 10 pings. Its surface reverberation is Chapman-Harris at 120 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_170k_transit` | Gallery. The same objects with the 170 kHz design out to 450 m. Its surface reverberation is Chapman-Harris at 170 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_330k_transit` | Gallery. The same with the 330 kHz design out to 300 m. Its surface reverberation is Chapman-Harris at 330 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
+| `fls_120k_cluttered_seabed` | Gallery. Boat with keel, propeller and wake over sand, boulders, debris and a pipeline. Its surface reverberation is Chapman-Harris at 120 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
 | `fls_120k_rough_surface` | Gallery. A wind sea of wave facets at 10 m/s, boat with wake, kayak, buoy. |
-| `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). |
+| `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). Its surface reverberation is Chapman-Harris at 170 kHz: fitted at 0.4-6.4 kHz, so an extrapolation that no read source covers (`docs/references/CONFORMANCE.md`). |
 | `fls_glints_on_sediment` | A smooth sphere and cylinder that glint, on a seabed whose scatterers follow the bottom scattering model. |
 | `fls_highlight_target_aspect` | A five-highlight target crossing ahead while turning, strength against aspect from an illustrative table. |
 | `fls_120k_quay_multipath` | The 120 kHz design along a quay wall over a bed sloping 5 degrees across the look direction (image sources off the wall and the tilted bed, `sonar-0nsi`): a moored sphere and its ghosts, a block on the bed; truth entries for the ghosts. |
@@ -924,6 +1076,10 @@ decides); the other shallow scenarios still state one far below what that rule w
 | --- | --- |
 | `flank_target_1km`, `flank_target_5km`, `flank_target_10km` | One target in noise in shallow water at each range; the link-budget cases. Needs Bellhop. |
 | `flank_seamount_3d` | ILLUSTRATIVE (unconfirmed relief). The flank array over a 180 m seamount in 200 m of water, a target 4 km out over its flank, at the opt-in `eigenray3d` tier (Bellhop3D: needs `GPUSONAR_BELLHOP3D`; about 4 minutes on the CPU: four Bellhop3D runs of about a minute, arrival files under 1 kB). One `bathymetry` for the whole scenario. No reverberation (the 3-D provider would need a receiver per cell). Not in the gallery. |
+| `flank_seamount_3d_opening`, `flank_seamount_3d_opening_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). The same seamount, a target opening along the flank bearing from 1.5 to 6 km over four pings, at `eigenray3d` and its N × 2-D twin at `eigenray` (the bearing's profile). Behind the flank the 3-D field is 4.0 and 2.3 dB below N × 2-D. About 6.5 min (3-D) and 40 s (twin) on the CPU. Section "Flank array over 3-D relief". |
+| `flank_level_3d`, `flank_bank_3d`, `flank_level_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). Three targets at 5 km over a level 100 m bed (control: the tiers agree within 0.003 dB) and over a bed sloping 1° across the look (arrivals 0.4° up-slope, no level change), and their level-bed `eigenray` twin. About 3 and 7 min (3-D), 2 min (twin). |
+| `flank_ridge_3d`, `flank_ridge_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A sill crossing the bearing at 45° (`bathymetry.ridge`), a target 5 km behind it: 3-D adds −0.2 dB; the twin is 1.9 dB louder for its own reasons. About 5 min (3-D), 1 min (twin). |
+| `flank_canyon_3d`, `flank_canyon_nx2d` | ILLUSTRATIVE (`sonar-d7sw`). A canyon along the look direction (a trough, `bathymetry.ridge` with negative height), a target 5 km down its axis: 3-D is 6.2 dB louder one-way than N × 2-D; the cross-slope warning does not flag it. About 4.5 min (3-D), 25 s (twin). |
 | `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km (−3 dB: below the scene's reverberation, never detected, left as a hard target on purpose, D-198), a wreck. Needs Bellhop. |
 | `flank_sst_shallow` | A target at 1 km in 100 m of water with time-spread bounce paths, sediment and surface reverberation and a volume layer; placeholders throughout. |
 | `flank_sst_spread` | The same channel with angle spreading, Doppler spreading within the pulse and convolved multi-bounce tails. |
@@ -934,6 +1090,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | --- | --- |
 | `sst_pursuit` | The report's "Pursuit" example as far as it is described: a vehicle at 20 m/s chasing a three-highlight target; our own parameters. |
 | `sst_asiaex` | The report's forward-scatter example: a 3 ms pulse at 8 kHz over about 500 m, now by a one-way source (`sources:`), no longer a relay point. |
+| `asiaex_dahl_2004` | Dahl (2004)'s 2001 ASIAEX layout as printed: source 25 m, a hydrophone at 52 m, 467 m, 105 m of water, 3 ms CW at 8 kHz (20 kHz by override), wind 7 m/s, rms wave height 0.3 m. Sound speed, sediment, ping interval are ours. Not a reproduction of the paper's coherence curves (vertical coherence an expected failure). |
 | `sst_echo_level` | One highlight of known strength with one bounce per leg: the compressed echo against the sonar equation. States `bottom_coefficient: 0.5`. |
 | `sst_sediment_reverb` | Bottom reverberation from `medium_sand` against the integral of its scattering strength. |
 
@@ -1037,11 +1194,16 @@ after the first whole-suite run"), `docs/figures/fjord_rehearsal.md`,
   has surface and bottom multipath.
 - Reverberation (the scattering-function model) over a tilted bed: refused; a sloping bed is
   given as scene scatterers (`fls_120k_quay_multipath`).
-- 3-D propagation in a gallery scene: every gallery scene is N × 2-D at most. The one scenario at
-  the opt-in `eigenray3d` tier, `flank_seamount_3d`, is illustrative, not in the gallery, and a
-  target in noise: no reverberation over relief at that tier (a receiver per scattering cell would be
+- 3-D propagation in a gallery scene: every gallery scene is N × 2-D at most. The six scenarios at
+  the opt-in `eigenray3d` tier (`flank_seamount_3d` and the five of `sonar-d7sw`) are illustrative, not in the
+  gallery, and targets in noise: no reverberation over relief at that tier (a receiver per scattering cell would be
   needed; `docs/tasks/PROPAGATION_3D.md` P5).
 - Waves that move as waves do, breaking, or a bubble layer; a wake that grows.
+- A 3-D scene for the Popoto long-range array (4 to 6 kHz, 12 km),
+  where the exposure is largest (`PROPAGATION_3D.md` section 3), or a moving platform over relief (a Bellhop3D run
+  per source position). A short-range FLS or SAS scene beyond the three image-plane scenes: a narrow channel with
+  two non-parallel banks was not added; the existing quay, pool lane and sloping-bed scenes already exercise a wall,
+  several walls and a tilted bed.
 - A range-dependent ocean in a gallery scene. Three trial scenarios have a sound speed
   that changes with range (`ssp_*`) and three a seabed section with sills (`fjord_*`),
   all illustrative and all as rings about the sonar; none has a front lying across a map.

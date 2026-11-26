@@ -844,13 +844,72 @@ before use".
 | Sound speed | table only | Mackenzie (1981) nine-term equation or Chen-Millero/TEOS-10 | - |
 | Bottom forward loss | "lossy Rayleigh coefficient" (no formula) | Rayleigh fluid-fluid reflection coefficient with complex sediment sound speed | `V = (m sin th - P)/(m sin th + P)`, `P = sqrt(kappa^2 - cos^2 th)`, `m = rho_sed/rho_w`, `kappa = (1 + i delta)/nu`, `c_sed = c/(1 + i delta)`, th = grazing angle (checked against open sources: `docs/REFERENCES.md` Sec. 12.4; correction 2026-11-20, the row was from memory and wrote the index inverted). Sign of the imaginary part depends on the time convention; SST uses exp(+2 pi i f t). |
 | Bottom backscatter / bistatic | pointer to Jackson models | (a) Lambert's law as a floor; (b) Jackson rough-interface + sediment-volume model (Jackson et al. 1986; Mourad & Jackson 1989; Williams & Jackson 1998; Jackson & Richardson, *High-Frequency Seafloor Acoustics*, 2007) | Lambert, from memory, verify before use: `sigma = mu sin(th_i) sin(th_s)`, `10 log10 mu` ~ -27 dB (Mackenzie value) as a classic default. Correction 2026-11-20: the code's default is -29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`, D-89), the one printed value found (Muggleworth, NPS 1994, hdl 10945/28529, p. 34, quoting Mackenzie 1961 for deep water at 530 and 1030 Hz); -27 dB was from memory. Either is a low-frequency value, not one for a sonar band. |
-| Surface backscatter | pointer to TR 9407 / McDaniel / Gilbert | Chapman & Harris (JASA 34, 1962) empirical formula for low-mid frequency; a bubble-layer + roughness model for > 10 kHz (Dahl; McDaniel 1993 review) | Chapman-Harris coefficients not reproduced here; take from the paper. |
-| Surface forward loss, coherent part | "simple model of surface roughness" | Rayleigh-parameter coherent reflection | From memory, verify before use: `|R_coh| = exp(-2 k^2 h_rms^2 sin^2 th)`. This is consistent with the TR's qualitative rule (rmsHeight vs lambda/sin th) but the TR does not give it. |
+| Surface backscatter | pointer to TR 9407 / McDaniel / Gilbert | Chapman & Harris (JASA 34, 1962) empirical formula for low-mid frequency; a bubble-layer + roughness model for > 10 kHz (Dahl; McDaniel 1993 review) | Chapman-Harris coefficients not reproduced here; take from the paper. (Since 2026-11-26: the formula is McDaniel 1993 eq. (27), via secondary, range 400-6400 Hz, to 15 m/s, low grazing angles; `acoustics.chapman_harris_db`.) |
+| Surface forward loss, coherent part | "simple model of surface roughness" | Rayleigh-parameter coherent reflection | From memory, verify before use: `|R_coh| = exp(-2 k^2 h_rms^2 sin^2 th)`. This is consistent with the TR's qualitative rule (rmsHeight vs lambda/sin th) but the TR does not give it. (Since 2026-11-26: confirmed, Jackson and Richardson 2007 eq. (13.14), p. 335.) |
 | Surface loss, bubbles | "fraction absorbed by bubbles" | APL-UW bubble-layer surface loss (TR 9407 family) or the Hall-Novarini bubble population model (Hall 1989; Novarini et al. 1998) with Ainslie (2005) surface-loss treatment | No formula reproduced. |
 | Surface wave statistics | computed inside `McDanielSurface` from wind speed | Pierson-Moskowitz spectrum for rms height; Cox & Munk (1954) for mean-square slope | From memory, verify before use: PM `h_rms ~ 0.0053 U^2` (U at 19.5 m, SI); Cox-Munk `mss ~ 0.003 + 0.00512 U` (U at 12.5 m). |
 | Time-spread intensity impulse response | pointer to TR 9407 II.7a | Dahl's forward-scatter model (JASA 100, 1996; JASA 105, 1999; IEEE JOE 26, 2001 - all cited by TR 0702) | Use the TR's own rule of thumb (3.6) for the decay time until Dahl's expressions are checked. |
 | Volume scattering strength | user input | tabulated Sv per layer; typical ocean values from Urick ch. 8 | - |
 | Ambient noise spectrum | nothing | Wenz (JASA 34, 1962) curves; Knudsen wind noise; thermal noise above ~100 kHz | From memory, verify before use: thermal noise `NL ~ -15 + 20 log10 f[kHz]` dB re uPa^2/Hz (Mellen 1952). |
+
+### 6.5 Elastic bottom: rock (A8, 2026-11-26)
+
+What is uncertain first: the `rock` row's shear numbers are another rock's. 1900 m/s and the shear loss
+parameter 0.085 are Olson, Lyons and Saebo's "generic rock" (arXiv:1601.06078, Table II, read: confirmed;
+they attribute it to TR 9407 Table IV.2, not read: via secondary), whose compressional speed is 3600 m/s; our
+row's compressional speed (3820 m/s) and density are UnderwaterAcoustics.jl's "Rock". Putting the two together
+is ours, so the row says `unconfirmed_fields: [shear]` and warns. 1900 / 3820 = 0.50 lies inside the 40-60 % of
+V_p that Jackson and Richardson (2007) print for rock (Sect. 5.6, p. 169). A different rock moves the loss a lot:
+at 10 degrees 6.8 / 3.4 / 2.1 dB for V_s = 0.4 / 0.5 / 0.6 V_p (shear delta 0.1).
+
+Formula, J&R (9.34)-(9.40) with (9.23) (docs/references/jackson_richardson_2007/03 Sec. 2.3): with
+a_rho = rho / rho_w, a_q = nu_q / (1 + i delta_q) (q = p, t; nu_q the speed ratio to the water),
+cos theta_q = a_q cos theta_w,
+
+    V = (z_e - 1) / (z_e + 1),  z_e = z_wp cos^2 2theta_t + z_wt sin^2 2theta_t,
+    z_wq = a_rho a_q sin theta_w / sin theta_q,  cos 2theta_t = 2 a_t^2 cos^2 theta_w - 1.
+
+The code (`bottom.reflection` with `nu_t`, `delta_t`; `propagation.rayleigh_reflection` with `shear_speed`,
+`shear_attenuation` in dB per wavelength; C++ `sim::rayleigh_reflection` with `FluidBottom::shear_speed`)
+writes z_wq = a_rho sin theta_w / s_q with s_q = sin theta_q / a_q = sqrt(1 / a_q^2 - cos^2 theta_w) on the
+decaying branch (the fluid coefficient's root), and multiplies numerator and denominator by s_p s_t:
+
+    V = (a_rho sin theta_w (C^2 s_t + (1 - C^2) s_p) - s_p s_t) / (a_rho sin theta_w (C^2 s_t + (1 - C^2) s_p) + s_p s_t),
+    C = cos 2theta_t,
+
+so no critical angle divides by zero. At nu_t = 0 the code takes the fluid expression itself (bit-identical to
+before); as nu_t -> 0, C -> -1 and 1 - C^2 -> 0 and V tends to the fluid one (1e-12 at nu_t = 1e-9). At normal
+incidence C = -1 whatever the shear speed. Checks (tests/python/test_elastic_bottom.py): the retyped book formula
+and a boundary-condition solve written from first principles (ours: u_z and sigma_zz continuous, sigma_xz = 0,
+potentials) agree with the code to 1e-12; lossless, |V|^2 plus the compressional and shear energy fluxes is 1 to
+1e-12 and |V| = 1 below the shear critical angle; J&R Fig. 9.4's minimum |V| = 0.052 at 35.7 degrees and Fig.
+9.3's sand within 0.51 dB of the fluid; Bellhop's acousto-elastic half-space (run as a separate process) within
+0.22 dB and 2.6 degrees of ours at 5-20 and 45-60 degrees grazing, 1.2 dB at 30 degrees where |V| falls 15 dB in
+three degrees.
+
+Per bounce on the `rock` row (ours, dB): fluid 0.01 / 0.02 / 0.03 / 0.03 / 0.03 / 0.03 / 0.06 / 2.80 ->
+elastic 1.56 / 2.90 / 5.45 / 14.57 / 8.78 / 6.25 / 4.54 / 2.80 at 5 / 10 / 20 / 30 / 40 / 45 / 60 / 90 degrees;
+the largest loss, 27.9 dB, is at 33.1 degrees, just below the shear critical angle (36.4 degrees for 1900 m/s on 1528 m/s
+water), where the leaky-Rayleigh wave makes the interface nearly transparent (J&R p. 276-277).
+
+Where it applies: the image-source tier and Bellhop (the shear column of the `.env`; Bellhop3D the same) for a
+`rock` bottom; and, since the live-chain port (2026-11-26), the live chain's depth and multipath models and the
+depth planner: `lloyd.py` (Layer.halfspace, one_way), `raytrace.py` (eigenrays), `multipath_depth.py` (the
+pattern, and the C++ stage both engines run), `coverage.py` (the C++ coverage picture both engines run),
+`depthplan.py` (the isovelocity image series and the Bellhop branch, no longer pinned to a fluid), in C++
+libs/live `rayleigh_reflection` (raytrace.cpp; coverage.cpp, multipath_depth.cpp, multipath_rays.cpp call it).
+There is one C++ implementation of the elastic coefficient, `sonar::elastic_reflection` in
+libs/core/include/sonar/core/reflection.hpp, which the simulator (`sim::rayleigh_reflection`) and libs/live both
+call; a GoogleTest (Rock.LiveCoefficientIsTheSimulators) holds them equal bit for bit. Each caller keeps its own
+fluid expression for shear speed 0, so every fluid row gives the bits it gave before (sha256 of the outputs, in the
+port's report). No CUDA code evaluates a bottom reflection: nothing to port there. `{sediment: rock,
+shear_speed: 0}` is the row as a fluid in every live model (the planning environment's `bottom` as the typed
+fluid numbers); the row's unconfirmed shear is warned about once per process, when a live model first resolves
+it (`lloyd._named_halfspace`), not per ping. What that does to the depth from multipath timing and the coverage
+picture over rock is in the port's report (a weaker bottom bounce: a weaker bottom part of the pattern and less
+bottom-returned energy in the coverage). Not: the `sediment` tier's penetration (a fluid model; it takes the
+row as a fluid), the scattering models. `pebbles` stays a fluid: no source gives its shear speed. The rock Lambert level
+(-16 dB, range -23 to -10 dB) is unchanged.
 
 ---
 
@@ -1350,8 +1409,21 @@ Limits that remain: flat boundary, stratified medium, eigenray pairs incoherent
 range walk, the "short pulse" assumption of Sec. 11.2.1), the first receive element's
 pattern for all, and the sector must be narrow compared with the transmitter's
 height over the boundary where the transmitter is far from the receiver
-(`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
-grazing angle whatever the bistatic azimuth.
+(`azimuth_subsamples`). Chapman-Harris (and every backscattering law of `sim/surface.py`:
+`kraus_surface`, `bubble_layer_surface`, `searay_bottom`) is a backscatter fit, made bistatic, whatever
+the bistatic azimuth, by the geometric mean of the two backscattering strengths, TR 0702 Sec. 6.4.2's
+rule, since A3 (`docs/references/CONFORMANCE.md` Sec. 1.1; `surface.bistatic_strength`). Before A3 it
+was used at the mean grazing angle (`bistatic_rule: mean_angle` on the item keeps that): for
+Chapman-Harris at 9.9 kHz and 8 m/s (`sst_pursuit`) the mean-angle rule is 0 / +1.7 / +3.6 / +5.9 dB
+above the geometric mean for the pairs 5/5, 5/20, 5/40, 5/80 degrees. The two are equal for equal
+angles, so only pairs of paths that meet the boundary at different angles move: in `sst_pursuit` those
+with a bottom-bounced leg, and the same holds for a monostatic sonar over a bottom (one path direct, the
+other bottom-bounced), so every scenario with a surface law and multipath moves, not only bistatic
+items. Measured at A3 (one ping, the surface-law items alone, no targets or noise, `mean_angle` ->
+`geometric_mean`, whole record / worst twentieth of it): `popoto_12km` -1.28 / -1.33 dB,
+`popoto_env_gravel_30m` -0.98 / -1.06, `flank_patrol` -0.91 / -1.05, `flank_sst_shallow` -0.08 / -1.43,
+`fls_120k_transit` -0.01 / -0.35, `fls_170k_traffic` -0.01 / -0.15, `fls_330k_transit` -0.00 / -0.08. Dahl (1999) eq. (13) is a published bistatic bubble term; the geometric mean is the closer of the
+two rules to it (0.3-5 dB), neither reproduces it.
 
 ### 14.3 Range-varying boundary (`strength_map`)
 
@@ -1608,6 +1680,10 @@ the ASIAEX surface Doppler spread was "less than 10 Hz" (p. 98), as a sanity bou
 Model: the boundary is a set of tilted mirrors (facets) with Gaussian slopes, variance mss/2
 per axis; one bounce, r1 and r2 the path lengths before and after it, g the grazing angle,
 q = 1/r1 + 1/r2, (x, y) a facet's position from the specular point, x along the path.
+For the sea surface, mss from the wind is the slope of the long waves, Dahl 1996 eq. (A7),
+0.0046 ln(2.1 U^2) (since docs/references/CONFORMANCE.md A4; the Cox-Munk total 0.003 + 0.00512 U
+before, `slope_law: cox_munk_total`): everything below that scales with mss shrinks by 1.4 to 2.2
+at 1.5 to 10 m/s, the angles by the root of that.
 
 **16.1 Geometry.** To second order the path through (x, y) is longer by
 `c tau = (x^2 sin^2 g + y^2) q / 2`: ellipses of equal delay, 1/sin g longer along the path.
@@ -1655,6 +1731,54 @@ rough bounces of equal T give `tau exp(-tau / T) / T^2` (zero at the specular de
 at T), where one exponential of mean 2T is highest at once and has rms spread 2T instead of
 sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`, the default
 since the owner's decision recorded in `DECISIONS.md` D-82; `sum` is the earlier rule.)
+
+**16.6 The exact Kirchhoff tail of a surface bounce** (`decay_time: kirchhoff_go`, opt-in; added
+2026-11-26, `docs/references/surface_forward_scatter_dahl_1996_2004.md` WP3; tests
+`tests/python/test_kirchhoff_go.py`). What does not hold first: Dahl 1996 eq. (13), "the sum over the
+surface equals a flat mirror within 0.25 dB", does not hold for our quadrature at Dahl's own low-grazing
+geometries (-0.35, -0.62, -0.40 dB at Table I sets 1, 2, 5B with s_LA; -0.02 to -0.13 dB at sets 3, 4,
+5A; computed, an independent grid sum agrees within 0.01 dB): the taps keep the flat mirror's energy and
+take only the shape from geometric optics. With the wind's eq. (A7) slope the across-path coherence of GO
+is 19-28 % short of Table I at sets 2, 3, 5A, 5B (with s_LA it is 3-20 % short at all six, within the note's 20 %); the facet closed
+form, whose q = sqrt 2 happens to sit nearer Dahl's fitted 1.348, is within 20 % with (A7). Near one end of
+a long low-grazing path (f = r1 / (r1 + r2) of a few thousandths, grazing a few degrees) GO is longer than
+the facet tail and heavy-tailed (6-9 facet means at f = 0.002, 0.5-5 degrees): far surface points are seen
+at nearly the source's own grazing angle and need a tilt of only about g / 2; shadowing, which would remove
+most of them, is not modelled.
+
+Model (Dahl 1996 eqs. (4), (7)-(10); the quadrature, table and sampler are ours). One bounce, unfolded
+(the other boundaries flat mirrors), lengths in units of r1 + r2: a surface point P carries the intensity
+`sigma_geo / (R_i^2 R_s^2) dA` re the flat mirror, `sigma_geo = sec^4(gb) exp(-tan^2 gb / mss) / (4 pi mss)`,
+`tan^2 gb = (alpha^2 + beta^2) / gamma^2`, `2 (alpha, beta, gamma) = k_i - k_s`, at the excess path
+`R_i + R_s - 1`. The curves of equal excess path are the sections of a prolate spheroid (foci: the source
+and the receiver's image) by the surface: ellipses that contain the specular point. In the stretched
+coordinates `(x sin g, y) = rho (cos psi, sin psi)` the curve's rho at each psi is the positive root of a
+quadratic, and the intensity per unit delay is `int sigma_geo / (R_i^2 R_s^2) rho / (sin g dDelta/drho) dpsi`
+(midpoint rule, 128 steps over a half circle; spectrally accurate for this periodic integrand). Delay
+grid: 240 steps even in sqrt(delay) to 30 facet means, then 160 even in log(delay) to an excess path of
+2 (r1 + r2). Stored per node of (grazing: 31 values 0.25-90 degrees; f: 17 values 0.002-0.5, f and 1 - f
+give the same delays) as the delay at 257 energy levels (`1 - (1 - t)^3`), computed on first use for each
+slope (3.7-8 ms a node, measured here under load). The tail's mean and variance are those of the
+interpolated quantile function, linear between levels, so taps built from it carry exactly that mean.
+
+Checks (all `tests/python/test_kirchhoff_go.py`): an independent sum over a 1 m x 0.25 m grid of the
+surface gives the same energy (0.3 %) and mean delay (1 %) at Table I set 1; the table is within 2 % of
+the direct quadrature in mean and in the 0.5, 0.9, 0.99 quantiles between nodes; the GO mean equals the
+facet form `mss (1 + sin^2 g) t1 t2 / (t1 + t2)` within 1 % at 45-89 degrees and within 0.5 % at
+20 degrees for a small slope; at the Dahl 2004 52 m geometry the facet mean is 1.57 times GO's.
+Against the papers (figure readings, +-1 dB): Dahl 2004 Fig. 3c at 52 m, 1.00 dB rms with S_L = 0.15 and
+1.38 dB with eq. (A7) at 7 m/s (tolerance 2 dB, the note's WP3; the note computed 1.0);
+Dahl 1996 Fig. 2, 2.92 dB rms with s_LA and 2.52 dB with eq. (A7) at 7.6 m/s (tolerance 3.5; the note
+computed 2.9); Table I kd*/(2 pi) with s_LA within 20 % at all six sets (-2.9 to -19.6 %).
+
+Taps: one rough bounce, an interval of delay each (the last everything later) at the interval's mean delay,
+spanning three GO means or the GO tail's own `tail_quantile`; several rough bounces as for `facet` (16.5),
+GO bounces entering the convolution as their energy in each tap's cell. Directions (`angle_spread`): the
+tap's surface point is drawn on the exact curve of its delay with the curve's own weights; the tap leaves
+the source towards it and arrives from it, so launch and arrival are one facet's (followed to the surface
+and back in the test to 1e-6 of the delay). The bottom keeps the facet tail. Cost (measured, 2000 points,
+6000 surface-bounce paths, 6 taps, another job running): 52 us a path against 17 us for `facet`, 187 against
+75 us with `angle_spread`; the first call of a slope adds the table's nodes (286 here, about 1 s).
 
 ---
 
@@ -2344,6 +2468,55 @@ rule_of_thumb, sum.
    Measured over model: facet median 0.99 with a scatter of a factor 5; rule of thumb 0.47
    with a factor 3. Above 12 degrees (Gamma^2 over 7): facet 1.28, rule of thumb 0.75. Below
    (Gamma^2 of order 1): facet 0.59, rule of thumb 0.28.
+   *With the long-wave slope (Dahl 1996 eq. (A7), the default since
+   docs/references/CONFORMANCE.md A4), worse above 12 degrees.* The numbers above were made
+   with the Cox-Munk total slope. Re-run of the model side (2026-11-26): option set A
+   simulated again on each file's grid and through the same estimator, with both slope laws
+   (3 seeds each; the measured decays read from the saved run's JSON, since the UACR files
+   are not on the machine), each arrival's saved model decay scaled by the re-simulated
+   ratio. Measured over model, facet, the eight files behind the numbers above (21
+   arrivals): overall 1.00 -> **1.68**; above 12 degrees 1.28 -> **1.89** (n = 13); below
+   12 degrees 0.76 -> 0.96 (n = 8). Simply scaling by the slope ratio (0.70, 0.69, 0.48 at
+   the fitted 3.70, 3.96, 9.14 m/s) gives 1.66 / 2.06 / 1.13: the estimators under-read the
+   shortened tails a little (a 0.19 ms decay at 60 m reads 0.135 ms, tests/python/
+   test_channel_replay.py). That saved run gives 0.76 below 12 degrees, not the 0.59 printed
+   above; the 0.59 was not reproduced. Over the nine files of
+   `docs/figures/channel_validation_sites.md` (with the 1 km paths up to 12 bounces): 1.72 ->
+   1.81 overall (n = 30 of 36: the re-run gives no decay for six), 1.26 -> 1.87 above 12
+   degrees; below 12 degrees 2.52 -> 1.15, but that row is dominated by 1 km arrivals whose
+   re-simulated ratios run from 0.24 to 149 over three seeds: not to be relied on. So: the
+   steep SPACE'08 tails (21-32 degrees at 60 m, 15 at 200 m; Gamma^2 over 7) decay 1.9 times more
+   slowly than the facet model with the long-wave slope, where with the Cox-Munk total they
+   were 1.3 times; the low-angle ones are now nearer (0.96). Dahl's measurements, which back
+   the slope law, are at 6-20 degrees. Kept as the residual of A4: nothing was tuned
+   (`slope_law: cox_munk_total` reproduces the earlier numbers).
+   *The exact Kirchhoff tail does not explain it (2026-11-26).* The hypothesis was that the
+   simplified facet shape, not the slope, fails at steep angles. Tested with
+   `decay_time: kirchhoff_go` (Sec. 16.6) by the same method: option set A re-simulated on each
+   file's grid through the same estimator, 3 seeds, each arrival's saved model decay scaled by
+   (re-simulated configuration / re-simulated Cox-Munk total with facet); the facet re-runs reproduce
+   the saved re-simulations exactly (checked at purple_1). Measured over model, the same 21 arrivals
+   (13 above 12 degrees, 8 below), median:
+
+   | Model | above 12 deg | below 12 deg | all |
+   | --- | --- | --- | --- |
+   | Cox-Munk total + facet (the saved run) | 1.28 | 0.76 | 1.00 |
+   | long-wave slope + facet (the default) | 1.89 | 0.96 | 1.68 |
+   | long-wave slope + kirchhoff_go | **2.10** | 1.33 | 1.86 |
+   | Cox-Munk total + kirchhoff_go | 1.60 | 1.10 | 1.39 |
+
+   Scatter per arrival a factor 1.8 to 2.5 in every row. The hypothesis is **false** for these data:
+   above 12 degrees the re-simulated GO decay over the facet one (long-wave slope) runs from 0.69 to
+   1.41 per arrival, median 0.98 (1.15 and 1.13 for the 60 m surface arrival), so GO does not
+   lengthen the steep tails, and the median ratio moves the wrong way (1.89 -> 2.10) through
+   arrival-by-arrival changes; below 12 degrees GO is shorter (0.44-1.08 of facet, as at Dahl's
+   7-12 degrees) and moves those arrivals from 0.96 to 1.33. What the steep
+   SPACE'08 arrivals want is a longer tail than either geometric-optics model gives with the
+   long-wave slope; the Cox-Munk total slope comes nearer with either shape. Not settled: the 60 m
+   arrivals are at Gamma^2 over 7 in 15 m of water with a seabed we assumed, one wind per recording
+   fitted to one Doppler width; diffraction (Bragg-scale roughness) beyond geometric optics,
+   multiple bounces in the near field, and the estimators' under-reading of short tails are not
+   separated by this test. Nothing was tuned.
 6. **Complex Gaussian taps: contradicted at steep angles.** Scintillation index of fully rough
    arrivals: median 1.43 (one bounce, n = 4), 1.31 (two, n = 7), 1.72 (three, n = 6), up to 4.8
    in the rough recording; the model gives 0.6 after the same windowing and cannot exceed 1.
@@ -2844,6 +3017,11 @@ Reading, honestly:
 Recommendation: none needed for the formulas. A default change is the owner's: `small_slope`
 is what the current literature uses and it is valid wherever `perturbation` is.
 
+Later (2026-11-26, Sec. 33): the slope and shadowing corrections of the volume term and the Kirchhoff /
+composite interpolation are now printed ([MJ89] (33)-(38)) and selectable (`mourad_jackson_1989`); our
+`composite` and `combined` carry Wagner's shadowing; the Gallaudet figures below for the relations are
+those before C5 (since C5 rho 1.148225, nu 0.986422: rho 7.5e-5 below the printed 1.1483).
+
 *Against one printed measurement at 68 kHz (Gallaudet 2001; `test_gallaudet_boundaries.py`).*
 What it cannot do first: the measurement does not tell the roughness models apart, and its
 angular curves (data and the fitted model) are only figures (Fig. 15a), so the comparison is
@@ -2859,9 +3037,11 @@ source puts the transmit-pattern bias at up to -9 dB, and both bands carry rever
   direction. The near-normal band (72-90 degrees, -19.4 dB printed) is not compared: our band
   mean there is -14.5 dB as a mean of intensity and -19.3 dB as a mean of dB, and the source
   does not say which it printed.
-- Table VI's rho, nu and delta are what `sediment_from_grain_size(6.36)` gives (within
-  4e-5), and w2 is our grain-size rule (0.0005175 cm^4): an independent second print of the
-  class regressions. The fit differs from the class in gamma (3.00 against 3.25, no effect
+- Table VI's rho, nu and delta are what `sediment_from_grain_size(6.36, method="table_linear")`
+  gives (within 4e-5), and w2 is our grain-size rule (0.0005175 cm^4): an independent second print
+  of the class regressions. The default method since A5 (`docs/references/CONFORMANCE.md`), the
+  printed relations J&R (11.1)-(11.3), gives rho 1.148249, nu 0.986430, delta 0.003267: rho 5.1e-5
+  below the printed 1.1483, inside its rounding once the rounding of the printed 6.36 phi is added. The fit differs from the class in gamma (3.00 against 3.25, no effect
   here) and sigma2 (0.003 against 0.001).
 - The class row `fine_silt` (6-7 phi) gives -27.6 and -29.5 dB: 5.0 and 0.8 dB low, 4.8 dB
   below the site fit in both bands (the volume parameter). Inside the +-3 to 6 dB of 23.1.
@@ -2882,7 +3062,8 @@ follow that we did not have:
   10 degrees for 12, 30 and 68 kHz, at most 3.7 dB more on the way there. The empirical
   laws in the tree have no ceiling: at 68 kHz, 15 m/s and 10 degrees Chapman-Harris gives
   -19.1 dB and the Kraus law -23.0 dB, 7 to 11 dB above it. At 30 kHz and 10 m/s the three
-  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees).
+  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees; the first with `extinction: apl_1994`,
+the default before A1; -27.2 dB with the default `dahl_1997`).
 - a consistency check of two sources. The module's bubble dynamics (Commander-Prosperetti,
   from arXiv:2410.14415) gives a total damping constant at resonance of 0.0544, 0.0797,
   0.1051, 0.1187 at 10, 30, 68, 100 kHz; the printed `2.55e-2 f^(1/3)` with f in kHz gives
@@ -2891,7 +3072,10 @@ follow that we did not have:
 
 Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_surface`),
 with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
-`hall_novarini`), because the handbook's law for it is not printed anywhere open; without the
+`hall_novarini`), because the handbook's law for it is not printed anywhere open, or, the default
+since A1 (`docs/references/CONFORMANCE.md` Sec. 1.1), from the published fit of Dahl et al. (1997)
+(`extinction: dahl_1997`, Sec. 23.7); the facet term attenuated by the layer, exp(-2 beta_I / sin(t)) (Dahl et al. 1997 Sec. VI,
+Dahl 1999 eqs. (11)-(12); the default since A2, `facet_attenuation: false` the model before); without the
 small-scale roughness term (its empirical function is not printed), so between about 30 and
 70 degrees it is a lower bound on the model with that term, not on data (D-193; below).
 
@@ -2919,7 +3103,9 @@ wake, and the one wind reading was 4.5 hours old. The source's own statement (p.
 its run-1 mean curve (Fig. 10, a figure) is within +-5 dB of the published model at 30-60
 degrees of incidence. Bubble clouds from breaking ship waves peak at -23.1 to -25.2 dB
 (Table III, p. 158), "within 1dB" of the saturation level (eq. (11)); ours reaches each within
-1 dB between 27.5 and 48.4 degrees of grazing, 13 dB above the ambient model at 3 m/s.
+1 dB between 27.5 and 48.4 degrees of grazing, 13 dB above the ambient model at 3 m/s with
+`apl_1994` (19 dB with the default `dahl_1997` since A1, which also brings the two band means to
+-43.7 / -44.4 dB: 2.2 dB below and 6.9 dB above the printed values, Sec. 23.7).
 
 *Forward loss, coherent reflection.* `exp(-Gamma^2 / 2)` is the Gaussian-height result;
 no opened document gives measured coherent loss against the Rayleigh parameter (22.4).
@@ -2931,7 +3117,8 @@ Cox-Munk: upwind 3.16e-3 U, crosswind 3e-3 + 1.92e-3 U at 12.5 m, 1 to 14 m/s
 (arXiv:2210.05456, eq. (12)); the sum is 0.8 % below our total 0.003 + 0.00512 U. Added:
 `acoustics.mean_square_slope_components`. The sea is steeper along the wind than across it
 by 1.2 to 1.5; the time-spreading model takes it isotropic. Chapman-Harris's formula and
-range could not be confirmed (no open copy).
+range could not be confirmed (no open copy); since 2026-11-26 both are via secondary in McDaniel 1993
+eq. (27) (end of Sec. 23.7).
 
 ### 23.4 Time, angle and Doppler spreading of forward scatter
 
@@ -2958,6 +3145,36 @@ be opened: publisher challenge pages, no open copies listed. What was found:
 
 Recommendation: none from the literature beyond what Sec. 21 already proposes; the wanted
 list names the pages that would settle each point.
+
+*Added 2026-11-26.* Dahl 1996, 1999 and 2004 were since supplied by the owner and read on the page
+images (`docs/references/surface_forward_scatter_dahl_1996_2004.md`,
+`docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md`). What they change in the points above:
+- Angle spread: our facet model's geometry is theirs (Dahl 1996 eq. (15), sigma_theta_h = q s_L
+  sin(g) / (1 + RD/SD); ours has q = sqrt(2) against the fitted 1.348). Its slope is not: the papers
+  use the large-scale slope (Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2); Dahl 1999 s_L^2 = 0.017 at 4 m/s),
+  ours the Cox-Munk total, 1.4 to 2.2 times larger. Our coherence lengths across the path come out
+  21-39 % short at five of Dahl 1996's six sets and 67 % short at 1.5 m/s; with s_LA they match within
+  0-19 %. Dahl 1999's measured angle spreads imply a smaller slope still (0.008-0.011 at 4 m/s): open.
+- Decay time: two measured decays exist only as figures (Dahl 1996 Fig. 2, Dahl 2004 Fig. 3c, +-1 dB).
+  Both reject the rule of thumb by 8-16 dB at 5-14 ms after the pulse and put our facet tail 4-10 dB too
+  slow; the large-scale slope and the exact Kirchhoff geometry together bring it within 1-4 dB.
+- Coherent fraction: not measured in any of them (they work at chi >> 1). Scintillation: "approximately
+  exponentially distributed" for one set (index about 1). Doppler spread: not given.
+- Vertical coherence at 6-11 degrees (Dahl 2004, ASIAEX): our facet model and geometric optics are both
+  about 2 times short; Dahl's small-slope model fits.
+- Bubble attenuation per bounce: Dahl 1996 eq. (17) prints twice our exponent; Dahl 1999 eq. (12) has
+  ours and calls the 1996 equation misprinted.
+- Applied (docs/references/CONFORMANCE.md A4): time spreading takes the large-scale slope of eq. (A7)
+  from the wind by default (`acoustics.large_scale_mean_square_slope`; the Cox-Munk total stays as
+  `time_spread.surface.slope_law: cox_munk_total`). Dahl 1999's smaller implied slope is recorded, not
+  followed (an expected failure in `tests/python/test_forward_scatter_dahl.py`). Against SPACE'08 it
+  makes the steep arrivals' tails fit worse: Sec. 21.4 item 5.
+- The exact Kirchhoff tail (Dahl 1996 eqs. (4), (9), (10) integrated over the surface) is opt-in as
+  `time_spread.decay_time: kirchhoff_go` (Sec. 16.6). It fits Dahl 2004 Fig. 3c (1.0-1.4 dB rms) and
+  Dahl 1996 Fig. 2 (2.5-2.9 dB rms) where the facet tail is 3.5-4.2 dB off ([NF] Sec. 3.3), and Table I's
+  across-path coherence with s_LA within 20 %; with the wind's eq. (A7) slope its coherence is 19-28 %
+  short at four of five sets. Against SPACE'08 it does not help the steep tails (Sec. 21.4 item 5:
+  measured over model above 12 degrees 1.89 with facet, 2.10 with it). Not made the default.
 
 ### 23.5 Reverberation statistics
 
@@ -2997,6 +3214,66 @@ input in the same way.
   relaxation frequencies (0.769 and 41.372 kHz). Stated validity ranges of both formulas
   were not read.
 - Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
+
+### 23.7 The bubble layer's optical depth from a published fit (`extinction: dahl_1997`, the default since A1)
+
+Sources: Dahl, Plant, Nuetzel, Schmidt, Herwig and Terray, JASA 101, 2583-2595 (1997) [D97], and
+McDaniel, JASA 94, 1905-1922 (1993) [McD93], as `docs/references/surface_papers_mcdaniel_dahl.md`
+extracts them. Added opt-in; the default since A1 (`docs/references/CONFORMANCE.md` Sec. 1.1:
+a printed fit wins over a secondary's loss law, and Dahl (1999)'s beta_I <= 0.0012 at 30 kHz,
+about 4 m/s, lies 0.7 dB below it and 5.2 dB below `apl_1994`); `apl_1994`, the default before,
+stays selectable. No shipped scenario uses `bubble_layer_surface`. Tests `test_surface_dahl_1997.py`,
+`test_gallaudet_boundaries.py`.
+
+What is still wrong or unknown, first:
+- **Nothing above 70 kHz.** [D97]'s data end at 70 kHz and [McD93]'s at 60 kHz. Above 70 kHz the
+  law is the 70 kHz fit scaled as f^0.8 (ours, with a warning); the resonant radii there (27 to 10
+  micrometres at 120 to 330 kHz) are below the smallest bubble counted in any population shown. The
+  FLS bands have no support from this law or any other in hand.
+- **Coastal against open ocean has no parameter.** [McD93] p. 1917: coastal waters exceed the open
+  ocean by about 10 dB before saturation at 3-60 kHz, 5 dB of it attributed to whitecap coverage.
+  Table II is one North Sea site. A named multiplier on beta_I is the only form the papers support;
+  it needs the owner (G-21).
+- **An excess remains at low grazing.** At 68 kHz and 3 m/s the 27-38 degree band is still 6.9 dB
+  above Gallaudet's printed mean; against Urick and Hoover's 60 kHz open-ocean curves (McDaniel
+  Fig. 18, read from the figure, +-1.5 dB) the model is +5.2 to +7.0 dB at 3.9-6.4 m/s and 15-30
+  degrees. No law in hand explains it. Candidates: the averaging of the printed means (a mean of dB
+  lies 3.4-4.5 dB below the dB of the mean under Dahl and Plant's statistics) and the omitted
+  roughness term; neither is proven.
+- One site, one angle (17 degrees), and the acoustic data were forced to the saturation levels of
+  Table I (a calibration uncertainty), so the absolute low-wind level carries that forcing.
+
+The law. [D97] Table II: `log10 beta_I = a + b log10 U10`, (a, b) = (-6.16, 5.50) at 26.5 kHz,
+(-6.70, 6.40) at 50 kHz, (-5.75, 5.35) at 70 kHz, obtained by inverting their eq. (17) (our
+`bubble_backscatter`, the same formula) on 1-minute averages at 17 degrees; U10 is the wind
+corrected to 10 m, our `wind_speed`. Between the three frequencies `log10 beta_I` is interpolated
+linearly in `log10 f` (ours; it is the table exactly at its frequencies and continuous); outside
+26.5-70 kHz the nearest fit times `(f / f_end)^0.8`, the trend [D97] state (p. 2592). Warnings below
+2.5 m/s (their fit is dashed there) and above 13 m/s (beyond their data), as the other laws warn
+outside their ranges; the value is still the fit's. beta_I is one vertical crossing in nepers of
+intensity, [D97] Sec. VI's convention and ours.
+
+What it changes against `apl_1994` (the default before A1; computed):
+- beta_I of `apl_1994` over that of `dahl_1997`, dB, at 2 / 3 / 5 / 10 / 15 m/s: +10.1 / +5.7 / +3.9 /
+  -4.0 / -10.9 at 26.5 kHz; +15.2 / +9.1 / +5.3 / -0.6 (8 m/s) / -13.8 at 50 kHz. Above about 8 m/s
+  backscatter barely depends on beta_I (saturation): `apl_1994` gives up to 15.1 dB more backscatter
+  at 2 m/s and between 2.5 dB less and 3.7 dB more above 8 m/s (the note's grid, its Sec. 3.2).
+- Gallaudet, 68 kHz, 3 m/s (beta_I 5.8e-4 against 2.4e-3): band means -43.7 dB at 44-66 degrees
+  (2.2 dB below the printed -41.5; `apl_1994` 3.4 dB above) and -44.4 dB at 27-38 degrees (6.9 dB
+  above -51.3; `apl_1994` 13.0). The reference note computed -43.4 / -44.1 with the 70 kHz fit
+  scaled as f^0.8 instead of the interpolation: 0.3 dB apart, both held by the test.
+- Wind exponent at 17 degrees, 2-7 m/s (least squares on 51 winds): `dahl_1997` U^5.37 / 6.20 /
+  5.10 at 26.5 / 50 / 70 kHz against the measured U^5.5 / 6.4 / 5.3 ([D97] p. 2591); `apl_1994`
+  U^4.25 / 4.06 / 3.91 (3.4 to 4.25 depending on how the winds are sampled, because that law
+  changes form at 6 m/s); `hall_novarini` U^2.63 / 2.12 / 1.72.
+- Urick-Hoover 60 kHz (figure readings, characterisation only): every point within +8 dB with
+  `dahl_1997` (largest +7.0); with `apl_1994` up to +12.2 dB.
+
+Also confirmed by these papers (no change; `test_surface_papers_1997.py`): the bubble term and its
+limits are [D97] eqs. (17)-(19) and [McD93] eqs. (9)-(12); the damping 2.55e-3 f^(1/3) is printed
+with f in Hz, our kHz form; the saturation at 17 degrees is within 0.1 dB of [D97] Table I; the
+facet term is [McD93] eq. (7); Chapman-Harris is [McD93] eq. (27) (via secondary; range 400-6400 Hz,
+wind to 15 m/s, low grazing angles: the "below about 40 degrees" we used to print is not in it).
 
 ## 24. The surface image in a link budget; own depth as a lever [OURS]
 
@@ -3079,7 +3356,8 @@ The echo travels every outbound path with every return path, so there are four a
 coincide and the echo is the triplet +1, −2, +1 at 0, τ, 2τ: the one-leg arrival is 6 dB above the direct one. At
 12 km from 225 m to 150 m, τ = 3.75 ms; the 1.5 m lever arm splits the middle pair by 2 × 1.5 × z_t / (r c) = 25 µs,
 an eighth of a carrier cycle, which the pattern carries. In shallow water each leg also has the bottom's images
-(reflection coefficient: Rayleigh, at each image's grazing angle), and the two-way set is the product of the two legs'.
+(reflection coefficient: Rayleigh, at each image's grazing angle; an elastic solid's, Sec. 6.5, for a bottom with
+shear such as `rock`), and the two-way set is the product of the two legs'.
 
 In the frequency domain the echo's transfer function is H(f) = Σ a_k exp(−i 2π f τ_k) = (1 + μ e^(−i2πfτ))² for the
 triplet, |H|² = 16 sin⁴(π f τ): the Lloyd-mirror ripple of the echo's spectrum, period 1/τ = c r / (2 z_own z_t).
@@ -3671,7 +3949,7 @@ I = cos(theta_0) / (r |dz/dtheta_0| cos(theta_r)), clipped at a caustic.
 is the one at which the direct path's two-way time is the detection's (Newton, dt/dr = p_tx + p_rx); the legs' arrivals
 there give the pattern: delay (t_tx,j - t_tx,0) + (t_rx,k - t_rx,0), amplitude a_tx,j a_rx,k / (a_tx,0 a_rx,0), with
 the surface's coefficient, roughness and bubble loss at each ray's own grazing angle at the surface (Snell:
-cos(g) = p c(0)) and the bottom's Rayleigh coefficient at its angle there. A change of the two-way time within the
+cos(g) = p c(0)) and the bottom's Rayleigh coefficient at its angle there (elastic for rock, Sec. 6.5). A change of the two-way time within the
 search moves each delay by (p_j - p_0) dr, exactly to first order. A depth with no direct or no once-surface-reflected
 path on either leg has no pattern and is not searched.
 
@@ -3874,7 +4152,8 @@ samples per 2 m cell, Hann aperture, 15 m merge): another map needs the tool run
 
 ## 30. Image sources off tilted planes and walls [OURS]
 
-Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages`; tests `tests/python/test_image_planes.py` (closed forms) and
+Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages` and, since `sonar-k9v7`, libs/sim `paths.cpp`
+`plane_image_eigenrays`; tests `tests/python/test_image_planes.py` (closed forms) and
 `tests/python/test_multipath_scenes.py` (the three scenes). Opt-in: `propagation.bottom_slope` or a wall given as
 `{point, normal, coefficient[, bounds]}`. Without either, nothing in this section runs.
 
@@ -3894,8 +4173,12 @@ Issue `sonar-0nsi`; `sim/propagation.py` `_PlaneImages`; tests `tests/python/tes
   weight along it is zero when the scatterer has the plane's normal (the path arrives from the wrong side), so a scene
   `seafloor` with `slope` (even `[0, 0]`) does not count it. A point target (no normal) on a plane does: its echo
   rises by |1 + R|^2 both ways together.
-- The C++ provider has none of this (axis-aligned walls and a flat bottom only): the general construction is NumPy
-  for both engines; the pairing and synthesis after it run in C++ or CUDA as before.
+- Both engines have the construction (`sonar-k9v7`: libs/sim `paths.cpp` `plane_image_eigenrays`, the NumPy
+  arithmetic step by step). They agree to rounding, not to the bit: NumPy hands its dot products to BLAS, which sums
+  in another order (and with fused multiply-adds on some machines). Measured bounds are in
+  `test_image_planes.py` (`PARITY`). The energy rule's order (D-105) is worked out in NumPy for both engines, as for
+  the flat series, so both use the same order. The pairing and synthesis after it run in C++ or CUDA as before; the
+  CUDA path takes its eigenrays from the host provider.
 
 **Construction.** A plane is a point Q and a unit normal n into the water; its mirror is R(x) = x - 2 ((x - Q).n) n
 (on an axis normal, 2 Q_i - x_i: the flat series' arithmetic, so `bottom_slope: [0, 0]` gives the flat bottom's
@@ -3926,16 +4209,265 @@ theta = 20, 30 and 45 degrees (surface and a bed sloping along x, 24 bounces all
 three images; the one off both is P turned 180 degrees about the corner's edge, and a monostatic path off both
 returns along its own line reversed in the horizontal (the corner reflector).
 
-**Checked against closed forms** (`test_image_planes.py`): one tilted bed (image position, delay, launch, arrival,
+**Checked against closed forms** (`test_image_planes.py`, every test on both engines since `sonar-k9v7`, which also
+compares the engines over 200 random sets of planes, bounds and points, and over the scattering points of
+`fls_120k_quay_multipath` and `pool_fls_p4_2v_walls`): one tilted bed (image position, delay, launch, arrival,
 specular point, Rayleigh coefficient at the local grazing angle); zero tilt against the flat bottom with both
 engines (every ray found and no other); a wall turned about z equals the same wall in turned coordinates; the
-axis-aligned wall in both forms gives the same delays and amplitudes; reciprocity over a tilted bed, a turned wall
+axis-aligned wall in both forms gives the same rays (delays, amplitudes, launch and arrival directions; since
+`sonar-8qn9`); reciprocity over a tilted bed, a turned wall
 and a bounded wall (two bounces a leg); bounded walls reflect only on their face and block only there; points outside
 the water get no path; the energy rule picks the same order as the flat series at zero tilt, warns at its cap; the
 pairing of masked rays agrees between the engines.
 
-**Found on the way.** The `{axis, position}` walls of both engines (`_eigenrays_numpy`, `paths.cpp`) mirror only
-the vertical part of the arrival direction, so a wall path arrives at the scatterer with its horizontal direction
-unreflected. Delays, amplitudes and launch directions are right; Lambert weights of scatterers with normals and
-anything else that reads `arrival` are not, on wall paths. No shipped scenario has walls; left as it is (an
-existing default) and proposed as a follow-up. The general form mirrors the whole direction.
+**Found on the way, fixed by `sonar-8qn9`.** Until `sonar-8qn9` the `{axis, position}` walls of both engines
+(`_eigenrays_numpy`, `paths.cpp`) mirrored only the vertical part of the arrival direction, so a wall path arrived at
+the scatterer with the component across the wall unreflected (the sign of x for an `axis: 0` wall, of y for
+`axis: 1`). Delays, amplitudes, launch directions, bounce counts and validity were right. What read the wrong
+component: the Lambert weight of a scatterer with its own normal (`two_way_paths`, both engines: the cosine between
+the arrival and the normal), the Lambert facets of `reverb_relief.py` (the same cosine, and the apparent origin of
+its shadow test), the Doppler of a moving source (`sources.py`, the range rate `arrival . v`) and the angle-spread
+taps of `timespread.py` (turned about the arrival). Not affected: Lambert weights without a normal (`|arrival_z|`),
+the scattering-function reverberation (`arrival_z` and the horizontal magnitude), and element and beam patterns,
+which see the apparent position along the launch direction. Now the wall's horizontal component is mirrored too, and
+an axis wall gives the same rays as the same wall as a plane, on both engines (`test_image_planes.py`,
+`test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane`: delays, directions and bounce counts to the bit,
+amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no shipped record moved.
+
+## 31. The `sediment` tier with fluid penetration (`penetration: fluid`, G-3; `penetration: rough`, G-13) [CONFIRMED formulas; OURS assembly]
+
+**What is still wrong with `rough` (G-13), first.** `penetration: rough` adds, for buried points below the critical
+angle, the first-order roughness-scattered field of Jackson and Richardson (2007) Ch. 15 (`sim/penetration.py`). Still
+wrong or unverified:
+- **A realisation, not a mean.** The field is one seeded realisation of a frozen interface (quadtree cells with a
+  complex Gaussian deviate each, hashed from (seed, cell); `RoughPatches`). A single echo is one draw of an
+  exponential intensity about the mean (std / mean 1.01 over 160 seeds, ours). The realisation is coherent from ping
+  to ping, so a synthetic aperture or 3-D focuser sums it coherently; but a cell's deviate does not change with the
+  geometry, whereas the Bragg component of the relief that scatters (K_s - K_i) does when the incidence turns by
+  more than about one over the cell size: across a long aperture the scattered field is too coherent and the
+  buried point images too sharply. Neighbouring points share cells only where their quadtrees coincide. Expect a
+  sub-critical buried point to image as a speckled, displaced, smeared copy of itself at about the mean level.
+- **Single scattering, first order in the relief**; the zeroth-order (evanescent) field is not reduced by the energy
+  the relief scatters (second order). Flat mean interface, isotropic spectrum (power law or von Karman (D.7)), no
+  ripple-specific (anisotropic) Bragg treatment in the provider (`ripple_field` handles one sinusoid, a test only),
+  no volume scattering of the transmitted field, no layering.
+- **One frequency**: cross section, attenuation and the cells' phases at the band centre; cells are merged into one
+  eigenray per delay bin (`bin`, default a quarter period), exact at the band centre, phase error up to
+  pi |f - f0| bin elsewhere in the band.
+- **The cross section is ours, not the retyped (15.11).** From (15.2)-(15.3) by stationary phase:
+  sigma_wp = k_w^2 k_p'^2 |beta_p(K_s) / beta_w(K_s)|^2 |A_wp|^2 W(K_s - K_i); the note's (15.11) is
+  (k_w^4 / nu_p^2) |A_wp|^2 W, without the obliquity factor. Ours reproduces Fig. 15.8's reading (133-141 dB at
+  5-40 cm): 141.6, 140.0, 137.6, 133.5 dB at 5, 10, 20, 40 cm; the retyped form gives 146.7 dB at 5 cm. The page
+  was not reread. Likewise (15.13) is used with the sediment's k_p' = k_w / nu, not the retyped k_w.
+- **Points above the critical angle get no scattered term** (exactly `fluid`); there the mean scattered intensity is
+  21-24 dB under the zeroth order (SAX99, 20 kHz, 40-90 deg, 17 and 30 cm, ours), so leaving it out costs under
+  0.04 dB in mean intensity. The jump at the criterion of `fluid` remains on the zeroth order.
+- **The two engines are equal to rounding, not bit for bit.** NumPy's vectorised exp, log, pow, hypot, |z| and
+  complex product (its own polynomials and fused multiply-adds) differ from libm and plain products by about an ulp;
+  the delay bins' weighted mean delays inherit that (6.4e-16 relative at worst) and the merge's phase
+  w0 (t - t_b) turns it into 2.6e-12 of a point's largest scattered amplitude (20 kHz; `test_sim_cpp.py`, 20 cases).
+  The cells, the hash and the bins are integers and agree exactly, so both engines see the same interface.
+- **Cost.** About 100-200 rays a leg for a sub-critical point (SAX99, 20-40 kHz, defaults), and the pairing takes
+  every outbound ray with every return ray, so a sub-critical point's echo has 10^4 or more pairs. Eigenrays: 0.24 ms
+  a point in C++, 1.1 ms in NumPy (one thread, 200 points, ours, 2026-11-26).
+- **Realisation average 0.6 dB above the quadrature** of (15.14) at 15 deg, 0.3 m, 20 kHz (160 seeds; sampling
+  1 sigma about 0.35 dB, the rest the cell-centre discretisation; ours, tested to 1 dB).
+
+**What is still wrong with `fluid` (and `rough`'s zeroth order).**
+- **Points below the critical angle.** A buried point whose straight line from the sonar meets the interface below
+  the critical angle arccos(c_w / c_s) (31.9 deg for medium sand over 1500 m/s water) is reached by no real refracted
+  plane wave. The default tier (`penetration: constant`) gives it the least-time ray, which enters near the critical
+  angle and runs almost horizontally through the sediment with no attenuation: 20 to 30 dB too loud against the
+  measured and modelled sub-critical field (Jackson and Richardson 2007, Figs. 15.3, 15.8, 15.11, through
+  `docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md` Sec. 3.5). With `fluid` the
+  point gets the evanescent zeroth-order field (15.1) instead (`subcritical: evanescent`, the default), which is far
+  too QUIET (-109 dB at 0.3 m, 10 deg, 20 kHz in medium sand, the note's figure, against a measured field 15-30 dB
+  below the incident one, so about 80-95 dB too quiet): the real sub-critical field comes from roughness scattering into
+  the sediment ((15.11)-(15.16)), which `fluid` does not model; `rough` (G-13, below) adds it. The amplitude jumps where a point crosses the
+  criterion (the ray's leg on one side, the plane wave's decay on the other). A warning counts such points once per
+  provider.
+- **No roughness-scattered penetration** with `fluid` at any angle (`rough` adds it below the critical angle), no
+  sediment volume scattering of the transmitted field
+  beyond the scene's own scatterers.
+- **No layering or gradient** (G-14): a 3 cm transition layer alone changes the normal-incidence loss by about 6 dB
+  at 20 kHz in the book's quoted case (Sec. 2.2.8 of the note).
+- **Frequency-independent sound speed and loss parameter**: attenuation linear in f, taken at ONE frequency (the
+  sonar's band centre): over the subbottom sonar's 10-30 kHz the true two-way attenuation of 0.3 m of medium sand
+  runs from 3 to 9 dB where the tier applies 6 dB to every frequency.
+- **Spreading**: spherical over the travel-time distance c t. On the vertical this is the paraxial refracted
+  spherical wave's distance h + d c_w / c_s (exact, `test_normal_incidence_is_exact`); off the vertical the two
+  principal curvatures of the refracted wavefront differ and neither is c t. The note gives no focusing factor for
+  a refracted spherical wave, so none is applied.
+- **One-way use**: the reciprocity factor 1 / a_rho is split as 1 / sqrt(a_rho) per leg, which makes every echo
+  exact and reciprocal; a one-way path from a radiating source under the interface (`sim/sources.py`) is therefore
+  sqrt(a_rho) too loud (1.3 dB for a_rho = 1.845).
+
+**Formulas** (book equation numbers; all read in the note, Secs. 2.2.1, 2.2.3, 2.2.4, 3.5):
+- a_p = nu / (1 + i delta) (8.25), nu = c_s / c_w, delta from the bottom's dB per wavelength by (8.27)
+  (40 pi delta / ln 10 dB per sediment wavelength); a_rho = rho / rho_w (8.54).
+- V = `rayleigh_reflection` (equal to (8.49)-(8.53) to 1.8e-15, the note's Sec. 3.1); V_wp = 1 + V (8.47)
+  = 2 z_wp / (z_wp + 1) (8.55) at the grazing angle of the ray's water leg. Lossless, it carries the energy flux
+  1 - |V|^2 = |V_wp|^2 Re{sin theta_p / (a_rho a_p)} / sin theta_w (tested to 1e-12).
+- k_p'' = k_w delta / nu ((8.18), (8.26)); the ray's leg of length L in the sediment loses exp(-k_p'' L). For a
+  lossy plane wave refracted at theta_p the decay along the ray is k_w delta / (nu sin theta_p') per unit depth to
+  first order in delta, i.e. k_p'' per unit length along the ray: the same.
+- Reciprocity (8.68): G_pw(r', r) = G_wp(r, r') / a_rho. The echo of a buried point is the leg from the transmitter
+  times the leg from the receiver read backwards, so it carries V_wp(theta_1) V_wp(theta_2) / a_rho
+  exp(-k_p''(L_1 + L_2)); each leg carries V_wp / sqrt(a_rho) exp(-k_p'' L).
+- Below the critical angle (`subcritical: evanescent`): the plane wave at the straight line's grazing angle theta_d,
+  (15.1): V_wp(theta_d) / sqrt(a_rho) exp(-k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} d), d the depth under the
+  interface; the delay and directions stay the least-time ray's. Medium sand at 10 deg: 145 / 364 / 728 / 2183 dB/m
+  at 8 / 20 / 40 / 120 kHz, the note's numbers (`test_evanescent_decay_is_the_notes`).
+
+**Worked case** (the note's Sec. 3.5; `test_worked_case_medium_sand_0_3_m`): 0.3 m of medium sand straight down
+(a_rho 1.845, nu 1.178, 10 dB/m at 20 kHz). Attenuation: 3.00 dB one way, 6.00 dB two-way at 20 kHz, 9.00 dB at
+30 kHz. Transmission: |V_wp(90 deg)|^2 / a_rho = 1.017, which multiplies PRESSURE: +0.146 dB two-way (the note
+writes "+0.07 dB", 10 log10 of the same factor). Together, against the default tier: -5.85 dB at 20 kHz, -8.85 dB at
+30 kHz. The interface factor grows toward the critical angle (|V_wp| = 2 at it, lossless).
+
+**`rough` formulas** (note [N3] = `docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md`
+Sec. 2.7; spectrum [N2] Sec. 2.1; SAX99 inputs Table 13.1, [N4] Sec. 2.3):
+- A_wp (15.4) = (1/2)[1 + V(K_i)][1 + V(K_s)]{(1 - 1/a_rho)[K_s.K_i / k_w^2 + beta_p(K_i) beta_w(K_s) / a_p] - 1
+  + 1/(a_p^2 a_rho)}. Our first-order solution (`sim/bottom.py` docstring) has the sediment amplitude
+  B = i k_w A_wp / beta_w(K_s) = T_wp^(1) / F of (15.3), to 1e-12 (`test_our_perturbation_sediment_amplitude_is_a_wp`):
+  the hint of the plan holds.
+- W(Q) = w2 / (Q^2 + K0^2)^(gamma2/2) (D.7), w2 in m^(4 - gamma2) (Table 13.1's units inferred, [N4] Sec. 6;
+  `configs/sediments.yaml` uses the same); K0 stated in config (0 = power law).
+- Per cell of area A at R, per leg: c sqrt(sigma_wp A) exp(-k_p'' |r - R|) / (|R - r_i| |r - R|) / sqrt(a_rho), delay
+  (15.16) |R - r_i| / c_w + |r - R| / c_s, K_i (15.12) from the source, K_s (15.13) to the point with k_p'. Averaged
+  over c this is the discrete (15.14). Cells: a global quadtree, finest `patch` (default lambda_w / 2), split within
+  `refine` = 3 sides of the point, out to where the sediment leg has lost `floor_db` = 30 dB (ours).
+- Checks against the note (figure readings, widened by their own width and the note's 1.5 dB reading error):
+  Fig. 15.6 (h0 0.01 m, lambda0 0.48 m, 17 cm; SAX99 and 15 / 20 deg ours): ripple-mean loss 10.8-19.9 dB at
+  10-40 kHz where the order propagates (reading 10-25 dB), 52.6 dB past the (15.6) cutoff (30.7 kHz at 15 deg);
+  Fig. 15.8 above; below the critical angle the scattered field is 21.7 / 23.5 dB under the incident plane wave at
+  17 / 30 cm (SAX99, 15 deg, 20 kHz; Figs. 15.3, 15.8, 15.11 read 5-31 dB).
+
+**Engines.** NumPy (`propagation.SedimentProvider`) and C++ (`libs/sim/src/paths.cpp` `sediment_eigenrays`) do the
+same operations in the same order: amplitudes agree to 2.9e-14 (refracted rays) and 4.3e-13 (evanescent points, an
+exp(-x) with x up to about 60) in `test_sim_cpp.py::test_sediment_fluid_penetration_matches`. There is no CUDA copy:
+eigenrays are computed on the host whatever `backend` the synthesis uses. The default (`penetration: constant`) is
+bit-identical to before on both engines (sha256 of eigenrays and of one ping of each buried scene and of two
+scenes of other tiers, before and after). `rough` has a C++ copy too (`libs/sim/src/penetration.cpp`, called from
+`sediment_eigenrays` when `SedimentConfig::rough`): the quadtree (`rough_quadtree_cells`), the reach
+(`rough_sediment_radius`), the deviates (`rough_patch_coefficient`), the cross section (`rough_sigma_wp`) and the
+bins, the same operations in the same order as `sim/penetration.py`. The interface is engine independent: a cell
+(level, i, j) carries c = sqrt(-ln u1) exp(2 pi i u2), u1 = ((h >> 11) + 0.5) / 2^53, u2 = (h2 >> 11) / 2^53, h the
+SplitMix64 chain over (seed, level, i, j) and h2 = SplitMix64(h) (ours; no random generator, so both engines draw
+it bit for bit apart from the last ulp of the logarithm). The cells, the radius and the bins agree exactly; the
+deviates to 2.3e-16, the cross section to 3.1e-15, the eigenrays as above (`test_rough_parts_match`,
+`test_rough_penetration_matches`). Also host only: the extra rays reach a CUDA synthesis as ordinary pairs
+(`synth_cuda.cu` runs channels x paths, with no number of rays per point anywhere;
+`test_cuda_synthesis_takes_the_rough_rays`, run in the GPU job).
+
+## 32. Reverberation in the link budget and the coverage picture (issue `sonar-w2w3`) [CONFIRMED formula via the J&R notes; OURS assembly]
+
+What was wrong first: `SonarEquation` and the coverage picture were noise-only. For `flank_patrol`'s −3 dB small
+vehicle at 2.2 km they gave 34.3 dB of peak over background on its beam where the simulated data give 6.6 dB
+(D-198 measured 3.8 to 5.1 dB in the gallery's 4 m cells).
+
+**The term.** The scattering-function integral the simulator itself uses (`sim/reverb.py` `reverberation_power`;
+SST's method, TR 0702 Sec. 6; Jackson and Richardson 2007 (G.4), `docs/references/jackson_richardson_2007/03`,
+Sec. 2.9): the boundary is cut into rings of radius rho and width d rho about the sonar; every pair of paths, out
+from the projector and back to the array, that reaches a ring travelling towards its boundary adds
+
+    p = |a_out|^2 |a_back|^2 S(g_in, g_out) rho d rho 10^(-alpha c t / 10)      at delay t = t_out + t_back
+
+per radian of azimuth for a unit source. Through the compressed pulse (the |sinc(B tau)|^2 of the band that the
+coverage picture puts the target's arrivals through, averaged over each delay bin with the sine integral,
+Int_0^y sinc^2 = (Si(2 pi y) − sin^2(pi y) / (pi y)) / pi) and the beam's azimuthal integral
+Psi = Int |b_rx b_tx|^2 dphi / |b_rx b_tx|^2 on axis (J&R (G.12)):
+
+    RL − SL = 10 log10( Psi sum_bins P_k <sinc^2(B (T − t_k))>_k )
+
+For one direct path each way over a Lambert bottom this is J&R (G.11)-(G.13), monostatic,
+RL = SL + S_b − 30 log r − 2 alpha r + 10 log10(Psi c tau / 2) re 1 m, with the pulse length tau replaced by the
+compressed one, 1 / B (for a CW pulse B = 1/T: (G.13) itself; the note's reading of the printed "−2 alpha_p r_t"
+as water absorption is used). Held: 0.2 dB from 1 to 4 km in both implementations (`test_reverb_budget.py`,
+GoogleTest `CoverageReverb.LambertBottomIsJacksonAndRichardsonG13`).
+
+**Units and processing gain.** The echo is SL − 2 TL + TS (+ the coverage picture's two-way factor) after the same
+compression: the matched filter's gain 10 log BT applies to echo and reverberation alike and cancels; the noise
+keeps its budget NL − 10 log BT − AG. The array gain against isotropic noise is not applied to reverberation; the
+beam's Psi is. An aperture window widens Psi by the factor it lowers the noise gain by (1.76 dB for Hann on 32
+elements, within 0.3 dB), so the detection table's window loss applies to both. Signal excess is
+−10 log10(10^(−SNR_noise/10) + 10^(−SRR/10)); zero scattering gives the noise-only figure exactly, and a
+reverberation-limited SNR does not depend on the source level.
+
+**Paths.** The Python reference (`gpusonar.reverb_budget.level_db`) calls `reverberation_power` with any eigenray
+provider (image sources, Bellhop): the simulator's own integral, monostatic (one eigenray set from the array
+centre serves both legs, as there). The coverage picture (C++, `coverage_reverberation_db`) uses its own rays with
+the coefficients of the boundaries met on the way as powers, as for the target. The two agree within 0.3 dB from 1
+to 4 km in 100 m of isovelocity water (1 dB at 500 m, near the first bottom return). Reverberation in shallow
+water at kilometres arrives by many bounces: three reflections each way gave 8 to 14 dB too little on
+`flank_patrol`; the default is 0.4 x range / water depth (as many as a ray at 22° of grazing makes; ours), and the
+data then agree within 1.3 dB at 2.2 to 10 km.
+
+**Laws.** The scattering strengths are the simulator's: `sim.simulator.reverberation_item_strength` turns a
+`reverberation:` item into its law (the dispatch moved there from the simulator's loop unchanged; records
+bit-identical), and the coverage picture takes them as 2° tables of incident x scattered grazing.
+
+**Not in it.** The reverberation's statistics in the detection probability (the table assumes Gaussian
+background; K-distributed reverberation raises false alarms at a given threshold); the Doppler that separates a
+moving target from reverberation; the elements' vertical patterns and beam sidelobes in elevation in the C++ term
+(the Python reference has the element patterns); for a CW pulse the sinc's sidelobes stand in for the
+autocorrelation's triangle (it overstates reverberation within a few pulse lengths of the first bottom return);
+volume scattering in the coverage picture (refused there; the Python reference has it); a boundary that changes
+with range; the Lambert and empirical laws' own validity.
+
+## 33. Bottom scattering after Mourad and Jackson (1989) and Wagner (1967) (C1-C5, C-W1-C-W3) [CONFIRMED formulas; OURS bistatic shadowing]
+
+Sources: `docs/references/bottom_mourad_jackson_1989.md` ([MJ89], OCEANS '89 pp. 1168-1175) and
+`docs/references/shadowing_wagner_1967.md` ([W67], J. Acoust. Soc. Am. 41, 138-147), both read on the page
+images. Code: `python/gpusonar/sim/bottom.py`; Python only (the bottom scattering model has no C++ twin:
+`libs/` and `apps/` have no roughness or volume scattering strength; `libs/sim/src/penetration.cpp` has its
+own transmission perturbation term, untouched). Tests: `tests/python/test_bottom_models.py`,
+`test_mourad_jackson_1989.py`, `test_grain_size_relations.py`, `test_reverberation.py`, `test_reverb_bistatic.py`.
+
+**What is still wrong or unsettled (first).**
+- Shadowing is geometric optics in the plane of incidence only, with diffraction ignored ([W67] p. 145).
+  The bistatic form inside `composite` / `combined` is OURS: [W67] (33) and (35)-(36) are in-plane; out of
+  the plane we take the backward form R(min(ti, ts)) for cos(azimuth) < 0 and the forward form
+  (1 - exp[-2(B_i + B_s)]) / [2(B_i + B_s)] otherwise, which jumps at azimuth 90 deg.
+- The B form of R that [MJ89] and J&R use overstates illumination at very large slopes (by up to 1.1 dB at
+  rms slope sqrt(2) per axis, [W67] Fig. 6, figure); [W67]'s better form (A29) needs derivatives a power-law
+  relief does not have. For our sediments (per-axis slope 0.01-0.37) R is within 1 dB of 1 above 10 deg.
+- The 1989 model (`mourad_jackson_1989`) is backscatter only and 10-100 kHz, sands to clays (1-9 phi). Its
+  Kirchhoff part is the paper's closed-form approximation (19)-(22), +3.7 dB above the exact integral at
+  gamma2 3.67, 60 deg; its slope (18) uses k h_s = 1/sqrt(2), not the 1/2 of J&R and our `composite`. Whether
+  APL-UW TR 9407 kept these forms is not known (never read). Against our default it is up to +11.5 dB at
+  5 deg (sandy gravel 100 kHz, outside its range), +9.3 dB for medium sand at 100 kHz; within 0.4 dB at 5 deg
+  for silts and clays; 20-85 deg within -1.6 to +1.0 dB (the note Sec. 4.3). It is NOT the default (D-86's
+  small-slope model stays).
+- [MJ89] (39), the volume term, is misprinted (|1 - R|^2 for |1 - R^2|^2); the internal inconsistencies of
+  [MJ89] Fig. 8 (Arafura sigma2 0.002 and w2 0.000391 against its own (4) and (6)) stay unexplained.
+- C5 moves Gallaudet's 6.36 phi row of the relations further from his print (rho 7.5e-5 below 1.1483, was
+  5.1e-5): his print follows J&R's rounded constant or the table, not the original's digits.
+
+**Wagner's backscatter shadow function** (C1, C-W1). R = (1 - exp(-2B)) / (2B), B = [pi^(-1/2) exp(-v^2) -
+v erfc v] / (4v), v = tan(theta) / s, s the TOTAL rms slope (sqrt(2) x the per-axis slope of
+`large_scale_slope`) ([W67] (49) with (20)-(22); [MJ89] (24)-(26); J&R (13.81)-(13.83) with the sign of
+(13.82) corrected: the book prints pi^(+1/2), a misprint). R, not the illuminated fraction S of [W67] (20),
+because our average already drops the facets that face away (S would count them twice). Evaluated with
+erfcx (no cancellation), R = 1 at normal incidence. `bottom.wagner_backscatter_shadowing`,
+`bottom.wagner_bistatic_shadowing`; `shadowing="wagner"` (default) | `"none"` on `composite` and `combined`.
+Values (ours): R = 0.385059, 0.719744, 0.906503, 0.987541, 0.998564 at v = 0.1, 0.25, 0.5, 1, 1.5. What it
+moves (opt-in models only, roughness term, 5 deg, c = 1500 m/s): medium sand 30 kHz -41.58 -> -41.69 dB,
+100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75. The sea-surface facet term keeps no
+shadowing: R there is 1 to 1e-6 dB wherever that term matters (C-W3). The coherent forward shadowing S^2
+([W67] p. 141) is recorded only (C-W4): tens of dB at 2 deg from a ray argument no acoustic source applies.
+
+**The 1989 model** (C4): `roughness_model="mourad_jackson_1989"`, `volume_model="mourad_jackson_1989"` (the
+paper's model is both), formulas in `bottom.py`'s section comment with equation numbers. It reproduces the
+paper's own model curves (Figs. 6-10, seven curves) within the reading error (+-1.5 dB, +-2 dB at 90 deg;
+Arafura 10 deg 1.65 dB), rms 0.34-0.77 dB per curve. Its volume term (38) is the printed recipe for the
+slope and shadow corrections of the volume term (G-16): +3.9 / +9.6 dB at 5 deg for medium sand at 20 /
+100 kHz over our flat-interface term, under 0.3 dB for silts. The low-angle excess over our default is the
+slope average acting on both terms, not a difference in either term's form (perturbation (30)-(31) equals
+ours to 1e-10 dB without the (k/10)^2 of (32); the corrected (39) equals our volume term to 1e-12).
+
+**Grain-size constants** (C5): `apl_grain_size_relations` carries [MJ89] (1)-(2)'s seven-digit constants
+(3.0455234, 1.3424740, 1.1564755, 1.0018916) where J&R print four decimals; rho moves by -2.45e-5 to
++2.34e-5, nu by -2.6e-5 to 0 (1-9 phi), the normal-incidence loss by at most 0.0023 dB; the pieces meet at
+5.3 phi to 4e-6 (5.1e-5 before). 1.0091 in J&R (11.2) is a misprint, now confirmed by the original;
+0.4566 / 0.4556 in (11.3) stays open ([MJ89] prints no k(Mz)).

@@ -7,6 +7,17 @@ target strength, NL0 the noise spectrum level (dB re 1 uPa^2/Hz) at the hydropho
 array gain, and 10 log10(T) the matched-filter gain against white noise for a pulse of
 duration T (equivalently: in-band noise NL0 + 10 log10(B), compression gain 10 log10(BT)).
 SNR_out is the ratio of peak signal power to mean noise power at the beamformer output.
+
+Reverberation (sonar-w2w3, D-198): with `reverberation_db` (a function of slant range giving the reverberation level
+re the source level at the target's delay, after the same pulse compression and the beam: gpusonar/reverb_budget.py,
+Jackson and Richardson 2007 (G.11)-(G.13) with the compressed pulse) the SNR is over the power sum of noise and
+reverberation:
+
+    SNR_out = -10 log10(10^(-SNR_noise / 10) + 10^(-SRR / 10)),   SRR = TS - 2 TL - RL_re_SL
+
+`signal_to_noise` and `signal_to_reverberation` give the two apart and `limited_by` which is the smaller. Without it
+(the default) every figure is the noise-only one, computed exactly as before. A budget without reverberation is
+optimistic wherever the boundaries' reverberation exceeds the noise: say so where its ranges are quoted.
 """
 
 from __future__ import annotations
@@ -34,6 +45,7 @@ class SonarEquation:
     depth: float = 0.0
     absorption_model: str = "francois_garrison"
     array_gain_db: float | None = None  # default: 10 log10(N), uncorrelated noise (from_sonar: against isotropic sea noise)
+    reverberation_db: object = None     # range -> reverberation level re SL at that delay, dB (reverb_budget.at_ranges); None: noise only
 
     @classmethod
     def from_sonar(cls, sonar: SonarModel, noise_spectrum_db: float, **kw) -> "SonarEquation":
@@ -69,10 +81,38 @@ class SonarEquation:
     def processing_gain(self) -> float:
         return 10.0 * np.log10(self.bandwidth * self.pulse_duration)
 
-    def snr(self, range_m):
-        """Output SNR (dB) after pulse compression and beamforming."""
+    def signal_to_noise(self, range_m):
+        """Output SNR (dB) against noise alone, after pulse compression and beamforming."""
         return (self.echo_level(range_m) - self.noise_level_in_band() + self.processing_gain()
                 + self.array_gain())
+
+    def noise_equivalent_db(self) -> float:
+        """The noise after processing in the echo's units (dB re 1 uPa^2): what the echo level is compared with."""
+        return self.noise_level_in_band() - self.processing_gain() - self.array_gain()
+
+    def reverberation_level(self, range_m):
+        """Reverberation at the delay of a target at `range_m`, after processing, in the echo's units (dB re 1 uPa^2);
+        -inf without the term."""
+        if self.reverberation_db is None:
+            return np.full(np.shape(range_m), -np.inf) if np.ndim(range_m) else -np.inf
+        return self.source_level_db + np.asarray(self.reverberation_db(range_m), dtype=float)
+
+    def signal_to_reverberation(self, range_m):
+        """Echo over reverberation (dB; +inf without the term). Independent of the source level."""
+        return self.echo_level(range_m) - self.reverberation_level(range_m)
+
+    def snr(self, range_m):
+        """Output SNR (dB) after pulse compression and beamforming: over noise alone, or with `reverberation_db` over
+        the power sum of noise and reverberation."""
+        if self.reverberation_db is None:
+            return self.signal_to_noise(range_m)
+        n, r = self.signal_to_noise(range_m), self.signal_to_reverberation(range_m)
+        return -10.0 * np.log10(10.0 ** (-np.asarray(n) / 10.0) + 10.0 ** (-np.asarray(r) / 10.0))
+
+    def limited_by(self, range_m):
+        """"noise" or "reverberation": the larger of the two after processing at that range."""
+        r = self.signal_to_reverberation(range_m) < self.signal_to_noise(range_m)
+        return np.where(r, "reverberation", "noise") if np.ndim(r) else ("reverberation" if r else "noise")
 
     def detection_range(self, threshold_db: float, r_min: float = 1.0, r_max: float = 1e6) -> float:
         """Largest range at which SNR >= threshold (SNR falls monotonically with range)."""
@@ -87,8 +127,14 @@ class SonarEquation:
         return float(lo)
 
     def table(self, ranges) -> list[dict]:
-        return [{"range_m": float(r), "tl_db": float(self.transmission_loss(r)),
+        rows = [{"range_m": float(r), "tl_db": float(self.transmission_loss(r)),
                  "echo_level_db": float(self.echo_level(r)), "snr_db": float(self.snr(r))} for r in ranges]
+        if self.reverberation_db is not None:            # the two parts and which limits (the noise-only table is unchanged)
+            for row in rows:
+                r = row["range_m"]
+                row.update(snr_noise_db=float(self.signal_to_noise(r)), srr_db=float(self.signal_to_reverberation(r)),
+                           reverberation_level_db=float(self.reverberation_level(r)), limited_by=str(self.limited_by(r)))
+        return rows
 
 
 def isotropic_noise_gain_db(positions, frequency: float, sound_speed: float = acoustics.NOMINAL_SOUND_SPEED, direction=None, weights=None) -> float:

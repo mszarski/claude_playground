@@ -255,6 +255,53 @@ prints at the end (`dropped_blocks`, `overrun_pings`, `bad_blocks`, `reports_spl
 `WavSource.dropped_pings` (not printed: read it from the source); whether Python and C++
 reports were identical; the noise fit (`fit_noise.py` report and `--check` round trip).
 
+**A seafloor backscatter fit** (`tools/fit_sediment.py`; estimators in `python/gpusonar/measure.py`;
+G-9 of `docs/tasks/SST_GAPS_JACKSON.md`). How it is judged:
+- Each value is 10 log10 of a mean INTENSITY: S_b from the calibrated level by (G.13) with Psi from
+  (G.28)-(G.29) (`measure.backscattering_strength_db`, `psi_gaussian`; main lobe only; c tau / 2 well
+  below the range; horizontal beam about 20 degrees or less). Averaging dB instead puts Rayleigh
+  speckle 2.507 dB low whatever the number of samples (Jackson and Richardson 2007 (16.15); Dahl and
+  Plant 1997 eq. (6)); for the sea surface's slow modulation 3.4-4.5 dB
+  (`docs/references/surface_papers_mcdaniel_dahl.md` Sec. 3.4). Say which average was taken.
+- The error of a value follows from its number N of independent samples (App. G.2.3:
+  10 log10(1 + 1/sqrt(N))): 15 samples for 1.0 dB, 16 for 0.97 dB, 68 for 0.5 dB, 285 for 0.25 dB,
+  1844 for 0.1 dB (`measure.samples_for_error_db`). N is the window's duration over the resolution
+  (pulse length for CW, about 1/bandwidth for FM; p. 429) times the beams that do not overlap times
+  the pings that see different seafloor (a still sonar's pings do not: pp. 422-424). Example, 10 m
+  above a flat bottom, one beam, one ping: a 5-degree grazing band holds 126 / 24 / 7 samples at
+  10-15 / 25-30 / 45-50 degrees with a 0.2 ms CW pulse, 25 / 5 / 1.5 with 1 ms CW, 505 / 98 / 29 with
+  a 20 kHz FM sweep: a steep band needs many pings or beams for 0.5 dB.
+- Fit with `--independent-samples N` (or a per-value `n_samples` column). The book's rule is an
+  upper 1-sigma bar; on synthetic N = 16 data the fitted parameters fall within their reported 1 sigma
+  in 55 % of cases (nominal 68 %) with it, 61 % with `--sample-error gamma` (the test
+  `test_recovered_parameters_lie_within_their_reported_errors_at_the_expected_rate`, made and fitted with
+  the perturbation model, the default when it was measured): read the
+  reported errors as somewhat optimistic.
+- A fit passes when the rms residual is within about the stated error (the tool notes it when it is
+  more than twice), every parameter used downstream is constrained (not in `unconfirmed_fields`), no
+  parameter ends on a prior bound or a search limit (the tool prints an "on a bound" line and a bounded
+  fit's row an `on_bound` list: such a value is set by the bound, not measured), and the result is
+  recorded with the roughness model used
+  (`--roughness-model`; the tool's default is `small_slope` since A10 of `docs/references/CONFORMANCE.md`,
+  `perturbation` before it; with one frequency and volume-dominated data a small-slope fit without
+  prior bounds can trade sigma2 for a much rougher relief, `test_sediment_fit.py`) and the extended
+  report (covariance, predicted-strength error). Prior bounds are the tool's default since 2026-11-26
+  (the owner): a `--sediment` row with a grain size (`mean_grain_size_phi`) bounds w2, gamma2 and sigma2
+  by `prior_bounds` of that grain size (the w2 widths are ours; gamma2's lower end Jackson and
+  Richardson's; sigma2 1e-4 to 5e-3: Jackson and Richardson's typical 1e-4 to 4e-3 with the ceiling
+  raised to 5e-3 by the owner on 2026-11-26 because Jackson and Briggs (1992) print fits up to 0.005, one
+  site at the top (Arafura Sea: bimodal sediment, at the border of single scattering); a fitted sigma2
+  above 4e-3 is one the book calls suspect: the tool's `--help`); `--prior-bounds PHI` replaces them, `--no-prior-bounds` turns them
+  off (the unbounded fit of before, bit for bit); without a row or a grain size there are none, and the
+  tool's "bounds used:" line always says which applied. On the volume-dominated silt case the default
+  prior turns six bad unbounded fits of ten (nothing or only w2 flagged, sigma2 0.65-0.78 of the truth)
+  into ten with w2 and gamma2 flagged and sigma2 0.85-1.05 of the truth; in eight of the ten w2 or gamma2
+  then sits on a prior bound. Where the roughness models differ by less than the
+  error over the data (the report says so), the data cannot choose among them; at D-193's Gallaudet
+  site they differ by under 0.05 dB and two band means fix neither w2 nor gamma2.
+- Calibration bias is not in these errors: an x dB error in the absolute level moves w2 and sigma2 by
+  the factor 10^(x / 10) unseen by the fit. State the calibration's own uncertainty beside the fit.
+
 Where results go: the report to the owner or orchestrator, with **proposed** text for a new
 `docs/RESULTS.md` section (each row naming what it is compared with, as that file does) and
 for `docs/STATUS.md` ("Where the code has run", the open items it closes or opens, "What is

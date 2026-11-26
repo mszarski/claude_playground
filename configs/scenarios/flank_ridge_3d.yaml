@@ -1,0 +1,28 @@
+# ILLUSTRATIVE (unconfirmed relief: no site was measured). A sill crossing the look direction OBLIQUELY, the
+# fjord-like case one range profile cannot express: a straight Gaussian ridge (sim/bathymetry.py `ridge`) rising
+# 60 m from a 120 m bed (crest 60 m deep, sigma 250 m), its axis running 45 degrees east of north through the point
+# 2.5 km east of the sonar, so the broadside bearing crosses it at 45 degrees. Its flanks slope up to 6.9 degrees,
+# about 5.9 degrees across the broadside bearing (the cross-slope warning flags that bearing). A target 5 km out on
+# broadside behind the sill, sonar and target 30 m deep (30 m above the crest). Compare with `flank_ridge_nx2d` (the
+# same scene at `eigenray` over the profile along broadside: N x 2-D, where the sill looks 1.41 times wider and
+# square to the bearing).
+# Opt-in `eigenray3d` tier (Bellhop3D, external: GPUSONAR_BELLHOP3D). Target in noise only (no reverberation).
+name: flank_ridge_3d
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [4600, 5400]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 120.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {ridge: {depth: 120.0, height: 60.0, point: [0.0, 2500.0], azimuth_deg: 45.0, sigma: 250.0}}
+propagation:
+  range_step: 25.0
+  depth_step: 4.0             # puts nodes at the sonar's and the target's 30 m (the twin has the same grid)
+  n_beta: 181                 # 0.67 degree over the default 120 degrees of azimuth, as flank_seamount_3d
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: target, positions: [[0.0, 5000.0, 30.0]], target_strength_db: 10.0}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz, as flank_target_5km
+seed: 1

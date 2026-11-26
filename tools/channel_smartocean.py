@@ -664,6 +664,9 @@ def derive(res: dict, data: Path | None) -> dict:
     # The wind whose Pierson-Moskowitz height (acoustics.rms_wave_height) is the tail's, and what that wind's laws say of the rest.
     u = float(np.sqrt(h_short * 9.81 / (0.25 * 0.21)))
     surface["equivalent_wind_m_s"] = u
+    # The Cox-Munk TOTAL slope, named as such in the report and passed to the model explicitly: this comparison was made
+    # with it and is kept so. Time spreading's own wind law is the long-wave slope of Dahl 1996 eq. (A7) since
+    # CONFORMANCE.md A4 (acoustics.large_scale_mean_square_slope), 1.4 to 2.2 times smaller.
     mss = acoustics.mean_square_slope(u)
     surface["wind_law"] = {"mean_square_slope": mss, "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u),
                            "rms_frequency_hz": acoustics.rms_surface_vertical_speed(u) / (2.0 * np.pi * max(acoustics.rms_wave_height(u), 1e-9))}

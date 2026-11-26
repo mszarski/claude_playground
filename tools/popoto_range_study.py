@@ -92,6 +92,7 @@ def main():
         snr_is = (f"what the chain's detector needs of one row on `{args.build}` for a detection probability of {det['probability']:g} on one ping; {det['threshold_high_db']:.1f} dB for "
                   f"{det['probability_high']:g}; stacked rows need less of each row")
     out = {"range_m": args.range, "target_strength_db": args.ts, "pulse_s": args.pulse, "snr_db": args.snr, "snr_is": snr_is,
+           "reverberation": "not included: noise only (no boundary scattering is given for this study; the term exists, issue sonar-w2w3, gpusonar.reverb_budget); the source levels are optimistic wherever reverberation limits",
            "fixed_count": {}, "fixed_aperture": {}, "bellhop": []}
     plt.rcParams.update({"figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
                          "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK, "xtick.color": MUTED,

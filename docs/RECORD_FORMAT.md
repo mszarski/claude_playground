@@ -52,7 +52,12 @@ checked against `libs/core/include/sonar/core/record.hpp`.
   the record's depth for elevation, so those were kept as they were.
 - **`metadata/extra_json` carries more than before**, still as a free-form JSON object:
   under `nav`, the navigation unit's one-sigma figures and its (depth, sound speed)
-  samples, so that a replay reproduces the live run's sound-speed ladder (D-129).
+  samples, so that a replay reproduces the live run's sound-speed ladder (D-129). A
+  simulated record also says, under `gpusonar` → `engine`, what each simulator stage with
+  an engine choice ran on, e.g. `{"gpusonar": {"engine": {"eigenrays": "cpp", "pairing":
+  "cpp", "synthesis": "cpp_host", "reverberation": "cpp_host"}}}` (a-engrec; the values
+  and their meaning: `python/gpusonar/sim/engine.py` and `CONFIGURATION.md`). Readers
+  ignore it.
 - **`metadata/tvg_time` and `tvg_gain_db`** also hold a reported gain switch during
   transmit when the simulator's overload model is asked to report one (D-125). The
   simulator's truth about overload is never written into the record.

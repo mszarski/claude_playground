@@ -31,7 +31,7 @@ scene:
      waypoints: [[150.0, -78.0, 39.7], [190.0, -30.0, 39.7], [230.0, 5.0, 39.7], [262.0, 60.0, 39.7]]}
 reverberation:
   - {mu_db: -27.0}
-  - {model: chapman_harris}
+  - {model: chapman_harris}      # fitted at 0.4-6.4 kHz: at 120 kHz an extrapolation with no source behind it
 synthesis: {beam_floor_db: -45.0}
 receiver:
   adc: false

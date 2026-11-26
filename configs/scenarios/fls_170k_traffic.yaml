@@ -25,7 +25,7 @@ scene:
      heading_deg: -30.0, count: 200}
 reverberation:
   - {mu_db: -27.0}
-  - {model: chapman_harris}
+  - {model: chapman_harris}      # fitted at 0.4-6.4 kHz: at 170 kHz an extrapolation with no source behind it
 receiver:
   adc: false
   ambient_noise: {model: wenz}        # wind and shipping: the environment's

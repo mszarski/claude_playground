@@ -58,7 +58,12 @@ def sound_speed(temperature: float, salinity: float = 35.0, depth: float = 0.0) 
 
 
 def absorption_francois_garrison(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0):
-    """Absorption in dB/m at `frequency` (Hz, scalar or array). Valid 100 Hz to 1 MHz."""
+    """Absorption in dB/m at `frequency` (Hz, scalar or array).
+
+    Every constant equals Jackson and Richardson (2007) App. B, eqs. (B.6)-(B.12), p. 461 (confirmed;
+    docs/references/jackson_richardson_2007/01_sediment_properties.md Sec. 3.3). The scope printed there is
+    the open ocean, 30-40 ppt ("may not be appropriate" in low-salinity estuaries, p. 462); no frequency
+    range is printed in what was read. Used here down to 5 PSU, and without the boric term at 0 PSU: ours."""
     f = np.asarray(frequency, dtype=float) / 1e3  # kHz
     t, s, d = float(temperature), float(salinity), float(depth)
     c = 1412.0 + 3.21 * t + 1.19 * s + 0.0167 * d
@@ -149,7 +154,10 @@ def water_density(temperature: float = 10.0, salinity: float = 35.0) -> float:
     with the coefficients printed in arlpy (BSD 3-clause), arlpy/uwa.py:101-121, and again in
     UnderwaterAcoustics.jl (MIT), src/basic.jl:111-121, both of which attribute it to
     "Fofonoff (1985 - IES 80)". Neither has a pressure term, so neither has this: it is the
-    density near the surface. Their documented value: 1022.7 kg/m3 at 27 deg C and 35 ppt."""
+    density near the surface. Their documented value: 1022.7 kg/m3 at 27 deg C and 35 ppt.
+    Confirmed in Jackson and Richardson (2007), eqs. (B.2)-(B.3), p. 456 (EOS 80 at one atmosphere,
+    -2 to 40 deg C, 0-42 ppt, 0.05 kg/m3), every coefficient; their pressure term (B.1)/(B.4) is not
+    here (+0.45 kg/m3 at 100 m, 10 deg C, 35 PSU)."""
     t, s = float(temperature), float(salinity)
     a = 999.842594 + t * (6.793952e-02 + t * (-9.095290e-03 + t * (1.001685e-04 + t * (-1.120083e-06 + t * 6.536332e-09))))
     b = 0.824493 + t * (-4.0899e-03 + t * (7.6438e-05 + t * (-8.2467e-07 + t * 5.3875e-09)))
@@ -218,14 +226,21 @@ KNOTS_PER_MS = 1.943844
 def chapman_harris_db(grazing, wind_speed: float, frequency: float):
     """Sea-surface backscattering strength in dB (Chapman and Harris, JASA 34, 1962).
 
-    Unconfirmed (docs/REFERENCES.md Sec. 4 and Sec. 10): the paper was not opened, and neither
-    the formula below nor its stated range has been checked against any opened print.
+    Via secondary: Chapman and Harris's paper was not opened; the formula is identical to
+    McDaniel's reprint of it, "Sea surface reverberation: A review", JASA 94, 1905-1922 (1993),
+    eq. (27), p. 1918 (her text calls it "Eq. (28)" twice; there is no eq. (28))
+    (tests/python/test_surface_papers_1997.py; docs/references/surface_papers_mcdaniel_dahl.md):
 
     S = 3.3 beta log10(theta / 30) - 42.4 log10(beta) + 2.6,
     beta = 158 (v f^(1/3))^(-0.58), theta the grazing angle in degrees, v the wind speed in
-    knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here. The fit was made
-    to explosive-source data from 400 to 6400 Hz and grazing angles below about 40
-    degrees; using it at 8 kHz and above is an extrapolation.
+    knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here.
+
+    Range, as McDaniel states it: explosive sources north of Bermuda, March 1961, 400 to 6400 Hz,
+    wind up to 15 m/s, "at low grazing angles". No upper grazing angle is printed (her Fig. 27
+    plots 0 to 30 degrees). The sea was not fully developed (the wind rose from 0 to 15 m/s in
+    15 hours), and McDaniel finds that the law "yield[s] scattering strengths that exceed the
+    remaining data" at low frequency. At 30 degrees it goes as wind^2.46 and frequency^0.82.
+    Using it above 6.4 kHz is an extrapolation.
     """
     theta = np.degrees(np.maximum(np.asarray(grazing, dtype=float), 1e-3))
     v = max(float(wind_speed), 0.1) * KNOTS_PER_MS
@@ -246,8 +261,61 @@ def mean_square_slope(wind_speed: float) -> float:
 
     Unconfirmed (docs/REFERENCES.md Sec. 4): this total regression was not found printed in
     an opened document; the opened print of the two components sums to 0.003 + 0.00508 U
-    (`mean_square_slope_components`), 0.8 % lower."""
+    (`mean_square_slope_components`), 0.8 % lower.
+
+    This is the TOTAL slope (all wavelengths). Forward scatter is steered by the slopes of the long
+    waves only: Dahl, JASA 100, 748-758 (1996), eq. (A7), uses 0.0046 ln(2.1 U^2) (Phillips' fit to
+    Cox and Munk's slick surface, waves longer than about 30 cm), 1.4 to 2.2 times smaller than this
+    at 1.5 to 10 m/s, and reproduces measured angle spreads with it
+    (docs/references/surface_forward_scatter_dahl_1996_2004.md; docs/references/CONFORMANCE.md A4).
+    That law is `large_scale_mean_square_slope`, and time spreading takes it from the wind by
+    default; this total stays for backscatter facets and as `time_spread.surface.slope_law:
+    cox_munk_total`."""
     return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
+
+
+# The lowest wind of Dahl 1996 Table I (set 4, 1.5 m/s): the law is clamped there.
+LARGE_SCALE_SLOPE_MIN_WIND = 1.5
+
+
+def large_scale_mean_square_slope(wind_speed: float, *, warn: bool = True) -> float:
+    """Mean-square slope of the LONG waves of the sea surface (both axes together), the slope that
+    steers forward scatter: Dahl, JASA 100, 748-758 (1996), eq. (A7) (confirmed, read on the page;
+    docs/references/surface_forward_scatter_dahl_1996_2004.md Sec. 2.4),
+
+        s_L^2 = 0.0046 ln(2.1 U^2),    U the wind at 10 m in m/s.
+
+    What it is, as Dahl states it: Phillips' fit to Cox and Munk's OIL-SLICK data (waves shorter than
+    about 30 cm damped, cut-off K_c = 2 pi / 0.3 rad/m) with a K^-4 equilibrium range; 0.0046 is "a
+    more precise value of the 0.005" of his eq. (A4). It runs through the middle of his altimeter
+    slopes (0.002 to 0.03 at 2 to 8 m/s, Fig. A2, read from figure) and reproduces the printed s_L of
+    his Table I (0.085 to 0.149 rms at 1.5 to 7.6 m/s). Dahl 2004 (JASA 115, 589-599) gives a low-pass
+    slope of 0.152 rms at 7 m/s from a measured spectrum, against 0.146 from this law. Dahl 1999
+    (JASA 105, 2155) prints s_L^2 = 0.017 at about 4 m/s (this law: 0.0162).
+
+    Validity: the data behind it are 1.5 to 8 m/s (Dahl 1996 Table I and Fig. A2) and 7 m/s
+    (Dahl 2004); above about 8 m/s it is an extrapolation (no warning). It is NEGATIVE below
+    0.69 m/s (2.1 U^2 < 1), so below 1.5 m/s (set 4, Dahl's lowest wind, where the rms slope fitted to the
+    coherence was already half of the law's: slicks, swell, internal waves, Dahl 1996 p. 753) it is held at its
+    1.5 m/s value, 0.00714, with a warning (`warn=False` silences it). The hold is ours.
+
+    Compared with the total Cox-Munk slope of `mean_square_slope`: 1.5, 1.37, 1.57, 1.82, 1.90, 2.20
+    times smaller at 1.5, 3.2, 5, 7, 7.6, 10 m/s (computed). Use this one for forward scatter (time
+    and angle spreading, `sim/timespread.py`); backscatter facets (`sim/surface.py`) keep the total.
+
+    An open contradiction, recorded and not followed: the angle spreads Dahl 1999 measured at about
+    4 m/s (runs 2-4) imply 0.008 to 0.011 (our computation,
+    docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md Sec. 3.3), about half of this law's
+    0.0162; Dahl 1999 puts the late decay down to Bragg-scale waves that a facet model lacks."""
+    u = float(wind_speed)
+    if u < LARGE_SCALE_SLOPE_MIN_WIND:
+        if warn:
+            import warnings
+            warnings.warn(f"large_scale_mean_square_slope: Dahl 1996 eq. (A7) is negative below 0.69 m/s and below the "
+                          f"data under {LARGE_SCALE_SLOPE_MIN_WIND} m/s; wind {u} m/s is held at the 1.5 m/s value",
+                          RuntimeWarning, stacklevel=2)
+        u = LARGE_SCALE_SLOPE_MIN_WIND
+    return float(0.0046 * np.log(2.1 * u * u))
 
 
 def mean_square_slope_components(wind_speed: float) -> tuple[float, float]:
@@ -277,7 +345,8 @@ def rms_surface_vertical_speed(wind_speed: float) -> float:
 
 def rough_coherent_reflection(grazing, rms_height: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Amplitude of the coherent reflection from a boundary of given rms height relative to a
-    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)."""
+    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing). Confirmed: Jackson and Richardson (2007),
+    eq. (13.14), p. 335 (Eckart; the coherent part only)."""
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     gamma = 2.0 * k * float(rms_height) * np.sin(np.asarray(grazing, dtype=float))
     return np.exp(-0.5 * gamma**2)

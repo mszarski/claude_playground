@@ -110,7 +110,7 @@ def main() -> None:
     # the loss parameter is per wavelength).
     header("Bottom reflection loss, dB: -20 log10 |R| of the fluid half-space (bottom.reflection)   [rho, nu, delta]")
     for name, entry in table.items():
-        par = bottom.sediment_reflection(name)
+        par = bottom.sediment_reflection(name, shear=False)        # the fluid half-space, as labelled (rock is elastic since A8)
         mark = "*" if entry.get("unconfirmed_fields") or entry.get("status") != "confirmed" else ""
         print(row(f"{name}{mark}", -20 * np.log10(np.abs(bottom.reflection(g, **par))))
               + f"   [{par['rho']:.3f}, {par['nu']:.4f}, {par['delta']:.5f}]")
@@ -142,7 +142,8 @@ def main() -> None:
             print(row(f"Chapman-Harris, {u:g} m/s", acoustics.chapman_harris_db(g, u, f_hz)))
             print(row(f"Kraus empirical, {u:g} m/s", surface.kraus_surface_db(g, u, f_hz)))
             # The published bubble-layer and facet terms (Gallaudet 2001, eqs. (8), (10)); stated range 12-70 kHz.
-            print(row(f"bubble layer, apl_1994, {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c)))
+            print(row(f"bubble layer, dahl_1997, {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c, "dahl_1997")))
+            print(row(f"bubble layer, apl_1994, {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c, "apl_1994")))
             print(row(f"bubble layer, hall_nov., {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c, "hall_novarini")))
         print(row("bubble saturation level", 10 * np.log10(surface.BUBBLE_RERADIATION_DAMPING * np.sin(np.maximum(g, surface.MIN_GRAZING))
                                                           / (8 * np.pi * surface.bubble_damping_constant(f_hz)))))
@@ -160,7 +161,7 @@ def main() -> None:
     w2_rock = 4.847e-8 * (2.0 * np.pi) ** (2.73 - 2.0)
     header("Rock at 100 kHz, dB: the fluid model with the table's 'rock' and the roughness measured in arXiv:1601.06078 (abraded)")
     print(row("fluid model (no volume term)", bottom.backscattering_strength_db(
-        g, 100e3, c, roughness_model="small_slope", w2=w2_rock, gamma2=2.73, sigma2=0.0, **bottom.sediment_reflection("rock"))))
+        g, 100e3, c, roughness_model="small_slope", w2=w2_rock, gamma2=2.73, sigma2=0.0, **bottom.sediment_reflection("rock", shear=False))))
     print("  measured there at 20 deg: -33 to -26 (abraded), -30 to -20 (plucked). The fluid model is below the measured\n"
           "  range: rock carries shear waves, which this model does not have (the paper compares with an elastic model),\n"
           "  and the level rests on the spectrum normalisation assumed above. Not a validation of a fluid 'rock' row.")

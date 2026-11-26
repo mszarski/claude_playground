@@ -181,7 +181,20 @@ def _stats(ratio) -> str:
     return f"median {np.exp(np.median(lg)):.2f}, scatter x{np.exp(lg.std()):.2f} (n={len(r)})"
 
 
-def report(dep: list, freq: list, surveys: dict, wind: dict) -> str:
+def slope_law_of(purple: dict) -> str:
+    """Which wind law gave the model's surface slope in a saved Purple run: the Cox-Munk total (runs before
+    docs/references/CONFORMANCE.md A4) or the long-wave slope of Dahl 1996 eq. (A7) (since)."""
+    laws = set()
+    for site in purple.get("sites", []):
+        u, mss = site.get("wind_speed"), (site.get("surface") or {}).get("mean_square_slope")
+        if u is None or mss is None:
+            continue
+        laws.add("cox_munk_total" if abs(mss - acoustics.mean_square_slope(u)) < 1e-9 else
+                 "large_scale" if abs(mss - acoustics.large_scale_mean_square_slope(u, warn=False)) < 1e-9 else "other")
+    return ", ".join(sorted(laws)) or "unknown"
+
+
+def report(dep: list, freq: list, surveys: dict, wind: dict, slope_law: str = "") -> str:
     lines = ["# All UACR sites against our time spreading", "",
              "Data: Underwater Acoustic Channel Repository v1.0, doi:10.5281/zenodo.21287414 (CC BY 4.0); Li et al., arXiv:2609.03207.",
              "No site states wind, sea state, a sound-speed profile or a seabed type.", "",
@@ -212,6 +225,10 @@ def report(dep: list, freq: list, surveys: dict, wind: dict) -> str:
             lines.append(f"| ... at {rng:.0f} m | {_stats(sel)} | |")
         lines.append(f"| decay time, facet rule (model A through the estimators) | {_stats([r['decay_measured'] / r['decay_facet'] for r in dep])} | |")
         lines.append(f"| decay time, rule of thumb (model C) | {_stats([r['decay_measured'] / r['decay_rule'] for r in dep])} | |")
+        if slope_law:
+            lines.append(f"| ... the models' surface slope from the wind | `slope_law: {slope_law}` | large_scale (Dahl 1996 eq. (A7)) is the default "
+                         "since CONFORMANCE.md A4; with it the facet tails are 0.48-0.70 times as long at these winds, and the steep "
+                         "arrivals fit worse (docs/PHYSICS_NOTES.md Sec. 21.4 item 5) |")
         for lo, hi, tag in ((0.0, 12.0, "grazing under 12 deg (Gamma^2 of order 1)"), (12.0, 90.0, "grazing over 12 deg (Gamma^2 over 7)")):
             sel = [r for r in dep if lo <= r["grazing_deg"] < hi]
             lines.append(f"| ... {tag}: facet; rule of thumb | {_stats([r['decay_measured'] / r['decay_facet'] for r in sel])} | {_stats([r['decay_measured'] / r['decay_rule'] for r in sel])} |")
@@ -381,7 +398,7 @@ def main(argv=None) -> int:
             bw, how = tracker_bandwidth(ch)
             entry["tracker"] = f"{bw:.2g} ({how})"
         surveys[name] = entry
-    text = report(dep, freq, surveys, wind)
+    text = report(dep, freq, surveys, wind, slope_law_of(purple))
     print(text)
     if args.out:
         Path(args.out).write_text(text)

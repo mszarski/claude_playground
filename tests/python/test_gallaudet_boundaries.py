@@ -95,14 +95,38 @@ def test_printed_values_as_data():
 
 def test_table_vi_geoacoustic_ratios_are_our_grain_size_interpolation():
     """[G01] Table VI's rho, nu and delta came from grain-size regressions at Mz 6.36 (pp. 47-48);
-    our linear interpolation of the Cintron (2001) class table at 6.36 phi gives the same to
-    within 4e-5 (rho 1.14828, nu 0.98644, delta 0.003284). The spectral strength is our
-    grain-size rule too (0.0005175 cm^4, printed 0.000518). The two fitted values differ from our
-    class defaults: gamma2 3.00 against 3.25, sigma2 0.003 against 0.001 (three times ours)."""
-    ours = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI)
+    our linear interpolation of the Cintron (2001) class table at 6.36 phi (`method="table_linear"`)
+    gives the same to within 4e-5 (rho 1.14828, nu 0.98644, delta 0.003284). The spectral strength is
+    our grain-size rule too (0.0005175 cm^4, printed 0.000518). The two fitted values differ from our
+    class defaults: gamma2 3.00 against 3.25, sigma2 0.003 against 0.001 (three times ours).
+
+    Since A5 (docs/references/CONFORMANCE.md Sec. 1.1) the default method is the printed relations,
+    J&R (11.1)-(11.3): rho 1.148249, nu 0.986430, delta 0.003267 at 6.36 phi (before C5). Their rho is 5.08e-5
+    below the printed 1.1483, just outside that print's own rounding (half a unit of the fourth
+    decimal, 5e-5) and inside it once the rounding of the printed Mz 6.36 is added (+-0.005 phi times
+    the slope 0.0013 of (11.1) above 5.3 phi: 6.5e-6); their delta is 3.3e-5 from the printed 0.0033
+    (the print's rounding 5e-5), outside the 2e-5 held for the interpolation. So the strict check
+    below names `table_linear` and keeps its tolerances unchanged; the relations get their own check
+    at the print's rounding (5e-5, plus 1e-5 on rho for the rounding of Mz). Neither tolerance was
+    widened.
+
+    C5 (docs/references/bottom_mourad_jackson_1989.md) WIDENED the relations' rho check, said plainly:
+    the relations now carry the seven-digit constants of Mourad and Jackson (1989) (1)-(2) (1.1564755, not
+    J&R's 1.1565), which give rho 1.148225 at 6.36 phi, 7.53e-5 below the printed 1.1483: outside the
+    print's rounding even with that of Mz (5e-5 + 6.5e-6). The check was 6e-5; it is 8e-5 now, with the miss
+    itself pinned (7.4e-5 to 7.7e-5). Gallaudet's 1.1483 is reproduced by the table interpolation (strict
+    check above, unchanged) and by J&R's rounded constant, not by the original's digits: weak evidence that
+    his numbers came from the rounded relations or the table. nu (0.986422) and delta (0.003267) stay within
+    the print's rounding, unchanged."""
+    ours = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI, method="table_linear")
     assert ours["rho"] == pytest.approx(BOTTOM_FIT["rho"], abs=5e-5)
     assert ours["nu"] == pytest.approx(BOTTOM_FIT["nu"], abs=5e-5)
     assert ours["delta"] == pytest.approx(BOTTOM_FIT["delta"], abs=2e-5)
+    rel = bottom.sediment_from_grain_size(MEAN_GRAIN_SIZE_PHI)                     # the default: the relations
+    assert rel["rho"] == pytest.approx(BOTTOM_FIT["rho"], abs=8e-5) and 7.4e-5 < BOTTOM_FIT["rho"] - rel["rho"] < 7.7e-5   # 6e-5 before C5
+    assert rel["nu"] == pytest.approx(BOTTOM_FIT["nu"], abs=5e-5)
+    assert rel["delta"] == pytest.approx(BOTTOM_FIT["delta"], abs=5e-5)
+    assert {k: rel[k] for k in ("w2", "gamma2", "sigma2")} == {k: ours[k] for k in ("w2", "gamma2", "sigma2")}
     assert bottom.grain_size_w2_cm4(MEAN_GRAIN_SIZE_PHI) == pytest.approx(BOTTOM_FIT_PRINTED["w2_cm4"], abs=6e-7)  # 0.0005175 printed to 6 places
     assert ours["gamma2"] == 3.25 and ours["sigma2"] == 0.001
 
@@ -156,8 +180,10 @@ def test_class_default_against_the_site():
 
 def test_surface_models_lie_above_the_printed_band_means_at_3_m_s():
     """FINDING. At 68 kHz and 3 m/s the bubble-layer model (bubbles plus facets, no small-scale
-    roughness term) is ABOVE the printed band means, not below them:
-      default (extinction apl_1994):  SS2 (44-66 deg) -38.1 dB, 3.4 dB above -41.5;
+    roughness term) is ABOVE the printed band means, not below them, with the two extinction laws
+    taken from loss laws (the default since A1, `dahl_1997`, is not: next test):
+      extinction apl_1994 (the default before A1):
+                                      SS2 (44-66 deg) -38.1 dB, 3.4 dB above -41.5;
                                       SS3 (27-38 deg) -38.3 dB, 13.0 dB above -51.3.
       extinction hall_novarini:       -28.9 and -29.1 dB, 12.6 and 22.2 dB above.
     At this wind the bubble term is in its sparse limit (eq. (12)), proportional to the optical
@@ -189,7 +215,47 @@ def test_surface_models_lie_above_the_printed_band_means_at_3_m_s():
         assert got2 == pytest.approx(ss2, abs=0.3), (model, ext, got2)
         assert got3 == pytest.approx(ss3, abs=0.3), (model, ext, got3)
         assert got2 > 0.0 and got3 > 0.0                    # every model above the printed means
-    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) == pytest.approx(0.0024, abs=1e-4)
+    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="apl_1994") == pytest.approx(0.0024, abs=1e-4)
+
+
+def test_surface_with_the_published_extinction_law_at_3_m_s():
+    """`extinction: dahl_1997` (the default since A1; Dahl et al. 1997, Table II, the beta_I fit at 17 degrees,
+    North Sea; docs/references/surface_papers_mcdaniel_dahl.md Sec. 2.8, 3.4). At 68 kHz, 3 m/s:
+      beta_I 5.8e-4 (log10 f interpolation between the 50 and 70 kHz fits; ours), 6.2 dB below
+      apl_1994's 2.4e-3;
+      SS2 (44-66 deg) -43.7 dB, 2.2 dB BELOW -41.5 (apl_1994: 3.4 dB above);
+      SS3 (27-38 deg) -44.4 dB, 6.9 dB above -51.3 (apl_1994: 13.0 dB above).
+    The note computed -43.4 and -44.1 dB (-1.9 / +7.2) with the 70 kHz fit scaled to 68 kHz as f^0.8
+    (beta_I 6.2e-4) instead; that construction is reproduced here too: the two differ by 0.3 dB. So the
+    published law removes 6.1 of the 13.0 dB at 27-38 degrees and all of the 3.4 dB at 44-66
+    degrees. What remains at 27-38 degrees (about 7 dB) is not explained by any law in hand; the
+    averaging of the printed means (dB or intensity: 3.4-4.5 dB under Dahl and Plant's statistics)
+    and the omitted roughness term are candidates, neither proven (the note Sec. 3.4)."""
+    def model(beta_i):
+        def fn(g):
+            b = beta_i / np.sin(g)
+            level = surface.BUBBLE_RERADIATION_DAMPING * np.sin(g) / (8 * np.pi * surface.bubble_damping_constant(FREQUENCY))
+            # the facets attenuated by the layer, exp(-2 b) (A2; 0.001 dB in these bands at 3 m/s)
+            return level * (1 + 8 * b * np.exp(-2 * b) - np.exp(-4 * b)) + surface.facet_backscatter(g, WIND_SPEED) * np.exp(-2 * b)
+        return fn
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                       # 68 kHz and 3 m/s are inside both stated ranges
+        beta_i = surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="dahl_1997")
+        ours = lambda g: 10 ** (surface.bubble_layer_surface_db(g, WIND_SPEED, FREQUENCY, extinction="dahl_1997") / 10)  # noqa: E731
+        ss2 = _band_db(ours, "SS2") - BANDS["SS2"][2]
+        ss3 = _band_db(ours, "SS3") - BANDS["SS3"][2]
+    assert beta_i == pytest.approx(5.81e-4, rel=0.005)
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY, extinction="apl_1994") / beta_i) == pytest.approx(6.2, abs=0.1)
+    assert surface.bubble_layer_optical_depth(WIND_SPEED, FREQUENCY) == beta_i               # the default (A1)
+    assert _band_db(model(beta_i), "SS2") - BANDS["SS2"][2] == pytest.approx(ss2, abs=1e-9)   # the formula typed here
+    assert ss2 == pytest.approx(-2.2, abs=0.1), ss2          # measured -2.15 (band mean -43.65 dB)
+    assert ss3 == pytest.approx(+6.9, abs=0.1), ss3          # measured +6.88 (band mean -44.42 dB)
+    note_beta = 10 ** (-5.75 + 5.35 * math.log10(WIND_SPEED)) * (68.0 / 70.0) ** 0.8         # the note's construction
+    assert note_beta == pytest.approx(6.2e-4, rel=0.005)
+    assert _band_db(model(note_beta), "SS2") == pytest.approx(-43.4, abs=0.05)                 # measured -43.41
+    assert _band_db(model(note_beta), "SS3") == pytest.approx(-44.1, abs=0.05)                 # measured -44.13
+    assert ss2 < 0.0 < ss3                                   # below the printed mean at 44-66 deg, still above at 27-38
 
 
 def test_bubble_cloud_peaks_and_the_saturation_level():
@@ -197,8 +263,9 @@ def test_bubble_cloud_peaks_and_the_saturation_level():
     for saturation". Our eq. (11) at 68 kHz reaches each printed peak to within 1 dB at some
     grazing angle (from 27.5 deg for -25.2 dB to 48.4 deg for -23.1 dB; the clouds lie outside
     the wake, below 72 deg of grazing), so the statement holds for our saturation level as it
-    is written. Our model with the ambient 3 m/s wind stays 13 to 15 dB below the clouds:
-    clouds from breaking ship waves are not in it, by design."""
+    is written. Our model with the ambient 3 m/s wind stays 19 to 21 dB below the clouds with the
+    default extinction `dahl_1997` (13 to 15 dB with `apl_1994`, the default before A1): clouds
+    from breaking ship waves are not in it, by design."""
     g = np.radians(np.linspace(1.0, 72.0, 7101))
     sat = surface.bubble_saturation_db(g, FREQUENCY)
     first = []
@@ -208,5 +275,8 @@ def test_bubble_cloud_peaks_and_the_saturation_level():
         first.append(float(np.degrees(g[near][0])))
     assert first == pytest.approx([37.5, 27.5, 43.0, 48.4], abs=0.1)
     ambient = surface.bubble_layer_surface_db(np.radians([30.0, 45.0, 60.0]), WIND_SPEED, FREQUENCY)
+    gap = min(CLOUD_PEAKS_DB) - float(np.max(ambient))
+    assert 18.7 < gap < 19.7, gap                            # measured 19.2 (to the lowest peak)
+    ambient = surface.bubble_layer_surface_db(np.radians([30.0, 45.0, 60.0]), WIND_SPEED, FREQUENCY, extinction="apl_1994")
     gap = min(CLOUD_PEAKS_DB) - float(np.max(ambient))
     assert 12.5 < gap < 13.5, gap                            # measured 13.1 (to the lowest peak)

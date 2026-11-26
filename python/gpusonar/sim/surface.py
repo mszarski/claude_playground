@@ -313,6 +313,34 @@ def bubble_loss_table(model: str, wind_speed: float, frequency: float, sound_spe
     return grazing, np.asarray(fn(grazing, wind_speed, frequency, sound_speed), dtype=float)
 
 
+# --- Bistatic pairs (A3, docs/references/CONFORMANCE.md Sec. 1.1) ----------------------------------
+#
+# The laws below are backscattering laws: a strength at one grazing angle. The reverberation code
+# asks for sigma(g_in, g_out), also for one transmitter and receiver, since a pair of paths (one
+# direct, one bottom-bounced) meets the boundary at two angles. TR 0702 Sec. 6.4.2 (printed): a
+# monostatic model is made bistatic by the geometric mean of the two backscattering strengths,
+# sigma(g_in, g_out) = sqrt(sigma(g_in) sigma(g_out)): "geometric_mean", the default since A3.
+# "mean_angle", sigma((g_in + g_out) / 2), is the rule before A3. The two agree, bit for bit, when
+# g_in = g_out. Of the two the geometric mean is the closer to the one published bistatic surface
+# term, Dahl (1999) eq. (13), by 0.3 to 5 dB (neither reproduces it;
+# docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md Sec. 3.2); applied to the facet term's
+# bubble attenuation it gives exactly Dahl (1999) eq. (12), exp(-(beta_I / sin t_i + beta_I / sin t_s)).
+BISTATIC_RULES = ("geometric_mean", "mean_angle")
+
+
+def bistatic_strength(monostatic_db, rule: str = "geometric_mean"):
+    """The function of (grazing in, grazing out), radians, giving the linear strength of a
+    backscattering law `monostatic_db` (a function of grazing returning dB) for a pair of angles,
+    by `rule` (comment above): "geometric_mean" (default) or "mean_angle"."""
+    if rule == "geometric_mean":
+        return lambda g_in, g_out: 10.0 ** ((monostatic_db(np.asarray(g_in, dtype=float))
+                                             + monostatic_db(np.asarray(g_out, dtype=float))) / 20.0)
+    if rule == "mean_angle":
+        return lambda g_in, g_out: 10.0 ** (monostatic_db(0.5 * (np.asarray(g_in, dtype=float)
+                                                                 + np.asarray(g_out, dtype=float))) / 10.0)
+    raise ValueError(f"unknown bistatic_rule {rule!r}; one of {', '.join(BISTATIC_RULES)}")
+
+
 def kraus_surface_db(grazing, wind_speed: float, frequency: float):
     """Empirical sea-surface backscattering strength, dB, at grazing angles in radians, wind
     speed in m/s and frequency in Hz (module docstring, item 2)."""
@@ -326,10 +354,10 @@ def kraus_surface_db(grazing, wind_speed: float, frequency: float):
     return 10.0 * (-5.05 + 2.0 * np.log10(1.0 + v) + (v / 150.0) * np.log10(f + 0.1) + b * np.log10(np.tan(t)))
 
 
-def kraus_surface_strength(wind_speed: float, frequency: float):
+def kraus_surface_strength(wind_speed: float, frequency: float, bistatic_rule: str = "geometric_mean"):
     """`kraus_surface_db` as the function of (grazing in, grazing out) the reverberation code
-    takes. A backscattering fit: for a path pair it is evaluated at the mean angle."""
-    return lambda g_in, g_out: 10.0 ** (kraus_surface_db(0.5 * (g_in + g_out), wind_speed, frequency) / 10.0)
+    takes. A backscattering fit: a pair of angles by `bistatic_rule` (`bistatic_strength`)."""
+    return bistatic_strength(lambda g: kraus_surface_db(g, wind_speed, frequency), bistatic_rule)
 
 
 def searay_bottom_db(grazing, frequency: float, bottom_type):
@@ -362,13 +390,15 @@ def searay_excess_over_lambert_bound_db(frequency: float, bottom_type) -> tuple[
     return float(excess[k]), float(t[k])
 
 
-def searay_bottom_strength(frequency: float, bottom_type):
+def searay_bottom_strength(frequency: float, bottom_type, bistatic_rule: str = "geometric_mean"):
     """`searay_bottom_db` as the function of (grazing in, grazing out) the reverberation code
-    takes. The law is unchanged; where it lies above the Lambert energy bound between 10 and 45
-    degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
+    takes, a pair of angles by `bistatic_rule` (`bistatic_strength`). The law is unchanged; where
+    it lies above the Lambert energy bound between 10 and 45 degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
     a warning says so, once per bottom type (D-88). For rock the measured Lambert value is in
     `configs/sediments.yaml` (`rock`: mu = -16 dB, range -23 to -10): the reverberation item
     `{boundary_z, sediment: rock}`."""
+    if bistatic_rule not in BISTATIC_RULES:
+        raise ValueError(f"unknown bistatic_rule {bistatic_rule!r}; one of {', '.join(BISTATIC_RULES)}")
     excess, angle = searay_excess_over_lambert_bound_db(frequency, bottom_type)
     if excess > 0.0 and str(bottom_type) not in _warned_above_lambert_bound:
         _warned_above_lambert_bound.add(str(bottom_type))
@@ -379,7 +409,7 @@ def searay_bottom_strength(frequency: float, bottom_type):
             + ("; measured rock is mu = -23 to -10 dB: use the reverberation item {boundary_z, sediment: rock} "
                "(mu = -16 dB from configs/sediments.yaml) or give mu_db" if rock else "; give mu_db or a sediment for the site")
             + ". The law is used as printed; this warning is given once per bottom type.", stacklevel=2)
-    return lambda g_in, g_out: 10.0 ** (searay_bottom_db(0.5 * (g_in + g_out), frequency, bottom_type) / 10.0)
+    return bistatic_strength(lambda g: searay_bottom_db(g, frequency, bottom_type), bistatic_rule)
 
 
 # --- Surface backscattering from the bubble layer and from wave facets (model `bubble_layer`) -----
@@ -407,19 +437,58 @@ def searay_bottom_strength(frequency: float, bottom_type):
 # What the source does not print, and what is used here instead (ours, stated per item):
 #   - the unit of f in delta. kHz is used: it gives delta = 0.08 at 30 kHz and 0.10 at 68 kHz,
 #     the size of the damping of a resonant bubble (the damping of eqs. (7)-(9) above gives
-#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5.
+#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5. Confirmed
+#     since: Dahl et al., JASA 101, 2583-2595 (1997) [D97], p. 2587, print the same law as
+#     2.55e-3 f^(1/3) with f in Hz (Devin 1959), which is ours with f in kHz.
 #   - the empirical law for beta_I against wind speed and frequency. beta_I is the optical depth
 #     of one vertical crossing of the layer, so a surface bounce loses 2 beta_I / sin(t) nepers
 #     of intensity: exactly what the bubble loss laws of this module give. It is taken from one
-#     of them (`extinction`): "apl_1994" (default; beta_I = loss in dB x sin(t) ln(10) / 20, which
-#     for that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`).
+#     of them (`extinction`): "apl_1994" (beta_I = loss in dB x sin(t) ln(10) / 20, which for
+#     that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`); or, the
+#     default since A1 (docs/references/CONFORMANCE.md Sec. 1.1; "apl_1994" before), from the
+#     published fit of [D97] Table II, "dahl_1997" (`dahl_1997_optical_depth`): a printed fit wins
+#     over a secondary's loss law, and [D99]'s independent beta_I <= 0.0012 (30 kHz, about 4 m/s)
+#     lies 0.7 dB below it and 5.2 dB below "apl_1994" (surface_bistatic_dahl_1999_mcdaniel_1986.md
+#     Sec. 3.2). Whether Table II is the handbook's law is not stated in [D97]; it is one site
+#     (North Sea) and one angle (17 degrees).
 #   - the small-scale roughness term sigma_sc = G(U10) tan^4(t) (their eq. (9); G is "an empirical
 #     function" not printed) and the bubble extinction applied to the roughness terms. They are
-#     left out: between about 30 and 70 degrees, where the source says sigma_sc is fitted, this
-#     model is therefore a lower bound; below about 30 degrees bubbles dominate at these
-#     frequencies and winds, and above about 70 degrees the facets do.
+#     left out. Below about 30 degrees bubbles dominate at these frequencies and winds, and above
+#     about 70 degrees the facets do; between, where the source says sigma_sc is fitted, the
+#     model lacks a positive term. That makes it a lower bound on the full published model, NOT
+#     on the sea: at 2.6 to 6.4 m/s, 5 to 45 degrees, with `apl_1994` (the default before A1) it lies
+#     6 to 12 dB ABOVE every open-ocean data set McDaniel (1993) shows, and 3.4 to 13 dB above
+#     Gallaudet's 68 kHz, 3 m/s band means (with `dahl_1997`: -2.2 and +6.9 dB)
+#     (docs/references/surface_papers_mcdaniel_dahl.md Sec. 3.3-3.5;
+#     tests/python/test_gallaudet_boundaries.py). The omitted term computed from McDaniel's
+#     spectrum is at most about 3 dB at 8 m/s and above, so "lower bound" holds at high wind only.
 #   - delta_r = 0.0136 is k a at resonance for a bubble near the surface (2 pi f a_R / c with
 #     Minnaert's a_R f = 3.26 m Hz gives 0.01366: tested), so it is not a free constant.
+#
+# Confirmed in print since (docs/references/surface_papers_mcdaniel_dahl.md; held by
+# tests/python/test_surface_papers_1997.py): eq. (10) and its limits (11)-(12) are [D97] eqs.
+# (17)-(19) and McDaniel, JASA 94, 1905-1922 (1993) [McD93] eqs. (9)-(12) (Crowther 1980);
+# delta_r = 0.0136 in both; our saturation level at 17 degrees is within 0.1 dB of [D97] Table I
+# (-26.82 / -27.74 / -28.22 dB against -26.9 / -27.8 / -28.3 at 26.5 / 50 / 70 kHz); the facet
+# term eq. (8) equals [McD93] eq. (7) with the x-slope variance half our total mean-square
+# slope; and beta_I as one vertical crossing is [D97] Sec. VI's convention (two-way loss
+# 20 log10(e) beta_I / sin(t) dB).
+#
+# Where the published forms differ from this one (docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md;
+# docs/references/CONFORMANCE.md):
+#   - Dahl, JASA 100, 748-758 (1996), eq. (17), prints the bubble attenuation of a bounce as
+#     exp(-2 (beta_I / sin t_i + beta_I / sin t_s)), twice the exponent used here. Dahl, JASA 105,
+#     2155-2169 (1999), eq. (12), prints exp(-(beta_I / sin t_i + beta_I / sin t_s)) and says the 1996
+#     equation was printed with an error; [D97] Sec. VI agrees. Ours is the single exponent.
+#   - [D97] Sec. VI and [D99] eqs. (11)-(12) attenuate the roughness (facet) term by that factor;
+#     `bubble_layer_surface_db` does too since A2 (docs/references/CONFORMANCE.md Sec. 1.1;
+#     `facet_attenuation=False` is the model before: 0 dB at 45 degrees, -0.6 to -3.2 dB at 80-89
+#     degrees, 8-15 m/s, 30-68 kHz with `apl_1994`'s beta_I; -2.2 to -9.2 dB at 80 degrees, 10-12 m/s
+#     with the default `dahl_1997`'s, tests/python/test_literature_models.py).
+#   - For a bistatic pair the strength functions here take the geometric mean of the two
+#     backscattering strengths, TR 0702 Sec. 6.4.2's rule, since A3 (`bistatic_strength`; the
+#     arithmetic mean grazing angle before, `bistatic_rule="mean_angle"`). [D99] eq. (13), a
+#     published bistatic bubble term, is not implemented.
 BUBBLE_RERADIATION_DAMPING = 0.0136
 
 
@@ -428,20 +497,65 @@ def bubble_damping_constant(frequency: float) -> float:
     return 2.55e-2 * (float(frequency) / 1e3) ** (1.0 / 3.0)
 
 
+# [D97] Table II (p. 2591): log10 beta_I = a + b log10 U10, by frequency (Hz): (a, b). Fitted by
+# inverting eq. (17) (their Newton-Raphson) on 1-minute averages at 17 degrees grazing, North Sea
+# (SAXON-FPN, December 1991 and March 1992), data 0-13 m/s, the fit drawn dashed below 2.5 m/s
+# "to emphasize the extrapolation". U10: sonic anemometers on the platform, corrected to 10 m,
+# the same height as our `wind_speed`. The acoustic data were forced to the eq. (18) saturation
+# levels (Table I; a calibration uncertainty), so the absolute low-wind level carries that forcing.
+DAHL_1997_TABLE_II = {26.5e3: (-6.16, 5.50), 50e3: (-6.70, 6.40), 70e3: (-5.75, 5.35)}
+DAHL_1997_WINDS = (2.5, 13.0)               # m/s: the fit's solid line and the extent of its data
+DAHL_1997_FREQUENCY_EXPONENT = 0.8          # beta_I ~ f^0.8, [D97] p. 2592 (clearest 26.5-70 kHz)
+EXTINCTION_LAWS = ("apl_1994", "dahl_1997", "hall_novarini")
+
+
+def dahl_1997_optical_depth(wind_speed: float, frequency: float) -> float:
+    """beta_I from [D97] Table II (comment above): exactly the printed fit at 26.5, 50 and 70 kHz;
+    between them log10 beta_I linear in log10 f (ours); outside 26.5-70 kHz the nearest fit scaled
+    as f^0.8 ([D97]'s stated trend, its use outside their band ours), with a warning. A warning
+    below 2.5 m/s (their dashed extrapolation) and above 13 m/s (beyond their data); the value is
+    the fit's in both. One site, one angle (17 degrees): whether it holds at other angles and sites
+    is not tested in [D97] beyond one figure at 45 degrees. Nothing in [D97] is above 70 kHz."""
+    u, f = max(float(wind_speed), 0.0), float(frequency)
+    if not DAHL_1997_WINDS[0] <= u <= DAHL_1997_WINDS[1]:
+        side = f"below {DAHL_1997_WINDS[0]:g} m/s, where the published fit is an extrapolation (drawn dashed)" \
+            if u < DAHL_1997_WINDS[0] else f"above {DAHL_1997_WINDS[1]:g} m/s, beyond the data it was fitted to"
+        warnings.warn(f"dahl_1997 extinction: wind speed {wind_speed:g} m/s is {side}", stacklevel=3)
+    freqs = sorted(DAHL_1997_TABLE_II)
+    if not freqs[0] <= f <= freqs[-1]:
+        warnings.warn(f"dahl_1997 extinction: {f / 1e3:g} kHz is outside the fit's 26.5-70 kHz; the nearest fit is "
+                      f"scaled as f^{DAHL_1997_FREQUENCY_EXPONENT:g} (an extrapolation)", stacklevel=3)
+    if u <= 0.0:
+        return 0.0
+    log_u, log_f = math.log10(u), math.log10(f)
+    logs = [DAHL_1997_TABLE_II[x][0] + DAHL_1997_TABLE_II[x][1] * log_u for x in freqs]
+    log_freqs = [math.log10(x) for x in freqs]
+    if f <= freqs[0]:
+        level = logs[0] + DAHL_1997_FREQUENCY_EXPONENT * (log_f - log_freqs[0])
+    elif f >= freqs[-1]:
+        level = logs[-1] + DAHL_1997_FREQUENCY_EXPONENT * (log_f - log_freqs[-1])
+    else:
+        level = float(np.interp(log_f, log_freqs, logs))
+    return 10.0 ** level
+
+
 def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                               extinction: str = "apl_1994") -> float:
-    """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from a
-    bubble loss law of this module: "apl_1994" or "hall_novarini"."""
+                               extinction: str = "dahl_1997") -> float:
+    """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from the
+    published fit of Dahl et al. (1997), "dahl_1997" (default since A1; `dahl_1997_optical_depth`),
+    or from a bubble loss law of this module, "apl_1994" (the default before A1) or "hall_novarini"."""
     if extinction == "apl_1994":
         t = np.radians(30.0)                              # the law is exactly 1 / sin(t): any angle gives the same
         return float(apl_1994_bubble_loss_db(t, wind_speed, frequency)) * math.sin(t) * math.log(10.0) / 20.0
     if extinction == "hall_novarini":
         return bubble_layer_depth_integral(frequency, wind_speed, sound_speed)
-    raise ValueError(f"unknown extinction {extinction!r}; 'apl_1994' or 'hall_novarini'")
+    if extinction == "dahl_1997":
+        return dahl_1997_optical_depth(wind_speed, frequency)
+    raise ValueError(f"unknown extinction {extinction!r}; one of {', '.join(EXTINCTION_LAWS)}")
 
 
 def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                       extinction: str = "apl_1994"):
+                       extinction: str = "dahl_1997"):
     """Backscattering cross section per unit area and solid angle of the near-surface bubble
     layer, eq. (10) of the comment above, at grazing angles in radians."""
     t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
@@ -453,7 +567,13 @@ def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed
 
 def facet_backscatter(grazing, wind_speed: float):
     """Near-specular backscattering cross section of the wave facets, eq. (8) of the comment
-    above, with the Cox-Munk mean square slope of `acoustics.mean_square_slope`."""
+    above, with the Cox-Munk mean square slope of `acoustics.mean_square_slope`.
+
+    No shadowing factor, on purpose: Wagner's backscatter shadow function R (J. Acoust. Soc. Am. 41,
+    138-147, 1967, eqs. (49), (20)-(22); `bottom.wagner_backscatter_shadowing`) is 1 to 1e-6 dB wherever
+    this term is within 30 dB of its peak (grazing above 47-70 deg for 3-20 m/s; at 10 deg it would be
+    -0.02 to -0.35 dB, where the term is far below anything else; docs/references/shadowing_wagner_1967.md
+    W3, C-W3; tests/python/test_bottom_models.py)."""
     from ..acoustics import mean_square_slope
     s2 = mean_square_slope(wind_speed)
     t = np.clip(np.asarray(grazing, dtype=float), 1e-6, 0.5 * np.pi)
@@ -463,24 +583,34 @@ def facet_backscatter(grazing, wind_speed: float):
 
 
 def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                            extinction: str = "apl_1994"):
+                            extinction: str = "dahl_1997", facet_attenuation: bool = True):
     """Sea-surface backscattering strength, dB, from the bubble layer plus the wave facets
     (model `bubble_layer`; comment above): the two terms of the published high-frequency model
     whose formulas could be read. Stated range of the published model: 12 to 70 kHz, 3 to
-    15 m/s; a warning is raised outside it."""
+    15 m/s; a warning is raised outside it.
+
+    The facet term is attenuated by the layer, exp(-2 beta_I / sin(t)) with the bubble term's
+    beta_I ([D97] Sec. VI; [D99] eqs. (11)-(12): one crossing per leg; the default since A2,
+    docs/references/CONFORMANCE.md Sec. 1.1). `facet_attenuation=False` gives the model before A2."""
     if not 12e3 <= float(frequency) <= 70e3 or not 3.0 <= float(wind_speed) <= 15.0:
         warnings.warn(f"bubble_layer_surface_db: {frequency / 1e3:g} kHz, {wind_speed:g} m/s is outside the range the "
                       "published model was compared with data in (12-70 kHz, 3-15 m/s)", stacklevel=2)
-    total = bubble_backscatter(grazing, wind_speed, frequency, sound_speed, extinction) + facet_backscatter(grazing, wind_speed)
+    facets = facet_backscatter(grazing, wind_speed)
+    if facet_attenuation:
+        t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
+        beta_i = bubble_layer_optical_depth(wind_speed, frequency, sound_speed, extinction)
+        facets = facets * np.exp(-2.0 * beta_i / np.sin(t))
+    total = bubble_backscatter(grazing, wind_speed, frequency, sound_speed, extinction) + facets
     return 10.0 * np.log10(np.maximum(total, 1e-300))
 
 
 def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                                  extinction: str = "apl_1994"):
+                                  extinction: str = "dahl_1997", facet_attenuation: bool = True,
+                                  bistatic_rule: str = "geometric_mean"):
     """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
-    code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
-    return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,
-                                                               sound_speed, extinction) / 10.0)
+    code takes. A backscattering model: a pair of angles by `bistatic_rule` (`bistatic_strength`)."""
+    return bistatic_strength(lambda g: bubble_layer_surface_db(g, wind_speed, frequency, sound_speed, extinction,
+                                                               facet_attenuation), bistatic_rule)
 
 
 # --- The empirical surface laws against the bubble layer's saturation level (D-87) ----------------
@@ -553,8 +683,10 @@ def saturation_crossing_frequency(model: str, wind_speed: float, grazing: float 
     return hi
 
 
-def empirical_surface_strength(model: str, wind_speed: float, frequency: float, cap: str | None = None):
-    """The strength function of a `chapman_harris` or `kraus_surface` reverberation item.
+def empirical_surface_strength(model: str, wind_speed: float, frequency: float, cap: str | None = None,
+                               bistatic_rule: str = "geometric_mean"):
+    """The strength function of a `chapman_harris` or `kraus_surface` reverberation item, a pair of
+    angles by `bistatic_rule` (`bistatic_strength`; applied to the capped law when capped).
 
     Without `cap` it is the law, unchanged; if at `frequency` (12 kHz or above) the law lies above
     the bubble layer's saturation level at 10 degrees of grazing, a warning says so, once per law.
@@ -564,10 +696,11 @@ def empirical_surface_strength(model: str, wind_speed: float, frequency: float, 
         raise ValueError(f"unknown empirical surface law {model!r}; one of {_EMPIRICAL_SURFACE_LAWS}")
     if cap not in (None, *SURFACE_CAPS):
         raise ValueError(f"unknown cap {cap!r} for a surface reverberation item; one of {SURFACE_CAPS}")
+    if bistatic_rule not in BISTATIC_RULES:
+        raise ValueError(f"unknown bistatic_rule {bistatic_rule!r}; one of {', '.join(BISTATIC_RULES)}")
     wind_speed, frequency = float(wind_speed), float(frequency)
 
-    def law(g_in, g_out):
-        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
+    def law(g):
         if model == "chapman_harris":
             from ..acoustics import chapman_harris_db
             return chapman_harris_db(g, wind_speed, frequency)
@@ -586,9 +719,5 @@ def empirical_surface_strength(model: str, wind_speed: float, frequency: float, 
                                        if inside else "Above 70 kHz no model here is validated against anything we could open.")
                 + " `cap: bubble_saturation` on the item limits the law to that level; this warning is given once per law.",
                 stacklevel=2)
-        return lambda g_in, g_out: 10.0 ** (law(g_in, g_out) / 10.0)
-
-    def capped(g_in, g_out):
-        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
-        return 10.0 ** (np.minimum(law(g_in, g_out), bubble_saturation_db(g, frequency)) / 10.0)
-    return capped
+        return bistatic_strength(law, bistatic_rule)
+    return bistatic_strength(lambda g: np.minimum(law(g), bubble_saturation_db(g, frequency)), bistatic_rule)

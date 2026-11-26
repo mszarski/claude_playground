@@ -150,7 +150,9 @@ def test_nearby_scatterers_fade_together_and_distant_ones_do_not():
 def test_wind_speed_gives_the_surface_statistics():
     p = boundary_parameters({"wind_speed": 8.0}, surface=True)
     assert p["rms_height"] == pytest.approx(0.25 * 0.21 * 64.0 / 9.81)
-    assert p["mean_square_slope"] == pytest.approx(0.003 + 0.00512 * 8.0)
+    # The long-wave slope of Dahl 1996 eq. (A7) (CONFORMANCE.md A4); the Cox-Munk total before it, by name.
+    assert p["mean_square_slope"] == pytest.approx(0.0046 * np.log(2.1 * 64.0))
+    assert boundary_parameters({"wind_speed": 8.0, "slope_law": "cox_munk_total"}, surface=True)["mean_square_slope"] == pytest.approx(0.003 + 0.00512 * 8.0)
     # Second moment of the Pierson-Moskowitz spectrum, by quadrature.
     w = np.linspace(0.05, 60.0, 400_000)
     spec = 0.0081 * 9.81**2 * w**-5 * np.exp(-0.74 * (9.81 / (8.0 * w)) ** 4)
@@ -256,10 +258,12 @@ def steep_bounce():
 
 def test_the_options_off_give_the_output_of_the_version_before_them():
     """Sums over the eigenrays of a two-boundary case, from sim/timespread.py as it was before
-    angle spreading, within-ping Doppler, the facet decay time and convolved bounces."""
+    angle spreading, within-ping Doppler, the facet decay time and convolved bounces. The wind's
+    slope law of that version, the Cox-Munk total, is named (the default since CONFORMANCE.md A4
+    is the long-wave slope): the stored sums then hold bit for bit."""
     inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, bottom_coefficient=0.5, max_order=2)
     pts = np.array([[500.0, 40.0, 40.0], [300.0, -20.0, 10.0]])
-    kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0}, surface=True),
+    kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0, "slope_law": "cox_munk_total"}, surface=True),
               bottom={"rms_height": 0.03, "mean_square_slope": 0.02, "rms_vertical_speed": 0.0},
               surface_z=0.0, bottom_z=80.0, taps=4, seed=5, multi_bounce="sum", doppler_spectrum="lorentzian",
               decay_time="rule_of_thumb")

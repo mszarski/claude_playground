@@ -1,0 +1,30 @@
+# ILLUSTRATIVE (unconfirmed relief: no site was measured). A shelf that slopes steadily ACROSS the look direction:
+# 100 m deep at the sonar, deepening 1 degree to the north (the flank array looks east), so the broadside bearing runs
+# along a depth contour and an N x 2-D run sees a level bed on it, while every bottom bounce is turned out of the
+# bearing's plane towards the deeper side (docs/tasks/PROPAGATION_3D.md section 3: 0.17 degree a bounce at 5 degrees
+# grazing over 1 degree). Targets at 5 km: down-slope (north, bearing 78 deg, bed 118 m), broadside (bed 100 m) and
+# up-slope (south, bearing 102 deg, bed 82 m). Compare with `flank_level_nx2d` (exact N x 2-D for the broadside
+# target; for the other two the N x 2-D reference is each bearing's own profile, measured with Bellhop3D's N x 2-D
+# mode: docs/SCENARIOS.md) and with `flank_level_3d` (the same tier over a level bed).
+# Opt-in `eigenray3d` tier (Bellhop3D, external: GPUSONAR_BELLHOP3D). Target in noise only (no reverberation).
+name: flank_bank_3d
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [4600, 5400]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {plane: {depth: 100.0, slope: [0.017455, 0.0]}}     # tan(1 deg) of depth per metre north
+propagation:
+  range_step: 25.0
+  depth_step: 4.0             # puts nodes at the sonar's 30 m and the targets' 50 m
+  n_beta: 181                 # 0.67 degree over the default 120 degrees of azimuth, as flank_seamount_3d
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: north, positions: [[1039.6, 4890.7, 50.0]], target_strength_db: 10.0}    # down-slope
+  - {type: points, label: broadside, positions: [[0.0, 5000.0, 50.0]], target_strength_db: 10.0}   # along the contour
+  - {type: points, label: south, positions: [[-1039.6, 4890.7, 50.0]], target_strength_db: 10.0}   # up-slope
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}
+seed: 1

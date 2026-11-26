@@ -11,8 +11,8 @@ C = 1500.0
 
 
 def test_chapman_harris_values():
-    # The formula is unconfirmed (docs/REFERENCES.md Sec. 4): these check the code against
-    # its own docstring, not against the paper.
+    # These check the code against its own docstring. The formula itself is held against
+    # McDaniel's 1993 reprint of it (eq. (27); via secondary) in test_surface_papers_1997.py.
     # 30 degrees: the angle term vanishes and S = -42.4 log10(beta) + 2.6.
     v_knots, f = 20.0, 1000.0
     beta = 158.0 * (v_knots * f ** (1 / 3)) ** -0.58

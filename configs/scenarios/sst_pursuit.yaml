@@ -21,8 +21,12 @@
 #     target doesn't show at all on the level plot");
 #   - source level 230 dB: the surface reverberation stands about 10 dB above the wind noise
 #     in the displayed band (the text: "the dominant feature in the figure is the reverberation").
-# Not in this scenario because the simulator has no one-way source: the noise radiated by
-# the fleeing target, which SST's example includes.
+# Not in this scenario: the noise radiated by the fleeing target, which SST's example includes.
+# One-way sources exist (`sources:`, D-123), but TR 0702 gives no level for that noise.
+# Surface reverberation is Chapman-Harris at 9.9 kHz, above its fitted 0.4-6.4 kHz (McDaniel 1993
+# eq. (27), via secondary). For a bistatic pair it is taken at the mean grazing angle; TR 0702
+# Sec. 6.4.2 takes the geometric mean of the two strengths. Equal for equal angles; on legs with a
+# bottom bounce ours is higher, up to about 6 dB (docs/references/CONFORMANCE.md).
 # Frame: x ahead of the vehicle at transmit, z down, z = 0 the sea surface.
 name: sst_pursuit
 sonar: flank_32

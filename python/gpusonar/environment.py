@@ -606,6 +606,17 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         if prop.get("bottom_z") is not None and "bottom_coefficient" not in prop and bottom is not None:
             site.take(prop, "bottom", {"sediment": bottom} if isinstance(bottom, str) else bottom, "propagation.bottom", "environment.bottom")
         cfg["propagation"] = prop
+    elif tier == "sediment" and (cfg.get("propagation") or {}).get("penetration") in ("fluid", "rough"):
+        # Opt-in fluid penetration (G-3; `rough`, G-13, adds roughness scattering): the sediment is the environment's
+        # bottom unless the scenario gives one, and the attenuation is taken at the sonar's band centre, as for the
+        # eigenray tier. With the default
+        # (`penetration` absent or `constant`) nothing is filled in: the tier takes neither.
+        prop = dict(cfg["propagation"])
+        if bottom is not None:
+            site.take(prop, "bottom", {"sediment": bottom} if isinstance(bottom, str) else bottom, "propagation.bottom", "environment.bottom")
+        if sonar is not None:
+            site.take(prop, "frequency", float(sonar.center_frequency), "propagation.frequency", "the sonar's band centre")
+        cfg["propagation"] = prop
     elif tier in ("eigenray", "eigenray3d"):
         # eigenray3d (Bellhop3D, opt-in) takes the same ocean; its bed is `propagation.bathymetry` (3-D), not a profile.
         prop = dict(cfg.get("propagation") or {})

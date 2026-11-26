@@ -729,3 +729,32 @@ Columns are grazing angles in degrees.
 | 330 | class-median roughness | -42.7 | -36.3 | -32.0 | -30.0 | -28.3 | -27.0 | -24.8 |
 | 330 | median roughness + sigma2 0.002 | -39.7 | -33.4 | -29.0 | -27.0 | -25.4 | -24.2 | -22.7 |
 | 330 | median roughness + sigma2 0.003 | -37.9 | -31.6 | -27.3 | -25.3 | -23.6 | -22.5 | -21.3 |
+
+## Addendum 2026-11-26: two printed fits for decision 1 (appended; the text above is unchanged)
+
+What is still wrong or uncertain first: the two new values are fits at one site each, by the model's authors; one
+of them (Arafura Sea) the authors themselves qualify (below). Nothing in the class rows changes.
+
+Jackson and Briggs (1992), J. Acoust. Soc. Am. 92, 962-977, Table V (p. 973), print the volume parameter they fitted
+at two of the sites behind section 2.1's agents' computations (confirmed: read on the page images,
+`docs/references/bottom_backscatter_jackson_briggs_1992.md` Sec. 2.1 and 5.2):
+
+| Value | dB on the volume term vs 0.001 | What it is | Site, grain size, frequency | Where recorded | Independent of the others? |
+|---|---|---|---|---|---|
+| 0.005 | +7.0 | **printed fitted value** (the only fitted parameter of Table V; "0.004-0.006 give reasonable fits", p. 974); the paper says the sediment is bimodal (55 % sand and gravel by weight in a silty clay), so the mean grain size misleads, and that 0.005 is at the border of single scattering | Arafura Sea, 5.63 phi (Table II, surficial), 15-45 kHz | row `jackson_briggs_1992_arafura`; `tests/python/test_sediment_table.py` | another source than Table 14.1; one site |
+| 0.002 | +3.0 | **printed fitted value** (Table V, p. 975) | San Francisco (STRESS), 6.39 phi, 40 kHz | row `jackson_briggs_1992_san_francisco` | one site |
+
+These supersede, as evidence for these two sites, the agents' (14.10) values 0.0031 and 0.0037 of section 2.1 (ours;
+they disagree with the authors' fits: lower at Arafura by 2.1 dB, higher at San Francisco by 2.7 dB). Contradiction
+C5 is thereby partly answered: the two infinite-L_c sites now have printed fits, and they do not "agree with
+Gallaudet's 0.003" as one number either (0.005 and 0.002). With the printed fits in place of the two derived values,
+the six numbers are 0.0008, 0.0016, 0.0017, 0.002, 0.003, 0.005: median 0.00185 (+2.7 dB), geometric mean 0.0020
+(+3.0 dB), spread 0.0008 to 0.005 (8.0 dB) (ours, simple statistics; three printed fits, three agents' computations).
+
+Applied (the owner's standing rule: a printed value wins over ours; one site's value is a named site row, not a class
+value): the seven soft rows' `sigma2_range` is now [0.0008, 0.005] and their `basis` names the two fits
+(`configs/sediments.yaml`); the class values (0.001; 0.000986 for `very_fine_silt`) are unchanged, so no default or
+shipped result moves. The two sites, and Quinault (fine sand, sigma2 0.001) and Williams and Jackson (1998)'s Panama
+City (coarse sand), are named site rows used only when named. The recommendation of section 0 (option E) stands;
+the evidence for "the class value is low" is a little stronger at the upper end (+7.0 dB at one bimodal site) and
+unchanged in kind (one paper, two sites).

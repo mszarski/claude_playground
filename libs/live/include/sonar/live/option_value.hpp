@@ -12,6 +12,8 @@ namespace sonar::live {
 
 /// A number (as strtod reads it, the whole text; blanks either side allowed). Throws std::invalid_argument.
 double option_number(const std::string& key, const std::string& value);
+/// A finite number >= 0 (an elastic bottom's shear speed and attenuation). Throws std::invalid_argument.
+double option_nonnegative(const std::string& key, const std::string& value);
 /// A whole number (an integer written as such or as a float with no fraction: 3, 3.0, 1e3).
 std::int64_t option_integer(const std::string& key, const std::string& value);
 /// A switch: a number (0 off, any other on) or true / false / True / False.

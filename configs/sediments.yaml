@@ -59,16 +59,26 @@
 #   uuid:b635a0a8-2ca1-44ae-8fbc-0866b3304827) tabulates the same quantity at whole phi from -1
 #   to 9 (0.0129 ... 0.0005 cm^4); the regression reproduces it to the printed digits, and it
 #   reproduces the two rows of arXiv:1809.08459 (printed in m^(4 - gamma)) within 0.3 %, which
-#   also checks the unit conversion.
+#   also checks the unit conversion. The original print (2026-11-26): Mourad and Jackson, "High
+#   Frequency Sonar Equation Models for Bottom Backscatter and Forward Loss", OCEANS '89 Proceedings,
+#   pp. 1168-1175, eqs. (6)-(7) print this relief rule and w2 = 0.00207 h^2 h0^2 for gamma = 3.25,
+#   "defined for 1 <= Mz <= 9" (confirmed; docs/references/bottom_mourad_jackson_1989.md Sec. 2.2).
+#   Our rows from -1 to 1 phi extend it as Snellen et al. do.
 # - Spectral exponent: 3.25 for every sediment (Snellen et al. 2011, Sec. II.A: "a value of 3.25
 #   for the exponent of the bottom relief spectrum is found to work well for many types of
-#   sediments", citing the handbook).
+#   sediments", citing the handbook). Printed as "3.25 for all grain sizes" in Mourad and Jackson
+#   (1989), eq. (5) (confirmed); the measured exponents they cite average 3.23 (sd 0.44), via secondary.
 # - Volume parameter (volume scattering cross section / attenuation in dB/m): 0.002 for
 #   -1 <= Mz < 5.5 and 0.001 for 5.5 <= Mz <= 9 (Snellen et al. 2013, text after eq. (5); Snellen
 #   et al. 2011, Table II). It is the least certain of the three: the GeoHab report says it "has
 #   to be adjusted empirically", and Snellen et al. (2013) found values half the rule at 300 kHz.
 #   The row `medium_sand` (from arXiv:1809.08459) holds 0.001 where this rule gives 0.002: see
-#   its note.
+#   its note. Mourad and Jackson (1989), eq. (4), the original, step it at 5.0 phi (0.002 for
+#   1 <= Mz < 5.0, 0.001 for 5.0 <= Mz <= 9; confirmed), but their own Fig. 8 used 0.002 at 5.3 phi
+#   and the later prints of the model (Snellen et al. 2011, 2013) step at 5.5: the step stays at
+#   5.5. Only `sandy_silt` (5.0 phi) would differ: 0.001 by eq. (4), -3.0 dB on its volume term.
+#   The density and speed relations of the same paper (eqs. (1)-(2)) are those of
+#   `bottom.apl_grain_size_relations` (seven-digit constants since C5 of the note above).
 # - Rock and pebbles are not fluid sediments. The open literature describes rock by Lambert's
 #   law fitted to measurements, or by an elastic small-slope model with measured roughness; the
 #   handbook's own curves for rock exceed the largest Lambert law energy conservation allows
@@ -76,6 +86,14 @@
 #   and carry an `empirical_backscatter:` block instead (bottom.empirical_backscatter): a Lambert
 #   parameter with the range of the published values. The fluid-sediment scattering models
 #   still refuse them.
+#
+# `sigma2_range: [low, high]`, `basis:` and `w2_note:` (the seven rows of 5.5 phi and finer; conformance item A6 of
+# docs/references/CONFORMANCE.md, option E of docs/tasks/SEDIMENT_DEFAULTS_DECISION.md) are information for the
+# user and are NOT used by the loader or any model: the class values stay as they are. `sigma2_range` is what
+# measured sites of that grain size imply for the volume parameter (agents' computations and three fitted sites,
+# `basis` says which); `w2_note` says how the roughness rule compares with measured spectra. A site with its own
+# numbers is a NAMED SITE ROW (`gallaudet_2001_site`), never a class row: use it, or give `sigma2` beside a class
+# name, or fit the site (tools/fit_sediment.py).
 #
 # `grain_size_phi: [low, high]` is the mean grain size range that Lurton, Lamarche et al.,
 # "Backscatter measurements by seafloor-mapping sonars: Guidelines and Recommendations" (GeoHab
@@ -112,6 +130,10 @@ medium_sand:
     mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sand or Medium Sand", bulk grain size index 1.5)'
     w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.406e-4 at 1.5 phi)"
     gamma2: "tabulated (arXiv:1809.08459 Table 1)"
+    # A further print of rho, nu, delta, w2 and gamma2: Jackson and Richardson (2007), Fig. 13.2, p. 337,
+    # inputs "typical of a medium sand seafloor": a_rho 1.845, nu_p 1.1782, delta_p 0.01624,
+    # w2 0.000141 m^0.75, gamma2 3.25 (the book does not say they are TR 9407's; it prints no sigma2 for
+    # medium sand). Held by tests/python/test_jackson_2007_bottom.py.
     sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength): 0.001. The grain-size rule gives 0.002; the difference is known and the tabulated value is kept (D-90: a sourced tabulated value outranks a rule), see note"
   note: >-
     Volume parameter: the paper's -20.0 dB/m with 10.0 dB/m of attenuation is sigma2 = 0.0010.
@@ -157,6 +179,37 @@ very_fine_silt:
     w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.6365e-5 at 7.5 phi)"
     gamma2: "tabulated (arXiv:1809.08459 Table 1)"
     sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength, 0.00099; the grain-size rule gives 0.001)"
+  sigma2_range: [0.0008, 0.005]
+  basis: &soft_basis >-
+    The class value is the published model's (0.001 from 5.5 phi: Snellen et al. 2013, text after eq. (5);
+    Snellen et al. 2011, Table II; arXiv:1809.08459 Table 1, very fine silt 0.00099; printed, all attributed
+    to APL-UW TR 9407). Measured sites of this grain size imply 0.0008 to 0.005 (-1.0 to +7.0 dB on the
+    volume term). Two are printed fits by the model's authors: Jackson and Briggs (1992) Table V print fitted
+    values at two of these sites, Arafura Sea 0.005 (0.004-0.006 "give reasonable fits"; 5.63 phi; the paper
+    says the sediment is bimodal, sand and gravel in a silty clay, so its mean grain size misleads, and 0.005 is at
+    the border of single scattering) and San Francisco 0.002 (6.39 phi); one site each (rows
+    jackson_briggs_1992_arafura, jackson_briggs_1992_san_francisco). The agents' (14.10) values for the same two
+    sites below, 0.0031 and 0.0037, are ours, disagree with the authors' fits, and are superseded as evidence by
+    them. Five of those numbers are rows of ONE table, J&R (2007) Table 14.1, pushed through (14.10)
+    by agents (ours, not printed volume parameters, not five independent measurements;
+    docs/references/jackson_richardson_2007/02_roughness_heterogeneity_statistics.md Sec. 3.3, recomputed in
+    docs/tasks/SEDIMENT_DEFAULTS_DECISION.md Sec. 2.1): Arafura Sea 5.6 phi 20 kHz 0.0031; San Francisco
+    6.4 phi 40 kHz 0.0037 (both superseded, above); Orcas 8.1 phi 40 kHz 0.0008; Porto Venere 9.1 phi 140 kHz 0.0017; P. della
+    Mariella 7.2 phi 140 kHz 0.0016. One fitted site: Gallaudet (2001) Ch. 3 Table VI, 0.003 (printed; NE
+    Gulf of Mexico, 6.36 phi, 68 kHz; row gallaudet_2001_site). His two band means cannot separate volume from
+    roughness scattering, so his 0.003 is not independent evidence for the volume parameter: it is evidence
+    only under volume dominance, which is our model's assumption there (roughness 21 to 28 dB below volume
+    off specular, docs/DECISIONS.md D-193); the range counts it as one fitted site. The class value is unchanged (a fit at one site is not a class value). For a measured mud give
+    sigma2 beside the name or fit the site.
+  w2_note: &soft_w2_note >-
+    The roughness is the grain-size rule (Snellen et al. 2013 eq. (5): 0.0005175 cm^4 from 5 phi, exponent
+    3.25). Briggs' measured spectra for silts and clays (J&R Table 6.1, the 8 rows of 5.5 phi and finer, four
+    sites) lie above it: median +7.1 dB at 10 kHz, +2.2 dB at 100 kHz, -0.9 dB at 300 kHz at the backscatter
+    Bragg wavenumber (an agent's comparison, ours:
+    docs/references/jackson_richardson_2007/02_roughness_heterogeneity_statistics.md Sec. 3.2). Kept: for these
+    rows the volume term is at least 14.3 dB above the roughness term at 5-60 degrees, so the data's class
+    median would move the total by at most 0.45 dB up to 60 degrees and 1.3 to 2.5 dB at 75 degrees
+    (docs/tasks/SEDIMENT_DEFAULTS_DECISION.md Sec. 0, table T4).
   status: confirmed
   source: >-
     Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1, column "Very Fine Silt" (values
@@ -201,7 +254,25 @@ rock:
     delta: 0.01374
     water_density: 1023.0
     water_sound_speed: 1528.0
+    shear_speed: 1900.0
+    shear_delta: 0.085
   reflection_only: true
+  unconfirmed_fields: [shear]
+  note: >-
+    An elastic solid (A8): with shear_speed the flat-interface reflection is Jackson and Richardson
+    (2007) (9.34)-(9.40) (bottom.reflection, propagation.rayleigh_reflection, Bellhop's shear column).
+    shear_speed 1900 m/s and shear_delta 0.085 are the "generic rock" of Olson, Lyons and Saebo,
+    arXiv:1601.06078, Table II (this file's header; they attribute it to TR 9407 Table IV.2, not read:
+    via secondary), the best-sourced rock shear values the notes name
+    (docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md Sec. 3.3 and
+    WP4; 01_sediment_properties.md Sec. 3.4, WP-C). That rock has 3600 m/s and 2500 kg/m3; this row's
+    compressional speed and density are UnderwaterAcoustics.jl's, so 1900 / 3820 = 0.50 of V_p, inside
+    J&R Sect. 5.6's printed 40-60 % (p. 169): putting the two sources together is ours, hence
+    unconfirmed. Per bounce 1.6 / 2.9 / 5.5 / 14.6 / 8.8 / 6.3 / 4.5 dB at 5 / 10 / 20 / 30 / 40 / 45 / 60
+    degrees, as a fluid 0.0 to 0.1 dB (tests/python/test_elastic_bottom.py). The fluid half-space of
+    this row stays selectable: image_source bottom {sediment: rock, shear_speed: 0}, Bellhop
+    environment {sediment: rock, elastic: false}, the live chain's coverage and multipath_depth
+    bottom {sediment: rock, shear_speed: 0} (they take the row as elastic otherwise).
   empirical_backscatter:
     model: lambert
     mu_db: -16.0
@@ -218,6 +289,10 @@ rock:
       Lambertian: -33 to -26 dB at 20 degrees (arXiv:1601.06078). mu_db is the middle of the
       published range, our choice of a representative value; give the site's own where known.
       Energy conservation limits mu to 10 log10(1 / pi) = -5 dB.
+    # A further reference, not used: Jackson and Richardson (2007), Ch. 12 (pp. 324-326), fit Lambert's
+    # law to rock data at mu = -5.6 dB (10.4 dB above mu_db here), with the book's caveat that its rock
+    # data are sparse and older and include TR 9407 levels that exceed the energy bound (-4.97 dB).
+    # (docs/references/jackson_richardson_2007/04_scattering_models.md Sec. 3.5)
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:115, "Rock"; attributed there to APL-UW
@@ -244,6 +319,10 @@ pebbles:
       Ward 2015 and Trzcinska et al. 2021, neither opened), i.e. mu = -10 to -8 dB. One angle
       and a narrative statement, not a measured curve: unconfirmed below about 150 kHz and
       away from 45 degrees.
+    # A further reference, not used: Jackson and Richardson (2007), Ch. 12 (pp. 324-326), fit Lambert's
+    # law to gravel data at mu = -11.7 dB (2.7 dB below mu_db here), from sparse, older data; the book
+    # says no experiment has characterised a gravel or rock seafloor (p. 362).
+    # (docs/references/jackson_richardson_2007/04_scattering_models.md Sec. 3.5)
   unconfirmed_fields: [empirical_backscatter]
   status: confirmed
   source: >-
@@ -587,6 +666,9 @@ medium_silt:
       1 cm reference length; converted by bottom.w2_from_cm4).
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:130, "MediumSilt"; attributed there to APL-UW
@@ -612,6 +694,9 @@ sandy_mud:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:131, "SandyMud"; attributed there to APL-UW
@@ -638,6 +723,9 @@ fine_silt:
       1 cm reference length; converted by bottom.w2_from_cm4).
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:132, "FineSilt"; attributed there to APL-UW
@@ -663,6 +751,9 @@ sandy_clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:133, "SandyClay"; attributed there to APL-UW
@@ -688,6 +779,9 @@ silty_clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:135, "SiltyClay"; attributed there to APL-UW
@@ -714,7 +808,204 @@ clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
+  sigma2_range: [0.0008, 0.005]
+  basis: *soft_basis
+  w2_note: *soft_w2_note
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:136, "Clay"; attributed there to APL-UW
     TR 9407 (1994), IV-6 Table 2.
+
+
+# --- Named site rows: one measured site each, not a sediment class --------------------------------
+
+gallaudet_2001_site:
+  rho: 1.1483
+  nu: 0.9864
+  delta: 0.0033
+  mean_grain_size_phi: 6.36
+  scattering:
+    w2_cm4: 0.000518
+    gamma2: 3.00
+    sigma2: 0.003
+  provenance:
+    rho_nu_delta: "printed (Gallaudet 2001, Ch. 3 Table VI, p. 60; from grain-size regressions, pp. 47-48)"
+    mean_grain_size_phi: 'printed (Gallaudet 2001, Ch. 3 Table I(e), p. 55: bulk grain size 6.36 phi "estimated from porosity data")'
+    w2: "printed (Table VI, 0.000518 cm^4; the text calls it the APL-UW model default: our grain-size rule gives 0.0005175)"
+    gamma2: "fitted to the site, printed (Table VI; the text, p. 48: the best fit with gamma = 3.00)"
+    sigma2: "fitted to the site, printed (Table VI; the text, p. 48: sigma2 = 0.003)"
+  note: >-
+    A SITE, not a class: the inputs of the composite-roughness model that Gallaudet fitted to backscatter
+    measured at 68 kHz in the NE Gulf of Mexico (a silt-sand bottom, 78 % fines; the source does not say
+    "silty clay"). With these inputs our fluid_sediment model is 0.2 dB below his printed band mean at
+    48-66 degrees and 3.9 dB above at 29-37 degrees, all roughness models alike (docs/DECISIONS.md D-193;
+    tests/python/test_gallaudet_boundaries.py). The class row of its grain size, fine_silt, has sigma2 0.001
+    and is 5.0 and 0.8 dB lower. His 0.003 is one fitted site: his two band means cannot separate volume from
+    roughness scattering, so the value is evidence for the volume parameter only under volume dominance, the
+    assumption our model makes there (roughness 21 to 28 dB below volume off specular); the soft rows'
+    sigma2_range counts it so. His rho, nu, delta are what bottom.sediment_from_grain_size(6.36,
+    method="table_linear") gives within 4e-5 (the default relations: rho 5.1e-5 off).
+  status: confirmed
+  source: >-
+    Gallaudet, "Shallow water acoustic backscatter and reverberation measurements using a 68-kHz cylindrical
+    array", dissertation (2001), https://hdl.handle.net/10945/11015, Ch. 3 Table VI (p. 60) and Table I(e)
+    (p. 55); opened and read (docs/DECISIONS.md D-193). Ratios to the water above, as printed.
+
+# Jackson and Briggs (1992), J. Acoust. Soc. Am. 92 (2), 962-977: three sites, Table V (p. 973) the model inputs,
+# Tables I (whole core) and II (surficial 0-2 cm) the cores' mean grain size. Extraction and the reasons for each
+# choice: docs/references/bottom_backscatter_jackson_briggs_1992.md ([JB]) Sec. 2.1, 5.1, 6. The paper prints w2 in
+# cm^4 at K = 2 pi / lambda = 1 cm^-1 (h0 = 1 cm): the rows keep it as `w2_cm4` and the loader converts it with
+# bottom.w2_from_cm4, w2 [m^(4 - gamma2)] = w2_cm4 x 10^(2 gamma2 - 8) (the arithmetic is in each row's comment).
+# sigma2 is the only fitted parameter of Table V (one site each).
+
+jackson_briggs_1992_quinault:
+  # Table V, Quinault row: nu 1.113, rho 1.94, delta 0.0115, sigma2 0.001; ACROSS-strike gamma 3.67 and
+  # w2 0.00422 cm^4 (what Fig. 10 uses). w2 in SI: 0.00422 x 10^(2 x 3.67 - 8) = 0.00422 x 0.21878 = 9.232e-4 m^0.33.
+  # Also printed and not carried: along strike gamma 3.92, w2 0.00598 cm^4 (= 0.00598 x 10^(-0.16) = 4.137e-3
+  # m^0.08, J&R 2007 Table 13.1's Quinault row 0.0041); the paper calls the along-strike exponent unreliable (p. 974).
+  # Mz: Table II (surficial) 2.97 phi, carried; Table I (whole core) 2.94 phi.
+  rho: 1.94
+  nu: 1.113
+  delta: 0.0115
+  mean_grain_size_phi: 2.97
+  scattering:
+    w2_cm4: 0.00422
+    gamma2: 3.67
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; rho and nu equal the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 2.94)"
+    w2: "printed (Table V, across strike, 0.00422 cm^4; Table III's 1-D spectrum through the paper's eq. (4))"
+    gamma2: "printed (Table V, across strike, 3.67)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; the fit is 'rather insensitive' to it, p. 974)"
+  note: >-
+    ONE SITE, not a class: fine sand with directional ripples, 49 m, off Washington; backscatter measured at 15-45 kHz.
+    The roughness across strike is carried, as the paper's Fig. 10 uses it; Table V also prints along strike gamma2
+    3.92 and w2 0.00598 cm^4, which the paper calls unreliable (an exponent near 4 extrapolated below the measured
+    wavenumbers, p. 974). The sigma2 fit is insensitive (roughness dominates except at about 20-70 degrees). delta
+    0.0115 follows Table I's whole-core attenuation (0.37 dB/m/kHz), although the text says Table V uses surficial
+    values (Table II's 0.30 would give 0.0093): kept as printed ([JB] Sec. 6). The measured density ratio 1.94 is far
+    above the class relations at 2.97 phi (1.345): use this row for this site, not for fine sand in general. With our
+    default model the row reproduces Fig. 10's model curve within 1 dB at 20-60 degrees and lies 1.4-2 dB below it at
+    10 degrees (tests/python/test_sediment_table.py).
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, "High-frequency bottom backscattering: Roughness versus sediment volume
+    scattering", J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II (p. 964); read on the
+    page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the water above, as printed.
+
+jackson_briggs_1992_arafura:
+  # Table V, Arafura Sea row: nu 0.988, rho 1.39, delta 0.00553, sigma2 0.005; gamma 3.18 and w2 0.00318 cm^4 along
+  # and across (one spectrum, Table III). w2 in SI: 0.00318 x 10^(2 x 3.18 - 8) = 0.00318 x 0.022909 = 7.285e-5
+  # m^0.82. sigma2: the text (p. 974) says 0.004-0.006 "give reasonable fits"; 0.005 is the printed value.
+  # Mz: Table II (surficial) 5.63 phi, carried; Table I (whole core) 5.24 phi.
+  rho: 1.39
+  nu: 0.988
+  delta: 0.00553
+  mean_grain_size_phi: 5.63
+  scattering:
+    w2_cm4: 0.00318
+    gamma2: 3.18
+    sigma2: 0.005
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; equal to the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 5.24)"
+    w2: "printed (Table V, 0.00318 cm^4, the same along and across strike)"
+    gamma2: "printed (Table V, 3.18)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; 0.004-0.006 give reasonable fits, p. 974)"
+  note: >-
+    ONE SITE, not a class: silt-clay with buried shell, 47 m, Arafura Sea; backscatter at 15-45 kHz, volume
+    scattering clearly dominant. sigma2 0.005 is the authors' fit (0.004-0.006 fit reasonably), at the border of
+    single scattering (above about 0.004 the first-order volume model may fail, p. 974), and the paper warns that
+    the mean grain size misleads here: the sediment is bimodal, 55 % sand and gravel by weight in a silty clay. It
+    is +7.0 dB on the volume term above the class value 0.001 at this grain size; a fitted site is not a class value
+    (the soft rows keep 0.001 and cite this fit in their `basis`). With our default model the row is within 1 dB of
+    Fig. 12's model curve at 40-70 degrees and of Fig. 14's -25.1 dB at 20 degrees (15-45 kHz), and 1.0-1.9 dB above
+    it at 10-30 degrees (the published volume term is slope-averaged and shadowed, ours is not).
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II
+    (p. 964); read on the page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the
+    water above, as printed.
+
+jackson_briggs_1992_san_francisco:
+  # Table V, San Francisco (STRESS mid-shelf) rows: nu 1.002, rho 1.41, delta 0.0104, sigma2 0.002; PRE-STORM ALONG
+  # strike gamma 3.65 and w2 0.000846 cm^4 (what Fig. 15 uses). w2 in SI: 0.000846 x 10^(2 x 3.65 - 8) = 0.000846 x
+  # 0.19953 = 1.688e-4 m^0.35. Also printed, not carried: pre-storm across gamma 3.38, w2 0.000912 cm^4
+  # (5.248e-5 m^0.62); post-storm along 3.73, 0.000826 (2.382e-4 m^0.27); post-storm across 3.56, 0.001296
+  # (1.709e-4 m^0.44). The paper's eq. (4) from Table III gives 0.000885 for the pre-storm along value ([JB] Sec. 6).
+  # Mz: Table II (surficial) 6.39 phi, carried; Table I (whole core) 6.35 phi.
+  rho: 1.41
+  nu: 1.002
+  delta: 0.0104
+  mean_grain_size_phi: 6.39
+  scattering:
+    w2_cm4: 0.000846
+    gamma2: 3.65
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "printed (Jackson and Briggs 1992, Table V, p. 973; equal to the surficial means of Table II)"
+    mean_grain_size_phi: "printed (Table II, surficial 0-2 cm mean, p. 964; Table I whole core 6.35)"
+    w2: "printed (Table V, pre-storm along strike, 0.000846 cm^4; eq. (4) from Table III gives 0.000885, 4.6 % more)"
+    gamma2: "printed (Table V, pre-storm along strike, 3.65)"
+    sigma2: "fitted to the site by the authors, printed (Table V; one site; p. 975)"
+  note: >-
+    ONE SITE, not a class: bioturbated silt, 90 m, 180 km NW of San Francisco; backscatter at 40 kHz, 4-30 degrees,
+    volume scattering clearly dominant. The roughness pre-storm along strike is carried, as the paper's Fig. 15
+    uses it; Table V also prints pre-storm across strike and post-storm values (the comment above). The printed
+    w2 0.000846 cm^4 is 4.6 % (0.19 dB) below the 0.000885 that the paper's eq. (4) gives from its Table III,
+    while the other six rows agree within 0.11 %; which number is misprinted is not known ([JB] Sec. 6), the
+    printed one is kept. sigma2 0.002 is +3.0 dB on the volume term above the class value 0.001 at this grain
+    size; the paper notes the data's angular dependence is stronger than the model's (a sigma2 rising with depth
+    would explain it, p. 975). With our default model the row is within 0.4 dB of Fig. 15's model curve at 10-70
+    degrees.
+  status: confirmed
+  source: >-
+    Jackson and Briggs (1992): D. R. Jackson and K. B. Briggs, J. Acoust. Soc. Am. 92 (2), 962-977 (1992), Table V (p. 973) and Tables I-II
+    (p. 964); read on the page images (docs/references/bottom_backscatter_jackson_briggs_1992.md). Ratios to the
+    water above, as printed.
+
+williams_jackson_1998_panama_city:
+  # Williams and Jackson (1998), Table I (p. 171), Panama City column: rho 1.97, nu 1.126, delta 0.0166,
+  # gamma2 3.12, w2 0.00849 cm^4 (at 2 pi / lambda = 1 cm^-1), and the volume spectrum gamma3 4, w3 0.0000161 cm^3,
+  # mu -2.44. w2 in SI: 0.00849 x 10^(2 x 3.12 - 8) = 0.00849 x 0.017378 = 1.475e-4 m^0.88 (J&R 2007 Table 13.1
+  # prints 0.0001475 for this site). w3 in SI: 0.0000161 x 10^(2 x 4 - 6) = 1.61e-3 m^-1.
+  # The paper prints no sigma2: 0.00007 is OUR equivalent of its spectral volume term, eqs. (21)-(22) in backscatter
+  # at 20 degrees, 40 kHz, c 1500 m/s: sigma_v -28.3 dB/m over the amplitude attenuation in dB/m gives 6.93e-5
+  # (0.000058 at 10 degrees, 0.000087 at 35: the spectral term is not a constant sigma2). Hence unconfirmed_fields.
+  # Eckernfoerde (the paper's other site) has no row: no sigma2 is printed, it is a gassy mud whose volume
+  # parameters the paper calls phenomenological, and its w3 was adjusted ([WJ] 5.5).
+  rho: 1.97
+  nu: 1.126
+  delta: 0.0166
+  scattering:
+    w2_cm4: 0.00849
+    gamma2: 3.12
+    sigma2: 0.00007
+  volume_spectral:
+    w3_cm3: 0.0000161
+    gamma3: 4.0
+    mu: -2.44
+  unconfirmed_fields: [sigma2]
+  provenance:
+    rho_nu_delta: "printed (Williams and Jackson 1998, Table I, p. 171; from Ref. 30, Jackson, Briggs, Williams and Richardson 1996)"
+    w2: "printed (Table I, 0.00849 cm^4)"
+    gamma2: "printed (Table I, 3.12)"
+    sigma2: >-
+      ours: the paper's spectral volume term (21)-(22) at 20 degrees backscatter, 40 kHz, as an equivalent
+      (6.93e-5); the paper prints w3 1.61e-5 cm^3, gamma3 4, mu -2.44 instead (`volume_spectral`, read by no model
+      until the spectral volume option exists, [WJ] 5.3)
+    volume_spectral: "printed (Table I: gamma3 4, w3 0.0000161 cm^3 at 1 cm^-1, mu -2.44)"
+  note: >-
+    ONE SITE, not a class: coarse sand off Panama City, roughness dominated, bistatic and backscatter data at 40
+    kHz (Tables AI-AII). The paper prints no mean grain size, so the row carries none. J&R (2007) Table 13.1 prints
+    the same site reprocessed to the upper 2 cm (rho 1.948, nu 1.097, delta 0.032, gamma2 3.12, w2 0.0001475
+    m^0.88). Our default model (small-slope) with this row agrees with the paper's Fig. 7 model curve at 5
+    degrees backscatter (-40.1 against -40.0 dB) and lies 1.2 to 5.8 dB above it at 10-60 degrees: the paper joins
+    Kirchhoff and perturbation theory by its eq. (10), which is up to 6.1 dB below small-slope at 20 degrees for
+    this sand ([WJ] Sec. 4 item 1). The sigma2 is our equivalent and warns.
+  status: confirmed
+  source: >-
+    Williams and Jackson (1998): K. L. Williams and D. R. Jackson, "Bistatic bottom scattering: Model, experiments, and model/data comparison",
+    J. Acoust. Soc. Am. 103 (1), 169-181 (1998), Table I (p. 171); read on the page images
+    (docs/references/bottom_bistatic_williams_jackson_1998.md). Ratios to the water above, as printed.

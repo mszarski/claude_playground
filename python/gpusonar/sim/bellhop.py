@@ -31,6 +31,7 @@ import numpy as np
 from ..acoustics import NOMINAL_SOUND_SPEED
 
 from .. import acoustics
+from . import engine as _engine
 from .propagation import EigenrayProvider, EigenraySet
 
 
@@ -66,6 +67,11 @@ class OceanEnvironment:
     The bottom has NO default (D-104, as for `image_source`): `sediment` (a name in configs/sediments.yaml) or all
     three of `bottom_speed`, `bottom_density`, `bottom_attenuation`, else ValueError. Before, a missing bottom was
     silently 1600 m/s, 1.8 g/cm^3, 0.5 dB per wavelength.
+
+    An elastic bottom (A8): `bottom_shear_speed` (m/s) and `bottom_shear_attenuation` (dB per wavelength), or a
+    `sediment` row with shear (`rock`), go into Bellhop's shear column, and Bellhop reflects off an acousto-elastic
+    half-space (J&R (9.34)-(9.40); tests/python/test_elastic_bottom.py). `elastic=False` takes such a row as the
+    fluid it was before.
     """
 
     depth: float                                   # water depth, m (the deepest point with bathymetry)
@@ -74,12 +80,15 @@ class OceanEnvironment:
     bottom_speed: float = None                     # m/s, fluid half-space (no default: D-104)
     bottom_density: float = None                   # g/cm^3
     bottom_attenuation: float = None               # dB per wavelength
+    bottom_shear_speed: float = None               # m/s; None or 0: a fluid half-space (A8: an elastic one when > 0)
+    bottom_shear_attenuation: float = None         # dB per wavelength of the shear wave
     surface: str = "vacuum"                        # pressure release
     sound_speed: float = NOMINAL_SOUND_SPEED                    # used when no profile is given
     bathymetry: list = None                        # [[range_m, depth_m], ...] from the source, or None
     sediment: str = None                           # a name in configs/sediments.yaml in place of the three bottom_* numbers
     sediment_file: str = None                      # another table for `sediment`
     sediment_name: str = field(default=None, init=False)   # the name `sediment` was resolved from
+    elastic: bool = True                           # False: a `sediment` row with shear (rock) as the fluid it was before A8
     ssp_range: list = None                         # [range_m, ...] from the source, the first 0: the water changes with range
     ssp_speed_by_range: list = None                # [n_range][n_depth] m/s on `ssp_depth`; row 0 is the local profile
 
@@ -101,8 +110,13 @@ class OceanEnvironment:
         if typed:
             raise ValueError("OceanEnvironment: give `sediment` or the bottom_* numbers, not both")
         from . import bottom
-        half = bottom.fluid_halfspace(self.sediment, self.speed_at(self.depth), self.sediment_file)
+        if self.elastic:
+            half = bottom.halfspace(self.sediment, self.speed_at(self.depth), self.sediment_file)
+        else:
+            half = bottom.fluid_halfspace(self.sediment, self.speed_at(self.depth), self.sediment_file)
         self.bottom_speed, self.bottom_density, self.bottom_attenuation = half["speed"], half["density"], half["attenuation"]
+        if "shear_speed" in half:            # an elastic row (rock, A8): Bellhop's shear column
+            self.bottom_shear_speed, self.bottom_shear_attenuation = half["shear_speed"], half["shear_attenuation"]
         # The numbers now stand for the name, so that dataclasses.replace (along_profile) keeps them.
         self.sediment_name, self.sediment = self.sediment, None
 
@@ -216,9 +230,7 @@ def write_env(path: str, env: OceanEnvironment, frequency: float, source_depth: 
         rows = [(-1000.0, b[0, 1])] + [tuple(v) for v in b if v[0] > -1000.0] + [(r_end, b[-1, 1])]
         with open(os.path.splitext(path)[0] + ".bty", "w", encoding="ascii") as f:
             f.write("'L'\n" + f"{len(rows)}\n" + "".join(f"{r / 1000.0:.6f} {d:.4f}\n" for r, d in rows))
-    lines += ["'A~' 0.0" if env.bathymetry is not None else "'A' 0.0",
-              f" {env.depth:.4f}  {env.bottom_speed:.4f} 0.0 {env.bottom_density:.4f} {env.bottom_attenuation:.4f} /",
-              "1", f"{source_depth:.6f} /"]
+    lines += ["'A~' 0.0" if env.bathymetry is not None else "'A' 0.0", _halfspace_line(env), "1", f"{source_depth:.6f} /"]
     rd = np.atleast_1d(np.asarray(receiver_depths, dtype=float))
     rr = np.atleast_1d(np.asarray(receiver_ranges, dtype=float))
     lines += [f"{len(rd)}", " ".join(f"{v:.6f}" for v in rd) + " /",
@@ -227,6 +239,21 @@ def write_env(path: str, env: OceanEnvironment, frequency: float, source_depth: 
               f"0.0  {1.05 * env.depth:.3f}  {1.05 * rr.max() / 1000.0 + 0.1:.6f}"]
     with open(path, "w", encoding="ascii") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def _halfspace_line(env: OceanEnvironment) -> str:
+    """The bottom half-space line of the `.env`: depth, compressional speed, shear speed, density, compressional and
+    shear attenuation (dB per wavelength, the 'W' of 'CVW'). A fluid writes 0.0 for the shear speed and leaves the
+    shear attenuation out, as before A8; an elastic bottom (rock) writes both, and Bellhop then reflects off an
+    acousto-elastic half-space."""
+    cs = env.bottom_shear_speed or 0.0
+    if cs == 0.0:
+        return f" {env.depth:.4f}  {env.bottom_speed:.4f} 0.0 {env.bottom_density:.4f} {env.bottom_attenuation:.4f} /"
+    if not (cs > 0.0 and np.isfinite(cs)) or not (env.bottom_shear_attenuation or 0.0) >= 0.0:
+        raise BellhopError(f"bottom_shear_speed {cs!r} and bottom_shear_attenuation {env.bottom_shear_attenuation!r}: "
+                           "a shear speed > 0 m/s and an attenuation >= 0 dB per wavelength")
+    return (f" {env.depth:.4f}  {env.bottom_speed:.4f} {cs:.4f} {env.bottom_density:.4f} {env.bottom_attenuation:.4f}"
+            f" {env.bottom_shear_attenuation or 0.0:.4f} /")
 
 
 @dataclass
@@ -395,6 +422,7 @@ class BellhopProvider(EigenrayProvider):
         return self._cache[key]
 
     def eigenrays(self, source, points) -> EigenraySet:
+        _engine.ran("eigenrays", "bellhop")          # one implementation; the record says which (sim/engine.py)
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         arr = self.arrivals_for(source[2])

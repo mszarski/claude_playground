@@ -1,0 +1,28 @@
+# ILLUSTRATIVE. The control of the 3-D scenarios: a LEVEL 100 m bed at the opt-in `eigenray3d` tier (Bellhop3D,
+# external: GPUSONAR_BELLHOP3D), three targets at 5 km on bearings 12 degrees north of broadside, broadside and
+# 12 degrees south. Over a level bed there is no 3-D effect, so this must agree with `flank_level_nx2d` (the same
+# scene at `eigenray`, Bellhop 2-D) within the 0.2 dB the two programs were found to agree to (D-197,
+# docs/tasks/PROPAGATION_3D.md section 2): the tier itself adds nothing where there is no relief.
+# `flank_bank_3d` is the same scene over a bed that slopes 1 degree across the look direction.
+# Target in noise only (no reverberation: see `flank_seamount_3d`). Measured numbers: docs/SCENARIOS.md.
+name: flank_level_3d
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [4600, 5400]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {plane: {depth: 100.0}}     # level: the same bed as the twin's
+propagation:
+  range_step: 25.0
+  depth_step: 4.0             # puts nodes at the sonar's 30 m and the targets' 50 m (the twin has the same grid)
+  n_beta: 181                 # 0.67 degree over the default 120 degrees of azimuth, as flank_seamount_3d
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: north, positions: [[1039.6, 4890.7, 50.0]], target_strength_db: 10.0}    # bearing 78 deg
+  - {type: points, label: broadside, positions: [[0.0, 5000.0, 50.0]], target_strength_db: 10.0}   # bearing 90 deg
+  - {type: points, label: south, positions: [[-1039.6, 4890.7, 50.0]], target_strength_db: 10.0}   # bearing 102 deg
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz, as flank_target_5km
+seed: 1

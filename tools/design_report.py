@@ -1014,7 +1014,8 @@ def write_report(D, reqs, out_md):
     L.append("## 5. Link budgets\n")
     L.append("![Link budgets](design/link_budgets.png)\n")
     L.append("Output SNR = SL − 2 TL + TS − NL + array gain + 10 log10(T), with spherical spreading plus Francois–Garrison\n"
-             f"absorption and the four-term ambient-noise fit at {WIND:.0f} m/s wind (`gpusonar.sonar_equation`).\n")
+             f"absorption and the four-term ambient-noise fit at {WIND:.0f} m/s wind (`gpusonar.sonar_equation`). Noise only: no boundary scattering is given for\n"
+             "these budgets, so reverberation is not in them (`SonarEquation(reverberation_db=...)`, `gpusonar.reverb_budget`, adds it where a scene gives the scattering).\n")
     L.append("| Quantity | " + " | ".join(f"`{n}`" for n in DESIGN_SONARS) + " |\n| --- |" + " --- |" * len(DESIGN_SONARS))
     for label, key, dig in [("Source level (dB re 1 µPa at 1 m)", "source_level_db", 0), ("Absorption (dB/km)", "absorption_db_per_km", 1),
                             ("Noise spectrum level (dB re 1 µPa²/Hz)", "noise_spectrum_db", 1), ("Target strength assumed (dB)", "target_strength_db", 0),
@@ -1074,7 +1075,8 @@ def write_report(D, reqs, out_md):
     L.append("- The boards sample at 102.4 kHz and need no change for this band; the hydrophones, the projector and its power\n"
              "  amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.\n")
     L.append("- These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short\n"
-             "  and medium range.\n- Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.\n"
+             "  and medium range. With the scenarios' boundaries (Lambert −27 dB bottom, Chapman-Harris surface at 5 m/s) in 100 m of water over sand, the coverage\n"
+             "  picture's reach for the +5 dB class of `popoto_face_1x32` from 50 m falls from 6.5 to 2.4 km; the +25 dB classes stay noise-limited (`gpusonar.coverage`, `reverberation`).\n- Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.\n"
              "- For the Popoto array the simulation uses Bellhop multipath, which in shallow water carries more energy to long\n"
              "  range than spherical spreading (see `RESULTS.md`).\n")
     L.append("## 6. Scenario geometry\n")

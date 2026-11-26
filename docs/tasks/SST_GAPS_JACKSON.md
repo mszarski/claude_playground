@@ -225,6 +225,13 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   `REFERENCES.md` (section 5), PHYSICS_NOTES Sec. 15 (our baseband is the conjugate of the book's P, [N2 §3.4]).
 - Engines: none. Size S. Depends on nothing.
 - Must not: change any formula or value.
+- **Done (2026-11-26, branch `g-bottom`)**: `tests/python/test_jackson_2007_bottom.py`, 15 tests, every book
+  formula retyped. Everything the notes said agrees, agrees: perturbation to 1e-13, Kirchhoff and small-slope
+  to 2e-7 (against an independent real-axis I_K), volume to 1e-11, (D.12) to 1e-14, (13.75)/(13.77) to 1e-12,
+  Fig. 13.19 slopes 0.0227 / 0.0595 / 0.1432 printed digits, the notes' SSA + volume tables to their 0.01 dB.
+  Small-slope's hemisphere integral is 0.902 / 1.031 / 1.005 |V|^2 at 20 / 40 / 70 deg (Fig. 13.2, 30 kHz):
+  below the (2.20) bound, not exactly (L.26). `configs/sediments.yaml`: comments only (loads identically).
+  The `bottom.py` docstring citations went with G-6. Nothing disagreed.
 
 ### G-2 Pin the surface papers' equalities; fix the docstrings — RECORD ONLY, S
 - Gap: Chapman-Harris "unconfirmed"; its docstring range "below about 40 degrees" is not printed; the surface
@@ -238,6 +245,15 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Files: the test file; `acoustics.chapman_harris_db` docstring (range: 400-6400 Hz, to 15 m/s, low grazing,
   explosive sources, March 1961, [McD93] p. 1918). The `surface.py` "lower bound" comment goes with G-7.
 - Engines: none. Size S.
+- **Done** (2026-11-26, branch `g-surface`): `tests/python/test_surface_papers_1997.py`, 12 tests, every
+  equality of [NS §3.1] reproduced: Table I -26.82 / -27.74 / -28.22 against -26.9 / -27.8 / -28.3 dB
+  (bound 0.1 dB); eq. (17) = [McD93] eq. (9) = ours to 1e-9; eqs. (18), (19) limits; bracket peak +3.73 dB;
+  McDaniel's damping law -0.35 dB at 68 kHz (the note's table to 0.01 dB); [D97] Sec. VI convention for
+  both laws; facet = eq. (7) to 1e-9; Chapman-Harris = eq. (27) to 1e-9 dB (1e-6 relative with the exact
+  knot), exponents 2.459 / 0.820; [DP97] 2.507 dB and 5.57 dB. Printed resonant radii 121 / 64 / 46 um:
+  ours 122.4 / 64.9 / 46.3 (1.5 %). Docstrings: `chapman_harris_db` (via secondary, the stated range;
+  "below about 40 degrees" removed), `surface.py` (the kHz unit of delta and the bubble/facet terms now
+  confirmed in print). No behaviour changed.
 
 ### G-3 Sediment tier above the critical angle: transmission and attenuation — OWNER FIRST (code may land opt-in), S
 - Gap W1: 6 dB two-way at 20 kHz, 9 dB at 30 kHz, 0.3 m of medium sand [N3 §3.5]. Exposure: `buried_cylinder`,
@@ -257,6 +273,58 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   (`test_realistic_scenes.py`, `test_scene_objects.py` name the scenes).
 - Must not: change the `transmission` default silently; claim sub-critical correctness (G-13).
 
+#### G-3 done (opt-in code; the scene switch NOT made, see below)
+
+- What exists: `propagation.penetration: fluid` on the `sediment` tier, both engines (`SedimentProvider`,
+  C++ `sediment_eigenrays`; no CUDA copy: eigenrays are host-side for every backend), default `constant` = the tier
+  before, bit-identical (sha256 of the default eigenrays on both engines and of one ping of `buried_cylinder`,
+  `buried_objects`, `sst_echo_level`, `rail_objects`, before and after). Per leg V_wp(theta_w) / sqrt(a_rho)
+  exp(-k_p'' L); the sediment from `bottom` (`{speed, density, attenuation}` or `{sediment: name}`, or the
+  environment's bottom), an unstated attenuation refused; frequency = the sonar's band centre. Sub-critical points
+  (straight line below arccos(c_w/c_s)): the evanescent field (15.1) by default (`subcritical: evanescent`), `ray`,
+  or `refuse`; a warning once per provider. `docs/PHYSICS_NOTES.md` section 31, `docs/CONFIGURATION.md`.
+- Disagreement with [N3 §3.5]: the two-way interface factor |V_wp(90)|^2 / a_rho = 1.017 is a PRESSURE factor,
+  +0.146 dB, not the note's "+0.07 dB" (10 log10 of it). The worked case is otherwise reproduced: attenuation
+  3.00 dB one way at 20 kHz, 6.00 / 9.00 dB two-way at 20 / 30 kHz; total against the old tier -5.85 / -8.85 dB.
+  The evanescent rates 145 / 364 / 728 / 2183 dB/m (10 deg) are reproduced within 0.5 %.
+- Owner's table (CPU, host backend; `tools/gallery.py` `run_buried` processing; noise-free scenes, so the figure of
+  merit is the target over the median sediment clutter of the refraction-corrected volume, not an SNR; no detector
+  runs on these scenes). "On" = `penetration: fluid, bottom: {sediment: medium_sand, speed: 1700}` (the scene's
+  speed kept; medium sand's density ratio 1.845 and loss 0.884 dB/wavelength = 10.4 dB/m at 20 kHz at 1700 m/s).
+  No point of either scene is sub-critical with it.
+
+| Scene (raster) | Quantity | Off (today) | On | Change |
+|---|---|---|---|---|
+| `buried_objects` full (0.075 m, 625 pings, gallery) | cylinder peak voxel | ref | -5.18 dB | -5.18 dB |
+| | sphere (0.22 m) peak voxel | ref | -3.63 dB | -3.63 dB |
+| | median sediment clutter | ref | -4.38 dB | -4.38 dB |
+| | `cylinder_over_clutter_db` | 21.12 | 20.32 | -0.80 dB |
+| | sphere over clutter | 33.77 | 34.52 | +0.75 dB |
+| | cylinder top depth (refraction on) | 0.26 m | 0.26 m | none |
+| | sphere top depth | 0.14 m | 0.14 m | none |
+| | nadir ping, record peak | 0.0656 | 0.0381 | -4.7 dB |
+| `buried_objects` quick (0.15 m, 169 pings, the test) | cylinder peak voxel | ref | -5.85 dB | |
+| | sphere peak voxel | ref | -3.62 dB | |
+| | `cylinder_over_clutter_db` (test: > 12) | 17.53 | 16.16 | -1.37 dB |
+| | cylinder / sphere top, refraction on (test: 0.24-0.31 / 0.14 +- 0.02) | 0.28 / 0.14 | 0.28 / 0.14 | none |
+| | cylinder / sphere top, refraction off (test: cyl off < on) | 0.24 / 0.13 | 0.24 / 0.13 | none |
+| `buried_cylinder` quick (169 pings) | cylinder peak voxel | ref | -6.50 dB | |
+| | cylinder over clutter | 28.99 | 29.26 | +0.27 dB |
+| | cylinder top depth | 0.30 m | 0.30 m | none |
+
+  The interface's own (proud) scatterers give bit-identical records with the option on
+  (`test_proud_scatterers_of_a_buried_scene_do_not_move`). Every assertion of `test_buried_objects_volume` still
+  holds with the option on; `test_scene_objects.py`'s buried-cylinder check asserts only counts and positions.
+  If switched, these would be stale until regenerated: `docs/figures/gallery.json` `buried_objects`
+  (`cylinder_over_clutter_db` 21.12 -> about 20.3), `docs/figures/buried_objects.png` and `.gif` (drawn in dB re the
+  sediment clutter, which drops with the targets: the cylinder moves -0.8 dB, the sphere +0.75 dB on that scale), the
+  `docs/RESULTS.md` "3D near-field imaging of a buried object" bullet "Not modelled: transmission loss and attenuation
+  in the sediment", the scene headers, and `docs/handoff/SIMULATION.md`'s sediment-tier row. With medium sand by
+  name at 1767 m/s instead (quick): cylinder -6.39 dB, sphere -3.59 dB, `cylinder_over_clutter_db` 15.03, depths
+  unchanged; 8 points sub-critical (measured with the earlier keep-the-ray policy).
+- Not done: switching the two scenes (the owner's later instruction to switch them was refused by this session's
+  permission system; the YAML lines to apply are in the G-3 report).
+
 ### G-4 Elastic flat-interface reflection (rock, optionally gravel) — OPT-IN, S-M
 - Gap W3. Merges [N1 WP-C] and [N3 WP4]; formulas [N3 §2.3] (9.34)-(9.40), losses (9.23)-(9.24).
 - Files: `python/gpusonar/sim/bottom.py` (`reflection`), `propagation.rayleigh_reflection`,
@@ -275,6 +343,14 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   No shipped scene moves (W3).
 - Must not: give `pebbles` or any row a shear speed without a source; invent per-site rock V_s; change the
   rock Lambert scattering (U3, a separate decision). Sediment shear only if asked (under 0.2 dB, [N1 §3.4]).
+- **Done 2026-11-26 (branch `a-rock`, CONFORMANCE.md A8, the owner's approval to align): rock is elastic by
+  default.** `bottom.reflection(..., nu_t, delta_t)`, `propagation.rayleigh_reflection(..., shear_speed,
+  shear_attenuation)`, C++ `FluidBottom::shear_speed` (equal to 4e-14 relative), Bellhop's and Bellhop3D's shear
+  column; `rock` has 1900 m/s and shear delta 0.085 (Olson et al.'s generic rock, the notes' best-sourced value,
+  `unconfirmed_fields: [shear]`), 0.50 V_p. Fluid rows bit-identical (sha256). C1 settled: [N3]'s numbers follow
+  from its stated inputs (delta_t 0.1, or 0.085 for the generic rock); [N1]'s 4.8-5.5 dB at 40-60 degrees holds
+  only from about 50 degrees up (ours, row: 8.8 / 6.3 / 5.3 / 4.8 / 4.5 dB at 40 / 45 / 50 / 55 / 60). Fig. 9.3's sand differs by up to 0.506 dB (not "below 0.5").
+  Tests: `tests/python/test_elastic_bottom.py`, `Paths.ElasticRockCoefficient`, parity cases in `test_sim_cpp.py`.
 
 ### G-5 Mud volume parameter and silt roughness: the owner's table — OWNER FIRST, S
 - Gap U1, U2. Draws on [N2 WP-4 (memo)], [N2 §3.2-§3.3], [N4 §3.6], D-193.
@@ -304,6 +380,15 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   at 1.25 phi [N1 §3.2]; no shipped scenario calls the function.
 - Must not: change the named rows; copy 1.0091 or 0.4566; call the relations "regressions" (the book: "ad hoc",
   not geoacoustic regressions, p. 314).
+- **Done (2026-11-26, branch `g-bottom`)**: `bottom.apl_grain_size_relations(phi, water_sound_speed=1528)`;
+  `sediment_from_grain_size(phi, method="table_linear" | "relations")`, default unchanged (bit-identical on a
+  0.01 phi grid against values written before the change); `tests/python/test_grain_size_relations.py`, 8 tests.
+  All of [N1 3.2]'s numbers reproduced: 0.678 dB at 5.3 phi, nu 0.0041, rho 0.0106 at 1.25 phi, delta 7.6 %
+  near 5.79 phi, under 0.1 dB outside 5-6 phi; Fig. 11.2 loss 6.12 / 14.77 / 22.15 dB at 0 / 3 / 5 phi.
+  C2 settled: the printed pieces of (11.3) at 6.0 phi give 0.1384 and 0.1397 (step 0.0013): [N1] is right,
+  [N3]'s "0.338" is a slip. The other printed steps: +0.0022 at 2.6 (a little above [N1]'s "0.001-0.002"),
+  -0.0009 at 4.5, 0 at 0 with 0.4556 (0.0010 with the printed 0.4566). C3: the rows at -1 and -0.5 phi agree
+  with 0.4556 to 2.5e-4 and with 0.4566 only to 2.4e-3; 0.4556 used.
 
 ### G-7 `extinction: dahl_1997` for `bubble_layer_surface` — OPT-IN, M
 - Gap W7 (`sonar-64sm`, `sonar-9le`). From [NS WP2]; formula beta_I = 10^(a + b log10 U10), [D97] Table II
@@ -319,6 +404,16 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   at low wind and rises by up to 3.7 dB above 8 m/s; no shipped scenario affected; `test_gallaudet_boundaries.py`
   values move.
 - Must not: change the `extinction` default; tune a constant to one figure reading (+-1.5 dB).
+- **Done, opt-in** (2026-11-26, branch `g-surface`): `surface.dahl_1997_optical_depth`, `extinction: dahl_1997`;
+  `tests/python/test_surface_dahl_1997.py` (9 tests) and one new test in `test_gallaudet_boundaries.py` (its
+  existing assertions unchanged). Found: the note's 68 kHz values -44.1 / -43.4 dB were computed with the 70 kHz
+  fit scaled as f^0.8, not with the log-f interpolation this package specifies; with the interpolation the
+  bands are -44.4 / -43.7 dB (+6.9 / -2.2 against Gallaudet; 0.3 dB apart; both held). Wind exponent at 17 deg:
+  5.37 / 6.20 / 5.10 (measured 5.5 / 6.4 / 5.3); `apl_1994` 4.25 / 4.06 / 3.91 with a 51-point fit (the note's
+  4.13 / 3.94 / 3.80 not reproduced: that law's exponent depends on the wind sampling, 3.4-4.25); Urick-Hoover
+  readings all within +8 dB (max +7.0). Default bit-identical (float.hex values from before). Docs:
+  CONFIGURATION.md (`bubble_layer_surface` row), PHYSICS_NOTES Sec. 23.7; the "lower bound" comment in
+  `surface.py` corrected (holds at high wind only).
 
 ### G-8 Surface model of the FLS scenarios: prepare the decision — OWNER FIRST, S
 - Gap U5. From [NS WP7]. No code. The notes give, `bubble_layer_surface` minus Chapman-Harris at 5 m/s: +5.4 /
@@ -341,6 +436,21 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Tests first: N = 16 gives 0.97 dB; simulated Rayleigh speckle over N cells gives the stated spread; (G.13)
   inverts our own simulated reverberation to S_b within 0.3 dB [N3 WP6]; bounds keep the fit inside.
 - Default moves: none unless bounds are made default (fit results where a bound binds: tell the owner).
+- **Done (branch `g-fit`, 2026-11-26), opt-in; the default fit and the tool's default output are
+  bit-identical to before (test with values from `c1d2b8f`).** New `python/gpusonar/measure.py` (G.2.3
+  error, gamma-distribution bias and spread of an N-sample mean (ours), dB-mean bias -2.507 dB and
+  5.57/sqrt(N), N from resolution/beams/pings and (16.26) effective looks, (G.13) with the absorption
+  misprint corrected, (G.28)-(G.29)); `sediment_fit.fit(independent_samples=, sample_error=, bounds=,
+  hold=)`, `prior_bounds(phi)`, `site_bounds(...)`, `roughness_model_spread_db`,
+  `SedimentFit.covariance` and `prediction_std_db`; tool options `--independent-samples`,
+  `--sample-error`, `--prior-bounds`, `--site-spread`, `--hold`, `--report-covariance`. Found:
+  (G.13) inverts our own simulated reverberation to S_b within 0.20 dB at 10-50 deg (Psi ~ Psi_3: up
+  to 1.6 dB); the book's +1 sigma used as a dB error under-covers (55 % within 1 sigma against 68 %
+  nominal, N = 16; 61 % with the gamma rule); the note's "0.25 dB at N = 260" is 0.261; two Gallaudet
+  band means fix neither w2 nor gamma2 (D-193 reproduced) and, with sigma2 free, are fitted better by
+  roughness alone (w2 280 times the site's) than by the site's volume model: two values cannot tell
+  the mechanisms apart; the prior for 6.36 phi excludes that. Not done: the near-vertical fit model
+  (G.43)/(G.54); a fit of a full Rayleigh-statistics likelihood instead of weighted dB least squares.
 
 ### G-10 Effective-density fluid (EDFM) for sand — OPT-IN, S (simple) / M (full)
 - Gap U4. From [N3 WP3]; formulas (10.82) simple; (10.70), (10.75)-(10.76), (10.81) with (10.13)-(10.16) full;
@@ -369,6 +479,23 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   100 kHz -32.9 -> -35.9; sandy gravel 100 kHz -21.4 -> -27.8 (Q as printed) [N4 WP-2].
 - **Must not: implement Q from the book's printed form before the primary paper is checked**; make
   `composite` or `combined` the default.
+- **Correction (2026-11-26):** the "before -> after" numbers above used the misprinted pi^(+1/2) of (13.82) and are
+  wrong. With Wagner's pi^(-1/2) ([W67] (22), [MJ89] (25)) the composite roughness term at 5 deg moves: medium sand
+  30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8)
+  (`docs/references/bottom_mourad_jackson_1989.md` C1; reproduced by `test_composite_shadowing_moves_the_opt_in_models_as_the_note_computes`).
+
+#### G-11 done (shadowing part; opt-in models only; no scene switched)
+
+- What is still wrong: the bistatic form of the shadow factor out of the plane of incidence is ours ([W67] is
+  in-plane); the B form overstates illumination at very large slopes ([W67] Fig. 6); geometric optics, no
+  diffraction. The default inside `composite` / `combined` is now `shadowing="wagner"` (the owner's instruction
+  for these two opt-in models, against "default none" above); `"none"` is the model before, bit for bit.
+- Sign settled: pi^(-1/2) ([W67] (22), [MJ89] (25), confirmed); J&R (13.82) is a misprint. The factor is R
+  ([W67] (49) with (20)), not S. `bottom.wagner_backscatter_shadowing`, `bottom.wagner_bistatic_shadowing`;
+  tests in `tests/python/test_bottom_models.py` (values, J&R's table with the corrected sign, limits,
+  reciprocity, bit-identity of "none"), `test_reverberation.py` and `test_reverb_bistatic.py` (both engines).
+- Not done here: the validity warning (sigma_sL > 0.1, theta > 70 deg, K_c above Bragg, (13.78)) and
+  `slope_average="book_1d"` (the 1989 model's three-point in-plane average exists as `mourad_jackson_1989`).
 
 ### G-12 Correlated cross-section texture (McDaniel 1996) — OPT-IN, M
 - Gap U8 (`sonar-6fc`; `sonar-6t5` for the texture). From [N2 WP-1]; formulas (16.59)-(16.69) [N2 §2.6].
@@ -392,6 +519,33 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   0.48 m, 10-40 kHz, 17 cm: 10-25 dB one-way below critical); Fig. 15.8 (t_s 100 us, SL 190 dB, 4 m up, 20 m off:
   peak 133-141 dB at 5-40 cm); h -> 0 gives zero; above critical the zeroth order dominates.
 - Depends on G-3. Must not: use the coherent flat transmission below the critical angle.
+
+#### G-13 done (opt-in, both engines since the C++ port; no scene switched)
+
+- What is still wrong: one seeded realisation of a frozen interface, too coherent across a long aperture (a cell's
+  deviate ignores the Bragg change with geometry); first order, single scattering, isotropic spectrum, flat mean
+  interface, band-centre cross section; the zeroth order not reduced by the scattered energy. The C++ engine runs it
+  since the port (`libs/sim/src/penetration.cpp`), equal to NumPy to rounding, not bit for bit (amplitudes 2.6e-12 of
+  a point's largest scattered ray, `tests/python/test_sim_cpp.py`); a sub-critical point adds 100-200 rays a leg, so
+  10^4 pairs or more an echo. `docs/PHYSICS_NOTES.md` section 31 lists it all.
+- Disagreements with the note (ours, not settled on the page): (15.11) as retyped lacks the obliquity factor
+  |beta_p(K_s) / beta_w(K_s)|^2 that (15.2)-(15.3) give by stationary phase; with it Fig. 15.8 is reproduced (141.6 to
+  133.5 dB at 5-40 cm against the reading 133-141), without it 146.7 dB at 5 cm. (15.13) is used with k_p', not k_w.
+  (15.9) as retyped lacks (15.3)'s factor i (no level changes). The hint holds: `bottom.py`'s sediment amplitude B
+  = i k_w A_wp / beta_w(K_s), to 1e-12.
+- What exists: `propagation.penetration: rough` with `roughness: {w2, gamma2 | sediment, K0, seed, patch, refine,
+  floor_db, bin}` (`sim/penetration.py`: `a_wp`, `sigma_wp`, `roughness_spectrum`, `ripple_*`, `mean_square_field`,
+  `RoughPatches`; C++ `sonar/sim/penetration.hpp`, through `sediment_eigenrays`); `fluid` and the default bit-identical (sha256 of eigenrays and of one ping of `buried_cylinder`,
+  `buried_objects`, both engines, before and after, again at the C++ port); tests
+  `tests/python/test_sediment_roughness.py` (19, run under GPUSONAR_SIM_ENGINE=numpy and =cpp), the `rough` tests of
+  `tests/python/test_sim_cpp.py` (engine parity, synthesis, CUDA) and `Paths.SedimentRough*` in
+  `tests/cpp/test_sim_paths.cpp`.
+- One-way level re the incident field at the interface, source 10 m up, medium sand / SAX99, 0.17-0.30 m, 10-40 kHz,
+  10-20 deg: default tier -0.1 to +0.5 dB; `fluid` -18 to -217 dB; `rough` -17.0 to -30.6 dB; the note's
+  measured/figure range 5-31 dB below (Figs. 15.3, 15.6, 15.8, 15.11).
+- The two buried scenes: with their 1700 m/s no buried point is sub-critical anywhere on the 625-ping raster, so
+  `rough` = `fluid` bit for bit; with medium sand's own 1767 m/s, 13 of 1.4 million point-pings (6 points of 2260 in
+  `buried_objects`, none in `buried_cylinder`). Not switched.
 
 ### G-14 Layered or graded fluid seafloor — OPT-IN, M-L
 - Gap (`sonar-3k1` layered part). Merges [N3 WP7] and [N4 WP-5]; reflection by the standard recursion of
@@ -424,6 +578,17 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
 - Tests first: zero slope gives exactly today's value; a sin-independent constant averages to itself times the
   shadow factor; reciprocity. Numbers to prepare: medium sand and very fine silt, 30/100 kHz, 5-30 deg.
 - Depends on G-11.
+
+#### G-16 in part (2026-11-26): the 1989 recipe, opt-in, backscatter only
+
+- What exists: `volume_model="mourad_jackson_1989"` ([MJ89] (38) with (39) corrected: three-point in-plane
+  Gauss-Hermite average over the slope (18), arguments clamped to 1-90 deg, times Wagner's R with R = 1 for t > 2).
+  Volume over our flat-interface term at 5 / 10 / 20 deg (c = 1500 m/s; the note D1): medium sand 20 kHz +3.9 /
+  +0.9 / +0.2 dB, 100 kHz +9.6 / +3.4 / +2.3; sandy gravel 100 kHz +12.2 / +6.0 / +6.4; very fine silt +0.04 to
+  +0.3 at 5 deg. Tests: `tests/python/test_mourad_jackson_1989.py` (a constant averages to itself, no slope gives
+  the flat term, the factor is R, the paper's figures).
+- Still open: a bistatic slope-averaged volume term (J&R Sect. 14.1.2's recipe for any geometry), reciprocity
+  (needs the bistatic form), the default (unchanged: the flat-interface term).
 
 ### G-17 Elastic rough-interface perturbation (and later elastic volume) for rock — OPT-IN, M (L for volume)
 - Gap U3 (a physical rock model instead of Lambert). From [N4 WP-6]; (13.27)-(13.34) with V from (9.34), in the
@@ -712,7 +877,11 @@ G-16 (after G-11), G-17 (after G-4), G-19, G-20 (after G-7), G-37 once Plant (19
     angle spread law), Plant (1986) (blocks G-37): obtain, or leave wanted? (section 4; McDaniel 1986 is now read)
 13. **Sediment fit tool** (STATUS item 30, `sonar-5bf2`): switch its model to small-slope? The book shows
     perturbation and small-slope overlap below about 70 deg for medium sand and used perturbation for its own
-    model-data fits [N4 §2.5, §4].
+    model-data fits [N4 §2.5, §4]. **Answered by the owner's 2026-11-26 instruction (A10 of
+    `docs/references/CONFORMANCE.md`): switched, `perturbation` kept by name; the book's error-bar rule stays the
+    default.** Found in doing it: on one-frequency, volume-dominated data a small-slope fit without prior bounds can
+    report a much rougher relief and a low sigma2 as constrained (`test_sediment_fit.py`
+    `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
 14. **Forward-scatter slope by default** for the three time-spreading scenarios (`flank_sst_shallow`,
     `flank_sst_spread`, `sst_asiaex`): keep the Cox-Munk total, or default to the large-scale law? With [D96]'s
     (A7) at 6 m/s: mss 0.0337 -> 0.0199, facet decay time x0.59, angular spread x0.77, coherence length x1.30;
@@ -854,3 +1023,54 @@ Not applied here. "J&R" = Jackson and Richardson (2007), confirmed on the page i
 | (A3) Banner coefficient from memory | G-37 | [BS §6] |
 | Whether TR 0702's `McDanielSurface` uses [McD86]'s correction inside TM 90-88 | G-38 | [BS §6] |
 | Which large-scale slope is right (C13); whether a facet model can carry the Bragg-scale tail (C12) | G-32, G-33 | [FS §3.3], [BS §3.3] |
+
+---
+
+## Unblocked by Mourad and Jackson (1989) and Wagner (1967)
+
+Added 2026-11-26 from `docs/references/bottom_mourad_jackson_1989.md` ([MJ89]) and
+`docs/references/shadowing_wagner_1967.md` ([W67]); both papers read in full on the page images. Earlier text
+above is unchanged; where it disagrees, this section is the later reading.
+
+| Package / row | Was | Now | Note |
+|---|---|---|---|
+| G-11 Wagner shadowing (done 2026-11-26, see G-11) | blocked on the sign of pi^(1/2) in J&R (13.82) | **unblocked**: pi^(-1/2) printed in [W67] (22) and [MJ89] (25); J&R (13.82) is a misprint. The composite needs R (= [W67] (49) with (20)), not S | G-11's "before -> after" used the misprint. Corrected (composite roughness, 5 deg): medium sand 30 kHz -41.58 -> -41.69 dB, 100 kHz -32.88 -> -33.56; sandy gravel 100 kHz -21.37 -> -23.75 (not -27.8). [MJ89] C1, [W67] C-W1, C-W2 (bistatic form, ours) |
+| G-16 Volume slope average (in part 2026-11-26, see G-16) | recipe only (J&R Sect. 14.1.2), not quantified | printed recipe [MJ89] (38) with corrected (39): three-point in-plane Gauss-Hermite average and R | quantified: volume +3.9 / +9.6 dB at 5 deg for medium sand 20 / 100 kHz, +7.9 / +12.2 for sandy gravel, under 0.3 dB for silts; part of [MJ89] C4 (opt-in) |
+| G-6 grain-size relations | 1.0091 judged a misprint by continuity | confirmed: [MJ89] (2) prints 1.0018916; 0.4566 / 0.4556 NOT settled ([MJ89] prints no k(Mz)) | [MJ89] C5 done 2026-11-26: the original's seven digits; rho -2.45e-5 to +2.34e-5, nu -2.6e-5 to 0; Gallaudet's 6.36 phi rho now 7.5e-5 below his print (was 5.1e-5) |
+| G-5 / decision 1 (volume parameter) | step at 5.5 phi (Snellen, via secondary) | [MJ89] (4) steps at 5.0 phi; its own Fig. 8 used 0.002 at 5.3 phi | kept at 5.5 (later prints of the same model); `sandy_silt` would lose 3.0 dB under (4). No change |
+| G-10 EDFM | must not apply to the TR 9407 rows (double count) | supported: [MJ89] fitted the relations' density to acoustic data, below bulk values (p. 1170) | no change |
+| G-8, G-12 | - | nothing in either paper | - |
+| G-36 | named in the brief for this work | no package G-36 exists in this file | - |
+| New (done 2026-11-26): [MJ89] model as an opt-in (`roughness_model` / `volume_model` "mourad_jackson_1989") | interpolation "not printed" (0.3) | printed: Kirchhoff approximation (19)-(22), interpolation (33)-(37), slope (18) | [MJ89] C4; tests reproduce the paper's Figs. 6-10 within the readings. Default unchanged (D-86); vs our default the model is +1.6 to +11.5 dB at 5 deg for sands and gravel, within 0.4 dB for silts |
+| Section 0.3 "Kirchhoff / composite interpolation function" | not printed | printed in [MJ89] (33)-(37) (the 1989 model; TR 9407's not known) | |
+| Section 0.4 row "(13.82) Wagner Q" | "pi^(-1/2)?" | settled: pi^(-1/2) | |
+| Section 0.4, new row | - | [MJ89] (39) prints abs(1 - R)^2; abs(1 - R^2)^2 meant (the paper's figures reproduce only with it; J&R (14.8); ours) | our `volume_strength` is right; [MJ89] C3 pins it |
+| Section 4 "Shadowing function sign" and "Kirchhoff/composite interpolation" rows | wanted | found ([W67]; [MJ89]) | gravel/rock law, bistatic model, TR 9407 versions stay wanted |
+| CONFORMANCE A13 first bullet; rows "Composite shadowing", "(13.82) pi^(+1/2)", "Interpolation Kirchhoff/composite", "Volume slope and shadow corrections", "(11.2) constant 1.0091", "Gamma2 3.25 for all" | blocked / suspected / NO SOURCE READ / not quantified | see the proposed row changes in the extraction report (CONFORMANCE.md is another agent's file) | |
+
+Still blocked after these two papers: the empirical gravel/rock law (not in [MJ89]: 1-9 phi only), the bistatic
+model (Williams and Jackson 1998, another note), out-of-plane bistatic shadowing (not printed; the rule in [W67]
+C-W2 is ours), the -1 <= Mz < 0 constant of (11.3), and anything TR 9407 changed.
+
+## 7. Unblocked by Williams and Jackson (1998) and Jackson and Briggs (1992)
+
+Added 2026-11-26 (branch `ref-b`). Notes: `docs/references/bottom_bistatic_williams_jackson_1998.md` [WJ],
+`docs/references/bottom_backscatter_jackson_briggs_1992.md` [JB]. Nothing below is applied; each note's
+section 5 is the ordered list.
+
+| Package, row or item | Effect |
+|---|---|
+| 0.3 "Williams-Jackson bistatic interpolation" (not printed) | **found**: [WJ] eq. (10), sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), Kirchhoff (11)-(15) with perturbation (16)-(19), no slope averaging. Our two terms equal its two to 1e-13 dB. Opt-in model `williams_jackson_1998` ([WJ] 5.1); default stays small-slope (both are printed; [WJ] 5.4 puts the evidence to the owner) |
+| 0.3 "Kirchhoff / composite interpolation" | partly: [JB] p. 977 prints the monostatic switch (Kirchhoff from 90 deg down to 15 dB below its peak, composite below); the interpolation formula stays with Mourad and Jackson (1989) |
+| W6 / G-15 (volume term isotropic) | [WJ] (20)-(22) print the bistatic volume model used with data; it is J&R (14.10) with rho_rk = -1 and mu' = -mu (the paper's mu is negative). G-15 gains test numbers (Eckernfoerde null at phi 39.3 deg, levels to 0.01 dB) and two printed site inputs ([WJ] 5.3). Still no class values |
+| U1, decision 1, G-5 (mud sigma2) | evidence changes: printed fits Arafura 0.005 (0.004-0.006) and San Francisco 0.002 ([JB] Table V), against the agents' derived 0.0031 and 0.0037 for the same sites. `sigma2_range` of the soft rows should become [0.0008, 0.005] ([JB] 5.2); class value unchanged |
+| Decision 2, D-90 (medium sand sigma2) | weak support for 0.001: the fine-sand fit at Quinault is 0.001, which the authors call insensitive ([JB] Table V) |
+| Decision 10 (grain-size relations) | three measured sites have density ratios 0.24-0.60 above the relations at their grain size (normal-incidence loss 6-9 dB lower) ([JB] Sec. 4 item 3); one site each, no class change |
+| G-11 (composite validity) | add a warning for gamma2 > 3.7 ([JB] p. 974); the cut-off is printed three ways (J&R 1/2, [JB] (A8) 2^(-1/2), [JB] text 1): record, no default change ([JB] 5.3, 5.4) |
+| G-16 (volume slope averaging and shadowing) | [JB] (A11) says the published model does it; size suggested +1.2 to +1.9 dB too high at 10-20 deg at Arafura without it (ours). Still after G-11 |
+| G-18 (1-D to 2-D helper) | [JB] eq. (4) is the corrected (D.19)/(D.23); Table III -> Table V is its test (six rows to 0.1 %, one row 4.6 % off: a probable misprint) |
+| [N2] Sec. 2.1 (D.19), (D.23) misprints; [N4] Sec. 6 Table 13.1 w2 units | **settled** by primary prints: [JB] (4) has the corrected forms; Table 13.1's Quinault (0.0041) and Panama City 93 (0.0001475) rows are [JB] and [WJ] cm^4 values converted to m^(4 - gamma2) |
+| G-25 (validation cases) | test data: [WJ] Figs. 7-8 readings and Table AII summary; [JB] Figs. 10, 12, 14, 15 readings; three [JB] site rows and one [WJ] site row ([JB] 5.1, [WJ] 5.5) |
+| G-27 (anisotropic roughness) | lower priority: mean backscatter isotropic within 1-2 dB at three sites with ripples ([JB] Sec. 2.2) |
+| Decision 12 (papers to obtain) | Williams and Jackson (1998) read. Mourad and Jackson (1989) and Wagner (1967): another agent, in parallel |
+| CONFORMANCE rows "`combined`", "Interpolation Kirchhoff/composite", "Volume term isotropic in bistatic angle" | change of status proposed in the reports of [WJ] and [JB] (CONFORMANCE.md not edited here) |

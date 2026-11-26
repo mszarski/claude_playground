@@ -53,6 +53,12 @@ double option_number(const std::string& key, const std::string& value) {
   return v;
 }
 
+double option_nonnegative(const std::string& key, const std::string& value) {
+  const double v = option_number(key, value);
+  if (!(v >= 0.0) || !std::isfinite(v)) refuse(key, value, "a finite number >= 0");
+  return v;
+}
+
 std::int64_t option_integer(const std::string& key, const std::string& value) {
   double v = 0.0;
   try {
@@ -583,7 +589,8 @@ std::string options_json(const ChainOptions& c) {
       .num("multipath_depth_surface_loss_db", q.surface_loss_db).num("multipath_depth_surface_min_amplitude", q.surface_min_amplitude)
       .list("multipath_depth_surface_loss_grazing", q.surface_loss_grazing).list("multipath_depth_surface_loss_table_db", q.surface_loss_table_db)
       .flag("multipath_depth_bottom", q.bottom).num("multipath_depth_bottom_speed", q.bottom_speed).num("multipath_depth_bottom_density", q.bottom_density)
-      .num("multipath_depth_bottom_attenuation", q.bottom_attenuation).integer("multipath_depth_bottom_order", q.bottom_order)
+      .num("multipath_depth_bottom_attenuation", q.bottom_attenuation)
+      .num("multipath_depth_bottom_shear_speed", q.bottom_shear_speed).num("multipath_depth_bottom_shear_attenuation", q.bottom_shear_attenuation).integer("multipath_depth_bottom_order", q.bottom_order)
       .num("multipath_depth_bottom_grazing_limit_deg", q.bottom_grazing_limit_deg).num("multipath_depth_water_depth", q.water_depth)
       .num("multipath_depth_surface_z", q.surface_z).num("multipath_depth_own_depth_sigma", q.own_depth_sigma)
       .num("multipath_depth_model_sigma_fraction", q.model_sigma_fraction).num("multipath_depth_gradient", q.gradient)
@@ -614,9 +621,13 @@ std::string options_json(const ChainOptions& c) {
       .num("coverage_surface_coefficient", v.surface_coefficient).num("coverage_surface_rms_height", v.surface_rms_height)
       .num("coverage_surface_loss_db", v.surface_loss_db).list("coverage_surface_loss_grazing", v.surface_loss_grazing)
       .list("coverage_surface_loss_table_db", v.surface_loss_table_db).flag("coverage_bottom", v.bottom).num("coverage_bottom_speed", v.bottom_speed)
-      .num("coverage_bottom_density", v.bottom_density).num("coverage_bottom_attenuation", v.bottom_attenuation).num("coverage_water_depth", v.water_depth)
+      .num("coverage_bottom_density", v.bottom_density).num("coverage_bottom_attenuation", v.bottom_attenuation)
+      .num("coverage_bottom_shear_speed", v.bottom_shear_speed).num("coverage_bottom_shear_attenuation", v.bottom_shear_attenuation).num("coverage_water_depth", v.water_depth)
       .integer("coverage_ray_fan", v.ray_fan).integer("coverage_max_bounces", v.max_bounces).integer("coverage_max_arrivals", v.max_arrivals)
-      .num("coverage_null_db", v.null_db).num("coverage_surface_z", v.surface_z);
+      .num("coverage_null_db", v.null_db).num("coverage_surface_z", v.surface_z).integer("coverage_reverb", v.reverb)
+      .list("coverage_reverb_grazing", v.reverb_grazing).list("coverage_reverb_bottom_strength", v.reverb_bottom_strength)
+      .list("coverage_reverb_surface_strength", v.reverb_surface_strength).num("coverage_reverb_beam_integral", v.reverb_beam_integral)
+      .integer("coverage_reverb_rings", v.reverb_rings).integer("coverage_reverb_max_bounces", v.reverb_max_bounces);
   j.text("backend", c.backend == Backend::Cuda ? "cuda" : "host");
   return j.str();
 }

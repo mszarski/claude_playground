@@ -184,13 +184,14 @@ def volume_layer_strength(sv_db: float, thickness: float):
     return lambda g_in, g_out: np.full(np.broadcast(np.asarray(g_in), np.asarray(g_out)).shape, areal)
 
 
-def chapman_harris_strength(wind_speed: float, frequency: float):
+def chapman_harris_strength(wind_speed: float, frequency: float, bistatic_rule: str = "geometric_mean"):
     """Sea-surface scattering strength function for `reverberation_power`. Chapman-Harris is
-    a backscattering fit; for a path pair with different grazing angles it is evaluated at
-    their mean."""
+    a backscattering fit; for a path pair with different grazing angles it is the geometric mean
+    of the two strengths (TR 0702 Sec. 6.4.2; since A3), or with `bistatic_rule="mean_angle"` the
+    law at their mean angle (before A3): `surface.bistatic_strength`."""
     from .. import acoustics
-    return lambda g_in, g_out: 10.0 ** (acoustics.chapman_harris_db(0.5 * (g_in + g_out), wind_speed,
-                                                                    frequency) / 10.0)
+    from .surface import bistatic_strength
+    return bistatic_strength(lambda g: acoustics.chapman_harris_db(g, wind_speed, frequency), bistatic_rule)
 
 
 def element_power_pattern(element, rotation: np.ndarray, frequency_ratio: float = 1.0):
@@ -406,11 +407,11 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
     if components is not None:
         extra = dict(direction=np.ascontiguousarray(components[0], dtype=float),
                      doppler=np.ascontiguousarray(components[1], dtype=float))
-        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low, components=True)
+        active = _engine.call("sim_reverb_active", coarse, density, fs, time0, n_azimuth, decim, n_low, components=True)
         rows = np.flatnonzero(active)
     else:
         # A sector without power draws nothing (as in `_series_numpy`).
-        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low)
+        active = _engine.call("sim_reverb_active", coarse, density, fs, time0, n_azimuth, decim, n_low)
         rows = (np.arange(n_azimuth) if active[0] else np.arange(0)) if len(active) == 1 else np.flatnonzero(active)
     n_active = len(rows)
     offsets = np.ascontiguousarray(offsets, dtype=float)
@@ -446,10 +447,11 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
             # The accumulated spectrum stays on the backend between the runs: to it with the
             # first, back with the last.
             extra["total_from_host"], extra["total_to_host"] = first == 0, first + count >= n_active
-        core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
-                                   n_azimuth, decim, velocity=velocity, backend=backend, **extra)
+        _engine.call("sim_reverb_accumulate", total, coarse, density, first, normals, pulse_low, offsets, fs, time0,
+                     fc, c, n_azimuth, decim, velocity=velocity, backend=backend, **extra)
     finish = dict(backend=backend, batched=BATCHED_ON_HOST) if getattr(core, "SIM_REVERB_BATCHED", False) else {}
-    return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real, **finish)
+    return _engine.call("sim_reverb_finish", total, fs, n, start_time, time0, fc, decim, carrier=carrier,
+                        real_output=real, **finish)
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,
@@ -773,6 +775,7 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         warnings.warn("bistatic reverberation: this build of the C++ generator has azimuth sectors only; "
                       "falling back to the NumPy engine", RuntimeWarning, stacklevel=2)
         chosen = "numpy"
+    _engine.ran("reverberation", _engine.on_backend(backend) if chosen == "cpp" else "numpy")   # a fallback above included
     if chosen == "cpp":
         out = _series_cpp(rng, coarse, density, not bistatic and tx_gain is None and rx_gain is None, pulse_low,
                           positions - centre, fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,

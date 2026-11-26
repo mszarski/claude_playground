@@ -88,12 +88,16 @@ bool ray_arrives(const RayProfile& profile, double receiver_depth, double elevat
 
 /// Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh), as sim/propagation.py:
 /// R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)), m = rho_b / rho_w, n = c_w / c_b,
-/// attenuation (dB per wavelength) as an imaginary part of c_b.
-std::complex<double> rayleigh_reflection(double grazing, double c_water, double speed, double density, double attenuation);
+/// attenuation (dB per wavelength) as an imaginary part of c_b. With `shear_speed` > 0 (m/s; `shear_attenuation` dB per
+/// wavelength) an elastic solid (rock): the simulator's coefficient itself, sonar/core/reflection.hpp `elastic_reflection`
+/// (Jackson and Richardson 2007, (9.34)-(9.40)). Shear speed 0 is the fluid expression above, unchanged.
+std::complex<double> rayleigh_reflection(double grazing, double c_water, double speed, double density, double attenuation, double shear_speed = 0.0,
+                                         double shear_attenuation = 0.0);
 
 struct RayBottom {
   bool given = false;                    ///< false: bottom-reflected rays are left out
   double speed = 0.0, density = 0.0, attenuation = 0.0;   ///< m/s, re water, dB per wavelength
+  double shear_speed = 0.0, shear_attenuation = 0.0;      ///< m/s (0: a fluid), dB per wavelength: an elastic bottom (rock)
 };
 
 struct Eigenray {

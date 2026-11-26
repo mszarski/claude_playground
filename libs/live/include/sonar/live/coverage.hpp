@@ -20,6 +20,24 @@
 //   levels      SNR = SL - 2 TL + TS - (N0 + 10 log B) + 10 log (B T) + AG + factor, TL spherical with
 //               absorption: the link budget of python/gpusonar/buildspec.py (`budget`), whose numbers the
 //               configuration carries (none has a default here: without them the summary says so).
+//   reverberation (opt-in per configuration: `reverb`; sonar-w2w3, D-198) the boundaries' backscatter at the target's
+//               delay, from the SAME scattering strengths the simulator uses (gpusonar/sim/simulator.py
+//               `reverberation_item_strength`, handed over as tables of grazing angle in x out) and the SAME rays
+//               as the target: the bottom and the surface are cut into rings about the sonar; the paths from the
+//               projector and to the array that reach a ring going towards its boundary (spreading, and the
+//               coefficients of the boundaries met on the way, as powers) pair up, each pair adding
+//               |a_tx|^2 |a_rx|^2 S(g_in, g_out) x ring area x absorption at its delay (sim/reverb.py
+//               `reverberation_power`, the scattering-function method; Jackson and Richardson 2007 (G.4)). The
+//               sum against delay goes through the compressed pulse as the target's arrivals do (|sinc|^2 of
+//               the band, averaged over each delay bin) and is multiplied by the beam's integral over azimuth,
+//               Psi = Int |b_rx b_tx|^2 dphi / |b_rx b_tx|^2 on its axis (J&R (G.12)), of an unweighted beam of
+//               the array at broadside (`coverage_beam_integral`). Monostatic and direct paths only, this is
+//               J&R (G.11)-(G.13) with the pulse length c tau / 2 replaced by the compressed one, c / (2 B): the
+//               processing gain is the target's, so it cancels, and the array gain is not applied (the beam's
+//               integral is). Signal excess is then over the power sum of noise and reverberation.
+//               What is not in it: the reverberation's statistics (non-Rayleigh) in the detection
+//               probability, a moving target's Doppler separation from it, beam sidelobes in elevation and the
+//               elements' vertical patterns, range-dependent bottoms, volume scattering.
 //   detection   the probability that the chain as configured reports a point echo of that SNR: a table
 //               made by python/gpusonar/live.py `detection_probability` (the detector's own plan and
 //               thresholds) and handed over; not a typed threshold.
@@ -76,8 +94,10 @@ struct CoverageOptions {
   double refresh_depth = 5.0, refresh_water_depth = 10.0, refresh_speed = 0.5;
   double surface_coefficient = -1.0, surface_rms_height = 0.0, surface_loss_db = 0.0;
   std::vector<double> surface_loss_grazing, surface_loss_table_db;   ///< a bubble law's loss against grazing angle (rad, dB)
-  bool bottom = false;                 ///< a fluid bottom's Rayleigh reflection (a named sediment's, resolved by the configuration)
+  bool bottom = false;                 ///< a bottom's Rayleigh reflection (a named sediment's, resolved by the configuration)
   double bottom_speed = 0.0, bottom_density = 0.0, bottom_attenuation = 0.0;
+  /// m/s (0: a fluid), dB per wavelength: an elastic bottom (rock), raytrace.hpp rayleigh_reflection
+  double bottom_shear_speed = 0.0, bottom_shear_attenuation = 0.0;
   /// m: the site's water depth, used on a ping that carries none (what the ping carries comes first). No default.
   /// A chain with the coverage picture enabled needs this and `bottom`: LiveChain refuses to start without them
   /// (coverage_site_missing). The class itself still takes a water without a bottom (tools: deep water, said by the caller).
@@ -85,6 +105,20 @@ struct CoverageOptions {
   std::int64_t ray_fan = 720, max_bounces = 3, max_arrivals = 6;
   double null_db = -10.0;              ///< a surface-image null: the factor below this where the direct path exists
   double surface_z = 0.0;
+  /// Reverberation (file comment): 0 off (the noise-only picture, as before the term existed), 1 included, 2 not
+  /// included because the configuration gives no scattering (the summary says so). gpusonar.coverage.cpp_options sets it.
+  std::int64_t reverb = 0;
+  std::vector<double> reverb_grazing;            ///< rad, increasing: the grid of both tables' axes
+  std::vector<double> reverb_bottom_strength;    ///< linear per unit area, [g_in][g_out] row major on reverb_grazing; empty: none
+  std::vector<double> reverb_surface_strength;   ///< the same for the sea surface
+  double reverb_beam_integral = 0.0;   ///< rad: Psi; 0: from the record (Coverage::update), or CoverageSonar's
+  std::int64_t reverb_rings = 600;     ///< rings of each boundary out to the farthest delay needed
+  /// Boundary reflections a path to a ring may have, each way; 0: as many as a ray at 22 degrees of grazing makes out to
+  /// the farthest ring, 0.4 x range / water depth, at least 3 and at most 40 (ours: steeper than about 20 degrees a sand
+  /// bottom takes most of each bounce). Not `max_bounces` (the target's): in shallow water the reverberation at
+  /// kilometres comes by many bounces (flank_patrol, 100 m deep: 3 give 8 to 14 dB too little at 2.2 to 3.6 km against
+  /// the simulated data; tests/python/test_reverb_budget.py).
+  std::int64_t reverb_max_bounces = 0;
 };
 
 /// What a chain's coverage picture must be told about its site and was not: "" when the water depth and the bottom are
@@ -96,7 +130,25 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
 
 struct CoverageSonar {
   double f_centre = 0.0, bandwidth = 0.0, pulse = 0.0;   ///< Hz, Hz, s
+  double beam_integral = 0.0;          ///< rad: Psi of the beam (CoverageOptions::reverb_beam_integral wins when given)
 };
+
+/// Psi (rad) of an unweighted beam of hydrophones at horizontal positions (x, y; m) steered to horizontal azimuth
+/// `steer` (rad, from x towards y), at `frequency` (Hz) in water of `sound_speed`: Int_0^2pi |AF(phi)|^2 dphi / |AF(steer)|^2
+/// with AF(phi) = sum_n exp(i k (x_n cos phi + y_n sin phi)), on `n` azimuths. One hydrophone: 2 pi.
+double coverage_beam_integral(const std::vector<double>& x, const std::vector<double>& y, double frequency, double sound_speed, double steer,
+                              std::int64_t n = 8192);
+/// Psi of a record's receive array (every element's lever arm, projected on the body's horizontal plane) steered to the
+/// first element's boresight (broadside of a line), at the band centre.
+double coverage_beam_integral(const PingRecord& record);
+/// Si(x) = Int_0^x sin(t)/t dt (a series below 4, Abramowitz and Stegun 5.2.38-39 above; absolute error < 1e-6).
+double sine_integral(double x);
+/// The compressed pulse's power response, |sinc(B u)|^2, averaged over u in [x - width/2, x + width/2] (s); width 0: its value.
+double compressed_power_average(double x, double width, double bandwidth);
+/// Reverberation level re the source level (dB; -inf: none) at the two-way `delays` (s), by the scattering-function
+/// method of the file comment, with the beam's integral `psi` (rad). Without scattering tables: every value -inf.
+std::vector<double> coverage_reverberation_db(const MultipathProfile& water, double water_depth, double array_depth, double projector_depth,
+                                              const std::vector<double>& delays, const CoverageOptions& options, const CoverageSonar& sonar, double psi);
 
 /// The two-way propagation factor on a grid of target depths x horizontal ranges, row major [depth][range].
 struct CoverageField {
@@ -105,12 +157,17 @@ struct CoverageField {
   std::vector<double> incoherent_db;   ///< one way, array leg, sum of powers, dB re spherical
   std::vector<char> direct;            ///< a path that touches no boundary joins both the projector and the array to the point
   std::vector<double> slant;           ///< m: sqrt(R_tx R_rx), straight
+  std::vector<double> delay;           ///< s: the two-way delay of the factor's peak (NaN: no path)
+  std::vector<double> reverb_db;       ///< reverberation level re the source level at that delay, dB (-inf: none or not included)
 };
 CoverageField coverage_field(const MultipathProfile& water, double water_depth, double array_depth, double projector_depth,
                              const std::vector<double>& ranges, const std::vector<double>& depths, const CoverageOptions& options,
                              const CoverageSonar& sonar);
 /// One row's link-budget SNR (dB) of a target at straight slant range `slant` with the two-way factor `factor_db`.
 double coverage_snr_db(const CoverageOptions& options, const CoverageSonar& sonar, double slant, double ts_db, double factor_db);
+/// The same over the power sum of noise and reverberation at `reverb_db` (re the source level). With the term off
+/// (`reverb` != 1) or no reverberation (-inf, NaN) it is the noise-only figure above, exactly.
+double coverage_snr_db(const CoverageOptions& options, const CoverageSonar& sonar, double slant, double ts_db, double factor_db, double reverb_db);
 /// The detection probability at that SNR, from the table (NaN without one).
 double coverage_pd(const CoverageOptions& options, double snr_db);
 
@@ -136,7 +193,7 @@ class Coverage {
  private:
   CoverageOptions opt_;
   bool have_ = false, refreshed_ = false;
-  double seconds_ = 0.0, own_ = 0.0, water_ = 0.0;
+  double seconds_ = 0.0, own_ = 0.0, water_ = 0.0, psi_ = 0.0;
   std::string rung_, json_;
   std::vector<double> depth_, speed_, ranges_;
   std::vector<std::vector<double>> pd_;   ///< [class][range]

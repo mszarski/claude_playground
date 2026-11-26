@@ -1,0 +1,76 @@
+# Forward scatter from the sea surface in the 2001 ASIAEX East China Sea experiment as Dahl prints it
+# (P. H. Dahl, "Forward scattering from the sea surface and the van Cittert-Zernike theorem",
+# JASA 115 (2), 589-599, 2004, Sec. IV.A; docs/references/surface_forward_scatter_dahl_1996_2004.md
+# Sec. 2.6, confirmed on the page): sets 6-8, 31 May 2001, R/V Melville, 105 m of water; an ITC 1007
+# source at 25 m; two four-element vertical arrays centred at 26 m and 52 m; 3 ms CW pulses at 8 and
+# 20 kHz; wind 7 +- 0.5 m/s and rms wave height 0.3 +- 0.1 m (buoy); 20 receptions a set. The range
+# was "about 500 m" (measured acoustically); 467 m is the value of Dahl's Fig. 4 caption and gives
+# his printed iso-speed grazing angle at 52 m, 9.4 degrees (9.36 computed); Sec. IV.C says 497 m.
+#
+# Here: one hydrophone at 52 m (the lower array, where the surface arrival, 3.62 ms after the direct
+# one, is clear of the 3 ms direct pulse; at 26 m it is 1.85 ms and overlaps), 467 m from the source;
+# 8 kHz, with 20 kHz as `sonar_overrides.transmit.waveform` changed by the user or the tests.
+# The surface: wind 7 m/s with the measured height 0.3 m in place of the wind law's (0.262 m); its
+# slope is the long-wave slope of Dahl 1996 eq. (A7), 0.0213 at 7 m/s (Dahl 2004's low-pass surface
+# gives 0.0231; docs/references/CONFORMANCE.md A4). At 8 kHz and 9.4 degrees the bounce is fully
+# rough (coherent share 3e-5): no coherent surface arrival.
+#
+# OURS (`unconfirmed`, not printed in Dahl 2004): the sound speed, a constant 1525 m/s (his Fig. 3a
+# profile runs from about 1521 to 1528 m/s, read from the figure, with refraction that turns the
+# 9.4-degree arrival into 10.9 degrees: not modelled here); temperature and salinity (only for
+# absorption); the sediment (none printed; medium sand of configs/sediments.yaml, as sst_asiaex);
+# the ping interval (Dahl cycles seven waveforms every 5 s; the time between two pulses of one
+# waveform is not stated); bubble loss (Dahl's beta 0.004 at 8 kHz, 0.009 at 20 kHz had "little or no
+# measurable impact": none here); the source level and the pulse taper; the receive window.
+#
+# What this scenario is not: a reproduction of Dahl 2004's coherence curves. Its model is the
+# small-slope approximation of Dahl 1999 with a measured spectrum that is not printed. Our facet
+# model gives a vertical coherence at 52 m, 20 kHz, 0.30 m of about 0.1 against 0.69 measured
+# (read from Fig. 5): tests/python/test_asiaex_dahl_2004.py records it as an expected failure.
+# The bottom arrival comes at 11.7 ms after the direct one here; Dahl's Fig. 3c shows it at about
+# 13.7 ms (read from figure) in the refracting water: recorded, not fitted.
+# TR 0702's ASIAEX example stays configs/scenarios/sst_asiaex.yaml (its geometry is ours; Dahl 2004
+# does not say that TR 0702's Run/Set 22 is one of these sets).
+# Frame: z down, z = 0 the sea surface; the receiver is at the origin's x, y.
+name: asiaex_dahl_2004
+sonar: flank_32
+fidelity: image_source
+sonar_overrides:
+  name: asiaex_dahl_2004_receiver
+  array: {count: 1, pitch: 0.094}             # one element of the lower array; omnidirectional
+  transmit:
+    waveform: {type: cw, f_start: 8.0e+3, f_stop: 8.0e+3, duration: 0.003, window_alpha: 0.1, source_level_db_rms: 190.0}
+  receive:
+    sample_rate: 64.0e+3
+    window: {range: [230.0, 268.5]}           # two-way "range": 5 ms before the first arrival to 45 ms after it
+environment:
+  sound_speed_m_s: 1525.0
+  temperature_c: 20.0
+  salinity_psu: 34.0
+  water_depth_m: 105.0                        # printed
+  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}   # medium sand of configs/sediments.yaml: ours, none printed
+  wind_speed_m_s: 7.0                         # printed: 7 +- 0.5 m/s
+  rms_wave_height_m: 0.3                      # printed: 0.3 +- 0.1 m
+  absorption: francois_garrison
+  water_depth_known: false
+  overrides:
+    sound_speed_m_s: "1525 m/s is ours: Dahl 2004 Fig. 3a shows about 1521 to 1528 m/s over the depth (read from the figure); the receive window is placed in time with it. 20 deg C / 34 PSU only feed absorption"
+propagation:
+  surface_z: 0.0
+  max_order: 2
+time_spread:
+  surface: {wind_speed: 7.0, rms_height: 0.3}   # the measured height in place of the wind law's; slope from the wind (Dahl 1996 eq. (A7))
+  taps: 12
+platform: {position: [0, 0, 52.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 20, interval: 5.0, transmit: false}
+scene: []
+sources:
+  - {label: projector, origin: [467.0, 0.0, 25.0], signal: {type: waveform}}   # printed: source 25 m; 467 m (Fig. 4 caption)
+receiver: {noise_rms: 0.0, adc: false}
+seed: 2001
+unconfirmed:
+  - environment.sound_speed       # a constant 1525 m/s; the printed profile refracts
+  - environment.bottom            # no sediment printed
+  - sonar_overrides               # source level, pulse taper, sampling, receive window
+  - pings.interval
+  - time_spread.taps

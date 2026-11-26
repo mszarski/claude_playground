@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from . import engine as _engine
 from .propagation import EigenrayProvider
 
 
@@ -76,16 +77,19 @@ def write_env3d(path: str, *, frequency: float, profile, depth: float, bottom, s
                 box_km, beam: str = "B", title: str = "gpusonar 3-D") -> None:
     """The `.env` of a Bellhop3D run with a source at (0, 0, `source_depth`): `profile` = (z [m], c [m/s]) of the
     water down to `depth`, `bottom` = (speed, density, attenuation dB/wavelength) of a fluid half-space under the
-    bed of the `.bty` beside it ('A~'), receivers on the bearings x depths x ranges given (m, degrees),
+    bed of the `.bty` beside it ('A~') (with (shear speed m/s, shear attenuation dB/wavelength) after them, an elastic
+    one, A8), receivers on the bearings x depths x ranges given (m, degrees),
     `run_type` 'I', 'C', 'A' or 'a', `mode` '2' or '3', `beam` Bellhop's beam letter."""
     z, c = (np.asarray(v, dtype=float) for v in profile)
     rz = np.atleast_1d(np.asarray(receiver_depths, dtype=float))
     rr = np.atleast_1d(np.asarray(ranges, dtype=float))
     th = np.atleast_1d(np.asarray(bearings_deg, dtype=float))
-    speed, density, attenuation = bottom
+    speed, density, attenuation, *shear = bottom
     lines = [f"'{title}'", f"{frequency:.6f}", "1", "'CVW'", f"{len(z)}  0.0  {depth:.4f}"]
     lines += [f"  {zi:.4f}  {ci:.4f}  /" for zi, ci in zip(z, c)]
-    lines += ["'A~' 0.0", f" {depth:.4f}  {speed:.4f} 0.0 {density:.4f} {attenuation:.4f} /",
+    half = (f" {depth:.4f}  {speed:.4f} 0.0 {density:.4f} {attenuation:.4f} /" if not shear or not shear[0] else
+            f" {depth:.4f}  {speed:.4f} {shear[0]:.4f} {density:.4f} {attenuation:.4f} {shear[1]:.4f} /")
+    lines += ["'A~' 0.0", half,
               "1", "0.0 /", "1", "0.0 /", "1", f"{source_depth:.4f} /",
               f"{len(rz)}", " ".join(f"{v:.4f}" for v in rz) + " /",
               f"{len(rr)}", _vector(rr, 1e-3),
@@ -437,6 +441,8 @@ class Bellhop3DProvider(EigenrayProvider):
             z, c = np.r_[z, deepest], np.r_[c, c[-1]]
         box = (max(abs(lo_x), abs(hi_x)) / 1000.0, max(abs(lo_y), abs(hi_y)) / 1000.0)
         bottom = (self.env.bottom_speed, self.env.bottom_density, self.env.bottom_attenuation)
+        if self.env.bottom_shear_speed:                                           # elastic (A8)
+            bottom += (self.env.bottom_shear_speed, self.env.bottom_shear_attenuation or 0.0)
         out = {}
         for run_type in ("a", "I"):
             with tempfile.TemporaryDirectory(prefix="gpusonar_bellhop3d_") as tmp:
@@ -472,6 +478,7 @@ class Bellhop3DProvider(EigenrayProvider):
     def eigenrays(self, source, points):
         from .propagation import EigenraySet
         from .. import acoustics
+        _engine.ran("eigenrays", "bellhop3d")        # one implementation; the record says which (sim/engine.py)
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
         key = self._key(source)

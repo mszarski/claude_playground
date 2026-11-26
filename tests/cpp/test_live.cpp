@@ -15,6 +15,10 @@
 #include <gtest/gtest.h>
 
 #include "sonar/live/chain.hpp"
+#include "sonar/live/coverage.hpp"
+#include "sonar/live/multipath_depth.hpp"
+#include "sonar/live/raytrace.hpp"
+#include "sonar/sim/paths.hpp"
 #include "sonar/core/platform.hpp"
 #include "sonar/live/option_value.hpp"
 #include "sonar/live/options.hpp"
@@ -1073,4 +1077,229 @@ TEST(RangeDoppler, TargetPartMovesThePositionAlongTheLineOfSightByItsClosingSpee
   EXPECT_EQ(c[0].vy, -8.0);
   EXPECT_NEAR(c[1].y, 100.0, 1e-12);
   EXPECT_EQ(c[2].y, 0.0);
+}
+
+// --- an elastic bottom (rock) in the live chain's depth and multipath models -------------------------------------------
+
+TEST(Rock, LiveCoefficientIsTheSimulators) {
+  // The `rock` row on 1500 m/s water (configs/sediments.yaml: speed ratio 3820 / 1528, density ratio 2557.5 / 1023, delta
+  // 0.01374; shear 1900 / 1528 of the water, shear delta 0.085, unconfirmed): live::rayleigh_reflection with the shear is
+  // sim::rayleigh_reflection bit for bit (one function, sonar/core/reflection.hpp), and its per-bounce losses are A8's
+  // table (tests/python/test_elastic_bottom.py: 1.56 / 2.90 / 5.45 / 14.57 / 8.78 / 6.25 / 4.54 / 2.80 dB).
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  const double speed = 3820.0 / 1528.0 * c, density = 2557.5 / 1023.0, att = 0.01374 * per_wl;
+  const double shear = 1900.0 / 1528.0 * c, shear_att = 0.085 * per_wl;
+  sim::FluidBottom rock{speed, density, att, 1.0, shear, shear_att};
+  sim::FluidBottom fluid{speed, density, att, 1.0};
+  for (double g = 0.001; g <= 0.5 * kPi; g += 0.003) {
+    EXPECT_EQ(rayleigh_reflection(g, c, speed, density, att, shear, shear_att), sim::rayleigh_reflection(g, c, rock)) << g;
+    // zero shear: the live chain's own fluid expression, unchanged (the five-argument call); it agrees with the
+    // simulator's fluid one to rounding (they divide differently)
+    EXPECT_EQ(rayleigh_reflection(g, c, speed, density, att, 0.0, shear_att), rayleigh_reflection(g, c, speed, density, att)) << g;
+    EXPECT_LT(std::abs(rayleigh_reflection(g, c, speed, density, att) - sim::rayleigh_reflection(g, c, fluid)), 1e-13) << g;
+  }
+  const double angles[] = {5.0, 10.0, 20.0, 30.0, 40.0, 45.0, 60.0, 90.0};
+  const double table[] = {1.56, 2.90, 5.45, 14.57, 8.78, 6.25, 4.54, 2.80};
+  for (int i = 0; i < 8; ++i) {
+    EXPECT_NEAR(-20.0 * std::log10(std::abs(rayleigh_reflection(angles[i] * kDeg, c, speed, density, att, shear, shear_att))), table[i], 0.005) << angles[i];
+  }
+}
+
+TEST(Rock, MultipathPatternAndCoverageTakeTheShear) {
+  // The pattern's bottom-reflected one-leg arrival (out by the bottom image, back direct; the surface's coefficient 0
+  // removes the surface images) over rock is the elastic coefficient at its grazing angle; the options carry the shear
+  // by name and refuse a negative one; the coverage options the same.
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  MultipathOptions o;
+  for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
+           {"bottom", "1"}, {"bottom_speed", std::to_string(3820.0 / 1528.0 * c)}, {"bottom_density", std::to_string(2557.5 / 1023.0)},
+           {"bottom_attenuation", std::to_string(0.01374 * per_wl)}, {"bottom_shear_speed", std::to_string(1900.0 / 1528.0 * c)},
+           {"bottom_shear_attenuation", std::to_string(0.085 * per_wl)}, {"bottom_order", "1"}, {"surface_coefficient", "0"}}) {
+    ASSERT_TRUE(set_multipath_option(o, "multipath_depth_" + k, v)) << k;
+  }
+  EXPECT_GT(o.bottom_shear_speed, 1800.0);
+  EXPECT_THROW(set_multipath_option(o, "multipath_depth_bottom_shear_speed", "-1"), std::invalid_argument);
+  const double own = 30.0, zt = 50.0, depth = 100.0, lift = 2.0 * depth - zt - own;
+  for (const double deg : {10.0, 30.0, 45.0}) {
+    MultipathGeometry g;
+    g.range = lift / std::tan(deg * kDeg);
+    g.array_depth = g.projector_depth = own;
+    g.sound_speed = c;
+    g.f_centre = 8000.0;
+    g.bandwidth = 2000.0;
+    g.water_depth = depth;
+    std::vector<double> delay;
+    std::vector<std::complex<double>> amp;
+    const double r_h = g.range;
+    multipath_pattern(zt, 2.0 * std::hypot(r_h, zt - own) / c, g, o, delay, amp);
+    ASSERT_EQ(amp.size(), 9u);
+    const double spread = std::hypot(r_h, zt - own) / std::hypot(r_h, lift);
+    const auto want = rayleigh_reflection(std::asin(lift / std::hypot(r_h, lift)), c, o.bottom_speed, o.bottom_density, o.bottom_attenuation,
+                                          o.bottom_shear_speed, o.bottom_shear_attenuation);
+    EXPECT_LT(std::abs(amp[6] / spread - want), 1e-9) << deg;
+    const auto fluid = rayleigh_reflection(std::asin(lift / std::hypot(r_h, lift)), c, o.bottom_speed, o.bottom_density, o.bottom_attenuation);
+    EXPECT_GT(std::abs(fluid) - std::abs(want), 0.1) << deg;     // the elastic rock returns less than the fluid one
+  }
+  CoverageOptions v;
+  ASSERT_TRUE(set_coverage_option(v, "coverage_bottom_shear_speed", "1865.5"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_bottom_shear_attenuation", "4.6"));
+  EXPECT_EQ(v.bottom_shear_speed, 1865.5);
+  EXPECT_EQ(v.bottom_shear_attenuation, 4.6);
+  EXPECT_THROW(set_coverage_option(v, "coverage_bottom_shear_attenuation", "nan"), std::invalid_argument);
+}
+
+TEST(Rock, EigenraysTakeTheShear) {
+  // One bottom bounce in isovelocity water: the eigenray over elastic rock is the fluid one times V_elastic / V_fluid at
+  // its grazing angle (the launch angle); a shear speed of 0 is the fluid bit for bit.
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  EigenrayOptions o;
+  o.n_fan = 801;
+  o.max_bounces = 2;
+  o.bottom = {true, 3820.0 / 1528.0 * c, 2557.5 / 1023.0, 0.01374 * per_wl, 1900.0 / 1528.0 * c, 0.085 * per_wl};
+  EigenrayOptions f = o;
+  f.bottom.shear_speed = 0.0;
+  const RayProfile prof({0.0, 100.0}, {c, c}, 100.0);
+  const auto rock = eigenrays(prof, 30.0, 50.0, 400.0, o), fluid = eigenrays(prof, 30.0, 50.0, 400.0, f);
+  ASSERT_EQ(rock.size(), fluid.size());
+  int checked = 0;
+  for (std::size_t i = 0; i < rock.size(); ++i) {
+    if (rock[i].n_bottom != 1 || rock[i].n_surface != 0) continue;
+    const double g = std::abs(rock[i].launch);
+    const auto ratio = rayleigh_reflection(g, c, o.bottom.speed, o.bottom.density, o.bottom.attenuation, o.bottom.shear_speed, o.bottom.shear_attenuation) /
+                       rayleigh_reflection(g, c, o.bottom.speed, o.bottom.density, o.bottom.attenuation);
+    EXPECT_LT(std::abs(rock[i].amplitude / fluid[i].amplitude - ratio), 1e-9);
+    ++checked;
+  }
+  EXPECT_EQ(checked, 1);
+}
+
+// --- the coverage picture's reverberation term (coverage.hpp; sonar-w2w3) ---
+
+// A Lambert bottom (mu, linear) on `n` grazing angles from 0 to 90 degrees, [g_in][g_out] as the options take it.
+CoverageOptions lambert_reverb(double mu, std::size_t n = 46) {
+  CoverageOptions o;
+  o.reverb = 1;
+  for (std::size_t i = 0; i < n; ++i) o.reverb_grazing.push_back(0.5 * kPi * static_cast<double>(i) / static_cast<double>(n - 1));
+  for (double a : o.reverb_grazing) {
+    for (double b : o.reverb_grazing) o.reverb_bottom_strength.push_back(mu * std::sin(a) * std::sin(b));
+  }
+  o.surface_coefficient = 0.0;           // no surface-reflected paths: one path each way, as (G.11) has it
+  o.max_bounces = 1;
+  o.reverb_max_bounces = 1;
+  o.ray_fan = 1440;
+  return o;
+}
+
+MultipathProfile isovelocity(double c) {
+  MultipathProfile w;
+  w.depth = {0.0, 1.0};
+  w.speed = {c, c};
+  return w;
+}
+
+TEST(CoverageReverb, SineIntegralAndTheCompressedPulsesAverage) {
+  // Si against tabulated values (Abramowitz and Stegun Table 5.1 / the series to 16 digits); the bin average of
+  // sinc^2 integrates to 1 / B over delay whatever the bin, and is the sinc^2 itself for a narrow bin.
+  const std::pair<double, double> si[] = {{0.5, 0.493107418043067}, {1.0, 0.946083070367183}, {5.0, 1.549931244944674},
+                                          {10.0, 1.658347594218874}, {20.0, 1.548241701043440}};
+  for (const auto& [x, v] : si) EXPECT_NEAR(sine_integral(x), v, 1e-6) << x;
+  EXPECT_NEAR(sine_integral(-1.0), -sine_integral(1.0), 1e-15);
+  const double band = 4000.0;
+  for (double width : {1e-6, 1e-4, 1e-3, 1e-2}) {
+    double sum = 0.0;
+    const double step = width;
+    for (double x = -0.5; x < 0.5; x += step) sum += compressed_power_average(x, width, band) * step;
+    EXPECT_NEAR(sum * band, 1.0, 0.01) << width;
+  }
+  const double s = std::sin(kPi * band * 1e-4) / (kPi * band * 1e-4);
+  EXPECT_NEAR(compressed_power_average(1e-4, 1e-9, band), s * s, 1e-12);
+}
+
+TEST(CoverageReverb, LambertBottomIsJacksonAndRichardsonG13) {
+  // One direct path each way to a flat Lambert bottom: RL - SL = 10 log10(mu sin^2 g Psi c / (2 B) / r^3) - 2 alpha r,
+  // (G.11)-(G.13) with the compressed pulse 1 / B in place of tau; held within 0.2 dB from 1 to 4 km.
+  const double c = 1500.0, depth = 100.0, own = 30.0, mu = std::pow(10.0, -2.7), psi = 0.1, alpha = 0.5;   // dB/km
+  CoverageOptions o = lambert_reverb(mu);
+  o.absorption_db_per_km = alpha;
+  CoverageSonar sonar;
+  sonar.f_centre = 8000.0;
+  sonar.bandwidth = 4000.0;
+  sonar.pulse = 1.0;
+  std::vector<double> ranges = {1000.0, 1500.0, 2200.0, 3000.0, 4000.0}, delays;
+  for (double r : ranges) delays.push_back(2.0 * r / c);
+  const std::vector<double> got = coverage_reverberation_db(isovelocity(c), depth, own, own, delays, o, sonar, psi);
+  for (std::size_t i = 0; i < ranges.size(); ++i) {
+    const double r = ranges[i], g = std::asin((depth - own) / r);
+    const double want = 10.0 * std::log10(mu * std::sin(g) * std::sin(g) * psi * c / (2.0 * sonar.bandwidth) / (r * r * r)) - 2.0 * alpha * r / 1000.0;
+    EXPECT_NEAR(got[i], want, 0.2) << r;
+  }
+}
+
+TEST(CoverageReverb, LimitsOfTheTerm) {
+  const double c = 1500.0, depth = 100.0, own = 30.0;
+  CoverageOptions o = lambert_reverb(std::pow(10.0, -2.7));
+  o.source_level_db = 200.0;
+  o.noise_spectrum_db = 45.0;
+  o.array_gain_db = 15.0;
+  o.absorption_db_per_km = 0.5;
+  CoverageSonar sonar;
+  sonar.f_centre = 8000.0;
+  sonar.bandwidth = 4000.0;
+  sonar.pulse = 1.0;
+  sonar.beam_integral = 0.1;
+  const std::vector<double> ranges = {1000.0, 2000.0, 3000.0}, depths = {40.0};
+  // Zero scattering strength: no reverberation at all, and the SNR is the noise-only figure bit for bit.
+  CoverageOptions zero = o;
+  std::fill(zero.reverb_bottom_strength.begin(), zero.reverb_bottom_strength.end(), 0.0);
+  const CoverageField fz = coverage_field(isovelocity(c), depth, own, own, ranges, depths, zero, sonar);
+  for (std::size_t i = 0; i < ranges.size(); ++i) {
+    EXPECT_TRUE(std::isinf(fz.reverb_db[i]) && fz.reverb_db[i] < 0.0);
+    EXPECT_EQ(coverage_snr_db(zero, sonar, fz.slant[i], 0.0, fz.factor_db[i], fz.reverb_db[i]), coverage_snr_db(zero, sonar, fz.slant[i], 0.0, fz.factor_db[i]));
+  }
+  // The term off: the noise-only figure, whatever the tables hold.
+  CoverageOptions off = o;
+  off.reverb = 0;
+  const CoverageField f0 = coverage_field(isovelocity(c), depth, own, own, ranges, depths, off, sonar);
+  for (std::size_t i = 0; i < ranges.size(); ++i) EXPECT_EQ(coverage_snr_db(off, sonar, f0.slant[i], 0.0, f0.factor_db[i], -20.0), coverage_snr_db(off, sonar, f0.slant[i], 0.0, f0.factor_db[i]));
+  // Reverberation-limited: with the noise 80 dB down, the SNR does not move with the source level.
+  const CoverageField f = coverage_field(isovelocity(c), depth, own, own, ranges, depths, o, sonar);
+  CoverageOptions quiet = o, loud = o;
+  quiet.noise_spectrum_db = loud.noise_spectrum_db = -60.0;
+  loud.source_level_db = 220.0;
+  for (std::size_t i = 0; i < ranges.size(); ++i) {
+    EXPECT_NEAR(coverage_snr_db(quiet, sonar, f.slant[i], 0.0, f.factor_db[i], f.reverb_db[i]), coverage_snr_db(loud, sonar, f.slant[i], 0.0, f.factor_db[i], f.reverb_db[i]), 1e-6);
+    EXPECT_LT(coverage_snr_db(o, sonar, f.slant[i], 0.0, f.factor_db[i], f.reverb_db[i]), coverage_snr_db(o, sonar, f.slant[i], 0.0, f.factor_db[i]));
+  }
+  // A CW pulse twice as long (its band 1 / T): 3 dB more reverberation, far from the bottom's first return.
+  CoverageSonar cw = sonar, cw2 = sonar;
+  cw.bandwidth = 1.0 / 0.01;
+  cw2.bandwidth = 1.0 / 0.02;
+  const std::vector<double> delays = {2.0 * 2000.0 / c, 2.0 * 3000.0 / c};
+  const std::vector<double> a = coverage_reverberation_db(isovelocity(c), depth, own, own, delays, o, cw, 0.1);
+  const std::vector<double> b = coverage_reverberation_db(isovelocity(c), depth, own, own, delays, o, cw2, 0.1);
+  for (std::size_t i = 0; i < delays.size(); ++i) EXPECT_NEAR(b[i] - a[i], 10.0 * std::log10(2.0), 0.1);
+  // The options by name, and an out-of-range switch refused.
+  CoverageOptions v;
+  ASSERT_TRUE(set_coverage_option(v, "coverage_reverb", "1"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_reverb_grazing", "0,0.5,1.5707963"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_reverb_beam_integral", "0.2"));
+  EXPECT_EQ(v.reverb, 1);
+  EXPECT_EQ(v.reverb_grazing.size(), 3u);
+  EXPECT_THROW(set_coverage_option(v, "coverage_reverb", "3"), std::invalid_argument);
+}
+
+TEST(CoverageReverb, BeamIntegralOfALineIsTwiceLambdaOverItsLength) {
+  // An unweighted line of N hydrophones at half a wavelength, broadside: Int |AF|^2 dphi / N^2 = 2 pi / N exactly
+  // (the cross terms integrate to J0(k d) = J0(m pi), small; both sides of the line count). One hydrophone: 2 pi.
+  const double c = 1500.0, f = 8000.0, d = 0.5 * c / f;
+  std::vector<double> x, y;
+  for (int i = 0; i < 32; ++i) {
+    x.push_back(d * i);
+    y.push_back(0.0);
+  }
+  const double psi = coverage_beam_integral(x, y, f, c, 0.5 * kPi);
+  double cross = 0.0;
+  for (int m = 1; m < 32; ++m) cross += 2.0 * (32 - m) * std::cyl_bessel_j(0.0, m * kPi);
+  EXPECT_NEAR(psi, 2.0 * kPi * (32.0 + cross) / (32.0 * 32.0), 1e-6);
+  EXPECT_NEAR(coverage_beam_integral({0.0}, {0.0}, f, c, 0.0), 2.0 * kPi, 1e-9);
 }

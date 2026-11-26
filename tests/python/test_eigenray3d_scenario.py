@@ -52,7 +52,9 @@ def test_no_shipped_scenario_but_the_new_one_uses_the_new_keys():
     users = [n for n in list_configs("scenarios")
              if load_scenario_config(n, expand=False).get("fidelity") == "eigenray3d"
              or "bathymetry" in load_scenario_config(n, expand=False)]
-    assert users == ["flank_seamount_3d"]
+    # sonar-d7sw added four scenes at the tier and a level-bed control (tests/python/test_3d_scenarios.py)
+    assert users == ["flank_bank_3d", "flank_canyon_3d", "flank_level_3d", "flank_ridge_3d", "flank_seamount_3d",
+                     "flank_seamount_3d_opening"]
 
 
 def _stand_in(self, key, it, iz, ir):

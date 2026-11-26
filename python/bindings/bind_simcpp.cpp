@@ -78,6 +78,21 @@ sim::EigenrayView set_view(const ArrD& delay, const ArrC& amplitude, const ArrD&
 /// entry point that starts to use the sound speed must take it from its caller instead.
 constexpr double kSoundSpeedNotUsed = 1500.0;
 
+/// A bottom half-space from propagation._fluid_bottom's tuple: (speed, density, attenuation, water_density) for a
+/// fluid, or those and (shear_speed, shear_attenuation) for an elastic solid (A8).
+sim::FluidBottom fluid_bottom(const py::object& bottom) {
+  const auto t = bottom.cast<py::tuple>();
+  if (t.size() != 4 && t.size() != 6) {
+    throw std::invalid_argument("a bottom is (speed, density, attenuation, water_density[, shear_speed, shear_attenuation])");
+  }
+  sim::FluidBottom b{t[0].cast<double>(), t[1].cast<double>(), t[2].cast<double>(), t[3].cast<double>()};
+  if (t.size() == 6) {
+    b.shear_speed = t[4].cast<double>();
+    b.shear_attenuation = t[5].cast<double>();
+  }
+  return b;
+}
+
 /// An image-source configuration from the binding's arguments. Nothing is defaulted here
 /// that the C++ struct does not default (audit S-1, S-3): a bottom without a coefficient
 /// or a sediment, and a missing max_order, are errors raised by sim::check_config.
@@ -96,11 +111,7 @@ sim::ImageSourceConfig image_config(double sound_speed, const py::object& surfac
   if (!max_order.is_none()) cfg.max_order = max_order.cast<int>();
   for (const auto& [axis, position, coefficient] : walls) cfg.walls.push_back({axis, position, coefficient});
   cfg.has_fluid_bottom = !bottom.is_none();
-  if (cfg.has_fluid_bottom) {
-    // (speed, density, attenuation, water_density)
-    const auto t = bottom.cast<std::tuple<double, double, double, double>>();
-    cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
-  }
+  if (cfg.has_fluid_bottom) cfg.fluid_bottom = fluid_bottom(bottom);
   return cfg;
 }
 
@@ -158,6 +169,59 @@ void bind_simcpp(py::module_& m) {
       "(sim_image_series_truncation gives what that leaves out).");
 
   m.def(
+      "sim_plane_image_eigenrays",
+      [](double sound_speed, const Vec3d& source, const ArrD& points, const py::list& planes, int max_order,
+         int wall_order, cd bottom_coefficient, const py::object& bottom) {
+        require_points(points, "points");
+        sim::PlaneImageConfig cfg;
+        cfg.sound_speed = sound_speed;
+        cfg.max_order = max_order;
+        cfg.wall_order = wall_order;
+        cfg.bottom_coefficient = bottom_coefficient;
+        cfg.has_fluid_bottom = !bottom.is_none();
+        if (cfg.has_fluid_bottom) cfg.fluid_bottom = fluid_bottom(bottom);
+        for (const py::handle item : planes) {
+          // (kind, point, normal, coefficient or None, [(axis, lower, upper), ...])
+          const auto t = item.cast<py::tuple>();
+          if (t.size() != 5) throw std::invalid_argument("a plane is (kind, point, normal, coefficient, bounds)");
+          sim::Plane p;
+          const auto kind = t[0].cast<std::string>();
+          if (kind == "surface") {
+            p.kind = sim::PlaneKind::Surface;
+          } else if (kind == "bottom") {
+            p.kind = sim::PlaneKind::Bottom;
+          } else if (kind == "wall") {
+            p.kind = sim::PlaneKind::Wall;
+          } else {
+            throw std::invalid_argument("plane kind must be surface, bottom or wall, not " + kind);
+          }
+          p.point = t[1].cast<Vec3d>();
+          p.normal = t[2].cast<Vec3d>();  // already unit (`_Plane` normalises it): taken as given
+          if (!t[3].is_none()) p.coefficient = t[3].cast<cd>();
+          for (const auto& [axis, lower, upper] : t[4].cast<std::vector<std::tuple<int, double, double>>>()) {
+            if (axis < 0 || axis > 2) throw std::invalid_argument("a bound's axis must be 0, 1 or 2");
+            p.has_bound[axis] = true;
+            p.lower[axis] = lower;
+            p.upper[axis] = upper;
+          }
+          cfg.planes.push_back(p);
+        }
+        sim::EigenraySet e;
+        {
+          py::gil_scoped_release release;
+          e = sim::plane_image_eigenrays(cfg, source, points.data(), points.shape(0));
+        }
+        return set_dict(std::move(e));
+      },
+      py::arg("sound_speed"), py::arg("source"), py::arg("points"), py::arg("planes"), py::arg("max_order"),
+      py::arg("wall_order"), py::arg("bottom_coefficient"), py::arg("bottom") = py::none(),
+      "Image-source eigenrays of the general construction (propagation._PlaneImages): `planes` a list of\n"
+      "(kind 'surface' | 'bottom' | 'wall', point [3], unit normal [3] into the water, coefficient or None for a\n"
+      "bottom, bounds [(axis, lower, upper), ...]); `max_order` surface and bottom bounces and `wall_order` wall\n"
+      "bounces a path; a bottom bounce takes the Rayleigh coefficient of `bottom` (speed, density, attenuation,\n"
+      "water_density) at its own grazing angle, or `bottom_coefficient`. A dict of the EigenraySet fields.");
+
+  m.def(
       "sim_image_series_truncation",
       [](double sound_speed, double source_z, double receiver_z, double range, const py::object& surface_z,
          const py::object& bottom_z, cd surface_coefficient, const py::object& bottom_coefficient,
@@ -177,16 +241,19 @@ void bind_simcpp(py::module_& m) {
 
   m.def(
       "sim_rayleigh_reflection",
-      [](const ArrD& grazing, double c_water, double speed, double density, double attenuation, double water_density) {
+      [](const ArrD& grazing, double c_water, double speed, double density, double attenuation, double water_density,
+         double shear_speed, double shear_attenuation) {
         py::array_t<cd> out(std::vector<py::ssize_t>(grazing.shape(), grazing.shape() + grazing.ndim()));
-        const sim::FluidBottom b{speed, density, attenuation, water_density};
+        const sim::FluidBottom b{speed, density, attenuation, water_density, shear_speed, shear_attenuation};
         for (py::ssize_t i = 0; i < grazing.size(); ++i) {
           out.mutable_data()[i] = sim::rayleigh_reflection(grazing.data()[i], c_water, b);
         }
         return out;
       },
       py::arg("grazing"), py::arg("c_water"), py::arg("speed"), py::arg("density"), py::arg("attenuation") = 0.0,
-      py::arg("water_density") = 1.0, "Rayleigh reflection coefficient of a fluid half-space at grazing angles (rad).");
+      py::arg("water_density") = 1.0, py::arg("shear_speed") = 0.0, py::arg("shear_attenuation") = 0.0,
+      "Rayleigh reflection coefficient of a fluid half-space at grazing angles (rad); with shear_speed > 0 (m/s) and\n"
+      "shear_attenuation (dB/wavelength) that of an elastic one, J&R (9.34)-(9.40).");
 
   m.def(
       "sim_snell_crossing",
@@ -208,19 +275,92 @@ void bind_simcpp(py::module_& m) {
   m.def(
       "sim_sediment_eigenrays",
       [](double sound_speed, double sediment_speed, double interface_z, cd transmission, const Vec3d& source,
-         const ArrD& points) {
+         const ArrD& points, const py::object& bottom, const py::object& frequency, bool evanescent,
+         const py::object& roughness) {
         require_points(points, "points");
+        sim::SedimentConfig cfg;
+        cfg.sound_speed = sound_speed;
+        cfg.sediment_speed = sediment_speed;
+        cfg.interface_z = interface_z;
+        cfg.transmission = transmission;
+        cfg.fluid = !bottom.is_none();
+        if (cfg.fluid) {
+          // (speed, density, attenuation, water_density), as for an image-source fluid bottom
+          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
+          cfg.bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
+          if (!frequency.is_none()) cfg.frequency = frequency.cast<double>();
+          cfg.evanescent = evanescent;
+        }
+        if (!roughness.is_none()) {
+          // (w2, gamma2, K0, seed, patch, refine, floor_db, bin): G-13's penetration: rough, every field stated
+          const auto r = roughness.cast<std::tuple<double, double, double, std::uint64_t, double, double, double, double>>();
+          cfg.rough = true;
+          cfg.roughness = {std::get<0>(r), std::get<1>(r), std::get<2>(r), std::get<3>(r),
+                           std::get<4>(r), std::get<5>(r), std::get<6>(r), std::get<7>(r)};
+        }
         sim::EigenraySet e;
         {
           py::gil_scoped_release release;
-          e = sim::sediment_eigenrays({sound_speed, sediment_speed, interface_z, transmission}, source, points.data(),
-                                      points.shape(0));
+          e = sim::sediment_eigenrays(cfg, source, points.data(), points.shape(0));
         }
         return set_dict(std::move(e));
       },
       py::arg("sound_speed"), py::arg("sediment_speed"), py::arg("interface_z"), py::arg("transmission"),
-      py::arg("source"), py::arg("points"),
-      "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields.");
+      py::arg("source"), py::arg("points"), py::arg("bottom") = py::none(), py::arg("frequency") = py::none(), py::arg("evanescent") = false,
+      py::arg("roughness") = py::none(),
+      "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields. With "
+      "`bottom` (speed, density, attenuation dB/wavelength, water_density) and `frequency` (Hz): the opt-in fluid "
+      "penetration (transmission coefficient, reciprocity factor, attenuation in the sediment; `evanescent`: the evanescent field below the critical angle). "
+      "With `roughness` (w2, gamma2, K0, seed, patch, refine, floor_db, bin) as well: penetration: rough (G-13), the "
+      "roughness-scattered bins of the sub-critical points as further rays (sonar/sim/penetration.hpp).");
+
+  m.def(
+      "sim_rough_patch_coefficients",
+      [](std::uint64_t seed, const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& level,
+         const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& i,
+         const py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>& j) {
+        if (level.size() != i.size() || level.size() != j.size()) throw std::invalid_argument("level, i, j: one size");
+        py::array_t<cd> out(level.size());
+        for (py::ssize_t k = 0; k < level.size(); ++k) {
+          out.mutable_data()[k] = sim::rough_patch_coefficient(seed, level.data()[k], i.data()[k], j.data()[k]);
+        }
+        return out;
+      },
+      py::arg("seed"), py::arg("level"), py::arg("i"), py::arg("j"),
+      "The complex Gaussian deviates of interface cells (level, i, j) for `seed` (penetration.patch_coefficients).");
+
+  m.def(
+      "sim_rough_quadtree_cells",
+      [](double px, double py, double radius, double finest, double refine) {
+        sim::QuadtreeCells c = sim::rough_quadtree_cells(px, py, radius, finest, refine);
+        const auto n = static_cast<py::ssize_t>(c.cx.size());
+        return py::make_tuple(to_array(std::move(c.level), {n}), to_array(std::move(c.i), {n}),
+                              to_array(std::move(c.j), {n}), to_array(std::move(c.cx), {n}),
+                              to_array(std::move(c.cy), {n}), to_array(std::move(c.side), {n}));
+      },
+      py::arg("px"), py::arg("py"), py::arg("radius"), py::arg("finest"), py::arg("refine"),
+      "Interface cells of the global quadtree about a point: (level, i, j, cx, cy, side) (penetration.quadtree_cells).");
+
+  m.def("sim_rough_sediment_radius", &sim::rough_sediment_radius, py::arg("depth"), py::arg("k_loss"),
+        py::arg("floor_db"), "Horizontal reach of the cells about a buried point (penetration._sediment_radius).");
+
+  m.def(
+      "sim_rough_sigma_wp",
+      [](const ArrD& K_s, const ArrD& K_i, double k_w, double a_rho, double nu, double delta, double w2, double gamma2,
+         double K0) {
+        if (K_s.ndim() != 2 || K_s.shape(1) != 2 || K_i.ndim() != 2 || K_i.shape(1) != 2 || K_s.shape(0) != K_i.shape(0)) {
+          throw std::invalid_argument("K_s and K_i must have shape [n, 2]");
+        }
+        py::array_t<double> out(K_s.shape(0));
+        for (py::ssize_t k = 0; k < K_s.shape(0); ++k) {
+          out.mutable_data()[k] = sim::rough_sigma_wp(K_s.data()[2 * k], K_s.data()[2 * k + 1], K_i.data()[2 * k],
+                                                      K_i.data()[2 * k + 1], k_w, a_rho, nu, delta, w2, gamma2, K0);
+        }
+        return out;
+      },
+      py::arg("K_s"), py::arg("K_i"), py::arg("k_w"), py::arg("a_rho"), py::arg("nu"), py::arg("delta"), py::arg("w2"),
+      py::arg("gamma2"), py::arg("K0"),
+      "The water-to-sediment cross section of penetration.sigma_wp (obliquity=True) for wave vectors [n, 2].");
 
   m.def(
       "sim_two_way_paths",

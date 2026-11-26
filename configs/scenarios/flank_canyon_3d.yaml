@@ -1,0 +1,27 @@
+# ILLUSTRATIVE (unconfirmed relief: no site was measured). A canyon ALONG the look direction: a straight Gaussian
+# trough (sim/bathymetry.py `ridge` with a negative height) 150 m deep cut into a 100 m shelf (axis 250 m deep,
+# sigma 400 m), running east from under the sonar, which looks down it. Its walls slope up to 12.8 degrees; along the
+# axis the bed is level, so an N x 2-D run there sees 250 m of water everywhere, and the cross-slope warning does not
+# flag the axis bearing (it reads the slope ON the bearing, which is zero on the axis). In 3-D the paths that meet the
+# walls are turned back towards the axis or out onto the shelf. A target 5 km down the axis, sonar and target 50 m
+# deep. Compare with `flank_canyon_nx2d` (the same scene at `eigenray` over a level 250 m bed: N x 2-D on the axis).
+# Opt-in `eigenray3d` tier (Bellhop3D, external: GPUSONAR_BELLHOP3D). Target in noise only (no reverberation).
+name: flank_canyon_3d
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [4600, 5400]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 250.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {ridge: {depth: 100.0, height: -150.0, point: [0.0, 0.0], azimuth_deg: 90.0, sigma: 400.0}}
+propagation:
+  range_step: 25.0
+  depth_step: 4.0             # puts a node at the sonar's and the target's 50 m (the twin has the same grid)
+  n_beta: 181                 # 0.67 degree over the default 120 degrees of azimuth, as flank_seamount_3d
+platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: target, positions: [[0.0, 5000.0, 50.0]], target_strength_db: 10.0}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz, as flank_target_5km
+seed: 1

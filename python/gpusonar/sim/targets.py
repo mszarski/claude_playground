@@ -759,8 +759,9 @@ class SedimentScatterers:
         missing = [k for k in SEDIMENT_KEYS if k not in item]
         if missing:
             raise ValueError(f"a fluid_sediment seafloor needs {missing}")
-        # `roughness_model` and `small_scale_kh` as for the reverberation item (sim/bottom.py); without
-        # them the model's default applies (small_slope since D-86; `roughness_model: perturbation`
+        # `roughness_model`, `small_scale_kh`, `shadowing` and `volume_model` as for the reverberation item (sim/bottom.py);
+        # without them the model's default applies (small_slope since D-86; `roughness_model: perturbation`
         # gives the earlier amplitudes).
-        extra = {k: (str(item[k]) if k == "roughness_model" else float(item[k])) for k in ("roughness_model", "small_scale_kh") if k in item}
+        extra = {k: (str(item[k]) if k in ("roughness_model", "shadowing", "volume_model") else float(item[k]))
+                 for k in ("roughness_model", "small_scale_kh", "shadowing", "volume_model") if k in item}
         return cls({**{k: float(item[k]) for k in SEDIMENT_KEYS}, **extra}, float(item.get("offset_db", 0.0)))
