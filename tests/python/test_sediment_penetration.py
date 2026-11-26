@@ -291,8 +291,20 @@ def test_named_sediment_and_speed_from_the_bottom():
 def _small(name, **prop):
     cfg = load_scenario_config(name)
     cfg["platform"]["raster"] = {"x": [0.0, 0.0001, 0.1], "y": [0.0, 0.0001, 0.1]}
+    # The shipped buried scenes name `penetration: fluid` and a bottom themselves (the owner's decision of
+    # 2026-11-26), so "off" here means those two keys removed: the tier as it was before the option.
+    for key in ("penetration", "bottom", "frequency"):   # frequency: filled in at load when the option is on
+        cfg["propagation"].pop(key, None)
     cfg["propagation"].update(prop)
     return cfg
+
+
+@pytest.mark.parametrize("name", ["buried_cylinder", "buried_objects"])
+def test_the_shipped_buried_scenes_use_the_fluid_penetration_with_medium_sand_at_their_own_speed(name):
+    prop = load_scenario_config(name)["propagation"]
+    assert prop["penetration"] == "fluid"
+    assert prop["bottom"] == {"sediment": "medium_sand", "speed": 1700.0}
+    assert prop["sediment_speed"] == 1700.0
 
 
 def test_scenario_option_off_is_the_default_and_on_needs_a_bottom():
@@ -314,6 +326,8 @@ def test_proud_scatterers_of_a_buried_scene_do_not_move():
         cfg = load_scenario_config("buried_objects")
         cfg["scene"] = [i for i in cfg["scene"] if i["label"] == "interface"]
         cfg["platform"]["raster"] = {"x": [-0.6, 0.6001, 0.6], "y": [0.0, 0.0001, 0.6]}
+        for key in ("penetration", "bottom", "frequency"):
+            cfg["propagation"].pop(key, None)
         cfg["propagation"].update(prop)
         return [np.asarray(r.samples.array) for r in run_scenario(cfg).records]
     off = records()
