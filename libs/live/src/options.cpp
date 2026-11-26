@@ -190,6 +190,27 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("doppler_hypotheses")) c.doppler.hypotheses = i();  // odd; 0: from doppler_max_range_rate_m_s
   else if (is("doppler_unknown_ownship_m_s")) c.doppler.unknown_ownship = option_nonnegative(key, value);
   else if (is("doppler_threshold_db")) c.doppler.threshold_db = v();   // NaN (nan): measured (bank_threshold_db)
+  else if (is("doppler_combine")) c.doppler.combine = parse_doppler_combine(value);   // max | cfar (doppler.hpp; D3)
+  else if (is("doppler_tone")) {                                   // off | bank: the tone's Doppler filter bank (doppler.hpp; D3)
+    if (value != "off" && value != "bank") throw std::invalid_argument("doppler_tone '" + value + "': one of off, bank");
+    c.doppler.tone.enabled = value == "bank";
+  }
+  else if (is("doppler_tone_frequency_hz")) c.doppler.tone.frequency = v();
+  else if (is("doppler_tone_start_s")) c.doppler.tone.start = option_nonnegative(key, value);
+  else if (is("doppler_tone_duration_s")) c.doppler.tone.duration = v();
+  else if (is("doppler_tone_window_alpha")) c.doppler.tone.window_alpha = v();
+  else if (is("doppler_tone_max_range_rate_m_s")) c.doppler.tone.max_range_rate = v();
+  else if (is("doppler_tone_step_m_s")) c.doppler.tone.step = v();
+  else if (is("doppler_tone_hop")) c.doppler.tone.hop = v();
+  else if (is("doppler_tone_notch_m_s")) c.doppler.tone.notch = v();
+  else if (is("doppler_tone_notch_cells")) c.doppler.tone.notch_cells = option_nonnegative(key, value);
+  else if (is("doppler_tone_guard")) c.doppler.tone.guard = i();
+  else if (is("doppler_tone_train")) c.doppler.tone.train = i();
+  else if (is("doppler_tone_false_alarms_per_ping")) c.doppler.tone.false_alarms_per_ping = v();
+  else if (is("doppler_tone_gate_range_m")) c.doppler.tone.gate_range = v();
+  else if (is("doppler_tone_gate_bearing_deg")) c.doppler.tone.gate_bearing = v() * kDeg;
+  else if (is("doppler_tone_range_sigma_m")) c.doppler.tone.range_sigma = v();
+  else if (is("doppler_tone_sidelobe_db")) c.doppler.tone.sidelobe_db = v();
   else if (is("doppler_report")) c.doppler.report = on();
   else if (is("range_doppler")) c.range_doppler = parse_range_doppler(value);   // off | ownship | full (sonar-fyj)   // centroid | first (D-157); unset: chain_range_estimate (D-158)
   // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
@@ -514,7 +535,15 @@ std::string options_json(const ChainOptions& c) {
   const DopplerOptions& dop = c.doppler;
   j.text("doppler_mode", doppler_mode_name(dop.mode)).num("doppler_max_range_rate_m_s", dop.max_range_rate).num("doppler_step_m_s", dop.step)
       .integer("doppler_hypotheses", dop.hypotheses).num("doppler_unknown_ownship_m_s", dop.unknown_ownship)
-      .num("doppler_threshold_db", dop.threshold_db).flag("doppler_report", dop.report);
+      .num("doppler_threshold_db", dop.threshold_db).text("doppler_combine", doppler_combine_name(dop.combine)).flag("doppler_report", dop.report);
+  const ToneOptions& tone = dop.tone;
+  j.text("doppler_tone", tone.enabled ? "bank" : "off").num("doppler_tone_frequency_hz", tone.frequency).num("doppler_tone_start_s", tone.start)
+      .num("doppler_tone_duration_s", tone.duration).num("doppler_tone_window_alpha", tone.window_alpha)
+      .num("doppler_tone_max_range_rate_m_s", tone.max_range_rate).num("doppler_tone_step_m_s", tone.step).num("doppler_tone_hop", tone.hop)
+      .num("doppler_tone_notch_m_s", tone.notch).num("doppler_tone_notch_cells", tone.notch_cells).integer("doppler_tone_guard", tone.guard)
+      .integer("doppler_tone_train", tone.train).num("doppler_tone_false_alarms_per_ping", tone.false_alarms_per_ping)
+      .num("doppler_tone_gate_range_m", tone.gate_range).num("doppler_tone_gate_bearing_deg", tone.gate_bearing / kDeg)
+      .num("doppler_tone_range_sigma_m", tone.range_sigma).num("doppler_tone_sidelobe_db", tone.sidelobe_db);
   j.num("min_snr_db", c.min_snr_db).text("doa", c.doa).integer("gate_fft", c.gate_fft).num("sbl_grid_step_deg", c.sbl_grid_step_deg)
       .integer("sbl_max_gates", c.sbl_max_gates).num("sbl_min_contrast_db", c.sbl_min_contrast_db).integer("sbl_max_iterations", c.sbl.max_iterations)
       .num("sbl_tolerance", c.sbl.tolerance).integer("sbl_max_sources", c.sbl.max_sources).num("sbl_dynamic_range_db", c.sbl.dynamic_range_db)

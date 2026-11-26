@@ -208,9 +208,13 @@ struct DetectorCells {
 /// DetectorDevice; tests/python/test_detector_device.py). `fine` and `cell_mean` are host memory either way.
 /// Not held: a map with a NaN in the first or last two training lengths of a bearing (the slope's medians), where the
 /// host's std::sort and the device's insertion sort order the NaN differently (detector_kernel.hpp).
+/// `given_level` (optional, [n_bearing * n_cells]): the background to test against instead of the one estimated from
+/// `cell_mean` (the thresholds still count the training cells the window holds). The live chain's Doppler bank with combine
+/// cfar gives each beam's centre hypothesis' own background (doppler.hpp). With it the host reference runs whatever the
+/// backend (the device kernels estimate their own). nullptr: as before, bit for bit.
 void multiscale_cells(Backend backend, const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
                       std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard_cells, std::int64_t train_cells,
-                      const DetectorPlan& plan, DetectorCells& out, int device = 0);
+                      const DetectorPlan& plan, DetectorCells& out, int device = 0, const double* given_level = nullptr);
 
 /// The kernels of the device path run on host threads instead: what the CPU build can test of them against the reference.
 void multiscale_cells_kernels_on_host(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean,
@@ -225,7 +229,8 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
                                          std::int64_t n_bearing, std::int64_t n_cells, const std::vector<double>& fine_ranges,
                                          const std::vector<double>& cell_ranges, const std::vector<double>& bearings,
                                          std::int64_t guard_cells, std::int64_t train_cells, const DetectorPlan& plan,
-                                         std::vector<float>& background, Backend backend = Backend::Host, int device = 0);
+                                         std::vector<float>& background, Backend backend = Backend::Host, int device = 0,
+                                         const double* given_level = nullptr);
 
 /// multiscale_detect after its statistic: sidelobes dropped and flagged cells grouped, from `statistic` (its flags are
 /// changed). `background` receives statistic.background.

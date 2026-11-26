@@ -26,6 +26,12 @@ alone, is counted here, not assumed:
 scene has it), the bank's shift taken from the code (bank_threshold_db): the counts with and without the bank at the
 same budget, to see the false-alarm rate held where the background is reverberation (a few pings: coarse).
 
+`--chain cfar` (D3): the live chain itself (C++ engine), without the bank and with `combine: cfar` (each (beam, hypothesis)
+normalised by its own background, the thresholds planned for the budget divided by the hypotheses per beam: the union
+bound), on the same noise-only pings at each budget and each --max-rates value: the counts side by side, the ratio, the
+three-sigma Poisson interval of the ratio, and the single-sample threshold of each plan (the correction in dB). With
+--reverb SCENE the same on the scene's reverberation-only pings (its targets removed, its own seed + 1000).
+
 Output: one line per (N, budget) and a JSON file. The fit in libs/live doppler.hpp (kBankThresholdSlopeDb) is a straight
 line in ln N through the long-range array's shifts at the budgets measured; run it again and compare before changing the
 map, the detector or the hypothesis spacing.
@@ -178,6 +184,39 @@ def measure_noise(name: str, pings: int, max_per_beam: int, budgets, seed: int, 
     return out
 
 
+def chain_counts(records, budgets, max_rates, combine: str, bearings=None, log=say) -> dict:
+    """Detections of the live chain (C++ engine) on `records` without the bank and with it (`combine`), per budget and
+    largest rate; the single-sample threshold of each plan."""
+    base = dict(CHAIN, engine="cpp") if bearings is None else {"engine": "cpp", "backend": "host"}
+    out = {}
+    for b in budgets:
+        for rate in [None] + list(max_rates):
+            cfg = dict(base, cfar={"false_alarms_per_ping": float(b)})
+            if rate is not None:
+                cfg["doppler"] = {"mode": "sweep_bank", "max_range_rate_m_s": float(rate), "combine": combine}
+            t = time.time()
+            with LiveChain(cfg) as chain:
+                n = sum(len(chain.process(r.copy())["detections"]) for r in records)
+                thr = float(chain.detector["scales"][0]["threshold_db"])
+                per_beam = json.loads(chain._cpp.doppler()).get("per_beam", 1) if rate is not None else 1
+            key = f"{b}/{'off' if rate is None else rate}"
+            out[key] = {"budget": float(b), "max_range_rate_m_s": rate, "per_beam": int(per_beam), "detections": int(n), "pings": len(records),
+                        "threshold_db": thr}
+            log(f"budget {b:6.3f} {'off' if rate is None else f'cfar {rate:.1f} m/s, {per_beam} a beam'}: {n} detections on {len(records)} pings "
+                f"({n / (b * len(records)):.2f} of the budget), single-sample threshold {thr:.3f} dB ({time.time() - t:.0f} s)")
+    for b in budgets:
+        ref = out[f"{b}/off"]
+        for rate in max_rates:
+            e = out[f"{b}/{rate}"]
+            e["ratio_to_off"] = e["detections"] / max(ref["detections"], 1)
+            e["threshold_correction_db"] = e["threshold_db"] - ref["threshold_db"]
+            # Three-sigma interval of the ratio of two Poisson counts (normal approximation on the log): coarse.
+            if e["detections"] > 0 and ref["detections"] > 0:
+                sig = np.sqrt(1.0 / e["detections"] + 1.0 / ref["detections"])
+                e["ratio_3sigma"] = [float(e["ratio_to_off"] * np.exp(-3 * sig)), float(e["ratio_to_off"] * np.exp(3 * sig))]
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sonar", default="long_range", choices=sorted(SONARS))
@@ -186,8 +225,35 @@ def main(argv=None) -> int:
     ap.add_argument("--budgets", default="3,0.3")
     ap.add_argument("--seed", type=int, default=7000)
     ap.add_argument("--json")
+    ap.add_argument("--chain", choices=["cfar"], help="count the live chain's detections without the bank and with this combiner")
+    ap.add_argument("--max-rates", default="3", help="--chain: the bank's max_range_rate_m_s values, comma separated")
+    ap.add_argument("--reverb", help="--chain: a scene whose reverberation-only pings are counted instead of noise")
     a = ap.parse_args(argv)
     budgets = [float(v) for v in a.budgets.split(",")]
+    if a.chain:
+        rates = [float(v) for v in a.max_rates.split(",")]
+        if a.reverb:
+            import copy
+            import warnings
+            from gpusonar.config import load_scenario_config
+            from gpusonar.sim.simulator import run_scenario
+            cfg = load_scenario_config(a.reverb, expand=False)
+            cfg["scene"] = []
+            cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
+            cfg["seed"] = int(cfg.get("seed", 0)) + 1000
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                records = run_scenario(copy.deepcopy(cfg)).records
+            res = {"reverb": a.reverb, "seed": cfg["seed"], "combine": a.chain,
+                   "counts": chain_counts(records, budgets, rates, a.chain, bearings="deployment")}
+        else:
+            sonar_name, overrides = SONARS[a.sonar]
+            sonar = SonarModel.load(sonar_name, overrides)
+            records = [noise_ping(sonar, a.seed + i, i) for i in range(a.pings)]
+            res = {"sonar": sonar_name, "seed": a.seed, "combine": a.chain, "counts": chain_counts(records, budgets, rates, a.chain)}
+        if a.json:
+            Path(a.json).write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     res = measure_noise(a.sonar, a.pings, a.max_per_beam, budgets, a.seed)
     if a.json:
         Path(a.json).write_text(json.dumps(res, indent=1) + "\n")

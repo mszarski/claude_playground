@@ -47,6 +47,12 @@ struct Detection {
   /// platform, opening positive; doppler.hpp), and the bank's step, its resolution: a COARSE estimate. NaN: no bank.
   double range_rate = std::numeric_limits<double>::quiet_NaN();
   double range_rate_step = std::numeric_limits<double>::quiet_NaN();
+  /// m: this detection's own range sigma for the tracker (a tone's coarse range, doppler.hpp ToneOptions::range_sigma);
+  /// NaN: the tracker's range_sigma (every detection before D3).
+  double range_sigma = std::numeric_limits<double>::quiet_NaN();
+  /// Which Doppler path found it (D3): 0 the sweep's map (or no Doppler path), 1 the tone's bank alone, 2 both (a sweep
+  /// detection that took a tone detection's range rate).
+  int doppler_path = 0;
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

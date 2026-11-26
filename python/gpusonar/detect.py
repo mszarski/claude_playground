@@ -85,6 +85,9 @@ class Detection:
     range_rate: float = float("nan")        # m/s, the Doppler bank's winning hypothesis (relative to the platform, opening
                                             # positive): a coarse estimate; NaN: no bank (libs/live detections.hpp, D4)
     range_rate_step: float = float("nan")   # m/s, the bank's step: the estimate's resolution
+    range_sigma: float = float("nan")       # m, the tracker's range sigma for this detection (a tone's coarse range, D3); NaN:
+                                            # the tracker's own (libs/live detections.hpp)
+    doppler_path: int = 0                   # D3: 0 the sweep's map, 1 the tone's bank alone, 2 both
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -210,19 +213,23 @@ def check_plan(plan: dict) -> None:
 
 
 def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
-               plan: dict) -> tuple[list[Detection], np.ndarray]:
+               plan: dict, level: np.ndarray | None = None) -> tuple[list[Detection], np.ndarray]:
     """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
     [n_bearing, n_cells] its cell means, and the background of each cell. A cell is flagged when its strongest
     sample, its mean, or the mean of several cells about it exceeds that statistic's threshold over the background
     (the mean of `train` cells either side beyond `guard`); flagged cells a stronger cell's sidelobes explain are
     dropped; touching cells are one detection at the energy-weighted position of their samples, with the strongest
-    sample over the background as its snr_db and the range it spans as its extent."""
+    sample over the background as its snr_db and the range it spans as its extent. `level` [n_bearing, n_cells]: the
+    background to test against instead of the estimate from `cell_mean` (the thresholds still count the training cells);
+    the live chain's Doppler bank with combine cfar (libs/live multiscale_detect's `given_level`). None: as before."""
     from . import _gpusonar as core
     k = int(plan["samples_per_cell"])
     n_b, n_c = cell_mean.shape
     fine_ranges, cell_ranges, bearings = np.asarray(fine_ranges, dtype=float), np.asarray(cell_ranges, dtype=float), np.asarray(bearings, dtype=float)
     cells = np.asarray(fine)[:, :n_c * k].reshape(n_b, n_c, k)
     mean, count = background(cell_mean, guard, train)
+    if level is not None:
+        mean = np.asarray(level, dtype=float).reshape(n_b, n_c)
     floor = np.maximum(mean, 1e-300)
     peak = cells.max(axis=2).astype(float)
     scales = plan["scales"]
@@ -387,7 +394,9 @@ class Tracker:
         # Polar measurement noise rotated into Cartesian.
         s, c = np.sin(d.bearing), np.cos(d.bearing)
         j = np.array([[s, d.range * c], [c, -d.range * s]])
-        return j @ np.diag([self.range_sigma**2, self.bearing_sigma**2]) @ j.T
+        rs = getattr(d, "range_sigma", float("nan"))
+        rs = rs if np.isfinite(rs) else self.range_sigma      # a tone's coarse range (D3); NaN: as before
+        return j @ np.diag([rs**2, self.bearing_sigma**2]) @ j.T
 
     @staticmethod
     def _take_depth(t: Track, d: Detection, gate: float = 3.0) -> None:

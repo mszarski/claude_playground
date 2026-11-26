@@ -190,3 +190,53 @@ def test_muting_the_sweep_gives_the_tone_back_its_ceiling(tmp_path):
     (tone,) = out["targets"]
     print(f"tone alone: bank {tone['bank_margin_db']:.1f} / {tone['noise_only_bank_margin_db']:.1f} dB")
     assert tone["noise_only_bank_margin_db"] - tone["bank_margin_db"] < 4.0     # measured 33.9 / 36.3 dB: 2.4 (25.4 with the sweep)
+
+
+# --- D3: the tone above the sweep's band (flank_patrol_doppler_tone) and the chain's tone path ----------------------------
+
+def test_the_tone_above_band_scene_is_flank_patrol_doppler_with_the_tone_at_10_5_khz():
+    """D2's control as a scene (DOPPLER.md "D2 done" item 1: the tone at 10.5 kHz, above the 6-10 kHz sweep, reached its
+    ceiling): the file is flank_patrol_doppler with the tone moved and the train's band stated to hold it; the energy and
+    its split are the same; the chain's tone keys come from its segment table (doppler.tone_from_sonar)."""
+    from gpusonar import doppler
+    cfg, base = load_scenario_config("flank_patrol_doppler_tone", expand=False), load_scenario_config("flank_patrol_doppler", expand=False)
+    a, b = copy.deepcopy(cfg), copy.deepcopy(base)
+    wa, wb = a["sonar_overrides"]["transmit"].pop("waveform"), b["sonar_overrides"]["transmit"].pop("waveform")
+    a.pop("name"), b.pop("name")
+    assert a == b
+    assert wa.pop("f_start") == 6.0e+3 and wa.pop("f_stop") == 10.6e+3
+    assert wa["segments"][0].pop("frequency") == 10.5e+3 and wb["segments"][0].pop("frequency") == 8.0e+3
+    assert wa == wb
+    sonar, old = _sonar(cfg), _sonar(base)
+    assert sonar.source_energy_db == pytest.approx(old.source_energy_db, abs=1e-9)
+    assert sonar.segment_energies_db() == pytest.approx(old.segment_energies_db(), abs=0.01)
+    assert doppler.tone_from_sonar(sonar) == {"tone": "bank", "tone_frequency_hz": 10.5e+3, "tone_start_s": 0.0, "tone_duration_s": 1.0,
+                                              "tone_window_alpha": 1.0}
+
+
+slow_chain = pytest.mark.skipif(os.environ.get("GPUSONAR_DOPPLER_CHAIN", "") in ("", "0"),
+                                reason="the chain's acceptance on the scene takes about half an hour on a CPU: GPUSONAR_DOPPLER_CHAIN=1")
+
+
+@needs_bellhop
+@slow_chain
+def test_the_chain_with_the_tone_path_sees_the_small_vehicle_and_keeps_the_wreck(tmp_path):
+    """D3's acceptance on flank_patrol_doppler_tone (tools/doppler_tone_eval.py, both engines, 6 pings): the small vehicle
+    (below the reverberation by design, D-198) detected on at least 5 of 6 pings with its range rate within 0.1 m/s of
+    the truth, the submarine as well, the wreck (still, on the bed) by the sweep on every ping; the engines' report lines
+    agree; the tone path's false detections on the background at the default budget at most one a ping. Numbers in
+    docs/tasks/doppler_tone_eval.json (ours)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import doppler_tone_eval
+    out = tmp_path / "eval.json"
+    assert doppler_tone_eval.main(["flank_patrol_doppler_tone", "--background", "2", "--json", str(out)]) == 0
+    res = json.loads(out.read_text())
+    assert res["engines_equal_on"]
+    for engine in ("python", "cpp"):
+        t = res["engines"][engine]["on"]["targets"]
+        for label in ("small_vehicle", "submarine"):
+            rates = [(p["range_rate_m_s"], p["true_range_rate_m_s"]) for p in t[label]["pings"] if p["range_rate_m_s"] is not None]
+            assert len(rates) >= 5, (engine, label, t[label])
+            assert all(abs(r - true) < 0.1 for r, true in rates), (engine, label, rates)
+        assert t["wreck"]["detected"] == len(t["wreck"]["pings"]) and t["wreck"]["paths"] == ["sweep"]
+    assert res["background"]["default"]["on_tone_only"] <= res["background"]["default"]["pings"]

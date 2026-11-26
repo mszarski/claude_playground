@@ -2,6 +2,7 @@
 // plan's hypotheses and their use per beam, the fold over hypotheses, the detector's offset and pedestal, the options,
 // and the chain with the bank against the chain without it. tests/python/test_doppler_bank.py and test_live_cpp.py hold
 // the same code against the Python engine and simulated pings.
+#include <array>
 #include <cmath>
 #include <complex>
 #include <random>
@@ -282,6 +283,268 @@ TEST(Doppler, TheBankGetsAMoversPeakBackAndItsRangeRateAndLeavesItsRange) {
   EXPECT_NE(rb.json().find("\"range_rate_m_s\": 2"), std::string::npos) << rb.json();
   EXPECT_EQ(ra.json().find("range_rate"), std::string::npos);
   EXPECT_EQ(bank.last_hypotheses().size(), bank.last_ranges.size() * bank.bearings.size() * static_cast<std::size_t>(bank.detector_plan().samples_per_cell));
+}
+
+// --- D3 part A: combine cfar ---------------------------------------------------------------------------------------------
+
+TEST(DopplerCfar, TheFoldKeepsTheLargestRatioToEachHypothesisOwnBackground) {
+  // Two beams, three hypotheses (beam 0 takes 0..1, beam 1 takes 1..2), maps scaled by 1, 8 and 1/8: normalised by their
+  // own backgrounds they are alike. A constant map's ratio is 1 everywhere it is kept; the reference is the background of
+  // each beam's centre hypothesis; skipped cells are 0.
+  DopplerPlan p;
+  p.first = {0, 1};
+  p.per_beam = 2;
+  const std::int64_t n_b = 2, n_c = 40, k = 4, skip = 3;
+  NormalisedFold f;
+  normalised_start(n_b, n_c, k, skip, f);
+  const double scale[3] = {1.0, 8.0, 0.125};   // powers of two: every ratio exactly 1, ties exact
+  for (std::int64_t h = 0; h < 3; ++h) {
+    std::vector<float> fine(static_cast<std::size_t>(n_b * n_c * k), static_cast<float>(2.0 * scale[h]));
+    fold_normalised(p, h, fine.data(), 1, 6, f);
+  }
+  std::vector<float> fine, cells;
+  std::vector<double> level;
+  normalised_map(f, fine, cells, level);
+  for (std::int64_t b = 0; b < n_b; ++b) {
+    for (std::int64_t j = 0; j < n_c; ++j) {
+      const auto c = static_cast<std::size_t>(b * n_c + j);
+      if (j < skip) {
+        EXPECT_EQ(cells[c], 0.0F);
+        continue;
+      }
+      EXPECT_NEAR(f.cell_ratio[c], 1.0F, 1e-6F);
+      EXPECT_NEAR(level[c], 2.0 * scale[b == 0 ? 0 : 1], 1e-5 * scale[b == 0 ? 0 : 1]);   // centre: h = first (per_beam 2)
+      EXPECT_NEAR(cells[c], static_cast<float>(level[c]), 1e-5F * static_cast<float>(level[c]));
+      for (std::int64_t q = 0; q < k; ++q) EXPECT_EQ(f.which[static_cast<std::size_t>(b * n_c * k + j * k + q)], b == 0 ? 0 : 1);   // ties: the earlier
+    }
+  }
+}
+
+TEST(DopplerCfar, ThePlanDividesTheBudgetAndTheDetectorTakesAGivenBackground) {
+  PingRecord r = empty_record();
+  std::vector<double> b;
+  for (int i = -15; i <= 15; ++i) b.push_back(2.0 * i * kDeg);
+  DopplerOptions o;
+  o.mode = DopplerMode::SweepBank;
+  o.max_range_rate = 2.5;
+  const DopplerPlan m = plan_doppler(r, b, o);
+  o.combine = DopplerCombine::Cfar;
+  const DopplerPlan c = plan_doppler(r, b, o);
+  EXPECT_EQ(m.budget_divisor, 1.0);
+  EXPECT_EQ(c.budget_divisor, static_cast<double>(c.per_beam));
+  EXPECT_EQ(c.threshold_db, 0.0);
+  EXPECT_EQ(c.rates, m.rates);
+  EXPECT_NE(c.json().find("\"combine\": \"cfar\""), std::string::npos);
+  EXPECT_EQ(parse_doppler_combine("max"), DopplerCombine::Max);
+  EXPECT_THROW(parse_doppler_combine("sum"), std::invalid_argument);
+  // The detector given the background it estimates itself flags the same cells.
+  std::mt19937 gen(11);
+  std::exponential_distribution<float> e(1.0F);
+  const std::int64_t n_b = 5, n_c = 120, k = 4;
+  std::vector<float> fine(static_cast<std::size_t>(n_b * n_c * k)), cell(static_cast<std::size_t>(n_b * n_c));
+  for (float& v : fine) v = e(gen);
+  fine[static_cast<std::size_t>(2 * n_c * k + 200)] = 400.0F;
+  for (std::int64_t i = 0; i < n_b * n_c; ++i) {
+    double s = 0.0;
+    for (std::int64_t q = 0; q < k; ++q) s += fine[static_cast<std::size_t>(i * k + q)];
+    cell[static_cast<std::size_t>(i)] = static_cast<float>(s / k);
+  }
+  const SonarFacts facts = sonar_facts(r);
+  DetectorOptions d;
+  const std::vector<double> bb(b.begin() + 13, b.begin() + 18);
+  const DetectorPlan plan = plan_detector(r, facts, d, n_c, k, 0.25, bb, 1, 2, 20, true, 3.0);
+  DetectorCells own, given;
+  multiscale_cells(Backend::Host, fine.data(), n_c * k, 0, cell.data(), n_b, n_c, 2, 20, plan, own);
+  multiscale_cells(Backend::Host, fine.data(), n_c * k, 0, cell.data(), n_b, n_c, 2, 20, plan, given, 0, own.level.data());
+  EXPECT_EQ(own.flag, given.flag);
+  EXPECT_EQ(own.background, given.background);
+  EXPECT_GE(std::count(own.flag.begin(), own.flag.end(), 1), 1);
+  // Another background (twice as high) is the one tested against.
+  std::vector<double> twice = own.level;
+  for (double& v : twice) v *= 2.0;
+  DetectorCells high;
+  multiscale_cells(Backend::Host, fine.data(), n_c * k, 0, cell.data(), n_b, n_c, 2, 20, plan, high, 0, twice.data());
+  for (std::size_t i = 0; i < twice.size(); ++i) EXPECT_FLOAT_EQ(high.background[i], static_cast<float>(twice[i]));
+  EXPECT_LE(std::count(high.flag.begin(), high.flag.end(), 1), std::count(own.flag.begin(), own.flag.end(), 1));
+}
+
+TEST(DopplerCfar, AMoverGainsTheMismatchAndAStillPointKeepsItsSnr) {
+  ChainOptions on = options(true);
+  on.doppler.combine = DopplerCombine::Cfar;
+  for (const double rate : {0.0, 2.0}) {
+    PingRecord a = empty_record();
+    add_echo(a, 250.0, rate, 0.02);
+    add_noise(a, 0.05, 5);
+    PingRecord b = a, c = a;
+    LiveChain off(options(false)), cfar(on), max(options(true));
+    const Report ra = off.process(a), rb = cfar.process(b), rc = max.process(c);
+    ASSERT_EQ(ra.detections.size(), 1U) << rate;
+    ASSERT_EQ(rb.detections.size(), 1U) << rate;
+    ASSERT_EQ(rc.detections.size(), 1U) << rate;
+    EXPECT_EQ(cfar.doppler_plan().budget_divisor, static_cast<double>(cfar.doppler_plan().per_beam));
+    if (rate == 0.0) {
+      EXPECT_NEAR(rb.detections[0].snr_db, ra.detections[0].snr_db, 0.05);
+      EXPECT_GT(ra.detections[0].snr_db - rc.detections[0].snr_db, 4.0);
+    } else {
+      EXPECT_GT(rb.detections[0].snr_db - ra.detections[0].snr_db, 8.0) << ra.detections[0].snr_db << " -> " << rb.detections[0].snr_db;
+      EXPECT_GT(rb.detections[0].snr_db - rc.detections[0].snr_db, 4.0);
+      EXPECT_NEAR(rb.detections[0].range_rate_m_s, 2.0, 0.5 * cfar.doppler_plan().step + 1e-12);
+    }
+  }
+}
+
+// --- D3 part B: the tone's Doppler filter bank ------------------------------------------------------------------------
+
+// A 1 s Hann tone at 8 kHz in the same 16-element line, complex baseband at 400 Hz about 8 kHz (room for +-5 m/s), 100
+// to 1000 m of window; `echoes`: (range, rate, amplitude) at broadside (a plane wave: the same on every element).
+PingRecord tone_record(const std::vector<std::array<double, 3>>& echoes, double noise, unsigned seed) {
+  PingRecord r;
+  const double fs = 400.0, start = 2.0 * 100.0 / kC;
+  const auto n = static_cast<std::int64_t>(std::ceil((2.0 * 1000.0 / kC + 1.0 - start) * fs));
+  r.samples.resize(kElements, n, SampleKind::ComplexBaseband);
+  r.samples.sample_rate = fs;
+  r.samples.center_frequency = kFc;
+  r.samples.start_time = start;
+  r.transmit.waveform.type = WaveformType::Cw;
+  r.transmit.waveform.f_start = r.transmit.waveform.f_stop = kFc;
+  r.transmit.waveform.duration = 1.0;
+  r.transmit.waveform.window_alpha = 1.0;
+  r.environment.sound_speed = kC;
+  for (std::int64_t e = 0; e < kElements; ++e) {
+    Element el;
+    el.lever_arm = Vec3d{(static_cast<double>(e) - 0.5 * (kElements - 1)) * kPitch, 0.0, 0.0};
+    el.boresight = Vec3d{0.0, 1.0, 0.0};
+    r.geometry.rx.push_back(el);
+  }
+  set_default_channel_tables(r);
+  for (const auto& [range, rate, amp] : echoes) {
+    const double eta = (kC - rate) / (kC + rate), t0 = 2.0 * range / kC;
+    for (std::int64_t i = 0; i < n; ++i) {
+      const double t = start + static_cast<double>(i) / fs, u = (t - t0) / 1.0;
+      if (u < 0.0 || u > 1.0) continue;
+      const double env = 0.5 - 0.5 * std::cos(2.0 * kPi * u), ph = 2.0 * kPi * (kFc * eta * (t - t0) - kFc * t);
+      for (std::int64_t e = 0; e < kElements; ++e) r.samples.channel_complex(e)[i] += Cf(static_cast<float>(amp * env * std::cos(ph)), static_cast<float>(amp * env * std::sin(ph)));
+    }
+  }
+  add_noise(r, noise, seed);
+  return r;
+}
+
+DopplerOptions tone_options() {
+  DopplerOptions o;
+  o.tone.enabled = true;
+  o.max_range_rate = 3.0;
+  return o;
+}
+
+std::vector<double> tone_bearings() {
+  std::vector<double> b;
+  for (int i = -15; i <= 15; ++i) b.push_back(2.0 * i * kDeg);
+  return b;
+}
+
+TEST(DopplerTone, ThePlanHalvesTheResolutionNotchesTheOwnShipRateAndSkipsASweep) {
+  const PingRecord r = tone_record({}, 0.0, 1);
+  const TonePlan p = plan_tone(r, tone_bearings(), tone_options());
+  ASSERT_TRUE(p.on);
+  EXPECT_TRUE(p.tone_only);
+  EXPECT_DOUBLE_EQ(p.resolution, kC / (2.0 * kFc * 1.0));
+  EXPECT_DOUBLE_EQ(p.step, 0.5 * p.resolution);
+  EXPECT_EQ(p.per_beam, 2 * static_cast<std::int64_t>(std::ceil(3.0 / p.step - 1e-9)) + 1);
+  EXPECT_EQ(p.guard, 4);
+  for (double n : p.notch) EXPECT_DOUBLE_EQ(n, 3.0 * p.resolution);      // a still platform: three resolution cells
+  EXPECT_DOUBLE_EQ(p.gate_range, 0.25 * kC);
+  EXPECT_FALSE(plan_tone(empty_record(), tone_bearings(), tone_options()).on);   // a sweep: no tone this ping
+  PingRecord train = r;
+  train.transmit.waveform.type = WaveformType::Arbitrary;
+  EXPECT_THROW(plan_tone(train, tone_bearings(), tone_options()), std::invalid_argument);   // a train must name its tone
+  DopplerOptions named = tone_options();
+  named.tone.frequency = kFc;
+  named.tone.duration = 0.5;
+  named.tone.window_alpha = 1.0;
+  train.transmit.waveform.duration = 1.0;
+  const TonePlan q = plan_tone(train, tone_bearings(), named);
+  EXPECT_TRUE(q.on);
+  EXPECT_FALSE(q.tone_only);
+}
+
+TEST(DopplerTone, AMoverIsFoundWithItsRateAndAStillEchoIsNot) {
+  const PingRecord r = tone_record({{600.0, 1.2, 2e-2}, {400.0, 0.0, 2e-2}}, 0.05, 3);
+  const ToneStage st = tone_stage(r, tone_bearings(), tone_options(), true);
+  ASSERT_EQ(st.detections.size(), 1U);
+  const ToneDetection& d = st.detections[0];
+  EXPECT_NEAR(d.range_rate, 1.2, 0.5 * st.plan.step);
+  EXPECT_NEAR(d.bearing, 0.0, 1.0 * kDeg);
+  EXPECT_NEAR(d.range, 600.0, 0.25 * kC);
+  EXPECT_GT(d.snr_db, 10.0 * std::log10(st.factor));
+}
+
+TEST(DopplerTone, TheMergeLendsTheRateToTheSweepDetectionAndKeepsTheRest) {
+  ToneStage st;
+  st.plan.on = true;
+  st.plan.step = 0.05;
+  st.plan.gate_range = 300.0;
+  st.plan.gate_bearing = 2.0 * kDeg;
+  st.plan.range_sigma = 150.0;
+  ToneDetection near_one;
+  near_one.range = 610.0;
+  near_one.bearing = 0.5 * kDeg;
+  near_one.range_rate = 1.21;
+  near_one.snr_db = 30.0;
+  ToneDetection alone = near_one;
+  alone.range = 2000.0;
+  alone.range_rate = -2.0;
+  alone.snr_db = 20.0;
+  st.detections = {near_one, alone};
+  std::vector<Detection> sweep = {Detection{600.0, 0.0, 15.0, 1}, Detection{400.0, -20.0 * kDeg, 25.0, 1}};
+  const std::vector<Detection> extra = merge_tone(sweep, st);
+  EXPECT_EQ(sweep[0].doppler_path, 2);
+  EXPECT_DOUBLE_EQ(sweep[0].range_rate, 1.21);
+  EXPECT_DOUBLE_EQ(sweep[0].range, 600.0);                       // the sweep's range
+  EXPECT_EQ(sweep[1].doppler_path, 0);                           // the still target: the sweep's alone
+  EXPECT_TRUE(std::isnan(sweep[1].range_rate));
+  ASSERT_EQ(extra.size(), 1U);
+  EXPECT_EQ(extra[0].doppler_path, 1);
+  EXPECT_DOUBLE_EQ(extra[0].range, 2000.0);
+  EXPECT_DOUBLE_EQ(extra[0].range_sigma, 150.0);
+}
+
+TEST(DopplerTone, TheChainReportsTheToneAndOffIsAsBefore) {
+  ChainOptions on = options(false);
+  on.doppler.tone.enabled = true;
+  on.doppler.report = true;
+  LiveChain chain(on);
+  PingRecord r = tone_record({{600.0, 1.2, 2e-2}}, 0.05, 5);
+  const Report rep = chain.process(r);
+  ASSERT_EQ(rep.detections.size(), 1U);
+  EXPECT_NEAR(rep.detections[0].range_rate_m_s, 1.2, 0.5 * chain.tone_stage_result().plan.step);
+  EXPECT_NE(rep.json().find("\"doppler_path\": \"tone\""), std::string::npos) << rep.json();
+  // Off (the default): a sweep ping's report as before, nothing of the tone in it.
+  PingRecord a = empty_record();
+  add_echo(a, 250.0, 0.0, 0.2);
+  add_noise(a, 0.05, 6);
+  PingRecord b = a;
+  ChainOptions tone_on_sweep = options(false);
+  tone_on_sweep.doppler.tone.enabled = true;       // with the option on but a sweep ping: the sweep path alone
+  LiveChain off(options(false)), with(tone_on_sweep);
+  Report ra = off.process(a), rb = with.process(b);
+  ra.processing_seconds = rb.processing_seconds = 0.0;
+  EXPECT_EQ(ra.json(), rb.json());
+  EXPECT_FALSE(with.tone_stage_result().plan.on);
+  ChainOptions bad = options(false);
+  bad.doppler.tone.enabled = true;
+  bad.range_doppler = RangeDoppler::Ownship;
+  EXPECT_THROW(LiveChain{bad}, std::invalid_argument);
+  std::istringstream t("doppler_tone=bank\ndoppler_tone_frequency_hz=10500\ndoppler_tone_gate_bearing_deg=3\n");
+  ChainOptions parsed;
+  PassiveOptions pa;
+  read_options(parsed, pa, t);
+  EXPECT_TRUE(parsed.doppler.tone.enabled);
+  EXPECT_EQ(parsed.doppler.tone.frequency, 10500.0);
+  EXPECT_NEAR(parsed.doppler.tone.gate_bearing, 3.0 * kDeg, 1e-12);
+  std::istringstream bad_t("doppler_tone=on\n");
+  ChainOptions m;
+  EXPECT_THROW(read_options(m, pa, bad_t), std::invalid_argument);
 }
 
 }  // namespace

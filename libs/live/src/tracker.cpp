@@ -26,7 +26,8 @@ M2 measurement_cov(const Detection& d, const TrackerOptions& o) {
   M2 j;
   j << s, d.range * c, c, -d.range * s;
   M2 p = M2::Zero();
-  p(0, 0) = o.range_sigma * o.range_sigma;
+  const double rs = std::isfinite(d.range_sigma) ? d.range_sigma : o.range_sigma;   // a tone's coarse range (D3); NaN: as before
+  p(0, 0) = rs * rs;
   p(1, 1) = o.bearing_sigma * o.bearing_sigma;
   return j * p * j.transpose();
 }
