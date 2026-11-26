@@ -58,7 +58,12 @@ def sound_speed(temperature: float, salinity: float = 35.0, depth: float = 0.0) 
 
 
 def absorption_francois_garrison(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0):
-    """Absorption in dB/m at `frequency` (Hz, scalar or array). Valid 100 Hz to 1 MHz."""
+    """Absorption in dB/m at `frequency` (Hz, scalar or array).
+
+    Every constant equals Jackson and Richardson (2007) App. B, eqs. (B.6)-(B.12), p. 461 (confirmed;
+    docs/references/jackson_richardson_2007/01_sediment_properties.md Sec. 3.3). The scope printed there is
+    the open ocean, 30-40 ppt ("may not be appropriate" in low-salinity estuaries, p. 462); no frequency
+    range is printed in what was read. Used here down to 5 PSU, and without the boric term at 0 PSU: ours."""
     f = np.asarray(frequency, dtype=float) / 1e3  # kHz
     t, s, d = float(temperature), float(salinity), float(depth)
     c = 1412.0 + 3.21 * t + 1.19 * s + 0.0167 * d
@@ -149,7 +154,10 @@ def water_density(temperature: float = 10.0, salinity: float = 35.0) -> float:
     with the coefficients printed in arlpy (BSD 3-clause), arlpy/uwa.py:101-121, and again in
     UnderwaterAcoustics.jl (MIT), src/basic.jl:111-121, both of which attribute it to
     "Fofonoff (1985 - IES 80)". Neither has a pressure term, so neither has this: it is the
-    density near the surface. Their documented value: 1022.7 kg/m3 at 27 deg C and 35 ppt."""
+    density near the surface. Their documented value: 1022.7 kg/m3 at 27 deg C and 35 ppt.
+    Confirmed in Jackson and Richardson (2007), eqs. (B.2)-(B.3), p. 456 (EOS 80 at one atmosphere,
+    -2 to 40 deg C, 0-42 ppt, 0.05 kg/m3), every coefficient; their pressure term (B.1)/(B.4) is not
+    here (+0.45 kg/m3 at 100 m, 10 deg C, 35 PSU)."""
     t, s = float(temperature), float(salinity)
     a = 999.842594 + t * (6.793952e-02 + t * (-9.095290e-03 + t * (1.001685e-04 + t * (-1.120083e-06 + t * 6.536332e-09))))
     b = 0.824493 + t * (-4.0899e-03 + t * (7.6438e-05 + t * (-8.2467e-07 + t * 5.3875e-09)))
@@ -253,7 +261,13 @@ def mean_square_slope(wind_speed: float) -> float:
 
     Unconfirmed (docs/REFERENCES.md Sec. 4): this total regression was not found printed in
     an opened document; the opened print of the two components sums to 0.003 + 0.00508 U
-    (`mean_square_slope_components`), 0.8 % lower."""
+    (`mean_square_slope_components`), 0.8 % lower.
+
+    This is the TOTAL slope (all wavelengths). Forward scatter is steered by the slopes of the long
+    waves only: Dahl, JASA 100, 748-758 (1996), eq. (A7), uses 0.0046 ln(2.1 U^2) (Phillips' fit to
+    Cox and Munk's slick surface, waves longer than about 30 cm), 1.4 to 2.2 times smaller than this
+    at 1.5 to 10 m/s, and reproduces measured angle spreads with it
+    (docs/references/surface_forward_scatter_dahl_1996_2004.md; docs/references/CONFORMANCE.md)."""
     return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
 
 
@@ -284,7 +298,8 @@ def rms_surface_vertical_speed(wind_speed: float) -> float:
 
 def rough_coherent_reflection(grazing, rms_height: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Amplitude of the coherent reflection from a boundary of given rms height relative to a
-    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)."""
+    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing). Confirmed: Jackson and Richardson (2007),
+    eq. (13.14), p. 335 (Eckart; the coherent part only)."""
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     gamma = 2.0 * k * float(rms_height) * np.sin(np.asarray(grazing, dtype=float))
     return np.exp(-0.5 * gamma**2)

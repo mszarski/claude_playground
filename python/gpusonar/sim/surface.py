@@ -438,6 +438,19 @@ def searay_bottom_strength(frequency: float, bottom_type):
 # term eq. (8) equals [McD93] eq. (7) with the x-slope variance half our total mean-square
 # slope; and beta_I as one vertical crossing is [D97] Sec. VI's convention (two-way loss
 # 20 log10(e) beta_I / sin(t) dB).
+#
+# Where the published forms differ from this one (docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md;
+# docs/references/CONFORMANCE.md):
+#   - Dahl, JASA 100, 748-758 (1996), eq. (17), prints the bubble attenuation of a bounce as
+#     exp(-2 (beta_I / sin t_i + beta_I / sin t_s)), twice the exponent used here. Dahl, JASA 105,
+#     2155-2169 (1999), eq. (12), prints exp(-(beta_I / sin t_i + beta_I / sin t_s)) and says the 1996
+#     equation was printed with an error; [D97] Sec. VI agrees. Ours is the single exponent.
+#   - [D97] Sec. VI and [D99] eqs. (11)-(12) attenuate the roughness (facet) term by that factor;
+#     `bubble_layer_surface_db` does not (0 dB at 45 degrees, -0.6 to -3.2 dB at 80-89 degrees,
+#     8-15 m/s, 30-68 kHz, with our beta_I).
+#   - For a bistatic pair the strength functions here take the arithmetic mean grazing angle. [D99]
+#     eq. (13) is a published bistatic bubble term; TR 0702 Sec. 6.4.2 makes monostatic laws bistatic
+#     by the geometric mean of the two backscattering strengths. Neither is implemented.
 BUBBLE_RERADIATION_DAMPING = 0.0136
 
 

@@ -99,7 +99,8 @@ small-slope and Kirchhoff approximations share the integral I with the argument 
 
 "composite": the perturbation result averaged over the slopes of the large-scale relief
 (McDaniel and Gorman 1983 and Jackson, Winebrenner and Ishimaru 1986 introduced this for the
-bottom; neither could be opened, so the recipe below is ours). The relief is split at a
+bottom; neither could be opened, so the recipe below was written as ours; J&R (2007) (13.80) has
+its structure, with the differences said below). The relief is split at a
 wavenumber Kc chosen so the small-scale part (K > Kc) has k x rms height = `small_scale_kh`:
 h_s^2 = 2 pi w2 Kc^(2 - gamma2) / (gamma2 - 2). The large-scale part tilts the surface with a
 Gaussian slope of variance s^2 = pi w2 Kc^(4 - gamma2) / (4 - gamma2) per axis. With slope
@@ -761,7 +762,8 @@ def sediment_from_grain_size(phi: float, method: str = "table_linear") -> dict:
 LAMBERT_MAX_MU_DB = -10.0 * math.log10(math.pi)
 """The largest Lambert parameter energy conservation allows, 10 log10(1 / pi) = -4.97 dB: a
 surface that scatters all the incident power with the Lambert pattern (Olson, Lyons and Saebo,
-arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
+arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti)).
+Also Jackson and Richardson (2007), eq. (2.23), p. 26."""
 
 
 DEFAULT_LAMBERT_MU_DB = -29.0

@@ -43,6 +43,16 @@ What comes from TR 0702 and what does not:
 The random amplitudes are a deterministic function of (seed, place, ray, tap, time): no
 state is kept, a scenario's seed reproduces a ping, and pings can be simulated in any order.
 
+Against the forward-scatter papers read since (Dahl, JASA 100, 748-758, 1996; 105, 2155-2169, 1999;
+115, 589-599, 2004; docs/references/surface_forward_scatter_dahl_1996_2004.md and
+surface_bistatic_dahl_1999_mcdaniel_1986.md): the geometry of the facet model below is theirs. Its
+across-path angular spread sqrt(2 mss) sin(g) r1 / (r1 + r2) is Dahl 1996 eq. (15) with q = sqrt(2)
+against the fitted 1.348, and its coherence lengths scale as Dahl 2004 eqs. (7)-(9). The slope is
+not: `wind_speed` gives the Cox-Munk TOTAL mean-square slope, where the papers use that of the long
+waves (Dahl 1996 eq. (A7), 0.0046 ln(2.1 U^2): 1.4 to 2.2 times smaller at 1.5 to 10 m/s). With the
+total, the angular spread is 1.2 to 1.5 times too wide and the facet tail 1.6 to 1.9 times too long
+at the papers' conditions. A slope given as `mean_square_slope` replaces the wind law's.
+
 Options beyond SST (all off by default; with them off the output is what it was)
 ---------------------------------------------------------------------------------
 The model behind all of them is the one behind the decay time: a boundary of tilted mirrors
