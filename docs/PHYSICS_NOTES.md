@@ -1665,6 +1665,54 @@ at T), where one exponential of mean 2T is highest at once and has rms spread 2T
 sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`, the default
 since the owner's decision recorded in `DECISIONS.md` D-82; `sum` is the earlier rule.)
 
+**16.6 The exact Kirchhoff tail of a surface bounce** (`decay_time: kirchhoff_go`, opt-in; added
+2026-11-26, `docs/references/surface_forward_scatter_dahl_1996_2004.md` WP3; tests
+`tests/python/test_kirchhoff_go.py`). What does not hold first: Dahl 1996 eq. (13), "the sum over the
+surface equals a flat mirror within 0.25 dB", does not hold for our quadrature at Dahl's own low-grazing
+geometries (-0.35, -0.62, -0.40 dB at Table I sets 1, 2, 5B with s_LA; -0.02 to -0.13 dB at sets 3, 4,
+5A; computed, an independent grid sum agrees within 0.01 dB): the taps keep the flat mirror's energy and
+take only the shape from geometric optics. With the wind's eq. (A7) slope the across-path coherence of GO
+is 19-28 % short of Table I at sets 2, 3, 5A, 5B (with s_LA it is 3-20 % short at all six, within the note's 20 %); the facet closed
+form, whose q = sqrt 2 happens to sit nearer Dahl's fitted 1.348, is within 20 % with (A7). Near one end of
+a long low-grazing path (f = r1 / (r1 + r2) of a few thousandths, grazing a few degrees) GO is longer than
+the facet tail and heavy-tailed (6-9 facet means at f = 0.002, 0.5-5 degrees): far surface points are seen
+at nearly the source's own grazing angle and need a tilt of only about g / 2; shadowing, which would remove
+most of them, is not modelled.
+
+Model (Dahl 1996 eqs. (4), (7)-(10); the quadrature, table and sampler are ours). One bounce, unfolded
+(the other boundaries flat mirrors), lengths in units of r1 + r2: a surface point P carries the intensity
+`sigma_geo / (R_i^2 R_s^2) dA` re the flat mirror, `sigma_geo = sec^4(gb) exp(-tan^2 gb / mss) / (4 pi mss)`,
+`tan^2 gb = (alpha^2 + beta^2) / gamma^2`, `2 (alpha, beta, gamma) = k_i - k_s`, at the excess path
+`R_i + R_s - 1`. The curves of equal excess path are the sections of a prolate spheroid (foci: the source
+and the receiver's image) by the surface: ellipses that contain the specular point. In the stretched
+coordinates `(x sin g, y) = rho (cos psi, sin psi)` the curve's rho at each psi is the positive root of a
+quadratic, and the intensity per unit delay is `int sigma_geo / (R_i^2 R_s^2) rho / (sin g dDelta/drho) dpsi`
+(midpoint rule, 128 steps over a half circle; spectrally accurate for this periodic integrand). Delay
+grid: 240 steps even in sqrt(delay) to 30 facet means, then 160 even in log(delay) to an excess path of
+2 (r1 + r2). Stored per node of (grazing: 31 values 0.25-90 degrees; f: 17 values 0.002-0.5, f and 1 - f
+give the same delays) as the delay at 257 energy levels (`1 - (1 - t)^3`), computed on first use for each
+slope (3.7-8 ms a node, measured here under load). The tail's mean and variance are those of the
+interpolated quantile function, linear between levels, so taps built from it carry exactly that mean.
+
+Checks (all `tests/python/test_kirchhoff_go.py`): an independent sum over a 1 m x 0.25 m grid of the
+surface gives the same energy (0.3 %) and mean delay (1 %) at Table I set 1; the table is within 2 % of
+the direct quadrature in mean and in the 0.5, 0.9, 0.99 quantiles between nodes; the GO mean equals the
+facet form `mss (1 + sin^2 g) t1 t2 / (t1 + t2)` within 1 % at 45-89 degrees and within 0.5 % at
+20 degrees for a small slope; at the Dahl 2004 52 m geometry the facet mean is 1.57 times GO's.
+Against the papers (figure readings, +-1 dB): Dahl 2004 Fig. 3c at 52 m, 1.00 dB rms with S_L = 0.15 and
+1.38 dB with eq. (A7) at 7 m/s (tolerance 2 dB, the note's WP3; the note computed 1.0);
+Dahl 1996 Fig. 2, 2.92 dB rms with s_LA and 2.52 dB with eq. (A7) at 7.6 m/s (tolerance 3.5; the note
+computed 2.9); Table I kd*/(2 pi) with s_LA within 20 % at all six sets (-2.9 to -19.6 %).
+
+Taps: one rough bounce, an interval of delay each (the last everything later) at the interval's mean delay,
+spanning three GO means or the GO tail's own `tail_quantile`; several rough bounces as for `facet` (16.5),
+GO bounces entering the convolution as their energy in each tap's cell. Directions (`angle_spread`): the
+tap's surface point is drawn on the exact curve of its delay with the curve's own weights; the tap leaves
+the source towards it and arrives from it, so launch and arrival are one facet's (followed to the surface
+and back in the test to 1e-6 of the delay). The bottom keeps the facet tail. Cost (measured, 2000 points,
+6000 surface-bounce paths, 6 taps, another job running): 52 us a path against 17 us for `facet`, 187 against
+75 us with `angle_spread`; the first call of a slope adds the table's nodes (286 here, about 1 s).
+
 ---
 
 ## 17. Reverberation: moving scatterers and a seabed with relief
@@ -2375,6 +2423,33 @@ rule_of_thumb, sum.
    were 1.3 times; the low-angle ones are now nearer (0.96). Dahl's measurements, which back
    the slope law, are at 6-20 degrees. Kept as the residual of A4: nothing was tuned
    (`slope_law: cox_munk_total` reproduces the earlier numbers).
+   *The exact Kirchhoff tail does not explain it (2026-11-26).* The hypothesis was that the
+   simplified facet shape, not the slope, fails at steep angles. Tested with
+   `decay_time: kirchhoff_go` (Sec. 16.6) by the same method: option set A re-simulated on each
+   file's grid through the same estimator, 3 seeds, each arrival's saved model decay scaled by
+   (re-simulated configuration / re-simulated Cox-Munk total with facet); the facet re-runs reproduce
+   the saved re-simulations exactly (checked at purple_1). Measured over model, the same 21 arrivals
+   (13 above 12 degrees, 8 below), median:
+
+   | Model | above 12 deg | below 12 deg | all |
+   | --- | --- | --- | --- |
+   | Cox-Munk total + facet (the saved run) | 1.28 | 0.76 | 1.00 |
+   | long-wave slope + facet (the default) | 1.89 | 0.96 | 1.68 |
+   | long-wave slope + kirchhoff_go | **2.10** | 1.33 | 1.86 |
+   | Cox-Munk total + kirchhoff_go | 1.60 | 1.10 | 1.39 |
+
+   Scatter per arrival a factor 1.8 to 2.5 in every row. The hypothesis is **false** for these data:
+   above 12 degrees the re-simulated GO decay over the facet one (long-wave slope) runs from 0.69 to
+   1.41 per arrival, median 0.98 (1.15 and 1.13 for the 60 m surface arrival), so GO does not
+   lengthen the steep tails, and the median ratio moves the wrong way (1.89 -> 2.10) through
+   arrival-by-arrival changes; below 12 degrees GO is shorter (0.44-1.08 of facet, as at Dahl's
+   7-12 degrees) and moves those arrivals from 0.96 to 1.33. What the steep
+   SPACE'08 arrivals want is a longer tail than either geometric-optics model gives with the
+   long-wave slope; the Cox-Munk total slope comes nearer with either shape. Not settled: the 60 m
+   arrivals are at Gamma^2 over 7 in 15 m of water with a seabed we assumed, one wind per recording
+   fitted to one Doppler width; diffraction (Bragg-scale roughness) beyond geometric optics,
+   multiple bounces in the near field, and the estimators' under-reading of short tails are not
+   separated by this test. Nothing was tuned.
 6. **Complex Gaussian taps: contradicted at steep angles.** Scintillation index of fully rough
    arrivals: median 1.43 (one bounce, n = 4), 1.31 (two, n = 7), 1.72 (three, n = 6), up to 4.8
    in the rough recording; the model gives 0.6 after the same windowing and cannot exceed 1.
@@ -3014,6 +3089,12 @@ images (`docs/references/surface_forward_scatter_dahl_1996_2004.md`,
   `time_spread.surface.slope_law: cox_munk_total`). Dahl 1999's smaller implied slope is recorded, not
   followed (an expected failure in `tests/python/test_forward_scatter_dahl.py`). Against SPACE'08 it
   makes the steep arrivals' tails fit worse: Sec. 21.4 item 5.
+- The exact Kirchhoff tail (Dahl 1996 eqs. (4), (9), (10) integrated over the surface) is opt-in as
+  `time_spread.decay_time: kirchhoff_go` (Sec. 16.6). It fits Dahl 2004 Fig. 3c (1.0-1.4 dB rms) and
+  Dahl 1996 Fig. 2 (2.5-2.9 dB rms) where the facet tail is 3.5-4.2 dB off ([NF] Sec. 3.3), and Table I's
+  across-path coherence with s_LA within 20 %; with the wind's eq. (A7) slope its coherence is 19-28 %
+  short at four of five sets. Against SPACE'08 it does not help the steep tails (Sec. 21.4 item 5:
+  measured over model above 12 degrees 1.89 with facet, 2.10 with it). Not made the default.
 
 ### 23.5 Reverberation statistics
 
