@@ -285,6 +285,11 @@ class SampledWaveform:
     _fine_total: np.ndarray | None = field(default=None, repr=False, compare=False)
     _replica: np.ndarray | None = field(default=None, repr=False, compare=False)
     _kernel: tuple | None = field(default=None, repr=False, compare=False)
+    # A pulse train (`source: train`): one TrainSegment per segment, in emission order. Configuration of the
+    # simulator only: the record carries the train as its replica (type Arbitrary), not this table.
+    segments: list | None = field(default=None, repr=False, compare=False)
+    # The train's energy at 1 m when its segments state theirs (`source_energy_db` on each), dB re 1 uPa^2 s.
+    source_energy_db: float | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         self.envelope = np.ascontiguousarray(self.envelope, dtype=complex)
@@ -298,6 +303,11 @@ class SampledWaveform:
     @property
     def bandwidth(self) -> float:
         return abs(self.f_stop - self.f_start)
+
+    def envelope_energy(self) -> float:
+        """Integral of |b(u)|^2 over the pulse, s (b at the scale it is held: unit peak after `normalise: peak`).
+        The samples are band-limited, so the sum of their squares over the rate is the integral (Parseval)."""
+        return float(np.sum(np.abs(self.envelope) ** 2) / self.sample_rate)
 
     @property
     def band_occupancy(self) -> float:
@@ -534,6 +544,8 @@ def _read_file(path: str, dataset: str | None, rate: float | None):
 def build_waveform(cfg: dict) -> SampledWaveform:
     """A SampledWaveform from a sonar's `transmit.waveform` mapping (type: sampled)."""
     source = str(cfg.get("source", "")).lower()
+    if source == "train":
+        return build_train(cfg)
     for key in ("f_start", "f_stop"):
         if cfg.get(key) is None:
             raise ValueError(f"sampled waveform: `{key}` is required (the occupied band)")
@@ -627,13 +639,276 @@ def build_waveform(cfg: dict) -> SampledWaveform:
             envelope = envelope * np.exp(2j * np.pi * (0.5 * (f0 + f1) - carrier) * u)
         else:
             raise ValueError(f"sampled waveform: unknown source {source!r} (lfm, hfm, stepped_fm, barker, "
-                             "mseq, code, samples, file)")
+                             "mseq, code, samples, file, train)")
     normalise = str(cfg.get("normalise", "peak")).lower()
     if normalise == "peak":
         envelope = envelope / np.abs(envelope).max()
     elif normalise != "none":
         raise ValueError("sampled waveform: normalise must be `peak` or `none`")
     return SampledWaveform(envelope, rate, carrier, f0, f1, duration, **common)
+
+
+# --- pulse trains (docs/tasks/DOPPLER.md, package D2) ------------------------------------------
+#
+# A train is one pulse made of segments sent back to back: tones (`cw`, one frequency or a comb of several at once),
+# sweeps (`lfm`, `hfm`) and silences (`gap`), each with its own Tukey taper and, opt-in, its own share of the
+# energy. It is built here as one sampled envelope on one grid, so everything a sampled pulse has it has too: the
+# C++ host and CUDA synthesis kernel (`pair_sampled`) and the NumPy reference synthesise it unchanged, Doppler is
+# the time scaling of the whole envelope (each segment is scaled exactly as a single pulse would be: the emission
+# time u(t) is solved per sample), and the record carries it as its arbitrary replica (type Arbitrary, the replica
+# as sent: no schema change). The segment table (`SampledWaveform.segments`) is configuration, not a record field.
+#
+# Why a tone could not be a sampled pulse before: the envelope's sample rate is `oversample` x the stated band and
+# the gain knots span that band, so `f_start == f_stop` (a tone's nominal band) gives a zero sample rate
+# (build_waveform refuses it). A tone of finite length has a band: in a train it lies inside the train's band (the
+# sweep's), and a train of tones alone takes f +- `tone_halfwidth_hz` (default 16 / T for each tone of length T;
+# ours: a Hann tone's spectrum there is about 100 dB below its peak).
+
+TRAIN_KINDS = ("cw", "lfm", "hfm", "gap")
+_SEGMENT_KEYS = {
+    "cw": ("kind", "frequency", "frequencies", "duration", "window_alpha", "energy_share", "source_energy_db", "comb_phase"),
+    "lfm": ("kind", "f_start", "f_stop", "duration", "window_alpha", "energy_share", "source_energy_db"),
+    "hfm": ("kind", "f_start", "f_stop", "duration", "window_alpha", "energy_share", "source_energy_db"),
+    "gap": ("kind", "duration"),
+}
+# Keys of a `transmit.waveform` mapping a train reads, and the analytic keys a sonar's base waveform may carry (a
+# train ignores a top-level `window_alpha` and `duration`: each segment has its own, and the duration is their sum).
+_TRAIN_KEYS = ("type", "source", "segments", "f_start", "f_stop", "carrier", "oversample", "interp_taps", "interp_window",
+               "interp_beta", "gain_knots", "table_factor", "replica_sample_rate", "normalise", "tone_halfwidth_hz",
+               "source_energy_db", "source_level_db_rms", "source_level_db", "amplitude", "duration", "window_alpha")
+TONE_HALFWIDTH_CYCLES = 16.0
+
+
+def _refuse_unknown(given, known, where: str) -> None:
+    import difflib
+    for key in given:
+        if key not in known:
+            near = difflib.get_close_matches(str(key), [str(k) for k in known], n=1)
+            hint = f"; did you mean '{near[0]}'?" if near else f"; known keys: {', '.join(known)}"
+            raise ValueError(f"{where}{key}: unknown key{hint}")
+
+
+@dataclass(frozen=True)
+class TrainSegment:
+    """One segment of a pulse train, as built: emission times [start, start + duration] of the train."""
+    index: int
+    kind: str                      # cw | lfm | hfm | gap
+    start: float                   # s from the start of the train
+    duration: float                # s
+    f_start: float = 0.0           # sweep: its band; tone: its lowest frequency
+    f_stop: float = 0.0            # sweep: its band; tone: its highest frequency
+    frequencies: tuple = ()        # tone: the frequency of each tone sent at once
+    phases: tuple = ()             # tone: the starting phase of each, cycles
+    window_alpha: float = 0.0      # Tukey fraction (1: Hann)
+    scale: float = 0.0             # factor on this segment's unit-scale shape (`signal`) in the train's envelope
+    energy: float = 0.0            # integral of |b|^2 over this segment in the train's envelope, s
+
+    @property
+    def stop(self) -> float:
+        return self.start + self.duration
+
+    def signal(self, u) -> np.ndarray:
+        """Analytic passband value w(u) exp(2 pi i phi(u)) of this segment at unit scale (each tone of a comb at unit
+        amplitude), at times u (s) from the segment's start; zero outside [0, duration]. The segment in the train's envelope is
+        scale * signal(u - start) * exp(-2 pi i F u)."""
+        u = np.asarray(u, dtype=float)
+        inside = (u >= 0.0) & (u <= self.duration)
+        x = np.where(inside, u, 0.0)
+        return np.where(inside, _segment_shape(self, x), 0.0)
+
+    def tone(self, k: int) -> "TrainSegment":
+        """Tone k of a comb as a segment of its own (one frequency), for processing it alone."""
+        f = self.frequencies[k]
+        return TrainSegment(self.index, "cw", self.start, self.duration, f, f, (f,), (0.0,), self.window_alpha,
+                            self.scale, self.energy / len(self.frequencies))
+
+
+def _segment_shape(seg: TrainSegment, ul: np.ndarray, carrier: float = 0.0, u=None) -> np.ndarray:
+    """The unit-scale analytic signal of a segment at local times ul (inside the segment), mixed down by `carrier`
+    at train times u (written as one exponent, as build_waveform writes a single sweep, so that a one-segment train
+    is the same pulse to the last bit)."""
+    w = _tukey(ul / seg.duration, seg.window_alpha)
+    mix = 0.0 if u is None else carrier * u
+    if seg.kind == "cw":
+        if len(seg.frequencies) == 1:
+            return w * np.exp(2j * np.pi * (seg.frequencies[0] * ul + seg.phases[0] - mix))
+        return w * sum(np.exp(2j * np.pi * (f * ul + p - mix)) for f, p in zip(seg.frequencies, seg.phases))
+    f0, f1 = seg.f_start, seg.f_stop
+    if seg.kind == "lfm":
+        phase = (f0 + 0.5 * (f1 - f0) / seg.duration * ul) * ul
+    else:
+        k = (1.0 / f1 - 1.0 / f0) / seg.duration
+        phase = np.log1p(k * f0 * ul) / k
+    return w * np.exp(2j * np.pi * (phase - mix))
+
+
+def _train_segments(cfg: dict) -> list[dict]:
+    """Check a train's `segments` and return them (as given, with `kind` in lower case)."""
+    segs = cfg.get("segments")
+    if not isinstance(segs, (list, tuple)) or not segs:
+        raise ValueError("sampled waveform: a train needs `segments`, a list of {kind: cw | lfm | hfm | gap, ...}")
+    out = []
+    for i, seg in enumerate(segs):
+        where = f"transmit.waveform.segments[{i}]."
+        if not isinstance(seg, dict) or "kind" not in seg:
+            raise ValueError(f"{where[:-1]}: each segment is a mapping with `kind` ({', '.join(TRAIN_KINDS)})")
+        kind = str(seg["kind"]).lower()
+        if kind not in TRAIN_KINDS:
+            raise ValueError(f"{where}kind: {seg['kind']!r} is not a segment kind ({', '.join(TRAIN_KINDS)})")
+        _refuse_unknown(seg, _SEGMENT_KEYS[kind], where)
+        if seg.get("duration") is None:
+            raise ValueError(f"{where}duration: required (s)")
+        dur = float(seg["duration"])
+        if not (dur >= 0.0 if kind == "gap" else dur > 0.0):
+            raise ValueError(f"{where}duration: must be positive (a gap: not negative)")
+        alpha = float(seg.get("window_alpha", 0.0))
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError(f"{where}window_alpha: a Tukey fraction from 0 (rectangular) to 1 (Hann)")
+        if kind == "cw":
+            if (seg.get("frequency") is None) == (seg.get("frequencies") is None):
+                raise ValueError(f"{where[:-1]}: give `frequency` (one tone) or `frequencies` (several at once), not both")
+            freqs = [float(seg["frequency"])] if seg.get("frequency") is not None else [float(f) for f in seg["frequencies"]]
+            if not freqs or min(freqs) <= 0.0:
+                raise ValueError(f"{where}frequencies: positive frequencies, at least one")
+            phase_rule = str(seg.get("comb_phase", "schroeder")).lower()
+            if phase_rule not in ("schroeder", "zero"):
+                raise ValueError(f"{where}comb_phase: `schroeder` (default) or `zero`")
+        elif kind in ("lfm", "hfm"):
+            for key in ("f_start", "f_stop"):
+                if seg.get(key) is None:
+                    raise ValueError(f"{where}{key}: required for a sweep")
+            if not (float(seg["f_start"]) > 0.0 and float(seg["f_stop"]) > 0.0 and float(seg["f_start"]) != float(seg["f_stop"])):
+                raise ValueError(f"{where[:-1]}: a sweep's f_start and f_stop must be positive and differ (a tone is `kind: cw`)")
+        out.append({**seg, "kind": kind})
+    return out
+
+
+def build_train(cfg: dict) -> SampledWaveform:
+    """A pulse train (`source: train`) as one SampledWaveform; its `segments` holds the TrainSegment table.
+
+    Energy (all opt-in; without them every segment is built at unit peak and `source_level_db_rms` keeps its
+    meaning for every sampled pulse: the RMS level of a constant-envelope pulse at the envelope's PEAK, applied
+    before any taper):
+      - `energy_share` on every non-gap segment: the segments' energies in these proportions (normalised to sum 1);
+      - `source_energy_db` on every non-gap segment: each segment's energy at 1 m, dB re 1 uPa^2 s; the train's
+        total is their sum (the sonar then derives `source_level_db_rms` from it: sonar.py `source_energy_db`).
+    """
+    _refuse_unknown(cfg, _TRAIN_KEYS, "transmit.waveform.")
+    segs = _train_segments(cfg)
+    oversample = float(cfg.get("oversample", DEFAULT_OVERSAMPLE))
+    halfwidth = cfg.get("tone_halfwidth_hz")
+    # Each segment's band; the train's band holds them all.
+    bands = []
+    for seg in segs:
+        if seg["kind"] == "cw":
+            freqs = [float(seg["frequency"])] if seg.get("frequency") is not None else [float(f) for f in seg["frequencies"]]
+            h = float(halfwidth) if halfwidth is not None else TONE_HALFWIDTH_CYCLES / float(seg["duration"])
+            bands.append((min(freqs) - h, max(freqs) + h))
+        elif seg["kind"] in ("lfm", "hfm"):
+            a, b = float(seg["f_start"]), float(seg["f_stop"])
+            bands.append((min(a, b), max(a, b)))
+    if not bands:
+        raise ValueError("sampled waveform: a train needs at least one tone or sweep")
+    lo, hi = min(b[0] for b in bands), max(b[1] for b in bands)
+    if cfg.get("f_start") is not None and cfg.get("f_stop") is not None:
+        f0, f1 = float(cfg["f_start"]), float(cfg["f_stop"])
+        if not (min(f0, f1) <= lo + 1e-9 and max(f0, f1) >= hi - 1e-9):
+            raise ValueError(f"sampled waveform: the train's segments occupy {lo:.6g}-{hi:.6g} Hz, outside the stated band "
+                             f"f_start..f_stop {f0:.6g}-{f1:.6g} Hz (widen it, or leave both out to take the segments' band)")
+    else:
+        f0, f1 = lo, hi
+    if lo <= 0.0:
+        raise ValueError("sampled waveform: a tone's band reaches zero frequency; lower `tone_halfwidth_hz`")
+    band = abs(f1 - f0)
+    carrier = float(cfg["carrier"]) if cfg.get("carrier") is not None else 0.5 * (f0 + f1)
+    window = str(cfg.get("interp_window", "kaiser")).lower()
+    if window not in ("kaiser", "hann"):
+        raise ValueError("sampled waveform: interp_window must be `kaiser` or `hann`")
+    common = dict(taps=int(cfg.get("interp_taps", DEFAULT_TAPS)),
+                  beta=float(cfg.get("interp_beta", DEFAULT_BETA)) if window == "kaiser" else None,
+                  gain_knots=int(cfg.get("gain_knots", DEFAULT_GAIN_KNOTS)),
+                  table_factor=int(cfg.get("table_factor", DEFAULT_TABLE_FACTOR)),
+                  replica_sample_rate=float(cfg.get("replica_sample_rate", 0.0)))
+
+    starts = np.concatenate([[0.0], np.cumsum([float(s["duration"]) for s in segs])])
+    duration = float(starts[-1])
+    rate = oversample * band
+    n = int(np.floor(duration * rate)) + 1
+    if n < 4:
+        raise ValueError("sampled waveform: time-bandwidth product too small to sample; raise `oversample`")
+    u = np.arange(n) / rate
+    last = max(i for i, s in enumerate(segs) if s["kind"] != "gap")
+    built, pieces = [], []
+    for i, seg in enumerate(segs):
+        s0, dur = float(starts[i]), float(seg["duration"])
+        if seg["kind"] == "gap":
+            built.append(TrainSegment(i, "gap", s0, dur))
+            pieces.append(None)
+            continue
+        if seg["kind"] == "cw":
+            freqs = [float(seg["frequency"])] if seg.get("frequency") is not None else [float(f) for f in seg["frequencies"]]
+            m = len(freqs)
+            # Schroeder's phases (k^2 / 2m cycles: a low peak-to-average ratio for m tones at once; general knowledge,
+            # not read in this repository) or all zero.
+            rule = str(seg.get("comb_phase", "schroeder")).lower()
+            phases = tuple(0.0 if rule == "zero" or m == 1 else (k * k) / (2.0 * m) for k in range(m))
+            s = TrainSegment(i, "cw", s0, dur, min(freqs), max(freqs), tuple(freqs), phases, float(seg.get("window_alpha", 0.0)))
+        else:
+            s = TrainSegment(i, seg["kind"], s0, dur, float(seg["f_start"]), float(seg["f_stop"]),
+                             window_alpha=float(seg.get("window_alpha", 0.0)))
+        # Half-open [start, stop) except the last sounding segment, so that a sample on a boundary belongs to one.
+        sel = np.nonzero((u >= s0) & ((u <= s0 + dur) if i == last else (u < s0 + dur)))[0]
+        ul = u[sel] - s0
+        pieces.append((sel, _segment_shape(s, ul, carrier, u[sel])))
+        built.append(s)
+
+    sounding = [i for i, s in enumerate(segs) if s["kind"] != "gap"]
+    raw = {i: float(np.sum(np.abs(pieces[i][1]) ** 2) / rate) for i in sounding}
+    if any(not raw[i] > 0.0 for i in sounding):
+        raise ValueError("sampled waveform: a segment of the train has no samples; raise `oversample` or lengthen it")
+    has_share = [segs[i].get("energy_share") is not None for i in sounding]
+    has_energy = [segs[i].get("source_energy_db") is not None for i in sounding]
+    if any(has_share) and any(has_energy):
+        raise ValueError("sampled waveform: give the segments `energy_share` or `source_energy_db`, not both")
+    total_energy_db = None
+    if any(has_share) or any(has_energy):
+        if not (all(has_share) or all(has_energy)):
+            raise ValueError("sampled waveform: `energy_share` / `source_energy_db` must be given on every tone and sweep "
+                             "segment of the train, or on none")
+        if all(has_energy):
+            if cfg.get("source_energy_db") is not None:
+                raise ValueError("sampled waveform: give the train's `source_energy_db` or each segment's, not both")
+            linear = {i: 10.0 ** (float(segs[i]["source_energy_db"]) / 10.0) for i in sounding}
+            total_energy_db = float(10.0 * np.log10(sum(linear.values())))
+        else:
+            linear = {i: float(segs[i]["energy_share"]) for i in sounding}
+            if min(linear.values()) <= 0.0:
+                raise ValueError("sampled waveform: energy_share must be positive")
+        whole = sum(linear.values())
+        amp = {i: np.sqrt(linear[i] / whole / raw[i]) for i in sounding}
+    else:
+        amp = {i: 1.0 for i in sounding}
+    envelope = np.zeros(n, dtype=complex)
+    for i in sounding:
+        sel, values = pieces[i]
+        envelope[sel] += values if amp[i] == 1.0 else amp[i] * values
+    normalise = str(cfg.get("normalise", "peak")).lower()
+    peak = 1.0
+    if normalise == "peak":
+        peak = float(np.abs(envelope).max())
+        envelope = envelope / peak
+    elif normalise != "none":
+        raise ValueError("sampled waveform: normalise must be `peak` or `none`")
+    final = []
+    for s in built:
+        if s.kind == "gap":
+            final.append(s)
+            continue
+        sel, _ = pieces[s.index]
+        final.append(TrainSegment(s.index, s.kind, s.start, s.duration, s.f_start, s.f_stop, s.frequencies, s.phases,
+                                  s.window_alpha, amp[s.index] / peak, float(np.sum(np.abs(envelope[sel]) ** 2) / rate)))
+    return SampledWaveform(envelope, rate, carrier, f0, f1, duration, segments=final, source_energy_db=total_energy_db,
+                           **common)
 
 
 # --- echo synthesis -----------------------------------------------------------------------

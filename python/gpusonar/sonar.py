@@ -67,6 +67,54 @@ def source_level_db_rms(waveform: dict, where: str = "transmit.waveform"):
     return None if new is None else float(new)
 
 
+# --- transmitted energy: the accounting, and an opt-in way to state it --------------------------------------------
+# `source_level_db_rms` (SL) is the RMS level of a constant-envelope pulse whose peak is the transmitted pulse's peak:
+# the record's amplitude is sqrt(2) 10^(SL / 20) and multiplies the envelope b(u), whose peak is 1, BEFORE any taper.
+# So the energy at 1 m (integral of p^2 over the pulse, the real pressure p = amplitude Re{b exp(2 pi i F u)}) is
+#     E = 10^(SL / 10) * integral |b(u)|^2 du,   i.e.  source energy level SE = SL + 10 log10(integral |b|^2 du / 1 s),
+# dB re 1 uPa^2 s at 1 m (narrowband: the carrier's double-frequency term averages out). A Tukey taper of fraction
+# alpha on a pulse of length T gives integral |b|^2 = T (1 - 5 alpha / 8): a Hann tone (alpha 1) carries 0.375 T, a
+# Tukey 0.05 sweep 0.969 T, so at the same SL the Hann tone has 4.1 dB less energy (docs/tasks/DOPPLER.md 0 item 4).
+# This is what SL has always meant; it is unchanged. Opt-in: `source_energy_db` (SE) states the energy instead, and
+# SL is derived from it (the record then holds the derived SL as always); giving both with different values is an
+# error. A train's segments can state theirs (sim/waveform.py `build_train`).
+SOURCE_ENERGY_KEY = "source_energy_db"
+
+
+def envelope_energy_s(waveform: dict, sampled=None):
+    """Integral of |b(u)|^2 du (s) of a transmit waveform mapping's unit-peak envelope, or None where there is no closed
+    form (a Gaussian pulse). A sampled pulse (and a train) from its samples; CW and LFM from the Tukey taper."""
+    if sampled is not None:
+        return sampled.envelope_energy()
+    kind = str(waveform.get("type", "lfm")).lower()
+    if kind not in ("cw", "lfm"):
+        return None
+    alpha = min(max(float(waveform.get("window_alpha", 0.0)), 0.0), 1.0)
+    return float(waveform["duration"]) * (1.0 - 5.0 * alpha / 8.0)
+
+
+def _level_from_energy(waveform: dict, sampled) -> dict:
+    """The waveform mapping with `source_level_db_rms` derived from the stated energy (opt-in `source_energy_db`, or a
+    train's segment energies)."""
+    stated = waveform.get(SOURCE_ENERGY_KEY)
+    own = getattr(sampled, "source_energy_db", None)
+    if stated is not None and own is not None and abs(float(stated) - own) > 1e-9:
+        raise ValueError(f"transmit.waveform.{SOURCE_ENERGY_KEY} ({stated}) and the train's segment energies ({own:.6g} dB in all) "
+                         "are both given and differ")
+    energy_db = float(stated) if stated is not None else float(own)
+    e = envelope_energy_s(waveform, sampled)
+    if e is None:
+        raise ValueError(f"transmit.waveform.{SOURCE_ENERGY_KEY}: only for CW, LFM and sampled pulses (a "
+                         f"{waveform.get('type')} pulse has no stated envelope energy here); give {SOURCE_LEVEL_KEY}")
+    level = energy_db - 10.0 * np.log10(e)
+    given = source_level_db_rms(waveform)
+    if given is not None and abs(given - level) > 1e-6:
+        raise ValueError(f"transmit.waveform: {SOURCE_LEVEL_KEY} ({given}) and {SOURCE_ENERGY_KEY} ({energy_db:.6g}, which "
+                         f"means {SOURCE_LEVEL_KEY} {level:.6g} for this pulse) are both given and differ; give one (set the "
+                         f"other to null to replace a base's)")
+    return {**waveform, SOURCE_LEVEL_KEY: float(level), SOURCE_ENERGY_KEY: energy_db}
+
+
 def record_source_level_db_rms(record) -> float:
     """The RMS source level (dB re 1 uPa at 1 m) of a record: its `transmit.waveform.source_level_db` is the PEAK
     level (core/record.hpp), 3.01 dB above. NaN when the record has none."""
@@ -221,6 +269,14 @@ class SonarModel:
             if tx_wf.get("duration") is None or tx_wf.get("source") in ("samples", "file"):
                 cfg = {**cfg, "transmit": {**cfg["transmit"], "waveform": {**tx_wf, "duration": sampled.duration}}}
                 tx_wf = cfg["transmit"]["waveform"]
+            if str(tx_wf.get("source", "")).lower() == "train":
+                # A train's duration is its segments' sum and its band holds them (a base's sweep keys are replaced).
+                cfg = {**cfg, "transmit": {**cfg["transmit"], "waveform": {
+                    **tx_wf, "duration": sampled.duration, "f_start": float(sampled.f_start), "f_stop": float(sampled.f_stop)}}}
+                tx_wf = cfg["transmit"]["waveform"]
+        if tx_wf.get(SOURCE_ENERGY_KEY) is not None or getattr(sampled, "source_energy_db", None) is not None:
+            cfg = {**cfg, "transmit": {**cfg["transmit"], "waveform": _level_from_energy(tx_wf, sampled)}}
+            tx_wf = cfg["transmit"]["waveform"]
         fc = 0.5 * (float(tx_wf["f_start"]) + float(tx_wf.get("f_stop", tx_wf["f_start"])))
         c = float(cfg.get("nominal_sound_speed", acoustics.NOMINAL_SOUND_SPEED))
         wavelength = c / fc
@@ -322,6 +378,22 @@ class SonarModel:
     def source_level_db_rms(self):
         """Configured source level, dB re 1 uPa at 1 m RMS, or None (an uncalibrated sonar)."""
         return source_level_db_rms(self.waveform_config)
+
+    @property
+    def source_energy_db(self):
+        """Transmitted energy at 1 m, dB re 1 uPa^2 s: SL + 10 log10(integral |b|^2 du / 1 s) (the accounting above
+        `envelope_energy_s`). None without a source level or for a pulse with no stated envelope energy."""
+        sl = self.source_level_db_rms
+        e = envelope_energy_s(self.waveform_config, self.sampled_waveform)
+        return None if sl is None or e is None else float(sl + 10.0 * np.log10(e))
+
+    def segment_energies_db(self):
+        """A train's energy per segment at 1 m (dB re 1 uPa^2 s; None for a gap), or None for any other pulse."""
+        segs = getattr(self.sampled_waveform, "segments", None)
+        sl = self.source_level_db_rms
+        if not segs or sl is None:
+            return None
+        return [None if s.kind == "gap" else float(sl + 10.0 * np.log10(s.energy)) for s in segs]
 
     def amplitude_at_1m(self) -> float:
         """PEAK echo amplitude from a 0 dB target at 1 m range each way, in sample units.
