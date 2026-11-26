@@ -313,6 +313,34 @@ def bubble_loss_table(model: str, wind_speed: float, frequency: float, sound_spe
     return grazing, np.asarray(fn(grazing, wind_speed, frequency, sound_speed), dtype=float)
 
 
+# --- Bistatic pairs (A3, docs/references/CONFORMANCE.md Sec. 1.1) ----------------------------------
+#
+# The laws below are backscattering laws: a strength at one grazing angle. The reverberation code
+# asks for sigma(g_in, g_out), also for one transmitter and receiver, since a pair of paths (one
+# direct, one bottom-bounced) meets the boundary at two angles. TR 0702 Sec. 6.4.2 (printed): a
+# monostatic model is made bistatic by the geometric mean of the two backscattering strengths,
+# sigma(g_in, g_out) = sqrt(sigma(g_in) sigma(g_out)): "geometric_mean", the default since A3.
+# "mean_angle", sigma((g_in + g_out) / 2), is the rule before A3. The two agree, bit for bit, when
+# g_in = g_out. Of the two the geometric mean is the closer to the one published bistatic surface
+# term, Dahl (1999) eq. (13), by 0.3 to 5 dB (neither reproduces it;
+# docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md Sec. 3.2); applied to the facet term's
+# bubble attenuation it gives exactly Dahl (1999) eq. (12), exp(-(beta_I / sin t_i + beta_I / sin t_s)).
+BISTATIC_RULES = ("geometric_mean", "mean_angle")
+
+
+def bistatic_strength(monostatic_db, rule: str = "geometric_mean"):
+    """The function of (grazing in, grazing out), radians, giving the linear strength of a
+    backscattering law `monostatic_db` (a function of grazing returning dB) for a pair of angles,
+    by `rule` (comment above): "geometric_mean" (default) or "mean_angle"."""
+    if rule == "geometric_mean":
+        return lambda g_in, g_out: 10.0 ** ((monostatic_db(np.asarray(g_in, dtype=float))
+                                             + monostatic_db(np.asarray(g_out, dtype=float))) / 20.0)
+    if rule == "mean_angle":
+        return lambda g_in, g_out: 10.0 ** (monostatic_db(0.5 * (np.asarray(g_in, dtype=float)
+                                                                 + np.asarray(g_out, dtype=float))) / 10.0)
+    raise ValueError(f"unknown bistatic_rule {rule!r}; one of {', '.join(BISTATIC_RULES)}")
+
+
 def kraus_surface_db(grazing, wind_speed: float, frequency: float):
     """Empirical sea-surface backscattering strength, dB, at grazing angles in radians, wind
     speed in m/s and frequency in Hz (module docstring, item 2)."""
@@ -326,10 +354,10 @@ def kraus_surface_db(grazing, wind_speed: float, frequency: float):
     return 10.0 * (-5.05 + 2.0 * np.log10(1.0 + v) + (v / 150.0) * np.log10(f + 0.1) + b * np.log10(np.tan(t)))
 
 
-def kraus_surface_strength(wind_speed: float, frequency: float):
+def kraus_surface_strength(wind_speed: float, frequency: float, bistatic_rule: str = "geometric_mean"):
     """`kraus_surface_db` as the function of (grazing in, grazing out) the reverberation code
-    takes. A backscattering fit: for a path pair it is evaluated at the mean angle."""
-    return lambda g_in, g_out: 10.0 ** (kraus_surface_db(0.5 * (g_in + g_out), wind_speed, frequency) / 10.0)
+    takes. A backscattering fit: a pair of angles by `bistatic_rule` (`bistatic_strength`)."""
+    return bistatic_strength(lambda g: kraus_surface_db(g, wind_speed, frequency), bistatic_rule)
 
 
 def searay_bottom_db(grazing, frequency: float, bottom_type):
@@ -362,13 +390,15 @@ def searay_excess_over_lambert_bound_db(frequency: float, bottom_type) -> tuple[
     return float(excess[k]), float(t[k])
 
 
-def searay_bottom_strength(frequency: float, bottom_type):
+def searay_bottom_strength(frequency: float, bottom_type, bistatic_rule: str = "geometric_mean"):
     """`searay_bottom_db` as the function of (grazing in, grazing out) the reverberation code
-    takes. The law is unchanged; where it lies above the Lambert energy bound between 10 and 45
-    degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
+    takes, a pair of angles by `bistatic_rule` (`bistatic_strength`). The law is unchanged; where
+    it lies above the Lambert energy bound between 10 and 45 degrees (the `rock` type does at every frequency: -7.2 dB at 20 degrees against -14.3 dB)
     a warning says so, once per bottom type (D-88). For rock the measured Lambert value is in
     `configs/sediments.yaml` (`rock`: mu = -16 dB, range -23 to -10): the reverberation item
     `{boundary_z, sediment: rock}`."""
+    if bistatic_rule not in BISTATIC_RULES:
+        raise ValueError(f"unknown bistatic_rule {bistatic_rule!r}; one of {', '.join(BISTATIC_RULES)}")
     excess, angle = searay_excess_over_lambert_bound_db(frequency, bottom_type)
     if excess > 0.0 and str(bottom_type) not in _warned_above_lambert_bound:
         _warned_above_lambert_bound.add(str(bottom_type))
@@ -379,7 +409,7 @@ def searay_bottom_strength(frequency: float, bottom_type):
             + ("; measured rock is mu = -23 to -10 dB: use the reverberation item {boundary_z, sediment: rock} "
                "(mu = -16 dB from configs/sediments.yaml) or give mu_db" if rock else "; give mu_db or a sediment for the site")
             + ". The law is used as printed; this warning is given once per bottom type.", stacklevel=2)
-    return lambda g_in, g_out: 10.0 ** (searay_bottom_db(0.5 * (g_in + g_out), frequency, bottom_type) / 10.0)
+    return bistatic_strength(lambda g: searay_bottom_db(g, frequency, bottom_type), bistatic_rule)
 
 
 # --- Surface backscattering from the bubble layer and from wave facets (model `bubble_layer`) -----
@@ -455,9 +485,10 @@ def searay_bottom_strength(frequency: float, bottom_type):
 #     `facet_attenuation=False` is the model before: 0 dB at 45 degrees, -0.6 to -3.2 dB at 80-89
 #     degrees, 8-15 m/s, 30-68 kHz with `apl_1994`'s beta_I; -2.2 to -9.2 dB at 80 degrees, 10-12 m/s
 #     with the default `dahl_1997`'s, tests/python/test_literature_models.py).
-#   - For a bistatic pair the strength functions here take the arithmetic mean grazing angle. [D99]
-#     eq. (13) is a published bistatic bubble term; TR 0702 Sec. 6.4.2 makes monostatic laws bistatic
-#     by the geometric mean of the two backscattering strengths. Neither is implemented.
+#   - For a bistatic pair the strength functions here take the geometric mean of the two
+#     backscattering strengths, TR 0702 Sec. 6.4.2's rule, since A3 (`bistatic_strength`; the
+#     arithmetic mean grazing angle before, `bistatic_rule="mean_angle"`). [D99] eq. (13), a
+#     published bistatic bubble term, is not implemented.
 BUBBLE_RERADIATION_DAMPING = 0.0136
 
 
@@ -568,11 +599,12 @@ def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_
 
 
 def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
-                                  extinction: str = "dahl_1997", facet_attenuation: bool = True):
+                                  extinction: str = "dahl_1997", facet_attenuation: bool = True,
+                                  bistatic_rule: str = "geometric_mean"):
     """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
-    code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
-    return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,
-                                                               sound_speed, extinction, facet_attenuation) / 10.0)
+    code takes. A backscattering model: a pair of angles by `bistatic_rule` (`bistatic_strength`)."""
+    return bistatic_strength(lambda g: bubble_layer_surface_db(g, wind_speed, frequency, sound_speed, extinction,
+                                                               facet_attenuation), bistatic_rule)
 
 
 # --- The empirical surface laws against the bubble layer's saturation level (D-87) ----------------
@@ -645,8 +677,10 @@ def saturation_crossing_frequency(model: str, wind_speed: float, grazing: float 
     return hi
 
 
-def empirical_surface_strength(model: str, wind_speed: float, frequency: float, cap: str | None = None):
-    """The strength function of a `chapman_harris` or `kraus_surface` reverberation item.
+def empirical_surface_strength(model: str, wind_speed: float, frequency: float, cap: str | None = None,
+                               bistatic_rule: str = "geometric_mean"):
+    """The strength function of a `chapman_harris` or `kraus_surface` reverberation item, a pair of
+    angles by `bistatic_rule` (`bistatic_strength`; applied to the capped law when capped).
 
     Without `cap` it is the law, unchanged; if at `frequency` (12 kHz or above) the law lies above
     the bubble layer's saturation level at 10 degrees of grazing, a warning says so, once per law.
@@ -656,10 +690,11 @@ def empirical_surface_strength(model: str, wind_speed: float, frequency: float, 
         raise ValueError(f"unknown empirical surface law {model!r}; one of {_EMPIRICAL_SURFACE_LAWS}")
     if cap not in (None, *SURFACE_CAPS):
         raise ValueError(f"unknown cap {cap!r} for a surface reverberation item; one of {SURFACE_CAPS}")
+    if bistatic_rule not in BISTATIC_RULES:
+        raise ValueError(f"unknown bistatic_rule {bistatic_rule!r}; one of {', '.join(BISTATIC_RULES)}")
     wind_speed, frequency = float(wind_speed), float(frequency)
 
-    def law(g_in, g_out):
-        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
+    def law(g):
         if model == "chapman_harris":
             from ..acoustics import chapman_harris_db
             return chapman_harris_db(g, wind_speed, frequency)
@@ -678,9 +713,5 @@ def empirical_surface_strength(model: str, wind_speed: float, frequency: float, 
                                        if inside else "Above 70 kHz no model here is validated against anything we could open.")
                 + " `cap: bubble_saturation` on the item limits the law to that level; this warning is given once per law.",
                 stacklevel=2)
-        return lambda g_in, g_out: 10.0 ** (law(g_in, g_out) / 10.0)
-
-    def capped(g_in, g_out):
-        g = 0.5 * (np.asarray(g_in, dtype=float) + np.asarray(g_out, dtype=float))
-        return 10.0 ** (np.minimum(law(g_in, g_out), bubble_saturation_db(g, frequency)) / 10.0)
-    return capped
+        return bistatic_strength(law, bistatic_rule)
+    return bistatic_strength(lambda g: np.minimum(law(g), bubble_saturation_db(g, frequency)), bistatic_rule)

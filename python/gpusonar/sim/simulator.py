@@ -162,14 +162,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         strength = None
         if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
             # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
-            # bubble_saturation]}. Without `cap` the law is unchanged and a warning is given once
+            # bubble_saturation][, bistatic_rule: geometric_mean (default) | mean_angle]}; the rule for a
+            # pair of grazing angles is the same key for searay_bottom and bubble_layer_surface
+            # (sim/surface.py, A3). Without `cap` the law is unchanged and a warning is given once
             # where it lies above the bubble layer's saturation level (sim/surface.py, D-87).
             from . import surface as surface_model
-            strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"))
+            strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"),
+                                                                item.get("bistatic_rule", "geometric_mean"))
         elif item.get("model") == "searay_bottom":
             # Empirical bottom law by type (sim/surface.py): {model: searay_bottom, bottom_type: mud|sand|gravel|rock}.
             from . import surface as surface_model
-            strength = surface_model.searay_bottom_strength(fc, item["bottom_type"])
+            strength = surface_model.searay_bottom_strength(fc, item["bottom_type"], item.get("bistatic_rule", "geometric_mean"))
         elif item.get("model") == "bubble_layer_surface":
             # {model: bubble_layer_surface, wind_speed, extinction: dahl_1997 (default) | apl_1994 | hall_novarini,
             # facet_attenuation: true (default) | false}: the bubble-layer and facet terms of the published
@@ -177,7 +180,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             from . import surface as surface_model
             strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env["sound_speed"],
                                                                    item.get("extinction", "dahl_1997"),
-                                                                   bool(item.get("facet_attenuation", True)))
+                                                                   bool(item.get("facet_attenuation", True)),
+                                                                   item.get("bistatic_rule", "geometric_mean"))
         elif item.get("model") == "fluid_sediment":
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
             # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.

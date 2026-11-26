@@ -1350,13 +1350,21 @@ Limits that remain: flat boundary, stratified medium, eigenray pairs incoherent
 range walk, the "short pulse" assumption of Sec. 11.2.1), the first receive element's
 pattern for all, and the sector must be narrow compared with the transmitter's
 height over the boundary where the transmitter is far from the receiver
-(`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
-grazing angle whatever the bistatic azimuth. TR 0702 Sec. 6.4.2 makes a monostatic model bistatic
-by the geometric mean of the two backscattering strengths instead; for Chapman-Harris at 9.9 kHz and
-8 m/s (`sst_pursuit`) the mean-angle rule is 0 / +1.7 / +3.6 / +5.9 dB above it for the pairs 5/5,
-5/20, 5/40, 5/80 degrees (`docs/references/CONFORMANCE.md`; the two are equal for equal angles, so only
-legs with a bottom bounce differ there). Dahl (1999) eq. (13) is a published bistatic bubble term; the
-geometric mean is the closer of the two rules to it (0.3-5 dB), neither reproduces it.
+(`azimuth_subsamples`). Chapman-Harris (and every backscattering law of `sim/surface.py`:
+`kraus_surface`, `bubble_layer_surface`, `searay_bottom`) is a backscatter fit, made bistatic, whatever
+the bistatic azimuth, by the geometric mean of the two backscattering strengths, TR 0702 Sec. 6.4.2's
+rule, since A3 (`docs/references/CONFORMANCE.md` Sec. 1.1; `surface.bistatic_strength`). Before A3 it
+was used at the mean grazing angle (`bistatic_rule: mean_angle` on the item keeps that): for
+Chapman-Harris at 9.9 kHz and 8 m/s (`sst_pursuit`) the mean-angle rule is 0 / +1.7 / +3.6 / +5.9 dB
+above the geometric mean for the pairs 5/5, 5/20, 5/40, 5/80 degrees. The two are equal for equal
+angles, so only pairs of paths that meet the boundary at different angles move: in `sst_pursuit` those
+with a bottom-bounced leg, and the same holds for a monostatic sonar over a bottom (one path direct, the
+other bottom-bounced), so every scenario with a surface law and multipath moves, not only bistatic
+items. Measured at A3 (one ping, the surface-law items alone, no targets or noise, `mean_angle` ->
+`geometric_mean`, whole record / worst twentieth of it): `popoto_12km` -1.28 / -1.33 dB,
+`popoto_env_gravel_30m` -0.98 / -1.06, `flank_patrol` -0.91 / -1.05, `flank_sst_shallow` -0.08 / -1.43,
+`fls_120k_transit` -0.01 / -0.35, `fls_170k_traffic` -0.01 / -0.15, `fls_330k_transit` -0.00 / -0.08. Dahl (1999) eq. (13) is a published bistatic bubble term; the geometric mean is the closer of the
+two rules to it (0.3-5 dB), neither reproduces it.
 
 ### 14.3 Range-varying boundary (`strength_map`)
 
