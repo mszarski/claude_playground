@@ -131,6 +131,69 @@ void check_config(const ImageSourceConfig& config);
 double image_series_truncation(const ImageSourceConfig& config, double source_z, double receiver_z,
                                double range);
 
+/// The general image construction (sonar-0nsi in NumPy, `propagation._PlaneImages`; here since sonar-k9v7):
+/// image sources for any set of planes in water of one sound speed: the surface, a bottom tilted in x and y,
+/// and walls as any plane, optionally bounded. The same arithmetic as the NumPy construction in the same order,
+/// except the dot products, which NumPy hands to BLAS (summed in another order, with fused multiply-adds on some
+/// machines): results agree to rounding, not to the bit.
+///
+/// A path from the source S to the field point P meeting planes p1, ..., pn in that order has the image
+/// I = R1(R2(...Rn(P))) (R: the mirror in a plane) and the length |I - S|. Sequences are grown from P outwards, a
+/// mirror applied only where the image so far is on the water side of that plane, with no plane twice in a row,
+/// at most `max_order` surface and bottom bounces and at most `wall_order` wall bounces; a sequence is kept as a
+/// ray (a column of the result) when it is possible for at least one field point. A ray is valid for a point
+/// when, traced back from S, each leg meets the next plane between its ends on the plane's face (within its
+/// bounds); the source, the point and every specular point are on the water side of every unbounded plane; and
+/// no leg passes through a bounded plane's face. Invalid rays have amplitude 0 and `valid` 0 (their delay and
+/// directions are still written: those of the image). Coefficients: a surface's or wall's `coefficient`; a
+/// bottom's the Rayleigh coefficient of `fluid_bottom` at that bounce's own grazing angle to its plane, or
+/// `bottom_coefficient`. Not modelled: diffraction at a face's edge, refraction, roughness.
+enum class PlaneKind { Surface, Bottom, Wall };
+
+/// Distance (m) within which a point is on a plane (scatterers laid on a boundary are): PLANE_TOLERANCE_M.
+inline constexpr double kPlaneTolerance = 1e-6;
+
+/// One mirror: the points x with normal . (x - point) = 0.
+struct Plane {
+  PlaneKind kind = PlaneKind::Wall;
+  Vec3d point{};
+  /// Unit normal pointing into the water. Taken as given (make_plane normalises), so that a normal
+  /// normalised by the caller is not rounded again.
+  Vec3d normal{};
+  /// Pressure reflection coefficient of a surface or a wall; no default. A bottom's comes from the configuration.
+  std::complex<double> coefficient{kUnset, 0.0};
+  /// The face, per axis x, y, z: lower[a] <= x[a] <= upper[a] where has_bound[a]. A plane with no bound is
+  /// unbounded (a boundary of the water); one with any bound is a face that reflects and blocks only there.
+  bool has_bound[3] = {false, false, false};
+  double lower[3] = {0.0, 0.0, 0.0};
+  double upper[3] = {0.0, 0.0, 0.0};
+  bool bounded() const { return has_bound[0] || has_bound[1] || has_bound[2]; }
+};
+
+/// A plane of `kind` through `point` with the normal `normal` (any length, pointing into the water) normalised.
+Plane make_plane(PlaneKind kind, const Vec3d& point, const Vec3d& normal,
+                 std::complex<double> coefficient = {kUnset, 0.0});
+
+struct PlaneImageConfig {
+  double sound_speed = kUnset;       ///< m/s; no default
+  std::vector<Plane> planes;         ///< in the order rays are listed by (the NumPy order: surface, bottom, walls)
+  int max_order = -1;                ///< surface and bottom bounces along one path; no default
+  int wall_order = -1;               ///< wall bounces along one path; no default
+  /// A bottom bounce's coefficient when `has_fluid_bottom` is false; no default.
+  std::complex<double> bottom_coefficient{kUnset, 0.0};
+  bool has_fluid_bottom = false;     ///< each bottom bounce uses the Rayleigh coefficient at its own grazing angle
+  FluidBottom fluid_bottom;
+};
+
+/// Throws std::invalid_argument for an unstated sound speed, order or coefficient, a normal that is not a unit
+/// vector, or bounds with lower > upper.
+void check_config(const PlaneImageConfig& config);
+
+/// Eigenrays of the general construction from `source` to `points` [S, 3]: rays in the order of
+/// `propagation._PlaneImages.sequences` (the direct path first, then the sequences grown level by level).
+EigenraySet plane_image_eigenrays(const PlaneImageConfig& config, const Vec3d& source, const double* points,
+                                  std::int64_t n_points);
+
 /// Plane-wave pressure reflection coefficient of a fluid half-space at a grazing angle
 /// (radians): R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)),
 /// m = rho_b / rho_w, n = c_w / c_b, attenuation as an imaginary part of c_b.

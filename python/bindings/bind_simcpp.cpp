@@ -158,6 +158,62 @@ void bind_simcpp(py::module_& m) {
       "(sim_image_series_truncation gives what that leaves out).");
 
   m.def(
+      "sim_plane_image_eigenrays",
+      [](double sound_speed, const Vec3d& source, const ArrD& points, const py::list& planes, int max_order,
+         int wall_order, cd bottom_coefficient, const py::object& bottom) {
+        require_points(points, "points");
+        sim::PlaneImageConfig cfg;
+        cfg.sound_speed = sound_speed;
+        cfg.max_order = max_order;
+        cfg.wall_order = wall_order;
+        cfg.bottom_coefficient = bottom_coefficient;
+        cfg.has_fluid_bottom = !bottom.is_none();
+        if (cfg.has_fluid_bottom) {
+          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
+          cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
+        }
+        for (const py::handle item : planes) {
+          // (kind, point, normal, coefficient or None, [(axis, lower, upper), ...])
+          const auto t = item.cast<py::tuple>();
+          if (t.size() != 5) throw std::invalid_argument("a plane is (kind, point, normal, coefficient, bounds)");
+          sim::Plane p;
+          const auto kind = t[0].cast<std::string>();
+          if (kind == "surface") {
+            p.kind = sim::PlaneKind::Surface;
+          } else if (kind == "bottom") {
+            p.kind = sim::PlaneKind::Bottom;
+          } else if (kind == "wall") {
+            p.kind = sim::PlaneKind::Wall;
+          } else {
+            throw std::invalid_argument("plane kind must be surface, bottom or wall, not " + kind);
+          }
+          p.point = t[1].cast<Vec3d>();
+          p.normal = t[2].cast<Vec3d>();  // already unit (`_Plane` normalises it): taken as given
+          if (!t[3].is_none()) p.coefficient = t[3].cast<cd>();
+          for (const auto& [axis, lower, upper] : t[4].cast<std::vector<std::tuple<int, double, double>>>()) {
+            if (axis < 0 || axis > 2) throw std::invalid_argument("a bound's axis must be 0, 1 or 2");
+            p.has_bound[axis] = true;
+            p.lower[axis] = lower;
+            p.upper[axis] = upper;
+          }
+          cfg.planes.push_back(p);
+        }
+        sim::EigenraySet e;
+        {
+          py::gil_scoped_release release;
+          e = sim::plane_image_eigenrays(cfg, source, points.data(), points.shape(0));
+        }
+        return set_dict(std::move(e));
+      },
+      py::arg("sound_speed"), py::arg("source"), py::arg("points"), py::arg("planes"), py::arg("max_order"),
+      py::arg("wall_order"), py::arg("bottom_coefficient"), py::arg("bottom") = py::none(),
+      "Image-source eigenrays of the general construction (propagation._PlaneImages): `planes` a list of\n"
+      "(kind 'surface' | 'bottom' | 'wall', point [3], unit normal [3] into the water, coefficient or None for a\n"
+      "bottom, bounds [(axis, lower, upper), ...]); `max_order` surface and bottom bounces and `wall_order` wall\n"
+      "bounces a path; a bottom bounce takes the Rayleigh coefficient of `bottom` (speed, density, attenuation,\n"
+      "water_density) at its own grazing angle, or `bottom_coefficient`. A dict of the EigenraySet fields.");
+
+  m.def(
       "sim_image_series_truncation",
       [](double sound_speed, double source_z, double receiver_z, double range, const py::object& surface_z,
          const py::object& bottom_z, cd surface_coefficient, const py::object& bottom_coefficient,

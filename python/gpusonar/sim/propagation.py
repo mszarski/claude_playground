@@ -11,7 +11,7 @@ return eigenrays (as in SST; `two_way_paths`). The providers, by fidelity tier
   at each ray's grazing angle) or an explicit constant, never assumed (D-104); bounce
   orders kept by energy with a cap that warns (D-105). Opt-in (sonar-0nsi): a bottom
   sloping in x and y (`bottom_slope`) and walls as arbitrary planes ({point, normal}),
-  with every image path checked for validity (`_PlaneImages`).
+  with every image path checked for validity (`_PlaneImages`; in C++ too since sonar-k9v7).
 - SedimentProvider (`sediment`): one refracted ray per point into a fluid sediment
   under a flat interface (Snell's law), for buried objects.
 - sim.bellhop.BellhopProvider (`eigenray`): arrivals from Bellhop, an external program
@@ -148,7 +148,7 @@ class ImageSourceProvider(EigenrayProvider):
 
     Walls, two forms. {axis: 0 | 1, position, coefficient}: a vertical plane x or y = position, applied once on top
     of every image of the surface and bottom series, with no check that the path meets the wall or stays in the
-    water (the form before sonar-0nsi; unchanged, and the only form the C++ provider takes).
+    water (the form before sonar-0nsi; since sonar-8qn9 its arrival direction is mirrored in the wall as well).
     {point: [x, y, z], normal: [nx, ny, nz], coefficient[, bounds: {x: [lo, hi], y: [..], z: [..]}]}: any plane,
     `normal` pointing into the water. Opt-in with it (or with `bottom_slope`), every plane becomes a mirror of
     one general construction (`_PlaneImages`): the surface, the bottom (tilted by `bottom_slope` = [dz/dx, dz/dy],
@@ -157,9 +157,10 @@ class ImageSourceProvider(EigenrayProvider):
     bounces and at most `wall_order` (1) wall bounces, and a path is valid only where every specular point lies on
     its plane's face (inside `bounds`), the source, the field point and every specular point are on the water side
     of every unbounded plane, and no leg crosses a bounded wall. Invalid paths are masked (`valid`, amplitude 0).
-    Each bounce off the bottom takes the Rayleigh coefficient at its own grazing angle to the tilted bed. These
-    run in NumPy whatever the engine (the C++ provider has neither tilted planes nor validity checks); the pairing
-    and synthesis that follow still run in C++ (or CUDA).
+    Each bounce off the bottom takes the Rayleigh coefficient at its own grazing angle to the tilted bed. Both
+    engines have the construction (C++: libs/sim paths.cpp `plane_image_eigenrays`, since sonar-k9v7; it agrees with
+    the NumPy one to rounding, not to the bit: NumPy's dot products go through BLAS). The energy rule's order is
+    worked out in NumPy for both engines, as for the flat series.
     """
 
     tier = "image_source"
@@ -288,6 +289,8 @@ class ImageSourceProvider(EigenrayProvider):
         points = np.atleast_2d(np.asarray(points, dtype=float))
         order = self._order_for(source, points)
         if self.general:
+            if _cpp_points(self.engine, points):
+                return self._planes.eigenrays_cpp(source, points, order, self.wall_order)
             return self._planes.eigenrays(source, points, order, self.wall_order)
         if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
             walls = [(int(w["axis"]), float(w["position"]), complex(w["coefficient"])) for w in self.walls]
@@ -307,20 +310,20 @@ class ImageSourceProvider(EigenrayProvider):
             img = points.copy()
             img[:, 2] = img_z
             coef = self.surface_coefficient**ns * self.bottom_coefficient**nb
-            rays.append((img, coef, ns, nb, 1.0))
+            rays.append((img, coef, ns, nb, 1.0, None))
             for wall in self.walls if walls else []:
                 wimg = img.copy()
                 axis = int(wall["axis"])
                 wimg[:, axis] = 2.0 * float(wall["position"]) - wimg[:, axis]
                 wall_coef = complex(wall["coefficient"])
-                rays.append((wimg, coef * wall_coef, ns, nb, wall_coef))
+                rays.append((wimg, coef * wall_coef, ns, nb, wall_coef, axis))
         s, k = points.shape[0], len(rays)
         out = EigenraySet(
             delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
             launch=np.zeros((s, k, 3)), arrival=np.zeros((s, k, 3)),
             n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int),
             valid=np.ones((s, k), dtype=bool), sound_speed=c)
-        for j, (img, coef, ns, nb, wall_coef) in enumerate(rays):
+        for j, (img, coef, ns, nb, wall_coef, wall_axis) in enumerate(rays):
             r, u = _direct(source, img, c)
             out.delay[:, j] = r / c
             if self.bottom is not None and nb > 0:
@@ -331,10 +334,14 @@ class ImageSourceProvider(EigenrayProvider):
                         * rayleigh_reflection(grazing, c, **self.bottom) ** nb) * wall_coef
             out.amplitude[:, j] = coef / r
             out.launch[:, j] = u
-            # Direction of travel at the real point: mirror the vertical component once per bounce.
+            # Direction of travel at the real point: the direction to the image mirrored in every plane met, the
+            # vertical component once per surface or bottom bounce and the wall's horizontal one at its bounce
+            # (before sonar-8qn9 the wall's was left out).
             arr = u.copy()
             if (ns + nb) % 2 == 1:
                 arr[:, 2] = -arr[:, 2]
+            if wall_axis is not None:
+                arr[:, wall_axis] = -arr[:, wall_axis]
             out.arrival[:, j] = arr
             out.n_surface[:, j] = ns
             out.n_bottom[:, j] = nb
@@ -492,6 +499,18 @@ class _PlaneImages:
             frontier = grown
         return nodes
 
+    def eigenrays_cpp(self, source, points, order: int, wall_order: int) -> EigenraySet:
+        """`eigenrays` by the C++ construction (libs/sim paths.cpp `plane_image_eigenrays`, sonar-k9v7): the same
+        rays in the same order, to rounding. Each plane goes with the unit normal computed here, so that both
+        engines mirror in the same plane."""
+        p = self.provider
+        planes = [(pl.kind, _source3(pl.point), _source3(pl.normal),
+                   None if pl.kind == "bottom" else complex(pl.coefficient),
+                   [(int(axis), float(lo), float(hi)) for axis, lo, hi in pl.bounds or []]) for pl in self.planes]
+        return EigenraySet(**core.sim_plane_image_eigenrays(
+            p.sound_speed, _source3(source), np.asarray(points, dtype=float), planes, int(order), int(wall_order),
+            complex(p.bottom_coefficient), None if p.bottom is None else _fluid_bottom(**p.bottom)))
+
     def eigenrays(self, source, points, order: int, wall_order: int) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
@@ -646,7 +665,7 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
     `options` passed as keyword arguments:
 
     - `free_field`: FreeFieldProvider (direct path; options are ignored);
-    - `image_source`: ImageSourceProvider (flat surface, bottom and walls);
+    - `image_source`: ImageSourceProvider (surface, bottom and walls; flat, or any planes);
     - `sediment`: SedimentProvider (one refracted ray into a fluid sediment);
     - `eigenray`: sim.bellhop.BellhopProvider; `options["environment"]` is the
       OceanEnvironment's keyword arguments and the rest go to the provider (`sound_speed`

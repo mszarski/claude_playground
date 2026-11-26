@@ -91,6 +91,32 @@ TEST(Paths, ImageSeriesWithoutABottomStopsAtTheSurface) {
   EXPECT_NEAR(e.amplitude[1].real(), 0.8 / std::hypot(40.0, 80.0), 1e-15);
 }
 
+TEST(Paths, AWallPathArrivesMirroredInTheWall) {
+  // sonar-8qn9: a path off a wall y = 50 then the surface leaves towards the image (40, 80, -10) and arrives with
+  // both the vertical part and the part across the wall (y) turned around; the part along the wall (x) is kept.
+  sim::ImageSourceConfig cfg;
+  cfg.sound_speed = kC;
+  cfg.max_order = 1;
+  cfg.walls.push_back({1, 50.0, {0.8, 0.0}});
+  const Vec3d source{0.0, 0.0, 10.0};
+  const std::vector<double> point{40.0, 20.0, 10.0};
+  const auto e = sim::image_source_eigenrays(cfg, source, point.data(), 1);
+  ASSERT_EQ(e.n_rays, 4);  // direct, wall, surface, surface + wall
+  for (int j = 0; j < 4; ++j) {
+    const bool wall = j % 2 == 1, surface = j >= 2;
+    EXPECT_EQ(e.arrival[3 * j], e.launch[3 * j]) << j;
+    EXPECT_EQ(e.arrival[3 * j + 1], wall ? -e.launch[3 * j + 1] : e.launch[3 * j + 1]) << j;
+    EXPECT_EQ(e.arrival[3 * j + 2], surface ? -e.launch[3 * j + 2] : e.launch[3 * j + 2]) << j;
+  }
+  // The last leg of the wall-and-surface path, from the geometry: the line from the source to the image
+  // (40, 80, -10) meets the wall at y = 50 (t = 5/8, z = -2.5: above the surface, so the surface comes first, at
+  // t = 1/2, (20, 40, 0)), then the wall at (25, 50, -2.5) mirrored to (25, 50, 2.5); the leg to the point is
+  // (15, -30, 7.5) / |..|.
+  const double leg[3] = {15.0, -30.0, 7.5};
+  const double length = std::sqrt(15.0 * 15.0 + 30.0 * 30.0 + 7.5 * 7.5);
+  for (int a = 0; a < 3; ++a) EXPECT_NEAR(e.arrival[3 * 3 + a], leg[a] / length, 1e-15) << a;
+}
+
 TEST(Paths, RayleighCoefficientLimits) {
   const sim::FluidBottom sand{1700.0, 1.9, 0.0, 1.0};
   // Normal incidence: (Z2 - Z1) / (Z2 + Z1).
@@ -338,5 +364,165 @@ TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {
   EXPECT_THROW(sim::reverb_active_sectors(p, half), std::invalid_argument);
   EXPECT_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 2, pulse.data(), 1, offsets.data(), 3,
                                   out.data()),
+               std::invalid_argument);
+}
+
+namespace {
+
+/// The general construction's configuration with a surface at z = 0 and a bottom at depth `zb` (normal
+/// (sx, sy, -1) normalised: the depth grows by sx per metre in x and sy in y).
+sim::PlaneImageConfig plane_config(double zb, double sx, double sy, int max_order, int wall_order) {
+  sim::PlaneImageConfig cfg;
+  cfg.sound_speed = kC;
+  cfg.max_order = max_order;
+  cfg.wall_order = wall_order;
+  cfg.planes.push_back(sim::make_plane(sim::PlaneKind::Surface, {0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}, {-1.0, 0.0}));
+  cfg.planes.push_back(sim::make_plane(sim::PlaneKind::Bottom, {0.0, 0.0, zb}, {sx, sy, -1.0}));
+  cfg.has_fluid_bottom = true;
+  cfg.fluid_bottom = {1650.0, 1.9, 0.8, 1.0};
+  cfg.bottom_coefficient = {0.0, 0.0};
+  return cfg;
+}
+
+/// The column of point i with these bounce counts among its valid rays (-1 when there is not exactly one).
+int column(const sim::EigenraySet& e, std::int64_t i, std::int64_t ns, std::int64_t nb) {
+  int found = -1, count = 0;
+  for (std::int64_t j = 0; j < e.n_rays; ++j) {
+    const std::int64_t k = i * e.n_rays + j;
+    if (e.valid[k] != 0 && e.n_surface[k] == ns && e.n_bottom[k] == nb) {
+      found = static_cast<int>(j);
+      ++count;
+    }
+  }
+  return count == 1 ? found : -1;
+}
+
+}  // namespace
+
+TEST(PlaneImages, OneBounceOffATiltedBedAgainstDirectGeometry) {
+  // sonar-k9v7: a bed 40 m deep at the origin, deepening 0.1 per metre across y. The bed-bounce path from the source
+  // to the point: its image is the point mirrored in the bed; the specular point is where the line to the image meets
+  // the bed; the path's length is |source - specular| + |specular - point|; it leaves towards the specular point and
+  // arrives along specular -> point; the coefficient is Rayleigh's at the grazing angle to the tilted bed.
+  const double zb = 40.0, sy = 0.1;
+  const sim::PlaneImageConfig cfg = plane_config(zb, 0.0, sy, 1, 0);
+  const Vec3d source{0.0, 0.0, 10.0};
+  const std::vector<double> point{120.0, 15.0, 25.0};
+  const auto e = sim::plane_image_eigenrays(cfg, source, point.data(), 1);
+  const int j = column(e, 0, 0, 1);
+  ASSERT_GE(j, 0);
+  const Vec3d n = sim::make_plane(sim::PlaneKind::Bottom, {0.0, 0.0, zb}, {0.0, sy, -1.0}).normal;
+  const Vec3d p{point[0], point[1], point[2]};
+  const Vec3d q{0.0, 0.0, zb};
+  const Vec3d image = p - n * (2.0 * sonar::dot(p - q, n));
+  const double t = sonar::dot(source - q, n) / (sonar::dot(source - q, n) - sonar::dot(image - q, n));
+  const Vec3d specular = source + (image - source) * t;
+  EXPECT_NEAR(sonar::dot(specular - q, n), 0.0, 1e-12);  // on the bed
+  const double length = sonar::norm(specular - source) + sonar::norm(p - specular);
+  EXPECT_NEAR(e.delay[j] * kC, length, 1e-11);
+  const Vec3d out = sonar::normalized(specular - source), in = sonar::normalized(p - specular);
+  for (int a = 0; a < 3; ++a) {
+    EXPECT_NEAR(e.launch[3 * j + a], out[a], 1e-13) << a;
+    EXPECT_NEAR(e.arrival[3 * j + a], in[a], 1e-13) << a;
+  }
+  const double grazing = std::asin(std::abs(sonar::dot(out, n)));
+  const auto expected = sim::rayleigh_reflection(grazing, kC, cfg.fluid_bottom) / length;
+  EXPECT_NEAR(std::abs(e.amplitude[j] - expected), 0.0, 1e-13 * std::abs(expected));
+  EXPECT_EQ(e.n_rays, 3);  // direct, surface, bottom
+}
+
+TEST(PlaneImages, ZeroTiltIsTheFlatBottomSeries) {
+  // A level bed through the general construction gives the flat series' rays: delays and directions to the bit,
+  // amplitudes to rounding (the coefficient a product in path order, where the flat series raises each to its count).
+  const sim::PlaneImageConfig planes = plane_config(60.0, 0.0, 0.0, 3, 0);
+  sim::ImageSourceConfig flat;
+  flat.sound_speed = kC;
+  flat.has_bottom = true;
+  flat.bottom_z = 60.0;
+  flat.max_order = 3;
+  flat.has_fluid_bottom = true;
+  flat.fluid_bottom = planes.fluid_bottom;
+  std::mt19937_64 rng(11);
+  std::uniform_real_distribution<double> x(20.0, 400.0), y(-80.0, 80.0), z(0.5, 59.5);
+  std::vector<double> pts;
+  for (int i = 0; i < 30; ++i) pts.insert(pts.end(), {x(rng), y(rng), z(rng)});
+  const Vec3d source{0.0, 0.0, 20.0};
+  const auto a = sim::image_source_eigenrays(flat, source, pts.data(), 30);
+  const auto b = sim::plane_image_eigenrays(planes, source, pts.data(), 30);
+  ASSERT_EQ(a.n_rays, 7);
+  for (std::int64_t i = 0; i < 30; ++i) {
+    int matched = 0;
+    for (std::int64_t ja = 0; ja < a.n_rays; ++ja) {
+      const std::int64_t ka = i * a.n_rays + ja;
+      for (std::int64_t jb = 0; jb < b.n_rays; ++jb) {
+        const std::int64_t kb = i * b.n_rays + jb;
+        if (b.valid[kb] == 0 || b.delay[kb] != a.delay[ka] || b.n_surface[kb] != a.n_surface[ka] ||
+            b.n_bottom[kb] != a.n_bottom[ka]) {
+          continue;
+        }
+        ++matched;
+        for (int c = 0; c < 3; ++c) {
+          EXPECT_EQ(b.launch[3 * kb + c], a.launch[3 * ka + c]);
+          EXPECT_EQ(b.arrival[3 * kb + c], a.arrival[3 * ka + c]);
+        }
+        EXPECT_LE(std::abs(b.amplitude[kb] - a.amplitude[ka]), 1e-14 * std::abs(a.amplitude[ka]));
+      }
+    }
+    EXPECT_EQ(matched, a.n_rays) << i;  // every flat ray found once
+    std::int64_t valid = 0;
+    for (std::int64_t jb = 0; jb < b.n_rays; ++jb) valid += b.valid[i * b.n_rays + jb];
+    EXPECT_EQ(valid, a.n_rays) << i;   // and no other
+  }
+}
+
+TEST(PlaneImages, ABoundedWallReflectsOnItsFaceAndBlocksOnlyThere) {
+  // A wall x = 30 facing -x, its face -5 <= y <= 5; no surface or bottom.
+  sim::PlaneImageConfig cfg;
+  cfg.sound_speed = kC;
+  cfg.max_order = 0;
+  cfg.wall_order = 1;
+  sim::Plane wall = sim::make_plane(sim::PlaneKind::Wall, {30.0, 0.0, 0.0}, {-1.0, 0.0, 0.0}, {0.9, 0.0});
+  wall.has_bound[1] = true;
+  wall.lower[1] = -5.0;
+  wall.upper[1] = 5.0;
+  cfg.planes.push_back(wall);
+  const Vec3d source{0.0, 0.0, 5.0};
+  const std::vector<double> pts{10.0, 1.0, 5.0,    // specular point at y = 0.67: on the face
+                                10.0, 12.0, 5.0,   // specular point at y = 9: off the face
+                                40.0, 1.0, 5.0,    // behind the wall: direct path blocked
+                                40.0, 30.0, 5.0};  // behind the wall's line, beside its face: direct path clear
+  const auto e = sim::plane_image_eigenrays(cfg, source, pts.data(), 4);
+  ASSERT_EQ(e.n_rays, 2);
+  const std::uint8_t expected[8] = {1, 1, 1, 0, 0, 0, 1, 0};
+  for (int k = 0; k < 8; ++k) {
+    EXPECT_EQ(e.valid[k], expected[k]) << k;
+    if (expected[k] == 0) EXPECT_EQ(e.amplitude[k], std::complex<double>(0.0, 0.0)) << k;
+  }
+  // The wall path of the first point: image (50, 1, 5), coefficient 0.9; arrives turned around in x only.
+  EXPECT_NEAR(e.delay[1] * kC, std::hypot(50.0, 1.0), 1e-12);
+  EXPECT_NEAR(e.amplitude[1].real(), 0.9 / std::hypot(50.0, 1.0), 1e-15);
+  EXPECT_EQ(e.arrival[3], -e.launch[3]);
+  EXPECT_EQ(e.arrival[4], e.launch[4]);
+  EXPECT_EQ(e.arrival[5], e.launch[5]);
+}
+
+TEST(PlaneImages, RefusesWhatItWouldHaveToAssume) {
+  sim::PlaneImageConfig cfg = plane_config(40.0, 0.0, 0.1, 1, 1);
+  const std::vector<double> point{10.0, 0.0, 5.0};
+  const Vec3d source{0.0, 0.0, 5.0};
+  sim::PlaneImageConfig unstated = cfg;
+  unstated.wall_order = -1;
+  EXPECT_THROW(sim::plane_image_eigenrays(unstated, source, point.data(), 1), std::invalid_argument);
+  sim::PlaneImageConfig wall = cfg;
+  wall.planes.push_back(sim::make_plane(sim::PlaneKind::Wall, {30.0, 0.0, 0.0}, {-1.0, 0.0, 0.0}));  // no coefficient
+  EXPECT_THROW(sim::plane_image_eigenrays(wall, source, point.data(), 1), std::invalid_argument);
+  sim::PlaneImageConfig long_normal = cfg;
+  long_normal.planes[1].normal = Vec3d{0.0, 0.0, -2.0};
+  EXPECT_THROW(sim::plane_image_eigenrays(long_normal, source, point.data(), 1), std::invalid_argument);
+  sim::PlaneImageConfig no_bottom = cfg;
+  no_bottom.has_fluid_bottom = false;
+  no_bottom.bottom_coefficient = {sim::kUnset, 0.0};
+  EXPECT_THROW(sim::plane_image_eigenrays(no_bottom, source, point.data(), 1), std::invalid_argument);
+  EXPECT_THROW(sim::make_plane(sim::PlaneKind::Wall, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.5, 0.0}),
                std::invalid_argument);
 }

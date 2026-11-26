@@ -595,12 +595,12 @@ in NumPy and C++ (`libs/sim` `paths.cpp`). No shipped scene uses it.
   bottom and a wall may be `{point, normal, coefficient[, bounds]}`; either turns on one image
   construction over every plane with validity checks (specular point on the face, every vertex in the
   water, no leg through a bounded wall), Rayleigh at each bounce's own grazing angle to the tilted bed,
-  `wall_order` for wall bounces (`docs/PHYSICS_NOTES.md` section 30; `CONFIGURATION.md`). NumPy only: the
-  C++ provider keeps axis walls and a flat bottom. New scenes, nothing shipped changed:
+  `wall_order` for wall bounces (`docs/PHYSICS_NOTES.md` section 30; `CONFIGURATION.md`). In NumPy at
+  first; in C++ too since `sonar-k9v7` (to rounding). New scenes, nothing shipped changed:
   `fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath` and `sas_auv_multipath_free`
   (`SCENARIOS.md`). Not done: a wall's coefficient from a material (each is a constant, a placeholder);
-  roughness (time spreading) on these paths; reverberation over a tilted bed; the arrival direction of
-  the old `{axis, position}` walls, which is wrong in the horizontal (follow-up).
+  roughness (time spreading) on these paths; reverberation over a tilted bed. The arrival direction of
+  the old `{axis, position}` walls, wrong in the horizontal until then, was fixed by `sonar-8qn9`.
 
 ### Recommendation
 
