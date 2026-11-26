@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 90 scenario files; the thirty-five named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 91 scenario files; the thirty-six named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -932,7 +932,8 @@ comparison with the spherical-spreading estimate.
 ## Scenarios for the SST-equivalence work
 
 Nine scenarios were added with the simulator work that closes the gap to SST (APL-UW
-TR 0702; `DECISIONS.md` D-62 to D-78). They are test and validation set-ups, not gallery
+TR 0702; `DECISIONS.md` D-62 to D-78). A tenth, `asiaex_dahl_2004`, holds the forward-scatter geometry
+Dahl (2004) prints (`docs/references/CONFORMANCE.md` A7). They are test and validation set-ups, not gallery
 scenes: `tools/gallery.py` does not run them, so there is no result figure, animation or
 CPU time for them here, except the two validation figures below. They have no geometry
 diagram yet either: `tools/scenario_diagrams.py` has not been run since they were added
@@ -949,6 +950,7 @@ has not been tried).
 | `flank_sst_spread` | `flank_32`, 4 pings 15 s apart | the same channel | every option beyond SST's time spreading: `angle_spread`, `doppler`, `decay_time: facet`, `multi_bounce: convolve` (the last is the default since D-82). Few taps and lines, because every bounce ray becomes 1 + taps × `doppler_lines` rays each way. Same placeholders, and the same slope change as `flank_sst_shallow` (A4: tails x0.59, angles x0.77) | `test_timespread.py`, on both engines |
 | `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Chapman–Harris at 9.9 kHz is above its fitted 0.4-6.4 kHz, and for a bistatic pair it is taken at the mean grazing angle, where TR 0702 Sec. 6.4.2 takes the geometric mean of the two strengths (equal for equal angles; on legs with a bottom bounce ours is up to about +6 dB higher, `docs/references/CONFORMANCE.md`). Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise: one-way sources exist (D-123) but TR 0702 gives no level for it, so the file has none. 15 s for one ping in the run behind the committed matrix (4 shared cores, CPU) | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
 | `sst_asiaex` | one `flank_32` hydrophone as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is a radiating source (`sources:`, D-123; until then a −20 dB relay 0.1 m from the projector) and the receiver does not transmit. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`); the surface slope is the long-wave slope of Dahl 1996 eq. (A7), 0.0135 at 3 m/s (the Cox-Munk total 0.0184 before `docs/references/CONFORMANCE.md` A4: the rule-of-thumb surface tail 2.91 -> 2.14 ms). Dahl (2004) prints a 2001 ASIAEX layout (source 25 m, arrays at 26 and 52 m, 467-500 m, 105 m of water, sets 6-8 at 7 m/s); whether TR 0702's Run/Set 22 used it is not stated, and with it the five arrivals do not fit TR 0702's description (at 26 m the surface arrival overlaps the direct one and the two two-bounce arrivals overlap each other; at 52 m the bottom-surface arrival is at 37 ms, past the 35 ms of the figures), so the file keeps its own depths | the same; figure below |
+| `asiaex_dahl_2004` | one `flank_32` hydrophone at 52 m as the receiver; a one-way source at 25 m, 467 m away; 3 ms CW at 8 kHz (20 kHz by overriding the waveform), 20 pings 5 s apart | the forward-scatter geometry and sea Dahl (2004, Sec. IV.A) prints for the 2001 ASIAEX sets 6-8 (CONFORMANCE.md A7): 105 m of water, the lower array, the range of his Fig. 4 (it gives his printed 9.4-degree iso-speed grazing angle: 9.36 computed), wind 7 m/s and the measured rms wave height 0.3 m in place of the wind law's 0.262 | time spreading of the surface bounce with that height and the long-wave slope of Dahl 1996 eq. (A7) (0.0213); fully rough at 8 kHz (coherent share 3e-5). Arrivals 3.62 ms (surface) and 11.67 ms (bottom) after the direct one in constant 1525 m/s; Dahl's Fig. 3c shows the bottom arrival at about 13.7 ms in refracting water (read from figure): recorded, not fitted. **Ours** (`unconfirmed`): the constant sound speed (his profile is about 1521-1528 m/s), the sediment (medium sand; none printed), the ping interval, the source level and taper. Vertical coherence at 52 m, 20 kHz, 0.30 m: ours 0.12 against 0.69 measured (read from his Fig. 5), an expected failure | `test_asiaex_dahl_2004.py` |
 | `sst_echo_level` | `flank_32` hydrophones, omnidirectional, 1 ping, 2 kHz of band | one highlight of known target strength; a flat surface (coefficient −1) and a flat bottom (0.5), one bounce at most per leg, so six groups of eigenray pairs arrive as six separate pulses | a geometry for a calculation, not a sonar: the compressed echo against the sonar equation and TR 0702 eqs. 36–38, 66, 68. The tool also runs it free-field, and with a sampled m-sequence pulse and a moving target | `test_sst_validation.py`: 0.004 dB free field; 0.005 dB and 0.13 µs in the image medium |
 | `sst_sediment_reverb` | `popoto_8` hydrophones, omnidirectional, 20 m above a flat bed; a 2 ms tone at 20 kHz, 6 pings | a bed of `medium_sand` (`configs/sediments.yaml`) | scattering-function reverberation, direct path only, no absorption, against σ(grazing)·πcT/R³. The tool also runs the same sediment as point scatterers, and LFM pulses of three bandwidths with a point target | `test_sst_validation.py`: mean +0.27 dB, −0.17 to +0.59 dB |
 
@@ -984,10 +986,10 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 90 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 91 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Thirty-five files have no geometry diagram in `docs/scenarios/` yet: `flank_seamount_3d` and the nine 3-D
+set. Thirty-six files have no geometry diagram in `docs/scenarios/` yet: `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
 scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
 `popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
@@ -1088,6 +1090,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | --- | --- |
 | `sst_pursuit` | The report's "Pursuit" example as far as it is described: a vehicle at 20 m/s chasing a three-highlight target; our own parameters. |
 | `sst_asiaex` | The report's forward-scatter example: a 3 ms pulse at 8 kHz over about 500 m, now by a one-way source (`sources:`), no longer a relay point. |
+| `asiaex_dahl_2004` | Dahl (2004)'s 2001 ASIAEX layout as printed: source 25 m, a hydrophone at 52 m, 467 m, 105 m of water, 3 ms CW at 8 kHz (20 kHz by override), wind 7 m/s, rms wave height 0.3 m. Sound speed, sediment, ping interval are ours. Not a reproduction of the paper's coherence curves (vertical coherence an expected failure). |
 | `sst_echo_level` | One highlight of known strength with one bounce per leg: the compressed echo against the sonar equation. States `bottom_coefficient: 0.5`. |
 | `sst_sediment_reverb` | Bottom reverberation from `medium_sand` against the integral of its scattering strength. |
 
