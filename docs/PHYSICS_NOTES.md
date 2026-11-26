@@ -4012,3 +4012,63 @@ which see the apparent position along the launch direction. Now the wall's horiz
 an axis wall gives the same rays as the same wall as a plane, on both engines (`test_image_planes.py`,
 `test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane`: delays, directions and bounce counts to the bit,
 amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no shipped record moved.
+
+## 31. The `sediment` tier with fluid penetration (`penetration: fluid`, G-3) [CONFIRMED formulas; OURS assembly]
+
+**What is still wrong, first.**
+- **Points below the critical angle.** A buried point whose straight line from the sonar meets the interface below
+  the critical angle arccos(c_w / c_s) (31.9 deg for medium sand over 1500 m/s water) is reached by no real refracted
+  plane wave. The default tier (`penetration: constant`) gives it the least-time ray, which enters near the critical
+  angle and runs almost horizontally through the sediment with no attenuation: 20 to 30 dB too loud against the
+  measured and modelled sub-critical field (Jackson and Richardson 2007, Figs. 15.3, 15.8, 15.11, through
+  `docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md` Sec. 3.5). With `fluid` the
+  point gets the evanescent zeroth-order field (15.1) instead (`subcritical: evanescent`, the default), which is far
+  too QUIET (-109 dB at 0.3 m, 10 deg, 20 kHz in medium sand, the note's figure, against a measured field 15-30 dB
+  below the incident one, so about 80-95 dB too quiet): the real sub-critical field comes from roughness scattering into
+  the sediment ((15.11)-(15.16)), which is not modelled (G-13). The amplitude jumps where a point crosses the
+  criterion (the ray's leg on one side, the plane wave's decay on the other). A warning counts such points once per
+  provider.
+- **No roughness-scattered penetration** at any angle (G-13), no sediment volume scattering of the transmitted field
+  beyond the scene's own scatterers.
+- **No layering or gradient** (G-14): a 3 cm transition layer alone changes the normal-incidence loss by about 6 dB
+  at 20 kHz in the book's quoted case (Sec. 2.2.8 of the note).
+- **Frequency-independent sound speed and loss parameter**: attenuation linear in f, taken at ONE frequency (the
+  sonar's band centre): over the subbottom sonar's 10-30 kHz the true two-way attenuation of 0.3 m of medium sand
+  runs from 3 to 9 dB where the tier applies 6 dB to every frequency.
+- **Spreading**: spherical over the travel-time distance c t. On the vertical this is the paraxial refracted
+  spherical wave's distance h + d c_w / c_s (exact, `test_normal_incidence_is_exact`); off the vertical the two
+  principal curvatures of the refracted wavefront differ and neither is c t. The note gives no focusing factor for
+  a refracted spherical wave, so none is applied.
+- **One-way use**: the reciprocity factor 1 / a_rho is split as 1 / sqrt(a_rho) per leg, which makes every echo
+  exact and reciprocal; a one-way path from a radiating source under the interface (`sim/sources.py`) is therefore
+  sqrt(a_rho) too loud (1.3 dB for a_rho = 1.845).
+
+**Formulas** (book equation numbers; all read in the note, Secs. 2.2.1, 2.2.3, 2.2.4, 3.5):
+- a_p = nu / (1 + i delta) (8.25), nu = c_s / c_w, delta from the bottom's dB per wavelength by (8.27)
+  (40 pi delta / ln 10 dB per sediment wavelength); a_rho = rho / rho_w (8.54).
+- V = `rayleigh_reflection` (equal to (8.49)-(8.53) to 1.8e-15, the note's Sec. 3.1); V_wp = 1 + V (8.47)
+  = 2 z_wp / (z_wp + 1) (8.55) at the grazing angle of the ray's water leg. Lossless, it carries the energy flux
+  1 - |V|^2 = |V_wp|^2 Re{sin theta_p / (a_rho a_p)} / sin theta_w (tested to 1e-12).
+- k_p'' = k_w delta / nu ((8.18), (8.26)); the ray's leg of length L in the sediment loses exp(-k_p'' L). For a
+  lossy plane wave refracted at theta_p the decay along the ray is k_w delta / (nu sin theta_p') per unit depth to
+  first order in delta, i.e. k_p'' per unit length along the ray: the same.
+- Reciprocity (8.68): G_pw(r', r) = G_wp(r, r') / a_rho. The echo of a buried point is the leg from the transmitter
+  times the leg from the receiver read backwards, so it carries V_wp(theta_1) V_wp(theta_2) / a_rho
+  exp(-k_p''(L_1 + L_2)); each leg carries V_wp / sqrt(a_rho) exp(-k_p'' L).
+- Below the critical angle (`subcritical: evanescent`): the plane wave at the straight line's grazing angle theta_d,
+  (15.1): V_wp(theta_d) / sqrt(a_rho) exp(-k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} d), d the depth under the
+  interface; the delay and directions stay the least-time ray's. Medium sand at 10 deg: 145 / 364 / 728 / 2183 dB/m
+  at 8 / 20 / 40 / 120 kHz, the note's numbers (`test_evanescent_decay_is_the_notes`).
+
+**Worked case** (the note's Sec. 3.5; `test_worked_case_medium_sand_0_3_m`): 0.3 m of medium sand straight down
+(a_rho 1.845, nu 1.178, 10 dB/m at 20 kHz). Attenuation: 3.00 dB one way, 6.00 dB two-way at 20 kHz, 9.00 dB at
+30 kHz. Transmission: |V_wp(90 deg)|^2 / a_rho = 1.017, which multiplies PRESSURE: +0.146 dB two-way (the note
+writes "+0.07 dB", 10 log10 of the same factor). Together, against the default tier: -5.85 dB at 20 kHz, -8.85 dB at
+30 kHz. The interface factor grows toward the critical angle (|V_wp| = 2 at it, lossless).
+
+**Engines.** NumPy (`propagation.SedimentProvider`) and C++ (`libs/sim/src/paths.cpp` `sediment_eigenrays`) do the
+same operations in the same order: amplitudes agree to 2.9e-14 (refracted rays) and 4.3e-13 (evanescent points, an
+exp(-x) with x up to about 60) in `test_sim_cpp.py::test_sediment_fluid_penetration_matches`. There is no CUDA copy:
+eigenrays are computed on the host whatever `backend` the synthesis uses. The default (`penetration: constant`) is
+bit-identical to before on both engines (sha256 of eigenrays and of one ping of each buried scene and of two
+scenes of other tiers, before and after).

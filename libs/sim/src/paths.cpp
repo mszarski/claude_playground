@@ -577,6 +577,27 @@ EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source
   check_points(points, n_points);
   check_speed(config.sound_speed, "sediment: sound_speed");
   check_speed(config.sediment_speed, "sediment: sediment_speed");
+  double sqrt_rho = 1.0;
+  double k_loss = 0.0;
+  if (config.fluid) {
+    const FluidBottom& b = config.bottom;
+    if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
+        !std::isfinite(b.density) || !std::isfinite(b.water_density) || !std::isfinite(b.attenuation) ||
+        b.attenuation < 0.0) {
+      throw std::invalid_argument(
+          "sediment: fluid penetration needs the sediment's speed (m/s), density (ratio to water_density) and "
+          "attenuation >= 0 dB per wavelength; none is assumed");
+    }
+    if (std::abs(b.speed - config.sediment_speed) > 1e-9 * b.speed) {
+      throw std::invalid_argument("sediment: the bottom's speed differs from sediment_speed");
+    }
+    if (!(config.frequency > 0.0) || !std::isfinite(config.frequency)) {
+      throw std::invalid_argument("sediment: fluid penetration needs the frequency (Hz) of its attenuation");
+    }
+    sqrt_rho = std::sqrt(b.density / b.water_density);
+    const double delta = b.attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
+    k_loss = 2.0 * kPi * config.frequency / config.sound_speed * delta / (b.speed / config.sound_speed);
+  }
   EigenraySet out;
   out.sound_speed = config.sound_speed;
   out.resize(n_points, 1);
@@ -596,6 +617,32 @@ EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source
       out.arrival[3 * i + a] = arrival[a];
     }
     const bool below = point.z > config.interface_z;
+    if (config.fluid) {
+      cd factor{1.0, 0.0};
+      const Vec3d direct = point - source;
+      const double sin_d = direct.z / norm(direct);
+      const double c_ratio = config.sound_speed / config.bottom.speed;
+      if (below && config.evanescent && config.bottom.speed > config.sound_speed && source.z < config.interface_z &&
+          sin_d < std::sqrt(1.0 - c_ratio * c_ratio)) {
+        // Below the critical angle: the plane wave's zeroth-order field (15.1), as the NumPy provider.
+        const double g_d = std::asin(std::min(std::max(sin_d, 0.0), 1.0));
+        const double delta = config.bottom.attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
+        const cd kappa = cd{1.0, delta} / (config.bottom.speed / config.sound_speed);
+        const double cg = std::cos(g_d);
+        cd root = std::sqrt(kappa * kappa - cg * cg + cd{0.0, 0.0});
+        if (root.imag() < 0.0) root = -root;
+        const double k_w = 2.0 * kPi * config.frequency / config.sound_speed;
+        factor = (1.0 + rayleigh_reflection(g_d, config.sound_speed, config.bottom)) / sqrt_rho *
+                 std::exp(-k_w * root.imag() * (point.z - config.interface_z));
+      } else if (below) {
+        const double grazing = std::asin(std::min(std::max(std::abs(launch.z), 0.0), 1.0));
+        // V_wp / sqrt(a_rho) exp(-k_p'' L), in the order of the NumPy provider.
+        factor = (1.0 + rayleigh_reflection(grazing, config.sound_speed, config.bottom)) / sqrt_rho *
+                 std::exp(-k_loss * length);
+      }
+      out.amplitude[i] = divide(factor, config.sound_speed * out.delay[i]);
+      return;
+    }
     out.amplitude[i] = divide(below ? config.transmission : cd{1.0, 0.0}, config.sound_speed * out.delay[i]);
   });
   return out;

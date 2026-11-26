@@ -264,19 +264,33 @@ void bind_simcpp(py::module_& m) {
   m.def(
       "sim_sediment_eigenrays",
       [](double sound_speed, double sediment_speed, double interface_z, cd transmission, const Vec3d& source,
-         const ArrD& points) {
+         const ArrD& points, const py::object& bottom, const py::object& frequency, bool evanescent) {
         require_points(points, "points");
+        sim::SedimentConfig cfg;
+        cfg.sound_speed = sound_speed;
+        cfg.sediment_speed = sediment_speed;
+        cfg.interface_z = interface_z;
+        cfg.transmission = transmission;
+        cfg.fluid = !bottom.is_none();
+        if (cfg.fluid) {
+          // (speed, density, attenuation, water_density), as for an image-source fluid bottom
+          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
+          cfg.bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
+          if (!frequency.is_none()) cfg.frequency = frequency.cast<double>();
+          cfg.evanescent = evanescent;
+        }
         sim::EigenraySet e;
         {
           py::gil_scoped_release release;
-          e = sim::sediment_eigenrays({sound_speed, sediment_speed, interface_z, transmission}, source, points.data(),
-                                      points.shape(0));
+          e = sim::sediment_eigenrays(cfg, source, points.data(), points.shape(0));
         }
         return set_dict(std::move(e));
       },
       py::arg("sound_speed"), py::arg("sediment_speed"), py::arg("interface_z"), py::arg("transmission"),
-      py::arg("source"), py::arg("points"),
-      "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields.");
+      py::arg("source"), py::arg("points"), py::arg("bottom") = py::none(), py::arg("frequency") = py::none(), py::arg("evanescent") = false,
+      "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields. With "
+      "`bottom` (speed, density, attenuation dB/wavelength, water_density) and `frequency` (Hz): the opt-in fluid "
+      "penetration (transmission coefficient, reciprocity factor, attenuation in the sediment; `evanescent`: the evanescent field below the critical angle).");
 
   m.def(
       "sim_two_way_paths",

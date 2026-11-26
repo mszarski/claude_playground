@@ -598,29 +598,162 @@ def snell_crossing(source, points, c_water: float, c_sediment: float, interface_
     return np.where(below, t_refr, t_direct), np.where(below[:, None], cross, points)
 
 
+_SEDIMENT_KEYS = ("sediment_speed", "interface_z", "transmission", "engine", "penetration", "bottom", "frequency",
+                  "subcritical")
+_FLUID_BOTTOM_KEYS = ("speed", "density", "attenuation", "water_density", "sediment", "sediment_file")
+PENETRATION_MODELS = ("constant", "fluid")
+SUBCRITICAL_POLICIES = ("evanescent", "ray", "refuse")
+
+
 class SedimentProvider(EigenrayProvider):
     """Water over a fluid sediment half-space with a flat interface: one refracted
     eigenray per point (Snell's law). Used for buried objects.
 
-    Amplitude is spherical spreading over the travel-time distance times a constant
-    `transmission` factor for points below the interface. Not modelled: transmission
-    that depends on the angle, and attenuation in the sediment.
+    `penetration` says what the amplitude of a point below the interface carries on top of
+    spherical spreading over the travel-time distance (c x delay):
+
+    - `constant` (the default; the tier as it has always been): the constant `transmission`
+      (default 1). No angle dependence, no density, no attenuation in the sediment.
+    - `fluid` (opt-in, G-3 of docs/tasks/SST_GAPS_JACKSON.md): the flat-interface fluid field
+      above the critical angle, Jackson and Richardson (2007) (15.1) along the ray: per leg
+      V_wp(theta_w) / sqrt(a_rho) x exp(-k_p'' L). V_wp = 1 + V is the pressure transmission
+      coefficient (8.47), (8.55) at the ray's grazing angle in the water, V the Rayleigh
+      coefficient of `bottom` (`fluid_transmission`); a_rho the density ratio; L the length of
+      the ray in the sediment; k_p'' = k_w delta / nu ((8.18), (8.26)) at `frequency` (the
+      sonar's band centre in a scenario), delta from the bottom's dB per wavelength ((8.27)),
+      nu = sediment speed / water speed. The echo of a buried point multiplies a leg from the
+      transmitter and a leg from the receiver (`two_way_paths`), so it carries
+      V_wp(theta_1) V_wp(theta_2) / a_rho exp(-k_p''(L_1 + L_2)): the reciprocity factor
+      1 / a_rho of the return leg (8.68), split evenly between the legs so that the echo is the
+      same with transmitter and receiver swapped. A ONE-WAY use of the tier (a radiating source
+      under the interface, sim/sources.py) is therefore off by sqrt(a_rho) (the one-way field
+      in the water from a source in the sediment carries 1 / a_rho; in the sediment from a
+      source in the water, 1): it is said in docs/PHYSICS_NOTES.md.
+      `bottom` is {speed, density, attenuation[, water_density]} or {sediment: name in
+      configs/sediments.yaml}, as for the image-source tier; `attenuation` (dB per wavelength)
+      must be stated: none is assumed. `sediment_speed`, when given, must equal the bottom's.
+      Points whose straight line from the source meets the interface below the critical angle
+      arccos(c_w / c_s) (lossless, (8.56); a slow sediment has none) are reached by no real
+      refracted plane wave: the flat-interface field there is evanescent ([N3] Sec. 3.5); the
+      least-time ray still found for them enters near the critical angle and runs almost
+      horizontally through the sediment, and its level is not the field's. `subcritical` says
+      what they get: `evanescent` (the default) the zeroth-order field (15.1) of the plane wave
+      at the straight line's grazing angle theta_d: per leg V_wp(theta_d) / sqrt(a_rho)
+      exp(-k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} d), d the point's depth under the interface
+      ([N3] Sec. 3.5 item 2; the delay and directions stay the least-time ray's); `ray` the
+      formula of the points above (for comparison only); `refuse` an error. With `evanescent` or
+      `ray` a warning counts them, once per provider. Penetration by roughness scattering,
+      which carries the measured sub-critical field (10-30 dB below the incident field, [N3]
+      Sec. 2.7), is NOT modelled (G-13): sub-critical buried points are far too quiet. The
+      amplitude jumps where a point crosses the criterion (the ray's leg above, the plane
+      wave's decay below). Still approximate everywhere: the spreading (exact on the vertical
+      only), one frequency for the attenuation, no layering, a frequency-independent speed.
     """
 
     tier = "sediment"
 
-    def __init__(self, sound_speed: float, sediment_speed: float, interface_z: float,
-                 transmission: complex = 1.0, engine: str | None = None):
+    def __init__(self, sound_speed: float, sediment_speed: float | None = None, interface_z: float | None = None,
+                 transmission: complex | None = None, engine: str | None = None, penetration: str = "constant",
+                 bottom: dict | None = None, frequency: float | None = None, subcritical: str | None = None):
         self.sound_speed = float(sound_speed)
         self.engine = engine
-        self.sediment_speed = float(sediment_speed)
+        if penetration not in PENETRATION_MODELS:
+            near = __import__("difflib").get_close_matches(str(penetration), PENETRATION_MODELS, n=1)
+            raise ValueError(f"sediment: penetration {penetration!r} unknown: one of {', '.join(PENETRATION_MODELS)}"
+                             + (f"; did you mean {near[0]!r}?" if near else ""))
+        self.penetration = penetration
+        if interface_z is None:
+            raise ValueError("sediment: interface_z (the depth of the water-sediment interface) is needed; there is no default")
         self.interface_z = float(interface_z)
-        self.transmission = complex(transmission)
+        self.bottom = None
+        self.frequency = None
+        self.subcritical = None
+        if penetration == "constant":
+            for key, value in (("bottom", bottom), ("frequency", frequency), ("subcritical", subcritical)):
+                if value is not None:
+                    raise ValueError(f"sediment: {key} is used only with penetration: fluid (the constant "
+                                     "`transmission` of the default carries no sediment)")
+            if sediment_speed is None:
+                raise ValueError("sediment: sediment_speed (m/s) is needed; there is no default")
+            self.sediment_speed = float(sediment_speed)
+            self.transmission = complex(1.0 if transmission is None else transmission)
+            return
+        # penetration: fluid
+        if transmission is not None:
+            raise ValueError("sediment: transmission is the constant of penetration: constant; with penetration: fluid "
+                             "the interface's own coefficient is used")
+        if bottom is None:
+            raise ValueError("sediment: penetration: fluid needs the sediment as `bottom` ({speed, density, attenuation} "
+                             "or {sediment: name in configs/sediments.yaml}, or the environment's `bottom`); none is assumed")
+        _refuse_unknown(bottom, _FLUID_BOTTOM_KEYS, "sediment: bottom.")
+        if "sediment" in bottom:
+            from . import bottom as bottom_model
+            rest = {k: v for k, v in bottom.items() if k not in ("sediment", "sediment_file")}
+            bottom = dict(bottom_model.fluid_halfspace(bottom["sediment"], self.sound_speed, bottom.get("sediment_file")), **rest)
+        for key in ("speed", "density", "attenuation"):
+            if bottom.get(key) is None:
+                raise ValueError(f"sediment: bottom.{key} is needed for penetration: fluid"
+                                 + (" (dB per wavelength; no loss is assumed: give 0 for a lossless sediment)"
+                                    if key == "attenuation" else "") + "; there is no default")
+        self.bottom = {"speed": float(bottom["speed"]), "density": float(bottom["density"]),
+                       "attenuation": float(bottom["attenuation"]), "water_density": float(bottom.get("water_density", 1.0))}
+        b = self.bottom
+        if not (b["speed"] > 0 and b["density"] > 0 and b["water_density"] > 0 and b["attenuation"] >= 0
+                and all(np.isfinite(list(b.values())))):
+            raise ValueError(f"sediment: bottom {b}: speed, density and water_density > 0, attenuation >= 0 dB per wavelength")
+        if sediment_speed is not None and abs(float(sediment_speed) - b["speed"]) > 1e-9 * b["speed"]:
+            raise ValueError(f"sediment: sediment_speed {float(sediment_speed)!r} differs from the bottom's speed {b['speed']!r}; "
+                             "give one (or both equal)")
+        self.sediment_speed = b["speed"]
+        if frequency is None or not float(frequency) > 0:
+            raise ValueError("sediment: penetration: fluid needs `frequency` (Hz, the band centre; a scenario fills in "
+                             "the sonar's) for the attenuation in the sediment")
+        self.frequency = float(frequency)
+        policy = "evanescent" if subcritical is None else subcritical
+        if policy not in SUBCRITICAL_POLICIES:
+            raise ValueError(f"sediment: subcritical {subcritical!r}: one of {', '.join(SUBCRITICAL_POLICIES)}")
+        self.subcritical = policy
+        self.transmission = complex(1.0)
+        self._warned = False
+
+    def _check_subcritical(self, source, points) -> None:
+        """Count the points under the interface whose straight line from `source` meets it below the
+        critical angle (lossless, (8.56)); refuse, or warn once per provider, as `subcritical` says."""
+        if self.sediment_speed <= self.sound_speed or (self._warned and self.subcritical != "refuse"):
+            return                                   # a slow sediment has no critical angle
+        below = (points[:, 2] > self.interface_z) & (source[2] < self.interface_z)
+        if not below.any():
+            return
+        d = points[below] - source
+        sin_direct = d[:, 2] / np.linalg.norm(d, axis=1)
+        n = int(np.count_nonzero(sin_direct < np.sqrt(1.0 - (self.sound_speed / self.sediment_speed) ** 2)))
+        if n == 0:
+            return
+        text = (f"sediment: {n} of {len(points)} points below the critical angle "
+                f"({np.degrees(np.arccos(self.sound_speed / self.sediment_speed)):.1f} deg grazing on the straight line from "
+                "the source): no real refracted plane wave reaches them. "
+                + ("They get the evanescent flat-interface field (15.1); penetration by roughness scattering is not "
+                   "modelled (G-13), so they are far too quiet" if self.subcritical == "evanescent"
+                   else "They keep the least-time ray's level, which is not the field's (20-30 dB too loud)")
+                + ". Said once per provider")
+        if self.subcritical == "refuse":
+            raise ValueError(text)
+        self._warned = True
+        import warnings
+        warnings.warn(text, RuntimeWarning, stacklevel=3)
 
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        fluid = self.penetration == "fluid"
+        if fluid:
+            self._check_subcritical(source, points)
         if _cpp_points(self.engine, points):
+            if fluid:
+                return EigenraySet(**core.sim_sediment_eigenrays(
+                    self.sound_speed, self.sediment_speed, self.interface_z, self.transmission, _source3(source), points,
+                    bottom=_fluid_bottom(**self.bottom), frequency=self.frequency,
+                    evanescent=self.subcritical == "evanescent"))
             return EigenraySet(**core.sim_sediment_eigenrays(self.sound_speed, self.sediment_speed, self.interface_z,
                                                              self.transmission, _source3(source), points))
         t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,
@@ -632,7 +765,33 @@ class SedimentProvider(EigenrayProvider):
         norm = np.linalg.norm(arrival, axis=1)
         arrival = np.where(norm[:, None] > 0, arrival / np.maximum(norm, 1e-300)[:, None], launch)
         s = len(points)
-        amp = np.where(below, self.transmission, 1.0) / (self.sound_speed * t)
+        if fluid:
+            # Per leg: V_wp(theta_w) / sqrt(a_rho) exp(-k_p'' L) (class docstring). The C++ engine
+            # (libs/sim/src/paths.cpp sediment_eigenrays) does the same operations in the same order.
+            b = self.bottom
+            grazing = np.arcsin(np.clip(np.abs(launch[:, 2]), 0.0, 1.0))
+            coef = fluid_transmission(grazing, self.sound_speed, **b) / np.sqrt(b["density"] / b["water_density"])
+            delta = b["attenuation"] / (40.0 * np.pi * np.log10(np.e))
+            k_loss = 2.0 * np.pi * self.frequency / self.sound_speed * delta / (b["speed"] / self.sound_speed)
+            factor = coef * np.exp(-k_loss * norm)
+            if self.subcritical == "evanescent" and b["speed"] > self.sound_speed and source[2] < self.interface_z:
+                # Below the critical angle on the straight line from the source: the plane wave's zeroth-order
+                # field (15.1), decaying with depth at k_w Im{sqrt(1/a_p^2 - cos^2 theta_d)} ([N3] Sec. 3.5).
+                d = points - source
+                sin_d = d[:, 2] / np.linalg.norm(d, axis=1)
+                sub = below & (sin_d < np.sqrt(1.0 - (self.sound_speed / b["speed"]) ** 2))
+                if sub.any():
+                    g_d = np.arcsin(np.clip(sin_d, 0.0, 1.0))
+                    kappa = (1.0 + 1j * delta) / (b["speed"] / self.sound_speed)          # 1 / a_p
+                    root = np.sqrt(kappa**2 - np.cos(g_d) ** 2 + 0j)
+                    root = np.where(root.imag < 0, -root, root)
+                    k_w = 2.0 * np.pi * self.frequency / self.sound_speed
+                    evan = (fluid_transmission(g_d, self.sound_speed, **b) / np.sqrt(b["density"] / b["water_density"])
+                            * np.exp(-k_w * root.imag * (points[:, 2] - self.interface_z)))
+                    factor = np.where(sub, evan, factor)
+            amp = np.where(below, factor, 1.0) / (self.sound_speed * t)
+        else:
+            amp = np.where(below, self.transmission, 1.0) / (self.sound_speed * t)
         return EigenraySet(
             delay=t[:, None], amplitude=amp[:, None].astype(complex), launch=launch[:, None, :],
             arrival=arrival[:, None, :], n_surface=np.zeros((s, 1), dtype=int),
@@ -660,13 +819,26 @@ def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
     return (m * np.sin(g) - root) / (m * np.sin(g) + root)
 
 
+def fluid_transmission(grazing, c_water: float, speed: float, density: float,
+                       attenuation: float = 0.0, water_density: float = 1.0):
+    """Plane-wave pressure transmission coefficient from the water into a fluid half-space:
+    V_wp = 1 + V (Jackson and Richardson 2007, (8.47); = 2 z_wp / (z_wp + 1), (8.55)), with V
+    `rayleigh_reflection` (equal to (8.49)-(8.53)). The pressure just below the interface per
+    unit incident pressure, at a grazing angle in the water (radians). Above the critical angle
+    the field it starts is refracted; below it, evanescent. A pressure ratio: lossless, the
+    energy flux it carries is 1 - |V|^2 = |V_wp|^2 Re{sin theta_p / (a_rho a_p)} / sin theta_w
+    (tests/python/test_sediment_penetration.py)."""
+    return 1.0 + rayleigh_reflection(grazing, c_water, speed, density, attenuation, water_density)
+
+
 def make_provider(tier: str, sound_speed: float, options: dict | None = None) -> EigenrayProvider:
     """The eigenray provider of a fidelity tier, with `sound_speed` in m/s and the tier's
     `options` passed as keyword arguments:
 
     - `free_field`: FreeFieldProvider (direct path; options are ignored);
     - `image_source`: ImageSourceProvider (surface, bottom and walls; flat, or any planes);
-    - `sediment`: SedimentProvider (one refracted ray into a fluid sediment);
+    - `sediment`: SedimentProvider (one refracted ray into a fluid sediment; an unknown key is
+      refused with the nearest known one);
     - `eigenray`: sim.bellhop.BellhopProvider; `options["environment"]` is the
       OceanEnvironment's keyword arguments and the rest go to the provider (`sound_speed`
       is not used: the environment's profile gives it);
@@ -681,6 +853,7 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
     if tier == "image_source":
         return ImageSourceProvider(sound_speed, **options)
     if tier == "sediment":
+        _refuse_unknown(options, _SEDIMENT_KEYS, "sediment: ")
         return SedimentProvider(sound_speed, **options)
     if tier == "eigenray":
         from .bellhop import BellhopProvider, OceanEnvironment
