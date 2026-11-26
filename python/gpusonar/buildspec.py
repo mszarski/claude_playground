@@ -939,6 +939,8 @@ def deploy_config(spec: dict) -> dict:
         env = next(e for e in environments_of(spec) if e["name"] == site) if isinstance(site, str) else site
         if env.get("illustrative", True):
             flags += ["chain.coverage.water_depth_m", "chain.coverage.bottom", "chain.coverage.surface"]
+            if (cfg["chain"].get("coverage") or {}).get("reverberation") is not None:     # the site's scattering (environment.boundary_scattering)
+                flags.append("chain.coverage.reverberation")
         if any(c.get("status") != "confirmed" for c in target_classes_of(spec, resolve=False)):
             flags.append("chain.coverage.classes")
         if env.get("illustrative", True) or status(spec, "projector", "source_level_db_rms") != "confirmed":
@@ -1535,7 +1537,7 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
     bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.
     `classes` (resolved target classes): one entry each, worst over the class's depths, at the low end of its target
     strength. SNRs are one row's; `threshold_db` (default: the build's detector's, `detection`) is what the margin is over. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
-    from . import depthplan
+    from . import depthplan, reverb_budget
     own = float(depthplan.own_depth_grid(environment, max_depth=(d.get("platform") or {}).get("max_depth_m"))[0] if own_depth_m is None else own_depth_m)
     eq, gains = budget(d, depthplan.wind_of(environment))
     threshold_db = gains["threshold_db"] if threshold_db is None else float(threshold_db)       # of one row's SNR, the build's detector's (`detection`)
@@ -1544,6 +1546,12 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
     items = [dict(c) for c in (classes or [])] or [{"name": "ship", "ts_db": [25.0, 25.0], "depth_m": [4.0, 4.0]}]
     out = {"environment": environment.get("name"), "own_depth_m": own, "wind_speed_m_s": depthplan.wind_of(environment), "rms_wave_height_m": depthplan.surface_of(environment).height(),
            "threshold_db": threshold_db, "ranges_m": rr.tolist(), "classes": {}}
+    # The site's reverberation (depthplan.reverberation_of: the one rule's scattering, the coverage picture's term), with the
+    # rows gaining nothing against it (depthplan.plan says why): snr_db and margin_db are over noise and reverberation
+    # where it is included; the noise-only figures beside them.
+    rl, note = depthplan.reverberation_of(d, environment, [own], rr, eq.absorption_db_per_m())
+    out["reverberation"] = note
+    gain, two_tl = float(gains["rows_detection_gain_db"]), 2.0 * np.asarray(eq.transmission_loss(rr), dtype=float)
     for c in items:
         lo, hi = c["depth_m"]
         if environment.get("water_depth_m") is not None:
@@ -1557,9 +1565,17 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
         free = np.asarray(eq.snr(rr)) + c["ts_db"][0]
         def by_range(v):
             return {str(float(r)): float(x) for r, x in zip(rr, v)}
-        out["classes"][c["name"]] = {"ts_db": c["ts_db"][0], "depth_m": [float(lo), float(hi)], "factor_db": by_range(worst),
-                                     "factor_narrowband_db": by_range(fac["narrowband_db"][0].min(axis=0)), "factor_energy_db": by_range(fac["energy_db"][0].min(axis=0)),
-                                     "snr_free_field_db": by_range(free), "snr_db": by_range(free + worst), "margin_db": by_range(free + worst - threshold_db)}
+        snr = free + worst
+        entry = {"ts_db": c["ts_db"][0], "depth_m": [float(lo), float(hi)], "factor_db": by_range(worst),
+                 "factor_narrowband_db": by_range(fac["narrowband_db"][0].min(axis=0)), "factor_energy_db": by_range(fac["energy_db"][0].min(axis=0)),
+                 "snr_free_field_db": by_range(free), "snr_db": by_range(snr), "margin_db": by_range(snr - threshold_db)}
+        if rl is not None:
+            srr = c["ts_db"][0] + worst - two_tl - rl[0]
+            with_r = reverb_budget.with_reverberation(snr + gain, srr) - gain
+            entry.update(snr_noise_only_db=entry["snr_db"], margin_noise_only_db=entry["margin_db"], srr_db=by_range(srr), snr_db=by_range(with_r),
+                         margin_db=by_range(with_r - threshold_db), limited_by=by_range(np.where(snr + gain - srr > 3.0, 1.0, 0.0)))
+            entry["limited_by"] = {k: ("reverberation" if v else "noise") for k, v in entry["limited_by"].items()}
+        out["classes"][c["name"]] = entry
     return out
 
 

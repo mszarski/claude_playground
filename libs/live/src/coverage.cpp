@@ -495,6 +495,7 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
   else if (k == "reverb_beam_integral") o.reverb_beam_integral = option_nonnegative(key, value);
   else if (k == "reverb_rings") o.reverb_rings = i();
   else if (k == "reverb_max_bounces") o.reverb_max_bounces = i();
+  else if (k == "reverb_note") o.reverb_note = value;
   else return false;
   return true;
 }
@@ -790,12 +791,26 @@ const std::string& Coverage::update(const CoverageSonar& sonar, double range_fir
   if (opt_.recommend) {
     s << ", \"recommend\": {\"own_depth_m\": " << std::round(best_depth * 10.0) / 10.0 << ", \"gain_m\": " << metres(reach(best).first - reach(now).first) << "}";
   }
+  // A note is written as JSON text (quotes and backslashes escaped; the configuration's writer keeps them out anyway).
+  auto quoted = [](const std::string& t) {
+    std::string q;
+    for (char ch : t) {
+      if (ch == '"' || ch == '\\') q += '\\';
+      q += (static_cast<unsigned char>(ch) < 0x20) ? ' ' : ch;
+    }
+    return q;
+  };
   if (opt_.reverb == 1) {
     const double psi = opt_.reverb_beam_integral > 0.0 ? opt_.reverb_beam_integral : sonar.beam_integral;
     s << ", \"reverberation\": \"included\", \"beam_integral_deg\": " << std::round(psi * 180.0 / kPi * 100.0) / 100.0;
+    if (!opt_.reverb_note.empty()) s << ", \"reverberation_note\": \"" << quoted(opt_.reverb_note) << "\"";
   } else if (opt_.reverb == 2) {
-    s << ", \"reverberation\": \"not included: the configuration gives no boundary scattering (coverage.reverberation), so ranges are noise-limited "
-         "and optimistic where reverberation limits\"";
+    if (!opt_.reverb_note.empty()) {
+      s << ", \"reverberation\": \"" << quoted(opt_.reverb_note) << "\"";
+    } else {
+      s << ", \"reverberation\": \"not included: the configuration gives no boundary scattering (coverage.reverberation), so ranges are noise-limited "
+           "and optimistic where reverberation limits\"";
+    }
   }
   s << "}";
   json_ = s.str();

@@ -20,7 +20,7 @@ import warnings
 
 import numpy as np
 
-from . import acoustics, environment, lloyd
+from . import acoustics, environment, lloyd, reverb_budget
 
 # One environment schema for the build layer and the scenarios: gpusonar/environment.py (FIELDS, the loader and the
 # checks). The planner reads the fields below; an environment may carry the others (temperature, absorption, ...).
@@ -168,12 +168,37 @@ def _cover(held: np.ndarray, own: np.ndarray, most: int = 6) -> list:
     return steps
 
 
+def reverberation_of(d: dict, env: dict, own, rr, absorption_db_per_m: float, cache: dict | None = None):
+    """(levels [own, range] re the source level, dB, or None; note): the site's reverberation at the delay of a target at each
+    range, by the coverage picture's term (C++, libs/live coverage.hpp) with the boundaries' scattering from the ONE rule
+    (gpusonar.environment.boundary_scattering) and a beam of one row of the build (unweighted, broadside)."""
+    from . import reverb_budget
+    psi = reverb_budget.line_beam_integral(d["per_row"][0], d["pitch_m"], d["centre_hz"], d["sound_speed"])
+    key = ("reverb", env.get("name"), tuple(d["band_hz"]), float(psi), float(d["projector_m"][2]), np.asarray(own, float).tobytes(), np.asarray(rr, float).tobytes())
+    if cache is not None and key in cache:
+        return cache[key]
+    term = reverb_budget.site_term(env, d["band_hz"], d["sound_speed"], psi, absorption_db_per_m, f"environment {env.get('name')!r}")
+    got = (reverb_budget.site_levels_db(term, own, rr, float(d["projector_m"][2]), d["sound_speed"]), term["note"])
+    if cache is not None:
+        cache[key] = got
+    return got
+
+
 def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float | None = None,
-         statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True) -> dict:
+         statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True, reverberation: bool = True) -> dict:
     """The depth plan of a build (`d`: buildspec.derive / describe) in one environment for resolved target classes
     (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest.
     A margin is over `threshold_db` of ONE row's SNR: by default what the build's own detector needs for the build's design
-    detection probability with its rows added (buildspec.detection); the budget itself holds no row gain."""
+    detection probability with its rows added (buildspec.detection); the budget itself holds no row gain.
+
+    Reverberation (`reverberation`, default on): where the site's boundary scattering follows from what it states
+    (gpusonar.environment.boundary_scattering: stated `bottom_scattering` / `surface_scattering`, a named sediment, the
+    wind), each margin is over the power sum of noise and the boundaries' reverberation at the target's delay
+    (`reverberation_of`): margin = -10 log10(10^(-(SNR + G) / 10) + 10^(-SRR / 10)) - T1, with SNR one row's over noise, G
+    the rows' gain against noise (`rows_gain_db`), T1 the one-row threshold and SRR the echo over reverberation (the rows
+    are taken to gain nothing against reverberation: it comes in by the same multipath as the echo; ours). With nothing
+    included, or `reverberation=False`, it is the noise-only margin, computed as before. `reverberation` in the result
+    says which, and why."""
     from . import buildspec as bs
     env, ranged = _local_water(env)
     wind = wind_of(env)
@@ -204,6 +229,24 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
             cache[key] = fac
     free = np.asarray(eq.snr(rr)) - threshold_db                                  # margin of a 0 dB target in free field: one row's SNR over the detector's need
     f3 = fac[statistic]
+    rl, note = reverberation_of(d, env, own, rr, eq.absorption_db_per_m(), cache) if reverberation else (None, "not included: the plan was asked without it")
+    gain = float(det["rows_gain_db"])
+    two_tl = 2.0 * np.asarray(eq.transmission_loss(rr), dtype=float)
+
+    def M(fac, ts, i_own=slice(None), i_rng=slice(None)):
+        """Margin (dB) of a factor `fac` ([own, ..., range] or [own, range], or with scalars where an index is one) and a
+        target strength `ts` at own depths `i_own` and ranges `i_rng`: noise-only, summed in the order it always was
+        (fac + free + ts: bit for bit the plan without the term), or with the site's reverberation."""
+        noise = fac + free[i_rng] + ts
+        if rl is None:
+            return noise
+        r = rl[i_own, i_rng]
+        if np.ndim(fac) == 3:
+            r = r[:, None, :]
+        elif np.ndim(fac) == 2 and np.ndim(r) == 1:                           # [own, target depth] at one range
+            r = r[:, None]
+        srr = fac + ts - two_tl[i_rng] - r
+        return reverb_budget.with_reverberation(noise + threshold_db + gain, srr) - threshold_db - gain
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
            "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
            "profile_rests_on": (LOCAL_PROFILE_NOTE if ranged else "the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
@@ -212,7 +255,9 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
                          "threshold_is_the_detectors": bool(abs(threshold_db - det["threshold_db"]) < 1e-9)},
            "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
-           "free_field_margin_0db_target_db": free.tolist(), "classes": {}}
+           "free_field_margin_0db_target_db": free.tolist(), "classes": {},
+           "reverberation": {"included": rl is not None, "note": note, "rows_gain_against_reverberation_db": 0.0 if rl is not None else None,
+                             "level_at_range_re_source_db": None if rl is None else rl[:, i_r].tolist()}}       # [own depth], at the range of interest
     held_by = {}
     for c in classes:
         lo, hi = c["depth_m"]
@@ -221,33 +266,39 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
             out["classes"][c["name"]] = {"skipped": f"its depths ({lo:g}-{hi:g} m) are not in this water"}
             continue
         ts_lo, ts_hi = c["ts_db"]
-        worst = f3[:, sel, :].min(axis=1) + free[None, :] + ts_lo                 # [own, range]
-        mean = lloyd.depth_average(f3[:, sel, :], axis=1) + free[None, :] + ts_lo
+        worst_f = f3[:, sel, :].min(axis=1)                                       # [own, range]: the worst depth's factor
+        worst = M(worst_f, ts_lo)
+        mean = M(lloyd.depth_average(f3[:, sel, :], axis=1), ts_lo)
         at = worst[:, i_r]
         best = int(np.argmax(at))
         held = worst >= 0.0
         reach = np.array([rr[np.flatnonzero(h)[-1]] if h.any() else 0.0 for h in held])
         gaps = np.array([bool(h.any() and not h[:np.flatnonzero(h)[-1] + 1].all()) for h in held])
-        all_d = f3[best, :, i_r] + free[i_r] + ts_lo                                 # every target depth, at the recommended own depth
+        all_d = M(f3[best, :, i_r], ts_lo, best, i_r)                               # every target depth, at the recommended own depth
         entry = {"ts_db": [ts_lo, ts_hi], "ts_status": c.get("status"), "depth_m": [lo, hi], "target_depths_used_m": zt[sel].tolist(),
                  "free_field_margin_db": float(free[i_r] + ts_lo), "margin_high_ts_db": float(ts_hi - ts_lo),
                  "free_field_detection_probability": float(bs.detection_probability(d, float(free[i_r] + ts_lo + threshold_db))),
                  "margin_worst_db": worst.tolist(), "margin_at_range_worst_db": at.tolist(), "margin_at_range_depth_mean_db": mean[:, i_r].tolist(),
-                 "factor_at_range_worst_db": (at - free[i_r] - ts_lo).tolist(),
+                 "factor_at_range_worst_db": (worst_f[:, i_r] if rl is not None else at - free[i_r] - ts_lo).tolist(),
                  "recommended": {"own_depth_m": float(own[best]), "inside_platform_limit": (None if not max_depth else bool(own[best] <= max_depth)),
-                                 "at_the_deepest_searched": bool(best == len(own) - 1), "margin_db": float(at[best]), "factor_db": float(at[best] - free[i_r] - ts_lo),
+                                 "at_the_deepest_searched": bool(best == len(own) - 1), "margin_db": float(at[best]), "factor_db": float(worst_f[best, i_r] if rl is not None else at[best] - free[i_r] - ts_lo),
                                  "detection_probability": float(bs.detection_probability(d, float(at[best] + threshold_db))),
                                  "held_band_m": _intervals(own, at >= 0.0), "within_3db_band_m": _intervals(own, at >= at[best] - 3.0),
                                  "reach_m": float(reach[best]), "nearer_gaps": bool(gaps[best]),
                                  "target_depths_not_held_m": _intervals(zt, all_d < 0.0)},
                  "shallowest_own_depth_held_m": float(own[np.flatnonzero(at >= 0.0)[0]]) if (at >= 0.0).any() else None,
                  "reach_by_own_depth_m": reach.tolist(), "at_own_depth": {}}
+        if rl is not None:                                                        # what noise alone would give there, and which limits
+            noise_at = worst_f[best, i_r] + free[i_r] + ts_lo
+            held_n = (worst_f + free[None, :] + ts_lo)[best] >= 0.0
+            entry["recommended"].update(margin_noise_only_db=float(noise_at), reach_noise_only_m=float(rr[np.flatnonzero(held_n)[-1]]) if held_n.any() else 0.0,
+                                        limited_by="reverberation" if noise_at - at[best] > 3.0 else "noise")
         for z in (own[0], 10.0, 30.0, 100.0):
             if own[0] <= z <= own[-1]:
                 k = int(np.argmin(np.abs(own - z)))
                 entry["at_own_depth"][f"{own[k]:g}"] = {"margin_db": float(at[k]), "reach_m": float(reach[k])}
         # depth diversity: every target depth of the water, this class's target strength, at the range of interest
-        m_all = f3[:, :, i_r] + free[i_r] + ts_lo
+        m_all = M(f3[:, :, i_r], ts_lo, slice(None), i_r)
         entry["depth_diversity"] = {"what": "own depths chosen in turn so that every target depth from 1 m to the deepest considered is held at the range of interest, "
                                             "at this class's low target strength", "deepest_target_m": float(zt[-1]), "steps": _cover(m_all >= 0.0, own),
                                     "one_depth_best_share": float((m_all >= 0.0).mean(axis=1).max())}

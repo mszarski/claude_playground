@@ -119,6 +119,10 @@ struct CoverageOptions {
   /// kilometres comes by many bounces (flank_patrol, 100 m deep: 3 give 8 to 14 dB too little at 2.2 to 3.6 km against
   /// the simulated data; tests/python/test_reverb_budget.py).
   std::int64_t reverb_max_bounces = 0;
+  /// What the site's scattering is and how it was had, or why it is not included (gpusonar.coverage.site_reverberation:
+  /// environment.boundary_scattering, the one rule). With reverb 1 the member carries it as "reverberation_note"; with
+  /// reverb 2 it is the "reverberation" text itself (in place of the generic one). Empty: nothing said beyond the default.
+  std::string reverb_note;
 };
 
 /// What a chain's coverage picture must be told about its site and was not: "" when the water depth and the bottom are

@@ -75,7 +75,7 @@ DEFAULTS = {
     "surface_z": 0.0,
     "reverberation": None,
 }
-REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces")
+REVERBERATION_KEYS = ("items", "frequency_hz", "beam_integral_deg", "max_bounces", "note")
 PD_SNR_DB = np.arange(-20.0, 60.01, 0.5)          # the table's grid: one row's link-budget SNR, dB
 
 
@@ -168,13 +168,17 @@ def reverberation_options(block, sound_speed: float = 1500.0) -> dict:
         return {"reverb": 2}
     if block is False:
         return {"reverb": 0}
+    if isinstance(block, dict) and set(block) == {"note"}:            # a site whose scattering is not known: said, with the reason
+        return {"reverb": 2, "reverb_note": _note_text(block["note"])}
     if not isinstance(block, dict) or set(block) - set(REVERBERATION_KEYS) or not {"items", "frequency_hz"} <= set(block):
-        raise ValueError(f"coverage.reverberation: give {{items: [...], frequency_hz: F[, beam_integral_deg: B]}} (or false); got {block!r}")
+        raise ValueError(f"coverage.reverberation: give {{items: [...], frequency_hz: F[, beam_integral_deg: B][, note: text]}}, {{note: text}} (or false); got {block!r}")
     if not block["items"]:
-        return {"reverb": 2}
+        return {"reverb": 2, **({"reverb_note": _note_text(block["note"])} if block.get("note") else {})}
     from . import reverb_budget
     tables = reverb_budget.strength_tables(block["items"], float(block["frequency_hz"]), float(sound_speed))
     o = {"reverb": 1, "reverb_grazing": [float(v) for v in reverb_budget.GRAZING]}
+    if block.get("note"):
+        o["reverb_note"] = _note_text(block["note"])
     for side in ("bottom", "surface"):
         if tables[side] is not None:
             o[f"reverb_{side}_strength"] = [float(v) for v in tables[side].ravel()]
@@ -183,6 +187,25 @@ def reverberation_options(block, sound_speed: float = 1500.0) -> dict:
     if block.get("max_bounces") is not None:
         o["reverb_max_bounces"] = int(block["max_bounces"])
     return o
+
+
+def _note_text(note) -> str:
+    """A note as the C++ options carry it (a key=value word: no quotes, backslashes, = or #)."""
+    text = " ".join(str(note).split())
+    for ch, to in (('"', "'"), ("\\", "/"), ("=", " is "), ("#", "no.")):
+        text = text.replace(ch, to)
+    return text
+
+
+def site_reverberation(env: dict, frequency_hz: float, where: str = "environment") -> dict:
+    """`coverage.reverberation` of a site (`gpusonar.environment.boundary_scattering`, the one rule): {items, frequency_hz,
+    note} with what is included and how, or {note: "not included: ..."} when neither boundary's scattering follows from
+    what the site states. The items are written out in full (a deployment file is read by people and by the chain)."""
+    from . import environment
+    found = environment.boundary_scattering(env, float(frequency_hz), where)
+    if not found["items"]:
+        return {"note": "not included: " + "; ".join(f"{side}: {found['notes'][side][len('not included: '):]}" for side in ("bottom", "surface"))}
+    return {"items": found["items"], "frequency_hz": float(frequency_hz), "note": environment.scattering_note(found)}
 
 
 def missing_site(cfg: dict | None) -> list:
@@ -228,7 +251,8 @@ def of_build(spec: dict, site: dict) -> dict:
         raise ValueError(f"{where}: the build has no target classes (`targets:`); the coverage picture is stated per class")
     surf = depthplan.surface_of(env)
     block = {"classes": classes, "budget": {k: round(v, 2) for k, v in budget_of(d, facts["wind_speed_m_s"]).items()},       # a file is read by people: 0.01 dB
-             "water_depth_m": facts["water_depth_m"], "bottom": facts["bottom"], "surface": {"rms_height_m": round(float(surf.height()), 3)}}
+             "water_depth_m": facts["water_depth_m"], "bottom": facts["bottom"], "surface": {"rms_height_m": round(float(surf.height()), 3)},
+             "reverberation": site_reverberation(env, float(d["centre_hz"]), f"{where}.environment")}
     if surf.bubble_model:
         block["surface"].update(bubble_model=surf.bubble_model, wind_speed_m_s=float(surf.wind_speed), frequency_hz=float(d["centre_hz"]))
     limit = (spec.get("platform") or {}).get("max_depth_m")

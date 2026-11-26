@@ -88,6 +88,8 @@ def chain_block(spec: dict, env: dict, pd: float) -> dict:
     lim = env.get("own_depth_limits_m") or [depthplan.DEFAULT_LIMITS[0], float(limit or depthplan.DEFAULT_LIMITS[1])]
     block["own_depth_limits_m"] = [float(lim[0]), float(min(lim[1], limit) if limit else lim[1])]
     block["bottom_clearance_m"] = float(env.get("bottom_clearance_m", depthplan.DEFAULT_CLEARANCE))
+    # the site's boundary scattering by the one rule (gpusonar.environment.boundary_scattering), as coverage.of_build writes it
+    block["reverberation"] = coverage.site_reverberation(env, float(d["centre_hz"]), f"environment {env.get('name')!r}")
     return block
 
 
@@ -100,8 +102,9 @@ def run(build: str, environment: str | None, own_depth: float, source: str = "en
     if env is None:
         raise SystemExit(f"--environment: {environment!r} is not one of {[e['name'] for e in envs]}")
     block = chain_block(spec, env, pd)
-    sonar = {"f_centre": float(d["centre_hz"]), "bandwidth": float(d["band_hz"][1] - d["band_hz"][0]), "pulse": float(d["pulse_s"])}
     record = SonarModel.from_config(bs.sonar_config(spec)).make_record(make_pose())
+    sonar = {"f_centre": float(d["centre_hz"]), "bandwidth": float(d["band_hz"][1] - d["band_hz"][0]), "pulse": float(d["pulse_s"]),
+             "beam_integral": float(gs.core.coverage_beam_integral_of(record))}       # the record's, as the chain has it
     chain_cfg = bs.chain_config(spec)
     table = coverage.pd_table(record, chain_cfg)
     water = water_of(env, own_depth, source, sensor_sigma, gradient_sigma, ensemble, extent)
