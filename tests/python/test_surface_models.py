@@ -111,8 +111,12 @@ def test_kraus_surface_formula_as_printed():
     assert surface.kraus_surface_db(np.radians(85.0), 8.0, 30e3) == surface.kraus_surface_db(np.radians(60.0), 8.0, 30e3)   # held
     with pytest.warns(UserWarning, match="below 10000 Hz"):
         surface.kraus_surface_db(g, 8.0, 3e3)
+    # A pair of angles: the geometric mean of the two strengths (A3; TR 0702 Sec. 6.4.2); the mean angle before.
     strength = surface.kraus_surface_strength(8.0, 30e3)
-    assert strength(g[0], g[2]) == pytest.approx(10 ** (float(surface.kraus_surface_db(0.5 * (g[0] + g[2]), 8.0, 30e3)) / 10))
+    assert strength(g[0], g[2]) == pytest.approx(10 ** ((float(surface.kraus_surface_db(g[0], 8.0, 30e3))
+                                                         + float(surface.kraus_surface_db(g[2], 8.0, 30e3))) / 20))
+    before = surface.kraus_surface_strength(8.0, 30e3, bistatic_rule="mean_angle")
+    assert before(g[0], g[2]) == pytest.approx(10 ** (float(surface.kraus_surface_db(0.5 * (g[0] + g[2]), 8.0, 30e3)) / 10))
 
 
 def test_searay_bottom_formula_as_printed():
@@ -184,6 +188,7 @@ def test_saturation_level_and_where_the_empirical_laws_cross_it():
 def test_empirical_surface_strength_is_the_law_unchanged_warns_once_and_caps_on_request():
     import warnings
     from gpusonar.sim import reverb
+    from gpusonar import acoustics
     g_in, g_out = np.radians([[3.0, 10.0, 25.0, 50.0]]), np.radians([[5.0], [20.0]])
     # Below the crossing: the law, bit for bit, and no warning.
     with warnings.catch_warnings():
@@ -205,16 +210,23 @@ def test_empirical_surface_strength_is_the_law_unchanged_warns_once_and_caps_on_
         surface.empirical_surface_strength("chapman_harris", 5.0, 330e3)                  # once
     with pytest.warns(UserWarning, match="bubble_layer_surface. is the model compared with data"):
         surface.empirical_surface_strength("kraus_surface", 10.0, 50e3)                   # the other law, inside 12-70 kHz
-    # The cap: the smaller of the law and the saturation level at the mean angle; no warning.
+    # The cap: the smaller of the law and the saturation level at each angle, the pair by the geometric
+    # mean (A3; at the mean angle before, `bistatic_rule="mean_angle"`); no warning.
     surface._warned_above_saturation.clear()
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         capped = surface.empirical_surface_strength("chapman_harris", 5.0, 330e3, cap="bubble_saturation")
     mean = 0.5 * (g_in + g_out)
     law = reverb.chapman_harris_strength(5.0, 330e3)(g_in, g_out)
-    level = 10 ** (surface.bubble_saturation_db(mean, 330e3) / 10)
-    assert np.allclose(capped(g_in, g_out), np.minimum(law, level), rtol=1e-12)
+    level = np.sqrt(10 ** (surface.bubble_saturation_db(g_in, 330e3) / 10) * 10 ** (surface.bubble_saturation_db(g_out, 330e3) / 10))
+    one = lambda g: np.minimum(10 ** (acoustics.chapman_harris_db(g, 5.0, 330e3) / 10), 10 ** (surface.bubble_saturation_db(g, 330e3) / 10))  # noqa: E731
+    assert np.allclose(capped(g_in, g_out), np.sqrt(one(g_in) * one(g_out)), rtol=1e-12)
     assert np.any(law > level) and np.all(capped(g_in, g_out) <= level * (1 + 1e-12))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        capped_before = surface.empirical_surface_strength("chapman_harris", 5.0, 330e3, cap="bubble_saturation", bistatic_rule="mean_angle")
+    law_before = reverb.chapman_harris_strength(5.0, 330e3, bistatic_rule="mean_angle")(g_in, g_out)
+    assert np.allclose(capped_before(g_in, g_out), np.minimum(law_before, 10 ** (surface.bubble_saturation_db(mean, 330e3) / 10)), rtol=1e-12)
     low = surface.empirical_surface_strength("chapman_harris", 5.0, 8e3, cap="bubble_saturation")
     assert np.array_equal(low(g_in, g_out), quiet(g_in, g_out))                           # nothing to cap at 8 kHz
     with pytest.raises(ValueError, match="unknown cap"):
@@ -293,3 +305,79 @@ def test_reverberation_item_with_a_named_rock_is_lamberts_law_at_the_tabulated_v
     assert 10 ** (change.min() / 10) <= ratio <= 10 ** (change.max() / 10) and change.max() < -10.0
     with pytest.raises(ValueError, match="fluid sediment and has no Lambert parameter"):
         ping({"sediment": "medium_sand"})
+
+
+# --- Bistatic pairs: the geometric mean of the two backscattering strengths (A3) -------------------
+
+def _strength_laws(rule=None):
+    kw = {} if rule is None else {"bistatic_rule": rule}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return {"chapman_harris": surface.empirical_surface_strength("chapman_harris", 8.0, 9.9e3, **kw),
+                "chapman_harris capped": surface.empirical_surface_strength("chapman_harris", 15.0, 68e3, cap="bubble_saturation", **kw),
+                "kraus_surface": surface.empirical_surface_strength("kraus_surface", 8.0, 50e3, **kw),
+                "kraus_surface_strength": surface.kraus_surface_strength(8.0, 50e3, **kw),
+                "bubble_layer_surface": surface.bubble_layer_surface_strength(10.0, 30e3, **kw),
+                "searay_bottom": surface.searay_bottom_strength(30e3, "sand", **kw)}
+
+
+def test_bistatic_rule_is_the_geometric_mean_of_the_backscattering_strengths():
+    """A3 (docs/references/CONFORMANCE.md Sec. 1.1): TR 0702 Sec. 6.4.2 (printed) makes a monostatic
+    model bistatic by the geometric mean of the two backscattering strengths, sigma(g_in, g_out) =
+    sqrt(sigma(g_in) sigma(g_out)), where ours took sigma((g_in + g_out) / 2). Every surface law here
+    (chapman_harris and kraus_surface, capped or not, bubble_layer_surface) and searay_bottom follow
+    it; `bistatic_rule="mean_angle"` (scenario key `bistatic_rule: mean_angle`) is the rule before A3.
+    Equal angles: the two rules agree bit for bit. Chapman-Harris at 9.9 kHz, 8 m/s (`sst_pursuit`'s
+    band and wind), pairs 5/5, 5/20, 5/40, 10/30, 5/80, 2/30 degrees: after minus before 0, -1.7, -3.6,
+    -1.1, -5.9, -5.7 dB (the CONFORMANCE item, computed there with `slope_fls.py`; reproduced)."""
+    from gpusonar.sim import reverb
+    g_in, g_out = np.radians([[2.0, 5.0, 10.0, 30.0, 60.0]]), np.radians([[5.0], [20.0], [40.0], [80.0]])
+    after, before = _strength_laws(), _strength_laws("mean_angle")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for name, fn in after.items():
+            np.testing.assert_allclose(fn(g_in, g_out), np.sqrt(fn(g_in, g_in) * fn(g_out, g_out)), rtol=1e-12, err_msg=name)
+            for g in (g_in, g_out):                                              # equal angles: bit for bit
+                assert np.array_equal(fn(g, g), before[name](g, g)), name
+            assert np.array_equal(_strength_laws("geometric_mean")[name](g_in, g_out), fn(g_in, g_out)), name
+        # The rule before, as it was written: the law at the mean angle.
+        from gpusonar import acoustics
+        mean = 0.5 * (g_in + g_out)
+        assert np.array_equal(before["chapman_harris"](g_in, g_out), 10.0 ** (acoustics.chapman_harris_db(mean, 8.0, 9.9e3) / 10.0))
+        assert np.array_equal(before["searay_bottom"](g_in, g_out), 10.0 ** (surface.searay_bottom_db(mean, 30e3, "sand") / 10.0))
+        assert np.array_equal(reverb.chapman_harris_strength(8.0, 9.9e3)(g_in, g_out), after["chapman_harris"](g_in, g_out))
+        assert np.array_equal(reverb.chapman_harris_strength(8.0, 9.9e3, bistatic_rule="mean_angle")(g_in, g_out),
+                              before["chapman_harris"](g_in, g_out))
+    pairs = np.radians([(5, 5), (5, 20), (5, 40), (10, 30), (5, 80), (2, 30)])
+    moved = 10 * np.log10(after["chapman_harris"](pairs[:, 0], pairs[:, 1]) / before["chapman_harris"](pairs[:, 0], pairs[:, 1]))
+    np.testing.assert_allclose(moved, [0.0, -1.7, -3.6, -1.1, -5.9, -5.7], atol=0.06)
+    # The facet term's bubble attenuation becomes Dahl (1999) eq. (12) for the pair:
+    # sqrt(exp(-2 b / sin t_i) exp(-2 b / sin t_s)) = exp(-(b / sin t_i + b / sin t_s)).
+    with pytest.raises(ValueError, match="unknown bistatic_rule 'mean'.*geometric_mean.*mean_angle"):
+        surface.empirical_surface_strength("chapman_harris", 8.0, 9.9e3, bistatic_rule="mean")
+
+
+def test_scenario_key_bistatic_rule():
+    """`bistatic_rule` reaches the strength through the simulator: absent is `geometric_mean` (A3);
+    `mean_angle` is the rule before. Image-source paths with a bottom bounce give pairs of unequal
+    angles at the surface even for one transmitter and receiver (direct out, bottom-bounced back):
+    those are the pairs that move, so a monostatic sonar's surface reverberation falls too."""
+    from test_reverberation import HEIGHT, empty_baseband_ping
+    from gpusonar.sim import Scene, make_pose, simulate_ping
+    from gpusonar.sim.propagation import ImageSourceProvider
+    sonar, _ = empty_baseband_ping()
+    provider = ImageSourceProvider(C, surface_z=0.0, bottom_z=60.0, bottom_coefficient=0.5, max_order=1)
+
+    def power(**key):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            provider=provider, rng=np.random.default_rng(2),
+                            reverberation=[dict({"model": "chapman_harris", "wind_speed": 8.0, "boundary_z": 0.0}, **key)])
+        return rec.samples.array.copy()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        default, geometric, mean = power(), power(bistatic_rule="geometric_mean"), power(bistatic_rule="mean_angle")
+        assert np.array_equal(default, geometric)
+        ratio = float((np.abs(default) ** 2).mean() / (np.abs(mean) ** 2).mean())
+        assert ratio < 1.0, ratio                                 # Chapman-Harris here: the cross pairs fall
+        with pytest.raises(ValueError, match="unknown bistatic_rule"):
+            power(bistatic_rule="arithmetic")

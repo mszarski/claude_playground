@@ -1,5 +1,6 @@
 """`extinction: dahl_1997` for the bubble-layer surface model (docs/tasks/SST_GAPS_JACKSON.md G-7;
-issues sonar-64sm, sonar-9le). Opt-in: `apl_1994` stays the default and its values are held
+issues sonar-64sm, sonar-9le). Added opt-in; the default since A1 (docs/references/CONFORMANCE.md
+Sec. 1.1). `apl_1994`, the default before, stays selectable by name and its values are held
 bit-identical below.
 
   [D97] P. H. Dahl, W. J. Plant, B. Nuetzel, A. Schmidt, H. Herwig and E. A. Terray, "Simultaneous
@@ -159,17 +160,19 @@ def test_urick_hoover_readings_at_60_khz():
     """Characterisation only (figure readings, +-1.5 dB; +-2 dB at the curve ends): Urick and Hoover (1956),
     60 kHz, open ocean, as McDaniel (1993) Fig. 18 shows them (the note Sec. 2.7). Ours (bubble + facet)
     minus the reading, dB, at the grazing angles listed:
-        wind 9.0 m/s, 15/30/45/60 deg:  apl_1994 +1.2 / +3.4 / +2.6 / +1.1    dahl_1997 +0.8 / +4.0 / +3.6 / +1.9
-             6.4                        +9.0 / +9.8 / +8.0 / +3.0              +6.5 / +6.5 / +4.4 / -0.3
+        wind 9.0 m/s, 15/30/45/60 deg:  apl_1994 +1.2 / +3.4 / +2.6 / +0.6    dahl_1997 +0.8 / +4.0 / +3.6 / +1.4
+             6.4                        +9.0 / +9.8 / +8.0 / +2.9              +6.5 / +6.5 / +4.4 / -0.4
              3.9                       +12.2 / +10.5 / +7.1 / +0.1             +7.0 / +5.2 / +1.7 / -5.2
              2.6, 32/45/60 deg          +9.3 / +5.8 / +2.3                     +0.5 / -3.0 / -6.5
     With dahl_1997 every point is within +8 dB (apl_1994 reaches +12.2). The note's own "with [D97]
     beta_I" column (+7.9 / +6.2 / +2.7 / -4.2 at 3.9 m/s; +2.3 / -1.2 / -4.7 at 2.6 m/s) scaled the 70 kHz
-    fit by f^0.8 instead of interpolating between 50 and 70 kHz: up to 1.8 dB apart at 2.6 m/s."""
+    fit by f^0.8 instead of interpolating between 50 and 70 kHz: up to 1.8 dB apart at 2.6 m/s.
+    The facet term attenuated by the layer (A2) moves only the 60 degree points: before A2
+    (`facet_attenuation=False`) 9.0 m/s +1.1 / +1.9 and 6.4 m/s +3.0 / -0.3 (apl_1994 / dahl_1997)."""
     readings = {9.0: {15: -26.0, 30: -26.0, 45: -24.5, 60: -21.0}, 6.4: {15: -34.3, 30: -33.8, 45: -31.5, 60: -26.0},
                 3.9: {15: -46.3, 30: -44.5, 45: -41.0, 60: -34.0}, 2.6: {32: -50.0, 45: -46.5, 60: -43.0}}
-    ours = {9.0: (0.8, 4.0, 3.6, 1.9), 6.4: (6.5, 6.5, 4.4, -0.3), 3.9: (7.0, 5.2, 1.7, -5.2), 2.6: (0.5, -3.0, -6.5)}
-    apl = {9.0: (1.2, 3.4, 2.6, 1.1), 6.4: (9.0, 9.8, 8.0, 3.0), 3.9: (12.2, 10.5, 7.1, 0.1), 2.6: (9.3, 5.8, 2.3)}
+    ours = {9.0: (0.8, 4.0, 3.6, 1.4), 6.4: (6.5, 6.5, 4.4, -0.37), 3.9: (7.0, 5.2, 1.7, -5.2), 2.6: (0.5, -3.0, -6.5)}
+    apl = {9.0: (1.2, 3.4, 2.6, 0.63), 6.4: (9.0, 9.8, 8.0, 2.92), 3.9: (12.2, 10.5, 7.1, 0.1), 2.6: (9.3, 5.8, 2.3)}
     for u, points in readings.items():
         g = np.radians(list(points))
         read = np.array(list(points.values()))
@@ -193,17 +196,27 @@ BEFORE = {
 }
 
 
-def test_default_path_is_bit_identical_to_before():
-    """The default (`apl_1994`) and `hall_novarini` give exactly the values they gave before the option
-    was added, bit for bit, through `bubble_layer_surface_db` and `bubble_layer_optical_depth`."""
+def test_apl_1994_path_is_unchanged_when_named():
+    """`apl_1994` (the default until A1) and `hall_novarini`, when named, give the values the default
+    and `hall_novarini` gave before `dahl_1997` was added, through `bubble_layer_surface_db` (with
+    `facet_attenuation=False`, the model before A2) and `bubble_layer_optical_depth`. (Until A1 this
+    test also held the unnamed default to these values; the default is now `dahl_1997`:
+    `test_dahl_1997_is_the_default_extinction`.)
+
+    WEAKENED from bit equality to a relative tolerance of 1e-14: the pinned hex values are this
+    machine's, and the GPU job's image (another Python, NumPy and libm) gave one value 1 ulp away
+    (85 degrees, 15 m/s, 120 kHz: -0x1.42a1777b0ee9ap-2 against -0x1.42a1777b0ee9cp-2). The pins are
+    kept; 1e-14 is about 45 ulp, far below any change of the model."""
     g = np.radians([5.0, 17.0, 30.0, 45.0, 60.0, 85.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for (u, f), (levels, apl, hn) in BEFORE.items():
-            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f)] == list(levels)
-            assert [float(x).hex() for x in surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994")] == list(levels)
-            assert float(surface.bubble_layer_optical_depth(u, f)).hex() == apl
-            assert float(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini")).hex() == hn
+            np.testing.assert_allclose(surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994", facet_attenuation=False),
+                                       [float.fromhex(x) for x in levels], rtol=1e-14, atol=0)
+            np.testing.assert_allclose(surface.bubble_layer_optical_depth(u, f, extinction="apl_1994"), float.fromhex(apl),
+                                       rtol=1e-14, atol=0)
+            np.testing.assert_allclose(surface.bubble_layer_optical_depth(u, f, extinction="hall_novarini"), float.fromhex(hn),
+                                       rtol=1e-14, atol=0)
 
 
 def test_unknown_extinction_is_refused_naming_the_three():
@@ -224,3 +237,44 @@ def test_scenario_item_takes_dahl_1997():
         records = run_scenario(cfg).records
     assert len(records) == 1 and np.all(np.isfinite(records[0].samples.array))
     assert any("dahl_1997" in str(w.message) and "26.5-70 kHz" in str(w.message) for w in caught)
+
+
+def test_dahl_1997_is_the_default_extinction():
+    """A1 (docs/references/CONFORMANCE.md Sec. 1.1): `dahl_1997` is the default extinction of the
+    bubble-layer surface model, in every function that takes the keyword and in the scenario item
+    (`{model: bubble_layer_surface}` without `extinction`). The printed [D97] Table II fit wins over
+    `apl_1994` (a secondary's loss law, 5.2 dB above [D99]'s beta_I <= 0.0012 at 30 kHz, 4 m/s, where
+    `dahl_1997` is 0.7 dB above: [NB] Sec. 3.2). `apl_1994` stays selectable by name."""
+    import inspect
+    for fn in (surface.bubble_layer_optical_depth, surface.bubble_backscatter, surface.bubble_layer_surface_db,
+               surface.bubble_layer_surface_strength):
+        assert inspect.signature(fn).parameters["extinction"].default == "dahl_1997", fn.__name__
+    g = np.radians([5.0, 17.0, 45.0, 80.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                       # inside both stated ranges: no warning
+        for u, f in ((3.0, 68e3), (5.0, 30e3), (10.0, 50e3)):
+            assert surface.bubble_layer_optical_depth(u, f) == surface.dahl_1997_optical_depth(u, f)
+            assert np.array_equal(surface.bubble_layer_surface_db(g, u, f), surface.bubble_layer_surface_db(g, u, f, extinction="dahl_1997"))
+            assert not np.array_equal(surface.bubble_layer_surface_db(g, u, f), surface.bubble_layer_surface_db(g, u, f, extinction="apl_1994"))
+    # [D99] p. 2161: beta_I <= 0.0012 at 30 kHz, about 4 m/s (an upper bound): the default is 0.7 dB above it,
+    # apl_1994 5.2 dB ([NB] Sec. 3.2).
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(4.0, 30e3) / 0.0012) == pytest.approx(0.7, abs=0.05)
+    assert 10 * math.log10(surface.bubble_layer_optical_depth(4.0, 30e3, extinction="apl_1994") / 0.0012) == pytest.approx(5.2, abs=0.05)
+
+
+def test_scenario_item_defaults_to_dahl_1997():
+    """The scenario item without `extinction` is the item with `extinction: dahl_1997`, bit for bit,
+    and not the one with `extinction: apl_1994` (A1)."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("point_grid_fls_300k")
+    cfg["n_pings"] = 1
+    item = {"model": "bubble_layer_surface", "boundary_z": 0.0, "wind_speed": 8.0}
+    out = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                      # 300 kHz is outside both stated ranges
+        for name in (None, "dahl_1997", "apl_1994"):
+            cfg["reverberation"] = [dict(item) if name is None else dict(item, extinction=name)]
+            out[name] = run_scenario(cfg).records[0].samples.array.copy()
+    assert np.array_equal(out[None], out["dahl_1997"])
+    assert not np.array_equal(out[None], out["apl_1994"])

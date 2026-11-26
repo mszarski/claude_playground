@@ -184,13 +184,14 @@ def volume_layer_strength(sv_db: float, thickness: float):
     return lambda g_in, g_out: np.full(np.broadcast(np.asarray(g_in), np.asarray(g_out)).shape, areal)
 
 
-def chapman_harris_strength(wind_speed: float, frequency: float):
+def chapman_harris_strength(wind_speed: float, frequency: float, bistatic_rule: str = "geometric_mean"):
     """Sea-surface scattering strength function for `reverberation_power`. Chapman-Harris is
-    a backscattering fit; for a path pair with different grazing angles it is evaluated at
-    their mean."""
+    a backscattering fit; for a path pair with different grazing angles it is the geometric mean
+    of the two strengths (TR 0702 Sec. 6.4.2; since A3), or with `bistatic_rule="mean_angle"` the
+    law at their mean angle (before A3): `surface.bistatic_strength`."""
     from .. import acoustics
-    return lambda g_in, g_out: 10.0 ** (acoustics.chapman_harris_db(0.5 * (g_in + g_out), wind_speed,
-                                                                    frequency) / 10.0)
+    from .surface import bistatic_strength
+    return bistatic_strength(lambda g: acoustics.chapman_harris_db(g, wind_speed, frequency), bistatic_rule)
 
 
 def element_power_pattern(element, rotation: np.ndarray, frequency_ratio: float = 1.0):
