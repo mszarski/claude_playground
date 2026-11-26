@@ -1167,6 +1167,10 @@ be asked before its packages D2, D6 and any default, and listed here briefly.
     most sites; the +5 dB class (`xl_auv`) is reached at 12 km by no variant in the grid where
     reverberation limits it. Is the +5 dB class at 12 km a requirement at all, and if a Doppler-resolving
     tone is the route, what is the slowest radial speed that must be seen? (Takes in question 46.)
+    **Answered in part by the owner, 2026-11-26 (D-235): the large submerged class mostly, and the
+    large ship.** The +5 dB class at 12 km is not what the requirement is for. Still open: the
+    detection probability, the false-alarm rate and the worst sea state in which 12 km must hold (both
+    classes fail at sea state 5 and in the summer mud shadow today, D-233), and the slowest radial speed.
 52. **The operating area's wind or noise climatology and its bottom backscatter at 4-6 kHz** (a
     measurement or a survey value): every site in the study is illustrative, and one sea state or 3 dB of
     bottom scattering changes the answer (with questions 12 and 40).
@@ -1179,6 +1183,9 @@ be asked before its packages D2, D6 and any default, and listed here briefly.
     that table, via secondary), and the depth planner's physics table computes at 9.8 m/s and calls it
     sea state 5 (`tools/popoto_depth_planner.py` `physics_tables`). The orchestrator recommends correcting
     the labels only.
+    **Answered by the owner, 2026-11-26 (D-235): correct the labels.** Done on branch `a-rows`
+    (`4db4a5f`, not yet merged): the site says 12.6 m/s, the planner's 9.8 m/s column says sea state 4;
+    no number moves.
 
 ## What is next
 
