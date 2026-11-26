@@ -259,21 +259,33 @@ def test_a_second_open_source_agrees_on_nine_rows():
 
 def test_the_soft_rows_keep_their_class_values_and_carry_the_measured_range():
     """A6 (docs/references/CONFORMANCE.md Sec. 1.1; docs/tasks/SEDIMENT_DEFAULTS_DECISION.md option E): the
-    seven rows of 5.5 phi and finer keep sigma2 0.001 (0.000986 for very_fine_silt) and the w2 rule, and gain
-    `sigma2_range: [0.0008, 0.0037]` (the five J&R Table 14.1 sites by (14.10), an agents' computation,
-    [N2] Sec. 3.3: 0.0031, 0.0037, 0.0008, 0.0017, 0.0016; and Gallaudet's fitted 0.003, printed, one site)
-    with a `basis:` and a `w2_note:` (Briggs' spectra, J&R Table 6.1, +7.1 dB at 10 kHz and +2.2 dB at
-    100 kHz above the rule, [N2] Sec. 3.2, ours). The loader carries the keys and does not use them."""
+    seven rows of 5.5 phi and finer keep sigma2 0.001 (0.000986 for very_fine_silt) and the w2 rule, and
+    carry a `sigma2_range` with a `basis:` and a `w2_note:` (Briggs' spectra, J&R Table 6.1, +7.1 dB at 10 kHz
+    and +2.2 dB at 100 kHz above the rule, [N2] Sec. 3.2, ours). The loader carries the keys and does not use
+    them.
+
+    Updated to new evidence, not weakened ([JB] 5.2, 2026-11-26): the range was [0.0008, 0.0037] (the five
+    J&R Table 14.1 sites by (14.10), an agents' computation, [N2] Sec. 3.3: 0.0031, 0.0037, 0.0008, 0.0017,
+    0.0016; and Gallaudet's fitted 0.003, printed, one site). Jackson and Briggs (1992) Table V print the
+    authors' own fits at two of those sites, Arafura Sea 0.005 and San Francisco 0.002 (confirmed, one site
+    each), so the upper end becomes the printed 0.005 and `basis` must name the printed fits and say that the
+    derived 0.0031 / 0.0037 for the same sites are ours and superseded as evidence. Every other assertion
+    (class values, the derived numbers still named, the loader ignoring the keys) is kept."""
     table = bottom.sediment_table()
     for name, sigma2 in SOFT_ROWS.items():
         entry = table[name]
-        assert entry["sigma2_range"] == [0.0008, 0.0037], name
+        assert entry["sigma2_range"] == [0.0008, 0.005], name
         low, high = entry["sigma2_range"]
-        assert low <= sigma2 <= high and low <= 0.003 <= high
+        assert low <= sigma2 <= high and low <= 0.003 <= high and low <= 0.002 <= high
         for site, value in (("Arafura", "0.0031"), ("San Francisco", "0.0037"), ("Orcas", "0.0008"),
                             ("Porto Venere", "0.0017"), ("Mariella", "0.0016"), ("Gallaudet", "0.003")):
             assert site in entry["basis"] and value in entry["basis"], (name, site)
         assert "Table 14.1" in entry["basis"] and "not independent" in entry["basis"] and "volume dominance" in entry["basis"]
+        # The printed fits ([JB] Table V, p. 973; text pp. 974-975), their caveats, and what they supersede.
+        basis = " ".join(entry["basis"].split())
+        assert "Jackson and Briggs (1992) Table V" in basis and "Arafura Sea 0.005" in basis and "San Francisco 0.002" in basis
+        assert "0.004-0.006" in basis and "bimodal" in basis and "single scattering" in basis
+        assert "superseded as evidence" in basis and "jackson_briggs_1992_arafura" in basis
         assert "Table 6.1" in entry["w2_note"] and "+7.1 dB" in entry["w2_note"] and "+2.2 dB" in entry["w2_note"]
         with warnings.catch_warnings():
             warnings.simplefilter("error")                              # confirmed rows still do not warn
@@ -281,7 +293,7 @@ def test_the_soft_rows_keep_their_class_values_and_carry_the_measured_range():
         assert par["sigma2"] == pytest.approx(sigma2, rel=1e-12) and par["gamma2"] == 3.25
         assert par["w2"] == pytest.approx(bottom.grain_size_scattering(entry["mean_grain_size_phi"])["w2"], rel=1e-3)
         assert set(par) == set(bottom.SEDIMENT_KEYS)                    # the six parameters only: the range is not used
-        assert bottom._entry(name)["sigma2_range"] == [0.0008, 0.0037]  # but it is carried
+        assert bottom._entry(name)["sigma2_range"] == [0.0008, 0.005]   # but it is carried
     # No other row claims the soft rows' range.
     assert {n for n, e in table.items() if "sigma2_range" in e} == set(SOFT_ROWS)
 

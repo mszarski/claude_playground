@@ -80,7 +80,7 @@
 # `sigma2_range: [low, high]`, `basis:` and `w2_note:` (the seven rows of 5.5 phi and finer; conformance item A6 of
 # docs/references/CONFORMANCE.md, option E of docs/tasks/SEDIMENT_DEFAULTS_DECISION.md) are information for the
 # user and are NOT used by the loader or any model: the class values stay as they are. `sigma2_range` is what
-# measured sites of that grain size imply for the volume parameter (agents' computations and one fitted site,
+# measured sites of that grain size imply for the volume parameter (agents' computations and three fitted sites,
 # `basis` says which); `w2_note` says how the roughness rule compares with measured spectra. A site with its own
 # numbers is a NAMED SITE ROW (`gallaudet_2001_site`), never a class row: use it, or give `sigma2` beside a class
 # name, or fit the site (tools/fit_sediment.py).
@@ -169,21 +169,27 @@ very_fine_silt:
     w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.6365e-5 at 7.5 phi)"
     gamma2: "tabulated (arXiv:1809.08459 Table 1)"
     sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength, 0.00099; the grain-size rule gives 0.001)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: &soft_basis >-
     The class value is the published model's (0.001 from 5.5 phi: Snellen et al. 2013, text after eq. (5);
     Snellen et al. 2011, Table II; arXiv:1809.08459 Table 1, very fine silt 0.00099; printed, all attributed
-    to APL-UW TR 9407). Measured sites of this grain size imply 0.0008 to 0.0037 (-1.0 to +5.7 dB on the
-    volume term). Five of those numbers are rows of ONE table, J&R (2007) Table 14.1, pushed through (14.10)
+    to APL-UW TR 9407). Measured sites of this grain size imply 0.0008 to 0.005 (-1.0 to +7.0 dB on the
+    volume term). Two are printed fits by the model's authors: Jackson and Briggs (1992) Table V print fitted
+    values at two of these sites, Arafura Sea 0.005 (0.004-0.006 "give reasonable fits"; 5.63 phi; the paper
+    says the sediment is bimodal, sand and gravel in a silty clay, so its mean grain size misleads, and 0.005 is at
+    the border of single scattering) and San Francisco 0.002 (6.39 phi); one site each (rows
+    jackson_briggs_1992_arafura, jackson_briggs_1992_san_francisco). The agents' (14.10) values for the same two
+    sites below, 0.0031 and 0.0037, are ours, disagree with the authors' fits, and are superseded as evidence by
+    them. Five of those numbers are rows of ONE table, J&R (2007) Table 14.1, pushed through (14.10)
     by agents (ours, not printed volume parameters, not five independent measurements;
     docs/references/jackson_richardson_2007/02_roughness_heterogeneity_statistics.md Sec. 3.3, recomputed in
     docs/tasks/SEDIMENT_DEFAULTS_DECISION.md Sec. 2.1): Arafura Sea 5.6 phi 20 kHz 0.0031; San Francisco
-    6.4 phi 40 kHz 0.0037; Orcas 8.1 phi 40 kHz 0.0008; Porto Venere 9.1 phi 140 kHz 0.0017; P. della
+    6.4 phi 40 kHz 0.0037 (both superseded, above); Orcas 8.1 phi 40 kHz 0.0008; Porto Venere 9.1 phi 140 kHz 0.0017; P. della
     Mariella 7.2 phi 140 kHz 0.0016. One fitted site: Gallaudet (2001) Ch. 3 Table VI, 0.003 (printed; NE
     Gulf of Mexico, 6.36 phi, 68 kHz; row gallaudet_2001_site). His two band means cannot separate volume from
     roughness scattering, so his 0.003 is not independent evidence for the volume parameter: it is evidence
     only under volume dominance, which is our model's assumption there (roughness 21 to 28 dB below volume
-    off specular, docs/DECISIONS.md D-193); the range counts it as one fitted site. For a measured mud give
+    off specular, docs/DECISIONS.md D-193); the range counts it as one fitted site. The class value is unchanged (a fit at one site is not a class value). For a measured mud give
     sigma2 beside the name or fit the site.
   w2_note: &soft_w2_note >-
     The roughness is the grain-size rule (Snellen et al. 2013 eq. (5): 0.0005175 cm^4 from 5 phi, exponent
@@ -650,7 +656,7 @@ medium_silt:
       1 cm reference length; converted by bottom.w2_from_cm4).
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
@@ -678,7 +684,7 @@ sandy_mud:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
@@ -707,7 +713,7 @@ fine_silt:
       1 cm reference length; converted by bottom.w2_from_cm4).
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
@@ -735,7 +741,7 @@ sandy_clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
@@ -763,7 +769,7 @@ silty_clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
@@ -792,7 +798,7 @@ clay:
       1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
     gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
     sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
-  sigma2_range: [0.0008, 0.0037]
+  sigma2_range: [0.0008, 0.005]
   basis: *soft_basis
   w2_note: *soft_w2_note
   status: confirmed
