@@ -24,8 +24,9 @@ python/gpusonar/sim/sediment_fit.py.
                             seconds (a Kirchhoff table per trial gamma2), a perturbation fit less
                             than one. The row records the model used.
 
-Error bars, priors and the extended report (opt-in; without these options, and with
---roughness-model perturbation, the output is what it was before them, bit for bit):
+Error bars, priors and the extended report (opt-in; without these options, with
+--roughness-model perturbation and --no-prior-bounds (or no row with a grain size), the output is
+what it was before them, bit for bit, but for the added "bounds used:" and "on a bound" lines):
 
   --independent-samples N   each value is the dB of an intensity average of N independent samples
                             (or `column`: an n_samples column per value); its error is then
@@ -39,13 +40,30 @@ Error bars, priors and the extended report (opt-in; without these options, and w
   --sample-error gamma      instead of the book's +1 sigma, the standard deviation of the dB of an
                             N-sample mean (1.10 dB at 16) and its bias (-0.14 dB at 16) removed (ours)
   --prior-bounds PHI        search limits from the reference notes for a site of mean grain size PHI
-                            (sim/sediment_fit.py PRIOR_BOUNDS, W2_SPREAD_DB); a parameter that ends on
-                            a bound is set by the prior and is listed as unconstrained
+                            (sim/sediment_fit.py PRIOR_BOUNDS, W2_SPREAD_DB) for w2, gamma2, sigma2,
+                            rho, nu, delta; it replaces the default prior below
+  --no-prior-bounds         no prior: the search limits only (sediment_fit.BOUNDS); the fit is then
+                            the unbounded one of before the default prior, bit for bit
   --site-spread K           with --fit-geoacoustic and --prior-bounds: rho, nu, delta held to within K
                             times their within-site coefficients of variation (App. C)
   --hold KEY=VALUE          hold a parameter instead of fitting it (repeatable)
   --report-covariance       the extended report alone: covariance of the fitted variables, the
                             error of the predicted strength, whether the roughness models differ
+
+Prior bounds by default (the owner, 2026-11-26): when the --sediment row carries a grain size
+(mean_grain_size_phi in configs/sediments.yaml), w2, gamma2 and sigma2 are searched within
+prior_bounds(that phi) unless --prior-bounds PHI or --no-prior-bounds is given; rho, nu, delta are
+not bounded by default (rows coarser than about 1 phi lie outside the rho and nu priors). Without a
+row, or with a row that has no grain size (placeholder_sand, rock, pebbles), no prior is applied and
+the output says so. Where the bounds come from: sigma2 1e-4 to 4e-3 (Jackson and Richardson 2007,
+p. 382) and gamma2 from 2.33 (their Table 6.1) are confirmed in the book through the reading notes
+in docs/references/; gamma2's upper end 3.95 is our search limit; w2 is the grain-size rule's value
+(Snellen et al. 2013 eq. (5), via secondary) times a spread of -15.3 to +9.9 dB (sands), -7.1 to
++14.5 dB (5.5 phi and finer), the union between: that spread is OURS (our comparison of Table 6.1's
+rows with our rule, docs/references/jackson_richardson_2007/02_*.md Sec. 3.2), not a number the
+book prints. The output states the bounds used and their source, and every parameter that ends on
+a bound or a search limit ("on a bound": set by the bound, not measured; listed as unconstrained;
+in a bounded fit's row as fit.on_bound).
 
 How many samples a stated error needs, and how a fit is judged: docs/tasks/REAL_DATA.md Sec. 5.
 """
@@ -139,7 +157,11 @@ def main(argv=None) -> int:
                     help="independent intensity samples behind each value: a number, or 'column' for an n_samples column")
     ap.add_argument("--sample-error", choices=("book", "gamma"), default="book",
                     help="with --independent-samples: the book's 10 log10(1 + 1/sqrt(N)) (default) or the gamma statistics")
-    ap.add_argument("--prior-bounds", type=float, metavar="PHI", help="search limits from the notes for mean grain size PHI")
+    ap.add_argument("--prior-bounds", type=float, metavar="PHI",
+                    help="search limits from the notes for mean grain size PHI (replaces the default prior of the row)")
+    ap.add_argument("--no-prior-bounds", action="store_true",
+                    help="no prior bounds: by default a --sediment row's grain size sets w2, gamma2, sigma2 bounds "
+                         "(sediment_fit.row_prior_bounds; the w2 widths are ours)")
     ap.add_argument("--site-spread", type=float, metavar="K",
                     help="with --fit-geoacoustic and --prior-bounds: rho, nu, delta within K within-site CVs")
     ap.add_argument("--hold", action="append", metavar="KEY=VALUE", help="hold a parameter (repeatable)")
@@ -164,9 +186,26 @@ def main(argv=None) -> int:
         n = read_column(args.data, "n_samples") if args.independent_samples == "column" else float(args.independent_samples)
         sigma = None
         opt.update(independent_samples=n, sample_error=args.sample_error)
+    if args.prior_bounds is not None and args.no_prior_bounds:
+        raise SystemExit("give --prior-bounds PHI or --no-prior-bounds, not both")
+    # Which bounds, and why (always stated): --prior-bounds PHI wins; then --no-prior-bounds; then the
+    # default prior of a --sediment row with a grain size (the owner, 2026-11-26); else none.
+    if args.prior_bounds is not None:
+        bounds_used = None                      # stated below, from the result
+    elif args.no_prior_bounds:
+        bounds_used = "the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: --no-prior-bounds"
+    elif not args.sediment:
+        bounds_used = "the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: no --sediment row named"
+    else:
+        default, why = sediment_fit.row_prior_bounds(args.sediment, args.sediment_file)
+        if default is None:
+            bounds_used = f"the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: {why}"
+        else:
+            bounds_used = None
+            opt.update(bounds=default, bounds_source=why)
     if args.prior_bounds is not None:
         bounds = sediment_fit.prior_bounds(args.prior_bounds)
-        source = f"prior, mean grain size {args.prior_bounds:g} phi (sediment_fit.prior_bounds)"
+        source = f"prior, mean grain size {args.prior_bounds:g} phi (sediment_fit.prior_bounds; given)"
         if args.site_spread is not None:
             if not args.fit_geoacoustic:
                 raise SystemExit("--site-spread needs --fit-geoacoustic")
@@ -186,6 +225,14 @@ def main(argv=None) -> int:
           f"{', '.join(f'{f / 1e3:g}' for f in result.frequencies)} kHz; rms residual {result.rms_residual_db:.2f} dB "
           f"(measurement error used: {result.sigma_db:.2f} dB)", file=sys.stderr)
     print(f"roughness share of the intensity over the data: {result.roughness_share[0]:.1%} to {result.roughness_share[1]:.1%}", file=sys.stderr)
+    if result.bounds is None:
+        print(f"bounds used: {bounds_used}", file=sys.stderr)
+    else:
+        print(f"bounds used: {result.bounds_source}: " + ", ".join(f"{k} {lo:.4g} to {hi:.4g}" for k, (lo, hi) in result.bounds.items())
+              + "; the rest the search limits", file=sys.stderr)
+    if result.on_bound:
+        print("on a bound (set by the bound, not measured): " + ", ".join(
+            f"{k} at the {b['kind']} {b['bound']:g} ({b['side']})" for k, b in result.on_bound.items()), file=sys.stderr)
     for k in result.fitted:
         err = f"x/ {result.factor(k):.3g}" if k in sediment_fit.LOG_KEYS else f"+- {result.std[k]:.3g}"
         mark = "   UNCONSTRAINED" if k in result.unconstrained else ""

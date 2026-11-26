@@ -279,11 +279,21 @@ G-9 of `docs/tasks/SST_GAPS_JACKSON.md`). How it is judged:
   reported errors as somewhat optimistic.
 - A fit passes when the rms residual is within about the stated error (the tool notes it when it is
   more than twice), every parameter used downstream is constrained (not in `unconfirmed_fields`), no
-  parameter ends on a `--prior-bounds` limit, and the result is recorded with the roughness model used
+  parameter ends on a prior bound or a search limit (the tool prints an "on a bound" line and a bounded
+  fit's row an `on_bound` list: such a value is set by the bound, not measured), and the result is
+  recorded with the roughness model used
   (`--roughness-model`; the tool's default is `small_slope` since A10 of `docs/references/CONFORMANCE.md`,
   `perturbation` before it; with one frequency and volume-dominated data a small-slope fit without
-  `--prior-bounds` can trade sigma2 for a much rougher relief, `test_sediment_fit.py`) and the extended
-  report (covariance, predicted-strength error). Where the roughness models differ by less than the
+  prior bounds can trade sigma2 for a much rougher relief, `test_sediment_fit.py`) and the extended
+  report (covariance, predicted-strength error). Prior bounds are the tool's default since 2026-11-26
+  (the owner): a `--sediment` row with a grain size (`mean_grain_size_phi`) bounds w2, gamma2 and sigma2
+  by `prior_bounds` of that grain size (the w2 widths are ours, the sigma2 and gamma2 ranges Jackson and
+  Richardson's: the tool's `--help`); `--prior-bounds PHI` replaces them, `--no-prior-bounds` turns them
+  off (the unbounded fit of before, bit for bit); without a row or a grain size there are none, and the
+  tool's "bounds used:" line always says which applied. On the volume-dominated silt case the default
+  prior turns six bad unbounded fits of ten (nothing or only w2 flagged, sigma2 0.65-0.78 of the truth)
+  into ten with w2 and gamma2 flagged and sigma2 0.85-1.05 of the truth; in eight of the ten w2 or gamma2
+  then sits on a prior bound. Where the roughness models differ by less than the
   error over the data (the report says so), the data cannot choose among them; at D-193's Gallaudet
   site they differ by under 0.05 dB and two band means fix neither w2 nor gamma2.
 - Calibration bias is not in these errors: an x dB error in the absolute level moves w2 and sigma2 by

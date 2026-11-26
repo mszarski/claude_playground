@@ -603,19 +603,23 @@ against grazing angle and frequency, holding rho, nu, delta from a named row (th
 reflection-only ones serve) or fitting them on request. It reports one-sigma uncertainties,
 lists the parameters the data cannot fix with the reason, and prints a row for
 `configs/sediments.yaml` with `status: fitted (<data source>)`; unconstrained parameters go
-into `unconfirmed_fields`, so using the row warns about them.
+into `unconfirmed_fields`, so using the row warns about them. By default (the owner, 2026-11-26)
+a `--sediment` row with a grain size bounds w2, gamma2 and sigma2 by the prior for that grain size
+(`sediment_fit.row_prior_bounds`; the w2 widths are ours); `--prior-bounds PHI` replaces it,
+`--no-prior-bounds` turns it off, and the output always says which bounds were used and flags a
+parameter that ends on one (set by the bound, not measured).
 
     PYTHONPATH=python python3 tools/fit_sediment.py --data site.csv --sediment fine_sand \
         --name my_site --source "survey 2026-11, FLS 300 kHz, calibrated" --out row.yaml --plot fit.png
 
 Measured on synthetic curves from our own model with 0.5 dB noise (the tests), each made and
-fitted with the same roughness model. The tool's default model is `small_slope` since A10
+fitted with the same roughness model, with the library's `fit` (no prior bounds unless said). The tool's default model is `small_slope` since A10
 (`docs/references/CONFORMANCE.md`); it was `perturbation` before, and the numbers first printed
 here were that model's (given as "before -> after"):
 
 | Data | Result |
 |---|---|
-| very fine silt, 8 to 44 degrees, 100 kHz | perturbation: sigma2 within 25 %, w2 and gamma2 flagged unconstrained (the data are volume scattering). **small_slope without bounds: worse.** In 5 of 10 noise realisations nothing is flagged and sigma2 comes out 0.65-0.78 of the truth, with a relief about 100 times rougher explaining part of the noise; with `--prior-bounds 7.5` the perturbation verdict comes back (seeds 0-8: sigma2 0.85-1.05 of the truth). `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds` |
+| very fine silt, 8 to 44 degrees, 100 kHz | perturbation: sigma2 within 25 %, w2 and gamma2 flagged unconstrained (the data are volume scattering). **small_slope without bounds: worse.** In 5 of 10 noise realisations nothing is flagged (seeds 4, 5, 7, 8, 9; seed 1 flags w2 alone) and sigma2 comes out 0.65-0.78 of the truth, with a relief about 100 times rougher explaining part of the noise. **The tool's default since 2026-11-26 (prior bounds of the row's grain size, here 7.5 phi)** gives the perturbation verdict back in all ten (seeds 0-9: sigma2 0.85-1.05 of the truth), with w2 or gamma2 on a prior bound in eight: set by the prior, not measured. `--no-prior-bounds` gives the unbounded fit. `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds` |
 | medium sand, 5 to 55 degrees, 20 and 200 kHz | all three recovered; one sigma: w2 a factor 1.18 -> 1.20, gamma2 0.024 -> 0.028, sigma2 a factor 1.10 -> 1.11 (ranges over four noise realisations: 1.181-1.185 -> 1.196-1.204, 0.0239-0.0243 -> 0.0271-0.0279, 1.097-1.103 -> 1.104-1.123); errors within 4 sigma in all four |
 | medium sand, 5 to 25 degrees, 300 kHz only | perturbation: all three flagged; one frequency at low angles fixes only w2 (2k)^(-gamma2) (recovered to 0.90 of the truth). small_slope: w2 and sigma2 flagged, gamma2 not (3.24 +- 0.49, the limit being 0.5); the combination recovered to 0.91 |
 

@@ -30,8 +30,9 @@ bit (tests/python/test_sediment_fit.py). Cost: every step with a new gamma2 buil
 of one (7.5 s against 0.2 s for 42 values, 12 starts, one core). What got worse: on volume-dominated
 data at one frequency (very fine silt, 100 kHz, 0.5 dB noise) an unbounded small-slope fit can explain
 part of the noise with a relief about 100 times rougher, flag nothing and put sigma2 at 0.65-0.78 of the
-truth (5 of 10 noise draws; perturbation: none); `bounds=prior_bounds(phi)` removes it in the draws
-tried (tests/python/test_sediment_fit.py `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
+truth (5 of 10 noise draws; perturbation: none); `bounds=row_prior_bounds(name)[0]` (the tool's default
+since 2026-11-26) removes it in all ten draws 0-9 (sigma2 0.85-1.05 of the truth), w2 or gamma2 then on a
+prior bound in eight (tests/python/test_sediment_fit.py `test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds`).
 
 Why the coverage matters (first-order perturbation theory, bottom.py; the same for small-slope away
 from the specular direction):
@@ -67,7 +68,11 @@ the fit is bit-identical to before them, held by tests/python/test_sediment_fit.
 - `bounds`: search limits replacing `BOUNDS` for the keys named, e.g. `prior_bounds(phi)` (the
   spreads the reference notes give per sediment class: `PRIOR_BOUNDS`) or `site_bounds(...)` (the
   within-site coefficients of variation of App. C about measured values). A fit that ends on a
-  prior bound is set by the prior, not by the data, and is listed as unconstrained.
+  prior bound is set by the prior, not by the data, and is listed as unconstrained; every parameter
+  that ends on a bound or a search limit is in `SedimentFit.on_bound`. `fit` itself applies no
+  prior unless given `bounds`: it takes neither a sediment row nor a grain size. The tool
+  (tools/fit_sediment.py) applies `row_prior_bounds(name)` by default when its `--sediment` row
+  carries a grain size (the owner, 2026-11-26), with `--no-prior-bounds` to turn it off.
 - `hold`: parameters held at given values instead of fitted (e.g. gamma2 when the data are at
   one frequency and too few for three parameters).
 With any of them the result also carries the extended report: the covariance of the fitted
@@ -152,6 +157,32 @@ def prior_bounds(phi: float) -> dict:
     return {k: (max(lo, BOUNDS[k][0]), min(hi, BOUNDS[k][1])) for k, (lo, hi) in out.items()}
 
 
+DEFAULT_PRIOR_KEYS = SCATTER_KEYS
+"""The keys of `prior_bounds` that `row_prior_bounds` (the tool's default) applies: the scattering parameters.
+Not rho, nu, delta: the TR 9407 rows coarser than about 1 phi lie outside the rho and nu priors (the note on
+`PRIOR_BOUNDS`), and without --fit-geoacoustic they are held anyway (ours)."""
+
+
+def row_prior_bounds(name: str, path=None) -> tuple:
+    """The default prior of tools/fit_sediment.py for the sediment row `name` (of configs/sediments.yaml or
+    `path`): `(bounds, source)` with `bounds` the `DEFAULT_PRIOR_KEYS` of `prior_bounds(phi)`, phi the row's
+    `mean_grain_size_phi`, and `source` saying so; `(None, reason)` when the row carries no grain size. The
+    owner's decision (2026-11-26): "yes apply prior bounds by default" when the row named has a grain size.
+    Where the bounds come from: `PRIOR_BOUNDS` (sigma2 and gamma2's lower end from J&R, confirmed in the
+    book via docs/references/; gamma2's upper end our search limit) and `W2_SPREAD_DB` (the spread of J&R
+    Table 6.1's rows about our grain-size rule, our comparison) about `bottom.grain_size_scattering(phi)`
+    (Snellen et al. 2013 eq. (5), via secondary): the widths are ours."""
+    entry = bottom._entry(name, path)
+    phi = entry.get("mean_grain_size_phi")
+    if phi is None:
+        return None, f"the row {name!r} carries no mean_grain_size_phi"
+    phi = float(phi)
+    full = prior_bounds(phi)
+    bounds = {k: full[k] for k in DEFAULT_PRIOR_KEYS}
+    return bounds, (f"default prior for the row {name!r}, mean grain size {phi:g} phi (sediment_fit.row_prior_bounds: "
+                    f"prior_bounds of {', '.join(DEFAULT_PRIOR_KEYS)}; --no-prior-bounds turns it off)")
+
+
 def site_bounds(rho: float, nu: float, delta: float, phi: float, n_sigma: float = 2.0) -> dict:
     """Opt-in search limits for rho, nu, delta measured at the site (cores) and fitted with
     `fit_geoacoustic`: each value -+ `n_sigma` times its within-site coefficient of variation
@@ -226,6 +257,9 @@ class SedimentFit:
     bounds: dict | None = None                   # the search limits used, when other than BOUNDS
     bounds_source: str | None = None             # what they are, for the row
     held: dict | None = None                     # parameters held by `hold`
+    # Fitted parameters that ended on a bound: {key: {"bound": value, "side": "low" | "high", "kind": "prior bound"
+    # | "search limit"}}. Such a value is set by the bound, not measured (also in `unconstrained` and `notes`).
+    on_bound: dict = field(default_factory=dict)
 
     def prediction_std_db(self, grazing_deg, frequency) -> np.ndarray:
         """1 sigma of the predicted backscattering strength (dB) at the given angles and frequencies,
@@ -282,6 +316,10 @@ class SedimentFit:
             lines.append(f"    held: [{', '.join(self.held)}]")
         if self.bounds is not None:
             lines.append(f"    bounds: \"{self.bounds_source or 'given'}\"")
+            # Only in a bounded fit's row, so that an unbounded fit's row stays what it was (a search-limit hit
+            # is in its notes and unconfirmed_fields as before).
+            if self.on_bound:
+                lines.append(f"    on_bound: [{', '.join(self.on_bound)}]   # set by the bound, not measured")
         lines.append("    one_sigma:")
         for k in self.fitted:
             lines.append(f"      {k}: " + (f"factor {self.factor(k):.3g}" if k in LOG_KEYS else yaml_number(self.std[k], '.3g')))
@@ -445,7 +483,7 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
 
     share = _shares(params, g, f, sound_speed, roughness_model)
     freqs = tuple(float(v) for v in np.unique(f))
-    unconstrained, notes = [], []
+    unconstrained, notes, on_bound = [], [], {}
 
     def flag(key, why):
         if key in keys and key not in unconstrained:
@@ -460,7 +498,12 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
                  + ", too wide to call the value known")
         if best.x[j] - lo[j] < 1e-6 * (hi[j] - lo[j]) or hi[j] - best.x[j] < 1e-6 * (hi[j] - lo[j]):
             where = "prior bound" if bounds is not None and k in bounds else "search limit"
-            flag(k, f"{k}: the fit ran to the {where} {active[k][0] if best.x[j] - lo[j] < hi[j] - best.x[j] else active[k][1]:g}")
+            side = "low" if best.x[j] - lo[j] < hi[j] - best.x[j] else "high"
+            value = active[k][0] if side == "low" else active[k][1]
+            on_bound[k] = {"bound": float(value), "side": side, "kind": where}
+            # (The search-limit note is as before; the prior-bound one says what it means.)
+            flag(k, f"{k}: the fit ran to the {where} {value:g}"
+                 + (": the value is set by the bound, not measured" if where == "prior bound" else ""))
     for i in range(len(keys)):
         for j in range(i + 1, len(keys)):
             if abs(corr[i, j]) > MAX_CORRELATION:
@@ -508,4 +551,4 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
                        independent_samples=None if n_used is None else (float(n_used.min()), float(n_used.max())),
                        sample_error=None if n_used is None else sample_error,
                        bounds=None if bounds is None else {k: active[k] for k in bounds}, bounds_source=bounds_source,
-                       held=hold or None)
+                       held=hold or None, on_bound=on_bound)
