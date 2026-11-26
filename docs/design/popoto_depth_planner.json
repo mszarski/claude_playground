@@ -1943,7 +1943,7 @@
      "rows": 1,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -11990,7 +11990,7 @@
      "rows": 2,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -22090,7 +22090,7 @@
      "rows": 3,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -32172,7 +32172,7 @@
      "rows": 1,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -36806,7 +36806,7 @@
      "rows": 2,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -41449,7 +41449,7 @@
      "rows": 3,
      "environment": {
       "name": "deep_no_bottom_return_sea_state_5",
-      "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+      "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
       "sea_state": 5,
       "bubble_model": "apl_1994"
      },
@@ -44570,7 +44570,7 @@
      "energy_db": -33.86016000573175,
      "peak_db": -34.10172451775685
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": -33.941054352951625,
      "energy_db": -33.60489733573682,
      "peak_db": -34.10446800814506
@@ -44593,7 +44593,7 @@
      "energy_db": -14.908906783214078,
      "peak_db": -15.147234533556915
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": -15.074766194391689,
      "energy_db": -14.752941343609518,
      "peak_db": -15.163481177617552
@@ -44616,7 +44616,7 @@
      "energy_db": 0.2524529469377829,
      "peak_db": 0.01066745861523452
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": 0.08603453705226333,
      "energy_db": 0.32599700142523025,
      "peak_db": -0.07345327232008483
@@ -44639,7 +44639,7 @@
      "energy_db": 9.531448970770294,
      "peak_db": 9.432030693572667
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": 9.432459470605957,
      "energy_db": 9.414346109160483,
      "peak_db": 9.113981822345183
@@ -44662,7 +44662,7 @@
      "energy_db": 11.733765413997117,
      "peak_db": 11.669379635263262
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": 11.682407220448363,
      "energy_db": 11.408127951884294,
      "peak_db": 10.9835762773486
@@ -44685,7 +44685,7 @@
      "energy_db": 9.500159502229907,
      "peak_db": 9.12701532366839
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": 9.13880424138885,
      "energy_db": 9.17046287807279,
      "peak_db": 8.053432745119402
@@ -44708,7 +44708,7 @@
      "energy_db": -3.520734963137823,
      "peak_db": -6.457128572931473
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": -4.975137305285453,
      "energy_db": -0.28328970253617375,
      "peak_db": -8.01528558475692
@@ -44731,7 +44731,7 @@
      "energy_db": 9.07470725006432,
      "peak_db": 7.849403544940366
     },
-    "9.8 m/s wind (sea state 5, wind-law height)": {
+    "9.8 m/s wind (sea state 4, wind-law height)": {
      "narrowband_db": 8.119025076920005,
      "energy_db": 7.409324343968461,
      "peak_db": 3.7615948986977794
@@ -44869,7 +44869,7 @@
   },
   {
    "name": "deep_no_bottom_return_sea_state_5",
-   "title": "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law",
+   "title": "Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law",
    "sea_state": 5,
    "bubble_model": "apl_1994"
   },

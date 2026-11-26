@@ -616,7 +616,7 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 
 **The surface image (Lloyd mirror).** A source and a target below the surface are joined by the direct path and by the path reflected at the surface, which arrives with the opposite sign. Their sum, each way, is |2 sin(2π z₁ z₂ / λR)| of the direct path: nothing at the surface, a first maximum of twice the pressure where own depth × target depth = λR / 4 (900 m² at 12 km and a 30 cm wavelength). The model (`gpusonar.lloyd`) has the surface's roughness (coherent reflection falling with rms wave height, an input of its own), bubble loss at each bounce by a named wind law, the whole transmitted band, the part a rough surface scatters (kept as power), and, where there is a bottom, the layer's image series. Two-way factor on the echo for a target at 4 m and 12 km, dB against the free-field budget (single frequency / all the echo's energy over the band / the peak of the compressed echo, which is what detection uses):
 
-| Own depth | flat | 5 m/s wind (wind-law height) | 9.8 m/s wind (sea state 5, wind-law height) | 9.8 m/s wind with apl_1994 bubble loss |
+| Own depth | flat | 5 m/s wind (wind-law height) | 9.8 m/s wind (sea state 4, wind-law height) | 9.8 m/s wind with apl_1994 bubble loss |
 | --- | --- | --- | --- | --- |
 | 10 m | -34.2 / -33.9 / -34.1 | -34.2 / -33.9 / -34.1 | -33.9 / -33.6 / -34.1 | -13.6 / -13.6 / -13.6 |
 | 30 m | -15.2 / -14.9 / -15.1 | -15.2 / -14.9 / -15.1 | -15.1 / -14.8 / -15.2 | -10.6 / -10.5 / -10.6 |
@@ -648,9 +648,9 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 | Non-ducting: no bottom return, isovelocity, 5 m/s wind | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | -43 dB | 225 m | +8.8 dB (1.00) | 130–265 m | 12.7 km |
 | Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -24 dB | 280 m | -11.6 dB (0.00) | none | 7.0 km |
 | Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | -3 dB | 245 m | +8.4 dB (1.00) | 65–500 m | 12.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -7.0 dB (0.00) | -16 dB | 225 m | -6.1 dB (0.00) | none | 7.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -27.0 dB (0.00) | -32 dB | 480 m | -27.1 dB (0.00) | none | 2.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -7.0 dB (0.00) | -12 dB | 395 m | -7.1 dB (0.00) | none | 8.7 km |
+| Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -7.0 dB (0.00) | -16 dB | 225 m | -6.1 dB (0.00) | none | 7.7 km |
+| Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -27.0 dB (0.00) | -32 dB | 480 m | -27.1 dB (0.00) | none | 2.7 km |
+| Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -7.0 dB (0.00) | -12 dB | 395 m | -7.1 dB (0.00) | none | 8.7 km |
 | Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +2.9 dB (0.99) | +15 dB | 5 m | +21.3 dB (1.00) | 5–89 m | 12.7 km |
 | Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.1 dB (0.00) | -6 dB | 65 m | -4.6 dB (0.00) | none | 2.6 km |
 | Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +2.9 dB (0.99) | +14 dB | 65 m | +15.4 dB (1.00) | 5–89 m | 12.7 km |

@@ -157,7 +157,7 @@ Each cell: A / B / noise-only margin at 12 km (dB), then the limiting term under
 
 Method: direct path and surface image (no bottom return), isovelocity; reverberation: bottom: not included: the environment states no bottom (no water_depth_m); surface: included, derived: Chapman-Harris at the wind of the site, 5 m/s; own depths 5-500 m; ranges 1.0-12.7 km in steps of about 334 m (the reach is read on that grid).
 
-### deep_no_bottom_return_sea_state_5: Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law
+### deep_no_bottom_return_sea_state_5: Non-ducting, sea state 5 (12.6 m/s wind), bubble loss by the apl_1994 law
 
 | Variant | ship | xl_auv | large_submerged |
 | --- | --- | --- | --- |
@@ -359,7 +359,7 @@ Where a case is noise-limited and no variant in the grid reaches it (the answer 
 
 ## 7. Found on the way (reported, not fixed here)
 
-- **Sea state 5 is 12.6 m/s in the code, 9.8 m/s in the words.** `deep_no_bottom_return_sea_state_5` states `sea_state: 5` and its title says "Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law"; `acoustics.sea_state_wind_speed(5)` gives 12.6 m/s (9.8 m/s is sea state 4 in that table, via secondary: UnderwaterAcoustics.jl), and the planner, `docs/design/popoto_depth_planner.json` (`wind_speed_m_s`) and this study computed with 12.6 m/s. `docs/DESIGN.md` prints the site as "sea state 5 (9.8 m/s wind)". Either the title or the state is wrong; at 9.8 m/s the +25 dB classes need less (the sensitivity table: sea state 4). Reproduce: `python3 -c "from gpusonar import acoustics; print(acoustics.sea_state_wind_speed(5))"`.
+- `deep_no_bottom_return_sea_state_5` is computed at 12.6 m/s, the table's wind for sea state 5 (via secondary: UnderwaterAcoustics.jl). Until 2026-11-26 its title said 9.8 m/s, which is sea state 4 in that table; the owner chose to correct the title, so no number moved. The sensitivity table's sea state 4 row shows what 9.8 m/s would give.
 - **A wider band does worse at 12 km in ducted water in this model** (shelf, xl_auv, 3 x 32: 1 kHz -3.5, 2 kHz -4.6, 4 kHz -6.1 dB, bound A): the margin uses the compressed echo's PEAK (`lloyd` `peak_db`), and a wider band splits the bottom-bounced arrivals into separate peaks, while the detector's threshold rises with the number of cells. A chain that integrates over the echo's extent (`cfar.integrate_cells`, D-97) would recover part of it; the reverberation term itself falls with the band (shorter compressed pulse). The band is not a lever for 12 km here.
 - **The planner's own depth serves 12 km only.** For 3 x 32 at 1 kHz over the shelf it recommends 5 m for the xl_auv, where the margin at 12 km is best (-3.5 dB) and no range at all is held (reach 0 km): the depth that maximises the 12 km figure can lose the near field. The reaches in this study are at that depth; a reach-maximising depth would read longer.
 - **The simulator's default reverberation is the same on every row** (correlation [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]): its monostatic generator ignores the arrival elevation when it steers to the hydrophones (sim/reverb.py header, a documented simplification). Every shipped multi-row scene therefore gives stacked rows no gain against reverberation by construction, which is bound A, not a measurement; `geometry: bistatic` with `n_elevation` is needed to test it.
