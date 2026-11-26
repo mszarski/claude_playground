@@ -599,9 +599,9 @@ def snell_crossing(source, points, c_water: float, c_sediment: float, interface_
 
 
 _SEDIMENT_KEYS = ("sediment_speed", "interface_z", "transmission", "engine", "penetration", "bottom", "frequency",
-                  "subcritical")
+                  "subcritical", "roughness")
 _FLUID_BOTTOM_KEYS = ("speed", "density", "attenuation", "water_density", "sediment", "sediment_file")
-PENETRATION_MODELS = ("constant", "fluid")
+PENETRATION_MODELS = ("constant", "fluid", "rough")
 SUBCRITICAL_POLICIES = ("evanescent", "ray", "refuse")
 
 
@@ -648,13 +648,25 @@ class SedimentProvider(EigenrayProvider):
       amplitude jumps where a point crosses the criterion (the ray's leg above, the plane
       wave's decay below). Still approximate everywhere: the spreading (exact on the vertical
       only), one frequency for the attenuation, no layering, a frequency-independent speed.
+    - `rough` (opt-in, G-13): `fluid`, and the sub-critical points get, on top of the evanescent
+      zeroth order, the first-order roughness-scattered field of Jackson and Richardson (2007)
+      Ch. 15 ((15.2)-(15.4), (15.11)-(15.16)) as ONE seeded realisation of a frozen rough
+      interface: extra eigenrays per point, one per delay bin of interface cells
+      (`sim/penetration.py` `RoughPatches`, which says what that means for imaging and what is
+      still wrong). `roughness` gives the relief spectrum: {w2, gamma2} or {sediment: name},
+      and K0 (1/m, von Karman (D.7); 0 the power law), stated; `seed` and the numerical keys
+      `patch`, `refine`, `floor_db`, `bin` have documented defaults. Points above the critical
+      angle get exactly the `fluid` ray (the scattered field there is at least 20 dB under the
+      zeroth order, tests/python/test_sediment_roughness.py). `subcritical` must be absent or
+      `evanescent`. NumPy only: the C++ engine refuses it (select `engine: numpy`).
     """
 
     tier = "sediment"
 
     def __init__(self, sound_speed: float, sediment_speed: float | None = None, interface_z: float | None = None,
                  transmission: complex | None = None, engine: str | None = None, penetration: str = "constant",
-                 bottom: dict | None = None, frequency: float | None = None, subcritical: str | None = None):
+                 bottom: dict | None = None, frequency: float | None = None, subcritical: str | None = None,
+                 roughness: dict | None = None):
         self.sound_speed = float(sound_speed)
         self.engine = engine
         if penetration not in PENETRATION_MODELS:
@@ -668,6 +680,10 @@ class SedimentProvider(EigenrayProvider):
         self.bottom = None
         self.frequency = None
         self.subcritical = None
+        self.rough = None
+        self.roughness = None
+        if roughness is not None and penetration != "rough":
+            raise ValueError("sediment: roughness is used only with penetration: rough")
         if penetration == "constant":
             for key, value in (("bottom", bottom), ("frequency", frequency), ("subcritical", subcritical)):
                 if value is not None:
@@ -715,6 +731,25 @@ class SedimentProvider(EigenrayProvider):
         self.subcritical = policy
         self.transmission = complex(1.0)
         self._warned = False
+        if penetration == "rough":
+            # G-13: the roughness-scattered field of the sub-critical points (sim/penetration.py). NumPy only.
+            from . import penetration as pen
+            if policy != "evanescent":
+                raise ValueError(f"sediment: penetration: rough adds the roughness-scattered field to the evanescent zeroth "
+                                 f"order; subcritical {policy!r} does not apply (leave it out)")
+            if _engine.resolve(engine) == "cpp":
+                raise ValueError("sediment: penetration: rough is not implemented in the C++ engine (G-13 follow-up); "
+                                 "select the NumPy engine for this tier (propagation.engine: numpy, or "
+                                 "GPUSONAR_SIM_ENGINE=numpy)")
+            if roughness is None:
+                raise ValueError("sediment: penetration: rough needs `roughness` ({w2, gamma2, K0} or {sediment: name, K0}); "
+                                 "none is assumed")
+            par = pen.roughness_from_config(dict(roughness))
+            self.roughness = par
+            delta = b["attenuation"] / (40.0 * np.pi * np.log10(np.e))
+            self.rough = pen.RoughPatches(c_w=self.sound_speed, c_s=b["speed"], interface_z=self.interface_z,
+                                          a_rho=b["density"] / b["water_density"], nu=b["speed"] / self.sound_speed,
+                                          delta=delta, frequency=self.frequency, **par)
 
     def _check_subcritical(self, source, points) -> None:
         """Count the points under the interface whose straight line from `source` meets it below the
@@ -732,7 +767,9 @@ class SedimentProvider(EigenrayProvider):
         text = (f"sediment: {n} of {len(points)} points below the critical angle "
                 f"({np.degrees(np.arccos(self.sound_speed / self.sediment_speed)):.1f} deg grazing on the straight line from "
                 "the source): no real refracted plane wave reaches them. "
-                + ("They get the evanescent flat-interface field (15.1); penetration by roughness scattering is not "
+                + ("They get the evanescent flat-interface field (15.1) and one realisation of the roughness-scattered "
+                   "field (penetration: rough, G-13)" if self.rough is not None
+                   else "They get the evanescent flat-interface field (15.1); penetration by roughness scattering is not "
                    "modelled (G-13), so they are far too quiet" if self.subcritical == "evanescent"
                    else "They keep the least-time ray's level, which is not the field's (20-30 dB too loud)")
                 + ". Said once per provider")
@@ -745,9 +782,12 @@ class SedimentProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
-        fluid = self.penetration == "fluid"
+        fluid = self.penetration in ("fluid", "rough")
         if fluid:
             self._check_subcritical(source, points)
+        if self.rough is not None and _engine.resolve(self.engine) == "cpp":
+            raise ValueError("sediment: penetration: rough is not implemented in the C++ engine (G-13 follow-up); "
+                             "select the NumPy engine for this tier (propagation.engine: numpy, or GPUSONAR_SIM_ENGINE=numpy)")
         if _cpp_points(self.engine, points):
             if fluid:
                 return EigenraySet(**core.sim_sediment_eigenrays(
@@ -792,11 +832,40 @@ class SedimentProvider(EigenrayProvider):
             amp = np.where(below, factor, 1.0) / (self.sound_speed * t)
         else:
             amp = np.where(below, self.transmission, 1.0) / (self.sound_speed * t)
+        if self.rough is not None:
+            return self._with_scattered(source, points, t, amp, launch, arrival, below)
         return EigenraySet(
             delay=t[:, None], amplitude=amp[:, None].astype(complex), launch=launch[:, None, :],
             arrival=arrival[:, None, :], n_surface=np.zeros((s, 1), dtype=int),
             n_bottom=np.zeros((s, 1), dtype=int), valid=np.ones((s, 1), dtype=bool),
             sound_speed=self.sound_speed)
+
+    def _with_scattered(self, source, points, t, amp, launch, arrival, below) -> EigenraySet:
+        """`rough` (G-13): column 0 is the `fluid` ray; the sub-critical points get further columns, one per delay bin
+        of the roughness-scattered realisation (`penetration.RoughPatches.point_rays`); the rest are invalid."""
+        s = len(points)
+        sub = np.zeros(s, dtype=bool)
+        if self.sediment_speed > self.sound_speed and source[2] < self.interface_z:
+            d = points - source
+            sin_d = d[:, 2] / np.linalg.norm(d, axis=1)
+            sub = below & (sin_d < np.sqrt(1.0 - (self.sound_speed / self.sediment_speed) ** 2))
+        rays = {int(k): self.rough.point_rays(source, points[k]) for k in np.flatnonzero(sub)}
+        extra = max((len(r[0]) for r in rays.values()), default=0)
+        k = 1 + extra
+        delay = np.zeros((s, k))
+        amplitude = np.zeros((s, k), dtype=complex)
+        lau = np.zeros((s, k, 3))
+        arr = np.zeros((s, k, 3))
+        valid = np.zeros((s, k), dtype=bool)
+        delay[:, 0], amplitude[:, 0], lau[:, 0], arr[:, 0], valid[:, 0] = t, amp, launch, arrival, True
+        lau[:, 1:], arr[:, 1:] = launch[:, None, :], arrival[:, None, :]
+        for i, (t_b, a_b, l_b, r_b) in rays.items():
+            n = len(t_b)
+            delay[i, 1:1 + n], amplitude[i, 1:1 + n], lau[i, 1:1 + n], arr[i, 1:1 + n] = t_b, a_b, l_b, r_b
+            valid[i, 1:1 + n] = True
+        return EigenraySet(delay=delay, amplitude=amplitude, launch=lau, arrival=arr,
+                           n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int), valid=valid,
+                           sound_speed=self.sound_speed)
 
 
 def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,

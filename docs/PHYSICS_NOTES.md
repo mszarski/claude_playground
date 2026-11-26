@@ -4013,9 +4013,39 @@ an axis wall gives the same rays as the same wall as a plane, on both engines (`
 `test_an_axis_wall_gives_the_rays_of_the_same_wall_as_a_plane`: delays, directions and bounce counts to the bit,
 amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no shipped record moved.
 
-## 31. The `sediment` tier with fluid penetration (`penetration: fluid`, G-3) [CONFIRMED formulas; OURS assembly]
+## 31. The `sediment` tier with fluid penetration (`penetration: fluid`, G-3; `penetration: rough`, G-13) [CONFIRMED formulas; OURS assembly]
 
-**What is still wrong, first.**
+**What is still wrong with `rough` (G-13), first.** `penetration: rough` adds, for buried points below the critical
+angle, the first-order roughness-scattered field of Jackson and Richardson (2007) Ch. 15 (`sim/penetration.py`). Still
+wrong or unverified:
+- **A realisation, not a mean.** The field is one seeded realisation of a frozen interface (quadtree cells with a
+  complex Gaussian deviate each, hashed from (seed, cell); `RoughPatches`). A single echo is one draw of an
+  exponential intensity about the mean (std / mean 1.01 over 160 seeds, ours). The realisation is coherent from ping
+  to ping, so a synthetic aperture or 3-D focuser sums it coherently; but a cell's deviate does not change with the
+  geometry, whereas the Bragg component of the relief that scatters (K_s - K_i) does when the incidence turns by
+  more than about one over the cell size: across a long aperture the scattered field is too coherent and the
+  buried point images too sharply. Neighbouring points share cells only where their quadtrees coincide. Expect a
+  sub-critical buried point to image as a speckled, displaced, smeared copy of itself at about the mean level.
+- **Single scattering, first order in the relief**; the zeroth-order (evanescent) field is not reduced by the energy
+  the relief scatters (second order). Flat mean interface, isotropic spectrum (power law or von Karman (D.7)), no
+  ripple-specific (anisotropic) Bragg treatment in the provider (`ripple_field` handles one sinusoid, a test only),
+  no volume scattering of the transmitted field, no layering.
+- **One frequency**: cross section, attenuation and the cells' phases at the band centre; cells are merged into one
+  eigenray per delay bin (`bin`, default a quarter period), exact at the band centre, phase error up to
+  pi |f - f0| bin elsewhere in the band.
+- **The cross section is ours, not the retyped (15.11).** From (15.2)-(15.3) by stationary phase:
+  sigma_wp = k_w^2 k_p'^2 |beta_p(K_s) / beta_w(K_s)|^2 |A_wp|^2 W(K_s - K_i); the note's (15.11) is
+  (k_w^4 / nu_p^2) |A_wp|^2 W, without the obliquity factor. Ours reproduces Fig. 15.8's reading (133-141 dB at
+  5-40 cm): 141.6, 140.0, 137.6, 133.5 dB at 5, 10, 20, 40 cm; the retyped form gives 146.7 dB at 5 cm. The page
+  was not reread. Likewise (15.13) is used with the sediment's k_p' = k_w / nu, not the retyped k_w.
+- **Points above the critical angle get no scattered term** (exactly `fluid`); there the mean scattered intensity is
+  21-24 dB under the zeroth order (SAX99, 20 kHz, 40-90 deg, 17 and 30 cm, ours), so leaving it out costs under
+  0.04 dB in mean intensity. The jump at the criterion of `fluid` remains on the zeroth order.
+- **Python only.** The C++ engine refuses `rough` (follow-up); the zeroth-order column is the NumPy `fluid` ray.
+- **Realisation average 0.6 dB above the quadrature** of (15.14) at 15 deg, 0.3 m, 20 kHz (160 seeds; sampling
+  1 sigma about 0.35 dB, the rest the cell-centre discretisation; ours, tested to 1 dB).
+
+**What is still wrong with `fluid` (and `rough`'s zeroth order).**
 - **Points below the critical angle.** A buried point whose straight line from the sonar meets the interface below
   the critical angle arccos(c_w / c_s) (31.9 deg for medium sand over 1500 m/s water) is reached by no real refracted
   plane wave. The default tier (`penetration: constant`) gives it the least-time ray, which enters near the critical
@@ -4025,10 +4055,11 @@ amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no sh
   point gets the evanescent zeroth-order field (15.1) instead (`subcritical: evanescent`, the default), which is far
   too QUIET (-109 dB at 0.3 m, 10 deg, 20 kHz in medium sand, the note's figure, against a measured field 15-30 dB
   below the incident one, so about 80-95 dB too quiet): the real sub-critical field comes from roughness scattering into
-  the sediment ((15.11)-(15.16)), which is not modelled (G-13). The amplitude jumps where a point crosses the
+  the sediment ((15.11)-(15.16)), which `fluid` does not model; `rough` (G-13, below) adds it. The amplitude jumps where a point crosses the
   criterion (the ray's leg on one side, the plane wave's decay on the other). A warning counts such points once per
   provider.
-- **No roughness-scattered penetration** at any angle (G-13), no sediment volume scattering of the transmitted field
+- **No roughness-scattered penetration** with `fluid` at any angle (`rough` adds it below the critical angle), no
+  sediment volume scattering of the transmitted field
   beyond the scene's own scatterers.
 - **No layering or gradient** (G-14): a 3 cm transition layer alone changes the normal-incidence loss by about 6 dB
   at 20 kHz in the book's quoted case (Sec. 2.2.8 of the note).
@@ -4065,6 +4096,24 @@ amplitudes to 1e-14). No shipped scenario has `{axis, position}` walls, so no sh
 30 kHz. Transmission: |V_wp(90 deg)|^2 / a_rho = 1.017, which multiplies PRESSURE: +0.146 dB two-way (the note
 writes "+0.07 dB", 10 log10 of the same factor). Together, against the default tier: -5.85 dB at 20 kHz, -8.85 dB at
 30 kHz. The interface factor grows toward the critical angle (|V_wp| = 2 at it, lossless).
+
+**`rough` formulas** (note [N3] = `docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md`
+Sec. 2.7; spectrum [N2] Sec. 2.1; SAX99 inputs Table 13.1, [N4] Sec. 2.3):
+- A_wp (15.4) = (1/2)[1 + V(K_i)][1 + V(K_s)]{(1 - 1/a_rho)[K_s.K_i / k_w^2 + beta_p(K_i) beta_w(K_s) / a_p] - 1
+  + 1/(a_p^2 a_rho)}. Our first-order solution (`sim/bottom.py` docstring) has the sediment amplitude
+  B = i k_w A_wp / beta_w(K_s) = T_wp^(1) / F of (15.3), to 1e-12 (`test_our_perturbation_sediment_amplitude_is_a_wp`):
+  the hint of the plan holds.
+- W(Q) = w2 / (Q^2 + K0^2)^(gamma2/2) (D.7), w2 in m^(4 - gamma2) (Table 13.1's units inferred, [N4] Sec. 6;
+  `configs/sediments.yaml` uses the same); K0 stated in config (0 = power law).
+- Per cell of area A at R, per leg: c sqrt(sigma_wp A) exp(-k_p'' |r - R|) / (|R - r_i| |r - R|) / sqrt(a_rho), delay
+  (15.16) |R - r_i| / c_w + |r - R| / c_s, K_i (15.12) from the source, K_s (15.13) to the point with k_p'. Averaged
+  over c this is the discrete (15.14). Cells: a global quadtree, finest `patch` (default lambda_w / 2), split within
+  `refine` = 3 sides of the point, out to where the sediment leg has lost `floor_db` = 30 dB (ours).
+- Checks against the note (figure readings, widened by their own width and the note's 1.5 dB reading error):
+  Fig. 15.6 (h0 0.01 m, lambda0 0.48 m, 17 cm; SAX99 and 15 / 20 deg ours): ripple-mean loss 10.8-19.9 dB at
+  10-40 kHz where the order propagates (reading 10-25 dB), 52.6 dB past the (15.6) cutoff (30.7 kHz at 15 deg);
+  Fig. 15.8 above; below the critical angle the scattered field is 21.7 / 23.5 dB under the incident plane wave at
+  17 / 30 cm (SAX99, 15 deg, 20 kHz; Figs. 15.3, 15.8, 15.11 read 5-31 dB).
 
 **Engines.** NumPy (`propagation.SedimentProvider`) and C++ (`libs/sim/src/paths.cpp` `sediment_eigenrays`) do the
 same operations in the same order: amplitudes agree to 2.9e-14 (refracted rays) and 4.3e-13 (evanescent points, an
