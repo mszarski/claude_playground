@@ -42,6 +42,7 @@ import gpusonar as gs  # noqa: E402
 from gpusonar import acoustics  # noqa: E402
 from gpusonar.config import load_scenario_config  # noqa: E402
 from gpusonar.sim import run_scenario  # noqa: E402
+from gpusonar.sim.timespread import boundary_parameters  # noqa: E402
 
 core = gs.core
 
@@ -594,7 +595,7 @@ def asiaex_geometry(cfg: dict | None = None) -> dict:
     return dict(c=float(cfg["environment"]["sound_speed"]), f0=float(wf["f_start"]), pulse=float(wf["duration"]),
                 alpha=float(wf.get("window_alpha", 0.0)), rx=rx, tx=tx, relay=relay,
                 depth=float(cfg["propagation"]["bottom_z"]), bottom=dict(cfg["propagation"]["bottom"]),
-                wind=float(cfg["time_spread"]["surface"]["wind_speed"]),
+                wind=float(cfg["time_spread"]["surface"]["wind_speed"]), surface=dict(cfg["time_spread"]["surface"]),
                 bottom_rms_height=float(cfg["time_spread"]["bottom"]["rms_height"]),
                 bottom_mss=float(cfg["time_spread"]["bottom"]["mean_square_slope"]),
                 taps=int(cfg["time_spread"].get("taps", 6)), interval=float(cfg["pings"]["interval"]),
@@ -754,11 +755,19 @@ def asiaex(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> dict:
         t1, t2 = ray["legs"][0]
         return 2.0 * mss * t1 * t2 / (t1 + t2)
 
-    mss_surface = acoustics.mean_square_slope(g["wind"])
+    # The slope the provider uses: the wind's law of `time_spread.surface` (by default the long-wave slope of
+    # Dahl 1996 eq. (A7), CONFORMANCE.md A4; Cox-Munk total with `slope_law: cox_munk_total`), or one given there.
+    mss_surface = boundary_parameters(g["surface"], surface=True, frequency=g["f0"])["mean_square_slope"]
     p_surface = power(runs["surface_many"]).mean(axis=0)
     a = arrival["surface"]
     t_rule = rule(rays["surface"], mss_surface) * 1e3
-    sel = at(a + p_ms + 0.4, a + p_ms + 0.4 + 2.5 * t_rule)
+    # The fit ends where the pulse, sliding off the last tap, first sees the end of the taps' span (three decay
+    # times, `TimeSpreadProvider`): later the record falls faster than the rule because the tail is cut, not
+    # because it decays. With the Cox-Munk slope (2.91 ms) the window 0.4 + 2.5 T after the pulse barely met the
+    # cut; with the long-wave slope (2.14 ms, CONFORMANCE.md A4) the pulse (3 ms) is longer than the decay and half
+    # of that window lay in it (fitted 1.79 ms against 2.14: -16 %). Not shorter than 1 ms.
+    end = max(min(0.4 + 2.5 * t_rule, 3.0 * t_rule - p_ms), 1.4)
+    sel = at(a + p_ms + 0.4, a + p_ms + end)
     t_surface = -1.0 / np.polyfit(ms[sel], np.log(p_surface[sel]), 1)[0]
     p_bottom = np.mean([power(r)[0] for r in runs["bottom_seeds"]], axis=0)
     a = arrival["bottom"]
@@ -1440,7 +1449,9 @@ def matrix(results: dict | None = None) -> list[dict]:
                        f"bottom {a['tails']['bottom']['coherent_fraction']:.2f} coherent"))
     row("Sec. 12.4, meanSquareSlope", "Spreading time ~ mss x half the one-way time (mid-path bounce); mss x twice the shorter leg (near one end)",
         "decay time 2 mss t1 t2 / (t1 + t2)", mine + "test_asiaex_tails_decay_at_the_rule_of_thumb",
-        m(A, lambda a: f"fitted to the mean intensity after the pulse: surface {a['tails']['surface']['fitted_ms']:.2f} ms (rule {a['tails']['surface']['rule_of_thumb_ms']:.2f}), "
+        m(A, lambda a: f"fitted to the mean intensity after the pulse: surface {a['tails']['surface']['fitted_ms']:.2f} ms (rule {a['tails']['surface']['rule_of_thumb_ms']:.2f}; "
+                       f"mss {a['tails']['surface']['mean_square_slope']:.4f}, the long-wave slope of Dahl 1996 eq. (A7) at the wind, where SST used "
+                       f"McDanielSurface's; the Cox-Munk total {acoustics.mean_square_slope(a['parameters']['wind']):.4f} until CONFORMANCE.md A4), "
                        f"bottom {a['tails']['bottom']['fitted_ms']:.2f} ms (rule {a['tails']['bottom']['rule_of_thumb_ms']:.2f}; mss 0.045 as printed)"))
     row("Sec. 12.4, rmsVerticalSpeed (p. 101)", "Doppler spread = f x rms vertical speed / (c x sin(grazing))", "2 f v sin(g) / c", "see readings, item 23",
         "Reading differs from the print (sin g, not 1 / sin g)")
@@ -1448,7 +1459,7 @@ def matrix(results: dict | None = None) -> list[dict]:
         "`time_spread` as in the scenario", mine + "test_asiaex_with_time_spreading_bounce_paths_get_tails_and_vary",
         m(A, lambda a: "std of level across 20 pings: " + ", ".join(f"{k} {v:.2f} dB" for k, v in a["time_spread"]["ping_to_ping_std_db"].items())
                        + "; 0.3-0.7 ms after the pulse: " + ", ".join(f"{k} {v:.0f} dB" for k, v in a["time_spread"]["db_after_pulse_re_peak"].items() if k != "direct")))
-    row("Sec. 12.6", "Wind 3 m/s fits the tail, 4 m/s the variability (McDanielSurface)", "Pierson-Moskowitz height, Cox-Munk slope", "cannot be checked",
+    row("Sec. 12.6", "Wind 3 m/s fits the tail, 4 m/s the variability (McDanielSurface)", "Pierson-Moskowitz height, long-wave slope of Dahl 1996 eq. (A7) (Cox-Munk total until CONFORMANCE.md A4)", "cannot be checked",
         "Needs the McDaniel laws and the data of Dahl (2002); only figures in TR 0702")
     row("Sec. 12.6", "Multiple-bounce peaks: intensity too high immediately after the pulse and too low later",
         "`multi_bounce: sum` against `convolve` (default)", mine + "test_asiaex_two_bounce_tail_sum_against_convolve",

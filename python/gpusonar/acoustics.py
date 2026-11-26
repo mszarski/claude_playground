@@ -267,8 +267,55 @@ def mean_square_slope(wind_speed: float) -> float:
     waves only: Dahl, JASA 100, 748-758 (1996), eq. (A7), uses 0.0046 ln(2.1 U^2) (Phillips' fit to
     Cox and Munk's slick surface, waves longer than about 30 cm), 1.4 to 2.2 times smaller than this
     at 1.5 to 10 m/s, and reproduces measured angle spreads with it
-    (docs/references/surface_forward_scatter_dahl_1996_2004.md; docs/references/CONFORMANCE.md)."""
+    (docs/references/surface_forward_scatter_dahl_1996_2004.md; docs/references/CONFORMANCE.md A4).
+    That law is `large_scale_mean_square_slope`, and time spreading takes it from the wind by
+    default; this total stays for backscatter facets and as `time_spread.surface.slope_law:
+    cox_munk_total`."""
     return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
+
+
+# The lowest wind of Dahl 1996 Table I (set 4, 1.5 m/s): the law is clamped there.
+LARGE_SCALE_SLOPE_MIN_WIND = 1.5
+
+
+def large_scale_mean_square_slope(wind_speed: float, *, warn: bool = True) -> float:
+    """Mean-square slope of the LONG waves of the sea surface (both axes together), the slope that
+    steers forward scatter: Dahl, JASA 100, 748-758 (1996), eq. (A7) (confirmed, read on the page;
+    docs/references/surface_forward_scatter_dahl_1996_2004.md Sec. 2.4),
+
+        s_L^2 = 0.0046 ln(2.1 U^2),    U the wind at 10 m in m/s.
+
+    What it is, as Dahl states it: Phillips' fit to Cox and Munk's OIL-SLICK data (waves shorter than
+    about 30 cm damped, cut-off K_c = 2 pi / 0.3 rad/m) with a K^-4 equilibrium range; 0.0046 is "a
+    more precise value of the 0.005" of his eq. (A4). It runs through the middle of his altimeter
+    slopes (0.002 to 0.03 at 2 to 8 m/s, Fig. A2, read from figure) and reproduces the printed s_L of
+    his Table I (0.085 to 0.149 rms at 1.5 to 7.6 m/s). Dahl 2004 (JASA 115, 589-599) gives a low-pass
+    slope of 0.152 rms at 7 m/s from a measured spectrum, against 0.146 from this law. Dahl 1999
+    (JASA 105, 2155) prints s_L^2 = 0.017 at about 4 m/s (this law: 0.0162).
+
+    Validity: the data behind it are 1.5 to 8 m/s (Dahl 1996 Table I and Fig. A2) and 7 m/s
+    (Dahl 2004); above about 8 m/s it is an extrapolation (no warning). It is NEGATIVE below
+    0.69 m/s (2.1 U^2 < 1), so below 1.5 m/s (set 4, Dahl's lowest wind, where the rms slope fitted to the
+    coherence was already half of the law's: slicks, swell, internal waves, Dahl 1996 p. 753) it is held at its
+    1.5 m/s value, 0.00714, with a warning (`warn=False` silences it). The hold is ours.
+
+    Compared with the total Cox-Munk slope of `mean_square_slope`: 1.5, 1.37, 1.57, 1.82, 1.90, 2.20
+    times smaller at 1.5, 3.2, 5, 7, 7.6, 10 m/s (computed). Use this one for forward scatter (time
+    and angle spreading, `sim/timespread.py`); backscatter facets (`sim/surface.py`) keep the total.
+
+    An open contradiction, recorded and not followed: the angle spreads Dahl 1999 measured at about
+    4 m/s (runs 2-4) imply 0.008 to 0.011 (our computation,
+    docs/references/surface_bistatic_dahl_1999_mcdaniel_1986.md Sec. 3.3), about half of this law's
+    0.0162; Dahl 1999 puts the late decay down to Bragg-scale waves that a facet model lacks."""
+    u = float(wind_speed)
+    if u < LARGE_SCALE_SLOPE_MIN_WIND:
+        if warn:
+            import warnings
+            warnings.warn(f"large_scale_mean_square_slope: Dahl 1996 eq. (A7) is negative below 0.69 m/s and below the "
+                          f"data under {LARGE_SCALE_SLOPE_MIN_WIND} m/s; wind {u} m/s is held at the 1.5 m/s value",
+                          RuntimeWarning, stacklevel=2)
+        u = LARGE_SCALE_SLOPE_MIN_WIND
+    return float(0.0046 * np.log(2.1 * u * u))
 
 
 def mean_square_slope_components(wind_speed: float) -> tuple[float, float]:

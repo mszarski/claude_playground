@@ -6,8 +6,8 @@
 # Few taps and lines: every bounce ray becomes 1 + taps x doppler_lines rays each way.
 # The sediment numbers are PLACEHOLDERS (bottom.PLACEHOLDER_SAND) and the bubble loss is
 # illustrative: none is a measurement. Frame: z = 0 is the sea surface.
-# As in flank_sst_shallow, the slope is the Cox-Munk total (0.0337 at 6 m/s), where Dahl 1996 and
-# 2004 use the long-wave slope (0.0199) (docs/references/CONFORMANCE.md).
+# As in flank_sst_shallow, the slope is the long-wave slope of Dahl 1996 eq. (A7) (0.0199 at 6 m/s;
+# the Cox-Munk total 0.0337 before docs/references/CONFORMANCE.md A4): tails x0.59, angles x0.77.
 name: flank_sst_spread
 sonar: flank_32
 fidelity: image_source

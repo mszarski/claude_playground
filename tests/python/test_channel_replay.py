@@ -15,7 +15,7 @@ import pytest
 from gpusonar import acoustics
 from gpusonar.sim import ImageSourceProvider
 from gpusonar.sim import channel_replay as cr
-from gpusonar.sim.timespread import wrap
+from gpusonar.sim.timespread import surface_slope_from_wind, wrap
 
 FS_T, FS_D, FC, BW = 65.1, 13020.0, 12500.0, 6510.0
 GRID = dict(n_time=3400, fs_time=FS_T, fs_delay=FS_D, n_delay=128, fc=FC, bandwidth=BW)
@@ -199,10 +199,11 @@ def test_replay_phi_puts_the_delay_drift_back():
 DEPTH, RANGE, ZS, ZR, C0 = 15.0, 60.0, 11.0, 11.7, 1500.0
 
 
-def _model(wind, n_rx=6, n_time=2400, bottom=True, **options):
+def _model(wind, n_rx=6, n_time=2400, bottom=True, slope_law=None, **options):
     inner = ImageSourceProvider(C0, surface_z=0.0, bottom_z=DEPTH if bottom else None, max_order=2 if bottom else 1,
                                 bottom=dict(speed=1700.0, density=1.9, attenuation=0.5))
-    prov = wrap(inner, dict({"surface": {"wind_speed": wind}, "taps": 24, "coherence_length": 0.01, "seed": 5}, **options), frequency=FC)
+    surface = {"wind_speed": wind} if slope_law is None else {"wind_speed": wind, "slope_law": slope_law}
+    prov = wrap(inner, dict({"surface": surface, "taps": 24, "coherence_length": 0.01, "seed": 5}, **options), frequency=FC)
     rx = np.array([[RANGE, 0.0, ZR + 0.05 * i] for i in range(n_rx)])
     return cr.model_channel(prov, [0.0, 0.0, ZS], rx, n_time=n_time, fs_time=FS_T, fs_delay=FS_D, n_delay=128, fc=FC, bandwidth=BW,
                             lead=2e-3, return_rays=True)
@@ -235,11 +236,16 @@ def test_model_surface_arrival_statistics_match_the_closed_forms():
     of the rule of thumb, 2 mss t1 t2 / (t1 + t2), or of the facets, half of it at low grazing
     angles times (1 + sin^2 g)."""
     wind = 4.0
-    h_rms, mss, v = acoustics.rms_wave_height(wind), acoustics.mean_square_slope(wind), acoustics.rms_surface_vertical_speed(wind)
+    # The Cox-Munk total slope is named here (the default since CONFORMANCE.md A4 is the long-wave slope of Dahl 1996
+    # eq. (A7)): this test is of the estimators, and they need a decay of several delay bins. With the long-wave slope
+    # the facet decay at 60 m is 0.19 ms, 2.5 bins of 0.077 ms at 6.5 kHz of band, and the estimator reads 0.135 ms of
+    # it (x0.69); with the total, 0.28 ms, it reads x1.14 (computed 2026-11-26). Short decays are under-read.
+    law = "cox_munk_total"
+    h_rms, mss, v = acoustics.rms_wave_height(wind), surface_slope_from_wind(wind, law), acoustics.rms_surface_vertical_speed(wind)
     out = {}
     for key, opts in (("gauss_facet", dict(doppler_spectrum="gaussian", decay_time="facet")),
                       ("lorentz_rule", dict(doppler_spectrum="lorentzian", decay_time="rule_of_thumb"))):
-        ch, rays = _model(wind, **opts)
+        ch, rays = _model(wind, slope_law=law, **opts)
         rows = []
         for m in range(ch.n_receivers):
             tau, g = _surface_arrival(rays, m)

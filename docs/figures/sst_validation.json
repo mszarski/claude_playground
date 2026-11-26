@@ -80,7 +80,7 @@
    "what": "the echo run again with `time_spread: {surface: {wind_speed}}` (not in the scenario file)",
    "direct_echo_change": 0.0,
    "surface_bounce_echo_db_re_direct": -5.481312611155643,
-   "surface_bounce_echo_change_db": -0.6689961501557701
+   "surface_bounce_echo_change_db": 1.004695135651741
   },
   "levels": {
    "ridge_psd_over_noise_psd_db": {
@@ -102,7 +102,7 @@
    "psd_db_re_upa2_per_hz": 50.51201919742883,
    "scenario_spectrum_db": 50.612689758941116
   },
-  "seconds_one_ping": 15.168617963790894,
+  "seconds_one_ping": 30.563371896743774,
   "cross_pairs": {
    "max_error_direct_only_hz": 1.4008716070787273,
    "max_error_with_bottom_paths_hz": 1.5195347739399665,
@@ -115,7 +115,7 @@
    "mean_error_with_bottom_paths_hz": -0.1191459448510482,
    "bottom_path_onset_s": 1.7
   },
-  "seconds": 80.19231247901917
+  "seconds": 170.56307315826416
  },
  "asiaex": {
   "parameters": {
@@ -196,34 +196,34 @@
   },
   "time_spread": {
    "ping_to_ping_std_db": {
-    "direct": 2.4240738917647198e-05,
-    "surface": 1.881006688290299,
-    "bottom": 0.9659066771029859,
-    "surface-bottom": 1.4135640593366348,
-    "bottom-surface": 3.3426684188717286
+    "direct": 4.259965660206212e-05,
+    "surface": 2.8603964664840182,
+    "bottom": 1.0844510315779263,
+    "surface-bottom": 1.5921092438498754,
+    "bottom-surface": 4.2865667983439515
    },
    "tail_ping_to_ping_std_db": {
-    "surface": 4.835124974155255,
-    "bottom": 5.896757734106672
+    "surface": 4.969734572445694,
+    "bottom": 4.535315615979185
    },
    "db_after_pulse_re_peak": {
-    "direct": -39.30151020247146,
-    "surface": -6.33683229078377,
-    "bottom": -15.076453232427143
+    "direct": -39.31693202065317,
+    "surface": -7.73142061604071,
+    "bottom": -18.839368186502256
    },
    "peak_mean_db_re_flat": {
-    "direct": -4.114178781026259e-06,
-    "surface": -0.9050861564369866,
-    "bottom": 0.46697627457289637,
-    "surface-bottom": -5.818845951199166,
-    "bottom-surface": -5.202177557533746
+    "direct": -2.1311967194244953e-06,
+    "surface": -0.7413661321255438,
+    "bottom": -0.413729155096941,
+    "surface-bottom": -5.757899847455676,
+    "bottom-surface": -5.925834524639631
    }
   },
   "tails": {
    "surface": {
-    "rule_of_thumb_ms": 2.9052379528190113,
-    "fitted_ms": 2.944688315180635,
-    "mean_square_slope": 0.01836,
+    "rule_of_thumb_ms": 2.1393920436351332,
+    "fitted_ms": 2.1761096186765863,
+    "mean_square_slope": 0.013520144841501745,
     "coherent_fraction": 0.7709724547878667,
     "pings": 200
    },
@@ -237,16 +237,16 @@
   },
   "surface_doppler_spread": {
    "lorentzian": {
-    "measured_hz": 0.3109187308350109,
+    "measured_hz": 0.3210263355186733,
     "closed_form_hz": 0.32656753409597705,
-    "coherence_time_s": 0.2559429962042894,
+    "coherence_time_s": 0.2478845588084746,
     "pings": 800,
     "interval_s": 0.05
    },
    "gaussian": {
-    "measured_hz": 0.5939234781440765,
+    "measured_hz": 0.6076922964407635,
     "closed_form_hz": 0.6823844910371427,
-    "coherence_time_s": 0.26797213605569375,
+    "coherence_time_s": 0.261900544114285,
     "pings": 800,
     "interval_s": 0.05
    },
@@ -258,10 +258,10 @@
    "path": "surface-bottom",
    "coherent_fraction_surface": 0.3025413697745108,
    "coherent_fraction_bottom": 0.9284770800174673,
-   "decay_surface_ms": 1.8068049147597534,
+   "decay_surface_ms": 1.3305154764645466,
    "decay_bottom_ms": 6.3966404934305,
-   "mean_delay_sum_ms": 8.203445408190253,
-   "mean_delay_convolve_ms": 2.3886588824784623,
+   "mean_delay_sum_ms": 7.727155969895046,
+   "mean_delay_convolve_ms": 1.926701659205756,
    "early_window_ms_after_pulse": [
     0.3,
     1.8
@@ -270,16 +270,16 @@
     3.0,
     0.3
    ],
-   "sum_over_convolve_early_db": -2.3290161339343833,
-   "sum_over_convolve_late_db": 3.6900312975665193,
-   "sum_over_convolve_after_last_arrival_db": -2.524646459339733,
-   "tail_centroid_sum_ms": 3.1350742538656164,
-   "tail_centroid_convolve_ms": 2.1303719673510324,
-   "tail_energy_sum_over_convolve_db": -0.12423359771780632,
-   "peak_sum_db_re_direct": -6.911936584618087,
-   "peak_convolve_db_re_direct": -3.5282033139171576,
+   "sum_over_convolve_early_db": -1.9272084360815587,
+   "sum_over_convolve_late_db": 4.874896345921743,
+   "sum_over_convolve_after_last_arrival_db": -2.468376415566144,
+   "tail_centroid_sum_ms": 3.0446583058107852,
+   "tail_centroid_convolve_ms": 1.8935314815495459,
+   "tail_energy_sum_over_convolve_db": 0.4193657241236762,
+   "peak_sum_db_re_direct": -6.880327201736076,
+   "peak_convolve_db_re_direct": -3.1234728296622363,
    "pings": 200,
-   "sum_over_convolve_first_half_of_pulse_db": -1.7147980444459545
+   "sum_over_convolve_first_half_of_pulse_db": -2.1453090553420875
   },
   "two_rough_bounces": {
    "what": "variant: both boundaries rms height 0.2 m, decay times equal on the surface-bottom path (not ASIAEX values)",

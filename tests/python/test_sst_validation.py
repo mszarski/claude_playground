@@ -227,8 +227,12 @@ def test_asiaex_tails_decay_at_the_rule_of_thumb(asiaex):
     times half of the total one-way propagation time if the reflection is near the middle of
     the path", less for an asymmetric path: 2 mss t1 t2 / (t1 + t2). Fitted to the mean
     intensity after the pulse (200 pings for the surface; 40 realisations of the bottom, with
-    the report's meanSquareSlope = 0.045)."""
+    the report's meanSquareSlope = 0.045). The surface's slope is the long-wave slope of
+    Dahl 1996 eq. (A7) since CONFORMANCE.md A4 (rule 2.91 -> 2.14 ms); its fit window ends
+    where the pulse meets the end of the taps' span (tools/sst_validation.py), which the
+    shorter tail reached inside the earlier window (fit 1.79 ms there, -16 %)."""
     tails = asiaex["tails"]
+    assert tails["surface"]["mean_square_slope"] == pytest.approx(0.0046 * np.log(2.1 * 3.0**2))
     assert tails["surface"]["fitted_ms"] == pytest.approx(tails["surface"]["rule_of_thumb_ms"], rel=0.15)
     assert tails["bottom"]["fitted_ms"] == pytest.approx(tails["bottom"]["rule_of_thumb_ms"], rel=0.2)
     assert tails["bottom"]["mean_square_slope"] == 0.045
