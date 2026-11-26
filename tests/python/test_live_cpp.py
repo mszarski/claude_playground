@@ -1584,3 +1584,108 @@ def test_coverage_reverberation_is_equal_in_both_engines_and_off_is_as_before():
     assert got["cpp", "unsaid"][0]["reverberation"].startswith("not included")
     assert "reverberation" not in got["cpp", "off"][0]
     assert all({k: v for k, v in a.items() if k != "reverberation"} == b for a, b in zip(got["cpp", "unsaid"], got["cpp", "off"]))
+
+
+# --- the sweep's Doppler bank (D4; libs/live doppler.hpp, gpusonar/doppler.py): both engines ----------------------------
+
+BANK = {"mode": "sweep_bank", "max_range_rate_m_s": 1.0, "report": True}
+
+
+def _bank_run(pings, engine, rd=None, bank=BANK):
+    cfg = dict(CHAIN, engine=engine, doppler=bank)
+    if rd is not None:
+        cfg["range_doppler"] = rd
+    with LiveChain(cfg) as chain:
+        return chain.run(copies(pings))
+
+
+def _same_bank_reports(want, got):
+    assert len(want) == len(got)
+    for w, g in zip(want, got):
+        assert len(w["detections"]) == len(g["detections"])
+        for a, b in zip(w["detections"], g["detections"]):
+            assert a["range_m"] == pytest.approx(b["range_m"], abs=0.05) and a["bearing_deg"] == pytest.approx(b["bearing_deg"], abs=0.05)
+            assert a["snr_db"] == pytest.approx(b["snr_db"], abs=0.05)
+            assert a["range_rate_m_s"] == pytest.approx(b["range_rate_m_s"], abs=1e-9)
+            assert a["range_rate_step_m_s"] == pytest.approx(b["range_rate_step_m_s"], abs=1e-12)
+        assert [(t["id"], t["kind"], t["parent"]) for t in w["tracks"]] == [(t["id"], t["kind"], t["parent"]) for t in g["tracks"]]
+        for a, b in zip(w["tracks"], g["tracks"]):
+            for key in ("x", "y", "vx", "vy", "range_m"):
+                assert a[key] == pytest.approx(b[key], abs=0.05), key
+
+
+def test_the_doppler_bank_gives_the_same_report_in_both_engines(pings):
+    """The fixture's pings (ownship at 1.5 m/s along the array: every beam's hypotheses centred on its own rate) through the
+    Python chain and the C++ chain (the binding): the same detections, range rates and tracks; the stage's maps alike."""
+    want, got = _bank_run(pings, "python"), _bank_run(pings, "cpp")
+    _same_bank_reports(want, got)
+    assert all("range_rate_m_s" in d for r in got for d in r["detections"])
+    # The static object at -60 m across, 320 m out: a still scatterer seen from the array moving along +x has the range
+    # rate -1.5 sin(b) (opening on this side).
+    rates = [d["range_rate_m_s"] + 1.5 * np.sin(np.radians(d["bearing_deg"])) for d in got[-1]["detections"] if d["bearing_deg"] < -5.0]
+    assert rates and all(abs(r) <= 0.5 * got[-1]["detections"][0]["range_rate_step_m_s"] + 1e-9 for r in rates)
+
+
+@needs_exe
+def test_program_runs_the_doppler_bank_like_the_python_chain(pings, tmp_path):
+    """build/bin/sonar_live with the deployment's chain section as key=value options (program_options): the Python chain's
+    detections and range rates on the replayed recording."""
+    cfg = dict(CHAIN, doppler=BANK)
+    with LiveChain(dict(cfg, engine="python"), recording=str(tmp_path / "rec.h5")) as chain:
+        want = chain.run(copies(pings))
+    flat = live_program_options(cfg)
+    assert flat["doppler_mode"] == "sweep_bank" and flat["doppler_report"] == 1
+    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), *[f"{k}={v}" for k, v in flat.items()]],
+                         capture_output=True, text=True, timeout=600)
+    assert out.returncode == 0, out.stderr
+    got = [json.loads(line) for line in out.stdout.splitlines()]
+    _same_bank_reports(want, got)
+
+
+def live_program_options(cfg):
+    from gpusonar import live
+    return live.program_options(cfg)
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_with_the_bank_range_doppler_takes_the_banks_estimate_and_corrects_once(pings, engine):
+    """With the bank on, a detection shows where it shows without the bank (every hypothesis aligned to the zero one):
+    `ownship` then adds f0 T / B x the bank's closing speed (-range_rate: the target's part and the own ship's together),
+    and `full` moves no track further (its target part is in each detection already): no double correction."""
+    plain, own, full = _bank_run(pings, engine), _bank_run(pings, engine, "ownship"), _bank_run(pings, engine, "full")
+    off = _range_doppler_run(pings, engine, None)
+    moved = []
+    for p, o, f, z in zip(plain, own, full, off):
+        assert len(p["detections"]) == len(o["detections"])
+        for dz in z["detections"]:                     # every detection without the bank is there with it, where it was
+            near = [d for d in p["detections"] if abs(d["bearing_deg"] - dz["bearing_deg"]) < 0.5]
+            assert near and min(abs(d["range_m"] - dz["range_m"]) for d in near) < 0.05
+        # What the bank adds on these pings (targets 80 to 90 dB over the noise) are sidelobes of the mismatched hypotheses
+        # 60 dB and more below the strongest echo, which the detector's sidelobe envelope (the matched pulse's) does not
+        # explain (DOPPLER.md D4, what got worse).
+        top = max(d["snr_db"] for d in p["detections"])
+        for d in p["detections"]:
+            if not any(abs(d["bearing_deg"] - dz["bearing_deg"]) < 0.5 and abs(d["range_m"] - dz["range_m"]) < 0.05 for dz in z["detections"]):
+                assert d["snr_db"] < top - 50.0, d
+        for dp, do in zip(p["detections"], o["detections"]):
+            shift = FLANK_32_FACTOR * -dp["range_rate_m_s"]
+            assert do["range_m"] - dp["range_m"] == pytest.approx(shift, abs=1e-6)
+            moved.append(shift)
+        assert {k: v for k, v in f.items() if k != "processing_seconds"} == {k: v for k, v in o.items() if k != "processing_seconds"}
+    assert max(moved) > 0.2 and min(moved) < -0.2
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_the_doppler_bank_is_off_by_default_and_off_is_as_before(pings, engine):
+    """Not given and `mode: off` are the chain as before, byte for byte in the report (processing time aside); nothing of
+    the bank reaches the C++ options or the report line unless it is on; the range rate reaches the line only with
+    `report` (owner question 6)."""
+    from gpusonar import live
+    assert not any(k.startswith("doppler") for k in live.cpp_chain_options(CHAIN))
+    a = _range_doppler_run(pings, engine, None)
+    with LiveChain(dict(CHAIN, engine=engine, doppler={"mode": "off"})) as chain:
+        b = chain.run(copies(pings))
+    strip = lambda r: {k: v for k, v in r.items() if k != "processing_seconds"}  # noqa: E731
+    assert json.dumps([strip(r) for r in a]) == json.dumps([strip(r) for r in b])
+    quiet = _bank_run(pings[:2], engine, bank=dict(BANK, report=False))
+    assert not any("range_rate_m_s" in d for r in quiet for d in r["detections"])

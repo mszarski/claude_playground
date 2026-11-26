@@ -184,6 +184,13 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("cfar_search_factor")) c.detector.search_factor = v();
   else if (is("cfar_merge_m")) c.detector.merge_m = v();
   else if (is("cfar_range_estimate")) c.range_estimate = parse_range_estimate(value);
+  else if (is("doppler_mode")) c.doppler.mode = parse_doppler_mode(value);   // off | sweep_bank (doppler.hpp; D4)
+  else if (is("doppler_max_range_rate_m_s")) c.doppler.max_range_rate = option_nonnegative(key, value);
+  else if (is("doppler_step_m_s")) c.doppler.step = v();          // NaN (nan): c / (2 B T)
+  else if (is("doppler_hypotheses")) c.doppler.hypotheses = i();  // odd; 0: from doppler_max_range_rate_m_s
+  else if (is("doppler_unknown_ownship_m_s")) c.doppler.unknown_ownship = option_nonnegative(key, value);
+  else if (is("doppler_threshold_db")) c.doppler.threshold_db = v();   // NaN (nan): measured (bank_threshold_db)
+  else if (is("doppler_report")) c.doppler.report = on();
   else if (is("range_doppler")) c.range_doppler = parse_range_doppler(value);   // off | ownship | full (sonar-fyj)   // centroid | first (D-157); unset: chain_range_estimate (D-158)
   // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
   else if (is("cell_multiscale")) {
@@ -504,6 +511,10 @@ std::string options_json(const ChainOptions& c) {
       .num("cfar_sidelobe_margin_db", d.sidelobe_margin_db).num("cfar_sidelobe_floor_db", d.sidelobe_floor_db).num("cfar_search_factor", d.search_factor)
       .text("cfar_range_estimate", range_estimate_name(chain_range_estimate(c)))   // the value the chain uses (D-158)
       .text("range_doppler", range_doppler_name(c.range_doppler));
+  const DopplerOptions& dop = c.doppler;
+  j.text("doppler_mode", doppler_mode_name(dop.mode)).num("doppler_max_range_rate_m_s", dop.max_range_rate).num("doppler_step_m_s", dop.step)
+      .integer("doppler_hypotheses", dop.hypotheses).num("doppler_unknown_ownship_m_s", dop.unknown_ownship)
+      .num("doppler_threshold_db", dop.threshold_db).flag("doppler_report", dop.report);
   j.num("min_snr_db", c.min_snr_db).text("doa", c.doa).integer("gate_fft", c.gate_fft).num("sbl_grid_step_deg", c.sbl_grid_step_deg)
       .integer("sbl_max_gates", c.sbl_max_gates).num("sbl_min_contrast_db", c.sbl_min_contrast_db).integer("sbl_max_iterations", c.sbl.max_iterations)
       .num("sbl_tolerance", c.sbl.tolerance).integer("sbl_max_sources", c.sbl.max_sources).num("sbl_dynamic_range_db", c.sbl.dynamic_range_db)

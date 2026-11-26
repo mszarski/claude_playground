@@ -82,6 +82,9 @@ class Detection:
     centroid_range: float = float("nan")  # m, the energy-weighted mean range of its samples (the multiscale detector),
                                           # whichever `range` reports: the elevation search, blanking and the burst
                                           # filter go by it (D-158). NaN: `range` is the centroid (libs/live detections.hpp)
+    range_rate: float = float("nan")        # m/s, the Doppler bank's winning hypothesis (relative to the platform, opening
+                                            # positive): a coarse estimate; NaN: no bank (libs/live detections.hpp, D4)
+    range_rate_step: float = float("nan")   # m/s, the bank's step: the estimate's resolution
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
