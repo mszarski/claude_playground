@@ -46,6 +46,8 @@ live::RayBottom ray_bottom(const py::object& bottom) {
   b.speed = d["speed"].cast<double>();
   b.density = d["density"].cast<double>();
   if (d.contains("attenuation")) b.attenuation = d["attenuation"].cast<double>();
+  if (d.contains("shear_speed")) b.shear_speed = d["shear_speed"].cast<double>();             // an elastic bottom (rock)
+  if (d.contains("shear_attenuation")) b.shear_attenuation = d["shear_attenuation"].cast<double>();
   return b;
 }
 
@@ -248,6 +250,9 @@ void bind_refraction(py::module_& m) {
       py::arg("reported_depth"), py::arg("range_resolution"), py::arg("aperture_resolution"), py::arg("first_arrival") = true,
       py::arg("first_arrival_db") = 8.0, py::arg("explain_sigma") = 3.0, py::arg("max_bounces") = 2, py::arg("max_depth") = 500.0,
       "What echoes sharing a range cell do to a depth from stacked rows (elevation.hpp multipath_depth_limit); `members`: the report's JSON members.");
+  m.def("live_rayleigh_reflection", &live::rayleigh_reflection, py::arg("grazing"), py::arg("c_water"), py::arg("speed"), py::arg("density"),
+        py::arg("attenuation") = 0.0, py::arg("shear_speed") = 0.0, py::arg("shear_attenuation") = 0.0,
+        "The live chain's bottom reflection coefficient (raytrace.hpp): a fluid, or with shear_speed > 0 the simulator's elastic one.");
   m.def("ray_depth_arcs", &live::ray_depth_arcs, py::arg("receiver_depth"), py::arg("elevation"), py::arg("slant_range"), py::arg("ssp_depth"),
         py::arg("ssp_speed"), py::arg("water_depth") = 0.0, "Depth an arrival started at, back along the ray in closed-form arcs (raytrace.hpp).");
   m.def(

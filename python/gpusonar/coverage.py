@@ -15,8 +15,10 @@ Configuration (`chain.coverage`; a key the C++ options do not have is an error):
     water_depth_m:     REQUIRED in a chain, no default: the site's water depth, m. Used on a ping for which neither
                        `elevation.water_depth` nor navigation gives one (what a ping carries comes first)
     bottom:            REQUIRED in a chain, no default: {sediment: name in configs/sediments.yaml} or {speed, density,
-                       attenuation}. Without the two the picture is the deep-water one, in which nothing comes back from the
-                       bottom: in 100 m over sand it said a ship at 12 km could not be seen while the chain detected it.
+                       attenuation[, shear_speed, shear_attenuation]}. A row with shear (`rock`) is an elastic solid, as in the
+                       simulator (its shear unconfirmed, said once); {sediment: rock, shear_speed: 0} is the row as a fluid.
+                       Without the two the picture is the deep-water one, in which nothing comes back from the bottom: in
+                       100 m over sand it said a ship at 12 km could not be seen while the chain detected it.
                        A chain given `coverage` without them does not start (`chain_options`); a build takes them from
                        its site (`of_build`: the spec's `operation.coverage.environment`)
     classes:           [{name, ts_db, depth_m: [shallowest, deepest]}, ...]   target classes (a build's: buildspec.target_classes_of)
@@ -99,7 +101,8 @@ def bubble_table(surface: dict, sound_speed: float = 1500.0):
 
 
 def halfspace(bottom: dict | None, sound_speed: float = 1500.0) -> dict | None:
-    """{speed, density, attenuation} of `bottom` ({sediment: name} resolves through configs/sediments.yaml as gpusonar.lloyd does)."""
+    """{speed, density, attenuation} of `bottom` ({sediment: name} resolves through configs/sediments.yaml as gpusonar.lloyd does),
+    with {shear_speed, shear_attenuation} for an elastic one (a row with shear, `rock`; or typed)."""
     if bottom is None:
         return None
     from .lloyd import Layer
@@ -139,6 +142,8 @@ def cpp_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
     half = halfspace(c["bottom"], sound_speed)
     if half is not None:
         o.update(bottom=1, bottom_speed=float(half["speed"]), bottom_density=float(half["density"]), bottom_attenuation=float(half.get("attenuation", 0.0)))
+        if float(half.get("shear_speed", 0.0)) > 0.0:          # an elastic bottom (rock): a fluid's options are as before
+            o.update(bottom_shear_speed=float(half["shear_speed"]), bottom_shear_attenuation=float(half.get("shear_attenuation", 0.0)))
     return o
 
 

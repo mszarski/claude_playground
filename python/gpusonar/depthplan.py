@@ -97,7 +97,16 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
             raise RuntimeError(f"environment {env.get('name')!r} has a sound-speed profile: that needs Bellhop (set GPUSONAR_BELLHOP)")
         prof = env["profile"]
         bottom = env.get("bottom") or {"speed": float(prof["speed_m_s"][-1]), "density": 1.0, "attenuation": 0.0}       # no bottom given: one that returns nothing
-        kw = {"sediment": bottom} if isinstance(bottom, str) else {"bottom_speed": float(bottom["speed"]), "bottom_density": float(bottom["density"]), "bottom_attenuation": float(bottom.get("attenuation", 0.0))}
+        # A row with shear (rock) is an elastic solid here as in the simulator (A8): Bellhop's shear column. A typed
+        # bottom with shear_speed > 0 the same; a fluid one writes no shear, as before.
+        if isinstance(bottom, str):
+            kw = {"sediment": bottom}
+            lloyd.Layer(depth=float(env["water_depth_m"]), bottom={"sediment": bottom}).halfspace()     # says once if the row's shear is unconfirmed
+        else:
+            kw = {"bottom_speed": float(bottom["speed"]), "bottom_density": float(bottom["density"]), "bottom_attenuation": float(bottom.get("attenuation", 0.0))}
+            lloyd.check_halfspace(bottom, f"environment {env.get('name')!r}.bottom")
+            if float(bottom.get("shear_speed", 0.0)) > 0.0:
+                kw.update(bottom_shear_speed=float(bottom["shear_speed"]), bottom_shear_attenuation=float(bottom.get("shear_attenuation", 0.0)))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ocean = OceanEnvironment(depth=float(env["water_depth_m"]), ssp_depth=np.asarray(prof["depth_m"], dtype=float), ssp_speed=np.asarray(prof["speed_m_s"], dtype=float), **kw)
@@ -126,7 +135,8 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
             res = lloyd.summarise(h, s)
         for k in keys:
             out[k][i] = res[k]
-    return {**out, "method": ("image series of an isovelocity layer over a fluid bottom (Rayleigh reflection), to 30 degrees of grazing" if ducted
+    elastic = ducted and float((layer.halfspace() or {}).get("shear_speed", 0.0)) > 0.0
+    return {**out, "method": (f"image series of an isovelocity layer over {'an elastic' if elastic else 'a fluid'} bottom (Rayleigh reflection), to 30 degrees of grazing" if ducted
                               else "direct path and surface image (no bottom return), isovelocity")}
 
 

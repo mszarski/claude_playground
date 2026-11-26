@@ -88,7 +88,8 @@ DEFAULTS = {
                 "wind_speed_m_s": None,   #   evaluated at this wind speed and
                 "frequency_hz": None,     #   this frequency (the band centre); both are needed with bubble_model
                 "min_amplitude": 0.5},    # a one-leg surface echo weaker than this (re the direct one): no_surface_path
-    "bottom": None,                  # {speed, density, attenuation}: a fluid bottom's Rayleigh reflection, with the water depth
+    "bottom": None,                  # {speed, density, attenuation[, shear_speed, shear_attenuation]} or {sediment: name}: the bottom's
+                                     # reflection, with the water depth (a row with shear, `rock`, is elastic; shear_speed 0: a fluid)
     "bottom_order": 2,               # boundary reflections per leg when a bottom is given (1: d, s, b; 2: also sb, bs)
     "bottom_grazing_limit_deg": 45.0,    # water depth known but no bottom given: a bottom path shallower than this makes the
                                      # depth ambiguous (`multipath_note: bottom_unmodelled`)
@@ -164,7 +165,17 @@ def options(cfg: dict | None) -> dict:
             out[key].update(value)
         else:
             out[key] = value
+    if out["bottom"] is not None:
+        out["bottom"] = bottom_halfspace(out["bottom"])
     return out
+
+
+def bottom_halfspace(bottom: dict, sound_speed: float = 1500.0) -> dict:
+    """`bottom` as numbers: {sediment: name} resolves through configs/sediments.yaml as gpusonar.lloyd (and the coverage
+    picture, on the same nominal 1500 m/s water) does; a typed one is checked. A row with shear (`rock`) adds shear_speed and
+    shear_attenuation: the pattern's bottom is then an elastic solid (Jackson and Richardson 2007, (9.34)-(9.40))."""
+    from .lloyd import Layer
+    return Layer(depth=1.0, bottom=dict(bottom), sound_speed=float(sound_speed)).halfspace()
 
 
 def cpp_options(cfg: dict | None) -> dict:
@@ -188,6 +199,8 @@ def cpp_options(cfg: dict | None) -> dict:
     if c["bottom"] is not None:
         b = c["bottom"]
         o.update(bottom=1, bottom_speed=float(b["speed"]), bottom_density=float(b["density"]), bottom_attenuation=float(b.get("attenuation", 0.0)))
+        if float(b.get("shear_speed", 0.0)) > 0.0:             # an elastic bottom (rock): a fluid's options are as before
+            o.update(bottom_shear_speed=float(b["shear_speed"]), bottom_shear_attenuation=float(b.get("shear_attenuation", 0.0)))
     if c["withhold_flagged"]:
         o["withhold_flagged"] = 1
     if c["rays"]:
@@ -276,7 +289,8 @@ class ChainStage:
 def one_way(z_own: float, z_target: float, r_h, c: float, fc: float, surface: dict, water_depth=None, bottom=None, order: int = 1):
     """Path lengths [J, M] and amplitudes re the direct path [J, M] (complex) of the images joining a point at depth
     `z_own` and one at `z_target` a horizontal distance `r_h` [M] apart; the direct path is row 0. Spherical spreading,
-    the surface's coefficient with roughness and loss, the bottom's Rayleigh coefficient at each image's grazing angle."""
+    the surface's coefficient with roughness and loss, the bottom's Rayleigh coefficient at each image's grazing angle (an
+    elastic one with `shear_speed` > 0: rock)."""
     r_h = np.atleast_1d(np.asarray(r_h, dtype=float))
     depth = float(water_depth) if (bottom is not None and water_depth) else None
     lengths, amps = [], []
@@ -291,7 +305,9 @@ def one_way(z_own: float, z_target: float, r_h, c: float, fc: float, surface: di
                 a = a * (float(surface["coefficient"]) * 10.0 ** (-float(surface["loss_db"]) / 20.0) * rho) ** ns
             if nb:
                 from .sim.propagation import rayleigh_reflection
-                a = a * rayleigh_reflection(grazing, c, float(bottom["speed"]), float(bottom["density"]), float(bottom.get("attenuation", 0.0))) ** nb
+                a = a * rayleigh_reflection(grazing, c, float(bottom["speed"]), float(bottom["density"]), float(bottom.get("attenuation", 0.0)),
+                                            shear_speed=float(bottom.get("shear_speed", 0.0)),
+                                            shear_attenuation=float(bottom.get("shear_attenuation", 0.0))) ** nb
         lengths.append(r_j)
         amps.append(a)
     return np.array(lengths), np.array(amps)

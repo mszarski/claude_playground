@@ -14,8 +14,10 @@ way (an active sonar: projector and array at one depth, target at another), with
                               peak of the compressed echo, against the single-frequency value
   the incoherent limit        what a rough surface scatters out of the coherent path still arrives, with no fixed
                               phase: it is kept as power
-  a bottom, optionally        the image series of an isovelocity layer over a fluid half-space (Rayleigh
-                              reflection at each image's grazing angle): the ducted case, without Bellhop
+  a bottom, optionally        the image series of an isovelocity layer over a half-space (Rayleigh reflection at each
+                              image's grazing angle): the ducted case, without Bellhop. A fluid, or an elastic solid
+                              (`rock`, whose row has a shear speed): then Jackson and Richardson (2007) (9.34)-(9.40),
+                              the simulator's coefficient (docs/PHYSICS_NOTES.md Sec. 6.5)
 
 Derivation (isovelocity water, exp(+i w t), a unit source). Horizontal range R, own depth z1, target depth z2.
 
@@ -50,6 +52,8 @@ time and angle, a rough bottom, a target's vertical extent other than through `d
 
 from __future__ import annotations
 
+import functools
+import math
 import warnings
 from dataclasses import dataclass, field
 
@@ -115,11 +119,42 @@ class Surface:
 FLAT = Surface()
 
 
+SHEAR_KEYS = ("shear_speed", "shear_attenuation")
+_SHEAR_WARNED: set = set()
+
+
+def reset_shear_warnings() -> None:
+    """Forget which rows' unconfirmed shear has been warned about (tests)."""
+    _SHEAR_WARNED.clear()
+
+
+@functools.lru_cache(maxsize=None)
+def _named_halfspace(name: str, sound_speed: float, sediment_file) -> tuple:
+    """(half-space, the row's warnings that name its shear): `sim.bottom.halfspace` resolved once per row and water."""
+    from .sim import bottom as bottom_model
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        half = bottom_model.halfspace(name, sound_speed, sediment_file)
+    return half, tuple(str(w.message) for w in caught if "shear" in str(w.message))
+
+
+def check_halfspace(half: dict, where: str = "bottom") -> dict:
+    """`half` after refusing a shear speed or attenuation that is negative or not finite (0 or absent: a fluid)."""
+    for key in SHEAR_KEYS:
+        value = half.get(key, 0.0)
+        if not (isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)) and float(value) >= 0.0):
+            raise ValueError(f"{where}.{key}: {value!r}; an elastic bottom needs shear_speed (m/s, 0 = a fluid) and shear_attenuation "
+                             "(dB per wavelength) >= 0")
+    return half
+
+
 @dataclass
 class Layer:
     """Isovelocity water. `depth` None: no bottom (or one that returns nothing): direct path and surface image only,
-    the non-ducting case. With `depth` and `bottom` ({speed m/s, density re water, attenuation dB/wavelength} or
-    {sediment: name in configs/sediments.yaml}): the image series to `max_order` bounces."""
+    the non-ducting case. With `depth` and `bottom` ({speed m/s, density re water, attenuation dB/wavelength[,
+    shear_speed m/s, shear_attenuation dB/wavelength]} or {sediment: name in configs/sediments.yaml}): the image series to
+    `max_order` bounces. A named row with shear (`rock`) is an elastic solid, as in the simulator (`sim.bottom.halfspace`;
+    its shear is unconfirmed, said once in a warning); {sediment: rock, shear_speed: 0} is the same row as a fluid."""
 
     depth: float | None = None
     bottom: dict | None = None
@@ -132,12 +167,16 @@ class Layer:
         if self.depth is None or self.bottom is None:
             return None
         if "sediment" in self.bottom:
-            from .sim import bottom as bottom_model
             rest = {k: v for k, v in self.bottom.items() if k not in ("sediment", "sediment_file")}
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                return dict(bottom_model.fluid_halfspace(self.bottom["sediment"], self.sound_speed, self.bottom.get("sediment_file")), **rest)
-        return {k: float(self.bottom[k]) for k in ("speed", "density", "attenuation") if k in self.bottom}
+            half, notes = _named_halfspace(self.bottom["sediment"], float(self.sound_speed), self.bottom.get("sediment_file"))
+            out = check_halfspace(dict(half, **rest))
+            if out.get("shear_speed", 0.0) > 0.0:          # the row's shear is used: say once that it is unconfirmed
+                for text in notes:
+                    if text not in _SHEAR_WARNED:
+                        _SHEAR_WARNED.add(text)
+                        warnings.warn(text, stacklevel=2)
+            return out
+        return check_halfspace({k: float(self.bottom[k]) for k in ("speed", "density", "attenuation") + SHEAR_KEYS if k in self.bottom})
 
 
 def _images(z, depth, order: int):

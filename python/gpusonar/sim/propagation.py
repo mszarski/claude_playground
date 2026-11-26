@@ -197,10 +197,16 @@ class ImageSourceProvider(EigenrayProvider):
         # ray's grazing angle instead of the constant `bottom_coefficient`.
         # {sediment: <name in configs/sediments.yaml>[, sediment_file]} gives the three numbers
         # from the table (speed = its ratio x this provider's sound speed); keys given beside it win.
+        # An elastic row (`rock`, A8) adds shear_speed and shear_attenuation: the bounce is then
+        # elastic, J&R (9.34)-(9.40); {sediment: rock, shear_speed: 0} is the same row as a fluid.
         if bottom is not None and "sediment" in bottom:
             from . import bottom as bottom_model
             rest = {k: v for k, v in bottom.items() if k not in ("sediment", "sediment_file")}
-            bottom = dict(bottom_model.fluid_halfspace(bottom["sediment"], self.sound_speed, bottom.get("sediment_file")), **rest)
+            bottom = dict(bottom_model.halfspace(bottom["sediment"], self.sound_speed, bottom.get("sediment_file")), **rest)
+        if bottom is not None and not all(np.isfinite(float(bottom.get(k, 0.0))) and float(bottom.get(k, 0.0)) >= 0.0
+                                          for k in ("shear_speed", "shear_attenuation")):
+            raise ValueError("image_source: an elastic bottom needs shear_speed (m/s, 0 = a fluid) and shear_attenuation "
+                             "(dB per wavelength) >= 0")
         self.bottom = bottom
         # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
         # Walls are applied to first order only, on top of the vertical image series.
@@ -348,9 +354,12 @@ class ImageSourceProvider(EigenrayProvider):
         return out
 
 
-def _fluid_bottom(speed: float, density: float, attenuation: float = 0.0, water_density: float = 1.0):
-    """A sediment mapping as the tuple the C++ provider takes (the arguments of `rayleigh_reflection`)."""
-    return float(speed), float(density), float(attenuation), float(water_density)
+def _fluid_bottom(speed: float, density: float, attenuation: float = 0.0, water_density: float = 1.0,
+                  shear_speed: float = 0.0, shear_attenuation: float = 0.0):
+    """A sediment mapping as the tuple the C++ provider takes (the arguments of `rayleigh_reflection`); the
+    four numbers of a fluid, six with an elastic bottom's shear."""
+    fluid = float(speed), float(density), float(attenuation), float(water_density)
+    return fluid if shear_speed == 0.0 else fluid + (float(shear_speed), float(shear_attenuation))
 
 
 _AXIS_WALL_KEYS = ("axis", "position", "coefficient")
@@ -800,14 +809,23 @@ class SedimentProvider(EigenrayProvider):
 
 
 def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
-                        attenuation: float = 0.0, water_density: float = 1.0):
-    """Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh).
+                        attenuation: float = 0.0, water_density: float = 1.0,
+                        shear_speed: float = 0.0, shear_attenuation: float = 0.0):
+    """Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh), or of an
+    elastic one when `shear_speed` > 0.
 
     `grazing` in radians; `density` in the same units as `water_density`; `attenuation` in
     dB per wavelength, entering as an imaginary part of the sediment sound speed.
     R = (m sin(g) - sqrt(n^2 - cos^2(g))) / (m sin(g) + sqrt(n^2 - cos^2(g))),
     m = rho_b / rho_w, n = c_w / c_b.
     Sources: docs/REFERENCES.md Sec. 12.4 (the dB/wavelength conversion is ours).
+
+    Elastic (A8; `shear_speed` m/s, `shear_attenuation` dB per wavelength of the shear wave):
+    Jackson and Richardson (2007) (9.34)-(9.40), as `bottom.reflection` with nu_t = shear_speed /
+    c_water: with n_t = c_w / c_t and the decaying roots p = sqrt(n^2 - cos^2 g),
+    s = sqrt(n_t^2 - cos^2 g), and C = cos 2theta_t = 2 cos^2 g / n_t^2 - 1,
+    R = (m sin g (C^2 s + (1 - C^2) p) - p s) / (m sin g (C^2 s + (1 - C^2) p) + p s).
+    `shear_speed` = 0 (the default) is the fluid expression above, unchanged.
     """
     g = np.asarray(grazing, dtype=float)
     delta = attenuation / (40.0 * np.pi * np.log10(np.e))      # loss tangent from dB/wavelength
@@ -816,7 +834,15 @@ def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
     n = c_water / c_b
     root = np.sqrt(n**2 - np.cos(g) ** 2 + 0j)
     root = np.where(root.imag < 0, -root, root)                 # decaying branch in the sediment
-    return (m * np.sin(g) - root) / (m * np.sin(g) + root)
+    if shear_speed == 0.0:
+        return (m * np.sin(g) - root) / (m * np.sin(g) + root)
+    delta_t = shear_attenuation / (40.0 * np.pi * np.log10(np.e))
+    n_t = c_water * (1.0 + 1j * delta_t) / shear_speed
+    s = np.sqrt(n_t**2 - np.cos(g) ** 2 + 0j)
+    s = np.where(s.imag < 0, -s, s)
+    cos2t = 2.0 * np.cos(g) ** 2 / n_t**2 - 1.0
+    num = m * np.sin(g) * (cos2t**2 * s + (1.0 - cos2t**2) * root)
+    return (num - root * s) / (num + root * s)
 
 
 def fluid_transmission(grazing, c_water: float, speed: float, density: float,

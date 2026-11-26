@@ -6,6 +6,7 @@
 #include <string>
 
 #include "sonar/core/parallel.hpp"
+#include "sonar/core/reflection.hpp"
 
 namespace sonar::sim {
 
@@ -31,16 +32,8 @@ double clip01(double x) { return x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x); }
 
 /// Complex quotient by Smith's method with a reciprocal, the operation order NumPy uses,
 /// so that amplitudes agree with the Python providers to the last bits.
-cd divide(cd a, cd b) {
-  if (std::abs(b.real()) >= std::abs(b.imag())) {
-    const double rat = b.imag() / b.real();
-    const double scl = 1.0 / (b.real() + b.imag() * rat);
-    return {(a.real() + a.imag() * rat) * scl, (a.imag() - a.real() * rat) * scl};
-  }
-  const double rat = b.real() / b.imag();
-  const double scl = 1.0 / (b.imag() + b.real() * rat);
-  return {(a.real() * rat + a.imag()) * scl, (a.imag() * rat - a.real()) * scl};
-}
+/// (sonar/core/reflection.hpp: one copy, shared with the elastic coefficient of the live chain)
+cd divide(cd a, cd b) { return smith_divide(a, b); }
 cd divide(cd a, double b) { return divide(a, cd{b, 0.0}); }
 
 /// f(i) for every field point. A point is a few dozen operations, so threads take
@@ -146,7 +139,9 @@ std::complex<double> rayleigh_reflection(double grazing, double c_water, const F
   cd root = std::sqrt(n * n - cg * cg + cd{0.0, 0.0});
   if (root.imag() < 0.0) root = -root;  // decaying branch in the sediment
   const double ms = m * std::sin(grazing);
-  return divide(ms - root, ms + root);
+  if (bottom.shear_speed == 0.0) return divide(ms - root, ms + root);
+  // Elastic solid (A8): J&R (9.34)-(9.40), the one implementation the live chain calls too (sonar/core/reflection.hpp).
+  return elastic_reflection(grazing, c_water, bottom.speed, m, bottom.attenuation, bottom.shear_speed, bottom.shear_attenuation);
 }
 
 void check_config(const ImageSourceConfig& config) {
@@ -169,10 +164,13 @@ void check_config(const ImageSourceConfig& config) {
     if (config.has_fluid_bottom) {
       const FluidBottom& b = config.fluid_bottom;
       if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
-          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0) {
+          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0 ||
+          !(b.shear_speed >= 0.0) || !std::isfinite(b.shear_speed) || !(b.shear_attenuation >= 0.0) ||
+          !std::isfinite(b.shear_attenuation)) {
         throw std::invalid_argument(
             "image_source: a fluid bottom needs its speed (m/s) and density (ratio to water_density), and an "
-            "attenuation >= 0 dB per wavelength; there is no default sediment");
+            "attenuation >= 0 dB per wavelength (an elastic one a shear_speed and shear_attenuation >= 0); "
+            "there is no default sediment");
       }
     } else if (!stated(config.bottom_coefficient)) {
       throw std::invalid_argument(
@@ -389,10 +387,13 @@ void check_config(const PlaneImageConfig& config) {
     if (config.has_fluid_bottom) {
       const FluidBottom& b = config.fluid_bottom;
       if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
-          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0) {
+          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0 ||
+          !(b.shear_speed >= 0.0) || !std::isfinite(b.shear_speed) || !(b.shear_attenuation >= 0.0) ||
+          !std::isfinite(b.shear_attenuation)) {
         throw std::invalid_argument(
             "image_source: a fluid bottom needs its speed (m/s) and density (ratio to water_density), and an "
-            "attenuation >= 0 dB per wavelength; there is no default sediment");
+            "attenuation >= 0 dB per wavelength (an elastic one a shear_speed and shear_attenuation >= 0); "
+            "there is no default sediment");
       }
     } else if (!stated(config.bottom_coefficient)) {
       throw std::invalid_argument(

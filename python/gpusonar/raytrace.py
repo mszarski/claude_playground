@@ -22,7 +22,7 @@ cos(theta_0) d theta_0 d phi crosses, at range r, the area r d phi |dz / d theta
 (isovelocity: z = r tan(theta_0) gives 1 / R^2). At a caustic dz / d theta_0 -> 0 and geometric acoustics fails: the
 amplitude is clipped at `caustic_clip` times the spherical value and the eigenray is marked; the -pi/2 phase of a
 caustic is not applied. Surface reflections multiply by `surface_coefficient` (-1), bottom ones by the Rayleigh
-coefficient of the given fluid half-space at the ray's grazing angle there.
+coefficient of the given half-space at the ray's grazing angle there (a fluid, or an elastic solid such as rock).
 
 This is the core's own code (no Bellhop source was read or copied; Bellhop is run as a separate program in the tests,
 as an oracle for the delays). `ray_depth` here answers the same question as `elevation.ray_depth` (which steps by
@@ -184,13 +184,15 @@ class Eigenray:
 
 def _rayleigh(grazing: float, c_water: float, bottom: dict) -> complex:
     from .sim.propagation import rayleigh_reflection
-    return complex(rayleigh_reflection(grazing, c_water, float(bottom["speed"]), float(bottom["density"]), float(bottom.get("attenuation", 0.0))))
+    return complex(rayleigh_reflection(grazing, c_water, float(bottom["speed"]), float(bottom["density"]), float(bottom.get("attenuation", 0.0)),
+                                       shear_speed=float(bottom.get("shear_speed", 0.0)), shear_attenuation=float(bottom.get("shear_attenuation", 0.0))))
 
 
 def eigenrays(profile: Profile, z_source: float, z_receiver: float, range_m: float, max_angle_deg: float = 60.0, n_fan: int = 2401,
               max_bounces: int = 4, surface_coefficient: float = -1.0, bottom: dict | None = None, caustic_clip: float = 10.0) -> list[Eigenray]:
     """Every ray joining a source at depth `z_source` and a receiver at `z_receiver` a horizontal `range_m` apart with at
-    most `max_bounces` boundary reflections, earliest first. `bottom`: {speed, density, attenuation} of a fluid half-space
+    most `max_bounces` boundary reflections, earliest first. `bottom`: {speed, density, attenuation} of a fluid half-space,
+    with {shear_speed, shear_attenuation} an elastic one (rock; libs/live RayBottom the same)
     (None: bottom-reflected rays are left out, the non-ducting case)."""
     angles = np.radians(np.linspace(-max_angle_deg, max_angle_deg, int(n_fan) | 1))
     angles = angles[np.abs(angles) > 1e-9]

@@ -52,7 +52,8 @@ void leg(const RayFan& fan, std::size_t i_range, double z, const CoverageOptions
       power *= std::pow(flat * flat, q.n_surface);
     }
     if (q.n_bottom > 0) {
-      const cd r = rayleigh_reflection(q.grazing_bottom, c_bot, o.bottom_speed, o.bottom_density, o.bottom_attenuation);
+      const cd r = rayleigh_reflection(q.grazing_bottom, c_bot, o.bottom_speed, o.bottom_density, o.bottom_attenuation, o.bottom_shear_speed,
+                                       o.bottom_shear_attenuation);
       coh *= std::pow(r, q.n_bottom);
       power *= std::pow(std::norm(r), q.n_bottom);
     }
@@ -271,6 +272,8 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
   else if (k == "bottom_speed") o.bottom_speed = v();
   else if (k == "bottom_density") o.bottom_density = v();
   else if (k == "bottom_attenuation") o.bottom_attenuation = v();
+  else if (k == "bottom_shear_speed") o.bottom_shear_speed = option_nonnegative(key, value);
+  else if (k == "bottom_shear_attenuation") o.bottom_shear_attenuation = option_nonnegative(key, value);
   else if (k == "water_depth") o.water_depth = v();
   else if (k == "ray_fan") o.ray_fan = i();
   else if (k == "max_bounces") o.max_bounces = i();

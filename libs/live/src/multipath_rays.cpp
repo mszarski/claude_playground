@@ -164,7 +164,8 @@ class RayPattern {
       const double mu = o_.surface_coefficient * std::pow(10.0, -multipath_surface_loss_db(o_, q.grazing_surface) / 20.0) * std::exp(-0.5 * gamma * gamma);
       a *= std::pow(mu, q.n_surface);
     }
-    if (q.n_bottom > 0) a *= std::pow(rayleigh_reflection(q.grazing_bottom, c_bot_, o_.bottom_speed, o_.bottom_density, o_.bottom_attenuation), q.n_bottom);
+    if (q.n_bottom > 0) a *= std::pow(rayleigh_reflection(q.grazing_bottom, c_bot_, o_.bottom_speed, o_.bottom_density, o_.bottom_attenuation, o_.bottom_shear_speed,
+                                                          o_.bottom_shear_attenuation), q.n_bottom);
     return a;
   }
 

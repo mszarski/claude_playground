@@ -210,6 +210,8 @@ def sediment_table(path=None) -> dict:
 
 
 REFLECTION_KEYS = ("rho", "nu", "delta")
+SHEAR_KEYS = ("nu_t", "delta_t")
+"""An elastic row's shear speed ratio to the water and shear loss parameter (J&R (9.23), q = t)."""
 DB_PER_WAVELENGTH = 40.0 * math.pi / math.log(10.0)
 """dB per wavelength for a loss parameter delta of one: a = delta 40 pi / ln 10 (the same
 conversion as in `propagation.rayleigh_reflection`; UnderwaterAcoustics.jl (MIT), src/basic.jl:171-179,
@@ -230,6 +232,8 @@ def _entry(name: str, path=None) -> dict:
         r = {k: float(v) for k, v in entry["reflection"].items()}
         entry = dict({"rho": r["density"] / r["water_density"], "nu": r["sound_speed"] / r["water_sound_speed"],
                       "delta": r["delta"]}, **entry)
+        if "shear_speed" in r:          # an elastic solid (rock): shear speed ratio and loss parameter (J&R (9.23))
+            entry = dict({"nu_t": r["shear_speed"] / r["water_sound_speed"], "delta_t": r.get("shear_delta", 0.0)}, **entry)
     if "scattering" in entry:
         # The three scattering parameters in the units of their source: spectral strength in
         # cm^4 with a 1 cm reference length (`w2_cm4`), or already in m^(4 - gamma2) (`w2`).
@@ -280,24 +284,42 @@ def sediment(name: str, path=None, supplied=None) -> dict:
     return {k: float(entry[k]) for k in SEDIMENT_KEYS if k in entry}
 
 
-def sediment_reflection(name: str, path=None) -> dict:
+def sediment_reflection(name: str, path=None, shear: bool = True) -> dict:
     """{rho, nu, delta} of a named sediment: all that the flat-interface reflection coefficient
-    needs. Works for every entry, the reflection-only ones included."""
+    needs. Works for every entry, the reflection-only ones included. A row that is an elastic
+    solid (its `reflection:` block has `shear_speed`; today only `rock`) adds {nu_t, delta_t},
+    the shear speed ratio and shear loss parameter of `reflection`, unless `shear` is False (the
+    fluid half-space of the same row, as before A8)."""
     entry = _entry(name, path)
     missing = [k for k in REFLECTION_KEYS if k not in entry]
     if missing:
         raise ValueError(f"sediment {name!r} lacks {missing}")
-    _warn_status(name, entry, REFLECTION_KEYS)
-    return {k: float(entry[k]) for k in REFLECTION_KEYS}
+    keys = REFLECTION_KEYS + (SHEAR_KEYS if shear and "nu_t" in entry else ())
+    _warn_status(name, entry, keys + (("shear",) if "nu_t" in keys else ()))
+    return {k: float(entry[k]) for k in keys}
 
 
 def fluid_halfspace(name: str, water_sound_speed: float, path=None) -> dict:
     """A named sediment as the fluid half-space the eigenray providers take:
     {speed (m/s), density (relative to the water), attenuation (dB per wavelength)}, with
-    speed = nu x the water sound speed given here (the table holds ratios)."""
-    par = sediment_reflection(name, path)
+    speed = nu x the water sound speed given here (the table holds ratios). Always a fluid: a
+    row's shear is left out (the `sediment` tier's penetration and the live chain's depth
+    models take this; `halfspace` keeps the shear)."""
+    par = sediment_reflection(name, path, shear=False)
     return {"speed": par["nu"] * float(water_sound_speed), "density": par["rho"],
             "attenuation": par["delta"] * DB_PER_WAVELENGTH}
+
+
+def halfspace(name: str, water_sound_speed: float, path=None) -> dict:
+    """`fluid_halfspace`, plus {shear_speed (m/s), shear_attenuation (dB per wavelength)} for a
+    row that is an elastic solid (`rock`): the half-space of the image-source tier and Bellhop
+    (`propagation.rayleigh_reflection`). Equal to `fluid_halfspace` for every fluid row."""
+    par = sediment_reflection(name, path)
+    out = {"speed": par["nu"] * float(water_sound_speed), "density": par["rho"],
+           "attenuation": par["delta"] * DB_PER_WAVELENGTH}
+    if "nu_t" in par:
+        out.update(shear_speed=par["nu_t"] * float(water_sound_speed), shear_attenuation=par["delta_t"] * DB_PER_WAVELENGTH)
+    return out
 
 
 def _vertical(k2, horizontal):
@@ -305,13 +327,30 @@ def _vertical(k2, horizontal):
     return np.where(b.imag < 0.0, -b, b)          # decays away from the interface
 
 
-def reflection(grazing, rho: float, nu: float, delta: float):
+def reflection(grazing, rho: float, nu: float, delta: float, nu_t: float = 0.0, delta_t: float = 0.0):
     """Flat-interface pressure reflection coefficient V of the fluid sediment at a grazing angle
-    (equal to Jackson and Richardson 2007, eqs. (8.49)-(8.53))."""
+    (equal to Jackson and Richardson 2007, eqs. (8.49)-(8.53)).
+
+    With a shear speed ratio `nu_t` > 0 (and shear loss parameter `delta_t`) the bottom is an
+    elastic solid and V is J&R's (9.34)-(9.40): V = (z_e - 1) / (z_e + 1),
+    z_e = z_wp cos^2 2theta_t + z_wt sin^2 2theta_t, z_wq = a_rho a_q sin theta_w / sin theta_q,
+    cos theta_q = a_q cos theta_w, cos 2theta_t = 2 a_t^2 cos^2 theta_w - 1, a_q = nu_q / (1 + i delta_q)
+    (9.23) ([N3] Sec. 2.3). It is evaluated multiplied through by the two vertical wavenumbers,
+    s_q = sin theta_q / a_q = sqrt(1 / a_q^2 - cos^2 theta_w) on the branch that decays into the
+    bottom (as the fluid's), so that no critical angle divides by zero. nu_t = 0 is the fluid
+    coefficient, computed by the fluid expression itself (bit-identical to before A8); as nu_t -> 0
+    the elastic one tends to it (tests/python/test_elastic_bottom.py). Twins:
+    `propagation.rayleigh_reflection`, libs/sim paths.cpp `rayleigh_reflection`."""
     g = np.asarray(grazing, dtype=float)
     kappa = (1.0 + 1j * delta) / nu
     p = _vertical(kappa**2, np.cos(g))
-    return (rho * np.sin(g) - p) / (rho * np.sin(g) + p)
+    if nu_t == 0.0:
+        return (rho * np.sin(g) - p) / (rho * np.sin(g) + p)
+    a_t = nu_t / (1.0 + 1j * delta_t)
+    s = _vertical(1.0 / a_t**2, np.cos(g))
+    cos2t = 2.0 * a_t**2 * np.cos(g) ** 2 - 1.0
+    num = rho * np.sin(g) * (cos2t**2 * s + (1.0 - cos2t**2) * p)       # z_e x p s
+    return (num - p * s) / (num + p * s)
 
 
 def _perturbation_factor(ti, ts, phi, k, rho, nu, delta):

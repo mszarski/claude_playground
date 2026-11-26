@@ -294,6 +294,14 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   No shipped scene moves (W3).
 - Must not: give `pebbles` or any row a shear speed without a source; invent per-site rock V_s; change the
   rock Lambert scattering (U3, a separate decision). Sediment shear only if asked (under 0.2 dB, [N1 §3.4]).
+- **Done 2026-11-26 (branch `a-rock`, CONFORMANCE.md A8, the owner's approval to align): rock is elastic by
+  default.** `bottom.reflection(..., nu_t, delta_t)`, `propagation.rayleigh_reflection(..., shear_speed,
+  shear_attenuation)`, C++ `FluidBottom::shear_speed` (equal to 4e-14 relative), Bellhop's and Bellhop3D's shear
+  column; `rock` has 1900 m/s and shear delta 0.085 (Olson et al.'s generic rock, the notes' best-sourced value,
+  `unconfirmed_fields: [shear]`), 0.50 V_p. Fluid rows bit-identical (sha256). C1 settled: [N3]'s numbers follow
+  from its stated inputs (delta_t 0.1, or 0.085 for the generic rock); [N1]'s 4.8-5.5 dB at 40-60 degrees holds
+  only from about 50 degrees up (ours, row: 8.8 / 6.3 / 5.3 / 4.8 / 4.5 dB at 40 / 45 / 50 / 55 / 60). Fig. 9.3's sand differs by up to 0.506 dB (not "below 0.5").
+  Tests: `tests/python/test_elastic_bottom.py`, `Paths.ElasticRockCoefficient`, parity cases in `test_sim_cpp.py`.
 
 ### G-5 Mud volume parameter and silt roughness: the owner's table — OWNER FIRST, S
 - Gap U1, U2. Draws on [N2 WP-4 (memo)], [N2 §3.2-§3.3], [N4 §3.6], D-193.

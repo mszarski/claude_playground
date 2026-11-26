@@ -63,8 +63,9 @@ struct MultipathOptions {
   double surface_rms_height = 0.0;     ///< m: coherent reflection exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)
   double surface_loss_db = 0.0;        ///< further loss per surface bounce (bubbles)
   double surface_min_amplitude = 0.5;  ///< a one-leg surface echo weaker than this re the direct one: no_surface_path
-  bool bottom = false;                 ///< a fluid bottom's Rayleigh reflection (with the water depth): the next three
+  bool bottom = false;                 ///< a bottom's Rayleigh reflection (with the water depth): the next three (five: rock)
   double bottom_speed = 0.0, bottom_density = 0.0, bottom_attenuation = 0.0;  ///< m/s, re water, dB per wavelength
+  double bottom_shear_speed = 0.0, bottom_shear_attenuation = 0.0;            ///< m/s (0: a fluid), dB per wavelength: an elastic bottom (rock)
   std::int64_t bottom_order = 2;       ///< boundary reflections per leg with a bottom (1: d, s, b; 2: also sb, bs)
   double bottom_grazing_limit_deg = 45.0;  ///< water depth known, no bottom given: a bottom path shallower than this makes the depth ambiguous
   double water_depth = 0.0;            ///< m; 0: the record's environment.water_depth (navigation's, else unknown)
