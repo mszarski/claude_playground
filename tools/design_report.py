@@ -217,13 +217,41 @@ def requirements(D: dict) -> list:
     face = {n: bs.performance(bs.derive(bs.load(n))) for n in ("popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32")}
     at12 = "; ".join(f"{p['detection']['rows']} row{'s' if p['detection']['rows'] > 1 else ''}: needs {p['detection']['threshold_db']:.1f} dB, margin {p['margin_db']['ship']['12000.0']:+.1f} dB, "
                      f"detection probability {p['detection_probability']['ship']['12000.0']:.2f}" for p in face.values())
-    add("POP-3", "Frequency and source level that take the Popoto array to 12 km",
-        "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
-        f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones a row, {d['pulse_ms'] / 1e3:.0f} s pulse: "
-        f"{face['popoto_face_1x32']['row_snr_db']['ship']['12000.0']:.1f} dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of "
-        f"{face['popoto_face_1x32']['detection']['probability']:g} on one ping: {at12} (study: {best['source_level_db']:.0f} dB at "
-        f"{best['best_frequency_hz'] / 1e3:.1f} kHz for {study['snr_db']:.1f} dB in one row). Met by the recommended three rows; one row alone is {-face['popoto_face_1x32']['margin_db']['ship']['12000.0']:.1f} dB short",
-        face["popoto_face_3x32"]["margin_db"]["ship"]["12000.0"] >= 0.0 and d["max_range_m"] >= 12000.0)
+    # POP-3: for large_submerged first and ship second (the owner, 2026-11-26; D-235). `met` is the free-field design point
+    # (both classes, the recommended rows) and is what --check holds; the cell says where it is not held at the illustrative
+    # sites of the depth plan, so the row never reads as a bare pass while a listed site fails.
+    sys.path.insert(0, str(ROOT / "tools"))
+    import reference_plan as rp
+    X = rp.twelve_km_by_site()
+    cls = list(rp.REQUIREMENT_CLASSES)
+    three = face[rp.REQUIREMENT_BUILD]
+    one_row = face["popoto_face_1x32"]["margin_db"]["ship"]["12000.0"]
+    free = X["free"] if X else {"ship": {"margin_db": three["margin_db"]["ship"]["12000.0"], "ts_low_db": None}}
+    design_ok = all(free[c]["margin_db"] >= 0.0 for c in (cls if X else ["ship"])) and d["max_range_m"] >= 12000.0
+    value = (f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones a row, {d['pulse_ms'] / 1e3:.0f} s pulse. "
+             + (f"**Free field** (spherical spreading, no site), `{cls[0]}` and `{cls[1]}` at the low end of their assumed strengths ({free[cls[0]]['ts_low_db']:+g} and {free[cls[1]]['ts_low_db']:+g} dB, "
+                f"the budget's ship-sized target): " if X else "**Free field** (spherical spreading, no site), the ship-sized target: ")
+             + f"{face['popoto_face_1x32']['row_snr_db']['ship']['12000.0']:.1f} dB in one row at 12 km, against what the chain's own detector needs of one row for a detection probability of {face['popoto_face_1x32']['detection']['probability']:g} on one ping: {at12} "
+             f"(study: {best['source_level_db']:.0f} dB at {best['best_frequency_hz'] / 1e3:.1f} kHz for {study['snr_db']:.1f} dB in one row); "
+             + ("held by the recommended three rows" if three["margin_db"]["ship"]["12000.0"] >= 0.0 else "**not** held by the recommended three rows")
+             + (f", one row alone is {-one_row:.1f} dB short." if one_row < 0.0 else ", and by one row alone."))
+    if X:
+        n = len(X["sites"])
+        value += (f" **At the {n} illustrative sites** of the depth plan (three rows, own depth planned; `docs/design/popoto_depth_planner.json`; ours, illustrative): "
+                  + "; ".join(f"`{c}` held at {n - len(X['failing'][c])} of {n}" + ((", not at " + ", ".join(f"`{s}` ({X['rows'][(s, c)]['margin_db']:+.1f} dB)" for s in X["failing"][c])) if X["failing"][c] else "")
+                              for c in cls)
+                  + ". Per site: *The 12 km design point*. Still open with the owner: " + rp.REQUIREMENT_OPEN + ".")
+        bad = [s for s in X["sites"] if any(s in X["failing"][c] for c in cls)]
+        met_text = ((f"free field: yes, both classes (three rows; one row: {'yes' if one_row >= 0.0 else 'no'}); " if design_ok else "free field: **NO**; ")
+                    + (("illustrative sites: **not** at " + ", ".join(f"`{s}`" for s in bad) + f" ({n - len(bad)} of {n} held by both; per site: *The 12 km design point*)") if bad else f"illustrative sites: yes, {n} of {n}"))
+        status = ("partly met" if bad else "met") if design_ok else "not met"
+    else:
+        met_text, status = None, ("met" if design_ok else "not met")
+    add("POP-3", "Frequency and source level that take the Popoto array to 12 km, for " + rp.requirement_classes_text(),
+        "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)", value, design_ok)
+    out[-1].update({"classes": cls if X else ["ship"], "status": status})
+    if met_text:
+        out[-1]["met_text"] = met_text
     envs = sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
     seen = set()
     for n in envs:
@@ -964,7 +992,7 @@ def write_report(D, reqs, out_md):
     L.append("## 2. Requirements and where each is met\n")
     L.append("| Id | Requirement (owner) | Set in | Value found | Met |\n| --- | --- | --- | --- | --- |")
     for r in reqs:
-        L.append(f"| {r['id']} | {r['requirement']} | `{r['set_in']}` | {r['value']} | {'yes' if r['met'] else '**NO**'} |")
+        L.append(f"| {r['id']} | {r['requirement']} | `{r['set_in']}` | {r['value']} | {r.get('met_text') or ('yes' if r['met'] else '**NO**')} |")
     L.append("\nEach row is checked by `tests/python/test_design.py`; the scenarios are run by "
              "`tests/python/test_realistic_scenes.py` (thinned) and `tools/gallery.py` (full size).\n")
     L.append("## 3. Arrays and beams\n")
@@ -1059,7 +1087,7 @@ def write_report(D, reqs, out_md):
         L.append(f"| {float(a):.1f} m aperture ({v['hydrophones']} hydrophones) | {v['best_frequency_hz'] / 1e3:.1f} kHz | {float(a):.1f} m | {v['source_level_db']:.0f} dB | {v['acoustic_power_w_omni']:.0f} W |")
     L.append(f"\n- **Chosen (`popoto_long_range`):** {lr['elements']} hydrophones at {lr['pitch_mm'] / 10:.0f} cm ({lr['array_length_m']:.1f} m), "
              f"{lr['centre_frequency_khz'] - lr['bandwidth_khz'] / 2:.0f} to {lr['centre_frequency_khz'] + lr['bandwidth_khz'] / 2:.0f} kHz, "
-             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {_face_12km()[2]:.1f} dB in one row at 12 km (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; "
+             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {_face_12km()[2]:.1f} dB in one row at 12 km on the ship-sized target in free field, not at a site (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; "
              f"{lr['_eq'].snr(12000.0):.1f} dB with Sec. 5's Francois-Garrison). It was sized when the budget's threshold was a typed 13 dB "
              "(13 dB plus 2 dB). Against what the chain's own detector needs for a detection probability of "
              f"{_face_12km()[0]:g} on one ping: " + _face_12km()[1] + " (*The 12 km design point*). "
@@ -1128,7 +1156,7 @@ def main():
     md.write_text(text + ("\n<!-- measured -->" + tail if tail else ""))
     bad = [r for r in reqs if not r["met"]]
     for r in reqs:
-        print(("ok   " if r["met"] else "FAIL ") + r["id"] + ": " + r["value"])
+        print(("FAIL " if not r["met"] else ("PART " if r.get("status") == "partly met" else "ok   ")) + r["id"] + ": " + r["value"])
     if args.check and bad:
         sys.exit(1)
 
