@@ -49,7 +49,9 @@ def test_every_row_loads_and_the_table_is_complete():
     assert set(table) == set(JULIA_TABLE) | {"placeholder_sand"}
     for name, entry in table.items():
         par = quiet(bottom.sediment_reflection, name)
-        assert set(par) == {"rho", "nu", "delta"} and all(math.isfinite(v) and v > 0 for v in par.values())
+        # rock is an elastic solid (A8; tests/python/test_elastic_bottom.py): also its shear ratio and loss
+        assert set(par) == {"rho", "nu", "delta"} | ({"nu_t", "delta_t"} if name == "rock" else set())
+        assert all(math.isfinite(v) and v > 0 for v in par.values())
         assert bottom.is_reflection_only(name) == (name in REFLECTION_ONLY) == bool(entry.get("reflection_only", False))
         assert "source" in entry and "status" in entry
     for name in JULIA_ROWS:
@@ -66,7 +68,7 @@ def test_confirmed_rows_do_not_warn_and_the_corrected_speed_is_documented():
     for name in JULIA_ROWS:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            bottom.sediment_reflection(name)
+            bottom.sediment_reflection(name, shear=False)    # rock's shear (A8) is flagged unconfirmed and warns
     par = bottom.sediment_reflection("sandy_gravel")
     entry = bottom.sediment_table()["sandy_gravel"]
     # The Julia table's 1.3570 was a typing error: both values and the three sources are in the note.
@@ -102,7 +104,7 @@ def hand_rayleigh(grazing, rho, nu, delta):
 def test_reflection_of_named_rows_against_a_hand_evaluated_coefficient(name):
     rho, c, delta = JULIA_TABLE[name]
     rho, nu = rho / 1023.0, c / 1528.0
-    par = bottom.sediment_reflection(name)
+    par = bottom.sediment_reflection(name, shear=False)      # rock as a fluid (A8 made it elastic by default)
     half = bottom.fluid_halfspace(name, 1500.0)
     assert half["speed"] == pytest.approx(nu * 1500.0) and half["density"] == pytest.approx(rho)
     assert half["attenuation"] == pytest.approx(delta * 40.0 * math.pi / math.log(10.0))

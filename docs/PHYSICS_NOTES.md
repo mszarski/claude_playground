@@ -852,6 +852,52 @@ before use".
 | Volume scattering strength | user input | tabulated Sv per layer; typical ocean values from Urick ch. 8 | - |
 | Ambient noise spectrum | nothing | Wenz (JASA 34, 1962) curves; Knudsen wind noise; thermal noise above ~100 kHz | From memory, verify before use: thermal noise `NL ~ -15 + 20 log10 f[kHz]` dB re uPa^2/Hz (Mellen 1952). |
 
+### 6.5 Elastic bottom: rock (A8, 2026-11-26)
+
+What is uncertain first: the `rock` row's shear numbers are another rock's. 1900 m/s and the shear loss
+parameter 0.085 are Olson, Lyons and Saebo's "generic rock" (arXiv:1601.06078, Table II, read: confirmed;
+they attribute it to TR 9407 Table IV.2, not read: via secondary), whose compressional speed is 3600 m/s; our
+row's compressional speed (3820 m/s) and density are UnderwaterAcoustics.jl's "Rock". Putting the two together
+is ours, so the row says `unconfirmed_fields: [shear]` and warns. 1900 / 3820 = 0.50 lies inside the 40-60 % of
+V_p that Jackson and Richardson (2007) print for rock (Sect. 5.6, p. 169). A different rock moves the loss a lot:
+at 10 degrees 6.8 / 3.4 / 2.1 dB for V_s = 0.4 / 0.5 / 0.6 V_p (shear delta 0.1).
+
+Formula, J&R (9.34)-(9.40) with (9.23) (docs/references/jackson_richardson_2007/03 Sec. 2.3): with
+a_rho = rho / rho_w, a_q = nu_q / (1 + i delta_q) (q = p, t; nu_q the speed ratio to the water),
+cos theta_q = a_q cos theta_w,
+
+    V = (z_e - 1) / (z_e + 1),  z_e = z_wp cos^2 2theta_t + z_wt sin^2 2theta_t,
+    z_wq = a_rho a_q sin theta_w / sin theta_q,  cos 2theta_t = 2 a_t^2 cos^2 theta_w - 1.
+
+The code (`bottom.reflection` with `nu_t`, `delta_t`; `propagation.rayleigh_reflection` with `shear_speed`,
+`shear_attenuation` in dB per wavelength; C++ `sim::rayleigh_reflection` with `FluidBottom::shear_speed`)
+writes z_wq = a_rho sin theta_w / s_q with s_q = sin theta_q / a_q = sqrt(1 / a_q^2 - cos^2 theta_w) on the
+decaying branch (the fluid coefficient's root), and multiplies numerator and denominator by s_p s_t:
+
+    V = (a_rho sin theta_w (C^2 s_t + (1 - C^2) s_p) - s_p s_t) / (a_rho sin theta_w (C^2 s_t + (1 - C^2) s_p) + s_p s_t),
+    C = cos 2theta_t,
+
+so no critical angle divides by zero. At nu_t = 0 the code takes the fluid expression itself (bit-identical to
+before); as nu_t -> 0, C -> -1 and 1 - C^2 -> 0 and V tends to the fluid one (1e-12 at nu_t = 1e-9). At normal
+incidence C = -1 whatever the shear speed. Checks (tests/python/test_elastic_bottom.py): the retyped book formula
+and a boundary-condition solve written from first principles (ours: u_z and sigma_zz continuous, sigma_xz = 0,
+potentials) agree with the code to 1e-12; lossless, |V|^2 plus the compressional and shear energy fluxes is 1 to
+1e-12 and |V| = 1 below the shear critical angle; J&R Fig. 9.4's minimum |V| = 0.052 at 35.7 degrees and Fig.
+9.3's sand within 0.51 dB of the fluid; Bellhop's acousto-elastic half-space (run as a separate process) within
+0.22 dB and 2.6 degrees of ours at 5-20 and 45-60 degrees grazing, 1.2 dB at 30 degrees where |V| falls 15 dB in
+three degrees.
+
+Per bounce on the `rock` row (ours, dB): fluid 0.01 / 0.02 / 0.03 / 0.03 / 0.03 / 0.03 / 0.06 / 2.80 ->
+elastic 1.56 / 2.90 / 5.45 / 14.57 / 8.78 / 6.25 / 4.54 / 2.80 at 5 / 10 / 20 / 30 / 40 / 45 / 60 / 90 degrees;
+the largest loss, 27.9 dB, is at 33.1 degrees, just below the shear critical angle (36.4 degrees for 1900 m/s on 1528 m/s
+water), where the leaky-Rayleigh wave makes the interface nearly transparent (J&R p. 276-277).
+
+Where it applies: the image-source tier and Bellhop (the shear column of the `.env`; Bellhop3D the same) for a
+`rock` bottom. Not: the `sediment` tier's penetration (a fluid model; it takes the row as a fluid), the live
+chain's depth models (`lloyd.py`, `raytrace.py`, `libs/live`, `depthplan.py`'s Bellhop branch: fluid, as
+before), the scattering models. `pebbles` stays a fluid: no source gives its shear speed. The rock Lambert level
+(-16 dB, range -23 to -10 dB) is unchanged.
+
 ---
 
 ## 7. Noise (Sec. 4.6, p. 29-33; Sec. 2.4, p. 10)

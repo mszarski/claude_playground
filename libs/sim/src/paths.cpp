@@ -146,7 +146,17 @@ std::complex<double> rayleigh_reflection(double grazing, double c_water, const F
   cd root = std::sqrt(n * n - cg * cg + cd{0.0, 0.0});
   if (root.imag() < 0.0) root = -root;  // decaying branch in the sediment
   const double ms = m * std::sin(grazing);
-  return divide(ms - root, ms + root);
+  if (bottom.shear_speed == 0.0) return divide(ms - root, ms + root);
+  // Elastic solid (A8): J&R (9.34)-(9.40) multiplied through by the vertical wavenumbers, as
+  // propagation.rayleigh_reflection: n_t = c_w / c_t, s = sqrt(n_t^2 - cos^2 g) (decaying),
+  // C = cos 2theta_t = 2 cos^2 g / n_t^2 - 1, R = (m sin g (C^2 s + (1 - C^2) p) - p s) / (... + p s).
+  const double delta_t = bottom.shear_attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
+  const cd n_t = c_water * cd{1.0, delta_t} / bottom.shear_speed;
+  cd s = std::sqrt(n_t * n_t - cg * cg + cd{0.0, 0.0});
+  if (s.imag() < 0.0) s = -s;
+  const cd cos2t = 2.0 * cg * cg / (n_t * n_t) - 1.0;
+  const cd num = ms * (cos2t * cos2t * s + (1.0 - cos2t * cos2t) * root);
+  return divide(num - root * s, num + root * s);
 }
 
 void check_config(const ImageSourceConfig& config) {
@@ -169,10 +179,13 @@ void check_config(const ImageSourceConfig& config) {
     if (config.has_fluid_bottom) {
       const FluidBottom& b = config.fluid_bottom;
       if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
-          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0) {
+          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0 ||
+          !(b.shear_speed >= 0.0) || !std::isfinite(b.shear_speed) || !(b.shear_attenuation >= 0.0) ||
+          !std::isfinite(b.shear_attenuation)) {
         throw std::invalid_argument(
             "image_source: a fluid bottom needs its speed (m/s) and density (ratio to water_density), and an "
-            "attenuation >= 0 dB per wavelength; there is no default sediment");
+            "attenuation >= 0 dB per wavelength (an elastic one a shear_speed and shear_attenuation >= 0); "
+            "there is no default sediment");
       }
     } else if (!stated(config.bottom_coefficient)) {
       throw std::invalid_argument(
@@ -389,10 +402,13 @@ void check_config(const PlaneImageConfig& config) {
     if (config.has_fluid_bottom) {
       const FluidBottom& b = config.fluid_bottom;
       if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
-          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0) {
+          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0 ||
+          !(b.shear_speed >= 0.0) || !std::isfinite(b.shear_speed) || !(b.shear_attenuation >= 0.0) ||
+          !std::isfinite(b.shear_attenuation)) {
         throw std::invalid_argument(
             "image_source: a fluid bottom needs its speed (m/s) and density (ratio to water_density), and an "
-            "attenuation >= 0 dB per wavelength; there is no default sediment");
+            "attenuation >= 0 dB per wavelength (an elastic one a shear_speed and shear_attenuation >= 0); "
+            "there is no default sediment");
       }
     } else if (!stated(config.bottom_coefficient)) {
       throw std::invalid_argument(

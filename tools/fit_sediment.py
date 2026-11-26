@@ -138,7 +138,7 @@ def main(argv=None) -> int:
         sigma = args.sigma_db
     geo = {}
     if args.sediment:
-        geo = bottom.sediment_reflection(args.sediment, args.sediment_file)
+        geo = bottom.sediment_reflection(args.sediment, args.sediment_file, shear=False)     # the fluid model is fitted
     for k in ("rho", "nu", "delta"):
         if getattr(args, k) is not None:
             geo[k] = getattr(args, k)

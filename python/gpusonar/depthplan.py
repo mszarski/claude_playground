@@ -97,7 +97,8 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
             raise RuntimeError(f"environment {env.get('name')!r} has a sound-speed profile: that needs Bellhop (set GPUSONAR_BELLHOP)")
         prof = env["profile"]
         bottom = env.get("bottom") or {"speed": float(prof["speed_m_s"][-1]), "density": 1.0, "attenuation": 0.0}       # no bottom given: one that returns nothing
-        kw = {"sediment": bottom} if isinstance(bottom, str) else {"bottom_speed": float(bottom["speed"]), "bottom_density": float(bottom["density"]), "bottom_attenuation": float(bottom.get("attenuation", 0.0))}
+        # The live chain's depth models keep a fluid bottom (A8 made rock elastic in the simulator only).
+        kw = {"sediment": bottom, "elastic": False} if isinstance(bottom, str) else {"bottom_speed": float(bottom["speed"]), "bottom_density": float(bottom["density"]), "bottom_attenuation": float(bottom.get("attenuation", 0.0))}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ocean = OceanEnvironment(depth=float(env["water_depth_m"]), ssp_depth=np.asarray(prof["depth_m"], dtype=float), ssp_speed=np.asarray(prof["speed_m_s"], dtype=float), **kw)

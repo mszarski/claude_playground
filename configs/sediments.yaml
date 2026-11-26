@@ -205,7 +205,24 @@ rock:
     delta: 0.01374
     water_density: 1023.0
     water_sound_speed: 1528.0
+    shear_speed: 1900.0
+    shear_delta: 0.085
   reflection_only: true
+  unconfirmed_fields: [shear]
+  note: >-
+    An elastic solid (A8): with shear_speed the flat-interface reflection is Jackson and Richardson
+    (2007) (9.34)-(9.40) (bottom.reflection, propagation.rayleigh_reflection, Bellhop's shear column).
+    shear_speed 1900 m/s and shear_delta 0.085 are the "generic rock" of Olson, Lyons and Saebo,
+    arXiv:1601.06078, Table II (this file's header; they attribute it to TR 9407 Table IV.2, not read:
+    via secondary), the best-sourced rock shear values the notes name
+    (docs/references/jackson_richardson_2007/03_wave_theories_reflection_penetration.md Sec. 3.3 and
+    WP4; 01_sediment_properties.md Sec. 3.4, WP-C). That rock has 3600 m/s and 2500 kg/m3; this row's
+    compressional speed and density are UnderwaterAcoustics.jl's, so 1900 / 3820 = 0.50 of V_p, inside
+    J&R Sect. 5.6's printed 40-60 % (p. 169): putting the two sources together is ours, hence
+    unconfirmed. Per bounce 1.6 / 2.9 / 5.5 / 14.6 / 8.8 / 6.3 / 4.5 dB at 5 / 10 / 20 / 30 / 40 / 45 / 60
+    degrees, as a fluid 0.0 to 0.1 dB (tests/python/test_elastic_bottom.py). The fluid half-space of
+    this row stays selectable: image_source bottom {sediment: rock, shear_speed: 0}, Bellhop
+    environment {sediment: rock, elastic: false}.
   empirical_backscatter:
     model: lambert
     mu_db: -16.0

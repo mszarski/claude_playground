@@ -97,6 +97,11 @@ def test_free_field_paths_match():
          walls=[dict(axis=0, position=400.0, coefficient=0.8), dict(axis=1, position=-350.0, coefficient=0.6 + 0.2j)]),
     dict(surface_z=0.0, bottom_z=80.0, max_order=2, bottom=dict(speed=1700.0, density=2.0, attenuation=0.5),
          walls=[dict(axis=1, position=350.0, coefficient=0.7)]),
+    # an elastic bottom (rock, A8), and the same over a tilted bed (the plane construction)
+    dict(surface_z=0.0, bottom_z=80.0, max_order=4, bottom=dict(speed=3820.0, density=2.5, attenuation=0.75,
+                                                                shear_speed=1900.0, shear_attenuation=4.64)),
+    dict(surface_z=0.0, bottom_z=80.0, max_order=3, bottom_slope=[0.05, 0.0],
+         bottom=dict(speed=3820.0, density=2.5, attenuation=0.75, shear_speed=1900.0, shear_attenuation=4.64)),
 ])
 def test_image_source_paths_match(options):
     source = np.array([0.0, 5.0, 20.0])
@@ -119,7 +124,11 @@ def test_image_path_lengths_are_those_of_the_images():
 def test_rayleigh_coefficient_matches():
     g = np.linspace(0.0, np.pi / 2, 181)
     for kw in (dict(speed=1650.0, density=1.9, attenuation=0.8), dict(speed=1450.0, density=1.4),
-               dict(speed=1700.0, density=2.0, attenuation=0.0, water_density=1.03)):
+               dict(speed=1700.0, density=2.0, attenuation=0.0, water_density=1.03),
+               # elastic (A8): rock with shear, lossless rock, and a slow shear (sand of J&R Fig. 9.3)
+               dict(speed=3820.0, density=2.5, attenuation=0.75, shear_speed=1900.0, shear_attenuation=4.64),
+               dict(speed=3750.0, density=2.5, shear_speed=1950.0),
+               dict(speed=1650.0, density=2.0, attenuation=0.55, water_density=1.0, shear_speed=250.0, shear_attenuation=0.55)):
         np.testing.assert_allclose(core.sim_rayleigh_reflection(g, C, **kw), rayleigh_reflection(g, C, **kw),
                                    rtol=1e-12, atol=1e-15)
 

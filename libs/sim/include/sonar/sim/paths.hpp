@@ -74,12 +74,15 @@ struct Wall {
   std::complex<double> coefficient{kUnset, 0.0};  ///< pressure reflection coefficient; no default
 };
 
-/// A fluid sediment half-space for the Rayleigh reflection coefficient.
+/// A fluid sediment half-space for the Rayleigh reflection coefficient; with `shear_speed` > 0 an
+/// elastic solid (rock, A8): Jackson and Richardson (2007) (9.34)-(9.40).
 struct FluidBottom {
   double speed = kUnset;          ///< m/s; no default (a sediment is a fact of the site)
   double density = kUnset;        ///< in the units of water_density; no default
   double attenuation = 0.0;       ///< dB per wavelength; 0 = lossless
   double water_density = 1.0;     ///< 1 = `density` is a ratio to water
+  double shear_speed = 0.0;       ///< m/s; 0 = a fluid (the coefficient is the fluid expression, unchanged)
+  double shear_attenuation = 0.0; ///< dB per wavelength of the shear wave
 };
 
 struct ImageSourceConfig {

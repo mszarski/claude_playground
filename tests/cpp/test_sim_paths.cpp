@@ -159,6 +159,52 @@ TEST(Paths, RayleighCoefficientLossyBottom) {
   EXPECT_NEAR(flat.imag(), 0.0, 1e-6);
 }
 
+TEST(Paths, ElasticRockCoefficient) {
+  // A8: an elastic bottom, Jackson and Richardson (2007) (9.34)-(9.40). The `rock` row (3820 m/s, density ratio 2.5,
+  // delta 0.01374 on 1528 m/s water) with V_s = 0.5 V_p and shear delta 0.085: the audit's per-bounce losses
+  // (docs/references/CONFORMANCE.md A8) 1.55 / 2.86 / 5.29 / 13.68 / 8.96 / 6.27 / 4.52 / 2.80 dB.
+  const double c = 1528.0, db_per_wavelength = 40.0 * kPi / std::log(10.0);
+  sim::FluidBottom rock{3820.0, 2557.5 / 1023.0, 0.01374 * db_per_wavelength, 1.0};
+  const sim::FluidBottom fluid = rock;
+  rock.shear_speed = 0.5 * 3820.0;
+  rock.shear_attenuation = 0.085 * db_per_wavelength;
+  const double angles[] = {5.0, 10.0, 20.0, 30.0, 40.0, 45.0, 60.0, 90.0};
+  const double audit[] = {1.55, 2.86, 5.29, 13.68, 8.96, 6.27, 4.52, 2.80};
+  for (int i = 0; i < 8; ++i) {
+    const double loss = -20.0 * std::log10(std::abs(sim::rayleigh_reflection(angles[i] * kPi / 180.0, c, rock)));
+    EXPECT_NEAR(loss, audit[i], 0.005) << angles[i];
+  }
+  // Zero shear speed is the fluid expression, bit for bit; a vanishing one tends to it; normal incidence does not
+  // depend on the shear speed.
+  sim::FluidBottom no_shear = rock;
+  no_shear.shear_speed = 0.0;
+  sim::FluidBottom tiny = rock;
+  tiny.shear_speed = 1e-6;
+  for (double g = 0.0; g <= 0.5 * kPi; g += 0.01) {
+    EXPECT_EQ(sim::rayleigh_reflection(g, c, no_shear), sim::rayleigh_reflection(g, c, fluid));
+    EXPECT_LT(std::abs(sim::rayleigh_reflection(g, c, tiny) - sim::rayleigh_reflection(g, c, fluid)), 1e-12) << g;
+  }
+  EXPECT_LT(std::abs(sim::rayleigh_reflection(0.5 * kPi, c, rock) - sim::rayleigh_reflection(0.5 * kPi, c, fluid)), 1e-15);
+  // Lossless: |R| = 1 below the shear critical angle acos(c_w / c_s) (both transmitted waves evanescent), < 1 above.
+  const sim::FluidBottom lossless{3820.0, 2.5, 0.0, 1.0, 1910.0, 0.0};
+  const double critical = std::acos(c / 1910.0);
+  for (const double g : {0.1 * critical, 0.5 * critical, 0.99 * critical}) {
+    EXPECT_NEAR(std::abs(sim::rayleigh_reflection(g, c, lossless)), 1.0, 1e-12) << g;
+  }
+  EXPECT_LT(std::abs(sim::rayleigh_reflection(1.05 * critical, c, lossless)), 0.99);
+  // A negative shear speed is refused.
+  sim::ImageSourceConfig cfg;
+  cfg.sound_speed = c;
+  cfg.has_bottom = true;
+  cfg.bottom_z = 50.0;
+  cfg.max_order = 1;
+  cfg.has_fluid_bottom = true;
+  cfg.fluid_bottom = rock;
+  cfg.fluid_bottom.shear_speed = -1.0;
+  const std::vector<double> point{10.0, 0.0, 20.0};
+  EXPECT_THROW(sim::image_source_eigenrays(cfg, Vec3d{0.0, 0.0, 10.0}, point.data(), 1), std::invalid_argument);
+}
+
 TEST(Paths, SnellCrossingObeysSnellsLaw) {
   const double c1 = 1500.0, c2 = 1700.0;
   const Vec3d source{0.0, 0.0, -10.0};

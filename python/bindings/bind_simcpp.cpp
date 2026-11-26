@@ -78,6 +78,21 @@ sim::EigenrayView set_view(const ArrD& delay, const ArrC& amplitude, const ArrD&
 /// entry point that starts to use the sound speed must take it from its caller instead.
 constexpr double kSoundSpeedNotUsed = 1500.0;
 
+/// A bottom half-space from propagation._fluid_bottom's tuple: (speed, density, attenuation, water_density) for a
+/// fluid, or those and (shear_speed, shear_attenuation) for an elastic solid (A8).
+sim::FluidBottom fluid_bottom(const py::object& bottom) {
+  const auto t = bottom.cast<py::tuple>();
+  if (t.size() != 4 && t.size() != 6) {
+    throw std::invalid_argument("a bottom is (speed, density, attenuation, water_density[, shear_speed, shear_attenuation])");
+  }
+  sim::FluidBottom b{t[0].cast<double>(), t[1].cast<double>(), t[2].cast<double>(), t[3].cast<double>()};
+  if (t.size() == 6) {
+    b.shear_speed = t[4].cast<double>();
+    b.shear_attenuation = t[5].cast<double>();
+  }
+  return b;
+}
+
 /// An image-source configuration from the binding's arguments. Nothing is defaulted here
 /// that the C++ struct does not default (audit S-1, S-3): a bottom without a coefficient
 /// or a sediment, and a missing max_order, are errors raised by sim::check_config.
@@ -96,11 +111,7 @@ sim::ImageSourceConfig image_config(double sound_speed, const py::object& surfac
   if (!max_order.is_none()) cfg.max_order = max_order.cast<int>();
   for (const auto& [axis, position, coefficient] : walls) cfg.walls.push_back({axis, position, coefficient});
   cfg.has_fluid_bottom = !bottom.is_none();
-  if (cfg.has_fluid_bottom) {
-    // (speed, density, attenuation, water_density)
-    const auto t = bottom.cast<std::tuple<double, double, double, double>>();
-    cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
-  }
+  if (cfg.has_fluid_bottom) cfg.fluid_bottom = fluid_bottom(bottom);
   return cfg;
 }
 
@@ -168,10 +179,7 @@ void bind_simcpp(py::module_& m) {
         cfg.wall_order = wall_order;
         cfg.bottom_coefficient = bottom_coefficient;
         cfg.has_fluid_bottom = !bottom.is_none();
-        if (cfg.has_fluid_bottom) {
-          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
-          cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
-        }
+        if (cfg.has_fluid_bottom) cfg.fluid_bottom = fluid_bottom(bottom);
         for (const py::handle item : planes) {
           // (kind, point, normal, coefficient or None, [(axis, lower, upper), ...])
           const auto t = item.cast<py::tuple>();
@@ -233,16 +241,19 @@ void bind_simcpp(py::module_& m) {
 
   m.def(
       "sim_rayleigh_reflection",
-      [](const ArrD& grazing, double c_water, double speed, double density, double attenuation, double water_density) {
+      [](const ArrD& grazing, double c_water, double speed, double density, double attenuation, double water_density,
+         double shear_speed, double shear_attenuation) {
         py::array_t<cd> out(std::vector<py::ssize_t>(grazing.shape(), grazing.shape() + grazing.ndim()));
-        const sim::FluidBottom b{speed, density, attenuation, water_density};
+        const sim::FluidBottom b{speed, density, attenuation, water_density, shear_speed, shear_attenuation};
         for (py::ssize_t i = 0; i < grazing.size(); ++i) {
           out.mutable_data()[i] = sim::rayleigh_reflection(grazing.data()[i], c_water, b);
         }
         return out;
       },
       py::arg("grazing"), py::arg("c_water"), py::arg("speed"), py::arg("density"), py::arg("attenuation") = 0.0,
-      py::arg("water_density") = 1.0, "Rayleigh reflection coefficient of a fluid half-space at grazing angles (rad).");
+      py::arg("water_density") = 1.0, py::arg("shear_speed") = 0.0, py::arg("shear_attenuation") = 0.0,
+      "Rayleigh reflection coefficient of a fluid half-space at grazing angles (rad); with shear_speed > 0 (m/s) and\n"
+      "shear_attenuation (dB/wavelength) that of an elastic one, J&R (9.34)-(9.40).");
 
   m.def(
       "sim_snell_crossing",
