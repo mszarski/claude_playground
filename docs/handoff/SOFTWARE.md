@@ -1,7 +1,8 @@
 # Software handoff
 
 For a software engineer or a coding model continuing the code with no conversation history.
-Written at the tree of `933972b` on branch `claude/gpu-sonar-suite-u289p5`, decisions to D-181.
+Written at the tree of `933972b` on branch `claude/gpu-sonar-suite-u289p5`, decisions to D-181;
+brought to D-201 and the opt-in 3-D tier on 2026-11-26 (sections 1, 5.1, 5.4, 6 and 8 changed).
 Every statement was checked against the code at that tree; where a document and the code
 disagree, the code is what is written here and the document is listed in section 10.
 
@@ -58,12 +59,15 @@ not written and the navigation mapping for the vehicle's unit is a template (STA
 
 | Limit | Detail | Issue |
 | --- | --- | --- |
-| Sensor Bridge loopback | the margin at real time is the receiver's socket buffer; the chain's OpenMP count must be below the CPU quota (D-162, D-173). `--chain-omp-threads` assumes the receive application's single-thread scheduler. The idle stop ran on a GPU only in runs set up for it. `serve` has no `--backend` | `sonar-vmm`, `sonar-3wd`, `sonar-thu`, `sonar-l6j`, `sonar-e2u` |
+| Sensor Bridge loopback | the margin at real time is the receiver's socket buffer; the chain's OpenMP count must be below the CPU quota (D-162, D-173). `--chain-omp-threads` assumes the receive application's single-thread scheduler. The idle stop ran on a GPU only in runs set up for it. `serve` has no `--backend`. At a Popoto build's rate the first 12 to 20 ms of stream are lost while Sensor Bridge's receiver starts (D-187, D-188): a board must stream 0.25 s before the first transmit that matters, and nothing enforces it. A host with Sensor Bridge's own socket setup, and the RoCE receiver, are unmeasured (D-189) | `sonar-vmm`, `sonar-3wd`, `sonar-thu`, `sonar-l6j`, `sonar-e2u`, `sonar-a75`, `sonar-02c`, `sonar-6rs` |
+| Per-board streams | boards aligned by capture start and configured rate only (they must agree with true time to about 0.8 ms); ranges are not corrected for a board's clock rate; through Sensor Bridge every board's frames share one data channel, so the boards must have equal channel counts; the Holoscan application and `receive` ignore `stream_clock_ppm` / `source.clock_ppm` and `source.clock` for a whole-array stream (D-184, D-185, D-200) | `sonar-9a2`, `sonar-pnyv` |
+| Multipath in the FLS chain | with walls and a tilted bed the chain tracks the ghosts as objects and its `multipath` class fires on none (one seed, D-201) | `sonar-izys` |
+| Link budget | `SonarEquation` and the coverage model have no reverberation term: noise-limited and optimistic where reverberation dominates (D-198) | `sonar-w2w3` |
 | Flank stream receive | a ping-index skip that also lost samples in the gap, and a real loss with jitter beyond half an interval, are still miscounted (D-177) | `sonar-thu` |
 | Wire format | the sample word length is configuration on both ends (the block header has no field); the Holoscan report sink cannot split an over-long report and refuses it | STATUS item 35 |
 | Motion estimation | lambda 2 is tuned on few scenes; `MotionOptions.bathymetry` also moves the DVL seabed; delays read 0.2 to 0.9 % below the model in every window; no along-track surge estimation; the CUDA delay path is slower than the host | `sonar-0bc`, `sonar-dix`, `sonar-oii`, `sonar-7k2`, `sonar-b6r` |
 | Classes in the gallery scenes | glint movers in `fls_120k_rough_surface` and the FLS detection merge (off) remain (D-135, D-170); FLS slant range is read as horizontal (+h²/2R); a stray ping-1 detection near the winter-sand ship moves its speed | `sonar-mib`, `sonar-m1r`, `sonar-2o5` |
-| Propagation | N x 2-D only; Bellhop 2-D against Bellhop3D differ by 1 to 2.5 dB; the energy rule lowers the gravel-water peak by 3.3 dB | `sonar-6c8`, `sonar-9b8` |
+| Propagation | the shipped tiers are N x 2-D at most; an opt-in `eigenray3d` tier (Bellhop3D, a separate process) is used only by the illustrative `flank_seamount_3d` and has no reverberation over relief. The 1 to 2.5 dB between Bellhop 2-D and Bellhop3D is explained (D-197, D-199). The energy rule lowers the gravel-water peak by 3.3 dB | `sonar-rcq`, `sonar-2e9e`, `sonar-9b8` |
 
 The record schema is frozen at 1.0.0 (`docs/RECORD_FORMAT.md`): changing it is on the
 stop-and-ask list (section 9).
@@ -336,6 +340,7 @@ Selected by the deployment file's `source:` section (`type`), or by `--replay`, 
 | `source.sonar` | none | | — | the sonar file that gives array, band, sampling and window |
 | `source.port`, `source.host` | none (5700 in `popoto_vehicle.yaml`), `0.0.0.0` | | — | `bind` for `sonar_live` |
 | `source.timeout` | 30.0 (`StreamOptions::idle_seconds`) | s | — | the program ends after this long without a block; 0: never |
+| `source.sound_speed` | absent, None or 0: the sonar file's nominal speed | m/s | D-183 | the speed at which `receive.window.range` becomes the window's first sample and length, in every receiver (`--export-template` writes it into the C++ program's template; `--emulate` sets it to the scenario's). It is also the record's speed until navigation or `chain.sound_speed` replaces it (`sonar-qei`) |
 | `source.sample_bytes` | 3 (`StreamOptions::sample_bytes`; `flank_stream.SAMPLE_BYTES`) | bytes | D-131 | 2, 3 or 4. The block header does not carry it: both ends are configured alike. An unconfirmed hardware fact ([HARDWARE.md](HARDWARE.md)) |
 | `source.buffer_bytes` | 0: the larger of 8 MB and half a second of the stream | bytes | — | `derive.hpp` `kStreamBufferSeconds` |
 | `source.queue_mb` | 1024 | MB | — | blocks waiting for the chain; beyond it arriving blocks are dropped and counted |
@@ -353,7 +358,10 @@ Through Sensor Bridge (`tools/sonar_live_hsb.py`, `sources/hsb.py`):
 | `receive --chain-omp-threads N` | not set: OpenMP's own count | threads | D-162, D-173 | sets OpenMP's count on the thread that runs the chain. The loopback tests pass half of min(affinity, cgroup CPU quota) (`hsb.usable_cpus`) |
 | `receive --idle` | 15.0 | s | D-163 | stop after this long without a frame, whatever was lost; exit status 3 when fewer pings were reported than asked |
 | `receive --find-timeout` | 30.0 | s | D-173 | how long to wait for the board; `serve --scenario` simulates every ping before announcing it |
-| `receive --queue` | 4 s of the stream (640 frames of 400 samples at 64 kHz, 1024 at 102.4 kHz) | frames | D-187 | 256 frames before; the receiver operator drops the oldest beyond it |
+| `receive --queue` | 4 s of the stream (640 frames of 400 samples at 64 kHz, 1024 at 102.4 kHz; with `source.boards`, 4 s of all boards' frames) | frames | D-187 | 256 frames before; the receiver operator drops the oldest beyond it. A longer queue loses more frames at start-up (D-187) |
+| `receive --receiver-core`, `--socket-buffer` | not set: Sensor Bridge's own | core, bytes | D-162, D-189 | where its receiver thread runs; the data socket's buffer (the kernel doubles it, up to twice `rmem_max`) |
+| `receive` with `source.boards` | | | D-200 | every frame is one board's block; `receive` merges before the assembler (`hsb.FrameReceiver(boards=...)`); statistics add `boards`. `serve --per-board` sends such frames |
+| `damaged_frames` (statistic) | the frame numbers of the first 16 frames counted in `frames_damaged` | | D-188 | a damaged frame without a frame number is counted, not listed |
 | `--frame-samples` | 400 (`hsb.FRAME_SAMPLES`) | samples | — | the same on both sides |
 | `serve --pace` | 1.0 | x real time | D-153 | |
 | `serve --catch-up` | `spread` | | D-151 | `burst`: the behaviour before |
@@ -415,6 +423,20 @@ dropped when dedicated.
 
 Report: `sync: {ok, worst_residual_us, offsets_us, drift_ppm, flagged}`; `blanking:
 {min_range_m, mode}`.
+
+How the stage works since D-190 to D-195 (every output the same to the bit on every case measured):
+the assembler decodes only the rows a window takes (`flank_stream.decode_header`, `decode_rows`;
+D-190); synchronisation moves each board's samples onto the first board's timeline with one set of
+16 Hann-sinc weights a board and a block of 256 samples, applied to up to 8 rows at once
+(`resample_rows` in `libs/live/src/sync.cpp`, the blocks in parallel; `sync.py` in the Python engine;
+D-190, D-191); a sample's 16 weights come from three trig calls and a table
+(`resample_weights`, `_sinc_weights`; the binding `core.live_resample_weights` compares the
+engines; D-192); the decimate-first stage's baseband correction (`correct_baseband`,
+`libs/live/src/decimate.cpp`, called by both engines through the bindings) works a board and a
+block at a time with the same weights, and refuses a channel whose board has no clock entry
+(D-195). Measured on an L4 (chain time a ping after the first, median): C++ 0.048 / 0.054 / 0.065 s
+and Python 0.084 / 0.18 / 0.25 s at 32 / 64 / 96 channels; before D-191 the C++ engine took 1.05 to
+1.83 s at 64 and 96 channels, mostly this stage. `tools/live_chain_timing.py` measures it.
 
 ### 5.5 Beamform
 
@@ -616,10 +638,10 @@ scenario into ping records plus ground truth. Stages in order, each tappable
 | --- | --- | --- | --- |
 | Echo synthesis in the time domain, analytic and sampled pulses | `libs/sim` `synth_kernel.hpp`; `sim/waveform.py` | A-05, D-51, D-74, D-75, D-81, D-83 | `test_sim.py`: delay and amplitude against analytic values, an independent frequency-domain oracle |
 | Scenes: point scatterers, extended objects as clouds of surface points, highlight targets | `sim/scene.py`, `sim/targets.py` | D-41, D-64, D-65 | closed forms of arXiv:1805.06945 (`test_scene_targets.py`) |
-| Propagation: free field, image sources, sediment refraction; Bellhop eigenrays as an external program | `sim/propagation.py`, `libs/sim` `paths.hpp`, `sim/bellhop.py` | D-36, D-39, D-104, D-105, D-110, D-137, D-142 | Bellhop, KRAKEN, PyRAM, Bellhop3D as oracles (`test_propagation.py`, `test_kraken_crosscheck.py`, `test_ram_crosscheck.py`, `test_seamount_3d.py`) |
-| Reverberation: point scatterers and the scattering-function method; bistatic; relief | `sim/reverb.py`, `reverb_bistatic.py`, `reverb_relief.py`, `libs/sim` `reverb.hpp` | D-37, D-43, D-69, D-70, D-72, D-73, D-80 | sonar-equation level within 2 dB (`test_reverberation.py`); `tools/calibrate_sim.py fls` on a real log |
+| Propagation: free field, image sources (opt-in a tilted bed and walls as any plane, D-201), sediment refraction; Bellhop eigenrays as an external program; opt-in Bellhop3D eigenrays over a 3-D bed (`eigenray3d`, 2026-11-26) | `sim/propagation.py`, `libs/sim` `paths.hpp`, `sim/bellhop.py`, `sim/bellhop3d.py` | D-36, D-39, D-104, D-105, D-110, D-137, D-142, D-197, D-201 | Bellhop, KRAKEN, PyRAM, Bellhop3D as oracles (`test_propagation.py`, `test_kraken_crosscheck.py`, `test_ram_crosscheck.py`, `test_seamount_3d.py`, `test_bellhop_nx2d_agreement.py`, `test_image_planes.py`, `test_bellhop3d_provider.py`) |
+| Reverberation: point scatterers and the scattering-function method; bistatic; relief (with the cross-slope warning); K shape fixed or from a density per cell | `sim/reverb.py`, `reverb_bistatic.py`, `reverb_relief.py`, `libs/sim` `reverb.hpp` | D-37, D-43, D-69, D-70, D-72, D-73, D-80, D-196 | sonar-equation level within 2 dB (`test_reverberation.py`); `tools/calibrate_sim.py fls` on a real log |
 | Bottom scattering, named sediments | `sim/bottom.py`, `configs/sediments.yaml` | D-63, D-66, D-67, D-86, D-88, D-89, D-90, D-132 | open literature values (`test_sediment_literature.py`); `tools/fit_sediment.py` on measured backscatter. APL-UW TR 9407 is unread and must stay so |
-| Sea surface: bubble loss, backscatter, a travelling surface | `sim/surface.py` | D-38, D-52, D-68, D-84, D-87 | `test_surface_models.py`, `test_bubble_layer.py` |
+| Sea surface: bubble loss, backscatter, a travelling surface | `sim/surface.py` | D-38, D-52, D-68, D-84, D-87, D-193 | `test_surface_models.py`, `test_bubble_layer.py`; Gallaudet 2001's 68 kHz values (`test_gallaudet_boundaries.py`: the surface model lies above them at 3 m/s) |
 | Time, angle and frequency spreading of bounce paths | `sim/timespread.py` | D-62, D-76, D-77, D-82, D-85, D-107, D-108 | APL-UW TR 0702 section by section (`tools/sst_validation.py`); measured channels (`tools/channel_validation.py`, `channel_sites.py`, `channel_watermark.py`, `channel_smartocean.py`) |
 | Noise: spectra, array coherence, K statistics; fitted to a recording | `sim/noise.py`, `sim/noise_fit.py` | D-103, D-123, D-124 | `tools/fit_noise.py` on a passive recording |
 | Receiver: hardware gain, ADC, overload and recovery, the projector's direct sound | `sim/receiver.py`, `sim/sources.py`, `hardware.py` | D-102, D-125 | `tools/direct_sound_study.py` |
@@ -703,7 +725,8 @@ Examples are from each tool's docstring or its argument list.
 | `live_chain_timing.py` | chain time and board-synchronisation time a ping for each engine on the Popoto trials (D-191); with `--decimate`, the decimate-first stage's time (D-195) | `tools/live_chain_timing.py` |
 | `sonar_run.py` | a batch chain from a YAML file | `tools/sonar_run.py configs/chains/stripmap_points.yaml` |
 | `inspect_tap.py` | numbers and plots of records in a container or a tap directory | `tools/inspect_tap.py taps/ --stage prepare --ping 2` |
-| `board_merge.py` | per-board GSFB streams to one whole-array stream, as a UDP relay (D-184) | `tools/board_merge.py popoto_testauv_1row_clocks --port 5710 --to 127.0.0.1:5700` |
+| `eigenray_tl_check.py` | each `eigenray` scenario's one-way loss at its target by the provider, every arrival, Bellhop's own loss run and (for a profile bed) the curvilinear form; diagnostic, opt-in (D-197) | `GPUSONAR_BELLHOP=.../bellhop.exe tools/eigenray_tl_check.py --scenarios fjord_static_trial_2row` |
+| `board_merge.py` | per-board GSFB streams to one whole-array stream, as a UDP relay (D-184); since D-200 every receiver merges itself, so it is needed only for a receiver elsewhere | `tools/board_merge.py popoto_testauv_1row_clocks --port 5710 --to 127.0.0.1:5700` |
 | `nav_adapter.py` | a vendor's navigation stream to the chain's datagrams | `tools/nav_adapter.py configs/nav/generic_csv.yaml --replay nav.csv --out-udp 127.0.0.1:5702` |
 | `gallery.py` | every mode's realistic scenario end to end; writes `docs/figures/` and `gallery.json` | `tools/gallery.py --backend host --only popoto_12km --out DIR` (`--quick` for thinned scenes) |
 | `classify_rules_eval.py` | multi-seed scoring of classification against truth; re-scores saved captures | `tools/classify_rules_eval.py --evaluate-only --captures DIR --json OUT` |

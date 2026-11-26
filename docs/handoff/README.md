@@ -1,8 +1,9 @@
 # Handoff: start here
 
 The entry point for whoever continues this work: a hardware engineer, a software engineer,
-or a coding model with no conversation history. Written 2026-11-24 at commit `933972b`,
-decisions to D-201. Everything said here was checked against the repository at that commit;
+or a coding model with no conversation history. Written 2026-11-24 at commit `933972b`
+(decisions to D-181) and brought to decisions D-201 and the opt-in 3-D propagation tier
+(`88e9b56`) on 2026-11-26. Everything said here was checked against the repository then;
 where two documents disagree, trust in this order: code and configs, `docs/DECISIONS.md`
 (later entries amend earlier ones), `docs/STATUS.md`, `docs/RESULTS.md`, the rest.
 
@@ -37,7 +38,9 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 5. [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md): what the vehicle has to provide, first time on
    the real hardware, the staged build, navigation and the sound-speed ladder.
 6. [`docs/tasks/VEHICLE_ADAPTERS.md`](../tasks/VEHICLE_ADAPTERS.md): the 17 questions about
-   the boards' output and the navigation interface.
+   the boards' output and the navigation interface. Since D-184 to D-200 each board may send its
+   own stream (every receiver merges them); the boards' capture starts must agree with true time
+   to about 0.8 ms, and a board must stream 0.25 s before the first transmit that matters.
 7. [OUTPUTS.md](OUTPUTS.md), sections 1.8, 1.9 and 2.1: what the design does in simulation
    and where it fails.
 8. [SIMULATION.md](SIMULATION.md): what the simulator behind those numbers models and what
@@ -72,7 +75,8 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 4. For the task at hand: the task file if there is one
    ([`docs/tasks/VEHICLE_ADAPTERS.md`](../tasks/VEHICLE_ADAPTERS.md),
    [`docs/tasks/REAL_DATA.md`](../tasks/REAL_DATA.md); both say to ask the owner their
-   questions before any code), else the `DECISIONS.md` entries that touch the files you
+   questions before any code; [`docs/tasks/PROPAGATION_3D.md`](../tasks/PROPAGATION_3D.md) for 3-D
+   propagation, its packages done and its open questions), else the `DECISIONS.md` entries that touch the files you
    will change (`grep -n "<file or key>" docs/DECISIONS.md`).
 5. [SOFTWARE.md](SOFTWARE.md) and [TESTS.md](TESTS.md) for where things are and which
    tests hold them; [SIMULATION.md](SIMULATION.md) for the simulator; [EXAMPLES.md](EXAMPLES.md)
@@ -86,56 +90,96 @@ where two documents disagree, trust in this order: code and configs, `docs/DECIS
 
 | Item | State | Source |
 | --- | --- | --- |
-| Branch | `claude/gpu-sonar-suite-u289p5`, HEAD `933972b` (2026-11-24) | `git log` |
-| Latest decision | D-201: image sources off a tilted bed and walls as any plane (opt-in), four multipath scenes; the FLS chain tracks multipath ghosts as objects and SAS images lose two thirds of their sharpness with bed multipath. D-200: every receiver merges per-board streams (`--listen`, the Holoscan source operator, `sonar_live_hsb.py receive`). D-198: `flank_patrol`'s small vehicle is below the scene's reverberation, not a defect; the link budget has no reverberation term. D-199 corrects D-197's account of the fjord beds. D-197: the 1 to 2.5 dB between our eigenray tier and Bellhop3D's N x 2-D mode explained (oracle beam count; Bellhop arrivals over a piecewise-linear bed; the fjord bed an owner question). D-196: the K shape of reverberation from a scatterer or patch density per cell (opt-in; Abraham and Lyons 2002). D-195: the decimate-first correction by board with the resampler's weights (no output changed; the one-row build 0.048 s a ping on an L4). D-194: stale simulator statements corrected (the TR 0702 matrix rows for Thorp and near-specular removal, RESULTS, SCENARIOS and others). D-193: the boundary models against Gallaudet 2001's printed values at 68 kHz (bottom agrees; the surface model lies above the data at 3 m/s, so "a lower bound" is withdrawn against data). D-192: the board resampler's weights from three trig calls a sample, both engines (no output changed; C++ 0.054 and 0.065 s a ping at 64 and 96 channels on an L4). D-191: the C++ engine resamples a board's rows together (0.09 to 0.17 s a ping at 64 and 96 channels on an L4, from 1.05 to 1.83 s; outputs unchanged). D-190: the Python engine is real time at 96 channels through Sensor Bridge on an L4 (frame path and board resampling faster, outputs unchanged). D-189: a host check and runbook for the Sensor Bridge measurement that needs a real host (still not measured). D-188: the receiver names its damaged frames, and one damaged at the start of a Popoto-rate loopback is start-up loss. D-187: the Popoto-rate loss is at the start of the run; the receiver queue defaults to 4 s of stream. D-186: the Sensor Bridge loopback at Popoto rates loses frames; D-184 per-board streams merged; D-185 a board clock's rate. D-182 is this documentation set | `docs/DECISIONS.md` |
-| Last full GPU suite | 2278 passed, 102 skipped, 1 xfailed (one Popoto-rate Sensor Bridge loopback case), none failed, on an NVIDIA L4 (Hugging Face job 6b078a26d91f621b93096bc7) | D-201 |
-| Last whole CPU suite in one run | the tree of D-157, `605a4e1` (2026-11-22; 157 of 157 ctest entries); since then (D-158 to D-181) affected files per package only | `docs/STATUS.md`, the result paragraphs just before "Open questions for the project owner" |
-| Gallery (`docs/figures/`, `gallery.json`) | regenerated at D-179 on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`); D-180 and D-181 move no default | D-179 |
-| Milestones | 1 to 10 of 13 done; 11 (Holoscan), 12 (propagation), 13 (performance model, Jetson) open | `README.md`, `bd` |
-| Open `bd` issues | 49 not closed of 126: **P1 8** (6 in progress, 2 open), **P2 0**, **P3 25**, **P4 16** | `.beads/issues.jsonl` at `933972b` |
+| Branch | `claude/gpu-sonar-suite-u289p5`; this page brought to `88e9b56` (the 3-D tier, 2026-11-26) | `git log` |
+| Latest decision | D-201 (the 3-D tier's decision entry is still to be written; its work is described in [`docs/tasks/PROPAGATION_3D.md`](../tasks/PROPAGATION_3D.md), section 5). One line each, since this set was written (D-182): D-183 the receive window laid out at `source.sound_speed`; D-184 one stream per board, merged; D-185 a board clock's rate configured or estimated; D-186 to D-188 Sensor Bridge at Popoto rates loses its first frames at start-up, the queue holds 4 s of stream, damaged frames named; D-189 a host check and runbook (the host measurement still not made); D-190 to D-192 and D-195 the frame path and board resampling faster in both engines, outputs to the bit (C++ 0.048 / 0.054 / 0.065 s a ping at 32 / 64 / 96 channels on an L4); D-193 the boundary models against Gallaudet 2001 (the surface model lies above the data at 3 m/s); D-194 stale simulator statements corrected; D-196 the K reverberation shape from a density per cell (opt-in); D-197, corrected by D-199, the eigenray tier against Bellhop3D's N × 2-D mode explained; D-198 `flank_patrol`'s small vehicle is below the scene's reverberation, kept as a hard target, and the link budget has no reverberation term; D-200 every receiver merges per-board streams; D-201 image sources off a tilted bed and walls (opt-in), four multipath scenes, the FLS chain tracks ghosts, SAS sharpness falls to a third with bed multipath. 2026-11-26: the opt-in `eigenray3d` tier (Bellhop3D as a separate process, the owner's approval), the cross-slope warning, `flank_seamount_3d` | `docs/DECISIONS.md` |
+| Scenario files | 81 in `configs/scenarios/`: 76 before D-201, its 4 multipath scenes, `flank_seamount_3d` | `docs/SCENARIOS.md`, "Every scenario file" |
+| Last full GPU suite | 2278 passed, 102 skipped, 1 xfailed (one Popoto-rate Sensor Bridge loopback case; the log does not print its reason), none failed, on an NVIDIA L4 (Hugging Face job 6b078a26d91f621b93096bc7), the tree of D-201. A later job covers the 3-D work | D-201 |
+| Last whole CPU suite in one run | the tree of D-157, `605a4e1` (2026-11-22; 157 of 157 ctest entries); not rerun in one go since. From D-158 to D-201 and the 3-D work each package ran its affected files only | `docs/STATUS.md`, "State of verification of this tree" |
+| Gallery (`docs/figures/`, `gallery.json`) | regenerated at D-179 on an L4 (job 6b054768c97b8ed4fcd78015, tree `4a80876`); D-180 to D-201 move no gallery scene's default result | D-179 |
+| Milestones | 1 to 10 of 13 done; 12 (propagation and reverberation) done as far as open literature allows (audited and closed 2026-11-25: `sonar-dzu`, `sonar-k7m`; follow-ups filed); 11 (Holoscan) and 13 (performance model, Jetson) open | `docs/STATUS.md`, "Where things stand"; `bd` |
+| Open `bd` issues | 77 not closed of 176: **P1 6** (3 in progress, 3 open), **P2 7**, **P3 39** (1 in progress), **P4 25** (1 in progress) | `.beads/issues.jsonl`, 2026-11-26 |
 | Run on hardware or real data | nothing | `docs/STATUS.md`, first paragraph |
 
 The open issues by theme, with ids, are in [`docs/HANDOFF.md`](../HANDOFF.md), section 8.
 
 ## Top risks and unknowns
 
-1. **Nothing has met hardware, water or recorded data.** Every result is simulated.
+1. **Nothing has met hardware, water or recorded data.** Every result is simulated
+   (`sonar-sul`, P1).
 2. **The hardware facts are unconfirmed**: converter (102.4 kHz, 24 bit, simultaneous),
    board synchronisation to about 1 microsecond, the projector and its 197 dB, boards used
-   at 4 to 6 kHz against a 10 to 100 kHz specification (STATUS questions 2 to 4).
-3. **One row is 1.1 dB short at 12 km** (detection probability 0.22 a ping), on a +25 dB
+   at 4 to 6 kHz against a 10 to 100 kHz specification (STATUS questions 2 to 4). Per-board
+   streams need the boards' capture starts true to about 0.8 ms and their clock rates known
+   (`sonar-9a2`); a grating lobe is in view beyond ±42° at 6 kHz on five of six builds
+   (`sonar-68e`); the synchronisation reference, input protection, power and mechanics are not
+   designed (`sonar-mu3`).
+3. **The link budget and coverage model have no reverberation term** (`sonar-w2w3`, P1). Their
+   margins and reaches are noise-limited and optimistic where reverberation dominates:
+   `flank_patrol`'s −3 dB small vehicle gets about 30 dB from the budget and about 4 dB over the
+   background in the simulated data (D-198).
+4. **One row is 1.1 dB short at 12 km** (detection probability 0.22 a ping), on a +25 dB
    target strength that is a placeholder.
-4. **The water decides more than the margin**: the same ship is not detected at 4 km in
-   summer over mud, nor tracked at its true place in deep water over silt.
-5. **Depth at long range is an indication only**: at 12 km the ship reads 8 to 35 m for a
+5. **The water decides more than the margin**: the same ship is not detected at 4 km in
+   summer over mud, nor tracked at its true place in deep water over silt. Over relief that
+   slopes across the look the shipped propagation is N × 2-D, 3 to 4 dB too loud over a
+   seamount's flanks; the opt-in `eigenray3d` tier has no reverberation over relief.
+6. **Depth at long range is an indication only**: at 12 km the ship reads 8 to 35 m for a
    true 4 m; two rows at 3 km in 100 m read the surface or the bed.
-6. **Track association among many multipath arrivals in one gate** is fragile at 12 km
-   (seed 60: 65 m off; issue `sonar-tlc`). The gallery shows one good seed.
-7. **False movers from a rough surface** (78 over ten seeds in one FLS scene) and **small
-   targets missed** (kayak, small vehicle) are known limits with no fix.
-8. **The Sensor Bridge path has only run against the board emulator** with a UDP patch;
-   its real-time margin is one socket buffer, about 20 ms of stream.
-9. **Navigation**: the lever arm is zero until surveyed, the array's velocity is not
-   corrected for it, and a source without timestamps yields speed 0 for every track.
-10. **Some generated files and documents are stale** (map below); the main checkout's
-    built Python module was older than its sources on 2026-11-24.
+7. **Track association among many multipath arrivals in one gate** is fragile at 12 km
+   (seed 60: 65 m off; issue `sonar-tlc`). The gallery shows one good seed. **The FLS chain
+   tracks multipath ghosts as objects** off walls and a sloping bed (`sonar-izys`, D-201).
+8. **False movers from a rough surface** (78 over ten seeds in one FLS scene) and **small
+   targets missed** (the kayak; `flank_patrol`'s small vehicle, which is below the scene's
+   reverberation by design, D-198) are known limits with no fix. **SAS results are the
+   free-field case**: every shipped SAS scene but `sas_auv_multipath` has no multipath, and with
+   bed multipath the image's sharpness falls to about a third (`sonar-ya2c`).
+9. **The Sensor Bridge path has only run against the board emulator** with a UDP patch. Its
+   real-time margin is one socket buffer (about 20 ms of `flank_32`'s stream, 4 to 13 ms at a
+   Popoto build's rate). At Popoto rates the first 12 to 20 ms of a stream are lost at start-up,
+   so a board must stream 0.25 s before the first transmit that matters, and nothing enforces it
+   (`sonar-a75`). A host with Sensor Bridge's own socket setup has never been tried
+   (`sonar-02c`); per-board frames have run only at `flank_32`'s rate (`sonar-pnyv`).
+10. **Navigation**: the lever arm is zero until surveyed, the array's velocity is not
+    corrected for it, and a source without timestamps yields speed 0 for every track.
+11. **Some generated files and documents are stale** (map below): the depth planner and
+    `popoto_12km.json` predate D-156; the benchmark files are of pings with ideal clocks (no
+    board synchronisation; still right for what they measure); the main checkout's built
+    Python module was older than its sources on 2026-11-24.
 
 ## Waiting on the owner
 
 | List | Where | Count | Blocks |
 | --- | --- | --- | --- |
-| Open questions for the project owner | [`docs/STATUS.md`](../STATUS.md), section of that name | 29 numbered; 1 to 12 are the Popoto array (rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site); 5 of the 29 are marked applied or answered | the hardware design and its defaults |
+| Open questions for the project owner | [`docs/STATUS.md`](../STATUS.md), section of that name | 35 numbered; 1 to 12 are the Popoto array (rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site); 30 to 34 were raised since D-182 (board timing, the grating lobe, the fjord beds, SAS with bed multipath, 3-D propagation); 17, 19, 22, 28, 29 and 35 are marked applied or answered | the hardware design and its defaults |
 | Vehicle adapters | [`docs/tasks/VEHICLE_ADAPTERS.md`](../tasks/VEHICLE_ADAPTERS.md), section 3 | 17 | issue `sonar-o7m` (P1): board samples and navigation into the live chain |
 | Real data | [`docs/tasks/REAL_DATA.md`](../tasks/REAL_DATA.md), section 3 | 11 | issue `sonar-sul` (P1): simulator calibration and the live chain on real data |
+| 3-D propagation | [`docs/tasks/PROPAGATION_3D.md`](../tasks/PROPAGATION_3D.md), section 6 | 9; question 1 answered (Bellhop3D as an opt-in provider, a separate process, 2026-11-26); 5 answered by `sonar-6c8`; 6 done; 8 settled as built; 9 narrowed by D-199 | open: relief across the look in the owner's waters (2), ranges and slopes (3), run time and disk (4), walls and banks in the FLS and SAS use (7), the 2-row fjord scenario's 12-arrival limit (9, `sonar-2e9e`) |
+
+Open P1 and P2 issues and what each waits on:
+
+| Issue | Priority | Waits on |
+| --- | --- | --- |
+| `sonar-o7m` vehicle adapters | P1 | the owner's answers (VEHICLE_ADAPTERS section 3) |
+| `sonar-sul` real data | P1 | data from the owner (REAL_DATA section 3) |
+| `sonar-w2w3` reverberation in the link budget and coverage | P1 | work only (a package to approve) |
+| `sonar-l59` M11 Holoscan, `sonar-3s7` M13 performance and Jetson, `sonar-k29` stacked rows | P1, in progress | hardware (a rig, a Jetson or DGX Spark) and the reference's SDK build |
+| `sonar-9a2` board timing | P2 | the owner: how capture starts are stamped, the boards' rates, the channel map |
+| `sonar-68e` grating lobe | P2 | the owner: limit the sector, change the pitch, or accept |
+| `sonar-mu3` hardware design gaps | P2 | hardware design work and choices |
+| `sonar-02c` Sensor Bridge on a real host, RoCE | P2 | a host with Sensor Bridge's socket setup; a RoCE build and a ConnectX card |
+| `sonar-pnyv` clock-rate keys ignored for a whole-array stream | P2 | work only |
+| `sonar-izys` FLS ghosts tracked | P2 | work; any chain default change goes to the owner |
+| `sonar-ya2c` SAS with bed multipath | P2 | the owner: should SAS scenes carry bed multipath |
 
 Standing rule: the owner approves each work package, and any change that moves a default
 result, before it is merged (`docs/HANDOFF.md`, section 2).
 
 ## Document map
 
-"Last commit" is `git log -1` of the file at `933972b`. "Past D-160" says whether the file
-mentions any decision from D-160 on. A file can be old and still right; the last column
-says what is known to be stale. The stale statements this map first listed in `STATUS.md`,
+"Last commit" is `git log -1` of the file at `933972b` (2026-11-24); every file marked "swept
+2026-11-26" in the last column was brought to D-201 and the 3-D work in one documentation sweep
+that day (issue `sonar-tadd`). "Past D-160" says whether the file mentions any decision from
+D-160 on. A file can be old and still right; the last column says what is known to be stale. The stale statements this map first listed in `STATUS.md`,
 `RESULTS.md`, `DEPLOYMENT.md`, `SCENARIOS.md`, `REFERENCES.md`, `REFERENCE_DESIGN.md`,
 `ARCHITECTURE.md`, `API_AUDIT.md`, the diagrams and the root `README.md` were corrected on
 2026-11-24, after the map was made; the last column says so where it applies, and the "Last
@@ -143,47 +187,48 @@ commit" dates of those files are a day or less older than their present state.
 
 | File | What it is | Last commit | Past D-160? | How current |
 | --- | --- | --- | --- | --- |
-| `handoff/README.md` | this page | 2026-11-24 | yes | current |
-| `handoff/HARDWARE.md` | the hardware side: what is unknown or at risk, the system block diagram, a register of every assumption with its status (confirmed, via secondary, ours, unconfirmed), the six Popoto builds with their numbers (`hardware_builds.json`, `tools/handoff_hardware.py`), the link budget and the 12 km design point, the interfaces the hardware must meet (ping record, UDP block, WAV sidecar, timing, navigation datagram), a bring-up plan, open hardware decisions | 2026-11-24 | written with this set | current (D-181). Nothing in it is built or measured on hardware, as its first paragraph says |
-| `handoff/SOFTWARE.md` | the software side: what is fragile or wrong, the layers and data flow, the repository map, the two live-chain engines, the live chain stage by stage with every default, its key and its decision, SAS, FLS and the simulator, configuration, tools and programs, how to add things without breaking the rules | 2026-11-24 | written with this set | current (D-181). Its section 10 lists stale statements found in other documents; those were corrected on 2026-11-24 after it was written (except root `CLAUDE.md`, the owner's file), so read that section as history |
-| `handoff/TESTS.md` | how to run the tests (CPU, GPU job, oracles), a map of what each test file protects, the tests that pin decisions D-155 to D-201, known false failures and how to recognise them, what is not tested or only on simulated input | 2026-11-24 | written with this set | current (D-181). No per-file run time is recorded; the 93 skips of the last GPU job are derived, not read from its log |
-| `handoff/SIMULATION.md` | the simulator: what it does not model, its pipeline and a table of its models with their sources and validation, all 81 scenarios by family, calibration to real data, determinism | written with this set | written with this set | written in parallel and merged after this row was written; described here from its author's summary, not read |
+| `handoff/README.md` | this page | 2026-11-24 | yes | current to D-201 and the 3-D work (swept 2026-11-26) |
+| `handoff/HARDWARE.md` | the hardware side: what is unknown or at risk, the system block diagram, a register of every assumption with its status (confirmed, via secondary, ours, unconfirmed), the six Popoto builds with their numbers (`hardware_builds.json`, `tools/handoff_hardware.py`), the link budget and the 12 km design point, the interfaces the hardware must meet (ping record, UDP block, WAV sidecar, timing, navigation datagram), a bring-up plan, open hardware decisions | 2026-11-24 | written with this set | swept 2026-11-26 to D-201 (Sensor Bridge start-up loss, per-board streams, chain times with board synchronisation, the budget's missing reverberation term, issue ids). Nothing in it is built or measured on hardware, as its first paragraph says |
+| `handoff/SOFTWARE.md` | the software side: what is fragile or wrong, the layers and data flow, the repository map, the two live-chain engines, the live chain stage by stage with every default, its key and its decision, SAS, FLS and the simulator, configuration, tools and programs, how to add things without breaking the rules | 2026-11-24 | written with this set | swept 2026-11-26 to D-201 (sections 1, 5.1, 5.4, 6, 8). Its section 10 lists stale statements found in other documents; those were corrected on 2026-11-24 after it was written (except root `CLAUDE.md`, the owner's file), so read that section as history |
+| `handoff/TESTS.md` | how to run the tests (CPU, GPU job, oracles), a map of what each test file protects, the tests that pin decisions D-155 to D-201, known false failures and how to recognise them, what is not tested or only on simulated input | 2026-11-24 | written with this set | swept 2026-11-26: counts per file collected then, the new test files, D-183 to D-201 and the 3-D tier's tests, the switches. No per-file run time is recorded; the 102 skips of the last GPU job are derived, not read from its log |
+| `handoff/SIMULATION.md` | the simulator: what it does not model, its pipeline and a table of its models with their sources and validation, all 81 scenarios by family, calibration to real data, determinism | written with this set | written with this set | swept 2026-11-26: D-193, D-196, D-197/D-199, D-198, D-201 and the `eigenray3d` tier in its limits, models and validation tables; `flank_seamount_3d` in the catalogue |
 | `handoff/EXAMPLES.md` (with `handoff/examples/`: scripts, pictures, saved outputs) | twelve worked examples run on the CPU with their commands, run times, real outputs and pictures, led by what failed (`--emulate` on multi-board scenarios) | written with this set | written with this set | the same |
-| `handoff/OUTPUTS.md` | pictures, headline numbers, a report line, how to regenerate | 2026-11-24 | yes | current |
-| `HANDOFF.md` | rules, build and test, GPU jobs, open work, how to work here | 2026-11-24 | yes | current (refreshed to D-181) |
-| `STATUS.md` | what works, how it was checked, what is wrong, owner questions | 2026-11-24 | yes (to D-181) | current. Corrected 2026-11-24: "State of verification of this tree" names the 2078-passed job and the last whole CPU run, "Where the code has run", "What is next" items 1 and 7, open item 14 and the list of stale generated files are brought to D-181 |
-| `DECISIONS.md` | every decision D-1 to D-201 with what got worse | 2026-11-24 | yes | current; the authority after code and configs |
-| `RESULTS.md` | every measured number and its source | 2026-11-24 | yes (to D-178) | mostly current. Corrected 2026-11-24: "Sensor Bridge loopback" carries the state since D-153, D-162, D-163 and D-173 beside its 2026-11-17 record; the `minefield_sas` and live-chain rows of "Every stage with a CUDA backend" are marked as old with the current figures beside them; the `sst_validation` sentence; "Not yet measured". Still: D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only; the `minefield_sas` row is not re-timed (issue `sonar-egj`) |
-| `SCENARIOS.md` | every scene with figures and per-scene results | 2026-11-24 | yes (to D-178) | current with the D-179 gallery. CPU times in its table are from a much older tree |
-| `CONFIGURATION.md` | every config key | 2026-11-24 | yes (to D-181) | current |
-| `DEPLOYMENT.md` | running the live chain: what the vehicle provides, the report line, staged build, Sensor Bridge | 2026-11-24 | yes (to D-175) | current to D-181. Corrected 2026-11-24: the leading edge is the default since D-160; `chain.range_doppler` (D-181) is in the report-line table and in "Keys a new sonar must review"; the direct-sound figures, the GPU timings and the full-rate GPU ping are the files' |
-| `DESIGN.md` | generated design report: requirements against configs, link budgets | 2026-11-20 | no | held to the configs by `tests/python/test_design.py`; regenerated 2026-11-24 for the full-rate GPU ping (measured; it had said unmeasured). **Stale:** its depth sections read `design/popoto_depth_planner.json` and its 12 km sections `design/popoto_12km.json`, both last regenerated 2026-11-19 and 20 (`STATUS.md`, list of stale generated files) |
+| `handoff/OUTPUTS.md` | pictures, headline numbers, a report line, how to regenerate | 2026-11-24 | yes | the gallery as of D-179; text swept 2026-11-26 (SAS free field, the small vehicle, Sensor Bridge at Popoto rates, chain times, the budget) |
+| `HANDOFF.md` | rules, build and test, GPU jobs, open work, how to work here | 2026-11-24 | yes | swept 2026-11-26 to D-201 (sections 2 to 11; section 8 rebuilt from the issue export) |
+| `STATUS.md` | what works, how it was checked, what is wrong, owner questions | 2026-11-26 | yes (to D-201) | swept 2026-11-26: the state lines (D-201's GPU job, the whole CPU suite last at D-157), chain times with and without board synchronisation, milestones 11 and 12, coverage item 24 (no reverberation term), Sensor Bridge item 34, owner questions 30 to 35 |
+| `DECISIONS.md` | every decision D-1 to D-201 with what got worse | 2026-11-26 | yes | current; the authority after code and configs. Append and amend only; pointers "(amended by D-xxx)" added 2026-11-26 where a later decision changed an entry. The 3-D tier's entry is to be written |
+| `RESULTS.md` | every measured number and its source | 2026-11-26 | yes (to D-201) | swept 2026-11-26: "Performance" opens with the chain times with board synchronisation (D-190 to D-195); "Sensor Bridge at Popoto rates" carries D-188 to D-192 and D-200; the SAS sections say the scenes are free field; the link budget and coverage sections say they have no reverberation term; a summary table of D-193 to D-201 and the 3-D tier before "Not yet measured". Still: D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only; the `minefield_sas` row is not re-timed (issue `sonar-egj`) |
+| `SCENARIOS.md` | every scene with figures and per-scene results | 2026-11-26 | yes (to D-201) | current with the D-179 gallery; `flank_patrol`'s small vehicle described as a hard target (D-198); the SAS scenes as free field. CPU times in its table are from a much older tree |
+| `CONFIGURATION.md` | every config key | 2026-11-26 | yes (to D-201) | current: per-board and clock keys, the K density, image planes, the top-level `bathymetry` and the `eigenray3d` options are documented; `receive --queue` is listed beside the keys |
+| `DEPLOYMENT.md` | running the live chain: what the vehicle provides, the report line, staged build, Sensor Bridge, the host check | 2026-11-24 | yes (to D-200) | swept 2026-11-26: chain times with board synchronisation beside the ideal-clock benchmark figures; the Popoto-rate section's superseded statements marked; "What `snr_db` is" says the budget has no reverberation term |
+| `DESIGN.md` | generated design report: requirements against configs, link budgets | 2026-11-26 | no | held to the configs by `tests/python/test_design.py`. 2026-11-26: the generators (`tools/design_report.py`, `tools/reference_plan.py`) say the budget has no reverberation term and the GPU timings are of pings with ideal clocks; the file carries the same text (the test passes). **Stale:** its depth sections read `design/popoto_depth_planner.json` and its 12 km sections `design/popoto_12km.json`, both last regenerated 2026-11-19 and 20 (`STATUS.md`, list of stale generated files) |
 | `REFERENCE_DESIGN.md` | from a spec sheet to a build: the build-spec fields and steps | 2026-11-18 | no | the method holds; since 2026-11-24 it points to the lever-arm keys of D-167 (not a spec field: generated deploy files do not carry them, issue `sonar-vjq`) |
-| `ARCHITECTURE.md` | data flow, backends, where each stage runs | 2026-11-21 | no (to D-147) | structure holds; predates the Sensor Bridge receive work (D-161 to D-163, D-173) and the option-key refusals (D-166, D-177), and says so since 2026-11-24, when its source table, its `libs/motion` row and its diagrams (`backends.png`, `dataflow.png`, `live_chain.png`) were corrected. Prefer `handoff/SOFTWARE.md` for the live chain |
-| `PHYSICS_NOTES.md` | derivations, Secs. 1 to 29 | 2026-11-20 | no | physics of the simulator and chain to D-144. The derivations of D-159 (outlier test), D-167 (lever arm), D-176 (parabola bearing) and D-181 (range-Doppler) are in their tests' docstrings and `DECISIONS.md`, not here |
+| `ARCHITECTURE.md` | data flow, backends, where each stage runs, the propagation tiers | 2026-11-26 | yes | structure holds; predates the Sensor Bridge receive work (D-161 to D-163, D-173) and the option-key refusals (D-166, D-177), and says so; since 2026-11-26 it names the five propagation tiers. Prefer `handoff/SOFTWARE.md` for the live chain |
+| `PHYSICS_NOTES.md` | derivations, Secs. 1 to 30 | 2026-11-26 | yes | physics of the simulator and chain to D-144, with the Gallaudet comparison (D-193) and section 30, image sources off tilted planes and walls (D-201). The derivations of D-159 (outlier test), D-167 (lever arm), D-176 (parabola bearing) and D-181 (range-Doppler) are in their tests' docstrings and `DECISIONS.md`, not here |
 | `PAPER_NOTES.md` | reading of the ASASIN paper | 2026-11-23 | yes (D-164) | current |
-| `REFERENCES.md` | register of sources with status (confirmed, via secondary, ours, unconfirmed) | 2026-11-21 | no (to D-146) | registered 2026-11-24 in its section 12.7: the relations of D-159 (outlier test, fit limit), D-167 (navigation unit to array), D-176 (parabola vertex) and D-181 (LFM coupling), all "ours" or "unconfirmed" as their decisions give them |
+| `REFERENCES.md` | register of sources with status (confirmed, via secondary, ours, unconfirmed) | 2026-11-26 | yes | registered: section 12.7 (D-159, D-167, D-176, D-181); Gallaudet 2001's measurements (D-193); Abraham and Lyons 2002 (D-196); BELLHOP3D's role as the `eigenray3d` tier's program; Mopin 2023 and Steininger 2013 (2026-11-26, section 3.2); section 10 updated |
 | `RECORD_FORMAT.md` | the HDF5 record, schema 1.0.0 | 2026-11-18 | no | current: the schema is frozen and no decision since has changed it |
-| `OPEN_SOURCE.md` | every open-source dependency and decision | 2026-11-21 | no | current as far as checked: no dependency was added from D-158 to D-181 |
+| `OPEN_SOURCE.md` | every open-source dependency and decision | 2026-11-26 | yes | current as far as checked: no dependency was added from D-158 to D-201; Bellhop3D's new role (the opt-in `eigenray3d` tier's program, a separate process, the owner's approval) is recorded in section 3.13 and the Acoustics Toolbox row |
 | `HOLOSCAN_NOTES.md` | source-reading notes on Holoscan and Sensor Bridge | 2026-11-22 | no | reading notes; what was then built and measured is in `DECISIONS.md` D-151 to D-173 and `DEPLOYMENT.md` |
 | `API_AUDIT.md` | audit of the API at `2c5bb8a` (2026-11-20), findings A1 to G5 | 2026-11-21 | no | historical: the findings are kept as found at `2c5bb8a`; the fixes followed (D-145 to D-147 and later packages) and its header says so since 2026-11-24. Do not read a finding as open without checking the code |
 | `HARDCODED_AUDIT.md` | audit of hard-coded assumptions at `3113327` | 2026-11-18 | no | historical; not re-checked here |
 | `ORG_ARL_SURVEY.md` | survey of the org-arl repositories | 2026-11-20 | no | historical reading survey, dated 2026-11-17 |
 | `SIM_CALIBRATION.md` | calibrating the simulator to real data | 2026-11-16 | no | method only; never run on real data (issue `sonar-sul`) |
-| `JETSON.md` | build steps for Jetson and DGX Spark | 2026-11-16 | no | **untested**, as its first line says |
-| `tasks/VEHICLE_ADAPTERS.md` | brief for the vehicle adapters, with 17 owner questions | 2026-11-23 | no | current; its "current state" was checked at `6600df8`, before D-175 to D-181 |
-| `tasks/REAL_DATA.md` | brief for real data, with 11 owner questions | 2026-11-23 | no | current; same note |
+| `JETSON.md` | build steps for Jetson and DGX Spark | 2026-11-26 | no | **untested**, as its first line says; since 2026-11-26 it names the host check (D-189) and the L4 chain times to compare with |
+| `tasks/VEHICLE_ADAPTERS.md` | brief for the vehicle adapters, with 17 owner questions | 2026-11-26 | yes | current; its "current state" was checked at `6600df8` and brought to D-201 on 2026-11-26 (per-board streams in every receiver, the 0.25 s lead, `source.sound_speed`, `sonar-57w`, `sonar-9a2`) |
+| `tasks/PROPAGATION_3D.md` | the scope of 3-D propagation (`sonar-rcq`): what is wrong, the `sonar-6c8` investigation, options, packages P0 to P6 (done 2026-11-26, with what differed from the plan), the cost of the `eigenray3d` tier, 9 owner questions | 2026-11-26 | yes | current; a state paragraph opens section 0; owner questions 6 to 9 annotated (question 9 corrected by D-199) |
+| `tasks/REAL_DATA.md` | brief for real data, with 11 owner questions | 2026-11-26 | no | current; checked at `6600df8`, its self-check numbers corrected 2026-11-26 |
 | `benchmarks/README.md` | which command wrote which benchmark file | 2026-11-20 | no | current for `bench_*`, `session_*`, `conditioning_*`; later files name their command in `RESULTS.md` |
-| `benchmarks/*.json`, `*.md` (35 files) | raw benchmark, ablation and ten-seed evaluation output | newest 2026-11-22 | n/a | measurements at the commits in their names; none rerun at HEAD. No file for the ten-seed runs of D-172 to D-181 |
+| `benchmarks/*.json`, `*.md` (35 files) | raw benchmark, ablation and ten-seed evaluation output | newest 2026-11-22 | n/a | measurements at the commits in their names; none rerun at HEAD. The live-chain cases are of pings with ideal clocks (no board synchronisation stage), so D-190 to D-195 do not apply to them; the trials' chain times with board synchronisation are in the decisions only (D-191, D-192, D-195). No file for the ten-seed runs of D-172 to D-181 |
 | `figures/` (88 files) | the gallery (57 files), validation tables and figures, study output | newest 2026-11-24 | n/a | gallery current (D-179); the other tables and figures date from 2026-11-18 to 20 |
-| `scenarios/` (56 files) | geometry diagram per scenario, `transmission_loss.json` | newest 2026-11-20 | n/a | 55 of the 81 scenario files have a diagram (`SCENARIOS.md` names the 25 without). The diagrams of `wreck_sas` and `minefield_sas` were redrawn on 2026-11-24 with the wider seabed of D-171; the others date from 2026-11-20 or before |
-| `design/` (38 files) | `derived.json`, study JSON, build and system diagrams, parts | newest 2026-11-20 | n/a | **stale:** `popoto_depth_planner.json` and `.png` (regenerated for D-134, item 37; not since) and `popoto_12km.json` (predates D-156 to D-181): `STATUS.md`, list of stale generated files. `popoto_parts.md` and `.json` and the `gpu` block of `popoto_stage2.json` were regenerated on 2026-11-24 |
+| `scenarios/` (56 files) | geometry diagram per scenario, `transmission_loss.json` | newest 2026-11-24 | n/a | 55 of the 81 scenario files have a diagram (`SCENARIOS.md` names the 26 without). The diagrams of `wreck_sas` and `minefield_sas` were redrawn on 2026-11-24 with the wider seabed of D-171; the others date from 2026-11-20 or before |
+| `design/` (38 files) | `derived.json`, study JSON, build and system diagrams, parts | newest 2026-11-24 | n/a | **stale:** `popoto_depth_planner.json` and `.png` (regenerated for D-134, item 37; not since) and `popoto_12km.json` (predates D-156 to D-201): `STATUS.md`, list of stale generated files. `popoto_parts.md` and `.json` and the `gpu` block of `popoto_stage2.json` were regenerated on 2026-11-24; the parts list's GPU timing does not say its pings have ideal clocks (not regenerated) |
 | `architecture/` (6 files) | diagrams for `ARCHITECTURE.md`, `DEPLOYMENT.md`, `SIM_CALIBRATION.md` | 2026-11-19 | n/a | drawn by `tools/architecture_diagrams.py`; its backend table is checked by `tests/python/test_architecture.py`. `backends.png`, `dataflow.png` and `live_chain.png` redrawn 2026-11-24 (ten stages with a device build, not seven; the Sensor Bridge path; the multiscale detector and echo grouping) |
 | `examples/reference_design/example_static_2x24.yaml` | the worked example of `REFERENCE_DESIGN.md` | 2026-11-24 | n/a | current (touched by D-180's YAML numbers) |
 | `plan/GPU-FLS-Phased-Plan.pdf` | the owner's phased plan | 2026-11-16 | n/a | input document, unchanged |
 
-Outside `docs/`: the repository `README.md` said "The full CPU suite and a GPU job have not
-yet been rerun on the present tree"; corrected on 2026-11-24 (a GPU job has, the whole CPU
-suite has not; state table above), and it now points here. The root `CLAUDE.md` describes
-another package (`trajectory_classifier`), not this suite; it is the owner's instruction
-file and is left as it is.
+Outside `docs/`: the repository `README.md` was brought to D-201 on 2026-11-26 (81 scenarios, the
+opt-in 3-D tier, the last GPU job, the budget's missing reverberation term, SAS free field), and it
+points here. The root `CLAUDE.md` is the owner's instruction file: it leads with the unrelated
+`trajectory_classifier` package and has a section, "The GPU sonar suite", that points to this set
+(`AGENTS.md` carries the same section). It is left as it is.
