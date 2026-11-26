@@ -55,9 +55,13 @@ Prior bounds by default (the owner, 2026-11-26): when the --sediment row carries
 prior_bounds(that phi) unless --prior-bounds PHI or --no-prior-bounds is given; rho, nu, delta are
 not bounded by default (rows coarser than about 1 phi lie outside the rho and nu priors). Without a
 row, or with a row that has no grain size (placeholder_sand, rock, pebbles), no prior is applied and
-the output says so. Where the bounds come from: sigma2 1e-4 to 4e-3 (Jackson and Richardson 2007,
-p. 382) and gamma2 from 2.33 (their Table 6.1) are confirmed in the book through the reading notes
-in docs/references/; gamma2's upper end 3.95 is our search limit; w2 is the grain-size rule's value
+the output says so. Where the bounds come from: sigma2 1e-4 to 5e-3: the book's typical 1e-4 to
+4e-3 (Jackson and Richardson 2007, p. 382; above 4e-3 they suspect the single-scattering assumption)
+with the ceiling raised to 5e-3 (the owner, 2026-11-26) because Jackson and Briggs (1992) print
+fitted values up to 0.005 (one site at the top, Arafura Sea, whose sediment they call bimodal and
+whose 0.005 they place at the border of single scattering); gamma2 from 2.33 (Jackson and
+Richardson's Table 6.1); all of these confirmed through the reading notes in docs/references/;
+gamma2's upper end 3.95 is our search limit; w2 is the grain-size rule's value
 (Snellen et al. 2013 eq. (5), via secondary) times a spread of -15.3 to +9.9 dB (sands), -7.1 to
 +14.5 dB (5.5 phi and finer), the union between: that spread is OURS (our comparison of Table 6.1's
 rows with our rule, docs/references/jackson_richardson_2007/02_*.md Sec. 3.2), not a number the

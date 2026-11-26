@@ -310,13 +310,14 @@ def test_covariance_and_the_error_of_the_predicted_strength():
 
 
 def test_prior_bounds_come_from_the_notes_and_keep_the_fit_inside():
-    """`prior_bounds(phi)`: rho 1.1-2.2, nu 0.97-1.2, sigma2 1e-4 to 4e-3 ([N1] Sec. 4, J&R p. 382), gamma2
+    """`prior_bounds(phi)`: rho 1.1-2.2, nu 0.97-1.2, sigma2 1e-4 to 5e-3 (J&R p. 382's typical 1e-4 to 4e-3, [N1]
+    Sec. 4, with the ceiling raised to Jackson and Briggs's (1992) printed fits up to 0.005: the owner, 2026-11-26), gamma2
     from 2.33 (Table 6.1's lowest) to our limit 3.95, w2 the rule's value -15.3 / +9.9 dB for sands and
     -7.1 / +14.5 dB for Mz >= 5.5 ([N2] Sec. 3.2); `site_bounds` the App. C within-site CVs. A bound that
     binds is reported as setting the value; unknown keys are refused with the nearest one."""
     sand = sediment_fit.prior_bounds(1.5)
     assert (sand["rho"], sand["nu"], sand["sigma2"], sand["gamma2"], sand["delta"]) == \
-        ((1.1, 2.2), (0.97, 1.2), (1e-4, 4e-3), (2.33, 3.95), sediment_fit.BOUNDS["delta"])
+        ((1.1, 2.2), (0.97, 1.2), (1e-4, 5e-3), (2.33, 3.95), sediment_fit.BOUNDS["delta"])
     w2 = bottom.grain_size_scattering(1.5)["w2"]
     assert sand["w2"] == pytest.approx((w2 * 10 ** -1.53, w2 * 10 ** 0.99), rel=1e-12)
     mud = sediment_fit.prior_bounds(6.36)
@@ -611,18 +612,43 @@ def test_default_prior_bounds_of_a_row_are_its_grain_sizes_scattering_priors():
             b, _ = sediment_fit.row_prior_bounds(name)
             p = bottom.sediment(name)
             assert all(b[k][0] <= p[k] <= b[k][1] for k in b), (name, p, b)
-        # A site's own printed fit need not lie inside the class prior of its grain size, and two do not (recorded,
-        # not changed here): Jackson and Briggs (1992) Table V's Arafura sigma2 0.005 is above the prior's 0.004 (J&R's
-        # typical upper end), and Quinault's across-strike w2 (0.00422 cm^4 at gamma2 3.67, 9.23e-4 m^0.33) is above
-        # the sand class's w2 band at 2.97 phi (a w2 at another exponent is in other units: compare spectra instead).
+        # A site's own printed fit need not lie inside the class prior of its grain size, and one does not (recorded,
+        # not changed here): Quinault's across-strike w2 (0.00422 cm^4 at gamma2 3.67, 9.23e-4 m^0.33) is above the
+        # sand class's w2 band at 2.97 phi (a w2 at another exponent is in other units: compare spectra instead).
+        # What changed (2026-11-26, an update to new evidence, not a weakening): this set also held
+        # ("jackson_briggs_1992_arafura", "sigma2") while the sigma2 prior ended at J&R's typical 0.004; Jackson and
+        # Briggs (1992) print 0.005 as their fit at Arafura and fitted values 0.0001-0.005 in the literature they
+        # cite, so the owner raised the ceiling to 0.005 ("yes raise the ceiling to 0.005") and the Arafura row's
+        # sigma2 now lies inside, on the ceiling itself (`test_the_sigma2_prior_reaches_the_printed_arafura_fit`).
         outside = set()
         for name in (n for n in with_phi if n in SITE_ROWS):
             b, _ = sediment_fit.row_prior_bounds(name)
             p = bottom.sediment(name)
             outside |= {(name, k) for k in b if not b[k][0] <= p[k] <= b[k][1]}
-    assert outside == {("jackson_briggs_1992_arafura", "sigma2"), ("jackson_briggs_1992_quinault", "w2")}
+    assert outside == {("jackson_briggs_1992_quinault", "w2")}
     with pytest.raises(ValueError, match="unknown sediment"):
         sediment_fit.row_prior_bounds("very_fine_slit")
+
+
+def test_the_sigma2_prior_reaches_the_printed_arafura_fit():
+    """The owner, 2026-11-26: "yes raise the ceiling to 0.005". The sigma2 prior was J&R's (2007, p. 382) typical
+    0.0001-0.004 (confirmed via [N1] Sec. 4); Jackson and Briggs (1992) print 0.005 as the fitted value at the Arafura
+    Sea (Table V; 0.004-0.006 "give reasonable fits", p. 974) and give 0.0001-0.005 as the range of fitted values in
+    the work they cite (the text of their eq. (3); confirmed via docs/references/bottom_backscatter_jackson_briggs_1992.md),
+    so the default prior excluded a printed value. Now (1e-4, 5e-3) for every grain size, the Arafura row's own sigma2
+    (0.005) inside its default prior (on the ceiling), and the tool's help names both sources."""
+    assert sediment_fit.PRIOR_BOUNDS["sigma2"] == (1e-4, 5e-3)
+    for phi in (-1.0, 1.5, 4.0, 5.63, 7.5, 9.0):
+        assert sediment_fit.prior_bounds(phi)["sigma2"] == (1e-4, 5e-3), phi
+    for name in ("very_fine_silt", "medium_sand", "jackson_briggs_1992_arafura"):
+        assert sediment_fit.row_prior_bounds(name)[0]["sigma2"] == (1e-4, 5e-3), name
+    arafura = bottom.sediment("jackson_briggs_1992_arafura")
+    lo, hi = sediment_fit.row_prior_bounds("jackson_briggs_1992_arafura")[0]["sigma2"]
+    assert arafura["sigma2"] == 0.005 and lo <= arafura["sigma2"] <= hi
+    helptext = " ".join(subprocess.run([sys.executable, str(ROOT / "tools" / "fit_sediment.py"), "--help"], capture_output=True,
+                                       text=True, env={"PYTHONPATH": str(ROOT / "python"), "PATH": "/usr/bin:/bin"}).stdout.split())
+    assert "sigma2 1e-4 to 5e-3" in helptext and "1e-4 to 4e-3" in helptext and "Jackson and Briggs (1992)" in helptext
+    assert "bimodal" in helptext and "single scattering" in helptext
 
 
 def test_tool_applies_the_rows_prior_by_default_and_the_off_switch_gives_the_fit_of_before(tmp_path):

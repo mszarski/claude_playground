@@ -112,10 +112,21 @@ DOMINANT_SHARE = 0.5        # which term the data mostly are, for the explanatio
 # docs/references/jackson_richardson_2007/01_sediment_properties.md, [N2] = 02_roughness_heterogeneity_statistics.md.
 # Neither Table 6.1 nor Table C.1 is carried here (the notes ask that they not be): only the class summaries.
 
+# sigma2, 1e-4 to 5e-3. The lower end and the old ceiling 4e-3: J&R p. 382 give 0.0001-0.004 as the typical range
+# and call values above 0.004 a possible sign that the weak (single) scattering assumption fails (confirmed in the
+# book via [N1 Sec. 4], [N2 Sec. 3.3]). The ceiling 5e-3 (the owner, 2026-11-26: "yes raise the ceiling to 0.005"):
+# Jackson and Briggs (1992), in the text of their eq. (3) (sigma2 = sigma_v / alpha), put the fitted values reported
+# in the work they cite at 0.0001 to 0.005, and print 0.005 as their own fit at the Arafura Sea site (Table V; the
+# text, p. 974, says 0.004-0.006 fit reasonably) (confirmed via docs/references/bottom_backscatter_jackson_briggs_1992.md).
+# That top value is ONE site, and the paper's own caveats on it: the sediment is bimodal (sand and gravel in a silty
+# clay, so its mean grain size misleads) and 0.005 lies at the border of single scattering, where the first-order
+# volume model may fail. The prior therefore admits values the book calls suspect; a fit that lands above 0.004 should
+# be read with that warning. The search limit BOUNDS["sigma2"] (ours) and the soft rows' information key
+# `sigma2_range: [0.0008, 0.005]` (configs/sediments.yaml) are separate and unchanged; the latter already ends at 0.005.
 PRIOR_BOUNDS = {
     "rho": (1.1, 2.2),        # J&R Tables 5.1/5.4 ranges of measured sediments, "a_rho from 1.1 to about 2.2" [N1 Sec. 4]
     "nu": (0.97, 1.2),        # the same tables' range [N1 Sec. 4]
-    "sigma2": (1e-4, 4e-3),   # J&R p. 382: typical 0.0001-0.004, above 0.004 suspect [N1 Sec. 4], [N2 Sec. 3.3]
+    "sigma2": (1e-4, 5e-3),   # two sources: the comment above
     "gamma2": (2.33, 3.95),   # J&R Table 6.1 (Briggs, 52 rows): gamma2 = gamma1 + 1 from 2.33 to 4.35 [N2 Sec. 2.2];
                               # the upper end capped at our search limit 3.95 (power law, bottom.py)
 }
@@ -168,8 +179,9 @@ def row_prior_bounds(name: str, path=None) -> tuple:
     `path`): `(bounds, source)` with `bounds` the `DEFAULT_PRIOR_KEYS` of `prior_bounds(phi)`, phi the row's
     `mean_grain_size_phi`, and `source` saying so; `(None, reason)` when the row carries no grain size. The
     owner's decision (2026-11-26): "yes apply prior bounds by default" when the row named has a grain size.
-    Where the bounds come from: `PRIOR_BOUNDS` (sigma2 and gamma2's lower end from J&R, confirmed in the
-    book via docs/references/; gamma2's upper end our search limit) and `W2_SPREAD_DB` (the spread of J&R
+    Where the bounds come from: `PRIOR_BOUNDS` (sigma2's lower end and gamma2's lower end from J&R, confirmed in
+    the book via docs/references/; sigma2's ceiling 5e-3 from Jackson and Briggs's (1992) printed fits, confirmed
+    via docs/references/, above J&R's typical 4e-3: the comment at `PRIOR_BOUNDS`; gamma2's upper end our search limit) and `W2_SPREAD_DB` (the spread of J&R
     Table 6.1's rows about our grain-size rule, our comparison) about `bottom.grain_size_scattering(phi)`
     (Snellen et al. 2013 eq. (5), via secondary): the widths are ours."""
     entry = bottom._entry(name, path)

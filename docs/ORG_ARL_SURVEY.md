@@ -605,7 +605,9 @@ lists the parameters the data cannot fix with the reason, and prints a row for
 `configs/sediments.yaml` with `status: fitted (<data source>)`; unconstrained parameters go
 into `unconfirmed_fields`, so using the row warns about them. By default (the owner, 2026-11-26)
 a `--sediment` row with a grain size bounds w2, gamma2 and sigma2 by the prior for that grain size
-(`sediment_fit.row_prior_bounds`; the w2 widths are ours); `--prior-bounds PHI` replaces it,
+(`sediment_fit.row_prior_bounds`; the w2 widths are ours; sigma2 1e-4 to 5e-3, Jackson and Richardson's
+typical 1e-4 to 4e-3 with the ceiling raised to Jackson and Briggs's (1992) printed fits up to 0.005 by
+the owner on 2026-11-26); `--prior-bounds PHI` replaces it,
 `--no-prior-bounds` turns it off, and the output always says which bounds were used and flags a
 parameter that ends on one (set by the bound, not measured).
 

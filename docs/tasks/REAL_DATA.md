@@ -287,8 +287,11 @@ G-9 of `docs/tasks/SST_GAPS_JACKSON.md`). How it is judged:
   prior bounds can trade sigma2 for a much rougher relief, `test_sediment_fit.py`) and the extended
   report (covariance, predicted-strength error). Prior bounds are the tool's default since 2026-11-26
   (the owner): a `--sediment` row with a grain size (`mean_grain_size_phi`) bounds w2, gamma2 and sigma2
-  by `prior_bounds` of that grain size (the w2 widths are ours, the sigma2 and gamma2 ranges Jackson and
-  Richardson's: the tool's `--help`); `--prior-bounds PHI` replaces them, `--no-prior-bounds` turns them
+  by `prior_bounds` of that grain size (the w2 widths are ours; gamma2's lower end Jackson and
+  Richardson's; sigma2 1e-4 to 5e-3: Jackson and Richardson's typical 1e-4 to 4e-3 with the ceiling
+  raised to 5e-3 by the owner on 2026-11-26 because Jackson and Briggs (1992) print fits up to 0.005, one
+  site at the top (Arafura Sea: bimodal sediment, at the border of single scattering); a fitted sigma2
+  above 4e-3 is one the book calls suspect: the tool's `--help`); `--prior-bounds PHI` replaces them, `--no-prior-bounds` turns them
   off (the unbounded fit of before, bit for bit); without a row or a grain size there are none, and the
   tool's "bounds used:" line always says which applied. On the volume-dominated silt case the default
   prior turns six bad unbounded fits of ten (nothing or only w2 flagged, sigma2 0.65-0.78 of the truth)
