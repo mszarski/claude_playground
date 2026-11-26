@@ -33,6 +33,8 @@ and at 16 degrees (too loud), -2.2 dB over the summit, 0.0 and -0.7 dB beside it
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
@@ -152,3 +154,58 @@ def test_our_n_by_2d_tier_over_the_seamount(bellhop3d_runs, capsys):
     # assertion must be changed to an agreement bound with the 3-D field.
     flanks = [k for k, b in enumerate(OURS) if b in FLANKS]
     assert np.all(to_full[flanks] < -2.0), to_full         # ours is too loud over the flanks: the 3-D error
+
+
+# --- P4 (sonar-rcq): the opt-in 3-D tier against the same seamount ------------------------------------------------
+
+# The acceptance runs Bellhop3D three times at converged fans (about 7 minutes on a shared 4-core machine: the
+# converged oracle 3 min, the provider's two runs 5 min), more than the one minute an oracle test may take in the
+# suite, so it runs only when asked: GPUSONAR_SLOW_ORACLES=1 (and the oracle).
+slow = pytest.mark.skipif(os.environ.get("GPUSONAR_SLOW_ORACLES", "") in ("", "0"),
+                          reason="slow 3-D acceptance (about 8 minutes): set GPUSONAR_SLOW_ORACLES=1 to run it")
+ACCEPT_BEARINGS = np.array([-24.0, -4.0, 16.0, 36.0])            # equally spaced for the oracle's writer
+ACCEPT_RANGES = np.arange(500.0, 6500.01, 500.0)
+ACCEPT_FLANKS = (-4.0, 16.0)                                     # over the flanks (cross-slopes 12.3 and 11.8 degrees)
+
+
+@slow
+@needs_bellhop3d
+def test_eigenray3d_tier_over_the_seamount(capsys):
+    """The acceptance bound of docs/tasks/PROPAGATION_3D.md P4, revised with D-197: the `eigenray3d` provider
+    (hat beams 241 x 181 over +-30 degrees and 120 degrees of azimuth: the default 361 halves the azimuth step and
+    doubles the time; measured within 0.42 dB at 361) against Bellhop3D's converged 3-D field (Gaussian beams,
+    481 x 361; D-197: 121 is 0.5 to 1.2 dB short) and its N x 2-D field at the same fan, 50 m, four bearings, ranges
+    0.5 to 6.5 km every 500 m. Measured 2026-11-26 (averages of the seven ranges from 3.5 to 6.5 km): see the printed
+    line; ours minus 3-D -0.01, -0.10, -1.17, +0.01 dB and ours minus N x 2-D -0.45, +3.37, +2.24, -0.71 dB on -24, -4,
+    16, 36 degrees; 0.05 dB at most at 0.5 and 1 km; 8 minutes, 223 kB of arrivals for 52 receivers (with bearings -20,
+    -7, 6, 19, 32 and 13 ranges: +0.02, -0.04, -0.05, -0.56, -0.05 dB). Bounds (the plan's, docs/tasks/
+    PROPAGATION_3D.md section 5, with D-197's converged oracle):
+    1. |ours - Bellhop3D 3-D| < 1.5 dB on every bearing (3.5 to 6.5 km averages): 1.17 measured at most; half the
+       smallest 3-D effect over the flanks (3.0 dB), so the test cannot pass without it.
+    2. ours - Bellhop3D N x 2-D > 2.0 dB over the flanks (-4 and 16 degrees): the energy is turned out of them.
+    3. Before the seamount (0.5 and 1.0 km), |ours - Bellhop3D 3-D| < 0.5 dB at each range."""
+    from gpusonar.sim.bellhop3d import Bellhop3DProvider
+    bed = bathymetry.make_bathymetry({"seamount": SEAMOUNT})
+    ref = {mode: run_bellhop3d(bed.depth, GRID_X, GRID_Y, WATER_DEPTH, WATER, BOTTOM, FREQUENCY, SOURCE_DEPTH, [RECEIVER_DEPTH],
+                               ACCEPT_BEARINGS, ACCEPT_RANGES, mode, 481, (-30.0, 30.0), 361, (-60.0, 60.0), FAN["box_km"],
+                               beam="B")[:, 0, :] for mode in ("3", "2")}
+    env = OceanEnvironment(depth=WATER_DEPTH, sound_speed=WATER, bottom_speed=BOTTOM[0], bottom_density=BOTTOM[1],
+                           bottom_attenuation=BOTTOM[2])
+    provider = Bellhop3DProvider(env, FREQUENCY, max_range=ACCEPT_RANGES[-1] + 100.0, bathymetry={"seamount": SEAMOUNT},
+                                 range_step=50.0, depth_step=20.0, n_beta=181)
+    pts = np.concatenate([np.column_stack([ACCEPT_RANGES * np.cos(np.radians(b)), ACCEPT_RANGES * np.sin(np.radians(b)),
+                                           np.full(len(ACCEPT_RANGES), RECEIVER_DEPTH)]) for b in ACCEPT_BEARINGS])
+    es = provider.eigenrays(np.array([0.0, 0.0, SOURCE_DEPTH]), pts)
+    ours = (-10.0 * np.log10(np.maximum(np.sum(np.where(es.valid, np.abs(es.amplitude) ** 2, 0.0), axis=1), 1e-300))
+            ).reshape(len(ACCEPT_BEARINGS), len(ACCEPT_RANGES))
+    to_full = range_average(ours, ACCEPT_RANGES, FAR) - range_average(ref["3"], ACCEPT_RANGES, FAR)
+    to_flat = range_average(ours, ACCEPT_RANGES, FAR) - range_average(ref["2"], ACCEPT_RANGES, FAR)
+    near = (ours - ref["3"])[:, ACCEPT_RANGES <= 1000.0]
+    with capsys.disabled():
+        print("\n[eigenray3d] seamount, 3.5 to 6.5 km: " + "; ".join(
+            f"{b:+.0f} deg: ours minus 3-D {a:+.2f}, minus N x 2-D {c:+.2f} dB" for b, a, c in zip(ACCEPT_BEARINGS, to_full, to_flat))
+              + f"; at 0.5 and 1 km max |ours - 3-D| {np.abs(near).max():.2f} dB; runs {provider.runs}")
+    assert np.abs(to_full).max() < 1.5, to_full
+    flanks = [k for k, b in enumerate(ACCEPT_BEARINGS) if b in ACCEPT_FLANKS]
+    assert np.all(to_flat[flanks] > 2.0), to_flat
+    assert np.abs(near).max() < 0.5, near

@@ -650,7 +650,10 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
     - `sediment`: SedimentProvider (one refracted ray into a fluid sediment);
     - `eigenray`: sim.bellhop.BellhopProvider; `options["environment"]` is the
       OceanEnvironment's keyword arguments and the rest go to the provider (`sound_speed`
-      is not used: the environment's profile gives it).
+      is not used: the environment's profile gives it);
+    - `eigenray3d` (opt-in): sim.bellhop3d.Bellhop3DProvider (Bellhop3D over a 3-D
+      `bathymetry`), the same `environment` and the provider's keywords; an unknown key is
+      refused with the nearest known one.
 
     Any other tier raises ValueError."""
     options = options or {}
@@ -665,6 +668,21 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
         opts = dict(options)
         env = OceanEnvironment(**opts.pop("environment"))
         return BellhopProvider(env, **opts)
+    if tier == "eigenray3d":
+        # Bellhop3D (opt-in; sim/bellhop3d.py). Keys are checked here: a misspelt one is refused with the nearest.
+        import difflib
+        import inspect
+        from .bellhop import OceanEnvironment
+        from .bellhop3d import Bellhop3DProvider
+        opts = dict(options)
+        known = [k for k in inspect.signature(Bellhop3DProvider.__init__).parameters if k not in ("self", "env")] + ["environment"]
+        for key in opts:
+            if key not in known:
+                near = difflib.get_close_matches(key, known, 1)
+                raise ValueError(f"propagation.{key}: unknown key for fidelity eigenray3d"
+                                 + (f"; did you mean {near[0]!r}?" if near else f" (known: {', '.join(sorted(known))})"))
+        env = OceanEnvironment(**opts.pop("environment"))
+        return Bellhop3DProvider(env, **opts)
     raise ValueError(f"unknown fidelity tier {tier!r}")
 
 

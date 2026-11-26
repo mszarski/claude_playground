@@ -1,0 +1,28 @@
+# ILLUSTRATIVE (unconfirmed relief: no site was measured). The flank array over a seamount at the opt-in
+# `eigenray3d` tier (Bellhop3D, external: GPUSONAR_BELLHOP3D; docs/tasks/PROPAGATION_3D.md P5). A Gaussian seamount
+# 180 m high (summit 20 m deep) in 200 m of water, centred 2.5 km east and 0.3 km north of the sonar (the seamount of
+# tests/python/test_seamount_3d.py turned to the array's broadside), and a target 4 km out on a bearing over its
+# southern flank (94 degrees), where the 3-D field is about 3 dB quieter than N x 2-D (D-149, D-197). One bed for
+# everything that sees the seabed: the top-level `bathymetry`. No reverberation: over relief the 3-D provider would
+# need a receiver per scattering cell (it refuses runs over `max_file_mb`), so this scene is a target in noise.
+# Run time (measured, 4-core CPU): see docs/tasks/PROPAGATION_3D.md P5; two source positions (the projector 0.5 m
+# below the array), two Bellhop3D runs each.
+name: flank_seamount_3d
+sonar: flank_32
+fidelity: eigenray3d
+sonar_overrides:
+  receive: {window: {range: [3600, 4400]}}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 200.0, absorption: ainslie_mccolm, water_depth_known: false}
+bathymetry: {seamount: {depth: 200.0, height: 180.0, center: [300.0, 2500.0], sigma: 500.0}}
+propagation:
+  range_step: 25.0
+  depth_step: 10.0
+  n_beta: 181                 # 0.67 degree over 120 degrees of azimuth (the default 361 doubles the time)
+platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: target, positions: [[-279.0, 3990.0, 50.0]], target_strength_db: 10.0}
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz, as flank_target_5km
+seed: 1

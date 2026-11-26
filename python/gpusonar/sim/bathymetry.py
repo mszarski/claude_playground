@@ -79,6 +79,27 @@ def seamount(depth: float, height: float, center, sigma: float) -> Bathymetry:
     return Bathymetry(lambda x, y: d0 - bump(x, y), gradient, flat_depth=d0 if h == 0.0 else None)
 
 
+def cross_bearing_slope(bed: Bathymetry, origin, azimuth, ranges) -> np.ndarray:
+    """The bed's slope across a bearing: dD/dn at the points `ranges` (m) from the horizontal `origin` along the
+    bearing `azimuth` (radians from x = north towards y = east), n the horizontal unit vector to the bearing's right
+    (-sin azimuth, cos azimuth). Positive: the bed deepens to the right. This is the slope an N x 2-D run (one depth
+    profile per bearing) cannot see (docs/tasks/PROPAGATION_3D.md, section 3)."""
+    r = np.asarray(ranges, dtype=float)
+    a = float(azimuth)
+    gx, gy = bed.gradient(float(origin[0]) + r * np.cos(a), float(origin[1]) + r * np.sin(a))
+    return -gx * np.sin(a) + gy * np.cos(a)
+
+
+def out_of_plane_turn(cross_slope, grazing) -> np.ndarray:
+    """The azimuth (radians) by which a ray in its bearing's vertical plane leaves that plane on reflection from a bed
+    of cross-bearing slope `cross_slope` (dD/dn, rise over run) at `grazing` (radians): atan(tan g sin 2 alpha),
+    alpha = atan(cross_slope), about 2 g alpha when both are small (ours: the reflection of the direction
+    (cos g, 0, sin g) off the normal (0, sin alpha, -cos alpha); docs/tasks/PROPAGATION_3D.md, section 3). Signed as
+    `cross_slope`: the reflected ray turns towards the deeper side (positive: to the bearing's right)."""
+    alpha = np.arctan(np.asarray(cross_slope, dtype=float))
+    return np.arctan(np.tan(np.asarray(grazing, dtype=float)) * np.sin(2.0 * alpha))
+
+
 def _interp_axis(axis, v):
     """Indices and weight for linear interpolation on an increasing axis, held beyond its ends."""
     v = np.clip(v, axis[0], axis[-1])

@@ -1011,7 +1011,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `flank_sst_shallow`, `flank_sst_spread`, the four validation scenarios `sst_*`, and the
   Popoto build scenarios (`popoto_12km_{2,3}row`, `popoto_elevation_*`, `popoto_static_*`,
   `popoto_face_2row_shallow`, `popoto_testauv_*`, `fjord_*`, `ssp_*`) and
-  `popoto_12km_two_ships` (D-172). All 80 files are
+  `popoto_12km_two_ships` (D-172). All 81 files are
   listed in `SCENARIOS.md`, "Every scenario file".
 - Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
   only to objects in the forward-looking sea scenes; range-independent oceans in the
