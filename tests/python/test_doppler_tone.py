@@ -186,7 +186,7 @@ def test_a_strong_still_echo_leaks_no_detection_out_of_the_notch(engine):
 def test_a_train_with_the_tone_above_the_band_gives_the_mover_the_sweeps_range_and_the_tones_rate(engine):
     """A Hann tone at 10.5 kHz then the 6-10 kHz sweep: a mover opening at 1.5 m/s at 500 m, a still target at 400 m and
     -20 degrees. The still one is the sweep's alone (path sweep, no rate); the mover is ONE detection, at the range the
-    sweep gives without the tone path (within its own coupling) with the tone's rate (path both)."""
+    sweep gives without the tone path with the tone's rate (path both)."""
     still = (400.0 * np.sin(np.radians(-20.0)), 400.0 * np.cos(np.radians(-20.0)), 0.0)
     rec = ping(TRAIN, targets=(((0.0, 500.0, 0.0), (0.0, 1.5, 0.0)), (still, (0.0, 0.0, 0.0))))
     (off,) = run(dict(CHAIN, engine=engine), [rec])
@@ -195,9 +195,19 @@ def test_a_train_with_the_tone_above_the_band_gives_the_mover_the_sweeps_range_a
     fixed = near(on, 400.0, -20.0)
     assert mover_off is not None and mover is not None and fixed is not None, on["detections"]
     assert mover["doppler_path"] == "both" and mover["range_rate_m_s"] == pytest.approx(1.5, abs=0.5 * mover["range_rate_step_m_s"])
-    assert mover["range_m"] == pytest.approx(mover_off["range_m"], abs=1e-6)
+    assert mover["range_m"] == pytest.approx(mover_off["range_m"], abs=1.0)        # the sweep's range (its replica the sweep alone now)
     assert fixed["doppler_path"] == "sweep" and fixed["range_rate_m_s"] is None
     assert len([d for d in on["detections"] if d["doppler_path"] == "tone"]) == 0
+    # With the tone path on, the sweep path compresses with the sweep part of the replica alone (the tone's samples zeroed,
+    # libs/live sweep_only_replica): the whole train's replica puts the tone's c T / 2 pedestal and its half of the energy
+    # into the sweep's map. Measured here while writing this test: the still target 24.9 -> 31.1 dB, the mover 19.4 -> 20.3 dB,
+    # detections 4 -> 2.
+    fixed_off = near(off, 400.0, -20.0)
+    assert fixed_off is not None and fixed["snr_db"] > fixed_off["snr_db"] + 3.0
+    assert mover["snr_db"] > mover_off["snr_db"]
+    r = rec.copy()
+    assert core.live_sweep_only_replica(r, doppler.tone_options(TONE_TRAIN)) == pytest.approx(T * r.transmit.waveform.replica_sample_rate, abs=1)
+    assert not np.any(np.asarray(r.transmit.waveform.replica)[:int(T * r.transmit.waveform.replica_sample_rate)])
 
 
 def test_a_train_without_its_tone_named_is_refused():

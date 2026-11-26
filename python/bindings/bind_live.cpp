@@ -745,6 +745,21 @@ void bind_live(py::module_& m) {
       "The sweep's Doppler bank for this record and the map's bearings (rad) (libs/live doppler.hpp plan_doppler): the "
       "options as the flat doppler_* keys of gpusonar.live.cpp_chain_options. Both engines take their hypotheses from it.");
   m.def(
+      "live_sweep_only_replica",
+      [](PingRecord& record, const py::dict& options, double default_budget) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_sweep_only_replica: ");
+        const live::TonePlan p = live::plan_tone(record, {}, o, default_budget);
+        Waveform w = record.transmit.waveform;
+        const std::int64_t n = live::sweep_only_replica(w, p);
+        record.transmit.waveform = w;
+        return n;
+      },
+      py::arg("record"), py::arg("options"), py::arg("default_budget") = 1e-3,
+      "The record's train replica with its tone segment zeroed, in place, as the live chain's sweep path uses it with the "
+      "tone path on (libs/live doppler.hpp sweep_only_replica, D3). Returns the samples zeroed.");
+  m.def(
       "live_tone_plan",
       [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options, double default_budget) {
         const Keys kw(options);

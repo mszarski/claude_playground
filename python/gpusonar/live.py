@@ -1446,6 +1446,8 @@ class LiveChain:
                 base = record.copy()
                 if tone_run:
                     self._tone = doppler.tone_stage(base, self.bearings, cfg["doppler"], cfg["window"] == "hann", budget, self.backend)
+                    # A train: the sweep path compresses with the sweep part of the replica alone (libs/live sweep_only_replica).
+                    core.live_sweep_only_replica(record, doppler.tone_options(cfg["doppler"]), budget)
                     if self._tone["plan"]["tone_only"]:
                         # A tone-only ping: the sweep path has no map to make (libs/live chain.cpp the same).
                         self._rows = self._subs = None

@@ -271,6 +271,14 @@ struct ToneStage {
 ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, bool hann,
                      double default_budget = 1e-3, Backend backend = Backend::Host, int device = 0, bool keep_map = false);
 
+/// The sweep path's replica on a train with the tone path on (D3): the record's replica (an arbitrary waveform: the train as
+/// sent) with the tone segment's samples set to zero, emission times [start, start + duration] of the plan. The tone's
+/// echo is Doppler-shifted off the zero-Doppler sweep replica's tone part (a 1 s tone tolerates c / (2 f T): 0.07 to 0.15 m/s),
+/// so with the whole train as the replica the sweep path pays the tone's half of the energy in its noise and gains nothing
+/// for a mover (measured: popoto_12km_doppler's ship 0 of 6 pings through the chain with the whole train; DOPPLER.md D3).
+/// Leaves anything that is not an arbitrary waveform with a replica alone; returns the samples zeroed.
+std::int64_t sweep_only_replica(Waveform& waveform, const TonePlan& plan);
+
 /// The chain's merge of the two paths (D3). Tone detections, strongest first, each take the strongest sweep detection not
 /// yet taken within the plan's gates (|range difference| <= gate_range, |bearing difference| <= gate_bearing): that sweep
 /// detection keeps its range and bearing (the sweep's resolution) and takes the tone's range rate and step (doppler_path

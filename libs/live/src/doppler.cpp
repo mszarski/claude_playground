@@ -708,4 +708,17 @@ std::vector<Detection> merge_tone(std::vector<Detection>& sweep, const ToneStage
   return alone;
 }
 
+std::int64_t sweep_only_replica(Waveform& w, const TonePlan& p) {
+  if (!p.on || p.tone_only || w.type != WaveformType::Arbitrary || w.replica.empty() || !(w.replica_sample_rate > 0.0)) return 0;
+  std::int64_t zeroed = 0;
+  for (std::size_t m = 0; m < w.replica.size(); ++m) {
+    const double t = static_cast<double>(m) / w.replica_sample_rate;
+    if (t >= p.start && t <= p.start + p.duration) {
+      w.replica[m] = 0.0F;
+      ++zeroed;
+    }
+  }
+  return zeroed;
+}
+
 }  // namespace sonar::live

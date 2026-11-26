@@ -380,6 +380,8 @@ Report LiveChain::process(PingRecord& record) {
     base = record;
     // The tone's bank on the baseband record before compression (doppler.hpp tone_stage): its detections join the sweep's below.
     if (tone_plan.on) tone_ = tone_stage(base, bearings, opt_.doppler, opt_.hann, opt_.detector.false_alarms_per_ping, opt_.backend, opt_.device);
+    // A train: the sweep path compresses with the sweep part of the replica alone (doppler.hpp sweep_only_replica).
+    sweep_only_replica(record.transmit.waveform, tone_.plan);
   }
   // A ping whose pulse is the tone alone (D3): the sweep path makes no map (a tone's zero-Doppler map is its reverberation
   // at c T / 2); its detections are the tone path's alone (live.py the same).
