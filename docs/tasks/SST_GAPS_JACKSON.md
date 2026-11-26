@@ -813,3 +813,26 @@ above is unchanged; where it disagrees, this section is the later reading.
 Still blocked after these two papers: the empirical gravel/rock law (not in [MJ89]: 1-9 phi only), the bistatic
 model (Williams and Jackson 1998, another note), out-of-plane bistatic shadowing (not printed; the rule in [W67]
 C-W2 is ours), the -1 <= Mz < 0 constant of (11.3), and anything TR 9407 changed.
+
+## 7. Unblocked by Williams and Jackson (1998) and Jackson and Briggs (1992)
+
+Added 2026-11-26 (branch `ref-b`). Notes: `docs/references/bottom_bistatic_williams_jackson_1998.md` [WJ],
+`docs/references/bottom_backscatter_jackson_briggs_1992.md` [JB]. Nothing below is applied; each note's
+section 5 is the ordered list.
+
+| Package, row or item | Effect |
+|---|---|
+| 0.3 "Williams-Jackson bistatic interpolation" (not printed) | **found**: [WJ] eq. (10), sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), Kirchhoff (11)-(15) with perturbation (16)-(19), no slope averaging. Our two terms equal its two to 1e-13 dB. Opt-in model `williams_jackson_1998` ([WJ] 5.1); default stays small-slope (both are printed; [WJ] 5.4 puts the evidence to the owner) |
+| 0.3 "Kirchhoff / composite interpolation" | partly: [JB] p. 977 prints the monostatic switch (Kirchhoff from 90 deg down to 15 dB below its peak, composite below); the interpolation formula stays with Mourad and Jackson (1989) |
+| W6 / G-15 (volume term isotropic) | [WJ] (20)-(22) print the bistatic volume model used with data; it is J&R (14.10) with rho_rk = -1 and mu' = -mu (the paper's mu is negative). G-15 gains test numbers (Eckernfoerde null at phi 39.3 deg, levels to 0.01 dB) and two printed site inputs ([WJ] 5.3). Still no class values |
+| U1, decision 1, G-5 (mud sigma2) | evidence changes: printed fits Arafura 0.005 (0.004-0.006) and San Francisco 0.002 ([JB] Table V), against the agents' derived 0.0031 and 0.0037 for the same sites. `sigma2_range` of the soft rows should become [0.0008, 0.005] ([JB] 5.2); class value unchanged |
+| Decision 2, D-90 (medium sand sigma2) | weak support for 0.001: the fine-sand fit at Quinault is 0.001, which the authors call insensitive ([JB] Table V) |
+| Decision 10 (grain-size relations) | three measured sites have density ratios 0.24-0.60 above the relations at their grain size (normal-incidence loss 6-9 dB lower) ([JB] Sec. 4 item 3); one site each, no class change |
+| G-11 (composite validity) | add a warning for gamma2 > 3.7 ([JB] p. 974); the cut-off is printed three ways (J&R 1/2, [JB] (A8) 2^(-1/2), [JB] text 1): record, no default change ([JB] 5.3, 5.4) |
+| G-16 (volume slope averaging and shadowing) | [JB] (A11) says the published model does it; size suggested +1.2 to +1.9 dB too high at 10-20 deg at Arafura without it (ours). Still after G-11 |
+| G-18 (1-D to 2-D helper) | [JB] eq. (4) is the corrected (D.19)/(D.23); Table III -> Table V is its test (six rows to 0.1 %, one row 4.6 % off: a probable misprint) |
+| [N2] Sec. 2.1 (D.19), (D.23) misprints; [N4] Sec. 6 Table 13.1 w2 units | **settled** by primary prints: [JB] (4) has the corrected forms; Table 13.1's Quinault (0.0041) and Panama City 93 (0.0001475) rows are [JB] and [WJ] cm^4 values converted to m^(4 - gamma2) |
+| G-25 (validation cases) | test data: [WJ] Figs. 7-8 readings and Table AII summary; [JB] Figs. 10, 12, 14, 15 readings; three [JB] site rows and one [WJ] site row ([JB] 5.1, [WJ] 5.5) |
+| G-27 (anisotropic roughness) | lower priority: mean backscatter isotropic within 1-2 dB at three sites with ripples ([JB] Sec. 2.2) |
+| Decision 12 (papers to obtain) | Williams and Jackson (1998) read. Mourad and Jackson (1989) and Wagner (1967): another agent, in parallel |
+| CONFORMANCE rows "`combined`", "Interpolation Kirchhoff/composite", "Volume term isotropic in bistatic angle" | change of status proposed in the reports of [WJ] and [JB] (CONFORMANCE.md not edited here) |
