@@ -423,11 +423,14 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
                          "not use, and it is defined for backscatter only. Fit with "
                          f"{', '.join(repr(m) for m in bottom.ROUGHNESS_MODELS)} and evaluate the 1989 model at the fitted "
                          "parameters if wanted")
-    if roughness_model not in bottom.ROUGHNESS_MODELS:
+    # The opt-in williams_jackson_1998 (Williams and Jackson 1998) is a model for any geometry with the same six
+    # parameters, so it is offered too; it is not part of the model spread (bottom.OPT_IN_ROUGHNESS_MODELS).
+    fittable = bottom.ROUGHNESS_MODELS + bottom.OPT_IN_ROUGHNESS_MODELS
+    if roughness_model not in fittable:
         import difflib
-        near = difflib.get_close_matches(str(roughness_model), bottom.ROUGHNESS_MODELS, n=1)
+        near = difflib.get_close_matches(str(roughness_model), fittable, n=1)
         raise ValueError(f"fit: roughness_model {roughness_model!r}: unknown" + (f"; did you mean {near[0]!r}?" if near else
-                         f" (known: {', '.join(bottom.ROUGHNESS_MODELS)})"))
+                         f" (known: {', '.join(fittable)})"))
     hold = dict(hold or {})
     _refuse_unknown(hold, bottom.SEDIMENT_KEYS, "fit: hold.")
     active = dict(BOUNDS)

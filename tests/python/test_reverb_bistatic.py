@@ -641,3 +641,36 @@ def test_composite_model_with_shadowing_is_used_at_the_bistatic_azimuth():
         rough_off = bottom.roughness_strength(g1, g2, F, C, azimuth=azimuth, **dict(params, shadowing="none"))
         shade = bottom.wagner_bistatic_shadowing(g1, g2, azimuth, np.sqrt(2.0) * slope)
         assert float(on) == pytest.approx(float(off - rough_off + rough_off * shade), rel=1e-12)
+
+
+def test_williams_jackson_1998_roughness_in_a_bistatic_fluid_sediment_item():
+    """[WJ] 5.1 of docs/references/bottom_bistatic_williams_jackson_1998.md: a `geometry: bistatic` `fluid_sediment`
+    item with `roughness_model: williams_jackson_1998` (the published bistatic model, opt-in) is evaluated at each
+    cell's true angles and azimuth (the law the item becomes is `bottom.strength` with the key), and a ping with it
+    runs on the engine in force (GPUSONAR_SIM_ENGINE) and differs from the default model's ping."""
+    from gpusonar.sim import bottom
+    from gpusonar.sim.simulator import reverberation_item_strength
+    par = bottom.sediment("medium_sand")
+    item = dict({"model": "fluid_sediment", "boundary_z": 0.0, "geometry": "bistatic", "roughness_model": "williams_jackson_1998"},
+                **par)
+    _, law, _ = reverberation_item_strength(item, F, {"sound_speed": C})
+    g1, g2, az = np.radians([8.0, 20.0, 35.0]), np.radians([12.0, 20.0, 10.0]), np.radians([30.0, 90.0, 170.0])
+    want = bottom.strength(g1, g2, F, C, azimuth=az, roughness_model="williams_jackson_1998", **par)
+    assert np.array_equal(law(g1, g2, az), want)
+    assert np.all(want < bottom.strength(g1, g2, F, C, azimuth=az, **par))     # below small-slope here (the note Sec. 4)
+    sonar = SonarModel.load("popoto_8", {
+        "receive": {"kind": "baseband", "sample_rate": 20e3, "window": {"range": [25.0, 230.0]}, "sensitivity_db": None},
+        "transmit": {"lever_arm": [0, 0, 0], "waveform": {"type": "cw", "f_start": F, "f_stop": F, "duration": 2e-3,
+                                                          "window_alpha": 0.0, "source_level_db_rms": None,
+                                                          "amplitude": 1.0}}})
+
+    def run(extra):
+        rec = simulate_ping(sonar, make_pose(position=RX), Scene(), environment={"sound_speed": C}, adc=False,
+                            absorption_model="none", tx_pose=make_pose(position=TX),
+                            reverberation=[dict({"model": "fluid_sediment", "boundary_z": 0.0, "geometry": "bistatic",
+                                                 "n_azimuth": 36, "sediment": "medium_sand"}, **extra)],
+                            rng=np.random.default_rng(6))
+        return rec.samples.array
+    published, default = run({"roughness_model": "williams_jackson_1998"}), run({})
+    assert np.all(np.isfinite(published)) and np.abs(published).max() > 0.0 and not np.array_equal(published, default)
+    assert (np.abs(published) ** 2).mean() < (np.abs(default) ** 2).mean()

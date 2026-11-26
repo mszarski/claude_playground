@@ -159,6 +159,19 @@ degrees at most. (A smooth minimum of the Kirchhoff and composite results was tr
 rejected: for a sediment the Kirchhoff result is BELOW the perturbation one at 20-30 degrees,
 because it carries the normal-incidence reflection coefficient, so a minimum pulls the
 valid perturbation result down by up to 6 dB.)
+
+"williams_jackson_1998" (opt-in, any geometry): the PUBLISHED smooth minimum, read since. Williams and Jackson
+(1998), J. Acoust. Soc. Am. 103, 169-181, eq. (10), join the Kirchhoff result (11)-(15) and first-order
+perturbation theory (16)-(19), not the composite result, by sigma = (sigma_k^-2 + sigma_p^-2)^(-1/2), "the
+smaller cross section takes precedence", and compare it with bistatic data at 40 kHz
+(docs/references/bottom_bistatic_williams_jackson_1998.md). Its two terms are ours (`kirchhoff_strength`,
+`perturbation_strength`, equal to the print to 1e-13 dB). The effect the paragraph above describes is real and
+is what the published model does: for sands it lies below our default small-slope result by up to 6.1 dB at 20
+degrees backscatter (Panama City, 40 kHz) and 6.8 dB at 30 degrees (medium sand, 30 kHz), out of plane by up
+to 5.3 dB, and where the two terms are equal (very fine silt) 1.5 dB below both. Against the paper's own
+bistatic data (one site, Table AII, 74 values) it is closer than ours (mean +3.3 against +6.1 dB), but the
+fluid model is known to overpredict at that site (J&R p. 351), so this does not settle which approximation is
+right; the default stays small-slope (D-86; the choice is the owner's, [WJ] 5.4).
 """
 from __future__ import annotations
 
@@ -647,8 +660,72 @@ def combined_strength(grazing_in, grazing_out, frequency: float, sound_speed: fl
                                     ti, ts, phi, slope, slope_nodes), ti, ts, phi, slope, shadowing)
 
 
+# --- Williams and Jackson (1998): the published bistatic roughness model (opt-in) -----------------
+#
+# K. L. Williams and D. R. Jackson, "Bistatic bottom scattering: Model, experiments, and model/data comparison",
+# J. Acoust. Soc. Am. 103 (1), 169-181 (1998) [WJ], extracted in docs/references/bottom_bistatic_williams_jackson_1998.md
+# (read on the page images; "confirmed" there = printed). The roughness cross section, any geometry:
+#   sigma_br = [sigma_kr^eta + sigma_pr^eta]^(1/eta),  eta = -2: "the smaller cross section takes precedence"  (10)
+#   sigma_kr  the Kirchhoff approximation (11)-(15), R at the facet angle arcsin(Delta): `kirchhoff_strength`
+#   sigma_pr  first-order perturbation theory (16)-(19): `perturbation_strength`
+# Both terms are ours, unchanged: they equal the print to 2.8e-14 and 5.7e-14 dB (the note Sec. 4 items 3-4). The
+# printed reason for the join: with a power-law spectrum perturbation theory overpredicts near specular (W(K)
+# diverges at K = 0) and Kirchhoff overpredicts elsewhere (Thorsos 1990, via secondary). No slope averaging, no
+# shadowing. Stated scope (pp. 169-170): 10-100 kHz; a lossy fluid sediment (no elasticity, no porosity), no
+# gradients; isotropic Gaussian relief with a power-law spectrum, 2 <= gamma2 <= 4 ((6); the structure function
+# needs 2 < gamma2 < 4, so the end points are refused); transverse isotropy (only the azimuth difference counts).
+# Where the two terms are equal (smooth relief: very fine silt everywhere; Panama City at about 10 deg backscatter)
+# (10) lies 10 log10(2) / 2 = 1.5 dB below both: that is the printed rule, not an error.
+# Against our default (small-slope, D-86; both printed, so neither wins by the owner's rule: [WJ] 5.4 is the
+# owner's decision): -6.1 dB at 20 deg backscatter (Panama City, 40 kHz), -6.8 dB at 30 deg (medium sand, 30 kHz),
+# within 0.2 dB at 5 deg and at specular for sands (the note Sec. 4 item 1).
+
+WILLIAMS_JACKSON_1998 = "williams_jackson_1998"
+
+WJ98_FREQUENCY_RANGE = (10e3, 100e3)
+"""[WJ] title and p. 169: "10-100 kHz" (confirmed)."""
+
+_warned_wj98_range = False
+
+
+def _wj98_warn_range(frequency: float) -> None:
+    global _warned_wj98_range
+    lo, hi = WJ98_FREQUENCY_RANGE
+    if not lo <= float(frequency) <= hi and not _warned_wj98_range:
+        _warned_wj98_range = True
+        import warnings
+        warnings.warn(f"williams_jackson_1998: {float(frequency) / 1e3:g} kHz is outside the paper's 10-100 kHz (Williams and "
+                      "Jackson 1998, p. 169); the model is evaluated as printed. This warning is given once.", stacklevel=3)
+
+
+def williams_jackson_1998_roughness(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
+                                    delta: float, w2: float, gamma2: float, azimuth=np.pi, **_ignored):
+    """[WJ] (10) with eta = -2: (sigma_kr^-2 + sigma_pr^-2)^(-1/2), the Kirchhoff (`kirchhoff_strength`, [WJ] (11)-(15))
+    and first-order perturbation (`perturbation_strength`, (16)-(19)) cross sections joined so that the smaller takes
+    precedence. Any geometry: `azimuth` pi is backscatter, 0 forward ([WJ] (2); our convention). In the exact
+    specular direction (horizontal wave-vector change zero) the perturbation term is infinite and (10) gives the
+    Kirchhoff term; at zero grazing both are zero and so is this. Module comment above for the scope; outside
+    10-100 kHz a warning (once)."""
+    _wj98_warn_range(frequency)
+    ti, ts, phi = _angles(grazing_in, grazing_out, azimuth)
+    par = dict(rho=rho, nu=nu, delta=delta, w2=w2, gamma2=gamma2, azimuth=phi)
+    sk = np.asarray(kirchhoff_strength(ti, ts, frequency, sound_speed, **par), dtype=float)
+    sp = np.asarray(perturbation_strength(ti, ts, frequency, sound_speed, **par), dtype=float)
+    q_h, _ = _kirchhoff_geometry(ti, ts, phi, 2.0 * np.pi * float(frequency) / float(sound_speed))
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        joined = 1.0 / np.sqrt(1.0 / sk**2 + 1.0 / sp**2)
+    joined = np.where(q_h > 0.0, joined, sk)
+    return np.where((sk > 0.0) & ((sp > 0.0) | (q_h == 0.0)), joined, 0.0)
+
+
 ROUGHNESS_MODELS = ("perturbation", "kirchhoff", "small_slope", "composite", "combined")
 """The roughness models for any geometry (bistatic). The fit (`sediment_fit`) and its model spread use these."""
+
+OPT_IN_ROUGHNESS_MODELS = (WILLIAMS_JACKSON_1998,)
+"""Roughness models for any geometry (bistatic) that are opt-in: Williams and Jackson (1998), the published
+bistatic join of Kirchhoff and perturbation theory. Offered by the fit (`sediment_fit.fit`, tools/fit_sediment.py)
+but kept out of `ROUGHNESS_MODELS`, which the fit's model spread (`sediment_fit.roughness_model_spread_db`) and
+tools/boundary_models_study.py iterate over: their numbers stay what they were before it existed."""
 
 BACKSCATTER_ROUGHNESS_MODELS = ("mourad_jackson_1989",)
 """Roughness models for backscatter only (opt-in): Mourad and Jackson (1989), whose paper is monostatic."""
@@ -672,8 +749,9 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
     angle between the horizontal directions of the incident and scattered waves: pi for
     backscatter, 0 for forward scatter. `roughness_model`: "small_slope" (the default,
     `DEFAULT_ROUGHNESS_MODEL`), "perturbation" (first order; the default before D-86),
-    "kirchhoff", "composite" or "combined" (module docstring), or for backscatter only
-    "mourad_jackson_1989" (the 1989 model's roughness term, opt-in). The small-slope result needs a
+    "kirchhoff", "composite" or "combined" (module docstring), "williams_jackson_1998" (opt-in, any
+    geometry: the published bistatic join of Kirchhoff and perturbation theory, `williams_jackson_1998_roughness`),
+    or for backscatter only "mourad_jackson_1989" (the 1989 model's roughness term, opt-in). The small-slope result needs a
     structure function, i.e. 2 < gamma2 < 4: outside that range, when no model is named, the
     perturbation result is used and a warning says so once (naming "small_slope" raises).
     `shadowing` ("wagner" | "none"; None = the model's own default): Wagner's shadow function, carried by
@@ -690,7 +768,8 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
                               "(name roughness_model to choose)", stacklevel=2)
                 _warned_no_small_slope = True
             roughness_model = "perturbation"
-    if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope"):
+    if shadowing is not None and _check_shadowing(shadowing) != "none" and roughness_model in ("perturbation", "kirchhoff", "small_slope",
+                                                                                                 WILLIAMS_JACKSON_1998):
         raise ValueError(f"shadowing {shadowing!r}: roughness_model {roughness_model!r} has no shadowing (it is carried by "
                          "'composite', 'combined' and 'mourad_jackson_1989')")
     args = (grazing_in, grazing_out, frequency, sound_speed)
@@ -708,7 +787,13 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
         return combined_strength(*args, small_scale_kh=small_scale_kh, **shade, **par)
     if roughness_model == MOURAD_JACKSON_1989:
         return mourad_jackson_1989_roughness(*args, **shade, **par)
-    raise ValueError(f"unknown roughness_model {roughness_model!r}; one of {ROUGHNESS_MODELS + BACKSCATTER_ROUGHNESS_MODELS}")
+    if roughness_model == WILLIAMS_JACKSON_1998:
+        return williams_jackson_1998_roughness(*args, **par)
+    known = ROUGHNESS_MODELS + OPT_IN_ROUGHNESS_MODELS + BACKSCATTER_ROUGHNESS_MODELS
+    import difflib
+    near = difflib.get_close_matches(str(roughness_model), known, n=1)
+    raise ValueError(f"unknown roughness_model {roughness_model!r}" + (f"; did you mean {near[0]!r}?" if near else "")
+                     + f"; one of {known}")
 
 
 VOLUME_MODELS = ("stockhausen", "mourad_jackson_1989")

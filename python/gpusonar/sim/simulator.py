@@ -81,7 +81,8 @@ def reverberation_item_strength(item: dict, fc: float, env: dict, provider=None)
         # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
         # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
         # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
-        # composite | combined),
+        # composite | combined | williams_jackson_1998: the published bistatic model, opt-in | mourad_jackson_1989:
+        # backscatter only, opt-in),
         # small_scale_kh, shadowing (wagner | none: composite and combined, default wagner),
         # volume_model (stockhausen, the default | mourad_jackson_1989: backscatter only).
         from . import bottom as bottom_model
