@@ -17,6 +17,8 @@ new chain takes the trial's pings in order. Measured per ping:
   and reference the chain gives it: filter, board clocks from the bursts and the baseband correction; the same C++
   code in both engines), when the deployment decimates first.
 `--decimate` switches the decimate-first stage on (`decimate: {}`) for every deployment (the one-row file has it).
+`--doppler` switches the sweep's Doppler bank on (`doppler: {mode: sweep_bank}`, D4; `--doppler-max-rate` its span, m/s):
+the cost of the bank against the chain without it.
 `--omp-threads` sets OpenMP's thread count for this thread (`receive --chain-omp-threads`). Prints one JSON line per
 (rows, engine): TIMING. Simulating the 3-row trial takes about 10 s; nothing is written to disk.
 """
@@ -106,6 +108,8 @@ def main(argv=None) -> int:
     ap.add_argument("--engine", nargs="+", choices=["python", "cpp"], default=["cpp", "python"])
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--decimate", action="store_true", help="switch the decimate-first stage on (decimate: {}) for every deployment")
+    ap.add_argument("--doppler", action="store_true", help="switch the sweep's Doppler bank on (doppler: {mode: sweep_bank}; D4)")
+    ap.add_argument("--doppler-max-rate", type=float, default=3.0, help="the bank's span either side of each beam's own-ship rate, m/s")
     ap.add_argument("--omp-threads", type=int, help="OpenMP threads for the chain (receive --chain-omp-threads); unset: as it is")
     args = ap.parse_args(argv)
     from gpusonar.sources import hsb
@@ -115,11 +119,13 @@ def main(argv=None) -> int:
         pings, cfg = assembled_pings(rows)
         if args.decimate and cfg["chain"].get("decimate") is None:
             cfg["chain"] = dict(cfg["chain"], decimate={})
+        if args.doppler:
+            cfg["chain"] = dict(cfg["chain"], doppler={"mode": "sweep_bank", "max_range_rate_m_s": args.doppler_max_rate})
         made = time.perf_counter() - t
         for engine in args.engine:
             row = time_engine(pings, cfg, engine, args.repeats)
             row.update(rows=rows, channels=int(pings[0].samples.n_channels), n_samples=int(pings[0].samples.n_samples),
-                       omp_threads=applied, simulated_s=round(made, 1))
+                       omp_threads=applied, simulated_s=round(made, 1), doppler=bool(args.doppler))
             print("TIMING " + json.dumps(row), flush=True)
     return 0
 

@@ -463,7 +463,8 @@ What moves with the pulse length:
   repository: a bank of replicas (`gpusonar.processing.doppler_bank`), at 55 channels for ±10 m/s at 1 s and
   proportionally more for longer pulses, or a Doppler-tolerant sweep: the hyperbolic FM that the sampled-waveform
   path provides (`transmit.waveform.source: hfm`); the dissertation read here calls the HFM "optimally Doppler
-  tolerant" [A2]. Own-ship Doppler is known from navigation and can be removed per beam first.
+  tolerant" [A2]. Own-ship Doppler is known from navigation and can be removed per beam first. The live chain has the bank as an option (`chain.doppler: {mode: sweep_bank}`, both engines, off by default:
+  `docs/tasks/DOPPLER.md` D4): hypotheses c / 2BT apart, each beam centred on its own-ship rate from navigation.
 - **Coded and continuous schemes.** The repository's sampled waveforms include phase codes (`barker`, `mseq`,
   `code`) and stepped FM. A code spreads the same energy with a thumbtack ambiguity (range and speed together,
   but Doppler-sensitive: it needs the bank). Continuous active sonar transmits a long sweep (the dissertation

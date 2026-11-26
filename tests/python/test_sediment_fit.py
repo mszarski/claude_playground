@@ -675,8 +675,9 @@ def test_a10_small_slope_on_volume_dominated_data_needs_prior_bounds():
     What changed on 2026-11-26 (the owner: "yes apply prior bounds by default"): the TOOL now applies
     `row_prior_bounds` of its --sediment row by default (`test_tool_applies_the_rows_prior_by_default_and_the_off_switch_gives_the_fit_of_before`),
     so through the tool with --sediment very_fine_silt the defect is gone unless --no-prior-bounds is given.
-    `fit` itself takes no row and still fits unbounded unless given `bounds`: the first block still holds and
-    still pins the defect of the library default. Re-measured over all ten seeds 0-9 (seed 9 was missing
+    `fit` without a row (and, since the same day's later decision, `fit(sediment=...)` applies the row's prior as the
+    tool does: `test_fit_naming_a_row_is_the_tools_fit_of_that_row`) still fits unbounded unless given `bounds`: the
+    first block still holds and still pins the defect of the library default. Re-measured over all ten seeds 0-9 (seed 9 was missing
     before): unbounded, seeds 4, 5, 7, 8, 9 flag nothing and seed 1 flags w2 alone, sigma2 0.645-0.783 of the
     truth in those six; with the default prior all ten flag w2 and gamma2, sigma2 0.850-1.048 of the truth
     (seed 9: 1.014), and in eight of them (all but 0 and 3) w2 or gamma2 ends ON a prior bound, so the prior
@@ -718,7 +719,8 @@ def test_a10_what_the_small_slope_default_changes_in_the_cases_above():
 # --- Prior bounds by default (the owner, 2026-11-26: "yes apply prior bounds by default"): the tool applies
 # `row_prior_bounds(--sediment)` (w2, gamma2, sigma2 of `prior_bounds(the row's mean_grain_size_phi)`) unless
 # --prior-bounds PHI (wins) or --no-prior-bounds (the fit of a2e7fbe, bit for bit) is given; a row without a
-# grain size, or no row, gets none and the output says so. `fit` itself takes no row and is unchanged.
+# grain size, or no row, gets none and the output says so. `fit` without a `sediment` row is unchanged (with one, it
+# applies the same prior: the tool calls it so; the tests at the end of this file).
 
 SILT_SEED1_A2E7FBE = "96454ec4cdd7255ec34752edebca5970a41530a6b57c63b11e3b2bbb01ae71ee"
 """sha256 of stdout + stderr of tools/fit_sediment.py at a2e7fbe on the silt seed-1 CSV (`_silt_csv`) with
@@ -890,3 +892,128 @@ def test_a_parameter_on_a_bound_is_in_the_result_and_called_not_measured():
     assert_on_bound_agrees_with_the_values(free)
     row = yaml.safe_load(site.yaml_row("s", "x"))["s"]
     assert "on_bound" not in row["fit"] and {"w2", "gamma2"} <= set(row["unconfirmed_fields"])
+
+
+# --- The library takes a row (the owner, 2026-11-26: "Library taking a row: yes"; opt-in by argument). `fit(...,
+# sediment=NAME[, sediment_file=PATH][, row_prior=False])` applies the tool's default prior of that row
+# (`row_prior_bounds`: w2, gamma2, sigma2 of its grain size; nothing for rho, nu, delta, the same decision) unless
+# `bounds` are given, and takes rho, nu, delta from the row where not given (as the tool's --sediment). The tool calls
+# `fit` with its row: one implementation. Without the argument every call is unchanged.
+
+def _fit_equal(a, b):
+    """Every field of two SedimentFit results the same, bit for bit (two calls in the same process)."""
+    for fld in dataclasses.fields(a):
+        x, y = getattr(a, fld.name), getattr(b, fld.name)
+        if isinstance(x, np.ndarray) or isinstance(y, np.ndarray):
+            assert np.array_equal(x, y), fld.name
+        else:
+            assert x == y, (fld.name, x, y)
+
+
+def _tool_result(argv, monkeypatch, capsys):
+    """Run tools/fit_sediment.py's main in this process and return the SedimentFit it computed, with its output."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fit_sediment_tool", ROOT / "tools" / "fit_sediment.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    got = []
+    real = sediment_fit.fit
+    monkeypatch.setattr(tool.sediment_fit, "fit", lambda *a, **k: got.append(real(*a, **k)) or got[-1])
+    assert tool.main(argv) == 0
+    out = capsys.readouterr()
+    assert len(got) == 1
+    return got[0], out
+
+
+def test_fit_naming_a_row_is_the_tools_fit_of_that_row(tmp_path, monkeypatch, capsys):
+    """The silt seed-1 case: the library with `sediment="very_fine_silt"` (and nothing else about the row) gives the
+    tool's fit with --sediment very_fine_silt on the same data: the same parameters, 1 sigma, on_bound, unconstrained
+    and notes (at `FIT_REL`: two optimiser runs), the same bounds and source text, and the same rho, nu, delta (the
+    row's). It is the fit with `bounds=row_prior_bounds(row)[0]` and the row's source, bit for bit."""
+    data = _silt_csv(tmp_path / "silt.csv")
+    tool, out = _tool_result(["--data", str(data), "--sigma-db", "0.5", "--name", "s", "--source", "synthetic",
+                              "--sediment", "very_fine_silt"], monkeypatch, capsys)
+    g, f, y = synthetic(bottom.sediment("very_fine_silt"), np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1)
+    lib = sediment_fit.fit(g, f, y, sigma_db=0.5, sediment="very_fine_silt")
+    assert lib.bounds == tool.bounds and lib.bounds_source == tool.bounds_source
+    bounds, source = sediment_fit.row_prior_bounds("very_fine_silt")
+    assert lib.bounds == bounds and lib.bounds_source == source and set(lib.bounds) == {"w2", "gamma2", "sigma2"}
+    assert f"bounds used: {source}: " in out.err
+    assert lib.fitted == tool.fitted and lib.unconstrained == tool.unconstrained
+    for k in bottom.SEDIMENT_KEYS:
+        assert lib.params[k] == pytest.approx(tool.params[k], rel=FIT_REL), k
+    for k in lib.fitted:
+        assert lib.std[k] == pytest.approx(tool.std[k], rel=FLAT_REL if k in ("w2", "gamma2") else FIT_REL), k
+    assert lib.on_bound.keys() == tool.on_bound.keys() and lib.on_bound and all(
+        lib.on_bound[k]["side"] == tool.on_bound[k]["side"] and lib.on_bound[k]["kind"] == tool.on_bound[k]["kind"] == "prior bound"
+        and lib.on_bound[k]["bound"] == pytest.approx(tool.on_bound[k]["bound"], rel=FIT_REL) for k in lib.on_bound)
+    assert len(lib.notes) == len(tool.notes)
+    for a, b in zip(lib.notes, tool.notes):
+        assert_same_printed_output(a, b)
+    geo_row = bottom.sediment_reflection("very_fine_silt", shear=False)
+    assert {k: lib.params[k] for k in geo_row} == geo_row
+    explicit = sediment_fit.fit(g, f, y, sigma_db=0.5, bounds=bounds, bounds_source=source, **geo_row)
+    _fit_equal(lib, explicit)
+
+
+def test_explicit_bounds_win_over_the_rows_prior_and_the_off_switch_is_the_unbounded_fit():
+    """`bounds` given: they are used, not the row's prior (as the tool's --prior-bounds PHI). `row_prior=False` (the
+    tool's --no-prior-bounds): the unbounded fit, bit for bit, with the reason recorded in `bounds_source` (the row
+    written is the unbounded fit's). Explicit rho, nu, delta win over the row's."""
+    truth = bottom.sediment("very_fine_silt")
+    g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1, model="perturbation")
+    common = dict(sound_speed=C, sigma_db=0.5, roughness_model="perturbation", n_starts=3)
+    given = sediment_fit.prior_bounds(6.36)
+    a = sediment_fit.fit(g, f, y, sediment="very_fine_silt", bounds=given, bounds_source="given", **common)
+    _fit_equal(a, sediment_fit.fit(g, f, y, bounds=given, bounds_source="given", **common, **geo(truth)))
+    off = sediment_fit.fit(g, f, y, sediment="very_fine_silt", row_prior=False, **common)
+    free = sediment_fit.fit(g, f, y, **common, **geo(truth))
+    assert off.bounds is None and off.bounds_source == (sediment_fit.SEARCH_LIMITS_ONLY
+                                                        + "the row's prior turned off (row_prior=False; the tool's --no-prior-bounds)")
+    _fit_equal(dataclasses.replace(off, bounds_source=None), free)
+    assert off.yaml_row("s", "x") == free.yaml_row("s", "x")
+    rho = sediment_fit.fit(g, f, y, sediment="very_fine_silt", rho=1.3, row_prior=False, **common)
+    assert rho.params["rho"] == 1.3 and rho.params["nu"] == truth["nu"] and rho.params["delta"] == truth["delta"]
+
+
+def test_a_row_without_a_grain_size_gets_no_prior_and_the_result_says_why(tmp_path):
+    """placeholder_sand (no mean_grain_size_phi): no prior; `bounds_source` holds the text the tool prints after
+    "bounds used: "; the fit is the unbounded one with the row's rho, nu, delta (and the row's status warning, as the
+    tool's). An unknown row is refused with the nearest name; a sediment_file without a row is refused; with
+    `sediment_file` the row is read from that file."""
+    truth = bottom.sediment("very_fine_silt")
+    g, f, y = synthetic(truth, np.arange(8.0, 46.0, 2.0), [100e3], 0.5, 1, model="perturbation")
+    common = dict(sound_speed=C, sigma_db=0.5, roughness_model="perturbation", n_starts=2)
+    with pytest.warns(UserWarning, match="placeholder_sand"):
+        none = sediment_fit.fit(g, f, y, sediment="placeholder_sand", **common)
+    assert none.bounds is None
+    assert none.bounds_source == ("the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: "
+                                  "the row 'placeholder_sand' carries no mean_grain_size_phi")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        row_geo = bottom.sediment_reflection("placeholder_sand", shear=False)
+    _fit_equal(dataclasses.replace(none, bounds_source=None), sediment_fit.fit(g, f, y, **common, **row_geo))
+    with pytest.raises(ValueError, match="did you mean 'very_fine_silt'"):
+        sediment_fit.fit(g, f, y, sediment="very_fine_slit", **common)
+    with pytest.raises(ValueError, match="sediment_file"):
+        sediment_fit.fit(g, f, y, sediment_file=str(tmp_path / "x.yaml"), **common, **geo(truth))
+    with pytest.raises(TypeError, match="rho, nu and delta"):
+        sediment_fit.fit(g, f, y, **common)
+    table = tmp_path / "sediments.yaml"
+    table.write_text(yaml.safe_dump({"my_silt": dict(bottom.sediment_table()["very_fine_silt"], mean_grain_size_phi=6.0)}))
+    mine = sediment_fit.fit(g, f, y, sediment="my_silt", sediment_file=str(table), **common)
+    assert mine.bounds == sediment_fit.row_prior_bounds("my_silt", str(table))[0] == {
+        k: sediment_fit.prior_bounds(6.0)[k] for k in sediment_fit.DEFAULT_PRIOR_KEYS}
+    assert "'my_silt', mean grain size 6 phi" in mine.bounds_source
+
+
+def test_without_a_row_a_call_is_todays_bit_for_bit():
+    """No row named: the new arguments at their defaults change nothing (every field, two calls in this process),
+    for the bounded, held and geoacoustic opt-ins as well as the plain fit."""
+    sand = bottom.sediment("medium_sand")
+    g, f, y = synthetic(sand, np.arange(5.0, 56.0, 5.0), [20e3, 200e3], 0.3, 4)
+    for extra in ({}, {"bounds": sediment_fit.prior_bounds(1.5)}, {"fit_geoacoustic": True, "hold": {"gamma2": 3.2},
+                                                                  "independent_samples": 30}):
+        common = dict(sound_speed=C, roughness_model="perturbation", n_starts=3, **extra, **geo(sand))
+        _fit_equal(sediment_fit.fit(g, f, y, **common),
+                   sediment_fit.fit(g, f, y, sediment=None, sediment_file=None, row_prior=True, **common))

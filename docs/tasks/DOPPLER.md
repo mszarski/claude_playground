@@ -365,6 +365,9 @@ package, held by `tests/python/test_live_cpp.py`; an unknown key refused with th
 
 ### D2. A Doppler-resolving waveform in the transmit configuration and in scenes (simulator, opt-in)
 
+- **Done 2026-11-26** (branch `d2-train`): see "D2 done" at the end of this file, which also says what option C
+  as planned did NOT deliver (the sweep's reverberation fills the tone's Doppler cells).
+
 - **Goal.** Scenes with option C (a tapered CW followed by the scene's sweep in one ping) and, for comparison, a CW
   alone, so that the chain work (D3) has records to run on and the owner can see the trade.
 - **Files.** `python/gpusonar/sim/waveform.py`: a sampled source `train` (a list of segments, each `cw` with
@@ -443,6 +446,7 @@ package, held by `tests/python/test_live_cpp.py`; an unknown key refused with th
 - **Default that could move:** if the owner wants it on by default, every chain result moves (bring before -> after
   on the gallery's ten seeds, worst first). Opt-in until then.
 - Size M. Shares D3's stage: do it with or after D3, not in parallel on the same files.
+- **Done 2026-11-26 (branch `d4-bank`), opt-in, and it loses on every scene measured**: section 9.
 
 ### D5. Tracker and classifier use the measured range rate (both engines, opt-in)
 
@@ -562,6 +566,121 @@ background.
   a Hann CW (equal energy free field for sweep and Tukey CW; Hann at the same `source_level_db_rms` 0.39 of it;
   image sources: the Tukey CW 18.9 dB under the sweep).
 
+## 9. D4 done: the sweep's Doppler bank in the live chain (2026-11-26, branch `d4-bank`)
+
+### 9.1 What got worse or did not work (read first)
+
+1. **On every scene measured the bank lowers the margin of every target, through both engines.** The chain keeps per map
+   sample the largest power over N hypotheses; that maximum's noise background (the detector's training cells are
+   maxima too) rises 4.8 to 5.6 dB (N = 17 to 33, measured on noise, `doppler_bank_threshold.json`), and the mismatch
+   it recovers on these targets is smaller than that: margins fall 3.4 to 5.3 dB (table 9.4). Stationary targets lose
+   the whole rise (the wreck: 5.3 dB). It is off by default and must stay off for now.
+2. **The thresholds are not moved (0 dB), so the false-alarm rate on the maximum is BELOW the configured one** (measured:
+   at 3 false detections a ping 50 -> 0 on noise, 5 -> 0, 18 -> 0, 20 -> 0 on the three scenes' reverberation; at the
+   default budget 0 -> 0 on 4 pings each). The shift that would restore the configured rate is negative and was measured
+   only at loosened budgets (-0.6 to -3.0 dB at 3 a ping, -0.3 to -2.4 dB at 0.3 a ping, for 3 to 33 hypotheses); it
+   shrinks toward the default budget (1e-3 a ping) by about 0.6 dB a decade, where a CPU cannot count it. Applying a
+   value from a looser budget would raise the false-alarm rate above the configured one, so none is applied
+   (`threshold_db` sets one). Even with the 0.3-a-ping shift every target still loses 1.0 to 2.9 dB (table 9.4).
+3. **The multiscale detector is the wrong statistic for a maximum over hypotheses.** For the single-sample test the
+   cost of searching N hypotheses at an equal false-alarm rate is small (the maximum's tail is about N times one map's,
+   measured: 12 to 16 times for N = 17; ours: 10 log10((x + ln N) / x), 0.6 dB at x = 14), but a uniform shift of every
+   test cannot get there: the detector-level shift that holds the rate (-1.7 dB for N = 17 at 0.3 a ping) is far from
+   the single-sample test's own (about -4.2 dB, from the measured rise and tail), presumably because the cell-mean test
+   of a maximum behaves differently (not isolated here). A per-test shift, or D3's CFAR per (beam, hypothesis) with
+   the maximum taken over normalised statistics and its own thresholds, is the follow-up.
+4. **The range rate is not a measurement on extended or multipath targets**: the submarine, the far mover's ship and the
+   12 km ship read rates scattered over +-3 m/s from ping to ping (true -0.03 to -0.99 m/s; the baseline found the same,
+   section 3.3 item 5). On a point (the tests) and on the wreck it is within one step; the small vehicle's one bank
+   detection read 2.06 m/s (true 2.00).
+5. **Cost: 22 to 32 times the chain on the scenes' pings, 2.3 to 2.9 times on the Popoto trial pings** (one compression
+   and one map per hypothesis; table 9.5; the trial's window is short and its other stages weigh more). Measured on this
+   CPU only; nothing ran on a GPU.
+6. **Sidelobes of very strong echoes**: on the test fixture (targets 80 to 90 dB over the noise) the bank adds detections
+   60 dB and more under the strongest echo at far bearings, which the detector's sidelobe envelope (made for the matched
+   pulse; the bank raises its range part by the mismatch pedestal only within per_beam x step x T) does not explain. Not
+   seen on the scenes (their echoes are 20 to 30 dB over the background).
+7. The plan's test expectation ("the bank's peak 5 to 6 dB above the zero hypothesis" for a point at 2 m/s on a 1 s,
+   4 kHz sweep) was the scene's study number. The closed form for a point is 11.7 dB (ours, derived in
+   `tests/python/test_doppler_bank.py`: the residual chirp's Fresnel integral with the delay free; centred it would say
+   13.5 dB); an ideal sweep gives 11.7 dB, the simulator's 5 % Tukey pulse on the map's samples 11.1 dB. Through the
+   detector, after the background's rise of 6.4 dB, the detection's snr_db gains 5.7 dB.
+
+### 9.2 What exists
+
+- Option `chain.doppler: {mode: sweep_bank, max_range_rate_m_s: 3.0, step_m_s: None, hypotheses: None,
+  unknown_ownship_m_s: 2.0, threshold_db: None, report: false}` (`docs/CONFIGURATION.md`; flat `doppler_*` keys for
+  `sonar_live`), both engines: `python/gpusonar/doppler.py`, `libs/live/include/sonar/live/doppler.hpp`,
+  `libs/live/src/doppler.cpp`, the stage in `live.py` and `chain.cpp`. Off is the chain as before, byte for byte.
+- Hypotheses r_k = k x step, step = c / (2 B T) (0.1875 m/s at 4 kHz, 0.375 m/s at 2 kHz, 1 s; the worst loss between two
+  hypotheses 0.24 dB, ours: phi <= pi / 4). Each beam takes the 2K + 1 nearest its own-ship rate -v . u_b from the mean of
+  the record's transmit and receive pose velocities (K = ceil(max_range_rate / step): 17 per beam at 2 kHz, 33 at 4 kHz
+  for 3 m/s; the scenes' slightly faster sound speed made it 19 and 35). No finite velocity: every beam centred on 0 and
+  the span widened by `unknown_ownship_m_s` (processed, not refused: a live chain must not stop on one bad fix).
+- Each hypothesis is compressed from the same baseband record with the pulse time-scaled exactly ((c - r)/(c + r);
+  the zero one is the chain's own compression, `doppler_scale` exactly 1) and **read 2 f0 T r / (B c) later** (its own
+  LFM coupling): every hypothesis then shows an echo where the zero one shows it, so the maximum takes the matched peak
+  at today's range instead of smearing it ±f0 T Δr / B along the range-Doppler ridge (without this, measured on the test
+  fixture, detections moved up to 9 m and strong echoes grew 21 m extents and spurious detections). Consequences: the
+  bank moves no detection; `range_doppler` with the bank takes each detection's closing speed from the bank
+  (-range_rate) and `full` moves no track further (no double correction; tested).
+- Baseband: `max_range_rate` is passed only when the default band's untapered room (0.1 B) does not hold 2 r f_top / c:
+  never for the shipped sweeps (35 Hz against 400 Hz at 6-10 kHz), so their baseband is today's.
+- Detector: `DetectorOptions::threshold_offset_db` (every test's threshold, 0 now) and `pedestal_m` (the range sidelobe
+  envelope raised to the mismatch loss out to per_beam x step x T); both 0 without the bank, the plan bit for bit.
+- Each detection carries `range_rate` and `range_rate_step` (`Detection`, both engines); on the report line only with
+  `report: true` (owner question 6).
+- Restrictions (refused): an LFM transmit only, `cell_statistic: multiscale`, `beamformer: backprojection`.
+- CUDA: the existing kernels in a loop (each hypothesis' compression and map on the device); a CUDA-gated test
+  (`test_doppler_bank.py::test_the_bank_on_a_gpu_gives_the_hosts_detections`) is for the GPU job; not run here.
+- Tools: `tools/doppler_bank_threshold.py` (the false-alarm measurement), `tools/doppler_bank_eval.py` (the end-to-end
+  table), `tools/live_chain_timing.py --doppler`.
+
+### 9.3 For D3
+
+D3 plugs in beside this stage, not in it: `doppler.plan` / `plan_doppler` already give per-beam own-ship centring, the
+hypothesis grid and the baseband allowance rule; `doppler.hypothesis_maps` is the map maker (D3 adds a tone's
+short-time Fourier transform per beam as a second one) and `doppler.fold` / `fold_hypothesis` the combiner (D3 adds a
+CFAR per (beam, hypothesis) as a second combiner; item 3 above says that one is needed for the sweep as well). The
+detection's `range_rate` fields, the report switch and the `range_doppler` interaction are shared.
+
+### 9.4 End to end through the chain (`tools/doppler_bank_eval.py`, docs/tasks/doppler_bank_eval.json; ours)
+
+Scenes as shipped, 6 pings, their seeds, Bellhop eigenrays; chain defaults (bearings -40 to 40 every 0.5,
+backprojection, multiscale, host); bank `max_range_rate_m_s: 3`. Margin = snr_db over the single-sample test's
+threshold, mean over the pings both detect. Gross: the chain as it is (thresholds unchanged). Net at 0.3 a ping: gross
+minus the shift measured at 0.3 false detections a ping (-1.7 dB for 17-19 hypotheses, -2.4 dB for 33-35), the nearest
+to an equal false-alarm rate measured (an estimate: the default budget's shift is smaller in size). Python and C++
+gave the same numbers to the printed digit on every row. Worst first:
+
+| Scene, target | Hypotheses a beam | Margin off -> on, dB | Gross | Net at 0.3 a ping | Detected off -> on (of 6) | Tracked off -> on | Baseline's sweep bank gain (section 3) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| flank_patrol wreck (still) | 35 | 14.63 -> 9.33 | -5.30 | -2.9 | 6 -> 6 | static -> static | 0.0 |
+| popoto_12km ship | 19 | 9.11 -> 5.57 | -3.55 | -1.9 | 6 -> 6 | mover -> mover | +1.9 |
+| popoto_far_mover ship | 35 | 12.35 -> 8.84 | -3.50 | -1.1 | 6 -> 6 | mover -> mover | +0.6 |
+| flank_patrol submarine | 35 | 11.69 -> 8.32 | -3.37 | -1.0 | 6 -> 6 | mover -> mover | +2.0 |
+| flank_patrol small vehicle | 35 | detected on one ping each (off ping 6 at 12.5 dB snr; on ping 3 at 9.8 dB, rate 2.06 m/s) | | | 1 -> 1 | no -> no | +5.9 |
+
+Why it differs from the baseline: the baseline normalised each (beam, hypothesis) cell by a clairvoyant background of
+its own and took the target's best cell; the chain takes the maximum over hypotheses first and estimates one background
+from it, which pays the rise of item 1. The mismatch itself is recovered (the point target: 11.1 of 11.7 dB on the map).
+What does not improve at all, as expected: stationary targets (nothing to recover) and reverberation-limited margins
+(the sweep's reverberation is in every hypothesis).
+
+### 9.5 Cost a ping (CPU of this machine, 1 thread, host backend; median after the first ping)
+
+| Case | Channels | Hypotheses (all beams) | Python off -> on, s | C++ off -> on, s |
+| --- | --- | --- | --- | --- |
+| flank_patrol (2.4 km window, 161 beams) | 32 | 35 | 4.79 -> 138.8 | 4.04 -> 129.9 |
+| popoto_far_mover | 32 | 45 | 2.72 -> 119.1 | 2.45 -> 124.9 |
+| popoto_12km (1.4 km) | 32 | 25 | 1.37 -> 30.8 | 1.08 -> 27.1 |
+| Popoto trial pings of `tools/live_chain_timing.py` (one row, decimated first) | 32 | 17 a beam | 1.08 -> 3.10 | 0.91 -> 2.64 |
+| the same, three rows (board synchronisation) | 96 | 17 a beam | 2.17 -> 5.08 | 1.71 -> 3.97 |
+
+The 0.065 s a ping at 96 channels in `docs/STATUS.md` is the C++ chain on an L4 GPU; the bank multiplies the compression
+and map part by the hypothesis count (25 to 45 here); its cost on the GPU was not measured (`tools/live_chain_timing.py
+--doppler` in the GPU job).
+
 ## Follow-ups (for the orchestrator to file)
 
 - D1 to D9 of section 6, one issue each; D1, D2, D3 and D7 can start in parallel.
@@ -576,3 +695,97 @@ background.
   wording (no schema change).
 - `flank_patrol`'s header says "reverberation has no Doppler spread": true of the scene (a still platform), but the
   simulator does have own-motion spread; no edit made (scenario files untouched).
+
+## D2 done (2026-11-26, branch `d2-train`): what was built and what it found
+
+Appended; nothing above was rewritten. Status of every number here: **ours** (simulated records, CPU, Bellhop,
+`tools/doppler_study.py`, one seed per scene; JSON in the run logs named below, not committed).
+
+**What got worse or did not work (first).**
+
+1. **Option C as planned (a tone at the band centre, then the sweep, in one ping) does not give the tone its Doppler
+   gain where the bottom reverberates.** The sweep's reverberation, from ranges c T / 2 nearer, arrives with the
+   tone's echo, is broadband (6-10 kHz) and fills every Doppler cell of the tone. On `flank_patrol_doppler` the
+   small vehicle's tone with the bank is at **10.9 dB** over its background (ceiling 36.3 dB), where the tone alone
+   of the baseline reached its ceiling (39.8 / 38.5 dB, section 3.2); under way **7.8 / 36.8 dB** (baseline 36.8 /
+   38.3). It is still above the train's sweep at zero Doppler (6.4 and 7.3 dB), but by 4.5 and 0.5 dB, not 33.
+   Controls on the static scene, small vehicle, two background pings: the sweep muted (`--mute 2`, the tone keeps
+   its half of the energy): **33.9 / 36.3 dB** (the tone back at its ceiling); the order reversed (sweep, then
+   tone): tone 17.7 / 34.8 dB and the sweep's zero-Doppler margin falls to 1.4 dB (the tone's reverberation now
+   lies under the sweep); **the tone moved outside the sweep's band (10.5 kHz, above 6-10 kHz): 37.7 / 34.4 dB**,
+   at its ceiling. So a tone and a sweep in one ping work only if the tone is outside the sweep's band (option D's
+   band split, sequential) or the two are in separate pings. This is a question for the owner (section 5 question
+   1: can the projector send a tone outside the sweep's band?), and changes what D3 can show on the shipped scenes.
+2. **Option E's comb helps the fade only a little** (item 3 below), and inside the sweep's band it meets the same
+   reverberation: a 4-tone comb (6.5, 7.5, 8.5, 9.5 kHz, Schroeder phases, the tone's half of the energy), each
+   tone's bank summed incoherently, gave the small vehicle **3.9 / 30.9 dB** on `flank_patrol_doppler` (single tone
+   10.9 / 36.3); with the sweep muted it reaches its ceiling, 31.1 / 30.9 dB, still 5.4 dB under the single tone's
+   ceiling at this geometry (2.2 km, 40 m), where the fade table below has the comb 5.3 dB under the tone.
+3. The tone's margins in the margin study scatter by about +-3 dB between runs: its background is a mean over a
+   1 s window of a filter about 1 Hz wide, about two independent values a ping, and the study takes two pings (the
+   baseline took six for the tone's reverberation, two for noise). The tests' tolerances say so.
+
+**The waveform** (`sim/waveform.py` `build_train`; keys in `docs/CONFIGURATION.md`): `transmit.waveform: {type:
+sampled, source: train, segments: [...]}` with `cw` (one `frequency` or several `frequencies` at once), `lfm`,
+`hfm` and `gap` segments, each with its Tukey `window_alpha`, and opt-in `energy_share` or `source_energy_db` per
+segment. Built as one sampled envelope, so the C++ host and CUDA kernel (`pair_sampled`) and the NumPy reference
+synthesise it unchanged; Doppler is the exact time scaling of the whole train; the record holds it as its replica
+(type Arbitrary; no field added). **Why a tone could not be a sampled pulse**: the envelope's sample rate is
+`oversample` x the stated band and the gain knots span that band, so `f_start == f_stop` gave a zero rate
+(`build_waveform` refuses it, as before for `source: lfm`); a train's tone takes f +- `tone_halfwidth_hz` (16 / T)
+as its band, or the sweep's band when there is one. No C++ was changed.
+
+**Energy accounting** (`sonar.py`): `source_level_db_rms` keeps its meaning (the peak of the envelope before the
+taper); the energy at 1 m is SL + 10 log10(integral |b|^2 du), measured on a free-field echo within 1e-3 dB.
+Opt-in `source_energy_db` states the energy and SL is derived. The four scenes keep their base scene's energy and
+give each segment half; the Hann tone then sets the peak: +1.1 dB (flank, 201.1 dB rms) and +1.0 dB (Popoto).
+
+**Measured** (tests in `tests/python/test_pulse_train.py`, `tests/python/test_doppler_scenes.py`):
+
+- one-segment train = today's sampled sweep, bit for bit (samples and record, both engines); one-tone train against
+  the analytic CW: 1.8e-6 relative rms (interpolation);
+- the train's envelope against its closed-form pieces: 1.4e-12 on its grid, 4.8e-6 of the peak between samples
+  (the default interpolator's own floor, 2.9e-6 for a single tone too);
+- engines: C++ against NumPy 6.0e-8 rms (worst sample 1.5e-7 of the peak) on a train with beams, absorption and
+  motion; on one thinned ping of each new scene 1.4e-8 to 1.1e-6 rms; CUDA: a gated test (not run here: no GPU);
+- Doppler: a target closing at 6 m/s: the echo is the train time-scaled by (c + v) / (c - v) to 5.7e-8; the tone's
+  peak at 8064.255 Hz against 8064.257 expected; the sweep segment's bank peaks at -6.0 m/s; the echo is the sum of
+  the pieces' echoes to 1.6e-16;
+- both live chains (unchanged) read train records and report the same detections.
+
+**The scenes against the baseline** (small vehicle / ship, two background pings, the baseline's bearing; margin /
+ceiling in dB; expected: ceilings -3.0 dB, noise-limited margins -3.0 dB, reverberation-limited margins unchanged):
+
+| Scene | Tone with the bank (baseline tone alone) | Sweep at zero Doppler (baseline) | |
+| --- | --- | --- | --- |
+| `flank_patrol_doppler` | 10.9 / 36.3 (39.8 / 38.5) | 6.4 / 28.3 (7.0 / 31.2) | tone: the sweep's reverberation (item 1) |
+| `flank_patrol_doppler_underway` (+2 m/s over ground: +1.38 m/s) | 7.8 / 36.8 (36.8 / 38.3) | 7.3 / 29.9 (8.8 / 32.8) | the same |
+| `popoto_far_mover_doppler` | 47.9 / 51.7 (49.4 / 51.5) | 24.1 / 24.2 (27.2 / 27.8) | noise-limited: as expected within the tone's scatter |
+| `popoto_12km_doppler` | 33.2 / 28.8 (34.7 / 34.1) | 21.2 / 21.3 (24.0 / 24.6) | the same |
+
+**The fade** (`tools/doppler_study.py fade`: target-only pings, the target moved along its bearing, four
+hydrophones, echo energy over transmitted energy per segment, the tone's against the sweep's):
+
+| Water, target | Geometries | Single tone minus sweep, dB: mean / min / max / std | 4-tone comb minus sweep |
+| --- | --- | --- | --- |
+| `flank_patrol_doppler` (Bellhop), small vehicle | 15: 1.8, 2.0, 2.2, 2.6, 3.0 km x 20, 40, 60 m | -1.9 / **-11.0** / +7.6 / 5.4 | -3.2 / **-9.3** / +2.4 / 3.8 |
+| `popoto_far_mover_doppler` (Bellhop), ship as one point at 4 m | 5: 5.8 to 6.6 km | -1.4 / **-8.6** / +6.2 / 5.3 | -3.1 / **-7.3** / +2.8 / 3.4 |
+| the same water, free field (check) | 2 | 0.0 (within 0.014) | 0.0 |
+
+The baseline's 18.9 dB was one image-source geometry; over these 20 Bellhop geometries the tone's worst is
+11.0 dB under the sweep, and the spread 18.7 dB. Option E (`frequencies`: four tones across the band, energy
+shared) narrows the spread to 11.7 dB and lifts the worst case by 1.3 to 1.7 dB, at a mean cost of 1.3 to 1.7 dB:
+cheap to configure (the key exists), small in effect, and inside the sweep's band it meets item 1. Not a fix.
+
+**What D3 can rely on**: a train record (type Arbitrary, the replica as sent, `f_start`/`f_stop` the train's
+band, `duration` the whole train) and the segment table from the sonar's configuration
+(`SonarModel.sampled_waveform.segments`: kind, start, duration, band, frequencies, taper, energy); a segment's
+replica at any range rate (`TrainSegment.signal`, as `tools/doppler_study.py` `segment_replica` uses it); exact
+Doppler on every segment on both engines. Not: a tone path free of the sweep's reverberation on these scenes (item 1).
+
+Runs (scratch, not committed): `tools/doppler_study.py margin <scene> --target <label> --pings 2 --bearing <deg>
+--vmax 3|4` per scene (the slow test, `GPUSONAR_DOPPLER_STUDY=1`, 42 min for the four); the controls with `--mute
+2`, a reversed-order and a tone-above-band copy of `flank_patrol_doppler`; `fade flank_patrol_doppler --target
+small_vehicle --ranges 1800 2000 2200 2600 3000 --depths 20 40 60 --comb 4 --channels 4`, the same with
+`--fidelity free_field`, and `fade popoto_far_mover_doppler --target ship --ranges 5800 6000 6200 6400 6600 --comb 4
+--channels 4`.

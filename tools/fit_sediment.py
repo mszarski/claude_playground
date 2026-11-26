@@ -192,21 +192,10 @@ def main(argv=None) -> int:
         opt.update(independent_samples=n, sample_error=args.sample_error)
     if args.prior_bounds is not None and args.no_prior_bounds:
         raise SystemExit("give --prior-bounds PHI or --no-prior-bounds, not both")
-    # Which bounds, and why (always stated): --prior-bounds PHI wins; then --no-prior-bounds; then the
-    # default prior of a --sediment row with a grain size (the owner, 2026-11-26); else none.
-    if args.prior_bounds is not None:
-        bounds_used = None                      # stated below, from the result
-    elif args.no_prior_bounds:
-        bounds_used = "the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: --no-prior-bounds"
-    elif not args.sediment:
-        bounds_used = "the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: no --sediment row named"
-    else:
-        default, why = sediment_fit.row_prior_bounds(args.sediment, args.sediment_file)
-        if default is None:
-            bounds_used = f"the search limits only (sediment_fit.BOUNDS, ours); no prior bounds applied: {why}"
-        else:
-            bounds_used = None
-            opt.update(bounds=default, bounds_source=why)
+    # Which bounds, and why (always stated). sediment_fit.fit decides, given the row (one implementation, the same for a
+    # script naming the row): --prior-bounds PHI is passed as `bounds` and wins; --no-prior-bounds is row_prior=False;
+    # otherwise the default prior of a --sediment row with a grain size (the owner, 2026-11-26); else none.
+    # (rho, nu, delta are passed as read above, so the row's status warning stays where it was.)
     if args.prior_bounds is not None:
         bounds = sediment_fit.prior_bounds(args.prior_bounds)
         source = f"prior, mean grain size {args.prior_bounds:g} phi (sediment_fit.prior_bounds; given)"
@@ -218,12 +207,23 @@ def main(argv=None) -> int:
         opt.update(bounds=bounds, bounds_source=source)
     elif args.site_spread is not None:
         raise SystemExit("--site-spread needs --prior-bounds PHI (the class)")
+    if args.sediment:
+        opt.update(sediment=args.sediment, sediment_file=args.sediment_file, row_prior=not args.no_prior_bounds)
     if args.hold:
         opt["hold"] = parse_hold(args.hold)
-    extended = bool(opt) or args.report_covariance
     result = sediment_fit.fit(grazing, frequency, bs, sound_speed=args.sound_speed, sigma_db=sigma,
                               fit_geoacoustic=args.fit_geoacoustic, roughness_model=args.roughness_model,
                               n_starts=args.starts, **geo, **opt)
+    # The extended report: an opt-in argument given, or a prior applied (the row's default included).
+    extended = bool(set(opt) - {"sediment", "sediment_file", "row_prior"}) or args.report_covariance or result.bounds is not None
+    if result.bounds is not None:
+        bounds_used = None                      # stated below, from the result
+    elif args.no_prior_bounds:
+        bounds_used = sediment_fit.SEARCH_LIMITS_ONLY + "--no-prior-bounds"
+    elif not args.sediment:
+        bounds_used = sediment_fit.SEARCH_LIMITS_ONLY + "no --sediment row named"
+    else:
+        bounds_used = result.bounds_source      # the row carries no grain size: the fit says so
 
     print(f"{result.n_points} values, {result.grazing_deg[0]:g} to {result.grazing_deg[1]:g} degrees grazing, "
           f"{', '.join(f'{f / 1e3:g}' for f in result.frequencies)} kHz; rms residual {result.rms_residual_db:.2f} dB "

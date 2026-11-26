@@ -609,13 +609,15 @@ a `--sediment` row with a grain size bounds w2, gamma2 and sigma2 by the prior f
 typical 1e-4 to 4e-3 with the ceiling raised to Jackson and Briggs's (1992) printed fits up to 0.005 by
 the owner on 2026-11-26); `--prior-bounds PHI` replaces it,
 `--no-prior-bounds` turns it off, and the output always says which bounds were used and flags a
-parameter that ends on one (set by the bound, not measured).
+parameter that ends on one (set by the bound, not measured). A script gets the same fit from the library
+by naming the row: `sediment_fit.fit(g, f, bs, sediment="fine_sand")` (rho, nu, delta and the default prior
+from the row; `bounds` win; `row_prior=False` is `--no-prior-bounds`); without `sediment` it applies none.
 
     PYTHONPATH=python python3 tools/fit_sediment.py --data site.csv --sediment fine_sand \
         --name my_site --source "survey 2026-11, FLS 300 kHz, calibrated" --out row.yaml --plot fit.png
 
 Measured on synthetic curves from our own model with 0.5 dB noise (the tests), each made and
-fitted with the same roughness model, with the library's `fit` (no prior bounds unless said). The tool's default model is `small_slope` since A10
+fitted with the same roughness model, with the library's `fit` given rho, nu, delta and no row (so no prior bounds unless said). The tool's default model is `small_slope` since A10
 (`docs/references/CONFORMANCE.md`); it was `perturbation` before, and the numbers first printed
 here were that model's (given as "before -> after"):
 

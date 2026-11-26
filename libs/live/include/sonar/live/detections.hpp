@@ -43,6 +43,10 @@ struct Detection {
   /// range / c, with the c that turned the two-way time into range (D-156). NaN (or any value that is not finite): the
   /// ping's time given to Tracker::update.
   double time = std::numeric_limits<double>::quiet_NaN();
+  /// m/s, the range rate of the Doppler bank's hypothesis that won at the detection's strongest sample (relative to the
+  /// platform, opening positive; doppler.hpp), and the bank's step, its resolution: a COARSE estimate. NaN: no bank.
+  double range_rate = std::numeric_limits<double>::quiet_NaN();
+  double range_rate_step = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

@@ -4978,6 +4978,8 @@ the owner's copies; `docs/references/bottom_bistatic_williams_jackson_1998.md`,
   replica bank (D4) and the tone-plus-sweep waveform (D2) go first, the chain's tone path (D3) after.
   Seven questions for the owner are in its section 5.
 
+*Later (pointer added 2026-11-26): packages D2 and D4 are D-231 and D-232; the sweep bank lowers every margin and stays off.*
+
 ### D-229 The merge of D-226 to D-228 and the owner's answers to STATUS questions 36 to 42
 
 2026-11-26.
@@ -5008,3 +5010,110 @@ the owner's copies; `docs/references/bottom_bistatic_williams_jackson_1998.md`,
   `docs/handoff/examples/live_popoto_12km_report.jsonl` (D-227 and this entry wrote `examples/…`);
   D-227's "`test_site_scattering.py` (21)" is the collected count (7 test functions); the default
   roughness model that D-226 lists as open is the owner's answer recorded above (small-slope stays).
+
+### D-230 Sediment fit: the library takes a sediment row (opt-in; owner's answer to STATUS question 36; branch `a-fitrow`)
+
+2026-11-26. Status of every number: ours.
+
+- Got worse or is open: nothing moved. Not done: rho, nu and delta stay unbounded by default (the
+  owner's answer, D-229).
+- `sediment_fit.fit(..., sediment=NAME, sediment_file=None, row_prior=True)` does what
+  `tools/fit_sediment.py --sediment` does: values not given come from the row, and unless bounds are
+  given the row's default prior is applied with the same source text. `row_prior=False` is the tool's
+  `--no-prior-bounds`. An unknown row is refused with the nearest name. Without the argument every
+  call is unchanged. The tool now passes its row to `fit` (one implementation); its output is
+  unchanged on 12 cases (scratch diff, not committed).
+
+### D-231 Pulse trains (a tone and a sweep in one ping) and four Doppler scenes (issue sonar-u1fu, package D2; branch `d2-train`; amends D-228)
+
+2026-11-26. Status of every number: ours (simulated records, Bellhop, one seed per scene). The
+account is `docs/tasks/DOPPLER.md`, "D2 done".
+
+- **Got worse or did not work, first.** A tone inside the sweep's band, sent in the same ping, gets
+  no Doppler gain where the bottom reverberates: the sweep's reverberation fills the tone's Doppler
+  cells. `flank_patrol_doppler`, small vehicle: the tone at 10.9 dB over its background, where the
+  tone alone reached 39.8 dB (D-228's baseline). Controls: sweep muted 33.9 dB; sweep first 17.7 dB
+  (and the sweep's own margin falls to 1.4 dB); **tone at 10.5 kHz, above the 6-10 kHz sweep:
+  37.7 dB**. A four-tone comb is not a fix (3.9 dB in band; worst fade lifted 1.3 to 1.7 dB at a mean
+  cost of 1.3 to 1.7 dB). At long range, noise-limited, the tone keeps its margin
+  (`popoto_far_mover_doppler` 47.9 dB, `popoto_12km_doppler` 33.2 dB).
+- The tone's margins scatter about +-3 dB between runs (two background pings); the tests'
+  tolerances say so.
+- What exists, opt-in: `transmit.waveform: {type: sampled, source: train, segments: [cw | lfm | hfm |
+  gap ...]}` with per-segment `energy_share` or `source_energy_db` (`docs/CONFIGURATION.md`). It is
+  one sampled envelope, so no C++ changed and the record gains no field (type Arbitrary). A
+  one-segment train is today's sampled sweep bit for bit. Four scenes (95 scenario files now):
+  `flank_patrol_doppler`, `flank_patrol_doppler_underway`, `popoto_far_mover_doppler`,
+  `popoto_12km_doppler`. No shipped scene or default moved.
+- Tests: `tests/python/test_pulse_train.py`, `tests/python/test_doppler_scenes.py` (its five margin
+  tests need `GPUSONAR_DOPPLER_STUDY=1`; run once on this machine by the orchestrator: 13 passed in
+  49 minutes). The CUDA train test passed in the GPU suite of D-234.
+- **The owner, 2026-11-26: the transmitter (projector, drive board, waveform) is free to choose
+  along with the Popoto.** This answers DOPPLER.md section 5 question 1. Decided from it (the
+  orchestrator's recommendation, to be shown on scenes by package D3): the tone goes outside the
+  sweep's band in the same ping; alternating tone and sweep pings is the configurable fallback. No
+  projector is chosen by this entry.
+
+### D-232 The sweep's Doppler bank in the live chain, opt-in, and it loses on every scene measured (issue sonar-u1fu, package D4; branch `d4-bank`)
+
+2026-11-26. Status of every number: ours (CPU, both engines equal to the printed digit;
+`docs/tasks/doppler_bank_eval.json`, `docs/tasks/doppler_bank_threshold.json`). The account is
+`docs/tasks/DOPPLER.md` section 9.
+
+- **Got worse, first.** With the bank on, every target's margin falls 3.4 to 5.3 dB: wreck
+  14.63 -> 9.33, `popoto_12km` ship 9.11 -> 5.57, `popoto_far_mover` ship 12.35 -> 8.84,
+  `flank_patrol` submarine 11.69 -> 8.32. Cause: the chain keeps the largest power over 17 to 35
+  hypotheses and the background of that maximum rises 4.8 to 5.6 dB, more than the mismatch
+  recovered. **It stays off and is not to become a Popoto default** until the combiner is repaired
+  (a CFAR per beam and hypothesis, package D3).
+- The thresholds are not moved (shift 0), so with the bank the false-alarm rate is below the
+  configured one; the restoring shift is negative and could be measured only at loosened budgets.
+- The range rate is within one step on point targets and the wreck; on extended or multipath targets
+  it scatters over +-3 m/s from ping to ping.
+- Cost on this CPU: 22 to 32 times the chain on the scenes, 2.3 to 2.9 times on the Popoto trial
+  pings. Not measured on a GPU.
+- On a fixture with echoes 80 to 90 dB over the noise the bank adds sidelobe detections the envelope
+  does not explain. Not seen on the scenes.
+- What exists: `chain.doppler: {mode: sweep_bank, ...}` in both engines (`python/gpusonar/doppler.py`,
+  `libs/live/src/doppler.cpp`), hypothesis step c / (2 B T), per-beam own-ship centring, detections
+  carrying `range_rate` (on the report line only with `report: true`; no record field). Off is the
+  chain as before, byte for byte. Tests: `tests/cpp/test_doppler.cpp`,
+  `tests/python/test_doppler_bank.py`, the engine equality in `tests/python/test_live_cpp.py`.
+
+### D-233 Popoto 12 km trade study: the +5 dB class is not reached at 12 km at any site (issue sonar-3983; branch `a-trade`; no default moved)
+
+2026-11-26. Status of every number: ours; every site value illustrative, every target strength
+assumed. The account is `docs/design/popoto_trade_study.md`, generated by
+`tools/popoto_trade_study.py` from `docs/design/popoto_trade_study.json` (grid run on tree `de3717b`).
+
+- **Worst first.** Requirement POP-3 names no target class, detection probability or sea state.
+  `xl_auv` is not met at 12 km by the shipped 3 x 32 at any of the 6 sites (margins -4.6 dB on the
+  shelf to -27.1 dB at sea state 5, -116.1 dB in the summer mud shadow). At the deep site, sea state
+  5 and summer mud no variant in the grid (up to 3 x 96, 200 dB) reaches it. `ship` and
+  `large_submerged` fail at sea state 5 (-6.1, -7.1 dB) and summer mud (-96.1, -4.7 dB).
+- Met by the shipped design at the other four sites: ship +8.8 (deep), +21.3 (shelf), +10.2 (slope),
+  +29.8 dB (winter sand); large_submerged +8.4, +15.4, +10.5, +9.5 dB. One row of 32 holds 12 km
+  wherever three rows do. Rows of 64 or 96 do not fit the face.
+- Not robust: one sea state of wind or 3 dB of bottom scattering changes which geometries hold 12 km.
+- The planner's assumption that rows gain nothing against reverberation is pessimistic: measured with
+  the bistatic generator on the shelf, 2.47 dB (2 rows) and 3.38 dB (3 rows), one site, 3 pings.
+- Found on the way: the site called "sea state 5" is labelled 9.8 m/s but computed at 12.6 m/s (an
+  owner question, not changed here).
+- Cross-check against the chain: `xl_auv` at 8 km within 0.7 dB; ship at 12 km 4.8 dB low.
+- Test: `tests/python/test_popoto_trade_study.py`.
+
+### D-234 The merge of D-230 to D-233 (the third batch)
+
+2026-11-26.
+
+- Full GPU suite on the batch's tree (branch `batch3` at `0a8b477`; NVIDIA L4, Hugging Face job
+  6b084a4cd91f621b930b6331; the same switches as D-229): **2886 passed, 111 skipped, 4 xfailed, none
+  failed**, job exit 0. Before: 2823 passed, 103 skipped (D-229). The eight more skips: five margin
+  tests of `test_doppler_scenes.py` (`GPUSONAR_DOPPLER_STUDY=1`) and three of `test_tools_help.py`
+  ("not a git checkout", the new tools). The merge had no conflict.
+- At this tree: 95 scenario files; 152 Python test files (1859 `def test_` functions); GoogleTest 202
+  cases (201 `TEST` and 1 `TEST_P`).
+- Not in this merge: the tone path with the CFAR per beam and hypothesis (D3), and the opt-in rows
+  gain against reverberation, `reach_limited_by` and the cost cap of `penetration: rough` (branch
+  `a-rows`).
+- Still stale: the items of issue `sonar-tmvu` (D-229).

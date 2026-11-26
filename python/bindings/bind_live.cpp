@@ -111,6 +111,19 @@ void number(const Keys& d, const char* k, double& v) {
   if (d.contains(k) && !d[k].is_none()) v = d[k].cast<double>();
 }
 
+// The flat doppler_* keys of gpusonar.live.cpp_chain_options (doppler.hpp; D4); a key left out keeps the default.
+live::DopplerOptions doppler_options(const Keys& d) {
+  live::DopplerOptions o;
+  if (d.contains("doppler_mode")) o.mode = live::parse_doppler_mode(d["doppler_mode"].cast<std::string>());
+  number(d, "doppler_max_range_rate_m_s", o.max_range_rate);
+  number(d, "doppler_step_m_s", o.step);
+  if (d.contains("doppler_hypotheses") && !d["doppler_hypotheses"].is_none()) o.hypotheses = d["doppler_hypotheses"].cast<std::int64_t>();
+  number(d, "doppler_unknown_ownship_m_s", o.unknown_ownship);
+  number(d, "doppler_threshold_db", o.threshold_db);
+  if (d.contains("doppler_report")) o.report = d["doppler_report"].cast<bool>();
+  return o;
+}
+
 live::DecimateOptions decimate_options(const Keys& d) {
   live::DecimateOptions o;
   o.enabled = true;
@@ -678,6 +691,37 @@ void bind_live(py::module_& m) {
       "The chain settings left to be derived, resolved from this record's band, pulse and array (libs/live derive.hpp): "
       "values in the units of the C++ options (angles in rad), and `json`, the line the programs print.");
   m.def(
+      "live_doppler_plan",
+      [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_doppler_plan: ");
+        const live::DopplerPlan p = live::plan_doppler(record, bearings, o);
+        py::dict out;
+        out["on"] = p.on;
+        out["step"] = p.step;
+        out["rates"] = p.rates;
+        out["scales"] = p.scales;
+        out["shifts"] = p.shifts;
+        out["pedestal_m"] = p.pedestal_m;
+        out["zero"] = p.zero;
+        out["per_beam"] = p.per_beam;
+        out["first"] = p.first;
+        out["ownship"] = p.ownship;
+        out["velocity_known"] = p.velocity_known;
+        out["baseband_max_range_rate"] = p.baseband_max_range_rate;
+        out["threshold_db"] = p.threshold_db;
+        out["json"] = p.json();
+        return out;
+      },
+      py::arg("record"), py::arg("bearings"), py::arg("options"),
+      "The sweep's Doppler bank for this record and the map's bearings (rad) (libs/live doppler.hpp plan_doppler): the "
+      "options as the flat doppler_* keys of gpusonar.live.cpp_chain_options. Both engines take their hypotheses from it.");
+  m.def("live_sweep_mismatch", &live::sweep_mismatch, py::arg("phi"),
+        "|integral_0^1 exp(i phi u^2) du|: a linear sweep's compressed peak with a quadratic phase error phi at its ends (doppler.hpp).");
+  m.def("live_bank_threshold_db", &live::bank_threshold_db, py::arg("per_beam"),
+        "The detector's threshold shift (dB) for the maximum over this many hypotheses per beam (doppler.hpp).");
+  m.def(
       "live_detector_plan",
       [](const PingRecord& record, std::int64_t n_cells, std::int64_t samples_per_cell, double step, const std::vector<double>& bearings,
          std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, const py::dict& options) {
@@ -687,6 +731,8 @@ void bind_live(py::module_& m) {
         number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
         number(kw, "sidelobe_floor_db", o.sidelobe_floor_db);
         number(kw, "search_factor", o.search_factor);
+        number(kw, "threshold_offset_db", o.threshold_offset_db);
+        number(kw, "pedestal_m", o.pedestal_m);
         if (kw.contains("range_estimate") && !kw["range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["range_estimate"].cast<std::string>());
         if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
         double tolerance = live::kDerive;
@@ -983,6 +1029,7 @@ void bind_live(py::module_& m) {
         get("cfar_merge_m", o.detector.merge_m);
         if (kw.contains("cfar_range_estimate") && !kw["cfar_range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
         if (kw.contains("range_doppler")) o.range_doppler = live::parse_range_doppler(kw["range_doppler"].cast<std::string>());   // sonar-fyj
+        o.doppler = doppler_options(kw);                       // the sweep's Doppler bank (D4): flat doppler_* keys
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) {
@@ -1109,6 +1156,15 @@ void bind_live(py::module_& m) {
            "before the first ping the sizes left to be derived are null.")
       .def("resolved", &live::LiveChain::resolved_json,
            "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
+      .def("doppler", [](const live::LiveChain& c) { return c.doppler_plan().json(); },
+           "The Doppler bank of the last ping (doppler.hpp) as a JSON line: mode, step, hypotheses, per beam, threshold shift.")
+      .def("last_hypotheses", [](const live::LiveChain& c) {
+        const std::vector<std::int32_t>& w = c.last_hypotheses();
+        const auto n_b = static_cast<py::ssize_t>(c.bearings.size());
+        py::array_t<std::int32_t> out({n_b, n_b > 0 ? static_cast<py::ssize_t>(w.size()) / n_b : py::ssize_t{0}});
+        std::copy(w.begin(), w.end(), out.mutable_data());
+        return py::make_tuple(out, c.doppler_plan().rates);
+      }, "The hypothesis holding each sample of the last fine map [n_bearing, n] and the hypotheses' range rates (m/s).")
       .def("last_map", [](const live::LiveChain& c) {
         py::array_t<float> power({static_cast<py::ssize_t>(c.bearings.size()), static_cast<py::ssize_t>(c.last_ranges.size())});
         std::copy(c.last_power.begin(), c.last_power.end(), power.mutable_data());

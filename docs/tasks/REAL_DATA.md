@@ -293,7 +293,9 @@ G-9 of `docs/tasks/SST_GAPS_JACKSON.md`). How it is judged:
   site at the top (Arafura Sea: bimodal sediment, at the border of single scattering); a fitted sigma2
   above 4e-3 is one the book calls suspect: the tool's `--help`); `--prior-bounds PHI` replaces them, `--no-prior-bounds` turns them
   off (the unbounded fit of before, bit for bit); without a row or a grain size there are none, and the
-  tool's "bounds used:" line always says which applied. On the volume-dominated silt case the default
+  tool's "bounds used:" line always says which applied. The library applies the same prior when given the
+  row (`sediment_fit.fit(..., sediment="fine_sand")`, `row_prior=False` to turn it off; opt-in, the owner
+  2026-11-26; the tool calls it so, one implementation). On the volume-dominated silt case the default
   prior turns six bad unbounded fits of ten (nothing or only w2 flagged, sigma2 0.65-0.78 of the truth)
   into ten with w2 and gamma2 flagged and sigma2 0.85-1.05 of the truth; in eight of the ten w2 or gamma2
   then sits on a prior bound. Where the roughness models differ by less than the
