@@ -18,6 +18,16 @@ which), and the placeholder. The scattering parameters follow the mean grain siz
 (`grain_size_scattering`); rock and pebbles are not fluids and carry an empirical Lambert law
 instead (`empirical_backscatter`).
 
+Printed since (record of what agrees; nothing below was changed by it): Jackson and Richardson,
+"High-Frequency Seafloor Acoustics", Springer (2007) [J&R], prints the forms derived here, and
+tests/python/test_jackson_2007_bottom.py holds ours against them as retyped from
+docs/references/jackson_richardson_2007/: the spectrum convention (6.5)-(6.8), the structure
+constant (D.11)-(D.13), the cm conversion D.1.3, flat-interface reflection (8.49)-(8.53),
+delta and its conversions (2.6), (8.25)-(8.27), perturbation (13.9), (13.21)-(13.25), Kirchhoff
+(13.10), (13.12)-(13.17), small-slope (13.11), the composite cut-off and large-scale slope
+(13.72)-(13.77) and the volume term (14.7)-(14.9). Not in J&R: our `combined` model, and the
+book's composite carries Wagner's shadowing factor (13.81)-(13.83), which ours lacks.
+
 Parameters (dimensionless unless noted), as in the published models:
   rho     sediment density / water density
   nu      sediment sound speed / water sound speed
@@ -104,7 +114,11 @@ doi:10.3389/frsen.2025.1619218, eqs. (6)-(8), "following Novarini and Caruthers 
 cut-off spatial frequency corresponds to the condition that the Rayleigh parameter ... for
 microroughness equals unity", g^2 = 4 k^2 zeta_mu^2 = 1, i.e. k x rms height = 0.5, with
 zeta_mu^2 = 2 pi integral_Kc^inf W K dK and the facet slope variance 2 pi integral_0^Kc W K^3 dK
-(both axes together: twice the per-axis s^2 above). Olson and Lyons (arXiv:2106.05909,
+(both axes together: twice the per-axis s^2 above). J&R (2007) print the same split and slope,
+(13.72)-(13.77), and attribute k_w h_s = 1/2 to "D. Jackson et al. 1986a"; our
+`large_scale_slope` gives the slopes printed for Fig. 13.19 (0.0227, 0.0595, 0.1432). Their
+average (13.80) is over the in-plane slope only and adds Wagner's shadowing factor (13.81)-(13.83),
+which ours does not. Olson and Lyons (arXiv:2106.05909,
 Sec. VIII, eq. (44), after McDaniel and Gorman 1983) write the composite model as this same
 average of the tilted small-scale perturbation result over the large-scale slope density and
 give its conditions: k x small-scale rms height below one, grazing angles above about twice
@@ -162,7 +176,8 @@ def w2_from_cm4(strength_cm4: float, gamma2: float) -> float:
     """Spectral strength in m^(4 - gamma2) (wavenumbers in rad/m) from the form with a 1 cm
     reference length, W = beta (h K)^(-gamma2), h = 1 cm, beta in cm^4 (Bentrem et al.,
     arXiv:physics/0607146, eq. (7) with K = 2 pi f / c, who take it from Mourad and Jackson):
-    W [m^4] = 1e-8 beta (0.01 K [1/m])^(-gamma2), so w2 = beta 10^(2 gamma2 - 8)."""
+    W [m^4] = 1e-8 beta (0.01 K [1/m])^(-gamma2), so w2 = beta 10^(2 gamma2 - 8). A second print:
+    Jackson and Richardson (2007), App. D.1.3, p. 479."""
     return float(strength_cm4) * 10.0 ** (2.0 * float(gamma2) - 8.0)
 
 
@@ -288,7 +303,8 @@ def _vertical(k2, horizontal):
 
 
 def reflection(grazing, rho: float, nu: float, delta: float):
-    """Flat-interface pressure reflection coefficient V of the fluid sediment at a grazing angle."""
+    """Flat-interface pressure reflection coefficient V of the fluid sediment at a grazing angle
+    (equal to Jackson and Richardson 2007, eqs. (8.49)-(8.53))."""
     g = np.asarray(grazing, dtype=float)
     kappa = (1.0 + 1j * delta) / nu
     p = _vertical(kappa**2, np.cos(g))
@@ -332,7 +348,8 @@ def perturbation_strength(grazing_in, grazing_out, frequency: float, sound_speed
 
 
 def structure_constant(w2: float, gamma2: float) -> tuple[float, float]:
-    """(Ch2, a) of the structure function D(R) = Ch2 R^(2 a) of a power-law relief spectrum."""
+    """(Ch2, a) of the structure function D(R) = Ch2 R^(2 a) of a power-law relief spectrum
+    (the same as Jackson and Richardson 2007, eqs. (D.11)-(D.13): Gamma(2 - a) = (1 - a) Gamma(1 - a))."""
     if not 2.0 < gamma2 < 4.0:
         raise ValueError("the structure function of a power-law spectrum needs 2 < gamma2 < 4")
     a = 0.5 * gamma2 - 1.0
@@ -428,7 +445,8 @@ def small_slope_strength(grazing_in, grazing_out, frequency: float, sound_speed:
 def large_scale_slope(frequency: float, sound_speed: float, *, w2: float, gamma2: float, small_scale_kh: float = 0.5,
                       **_ignored) -> tuple[float, float]:
     """(rms slope per axis of the large-scale relief, cutoff wavenumber Kc in rad/m) for the
-    composite-roughness split: relief at K > Kc has k x rms height = `small_scale_kh`."""
+    composite-roughness split: relief at K > Kc has k x rms height = `small_scale_kh`
+    (Jackson and Richardson 2007, eqs. (13.72)-(13.77), with `small_scale_kh` = 1/2)."""
     if not 2.0 < gamma2 < 4.0:
         raise ValueError("composite roughness needs 2 < gamma2 < 4")
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
@@ -532,7 +550,8 @@ def roughness_strength(grazing_in, grazing_out, frequency: float, sound_speed: f
 
 def volume_strength(grazing_in, grazing_out, frequency: float, sound_speed: float, *, rho: float, nu: float,
                     delta: float, sigma2: float, **_ignored):
-    """Cross section per unit area and solid angle from scatterers inside the sediment."""
+    """Cross section per unit area and solid angle from scatterers inside the sediment
+    (equal to Jackson and Richardson 2007, eqs. (14.7)-(14.9), with (8.26) for the attenuation)."""
     ti, ts = np.broadcast_arrays(np.asarray(grazing_in, dtype=float), np.asarray(grazing_out, dtype=float))
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     k2sq = (k * (1.0 + 1j * delta) / nu) ** 2
@@ -645,19 +664,95 @@ loss 0.0137, with index values -9, -7 and -3 that are labels, not grain sizes) a
 and are not here."""
 
 
-def sediment_from_grain_size(phi: float) -> dict:
+GRAIN_SIZE_WATER_SOUND_SPEED = 1528.0
+"""The water sound speed (m/s) that turns the attenuation of (11.3) into the loss parameter of
+`GRAIN_SIZE_TABLE`: it reproduces the table's delta (0.01624 at 1.5 phi), as in UnderwaterAcoustics.jl
+(docs/references/jackson_richardson_2007/01_sediment_properties.md Sec. 3.1)."""
+
+
+def apl_grain_size_relations(phi: float, water_sound_speed: float = GRAIN_SIZE_WATER_SOUND_SPEED) -> dict:
+    """{rho, nu, delta, k_db_per_m_khz} for a mean grain size Mz in phi units (-1 to 9) by the TR 9407
+    relations as printed in Jackson and Richardson, "High-Frequency Seafloor Acoustics" (2007), eqs.
+    (11.1)-(11.3), pp. 313-314 (first given by Mourad and Jackson 1989 and expanded in APL-UW TR 9407;
+    (11.3) taken from Hamilton 1972). The book calls (11.1)-(11.2) "ad hoc" expressions to improve
+    model-data fits, not geoacoustic regressions (p. 314):
+
+        rho = 0.007797 Mz^2 - 0.17057 Mz + 2.3139                          -1 <= Mz < 1
+            = -0.0165406 Mz^3 + 0.2290201 Mz^2 - 1.1069031 Mz + 3.0455      1 <= Mz < 5.3
+            = -0.0012973 Mz + 1.1565                                        5.3 <= Mz <= 9     (11.1)
+        nu  = 0.002709 Mz^2 - 0.056452 Mz + 1.2778                          -1 <= Mz < 1
+            = -0.0014881 Mz^3 + 0.0213937 Mz^2 - 0.1382798 Mz + 1.3425      1 <= Mz < 5.3
+            = -0.0024324 Mz + 1.0019                                        5.3 <= Mz <= 9     (11.2)
+        k   = 0.4556                                                        -1 <= Mz < 0
+            = 0.0245 Mz + 0.4556                                            0 <= Mz < 2.6
+            = 0.1245 Mz + 0.1978                                            2.6 <= Mz < 4.5
+            = 0.20098 Mz^2 - 2.5228 Mz + 8.0399                             4.5 <= Mz < 6.0
+            = 0.0117 Mz^2 - 0.2041 Mz + 0.9431                              6.0 <= Mz < 9.5
+            = 0.0601                                                        9.5 <= Mz          (11.3)
+
+    k in dB m^-1 kHz^-1; delta = k nu c_w ln 10 / (40 000 pi), the book's (2.6) with alpha = k f_kHz,
+    c_w = `water_sound_speed` (1528 m/s, the table's water).
+
+    Two printed constants are NOT used, as misprints (the notes' argument; the original papers were not
+    read): the book prints 1.0091 in the last piece of (11.2), which jumps by 0.0072 at 5.3 phi and misses
+    the tabulated rows from 5.5 to 9 phi by 0.0072; 1.0019 is continuous with the cubic (0.98901) and
+    gives the rows. It prints 0.4566 in the first piece of (11.3); the next piece starts at 0.4556 and the
+    rows at -1 and -0.5 phi follow 0.4556. (11.3) has steps as printed (+0.0022 at 2.6, -0.0009 at 4.5,
+    +0.0013 at 6.0 phi), kept. Tests: tests/python/test_grain_size_relations.py."""
+    mz = _check_grain_size(phi)
+    if mz < 1.0:
+        rho = 0.007797 * mz**2 - 0.17057 * mz + 2.3139
+        nu = 0.002709 * mz**2 - 0.056452 * mz + 1.2778
+    elif mz < 5.3:
+        rho = -0.0165406 * mz**3 + 0.2290201 * mz**2 - 1.1069031 * mz + 3.0455
+        nu = -0.0014881 * mz**3 + 0.0213937 * mz**2 - 0.1382798 * mz + 1.3425
+    else:
+        rho = -0.0012973 * mz + 1.1565
+        nu = -0.0024324 * mz + 1.0019                      # printed 1.0091: a misprint (docstring)
+    if mz < 0.0:
+        k = 0.4556                                         # printed 0.4566: a misprint (docstring)
+    elif mz < 2.6:
+        k = 0.0245 * mz + 0.4556
+    elif mz < 4.5:
+        k = 0.1245 * mz + 0.1978
+    elif mz < 6.0:
+        k = 0.20098 * mz**2 - 2.5228 * mz + 8.0399
+    elif mz < 9.5:
+        k = 0.0117 * mz**2 - 0.2041 * mz + 0.9431
+    else:
+        k = 0.0601
+    delta = k * nu * float(water_sound_speed) * math.log(10.0) / (40000.0 * math.pi)
+    return {"rho": rho, "nu": nu, "delta": delta, "k_db_per_m_khz": k}
+
+
+GRAIN_SIZE_METHODS = ("table_linear", "relations")
+
+
+def sediment_from_grain_size(phi: float, method: str = "table_linear") -> dict:
     """The six parameters for a mean grain size in phi units (-1 to 9), for a site whose grain
     size is known and that is not one of the named classes.
 
-    rho, nu and delta are interpolated linearly between the tabulated classes of
-    `GRAIN_SIZE_TABLE` (every half phi). The interpolation is ours: the handbook's own
-    regressions of these three against grain size were not found in an open document, and the
-    table shows they are piecewise (the density ratio drops from 2.151 to 1.615 between 1 and
-    2 phi), so between two classes the result is a guess good to the difference of its
-    neighbours. w2, gamma2 and sigma2 are `grain_size_scattering`."""
+    `method="table_linear"` (the default, unchanged): rho, nu and delta are interpolated linearly
+    between the tabulated classes of `GRAIN_SIZE_TABLE` (every half phi). The interpolation is ours;
+    the table is piecewise (the density ratio drops from 2.151 to 1.615 between 1 and 2 phi), so
+    between two classes the result is a guess good to the difference of its neighbours.
+    `method="relations"`: rho, nu and delta from the relations themselves, `apl_grain_size_relations`
+    (J&R 2007 eqs. (11.1)-(11.3)), which give the table at its points (rho 5e-4, nu 1e-4, delta
+    0.5 %). Between the points the two differ by at most 0.68 dB in the normal-incidence reflection
+    coefficient (at 5.3 phi), under 0.1 dB outside 5-6 phi; rho by up to 0.0106 (1.25 phi), delta by up
+    to 7.6 % (near 5.8 phi). w2, gamma2 and sigma2 are `grain_size_scattering` either way."""
+    if method not in GRAIN_SIZE_METHODS:
+        import difflib
+        near = difflib.get_close_matches(str(method), GRAIN_SIZE_METHODS, n=1)
+        hint = f"; did you mean {near[0]!r}?" if near else ""
+        raise ValueError(f"sediment_from_grain_size: unknown method {method!r}{hint} (one of {GRAIN_SIZE_METHODS})")
     phi = _check_grain_size(phi)
-    table = np.array(GRAIN_SIZE_TABLE)
-    out = {key: float(np.interp(phi, table[:, 0], table[:, i])) for i, key in ((1, "rho"), (2, "nu"), (3, "delta"))}
+    if method == "relations":
+        rel = apl_grain_size_relations(phi)
+        out = {key: rel[key] for key in ("rho", "nu", "delta")}
+    else:
+        table = np.array(GRAIN_SIZE_TABLE)
+        out = {key: float(np.interp(phi, table[:, 0], table[:, i])) for i, key in ((1, "rho"), (2, "nu"), (3, "delta"))}
     return dict(out, **grain_size_scattering(phi))
 
 

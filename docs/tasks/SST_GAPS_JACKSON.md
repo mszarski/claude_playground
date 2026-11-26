@@ -257,6 +257,15 @@ to both engines (D-196). Bellhop's bottom line is written in `sim/bellhop.py` (a
   at 1.25 phi [N1 §3.2]; no shipped scenario calls the function.
 - Must not: change the named rows; copy 1.0091 or 0.4566; call the relations "regressions" (the book: "ad hoc",
   not geoacoustic regressions, p. 314).
+- **Done (2026-11-26, branch `g-bottom`)**: `bottom.apl_grain_size_relations(phi, water_sound_speed=1528)`;
+  `sediment_from_grain_size(phi, method="table_linear" | "relations")`, default unchanged (bit-identical on a
+  0.01 phi grid against values written before the change); `tests/python/test_grain_size_relations.py`, 8 tests.
+  All of [N1 3.2]'s numbers reproduced: 0.678 dB at 5.3 phi, nu 0.0041, rho 0.0106 at 1.25 phi, delta 7.6 %
+  near 5.79 phi, under 0.1 dB outside 5-6 phi; Fig. 11.2 loss 6.12 / 14.77 / 22.15 dB at 0 / 3 / 5 phi.
+  C2 settled: the printed pieces of (11.3) at 6.0 phi give 0.1384 and 0.1397 (step 0.0013): [N1] is right,
+  [N3]'s "0.338" is a slip. The other printed steps: +0.0022 at 2.6 (a little above [N1]'s "0.001-0.002"),
+  -0.0009 at 4.5, 0 at 0 with 0.4556 (0.0010 with the printed 0.4566). C3: the rows at -1 and -0.5 phi agree
+  with 0.4556 to 2.5e-4 and with 0.4566 only to 2.4e-3; 0.4556 used.
 
 ### G-7 `extinction: dahl_1997` for `bubble_layer_surface` — OPT-IN, M
 - Gap W7 (`sonar-64sm`, `sonar-9le`). From [NS WP2]; formula beta_I = 10^(a + b log10 U10), [D97] Table II
