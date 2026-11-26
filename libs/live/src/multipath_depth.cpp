@@ -28,8 +28,9 @@ double sinc(double x) {
   return std::abs(a) < 1e-12 ? 1.0 : std::sin(a) / a;
 }
 
-cd rayleigh(double grazing, double c_water, double speed, double density, double attenuation) {
-  return rayleigh_reflection(grazing, c_water, speed, density, attenuation);   // raytrace.hpp: one implementation
+cd rayleigh(double grazing, double c_water, const MultipathOptions& o) {
+  return rayleigh_reflection(grazing, c_water, o.bottom_speed, o.bottom_density, o.bottom_attenuation, o.bottom_shear_speed,
+                             o.bottom_shear_attenuation);   // raytrace.hpp: one implementation
 }
 
 struct Image {
@@ -80,7 +81,7 @@ void one_way(double z_own, double z_target, double r_h, const MultipathGeometry&
         const double mu = o.surface_coefficient * std::pow(10.0, -loss_db / 20.0) * std::exp(-0.5 * gamma * gamma);
         a *= std::pow(mu, im.ns);
       }
-      if (im.nb > 0) a *= std::pow(rayleigh(std::asin(sin_g), g.sound_speed, o.bottom_speed, o.bottom_density, o.bottom_attenuation), im.nb);
+      if (im.nb > 0) a *= std::pow(rayleigh(std::asin(sin_g), g.sound_speed, o), im.nb);
     }
     length.push_back(r_j);
     amp.push_back(a);
@@ -174,6 +175,8 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "bottom_speed") o.bottom_speed = v();
   else if (k == "bottom_density") o.bottom_density = v();
   else if (k == "bottom_attenuation") o.bottom_attenuation = v();
+  else if (k == "bottom_shear_speed") o.bottom_shear_speed = option_nonnegative(key, value);
+  else if (k == "bottom_shear_attenuation") o.bottom_shear_attenuation = option_nonnegative(key, value);
   else if (k == "bottom_order") o.bottom_order = i();
   else if (k == "bottom_grazing_limit_deg") o.bottom_grazing_limit_deg = v();
   else if (k == "water_depth") o.water_depth = v();

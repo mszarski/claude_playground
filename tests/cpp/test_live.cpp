@@ -15,6 +15,10 @@
 #include <gtest/gtest.h>
 
 #include "sonar/live/chain.hpp"
+#include "sonar/live/coverage.hpp"
+#include "sonar/live/multipath_depth.hpp"
+#include "sonar/live/raytrace.hpp"
+#include "sonar/sim/paths.hpp"
 #include "sonar/core/platform.hpp"
 #include "sonar/live/option_value.hpp"
 #include "sonar/live/options.hpp"
@@ -1073,4 +1077,98 @@ TEST(RangeDoppler, TargetPartMovesThePositionAlongTheLineOfSightByItsClosingSpee
   EXPECT_EQ(c[0].vy, -8.0);
   EXPECT_NEAR(c[1].y, 100.0, 1e-12);
   EXPECT_EQ(c[2].y, 0.0);
+}
+
+// --- an elastic bottom (rock) in the live chain's depth and multipath models -------------------------------------------
+
+TEST(Rock, LiveCoefficientIsTheSimulators) {
+  // The `rock` row on 1500 m/s water (configs/sediments.yaml: speed ratio 3820 / 1528, density ratio 2557.5 / 1023, delta
+  // 0.01374; shear 1900 / 1528 of the water, shear delta 0.085, unconfirmed): live::rayleigh_reflection with the shear is
+  // sim::rayleigh_reflection bit for bit (one function, sonar/core/reflection.hpp), and its per-bounce losses are A8's
+  // table (tests/python/test_elastic_bottom.py: 1.56 / 2.90 / 5.45 / 14.57 / 8.78 / 6.25 / 4.54 / 2.80 dB).
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  const double speed = 3820.0 / 1528.0 * c, density = 2557.5 / 1023.0, att = 0.01374 * per_wl;
+  const double shear = 1900.0 / 1528.0 * c, shear_att = 0.085 * per_wl;
+  sim::FluidBottom rock{speed, density, att, 1.0, shear, shear_att};
+  sim::FluidBottom fluid{speed, density, att, 1.0};
+  for (double g = 0.001; g <= 0.5 * kPi; g += 0.003) {
+    EXPECT_EQ(rayleigh_reflection(g, c, speed, density, att, shear, shear_att), sim::rayleigh_reflection(g, c, rock)) << g;
+    // zero shear: the live chain's own fluid expression, unchanged (the five-argument call); it agrees with the
+    // simulator's fluid one to rounding (they divide differently)
+    EXPECT_EQ(rayleigh_reflection(g, c, speed, density, att, 0.0, shear_att), rayleigh_reflection(g, c, speed, density, att)) << g;
+    EXPECT_LT(std::abs(rayleigh_reflection(g, c, speed, density, att) - sim::rayleigh_reflection(g, c, fluid)), 1e-13) << g;
+  }
+  const double angles[] = {5.0, 10.0, 20.0, 30.0, 40.0, 45.0, 60.0, 90.0};
+  const double table[] = {1.56, 2.90, 5.45, 14.57, 8.78, 6.25, 4.54, 2.80};
+  for (int i = 0; i < 8; ++i) {
+    EXPECT_NEAR(-20.0 * std::log10(std::abs(rayleigh_reflection(angles[i] * kDeg, c, speed, density, att, shear, shear_att))), table[i], 0.005) << angles[i];
+  }
+}
+
+TEST(Rock, MultipathPatternAndCoverageTakeTheShear) {
+  // The pattern's bottom-reflected one-leg arrival (out by the bottom image, back direct; the surface's coefficient 0
+  // removes the surface images) over rock is the elastic coefficient at its grazing angle; the options carry the shear
+  // by name and refuse a negative one; the coverage options the same.
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  MultipathOptions o;
+  for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
+           {"bottom", "1"}, {"bottom_speed", std::to_string(3820.0 / 1528.0 * c)}, {"bottom_density", std::to_string(2557.5 / 1023.0)},
+           {"bottom_attenuation", std::to_string(0.01374 * per_wl)}, {"bottom_shear_speed", std::to_string(1900.0 / 1528.0 * c)},
+           {"bottom_shear_attenuation", std::to_string(0.085 * per_wl)}, {"bottom_order", "1"}, {"surface_coefficient", "0"}}) {
+    ASSERT_TRUE(set_multipath_option(o, "multipath_depth_" + k, v)) << k;
+  }
+  EXPECT_GT(o.bottom_shear_speed, 1800.0);
+  EXPECT_THROW(set_multipath_option(o, "multipath_depth_bottom_shear_speed", "-1"), std::invalid_argument);
+  const double own = 30.0, zt = 50.0, depth = 100.0, lift = 2.0 * depth - zt - own;
+  for (const double deg : {10.0, 30.0, 45.0}) {
+    MultipathGeometry g;
+    g.range = lift / std::tan(deg * kDeg);
+    g.array_depth = g.projector_depth = own;
+    g.sound_speed = c;
+    g.f_centre = 8000.0;
+    g.bandwidth = 2000.0;
+    g.water_depth = depth;
+    std::vector<double> delay;
+    std::vector<std::complex<double>> amp;
+    const double r_h = g.range;
+    multipath_pattern(zt, 2.0 * std::hypot(r_h, zt - own) / c, g, o, delay, amp);
+    ASSERT_EQ(amp.size(), 9u);
+    const double spread = std::hypot(r_h, zt - own) / std::hypot(r_h, lift);
+    const auto want = rayleigh_reflection(std::asin(lift / std::hypot(r_h, lift)), c, o.bottom_speed, o.bottom_density, o.bottom_attenuation,
+                                          o.bottom_shear_speed, o.bottom_shear_attenuation);
+    EXPECT_LT(std::abs(amp[6] / spread - want), 1e-9) << deg;
+    const auto fluid = rayleigh_reflection(std::asin(lift / std::hypot(r_h, lift)), c, o.bottom_speed, o.bottom_density, o.bottom_attenuation);
+    EXPECT_GT(std::abs(fluid) - std::abs(want), 0.1) << deg;     // the elastic rock returns less than the fluid one
+  }
+  CoverageOptions v;
+  ASSERT_TRUE(set_coverage_option(v, "coverage_bottom_shear_speed", "1865.5"));
+  ASSERT_TRUE(set_coverage_option(v, "coverage_bottom_shear_attenuation", "4.6"));
+  EXPECT_EQ(v.bottom_shear_speed, 1865.5);
+  EXPECT_EQ(v.bottom_shear_attenuation, 4.6);
+  EXPECT_THROW(set_coverage_option(v, "coverage_bottom_shear_attenuation", "nan"), std::invalid_argument);
+}
+
+TEST(Rock, EigenraysTakeTheShear) {
+  // One bottom bounce in isovelocity water: the eigenray over elastic rock is the fluid one times V_elastic / V_fluid at
+  // its grazing angle (the launch angle); a shear speed of 0 is the fluid bit for bit.
+  const double c = 1500.0, per_wl = 40.0 * kPi / std::log(10.0);
+  EigenrayOptions o;
+  o.n_fan = 801;
+  o.max_bounces = 2;
+  o.bottom = {true, 3820.0 / 1528.0 * c, 2557.5 / 1023.0, 0.01374 * per_wl, 1900.0 / 1528.0 * c, 0.085 * per_wl};
+  EigenrayOptions f = o;
+  f.bottom.shear_speed = 0.0;
+  const RayProfile prof({0.0, 100.0}, {c, c}, 100.0);
+  const auto rock = eigenrays(prof, 30.0, 50.0, 400.0, o), fluid = eigenrays(prof, 30.0, 50.0, 400.0, f);
+  ASSERT_EQ(rock.size(), fluid.size());
+  int checked = 0;
+  for (std::size_t i = 0; i < rock.size(); ++i) {
+    if (rock[i].n_bottom != 1 || rock[i].n_surface != 0) continue;
+    const double g = std::abs(rock[i].launch);
+    const auto ratio = rayleigh_reflection(g, c, o.bottom.speed, o.bottom.density, o.bottom.attenuation, o.bottom.shear_speed, o.bottom.shear_attenuation) /
+                       rayleigh_reflection(g, c, o.bottom.speed, o.bottom.density, o.bottom.attenuation);
+    EXPECT_LT(std::abs(rock[i].amplitude / fluid[i].amplitude - ratio), 1e-9);
+    ++checked;
+  }
+  EXPECT_EQ(checked, 1);
 }

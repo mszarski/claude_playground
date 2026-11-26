@@ -76,8 +76,10 @@ struct CoverageOptions {
   double refresh_depth = 5.0, refresh_water_depth = 10.0, refresh_speed = 0.5;
   double surface_coefficient = -1.0, surface_rms_height = 0.0, surface_loss_db = 0.0;
   std::vector<double> surface_loss_grazing, surface_loss_table_db;   ///< a bubble law's loss against grazing angle (rad, dB)
-  bool bottom = false;                 ///< a fluid bottom's Rayleigh reflection (a named sediment's, resolved by the configuration)
+  bool bottom = false;                 ///< a bottom's Rayleigh reflection (a named sediment's, resolved by the configuration)
   double bottom_speed = 0.0, bottom_density = 0.0, bottom_attenuation = 0.0;
+  /// m/s (0: a fluid), dB per wavelength: an elastic bottom (rock), raytrace.hpp rayleigh_reflection
+  double bottom_shear_speed = 0.0, bottom_shear_attenuation = 0.0;
   /// m: the site's water depth, used on a ping that carries none (what the ping carries comes first). No default.
   /// A chain with the coverage picture enabled needs this and `bottom`: LiveChain refuses to start without them
   /// (coverage_site_missing). The class itself still takes a water without a bottom (tools: deep water, said by the caller).

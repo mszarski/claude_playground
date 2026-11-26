@@ -9,6 +9,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include "sonar/core/reflection.hpp"
+
 namespace sonar::live {
 namespace {
 
@@ -167,7 +169,8 @@ bool ray_arrives(const RayProfile& profile, double receiver_depth, double elevat
   return end.ok && end.n_surface + end.n_bottom <= max_bounces && end.z <= max_depth;
 }
 
-cd rayleigh_reflection(double grazing, double c_water, double speed, double density, double attenuation) {
+cd rayleigh_reflection(double grazing, double c_water, double speed, double density, double attenuation, double shear_speed, double shear_attenuation) {
+  if (shear_speed != 0.0) return elastic_reflection(grazing, c_water, speed, density, attenuation, shear_speed, shear_attenuation);
   const double delta = attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
   const cd c_b = speed / cd(1.0, delta);
   const cd n = c_water / c_b;
@@ -227,7 +230,8 @@ std::vector<Eigenray> eigenrays(const RayProfile& profile, double z_source, doub
     cd coeff = std::pow(cd(o.surface_coefficient), q.n_surface);
     if (q.n_bottom) {
       const double c_b = profile.speed.back();
-      coeff *= std::pow(rayleigh_reflection(std::acos(std::min(std::cos(launch) / c_s * c_b, 1.0)), c_b, o.bottom.speed, o.bottom.density, o.bottom.attenuation),
+      coeff *= std::pow(rayleigh_reflection(std::acos(std::min(std::cos(launch) / c_s * c_b, 1.0)), c_b, o.bottom.speed, o.bottom.density, o.bottom.attenuation,
+                                            o.bottom.shear_speed, o.bottom.shear_attenuation),
                         q.n_bottom);
     }
     out.push_back({launch, std::asin(std::clamp(q.s, -1.0, 1.0)), q.time, amp * coeff, q.n_surface, q.n_bottom, q.turns, intensity > cap});

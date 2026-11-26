@@ -1482,3 +1482,61 @@ def test_range_doppler_refuses_an_unknown_word(engine):
             LiveChain(dict(CHAIN, range_doppler="on"))
         else:
             core.LiveChainCpp(dict(CPP_CHAIN, range_doppler="on"))
+
+
+# --- an elastic bottom (rock) in the depth and multipath models: both engines ---------------------------------------
+
+def test_rock_bottom_is_elastic_and_equal_in_both_engines():
+    """100 m of water over `rock` (the simulator's elastic bottom, A8), one row at 30 m, a target at 50 m depth 1 km
+    away: the chain's coverage picture and multipath depth with `bottom: {sediment: rock}` give the same members in
+    both engines (coverage exactly, the multipath depth to 0.05 m as test_multipath_depth.py holds sand), the options
+    carry the row's shear to the C++ stage and the program's key=value text, and the elastic rock's coverage differs
+    from the fluid rock's (`shear_speed: 0`): a weak class is seen less far. Before the port the multipath stage refused a named bottom and the
+    coverage took rock as a fluid."""
+    import warnings
+
+    from gpusonar import live
+    from gpusonar.sim import run_scenario
+    from test_multipath_depth import KNOWN, scenario
+    cfg = scenario(30.0, 50.0, 1000.0, ts=20.0, bottom_z=100.0, pings=3)
+    cfg["propagation"]["bottom"] = {"sediment": "rock"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        records = run_scenario(cfg, engine="cpp").records
+    cov = {"classes": [{"name": "sub", "ts_db": -30.0, "depth_m": [20.0, 90.0]}],        # weak: its range is set by the bottom's return
+           "budget": {"source_level_db": 197.0, "noise_spectrum_db": 51.46, "array_gain_db": 15.05, "absorption_db_per_km": 0.32},
+           "water_depth_m": 100.0, "bottom": {"sediment": "rock"}}
+    rock = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "coverage": cov,
+            "multipath_depth": dict(KNOWN, bottom={"sediment": "rock"}, water_depth=100.0, bottom_order=2)}
+    fluid = dict(rock, coverage=dict(cov, bottom={"sediment": "rock", "shear_speed": 0.0}))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        o = live.cpp_chain_options(rock)
+        flat = live.program_options(rock)
+    assert o["multipath_depth"]["bottom_shear_speed"] > 0.0 and o["coverage"]["bottom_shear_speed"] == o["multipath_depth"]["bottom_shear_speed"]
+    text = json.loads(core.live_options_from_text("".join(f"{k}={v}\n" for k, v in flat.items())))
+    for key in ("multipath_depth_bottom_shear_speed", "multipath_depth_bottom_shear_attenuation", "coverage_bottom_shear_speed", "coverage_bottom_shear_attenuation"):
+        assert float(flat[key]) == pytest.approx(text[key], rel=1e-9) and text[key] > 0.0, key
+    got = {}
+    for engine in ("cpp", "python"):
+        for name, chain in (("rock", rock), ("fluid", fluid)):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with LiveChain(dict(chain, engine=engine)) as c:
+                    got[engine, name] = c.run([r.copy() for r in records])
+    for name in ("rock", "fluid"):
+        a, b = got["cpp", name], got["python", name]
+        assert [r["coverage"] for r in a] == [r["coverage"] for r in b], name
+        n = 0
+        for ra, rb in zip(a, b):
+            assert len(ra["detections"]) == len(rb["detections"])
+            for x, y in zip(ra["detections"] + ra["tracks"], rb["detections"] + rb["tracks"]):
+                assert ("depth_multipath_m" in x) == ("depth_multipath_m" in y)
+                if "depth_multipath_m" in x:
+                    n += 1
+                    assert x["depth_multipath_m"] == pytest.approx(y["depth_multipath_m"], abs=0.05)
+                    assert x["depth_multipath_sigma_m"] == pytest.approx(y["depth_multipath_sigma_m"], rel=0.05, abs=0.02)
+        assert n >= 1, name
+    # the elastic rock returns less than the fluid one: the class is seen less far (755 against 897 m when written)
+    reach = {name: got["cpp", name][0]["coverage"]["classes"][0]["max_range_m"] for name in ("rock", "fluid")}
+    assert reach["rock"] < reach["fluid"] - 50.0, reach

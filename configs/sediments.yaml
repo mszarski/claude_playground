@@ -222,7 +222,8 @@ rock:
     unconfirmed. Per bounce 1.6 / 2.9 / 5.5 / 14.6 / 8.8 / 6.3 / 4.5 dB at 5 / 10 / 20 / 30 / 40 / 45 / 60
     degrees, as a fluid 0.0 to 0.1 dB (tests/python/test_elastic_bottom.py). The fluid half-space of
     this row stays selectable: image_source bottom {sediment: rock, shear_speed: 0}, Bellhop
-    environment {sediment: rock, elastic: false}.
+    environment {sediment: rock, elastic: false}, the live chain's coverage and multipath_depth
+    bottom {sediment: rock, shear_speed: 0} (they take the row as elastic otherwise).
   empirical_backscatter:
     model: lambert
     mu_db: -16.0

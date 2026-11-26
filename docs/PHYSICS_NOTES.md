@@ -893,9 +893,22 @@ the largest loss, 27.9 dB, is at 33.1 degrees, just below the shear critical ang
 water), where the leaky-Rayleigh wave makes the interface nearly transparent (J&R p. 276-277).
 
 Where it applies: the image-source tier and Bellhop (the shear column of the `.env`; Bellhop3D the same) for a
-`rock` bottom. Not: the `sediment` tier's penetration (a fluid model; it takes the row as a fluid), the live
-chain's depth models (`lloyd.py`, `raytrace.py`, `libs/live`, `depthplan.py`'s Bellhop branch: fluid, as
-before), the scattering models. `pebbles` stays a fluid: no source gives its shear speed. The rock Lambert level
+`rock` bottom; and, since the live-chain port (2026-11-26), the live chain's depth and multipath models and the
+depth planner: `lloyd.py` (Layer.halfspace, one_way), `raytrace.py` (eigenrays), `multipath_depth.py` (the
+pattern, and the C++ stage both engines run), `coverage.py` (the C++ coverage picture both engines run),
+`depthplan.py` (the isovelocity image series and the Bellhop branch, no longer pinned to a fluid), in C++
+libs/live `rayleigh_reflection` (raytrace.cpp; coverage.cpp, multipath_depth.cpp, multipath_rays.cpp call it).
+There is one C++ implementation of the elastic coefficient, `sonar::elastic_reflection` in
+libs/core/include/sonar/core/reflection.hpp, which the simulator (`sim::rayleigh_reflection`) and libs/live both
+call; a GoogleTest (Rock.LiveCoefficientIsTheSimulators) holds them equal bit for bit. Each caller keeps its own
+fluid expression for shear speed 0, so every fluid row gives the bits it gave before (sha256 of the outputs, in the
+port's report). No CUDA code evaluates a bottom reflection: nothing to port there. `{sediment: rock,
+shear_speed: 0}` is the row as a fluid in every live model (the planning environment's `bottom` as the typed
+fluid numbers); the row's unconfirmed shear is warned about once per process, when a live model first resolves
+it (`lloyd._named_halfspace`), not per ping. What that does to the depth from multipath timing and the coverage
+picture over rock is in the port's report (a weaker bottom bounce: a weaker bottom part of the pattern and less
+bottom-returned energy in the coverage). Not: the `sediment` tier's penetration (a fluid model; it takes the
+row as a fluid), the scattering models. `pebbles` stays a fluid: no source gives its shear speed. The rock Lambert level
 (-16 dB, range -23 to -10 dB) is unchanged.
 
 ---
@@ -3207,7 +3220,8 @@ The echo travels every outbound path with every return path, so there are four a
 coincide and the echo is the triplet +1, −2, +1 at 0, τ, 2τ: the one-leg arrival is 6 dB above the direct one. At
 12 km from 225 m to 150 m, τ = 3.75 ms; the 1.5 m lever arm splits the middle pair by 2 × 1.5 × z_t / (r c) = 25 µs,
 an eighth of a carrier cycle, which the pattern carries. In shallow water each leg also has the bottom's images
-(reflection coefficient: Rayleigh, at each image's grazing angle), and the two-way set is the product of the two legs'.
+(reflection coefficient: Rayleigh, at each image's grazing angle; an elastic solid's, Sec. 6.5, for a bottom with
+shear such as `rock`), and the two-way set is the product of the two legs'.
 
 In the frequency domain the echo's transfer function is H(f) = Σ a_k exp(−i 2π f τ_k) = (1 + μ e^(−i2πfτ))² for the
 triplet, |H|² = 16 sin⁴(π f τ): the Lloyd-mirror ripple of the echo's spectrum, period 1/τ = c r / (2 z_own z_t).
@@ -3799,7 +3813,7 @@ I = cos(theta_0) / (r |dz/dtheta_0| cos(theta_r)), clipped at a caustic.
 is the one at which the direct path's two-way time is the detection's (Newton, dt/dr = p_tx + p_rx); the legs' arrivals
 there give the pattern: delay (t_tx,j - t_tx,0) + (t_rx,k - t_rx,0), amplitude a_tx,j a_rx,k / (a_tx,0 a_rx,0), with
 the surface's coefficient, roughness and bubble loss at each ray's own grazing angle at the surface (Snell:
-cos(g) = p c(0)) and the bottom's Rayleigh coefficient at its angle there. A change of the two-way time within the
+cos(g) = p c(0)) and the bottom's Rayleigh coefficient at its angle there (elastic for rock, Sec. 6.5). A change of the two-way time within the
 search moves each delay by (p_j - p_0) dr, exactly to first order. A depth with no direct or no once-surface-reflected
 path on either leg has no pattern and is not searched.
 
