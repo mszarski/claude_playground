@@ -1,0 +1,2125 @@
+{
+ "what": "docs/tasks/DOPPLER.md, 'Large submerged at 12 km' (issue sonar-qbrg, branch scene12): the large_submerged class at 12 km through both live-chain engines; status ours (simulated records, shared 4-core CPU, one thread, host backend, Bellhop, one seed); class values assumed (configs/builds/targets/reference_classes.yaml)",
+ "commands": {
+  "bank": "PYTHONPATH=python OMP_NUM_THREADS=1 GPUSONAR_BELLHOP=... python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100 --cache CACHE --json bank.json",
+  "bank_first_run_ping_truth": "the same with the defaults --truth-at ping --gate-range-m 60 (closing reported 'not detected': the tool's truth, LS.1 item 7)",
+  "alternate": "python3 tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --max-rate 8 --truth-at reflection --gate-range-m 100 --cache CACHE --json alternate.json",
+  "train_one_ping": "python3 tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --pings 1 --background 0 --max-rate 8 --truth-at reflection --gate-range-m 100 --cache CACHE --json train.json (cut from 6 pings: 58 min a ping to simulate on this CPU)",
+  "planner": "python3 tools/popoto_depth_planner.py --build popoto_face_1x32 --environment shelf_100m_sand --own-depth 9 11 --ts 25 --target-depth 49 51 --range 12000 --no-figure --out PREFIX"
+ },
+ "tone_notch": {
+  "rule": "libs/live/src/doppler.cpp: |v . du| x 0.5 x 0.886 lambda / (L |cos b|) + notch_cells x c / (2 f T); v 1.5 m/s along the array, L = 4.65 m, c = 1496.8 m/s (the record's), notch_cells 3",
+  "half_width_m_s": {
+   "6500_hz": 0.378,
+   "5000_hz": 0.492,
+   "3500_hz": 0.703
+  },
+  "tone_plan_6500_hz_from_the_chain": {
+   "tone": true,
+   "frequency_hz": 6500,
+   "start_s": 0,
+   "duration_s": 1,
+   "window_alpha": 1,
+   "tone_only": true,
+   "step_m_s": 0.05757017182,
+   "resolution_m_s": 0.1151403436,
+   "hypotheses": 313,
+   "per_beam": 279,
+   "hop_s": 0.25,
+   "guard": 4,
+   "train": 32,
+   "budget": 0.001,
+   "baseband_max_range_rate_m_s": 12.14730625,
+   "gate_range_m": 374.2061168,
+   "gate_bearing_rad": 0.03490658504,
+   "range_sigma_m": 187.1030584
+  }
+ },
+ "planner": {
+  "own_depth_m": 10,
+  "target_depth_m": [
+   49,
+   51
+  ],
+  "ts_db": 25,
+  "margin_db": 13.491902490483314,
+  "needed_db": 15.770873754660299,
+  "margin_noise_only_db_at_best_own_depth": 14.647760380400321,
+  "margin_db_at_best_own_depth": 14.026728814814449
+ },
+ "bank": {
+  "scene": "popoto_12km_large_submerged",
+  "pings": 6,
+  "channels": 32,
+  "max_range_rate_m_s": 8.0,
+  "combine": "cfar",
+  "truth_at": "reflection",
+  "gate_range_m": 100.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 20.75785220366932,
+         "threshold_db": 13.0648,
+         "margin_db": 7.693052203669319,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.610369041141093
+        },
+        {
+         "snr_db": 20.801291087327918,
+         "threshold_db": 13.0648,
+         "margin_db": 7.736491087327918,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148
+        },
+        {
+         "snr_db": 20.164142225819532,
+         "threshold_db": 13.0648,
+         "margin_db": 7.099342225819532,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.60327343046251
+        },
+        {
+         "snr_db": 21.63529118314038,
+         "threshold_db": 13.0648,
+         "margin_db": 8.570491183140382,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383
+        },
+        {
+         "snr_db": 21.87230495438147,
+         "threshold_db": 13.0648,
+         "margin_db": 8.80750495438147,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.5957700876048
+        },
+        {
+         "snr_db": 21.038450591917478,
+         "threshold_db": 13.0648,
+         "margin_db": 7.973650591917478,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 21.649328103098146,
+         "threshold_db": 13.0648,
+         "margin_db": 8.584528103098146,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49986986560773805
+        },
+        {
+         "snr_db": 21.19366351208474,
+         "threshold_db": 13.0648,
+         "margin_db": 8.12886351208474,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233
+        },
+        {
+         "snr_db": 23.248618306605657,
+         "threshold_db": 13.0648,
+         "margin_db": 10.183818306605657,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49923593010118095
+        },
+        {
+         "snr_db": 22.424507595099065,
+         "threshold_db": 13.0648,
+         "margin_db": 9.359707595099065,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375
+        },
+        {
+         "snr_db": 23.563269502324626,
+         "threshold_db": 13.0648,
+         "margin_db": 10.498469502324626,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4985988322460772
+        },
+        {
+         "snr_db": 21.603913066239567,
+         "threshold_db": 13.0648,
+         "margin_db": 8.539113066239567,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 25.8389805763288,
+         "threshold_db": 13.0648,
+         "margin_db": 12.774180576328801,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175
+        },
+        {
+         "snr_db": 24.144338257191382,
+         "threshold_db": 13.0648,
+         "margin_db": 11.079538257191382,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556
+        },
+        {
+         "snr_db": 22.149552749468164,
+         "threshold_db": 13.0648,
+         "margin_db": 9.084752749468164,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38696463255502883
+        },
+        {
+         "snr_db": 25.276511663322445,
+         "threshold_db": 13.0648,
+         "margin_db": 12.211711663322445,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584
+        },
+        {
+         "snr_db": 26.63317733739379,
+         "threshold_db": 13.0648,
+         "margin_db": 13.56837733739379,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38595077787149284
+        },
+        {
+         "snr_db": 22.799422522723106,
+         "threshold_db": 13.0648,
+         "margin_db": 9.734622522723106,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      }
+     },
+     "seconds": [
+      1.9568310559989186,
+      1.2685957700014114,
+      1.400737731004483,
+      1.4011091910069808,
+      1.317235291004181,
+      1.2602703309967183
+     ],
+     "seconds_median_after_first": 1.317235291004181,
+     "detections_per_ping": [
+      5,
+      3,
+      3,
+      4,
+      3,
+      3
+     ],
+     "threshold_db": 13.0648,
+     "bank": null
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 22.61288355490307,
+         "threshold_db": 13.8452,
+         "margin_db": 8.767683554903071,
+         "range_rate_m_s": -4.1162672848,
+         "true_range_rate_m_s": -5.610369041141093
+        },
+        {
+         "snr_db": 22.59576937966675,
+         "threshold_db": 13.8452,
+         "margin_db": 8.750569379666748,
+         "range_rate_m_s": -7.1099162192000005,
+         "true_range_rate_m_s": -5.606870358016148
+        },
+        {
+         "snr_db": 22.83668632722691,
+         "threshold_db": 13.8452,
+         "margin_db": 8.99148632722691,
+         "range_rate_m_s": -5.238885635200001,
+         "true_range_rate_m_s": -5.60327343046251
+        },
+        {
+         "snr_db": 21.858699914915498,
+         "threshold_db": 13.8452,
+         "margin_db": 8.013499914915498,
+         "range_rate_m_s": -5.987297868800001,
+         "true_range_rate_m_s": -5.599574611742383
+        },
+        {
+         "snr_db": 22.86414285693811,
+         "threshold_db": 13.8452,
+         "margin_db": 9.018942856938109,
+         "range_rate_m_s": 2.2452367008000005,
+         "true_range_rate_m_s": -5.5957700876048
+        },
+        {
+         "snr_db": 23.0129365194693,
+         "threshold_db": 13.8452,
+         "margin_db": 9.1677365194693,
+         "range_rate_m_s": -5.238885635200001,
+         "true_range_rate_m_s": -5.591855867162396
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 23.76310588257336,
+         "threshold_db": 13.8452,
+         "margin_db": 9.91790588257336,
+         "range_rate_m_s": -1.4968244672000002,
+         "true_range_rate_m_s": -0.49986986560773805
+        },
+        {
+         "snr_db": 23.76937852830781,
+         "threshold_db": 13.8452,
+         "margin_db": 9.924178528307811,
+         "range_rate_m_s": 4.490473401600001,
+         "true_range_rate_m_s": -0.49955329208874233
+        },
+        {
+         "snr_db": 25.060596316379584,
+         "threshold_db": 13.8452,
+         "margin_db": 11.215396316379584,
+         "range_rate_m_s": -3.3678550512000003,
+         "true_range_rate_m_s": -0.49923593010118095
+        },
+        {
+         "snr_db": 24.273324013605986,
+         "threshold_db": 13.8452,
+         "margin_db": 10.428124013605986,
+         "range_rate_m_s": 4.1162672848,
+         "true_range_rate_m_s": -0.4989177775276375
+        },
+        {
+         "snr_db": 23.966357686034456,
+         "threshold_db": 13.8452,
+         "margin_db": 10.121157686034456,
+         "range_rate_m_s": 7.858328452800001,
+         "true_range_rate_m_s": -0.4985988322460772
+        },
+        {
+         "snr_db": 22.733989361351902,
+         "threshold_db": 13.8452,
+         "margin_db": 8.888789361351902,
+         "range_rate_m_s": -3.3678550512000003,
+         "true_range_rate_m_s": -0.4982790921298506
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 27.767828076175643,
+         "threshold_db": 13.8452,
+         "margin_db": 13.922628076175643,
+         "range_rate_m_s": -1.1226183504000002,
+         "true_range_rate_m_s": -0.38797458544381175
+        },
+        {
+         "snr_db": 25.383170623164336,
+         "threshold_db": 13.8452,
+         "margin_db": 11.537970623164336,
+         "range_rate_m_s": -0.7484122336000001,
+         "true_range_rate_m_s": -0.3874700961068556
+        },
+        {
+         "snr_db": 23.5297341649955,
+         "threshold_db": 13.8452,
+         "margin_db": 9.6845341649955,
+         "range_rate_m_s": -1.4968244672000002,
+         "true_range_rate_m_s": -0.38696463255502883
+        },
+        {
+         "snr_db": 26.839768627366162,
+         "threshold_db": 13.8452,
+         "margin_db": 12.994568627366162,
+         "range_rate_m_s": -1.1226183504000002,
+         "true_range_rate_m_s": -0.38645819355345584
+        },
+        {
+         "snr_db": 27.910669533919354,
+         "threshold_db": 13.8452,
+         "margin_db": 14.065469533919353,
+         "range_rate_m_s": -1.1226183504000002,
+         "true_range_rate_m_s": -0.38595077787149284
+        },
+        {
+         "snr_db": 23.64243609098347,
+         "threshold_db": 13.8452,
+         "margin_db": 9.79723609098347,
+         "range_rate_m_s": -0.7484122336000001,
+         "true_range_rate_m_s": -0.3854423842827756
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "static"
+      }
+     },
+     "seconds": [
+      61.36949093399744,
+      61.13404061899928,
+      61.19551288700313,
+      63.427717116996064,
+      60.73931628900755,
+      62.09736247699766
+     ],
+     "seconds_median_after_first": 61.19551288700313,
+     "detections_per_ping": [
+      4,
+      3,
+      3,
+      4,
+      3,
+      3
+     ],
+     "threshold_db": 13.8452,
+     "bank": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.3742061168,
+      "hypotheses": 51,
+      "per_beam": 45,
+      "first_m_s": -9.35515292,
+      "last_m_s": 9.35515292,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 16.83927526,
+      "combine": "cfar",
+      "budget_divisor": 45
+     }
+    },
+    "summary": {
+     "closing": {
+      "pings_both": 6,
+      "margin_off_db": 7.98008870770935,
+      "margin_on_db": 8.784986425519941,
+      "gross_db": 1.5852977178105896,
+      "net_db": 0.8048977178105895,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "mover",
+      "range_rate_on": [
+       -4.1162672848,
+       -7.1099162192000005,
+       -5.238885635200001,
+       -5.987297868800001,
+       2.2452367008000005,
+       -5.238885635200001
+      ],
+      "true_range_rate": [
+       -5.610369041141093,
+       -5.606870358016148,
+       -5.60327343046251,
+       -5.599574611742383,
+       -5.5957700876048,
+       -5.591855867162396
+      ]
+     },
+     "oblique": {
+      "pings_both": 6,
+      "margin_off_db": 9.215750014241967,
+      "margin_on_db": 10.08259196470885,
+      "gross_db": 1.6472419504668832,
+      "net_db": 0.866841950466883,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "mover",
+      "range_rate_on": [
+       -1.4968244672000002,
+       4.490473401600001,
+       -3.3678550512000003,
+       4.1162672848,
+       7.858328452800001,
+       -3.3678550512000003
+      ],
+      "true_range_rate": [
+       -0.49986986560773805,
+       -0.49955329208874233,
+       -0.49923593010118095,
+       -0.4989177775276375,
+       -0.4985988322460772,
+       -0.4982790921298506
+      ]
+     },
+     "crossing": {
+      "pings_both": 6,
+      "margin_off_db": 11.408863851071281,
+      "margin_on_db": 12.000401186100746,
+      "gross_db": 1.3719373350294628,
+      "net_db": 0.5915373350294626,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "static",
+      "range_rate_on": [
+       -1.1226183504000002,
+       -0.7484122336000001,
+       -1.4968244672000002,
+       -1.1226183504000002,
+       -1.1226183504000002,
+       -0.7484122336000001
+      ],
+      "true_range_rate": [
+       -0.38797458544381175,
+       -0.3874700961068556,
+       -0.38696463255502883,
+       -0.38645819355345584,
+       -0.38595077787149284,
+       -0.3854423842827756
+      ]
+     }
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 20.75785249,
+         "threshold_db": 13.0648,
+         "margin_db": 7.693052490000001,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.610369041141093
+        },
+        {
+         "snr_db": 20.80129162,
+         "threshold_db": 13.0648,
+         "margin_db": 7.736491620000001,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148
+        },
+        {
+         "snr_db": 20.16414223,
+         "threshold_db": 13.0648,
+         "margin_db": 7.0993422299999995,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.60327343046251
+        },
+        {
+         "snr_db": 21.63529169,
+         "threshold_db": 13.0648,
+         "margin_db": 8.570491689999999,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383
+        },
+        {
+         "snr_db": 21.87230495,
+         "threshold_db": 13.0648,
+         "margin_db": 8.80750495,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.5957700876048
+        },
+        {
+         "snr_db": 21.03845059,
+         "threshold_db": 13.0648,
+         "margin_db": 7.97365059,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 21.64932783,
+         "threshold_db": 13.0648,
+         "margin_db": 8.58452783,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49986986560773805
+        },
+        {
+         "snr_db": 21.19366384,
+         "threshold_db": 13.0648,
+         "margin_db": 8.12886384,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233
+        },
+        {
+         "snr_db": 23.2486186,
+         "threshold_db": 13.0648,
+         "margin_db": 10.1838186,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49923593010118095
+        },
+        {
+         "snr_db": 22.4245081,
+         "threshold_db": 13.0648,
+         "margin_db": 9.3597081,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375
+        },
+        {
+         "snr_db": 23.56326892,
+         "threshold_db": 13.0648,
+         "margin_db": 10.498468919999999,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4985988322460772
+        },
+        {
+         "snr_db": 21.60391264,
+         "threshold_db": 13.0648,
+         "margin_db": 8.53911264,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 25.83898058,
+         "threshold_db": 13.0648,
+         "margin_db": 12.774180580000001,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175
+        },
+        {
+         "snr_db": 24.14433927,
+         "threshold_db": 13.0648,
+         "margin_db": 11.07953927,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556
+        },
+        {
+         "snr_db": 22.14955227,
+         "threshold_db": 13.0648,
+         "margin_db": 9.084752270000001,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38696463255502883
+        },
+        {
+         "snr_db": 25.27651134,
+         "threshold_db": 13.0648,
+         "margin_db": 12.211711339999999,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584
+        },
+        {
+         "snr_db": 26.63317694,
+         "threshold_db": 13.0648,
+         "margin_db": 13.568376939999998,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38595077787149284
+        },
+        {
+         "snr_db": 22.79942252,
+         "threshold_db": 13.0648,
+         "margin_db": 9.73462252,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      }
+     },
+     "seconds": [
+      1.0281402810069267,
+      0.9993261350027751,
+      0.996719281989499,
+      1.28897014199174,
+      1.0256089659960708,
+      0.9963684750109678
+     ],
+     "seconds_median_after_first": 0.9993261350027751,
+     "detections_per_ping": [
+      5,
+      3,
+      3,
+      4,
+      3,
+      3
+     ],
+     "threshold_db": 13.0648,
+     "bank": null
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 22.61288355,
+         "threshold_db": 13.8452,
+         "margin_db": 8.76768355,
+         "range_rate_m_s": -4.116267285,
+         "true_range_rate_m_s": -5.610369041141093
+        },
+        {
+         "snr_db": 22.59576938,
+         "threshold_db": 13.8452,
+         "margin_db": 8.75056938,
+         "range_rate_m_s": -7.109916219,
+         "true_range_rate_m_s": -5.606870358016148
+        },
+        {
+         "snr_db": 22.83668633,
+         "threshold_db": 13.8452,
+         "margin_db": 8.991486329999999,
+         "range_rate_m_s": -5.238885635,
+         "true_range_rate_m_s": -5.60327343046251
+        },
+        {
+         "snr_db": 21.85870058,
+         "threshold_db": 13.8452,
+         "margin_db": 8.01350058,
+         "range_rate_m_s": -5.987297869,
+         "true_range_rate_m_s": -5.599574611742383
+        },
+        {
+         "snr_db": 22.8641422,
+         "threshold_db": 13.8452,
+         "margin_db": 9.0189422,
+         "range_rate_m_s": 2.245236701,
+         "true_range_rate_m_s": -5.5957700876048
+        },
+        {
+         "snr_db": 23.01293725,
+         "threshold_db": 13.8452,
+         "margin_db": 9.16773725,
+         "range_rate_m_s": -5.238885635,
+         "true_range_rate_m_s": -5.591855867162396
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 23.76310561,
+         "threshold_db": 13.8452,
+         "margin_db": 9.91790561,
+         "range_rate_m_s": -1.496824467,
+         "true_range_rate_m_s": -0.49986986560773805
+        },
+        {
+         "snr_db": 23.76937853,
+         "threshold_db": 13.8452,
+         "margin_db": 9.92417853,
+         "range_rate_m_s": 4.490473402,
+         "true_range_rate_m_s": -0.49955329208874233
+        },
+        {
+         "snr_db": 25.06059593,
+         "threshold_db": 13.8452,
+         "margin_db": 11.215395930000001,
+         "range_rate_m_s": -3.367855051,
+         "true_range_rate_m_s": -0.49923593010118095
+        },
+        {
+         "snr_db": 24.27332303,
+         "threshold_db": 13.8452,
+         "margin_db": 10.42812303,
+         "range_rate_m_s": 4.116267285,
+         "true_range_rate_m_s": -0.4989177775276375
+        },
+        {
+         "snr_db": 23.96635769,
+         "threshold_db": 13.8452,
+         "margin_db": 10.121157689999999,
+         "range_rate_m_s": 7.858328453,
+         "true_range_rate_m_s": -0.4985988322460772
+        },
+        {
+         "snr_db": 22.73398955,
+         "threshold_db": 13.8452,
+         "margin_db": 8.88878955,
+         "range_rate_m_s": -3.367855051,
+         "true_range_rate_m_s": -0.4982790921298506
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "mover"
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 27.76782808,
+         "threshold_db": 13.8452,
+         "margin_db": 13.92262808,
+         "range_rate_m_s": -1.12261835,
+         "true_range_rate_m_s": -0.38797458544381175
+        },
+        {
+         "snr_db": 25.383171,
+         "threshold_db": 13.8452,
+         "margin_db": 11.537971,
+         "range_rate_m_s": -0.7484122336,
+         "true_range_rate_m_s": -0.3874700961068556
+        },
+        {
+         "snr_db": 23.52973452,
+         "threshold_db": 13.8452,
+         "margin_db": 9.684534520000001,
+         "range_rate_m_s": -1.496824467,
+         "true_range_rate_m_s": -0.38696463255502883
+        },
+        {
+         "snr_db": 26.83976863,
+         "threshold_db": 13.8452,
+         "margin_db": 12.994568629999998,
+         "range_rate_m_s": -1.12261835,
+         "true_range_rate_m_s": -0.38645819355345584
+        },
+        {
+         "snr_db": 27.91066983,
+         "threshold_db": 13.8452,
+         "margin_db": 14.06546983,
+         "range_rate_m_s": -1.12261835,
+         "true_range_rate_m_s": -0.38595077787149284
+        },
+        {
+         "snr_db": 23.64243569,
+         "threshold_db": 13.8452,
+         "margin_db": 9.797235689999999,
+         "range_rate_m_s": -0.7484122336,
+         "true_range_rate_m_s": -0.3854423842827756
+        }
+       ],
+       "detected": 6,
+       "tracked": true,
+       "kind": "static"
+      }
+     },
+     "seconds": [
+      53.57201367401285,
+      52.08269411198853,
+      53.50771912900382,
+      54.1863831429946,
+      55.0291740429966,
+      53.46909659000812
+     ],
+     "seconds_median_after_first": 53.50771912900382,
+     "detections_per_ping": [
+      4,
+      3,
+      3,
+      4,
+      3,
+      3
+     ],
+     "threshold_db": 13.8452,
+     "bank": {
+      "mode": "sweep_bank",
+      "step_m_s": 0.3742061168,
+      "hypotheses": 51,
+      "per_beam": 45,
+      "first_m_s": -9.35515292,
+      "last_m_s": 9.35515292,
+      "velocity_known": true,
+      "baseband_max_range_rate_m_s": 0,
+      "threshold_db": 0,
+      "pedestal_m": 16.83927526,
+      "combine": "cfar",
+      "budget_divisor": 45
+     }
+    },
+    "summary": {
+     "closing": {
+      "pings_both": 6,
+      "margin_off_db": 7.980088928333333,
+      "margin_on_db": 8.784986548333332,
+      "gross_db": 1.5852976199999997,
+      "net_db": 0.8048976199999996,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "mover",
+      "range_rate_on": [
+       -4.116267285,
+       -7.109916219,
+       -5.238885635,
+       -5.987297869,
+       2.245236701,
+       -5.238885635
+      ],
+      "true_range_rate": [
+       -5.610369041141093,
+       -5.606870358016148,
+       -5.60327343046251,
+       -5.599574611742383,
+       -5.5957700876048,
+       -5.591855867162396
+      ]
+     },
+     "oblique": {
+      "pings_both": 6,
+      "margin_off_db": 9.215749988333334,
+      "margin_on_db": 10.082591723333334,
+      "gross_db": 1.6472417350000004,
+      "net_db": 0.8668417350000001,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "mover",
+      "range_rate_on": [
+       -1.496824467,
+       4.490473402,
+       -3.367855051,
+       4.116267285,
+       7.858328453,
+       -3.367855051
+      ],
+      "true_range_rate": [
+       -0.49986986560773805,
+       -0.49955329208874233,
+       -0.49923593010118095,
+       -0.4989177775276375,
+       -0.4985988322460772,
+       -0.4982790921298506
+      ]
+     },
+     "crossing": {
+      "pings_both": 6,
+      "margin_off_db": 11.40886382,
+      "margin_on_db": 12.000401291666664,
+      "gross_db": 1.3719374716666668,
+      "net_db": 0.5915374716666667,
+      "detected_off": 6,
+      "detected_on": 6,
+      "tracked_off": true,
+      "tracked_on": true,
+      "kind_off": "mover",
+      "kind_on": "static",
+      "range_rate_on": [
+       -1.12261835,
+       -0.7484122336,
+       -1.496824467,
+       -1.12261835,
+       -1.12261835,
+       -0.7484122336
+      ],
+      "true_range_rate": [
+       -0.38797458544381175,
+       -0.3874700961068556,
+       -0.38696463255502883,
+       -0.38645819355345584,
+       -0.38595077787149284,
+       -0.3854423842827756
+      ]
+     }
+    }
+   }
+  },
+  "background": {
+   "default": {
+    "off": 0,
+    "on": 0,
+    "pings": 4
+   },
+   "3.0": {
+    "off": 20,
+    "on": 7,
+    "pings": 4
+   }
+  }
+ },
+ "bank_first_run_ping_truth_summary": {
+  "python": {
+   "closing": {
+    "pings_both": 0
+   },
+   "oblique": {
+    "pings_both": 6,
+    "margin_off_db": 9.215750014241967,
+    "margin_on_db": 10.08259196470885,
+    "gross_db": 1.6472419504668832,
+    "net_db": 0.866841950466883,
+    "detected_off": 6,
+    "detected_on": 6,
+    "tracked_off": true,
+    "tracked_on": true,
+    "kind_off": "mover",
+    "kind_on": "mover",
+    "range_rate_on": [
+     -1.4968244672000002,
+     4.490473401600001,
+     -3.3678550512000003,
+     4.1162672848,
+     7.858328452800001,
+     -3.3678550512000003
+    ],
+    "true_range_rate": [
+     -0.4999972222453702,
+     -0.4996808600793278,
+     -0.49936370983678047,
+     -0.49904576940072076,
+     -0.4987270366495194,
+     -0.49840750945693
+    ]
+   },
+   "crossing": {
+    "pings_both": 6,
+    "margin_off_db": 11.408863851071281,
+    "margin_on_db": 12.000401186100746,
+    "gross_db": 1.3719373350294628,
+    "net_db": 0.5915373350294626,
+    "detected_off": 6,
+    "detected_on": 6,
+    "tracked_off": true,
+    "tracked_on": true,
+    "kind_off": "mover",
+    "kind_on": "static",
+    "range_rate_on": [
+     -1.1226183504000002,
+     -0.7484122336000001,
+     -1.4968244672000002,
+     -1.1226183504000002,
+     -1.1226183504000002,
+     -0.7484122336000001
+    ],
+    "true_range_rate": [
+     -0.3881776043745615,
+     -0.38767337639367283,
+     -0.38716817436169687,
+     -0.3866619970424222,
+     -0.3861548432038601,
+     -0.38564671161829195
+    ]
+   }
+  },
+  "cpp": {
+   "closing": {
+    "pings_both": 0
+   },
+   "oblique": {
+    "pings_both": 6,
+    "margin_off_db": 9.215749988333334,
+    "margin_on_db": 10.082591723333334,
+    "gross_db": 1.6472417350000004,
+    "net_db": 0.8668417350000001,
+    "detected_off": 6,
+    "detected_on": 6,
+    "tracked_off": true,
+    "tracked_on": true,
+    "kind_off": "mover",
+    "kind_on": "mover",
+    "range_rate_on": [
+     -1.496824467,
+     4.490473402,
+     -3.367855051,
+     4.116267285,
+     7.858328453,
+     -3.367855051
+    ],
+    "true_range_rate": [
+     -0.4999972222453702,
+     -0.4996808600793278,
+     -0.49936370983678047,
+     -0.49904576940072076,
+     -0.4987270366495194,
+     -0.49840750945693
+    ]
+   },
+   "crossing": {
+    "pings_both": 6,
+    "margin_off_db": 11.40886382,
+    "margin_on_db": 12.000401291666664,
+    "gross_db": 1.3719374716666668,
+    "net_db": 0.5915374716666667,
+    "detected_off": 6,
+    "detected_on": 6,
+    "tracked_off": true,
+    "tracked_on": true,
+    "kind_off": "mover",
+    "kind_on": "static",
+    "range_rate_on": [
+     -1.12261835,
+     -0.7484122336,
+     -1.496824467,
+     -1.12261835,
+     -1.12261835,
+     -0.7484122336
+    ],
+    "true_range_rate": [
+     -0.3881776043745615,
+     -0.38767337639367283,
+     -0.38716817436169687,
+     -0.3866619970424222,
+     -0.3861548432038601,
+     -0.38564671161829195
+    ]
+   }
+  }
+ },
+ "alternate": {
+  "scene": "popoto_12km_large_submerged",
+  "alternate_hz": 6500.0,
+  "tone_energy_db": 196.71971276399756,
+  "pings": 6,
+  "channels": 32,
+  "tone": {
+   "tone": "bank"
+  },
+  "max_range_rate_m_s": 8.0,
+  "truth_at": "reflection",
+  "gate_range_m": 100.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 20.801291087327918,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148,
+         "range_error_m": -45.87584510549459,
+         "tone": null
+        },
+        {
+         "snr_db": 21.63529118314038,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383,
+         "range_error_m": -65.45127731175307,
+         "tone": null
+        },
+        {
+         "snr_db": 21.038450591917478,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396,
+         "range_error_m": -65.57316768128112,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 17.53027479599924
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 21.19366351208474,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233,
+         "range_error_m": -12.867749846267543,
+         "tone": null
+        },
+        {
+         "snr_db": 22.424507595099065,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375,
+         "range_error_m": -13.004793871295988,
+         "tone": null
+        },
+        {
+         "snr_db": 21.603913066239567,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506,
+         "range_error_m": -13.167177519089819,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 20.825401510986495
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.144338257191382,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556,
+         "range_error_m": 1.7506944062151888,
+         "tone": null
+        },
+        {
+         "snr_db": 25.276511663322445,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584,
+         "range_error_m": 1.3978966446320555,
+         "tone": null
+        },
+        {
+         "snr_db": 22.799422522723106,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756,
+         "range_error_m": 1.7547682867061667,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 26.390460631038568
+      }
+     },
+     "seconds": [
+      2.3073437199927866,
+      1.672191372999805,
+      1.58813993500371
+     ],
+     "seconds_median_after_first": 1.6301656540017575,
+     "detections_per_ping": [
+      3,
+      4,
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 40.8468894196112,
+         "path": "tone",
+         "range_rate_m_s": -5.601793422506825,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": 68.02524640910997,
+         "tone": {
+          "snr_db": 40.8468894196112,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 25.760112483290797,
+          "range_rate": -5.601793422506825,
+          "range_error_m": 68.02524640910997
+         }
+        },
+        {
+         "snr_db": 20.801291087327918,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148,
+         "range_error_m": -45.87584510549459,
+         "tone": null
+        },
+        {
+         "snr_db": 39.11316089812624,
+         "path": "tone",
+         "range_rate_m_s": -5.5821774902250905,
+         "true_range_rate_m_s": -5.60327343046251,
+         "range_error_m": 28.097051330285467,
+         "tone": {
+          "snr_db": 39.11316089812624,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 24.026383961805834,
+          "range_rate": -5.5821774902250905,
+          "range_error_m": 28.097051330285467
+         }
+        },
+        {
+         "snr_db": 21.63529118314038,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383,
+         "range_error_m": -65.45127731175307,
+         "tone": null
+        },
+        {
+         "snr_db": 32.576506901237885,
+         "path": "tone",
+         "range_rate_m_s": -5.594561954842749,
+         "true_range_rate_m_s": -5.5957700876048,
+         "range_error_m": 39.29806839505363,
+         "tone": {
+          "snr_db": 32.576506901237885,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 17.48972996491748,
+          "range_rate": -5.594561954842749,
+          "range_error_m": 39.29806839505363
+         }
+        },
+        {
+         "snr_db": 21.038450591917478,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396,
+         "range_error_m": -65.57316768128112,
+         "tone": null
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 33.646576282163394
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 29.331121628688717,
+         "path": "tone",
+         "range_rate_m_s": -0.5371543935900742,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": 214.13557739944008,
+         "tone": {
+          "snr_db": 29.331121628688717,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 14.244344692368312,
+          "range_rate": -0.5371543935900742,
+          "range_error_m": 214.13557739944008
+         }
+        },
+        {
+         "snr_db": 21.19366351208474,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233,
+         "range_error_m": -12.867749846267543,
+         "tone": null
+        },
+        {
+         "snr_db": 38.32807468598793,
+         "path": "tone",
+         "range_rate_m_s": -0.47698142997537496,
+         "true_range_rate_m_s": -0.49923593010118095,
+         "range_error_m": 75.6698436405477,
+         "tone": {
+          "snr_db": 38.32807468598793,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 23.241297749667524,
+          "range_rate": -0.47698142997537496,
+          "range_error_m": 75.6698436405477
+         }
+        },
+        {
+         "snr_db": 22.424507595099065,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375,
+         "range_error_m": -13.004793871295988,
+         "tone": null
+        },
+        {
+         "snr_db": 44.403439337632086,
+         "path": "tone",
+         "range_rate_m_s": -0.505448782973224,
+         "true_range_rate_m_s": -0.4985988322460772,
+         "range_error_m": 38.92991344557777,
+         "tone": {
+          "snr_db": 44.403439337632086,
+          "threshold_db": 15.086776936320405,
+          "margin_db": 29.31666240131168,
+          "range_rate": -0.505448782973224,
+          "range_error_m": 38.92991344557777
+         }
+        },
+        {
+         "snr_db": 21.603913066239567,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506,
+         "range_error_m": -13.167177519089819,
+         "tone": null
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "static",
+       "track_error_m": 20.260001174081616
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.086776936320405
+         }
+        },
+        {
+         "snr_db": 24.144338257191382,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556,
+         "range_error_m": 1.7506944062151888,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38696463255502883,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.086776936320405
+         }
+        },
+        {
+         "snr_db": 25.276511663322445,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584,
+         "range_error_m": 1.3978966446320555,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38595077787149284,
+         "range_error_m": null,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.086776936320405
+         }
+        },
+        {
+         "snr_db": 22.799422522723106,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756,
+         "range_error_m": 1.7547682867061667,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 26.390460631038497
+      }
+     },
+     "seconds": [
+      1.631246631994145,
+      1.7195215539977653,
+      1.380050122999819,
+      1.5875318020116538,
+      1.5611030080035562,
+      1.7575287490035407
+     ],
+     "seconds_median_after_first": 1.5875318020116538,
+     "detections_per_ping": [
+      7,
+      3,
+      6,
+      4,
+      5,
+      3
+     ]
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 20.80129162,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148,
+         "range_error_m": -45.87584510549459,
+         "tone": null
+        },
+        {
+         "snr_db": 21.63529169,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383,
+         "range_error_m": -65.45127731175307,
+         "tone": null
+        },
+        {
+         "snr_db": 21.03845059,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396,
+         "range_error_m": -65.57316768128112,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 17.53027584243648
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 21.19366384,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233,
+         "range_error_m": -12.867749846267543,
+         "tone": null
+        },
+        {
+         "snr_db": 22.4245081,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375,
+         "range_error_m": -13.004793871295988,
+         "tone": null
+        },
+        {
+         "snr_db": 21.60391264,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506,
+         "range_error_m": -13.167177519089819,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 20.825400245288996
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.14433927,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556,
+         "range_error_m": 1.7506944062151888,
+         "tone": null
+        },
+        {
+         "snr_db": 25.27651134,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584,
+         "range_error_m": 1.3978966446320555,
+         "tone": null
+        },
+        {
+         "snr_db": 22.79942252,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756,
+         "range_error_m": 1.7547682867061667,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 26.390461643584132
+      }
+     },
+     "seconds": [
+      1.4759285670006648,
+      1.4323088060045848,
+      1.2884448190015974
+     ],
+     "seconds_median_after_first": 1.360376812503091,
+     "detections_per_ping": [
+      3,
+      4,
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 40.84688942,
+         "path": "tone",
+         "range_rate_m_s": -5.601793423,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": 68.02525004758718,
+         "tone": null
+        },
+        {
+         "snr_db": 20.80129162,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.606870358016148,
+         "range_error_m": -45.87584510549459,
+         "tone": null
+        },
+        {
+         "snr_db": 39.1131609,
+         "path": "tone",
+         "range_rate_m_s": -5.58217749,
+         "true_range_rate_m_s": -5.60327343046251,
+         "range_error_m": 28.097051295086203,
+         "tone": null
+        },
+        {
+         "snr_db": 21.63529169,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.599574611742383,
+         "range_error_m": -65.45127731175307,
+         "tone": null
+        },
+        {
+         "snr_db": 32.5765069,
+         "path": "tone",
+         "range_rate_m_s": -5.594561955,
+         "true_range_rate_m_s": -5.5957700876048,
+         "range_error_m": 39.29806881508921,
+         "tone": null
+        },
+        {
+         "snr_db": 21.03845059,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.591855867162396,
+         "range_error_m": -65.57316768128112,
+         "tone": null
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 33.6465788642342
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 29.33112163,
+         "path": "tone",
+         "range_rate_m_s": -0.5371543936,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": 214.13557914627017,
+         "tone": null
+        },
+        {
+         "snr_db": 21.19366384,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49955329208874233,
+         "range_error_m": -12.867749846267543,
+         "tone": null
+        },
+        {
+         "snr_db": 38.32807469,
+         "path": "tone",
+         "range_rate_m_s": -0.47698143,
+         "true_range_rate_m_s": -0.49923593010118095,
+         "range_error_m": 75.66984771580428,
+         "tone": null
+        },
+        {
+         "snr_db": 22.4245081,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4989177775276375,
+         "range_error_m": -13.004793871295988,
+         "tone": null
+        },
+        {
+         "snr_db": 44.40343934,
+         "path": "tone",
+         "range_rate_m_s": -0.505448783,
+         "true_range_rate_m_s": -0.4985988322460772,
+         "range_error_m": 38.929909646480155,
+         "tone": null
+        },
+        {
+         "snr_db": 21.60391264,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.4982790921298506,
+         "range_error_m": -13.167177519089819,
+         "tone": null
+        }
+       ],
+       "detected": 6,
+       "paths": [
+        "sweep",
+        "tone"
+       ],
+       "tracked": true,
+       "kind": "static",
+       "track_error_m": 20.26000304655674
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 24.14433927,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3874700961068556,
+         "range_error_m": 1.7506944062151888,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38696463255502883,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 25.27651134,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38645819355345584,
+         "range_error_m": 1.3978966446320555,
+         "tone": null
+        },
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38595077787149284,
+         "range_error_m": null,
+         "tone": null
+        },
+        {
+         "snr_db": 22.79942252,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.3854423842827756,
+         "range_error_m": 1.7547682867061667,
+         "tone": null
+        }
+       ],
+       "detected": 3,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": true,
+       "kind": "uncertain",
+       "track_error_m": 26.390461643584132
+      }
+     },
+     "seconds": [
+      1.4801731879997533,
+      1.2319325270073023,
+      1.4236576889961725,
+      1.4606959150114562,
+      1.3676470009959303,
+      1.23906071500096
+     ],
+     "seconds_median_after_first": 1.3676470009959303,
+     "detections_per_ping": [
+      7,
+      3,
+      6,
+      4,
+      5,
+      3
+     ]
+    }
+   }
+  },
+  "background": {},
+  "engines_equal_on": true
+ },
+ "train_one_ping": {
+  "scene": "popoto_12km_large_submerged_tone",
+  "alternate_hz": null,
+  "tone_energy_db": null,
+  "pings": 1,
+  "channels": 32,
+  "tone": {
+   "tone": "bank",
+   "tone_frequency_hz": 6500.0,
+   "tone_start_s": 0.0,
+   "tone_duration_s": 1.0,
+   "tone_window_alpha": 1.0
+  },
+  "max_range_rate_m_s": 8.0,
+  "truth_at": "reflection",
+  "gate_range_m": 100.0,
+  "engines": {
+   "python": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 17.847505885712934,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": -46.71921995241246,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.494287327307802,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": 1.2370178492001287,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds": [
+      2.004175316003966
+     ],
+     "seconds_median_after_first": 2.004175316003966,
+     "detections_per_ping": [
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 18.45812258759308,
+         "path": "both",
+         "range_rate_m_s": -5.59758967673077,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": -46.91921995241319,
+         "tone": {
+          "snr_db": 39.71081690848225,
+          "threshold_db": 15.223053819971245,
+          "margin_db": 24.487763088511006,
+          "range_rate": -5.59758967673077,
+          "range_error_m": 71.22218970494578
+         }
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "both"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 20.10197193731898,
+         "path": "both",
+         "range_rate_m_s": -0.5506950553526485,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": -13.458690853729422,
+         "tone": {
+          "snr_db": 23.753721319361784,
+          "threshold_db": 15.223053819971245,
+          "margin_db": 8.530667499390539,
+          "range_rate": -0.5506950553526485,
+          "range_error_m": 184.32970915820806
+         }
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "both"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.961520563468994,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": 1.037017849199401,
+         "tone": {
+          "snr_db": null,
+          "threshold_db": 15.223053819971245
+         }
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds": [
+      3.219702852991759
+     ],
+     "seconds_median_after_first": 3.219702852991759,
+     "detections_per_ping": [
+      9
+     ],
+     "tone_plan": {
+      "tone": true,
+      "frequency_hz": 6500,
+      "start_s": 0,
+      "duration_s": 1,
+      "window_alpha": 1,
+      "tone_only": false,
+      "step_m_s": 0.05757017182,
+      "resolution_m_s": 0.1151403436,
+      "hypotheses": 313,
+      "per_beam": 279,
+      "hop_s": 0.25,
+      "guard": 4,
+      "train": 32,
+      "budget": 0.001,
+      "baseband_max_range_rate_m_s": 0,
+      "gate_range_m": 374.2061168,
+      "gate_bearing_rad": 0.03490658504,
+      "range_sigma_m": 187.1030584
+     },
+     "tone_factor_db": 15.223053819971245
+    }
+   },
+   "cpp": {
+    "off": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 17.84750589,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": -46.71921995241246,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": null,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": null,
+         "tone": null
+        }
+       ],
+       "detected": 0,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.49428697,
+         "path": null,
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": 1.2370178492001287,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds": [
+      1.3332825749967014
+     ],
+     "seconds_median_after_first": 1.3332825749967014,
+     "detections_per_ping": [
+      3
+     ]
+    },
+    "on": {
+     "targets": {
+      "closing": {
+       "pings": [
+        {
+         "snr_db": 18.45812259,
+         "path": "both",
+         "range_rate_m_s": -5.597589677,
+         "true_range_rate_m_s": -5.610369041141093,
+         "range_error_m": -46.91921995241319,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "both"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "oblique": {
+       "pings": [
+        {
+         "snr_db": 20.10197194,
+         "path": "both",
+         "range_rate_m_s": -0.5506950554,
+         "true_range_rate_m_s": -0.49986986560773805,
+         "range_error_m": -13.458690853729422,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "both"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      },
+      "crossing": {
+       "pings": [
+        {
+         "snr_db": 24.96152095,
+         "path": "sweep",
+         "range_rate_m_s": null,
+         "true_range_rate_m_s": -0.38797458544381175,
+         "range_error_m": 1.037017849199401,
+         "tone": null
+        }
+       ],
+       "detected": 1,
+       "paths": [
+        "sweep"
+       ],
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
+      }
+     },
+     "seconds": [
+      2.970732683010283
+     ],
+     "seconds_median_after_first": 2.970732683010283,
+     "detections_per_ping": [
+      9
+     ]
+    }
+   }
+  },
+  "background": {},
+  "engines_equal_on": true
+ },
+ "tone_false_detections_beyond_32_deg": {
+  "alternate_tone_pings_0_2_4": [
+   5,
+   4,
+   3
+  ],
+  "train_ping_0": 4,
+  "bearings_deg": [
+   31.95,
+   40.0
+  ],
+  "snr_db": [
+   15.8,
+   28.7
+  ],
+  "rates_m_s": [
+   1.1,
+   1.6
+  ],
+  "cause": "grating lobe near endfire at 6.5 kHz on the 0.15 m pitch (LS.1 item 0)"
+ }
+}

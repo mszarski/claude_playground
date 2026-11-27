@@ -4,8 +4,8 @@ its path (sweep, tone, both), range rate and range error, its track, the tone's 
 scene's background, and the cost a ping.
 
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
-                               [--alternate HZ] [--cache DIR] [--json FILE] [--backend host|cuda|auto] [--sim-backend host|cuda]
-                               [--set KEY=VALUE ...]
+                               [--alternate HZ] [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
+                               [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -37,6 +37,8 @@ written after each engine and after the background (a run stopped by a time limi
 both backends. `--set KEY=VALUE` changes the scene before anything runs (KEY dotted into the scenario, VALUE read as
 YAML), for a check of the plumbing on a CPU, e.g. `--set fidelity=free_field --set "reverberation=[]"`: not a measurement
 of the scene; the result lists the changes and the cache's file names carry them.
+`--truth-at` and `--gate-range-m`: as tools/doppler_bank_eval.py's (the truth at the pulse's reflection time; the sweep
+detection's range gate).
 """
 from __future__ import annotations
 
@@ -230,9 +232,12 @@ def main(argv=None) -> int:
     ap.add_argument("--backend", default="host", choices=["host", "cuda", "auto"], help="the chain's backend (default host)")
     ap.add_argument("--sim-backend", default="host", choices=["host", "cuda"], help="the simulator's backend (default host)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene (a plumbing check, not a measurement)")
+    ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
+    ap.add_argument("--gate-range-m", type=float, default=60.0)
     a = ap.parse_args(argv)
-    global CACHE, BACKEND, SIM_BACKEND
+    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M
     CACHE, BACKEND, SIM_BACKEND = a.cache, a.backend, a.sim_backend
+    GATE_RANGE_M = a.gate_range_m
     cfg = apply_sets(load_scenario_config(a.scene, expand=False), a.set)
     t0 = time.time()
     energy = None
@@ -244,11 +249,12 @@ def main(argv=None) -> int:
             cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
         records, tone, eval_cfg = simulate(cfg), tone_keys(cfg), cfg
     say(f"{a.scene}: {len(records)} pings simulated in {time.time() - t0:.0f} s, {records[0].samples.n_channels} channels; tone {tone}")
-    truths = truth(eval_cfg, len(records))
     c = float(records[0].environment.sound_speed)
+    truths = truth(eval_cfg, len(records), c if a.truth_at == "reflection" else None)
     tone_gate = 0.25 * c * float(tone.get("tone_duration_s") or records[0].transmit.waveform.duration)
     result = {"scene": a.scene, "alternate_hz": a.alternate, "tone_energy_db": energy, "pings": len(records),
-              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "engines": {}, "background": {},
+              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "truth_at": a.truth_at,
+              "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {},
               "backend": a.backend, "sim_backend": a.sim_backend, "simulated_s": round(time.time() - t0, 1), "set": a.set}
 
     def store():

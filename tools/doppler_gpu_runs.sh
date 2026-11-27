@@ -13,6 +13,10 @@
 #   timing      tools/live_chain_timing.py: a ping's cost with the sweep bank off, max and cfar (the Popoto trial pings,
 #               1 and 3 rows; flank_patrol, popoto_far_mover, popoto_12km) and with the tone path (popoto_12km_doppler;
 #               flank_patrol_doppler_tone when the tone run left its records in the cache) -> timing_*.json
+#   ls12        (only when named) the large submerged class at 12 km: tools/doppler_tone_eval.py on
+#               popoto_12km_large_submerged_tone (tone then sweep in one ping) and on popoto_12km_large_submerged with
+#               alternating pings (12) -> ls12_tone_train.json, ls12_tone_alternate12.json
+#               (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 80m; GPUSONAR_DOPPLER_LS12_ARGS appended)
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
 #   GPUSONAR_DOPPLER_QUICK=1       small sizes, to check the plumbing on a CPU: the tone run on popoto_12km_doppler
@@ -127,6 +131,27 @@ if [[ $runs == *,timing,* ]]; then
   export -f timing
   export py out be cache trial_args scenes scene_args engines quick
   run timing "${GPUSONAR_DOPPLER_TIMEOUT_TIMING:-40m}" bash -c timing
+  upload
+fi
+if [[ $runs == *,ls12,* ]]; then
+  # Not in the default runs: the large submerged class at 12 km (DOPPLER.md "Large submerged at 12 km"): the tone above
+  # the band then the sweep in one ping, and alternating tone and sweep pings on the sweep-only scene. 58 minutes a
+  # ping to simulate on a CPU.
+  ls12() {
+    local rc=0
+    set -f
+    # shellcheck disable=SC2086
+    "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 \
+        --background 4 --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/ls12_tone_train.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
+    # shellcheck disable=SC2086
+    "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --pings 12 --max-rate 8 --truth-at reflection \
+        --gate-range-m 100 --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/ls12_tone_alternate12.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
+    set +f
+    return "$rc"
+  }
+  export -f ls12
+  export py out be cache
+  run ls12 "${GPUSONAR_DOPPLER_TIMEOUT_LS12:-80m}" bash -c ls12
   upload
 fi
 exit "$status"

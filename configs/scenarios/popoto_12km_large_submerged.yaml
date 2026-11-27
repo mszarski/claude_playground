@@ -1,0 +1,61 @@
+# popoto_12km's water, array, platform, pings, reverberation, noise and seed with the class the owner set the 12 km
+# requirement for first (2026-11-26: "Large submerged mostly but also Large Ship is what we care about"; D-235):
+# three `large_submerged` targets near 12 km in place of the ship, at three radial speeds against the own-motion
+# ridge of their beams (docs/tasks/DOPPLER.md, "Large submerged at 12 km"). The shipped sweep only (4-6 kHz, 1 s,
+# 197 dB). The tone above the band: popoto_12km_large_submerged_tone; alternating tone and sweep pings: this file with
+# tools/doppler_tone_eval.py --alternate.
+#
+# The class's values (configs/builds/targets/reference_classes.yaml, status ASSUMED; nothing here is measured):
+#   - target strength at its LOW end, +25 dB, built as popoto_12km's ship is: five highlights of +18.01 dB, 25 m apart
+#     along the hull's axis (100 m, the class's illustrative length), 18.01 + 10 log10(5) = +25.00 dB in all (the ship
+#     writes 18.0: 24.99). The low end stands in for off-broadside aspects; `crossing` is seen near broadside, where
+#     the class states up to +41.5 dB (the bare cylinder's lobe is a fraction of a degree wide); the file keeps the
+#     low end for all three.
+#   - depth 50 m: inside the class's 30 to 300 m (the water is 100 m deep).
+#   - speeds 6, 2 and 2 m/s: inside the class's 2 to 8 m/s.
+# The three (ownship 1.5 m/s along x; bearing from broadside, positive toward +x; range rate positive opening):
+#   - closing:  -15 degrees, 12.2 km, 6 m/s straight at the array (bow-on): range rate -5.61 m/s, its beam's ridge
+#               +0.39 m/s: 6.0 m/s from the ridge, clear of any notch.
+#   - oblique:    0 degrees, 12.0 km, 2 m/s at 75.5 degrees to the line of sight: 0.50 m/s closing over ground, range
+#               rate -0.50 m/s, ridge 0: 0.50 m/s from the ridge (popoto_12km's ship is 0.40 m/s from its ridge).
+#   - crossing: +15 degrees, 12.0 km, 2 m/s across the line of sight: range rate -0.39 m/s ON its beam's ridge.
+# Like popoto_12km: needs GPUSONAR_BELLHOP; the eigenrays reflect from a flat surface; no Doppler spread of the sea
+# surface (DOPPLER.md section 0 item 1).
+name: popoto_12km_large_submerged
+sonar: popoto_long_range
+fidelity: eigenray
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
+environment: {base: shelf_100m_sand_12c, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  max_range: 13200.0
+  range_step: 40.0
+  depth_step: 2.0
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 19.9}
+scene:
+  - type: points
+    label: closing
+    positions: [[-3170.5, 11832.6, 50.0], [-3164.1, 11808.4, 50.0], [-3157.6, 11784.3, 50.0], [-3151.1, 11760.1, 50.0], [-3144.7, 11736.0, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.5529, -5.7956, 0.0]
+  - type: points
+    label: oblique
+    positions: [[-48.4, 12012.5, 50.0], [-24.2, 12006.2, 50.0], [0.0, 12000.0, 50.0], [24.2, 11993.8, 50.0], [48.4, 11987.5, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.9365, -0.5, 0.0]
+  - type: points
+    label: crossing
+    positions: [[3057.5, 11604.1, 50.0], [3081.7, 11597.6, 50.0], [3105.8, 11591.1, 50.0], [3130.0, 11584.6, 50.0], [3154.1, 11578.2, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.9319, -0.5176, 0.0]
+reverberation:
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 51
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as in popoto_12km"
