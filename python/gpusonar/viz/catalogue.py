@@ -40,6 +40,7 @@ FAMILIES = [
         "popoto_trial_100m", "popoto_trial_1000m", "popoto_trial_2000m", "popoto_far_mover", "popoto_far_mover_doppler")),
     ("The 12 km design", "design_12km", (
         "popoto_12km", "popoto_12km_2row", "popoto_12km_3row", "popoto_12km_doppler", "popoto_12km_two_ships",
+        "popoto_12km_large_submerged", "popoto_12km_large_submerged_tone",
         "popoto_env_winter_sand_200m", "popoto_env_summer_mud_60m", "popoto_env_gravel_30m",
         "popoto_env_deep_silt_1000m")),
     ("Stacked rows", "rows", (
