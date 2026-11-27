@@ -206,6 +206,30 @@ def test_fls_170k_separates_closing_crossing_and_anchored_boats():
     assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 2.5
 
 
+def test_fls_170k_false_movers_stay_rare_over_seeds():
+    """A guard on the rate, not one draw (sonar-4pon). The full-size gallery's one false mover on this scene (D-251's
+    regeneration; 0 before) is a track on the crossing boat's still wake: the wake is many fixed bubble highlights,
+    and a track that takes one cluster on some pings and another 5 to 20 m along the wake on others fits a line at 1 to
+    4 m/s, just past the mover rule's significance (1.1 to 3.1 times its need). Measured at full size on a CPU, seeds
+    63 to 70: 5 such false movers in 8 runs with the per-frequency reverberation Doppler, 3 in 8 with `doppler:
+    centre`, no seed lower under the new law and two higher; every one on the wake. So the rate was not zero before
+    and is not shown to have changed; one run shows a draw.
+    This thinned four-ping form, seeds 63 to 70 (CPU, both laws alike on every seed): 1 false mover in 8 runs (seed 64:
+    the anchored boat a mover), none on the other seeds. Held here over the first three (measured: 1) at two, and the
+    closing boat a mover on each (it is on all eight)."""
+    total = 0
+    for k in range(3):
+        cfg = load_scenario_config("fls_170k_traffic")
+        gallery.QUICK["fls_170k_traffic"](cfg)
+        cfg["seed"] = int(cfg["seed"]) + k
+        fig, m = gallery.RUNNERS["fls_170k_traffic"]("fls_170k_traffic", cfg, HOST, True)[:2]
+        gallery.plt.close(fig)
+        c = m["classification"]
+        assert c["targets"]["boat_closing"]["kind"] == "mover", k
+        total += c["movers_not_on_a_moving_object"]
+    assert total <= 2
+
+
 def test_merging_fls_detections_as_the_chain_does_holds_the_anchored_boat_still(monkeypatch):
     """The fix proposed for the swap above, behind `gallery.FLS_MERGE`: flagged cells within the tracker's range sigma
     (1.5 m: three 0.48 m cells and the next) and half the beam's half-power width (0.73 degrees, from the chain's own
