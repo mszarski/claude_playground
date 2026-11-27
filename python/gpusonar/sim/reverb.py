@@ -29,7 +29,11 @@ the transmit pattern and the pattern of the first receive element weight each az
 sector and each path, at the path's own elevation at the sonar (its launch direction, not
 its grazing angle at the boundary); each sector is shifted by the Doppler of the receive
 platform's horizontal velocity towards the sector's azimuth, two-way, as if every path
-were horizontal (no elevation factor, no vertical velocity); the arrival elevation is
+were horizontal (no elevation factor, no vertical velocity), as ONE frequency shift of the
+whole sector at the record's centre frequency fc (`doppler="centre"`, the default: right at
+fc only; a line at f should move by 2 (v . u) f / c, TR 0702 eqs. (63)-(64), so on a wide
+pulse the band's edges are off by (f - fc) / fc of the shift; `doppler="per_frequency"`
+time-scales each sector's pulse instead, see `scaled_pulse`); the arrival elevation is
 ignored when steering to the hydrophones (fine at the low grazing angles of long ranges);
 the boundary is flat and uniform.
 
@@ -252,6 +256,67 @@ BATCHED_ON_HOST = False
 PARALLEL_DRAWS = True
 
 
+# The Doppler of a sector (or component): "centre", one frequency shift of the whole row at the
+# record's centre frequency (the default, as before); "per_frequency", the row's pulse time-scaled
+# by Gamma = 1 + doppler / fc as well, so that every frequency f moves by doppler f / fc.
+DOPPLER_LAWS = ("centre", "per_frequency")
+# Half the taps of the interpolation that time-scales the pulse (libs/sim reverb_kernel.hpp
+# kReverbScaleHalf): a Blackman-windowed sinc of 2 x 8 taps.
+SCALE_HALF_TAPS = 8
+
+
+def scaled_pulse(pulse: np.ndarray, n_low: int, doppler: float, fc: float, fs_low: float) -> np.ndarray:
+    """The pulse of a row whose Doppler is `doppler` (Hz at `fc`), per frequency: n_low samples of
+    q(s) = p(Gamma s) exp(2 pi i doppler s / fs_low),  Gamma = 1 + doppler / fc,
+    s the signed sample (k, or k - n_low past the middle: the pulse is periodic in n_low as its
+    transform is). Its spectrum is P((f - doppler) / Gamma) / Gamma, so the baseband frequency f_b of
+    the pulse (passband fc + f_b) comes out at Gamma f_b + doppler (passband Gamma (fc + f_b)):
+    each frequency shifted by its own doppler (fc + f_b) / fc. The echo of a still scatterer seen
+    from a moving platform is the pulse time-scaled by Gamma (TR 0702 eqs. (63)-(64)); the
+    scatterers' delays are not moved (no range walk, as before). p(Gamma s) is the pulse's own
+    samples interpolated by a Blackman-windowed sinc of 2 SCALE_HALF_TAPS taps (ours). The scaled
+    pulse carries 1 / Gamma of the energy (0.01 dB at 4 m/s, two-way). Mirrors
+    libs/sim reverb_kernel.hpp reverb_scaled_pulse."""
+    p = np.asarray(pulse, dtype=complex)[:n_low]
+    n_taps = len(p)
+    eta = 1.0 + doppler / fc
+    h = SCALE_HALF_TAPS
+    k = np.arange(n_low)
+    s = np.where(2 * k <= n_low, k, k - n_low)
+    x = eta * s
+    j0 = np.floor(x)
+    first = j0.astype(np.int64) - h + 1                      # the taps are first .. first + 2h - 1
+    m = np.mod(first, n_low)
+    lit = (m < n_taps) | (m + 2 * h - 1 >= n_low)            # some tap on the pulse
+    fr, first, m = (x - j0)[lit], first[lit], m[lit]
+    sp = np.sin(np.pi * fr)
+    acc = np.zeros(len(fr), dtype=complex)
+    for t in range(2 * h):
+        i = t - h + 1
+        d = fr - i
+        sinc = np.where(d == 0.0, 1.0, (sp if i % 2 == 0 else -sp) / (np.pi * np.where(d == 0.0, 1.0, d)))
+        a = np.pi * d / h
+        window = 0.42 + 0.5 * np.cos(a) + 0.08 * np.cos(2.0 * a)
+        idx = np.mod(m + t, n_low)
+        acc += np.where(idx < n_taps, sinc * window * p[np.minimum(idx, n_taps - 1)], 0.0)
+    out = np.zeros(n_low, dtype=complex)
+    out[lit] = acc * np.exp(2j * np.pi * doppler * s[lit] / fs_low)
+    return out
+
+
+def check_doppler(doppler) -> str:
+    """A reverberation item's `doppler`: None or one of DOPPLER_LAWS."""
+    law = "centre" if doppler is None else str(doppler)
+    if law not in DOPPLER_LAWS:
+        raise ValueError(f"reverberation doppler: unknown law {doppler!r}; use one of {', '.join(DOPPLER_LAWS)}")
+    return law
+
+
+def cpp_has_per_frequency() -> bool:
+    """True when the built extension's generator takes the per-frequency Doppler."""
+    return bool(getattr(core, "SIM_REVERB_PER_FREQUENCY", False))
+
+
 def taper_pulse(pulse: np.ndarray, n: int) -> np.ndarray:
     """The pulse with its spectrum rolled off to zero at the Nyquist frequency: unchanged
     below half of it, a raised cosine from there up. Returned as `n` samples of one period
@@ -392,7 +457,8 @@ def cpp_has_components() -> bool:
 
 
 def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n, start_time, time0, fc, c,
-                n_azimuth, decim, n_low, velocity, carrier, real, backend, components=None, texture=None):
+                n_azimuth, decim, n_low, velocity, carrier, real, backend, components=None, texture=None,
+                doppler="centre"):
     """The reverberation of every channel in the record's window, [channels, n], by the C++
     generator. The random numbers are drawn here, in the order `_series_numpy` draws them
     (for each sector with power: n_low for the real part, then n_low for the imaginary
@@ -400,7 +466,7 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
 
     With `components` = (direction [rows, 3], doppler [rows]) each row of the density is a
     component with that arrival direction and frequency shift. `texture` (CellTexture)
-    scales each row's deviates."""
+    scales each row's deviates. `doppler` is one of DOPPLER_LAWS."""
     density = np.ascontiguousarray(density[:1] if same_in_azimuth else density, dtype=float)
     coarse = np.ascontiguousarray(coarse, dtype=float)
     extra = {}
@@ -413,6 +479,11 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
         # A sector without power draws nothing (as in `_series_numpy`).
         active = _engine.call("sim_reverb_active", coarse, density, fs, time0, n_azimuth, decim, n_low)
         rows = (np.arange(n_azimuth) if active[0] else np.arange(0)) if len(active) == 1 else np.flatnonzero(active)
+    if check_doppler(doppler) == "per_frequency":
+        if not cpp_has_per_frequency():
+            raise RuntimeError("reverberation doppler: per_frequency: this build of the C++ generator does not have it; "
+                               "rebuild, or use engine='numpy'")
+        extra["per_frequency"] = True
     n_active = len(rows)
     offsets = np.ascontiguousarray(offsets, dtype=float)
     pulse_low = np.ascontiguousarray(pulse_low, dtype=complex)
@@ -455,9 +526,12 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,
-                  n_azimuth, decim, n_low, velocity, carrier, real, components=None, texture=None):
+                  n_azimuth, decim, n_low, velocity, carrier, real, components=None, texture=None, doppler="centre"):
     """The reverberation of every channel in the record's window, [channels, n], in NumPy.
-    `components` and `texture` as in `_series_cpp`."""
+    `components`, `texture` and `doppler` as in `_series_cpp`."""
+    per_frequency = check_doppler(doppler) == "per_frequency"
+    if per_frequency and not fc > 0.0:
+        raise ValueError("reverberation doppler: per_frequency needs a positive centre frequency")
     fs_low = fs / decim
     t_low = times[0] + np.arange(n_low) / fs_low
     dphi = 2.0 * np.pi / n_azimuth
@@ -489,9 +563,13 @@ def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, sta
             doppler = float(components[1][m])
         if doppler != 0.0:
             # Every echo from this azimuth is the pulse shifted in frequency: shift the
-            # scatterer sequence and the pulse together.
+            # scatterer sequence and the pulse together (per frequency: the pulse also
+            # time-scaled, `scaled_pulse`).
             b = b * np.exp(2j * np.pi * doppler * (t_low - t_low[0]))
-            shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
+            if per_frequency:
+                shifted = scaled_pulse(pulse_low, n_low, doppler, fc, fs_low)
+            else:
+                shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
             spectrum = (np.fft.fft(b) * np.fft.fft(shifted, n_low)).astype(np.complex64)
         else:
             spectrum = (np.fft.fft(b) * pulse_spectrum).astype(np.complex64)
@@ -534,7 +612,8 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                       strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None,
                       guard: float = 0.0, band_taper: bool = False, bathymetry=None,
                       scatterer_motion: dict | None = None, shadowing: bool = True,
-                      bottom_bounces: str = "exclude", max_doppler_bins: int = 128) -> np.ndarray:
+                      bottom_bounces: str = "exclude", max_doppler_bins: int = 128,
+                      doppler: str | None = None) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -596,7 +675,16 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     appends two pulse lengths of silence to the generated series to keep what is left of
     the wrap-round out of the record; `guard` (seconds) sets that silence directly. The
     defaults (off, 0) keep earlier results.
+
+    `doppler` is how a moving platform's (and moving scatterers') Doppler enters each sector or
+    component: "centre" (the default, None alike: earlier results bit for bit) shifts the whole
+    row by its Doppler at the record's centre frequency fc, right at fc only; "per_frequency"
+    time-scales the row's pulse by Gamma = 1 + doppler / fc as well (`scaled_pulse`), so that each
+    frequency f moves by its own 2 (v . u) f / c, as the echoes of targets do. It matters on a wide
+    band: on a 4.0-6.6 kHz train a 6.5 kHz tone sees the still boundary at 5.3 / 6.5 = 0.815 of
+    its physical shift under "centre".
     """
+    doppler = check_doppler(doppler)
     if geometry not in ("monostatic", "bistatic"):
         raise ValueError(f"unknown reverberation geometry {geometry!r}: use 'monostatic' or 'bistatic'")
     bistatic = geometry == "bistatic"
@@ -771,6 +859,9 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
             texture = CellTexture(rng, shape, n_low, cell_samples, sectors // per_cell,
                                   start_time=float(times[0]), rate=fs_low)
     chosen = _engine.resolve(engine)
+    if chosen == "cpp" and doppler == "per_frequency" and not cpp_has_per_frequency():
+        raise RuntimeError("reverberation doppler: per_frequency: this build of the C++ generator does not have it; "
+                           "rebuild, or use engine='numpy'")
     if chosen == "cpp" and components is not None and not cpp_has_components():
         warnings.warn("bistatic reverberation: this build of the C++ generator has azimuth sectors only; "
                       "falling back to the NumPy engine", RuntimeWarning, stacklevel=2)
@@ -779,11 +870,12 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     if chosen == "cpp":
         out = _series_cpp(rng, coarse, density, not bistatic and tx_gain is None and rx_gain is None, pulse_low,
                           positions - centre, fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,
-                          record.geometry.rx_pose.velocity, carrier, real, backend, components, texture)
+                          record.geometry.rx_pose.velocity, carrier, real, backend, components, texture,
+                          doppler=doppler)
     else:
         out = _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, s.start_time, times, fc, c,
                             n_azimuth, decim, n_low, record.geometry.rx_pose.velocity, carrier, real,
-                            components, texture)
+                            components, texture, doppler=doppler)
     x = s.array + out.astype(s.array.dtype)
     kind = s.kind
     s.array = x

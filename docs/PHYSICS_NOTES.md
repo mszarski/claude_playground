@@ -1328,7 +1328,7 @@ Established by reading the code and by tests (`tests/python/test_reverb_bistatic
 | Receive element pattern | yes, the first element's, for all | as above, on the return path (reciprocity) |
 | Ray elevation in the patterns | at the platform (launch), not at the boundary | verified with a surface-bounce path that leaves upwards and arrives at the bottom travelling down |
 | Scattering strength angles | grazing angles at the boundary of each leg | backscatter only (no bistatic azimuth) |
-| Receiver motion | Doppler `2 (v_h . u_az) f / c` per sector | horizontal velocity, as if every path were horizontal: no `cos(elevation)`, no vertical velocity |
+| Receiver motion | Doppler per sector: by default **one shift `2 (v_h . u_az) fc / c` at the record's centre frequency for the whole sector (wrong away from fc, 14.7)**; `doppler: per_frequency` gives each frequency its own `2 (v_h . u_az) f / c` | horizontal velocity, as if every path were horizontal: no `cos(elevation)`, no vertical velocity |
 | Transmitter position and velocity | no | one provider call from the array centre serves both legs |
 | Arrival elevation in the steering | no | plane wave from the sector's azimuth in the horizontal plane |
 | Boundary | flat, uniform | |
@@ -1527,6 +1527,53 @@ the same tapered pulse.
 | (103) | arrivals Gaussian in sin(theta), sigma = 0.08, 10 kHz | sigma_d = 0.2984 m | 0.2973 m |
 | replica-correlation gain | LFM, 20 ms, 0.5 / 1 / 2 / 4 kHz | 3.01 dB per octave | 2.73, 3.01, 3.13 dB |
 | K moments | nu = 0.5, 2, 10 | m2 = 6, 3, 2.2 | 6.01, 3.00, 2.19 |
+
+### 14.7 The Doppler of the reverberation is one shift at the centre frequency (a defect found 2026-11-27) [OURS]
+
+**What is wrong (the default, `doppler: centre`).** Every azimuth sector of the monostatic generator, and every
+component of the bistatic one, is shifted as a whole by its Doppler computed at the record's centre frequency fc,
+`d = 2 (v . u) fc / c` (`sim/reverb.py` `_series_numpy`, `libs/sim/src/reverb.cpp` `arrival`, the CUDA sum through
+`ReverbShapeKernel` and `ReverbPulseKernel`): the sequence and the pulse are both multiplied by `exp(2 pi i d t)`. The
+echo of a still scatterer seen from a moving platform is the pulse time-scaled by Gamma = 1 - dT/dt (TR 0702 eqs.
+(63)-(64), Sec. 8.3, confirmed: "a spectral line at f_S is received at f_R = Gamma f_S"), so a line at f should move
+by `2 (v . u) f / c`. The default is exact at fc only; at f it is off by (f - fc) / fc of the shift. Where it bites:
+- a tone away from the band's centre: on the 4.0-6.6 kHz train of `popoto_12km_large_submerged_tone` (fc 5.3 kHz)
+  the 6.5 kHz tone sees the still water at 5.3 / 6.5 = 0.815 of its physical ridge; the live chain's notch sits at
+  the physical ridge, and the tone path's false detections on target-free pings (22 to 25 in 4 pings on the device)
+  lay on the scaled ridge (`docs/tasks/DOPPLER.md` GL.8 on branch `notch`). Measured on the beamformed record here
+  (`tools`-free scratch reproduction, 14.7 table below): ridge / physical = 0.815 -> 1.00 with the option on.
+- the band's edges of a wide sweep: 4-6 kHz about 5 kHz, 20 % of the shift; 6-10 kHz about 8 kHz, 25 %. At 1.5 m/s
+  that is 2 Hz (4 Hz) at the edges, against the 1 s sweep's resolution of 1 Hz.
+- a narrow band (FLS 110-130 kHz, 10 ms; a CW at fc): within the pulse's resolution (edge error x T = 0.27 to 0.53).
+
+The targets' echoes were already exact (`synth_kernel.hpp`: the emission time solved per sample, "envelope and
+carrier both time-scaled"; `tests/python/test_pulse_train.py::test_a_moving_targets_echo_carries_the_doppler_on_both_segments`),
+as are the one-way sources and the projector's direct sound (`sim/sources.py`: "Doppler is the exact time scaling").
+So under the default the reverberation and the echoes of one record obey different laws on a wide band.
+
+Which generators share the approximation: the monostatic and bistatic scattering-function reverberation, and so every
+reverberation item that goes through them (bottom, surface, the `volume` sheet, `fluid_sediment` and every strength
+law; the moving scatterers' mean shift and Doppler lines of 17.2-17.3 too: each component's shift is computed at fc).
+Not: the time-spread taps (`sim/timespread.py`: each tap is an eigenray with its own range rate, synthesised by the
+exact kernel), the direct sound and one-way sources (exact), the point-scatterer seafloors and targets (exact), the
+basin's late tail (no Doppler at all, 26).
+
+**The option `doppler: per_frequency`.** Each row's pulse is time-scaled by Gamma = 1 + d / fc as well as shifted:
+`q(s) = p(Gamma s) exp(2 pi i d s / fs_low)`, s the signed sample of the pulse (its transform is periodic), so that the
+baseband frequency f_b of the pulse (passband fc + f_b) comes out at Gamma f_b + d, i.e. at Gamma (fc + f_b): every
+frequency its own shift (derivation ours; first order in v / c like the shift it replaces, which is what the bistatic
+components already carry: second-order terms are below 1e-5 of the shift at 10 m/s). `p(Gamma s)` is the pulse's own
+samples interpolated by a Blackman-windowed sinc of 2 x 8 taps (ours: below -75 dB of the peak for tones up to a
+sixth of the generation rate, which holds the band within an eighth). The scatterers' delays are not moved (no range
+walk within a ping, as before) and the scaled pulse carries 1 / Gamma of the energy (0.01 dB at 4 m/s): the power
+against time is unchanged (`test_reverb_doppler.py::test_per_frequency_keeps_the_level_against_time`: within 0.05 dB
+in blocks over 6 seeds, 0.005 dB over the record). The per-sector work is the same two transforms as before plus one
+interpolation of the pulse (16 multiply-adds a pulse sample); the shift no longer factors out as a frequency offset,
+but the old code transformed a shifted pulse per sector already, so nothing that was shared becomes per sector.
+
+| Measured (ours) | `centre` | `per_frequency` | closed form |
+|---|---|---|---|
+| one lit sector at 22.5 deg, 3 m/s, Hann tones 4.5 / 6.5 kHz about 5.5 kHz (`test_reverb_doppler.py`, both engines and the batched form) | 20.28 / 20.41 Hz | 16.63 / 24.01 Hz | 16.63 / 24.02 Hz |
 
 ## 15. Sampled transmit waveforms and the variable-delay resampler
 
