@@ -22,6 +22,17 @@ D-240 name no matrix row and the batch did not edit this file. The `penetration:
 cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
 the sharding) touch no conformance item.
 
+**State 2026-11-27, after the merge `e06fac8` of the seventh batch (D-251 to D-254; full GPU suite as three shards
+3392 passed, 122 skipped, 4 xfailed; jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58,
+6b0947c36c5d61fff188c461):** D-251 to D-254 name no matrix row and the batch did not edit this file. **D-251 fixes the
+defect D-249 found**: the boundary reverberation's Doppler is per frequency by default (`doppler: per_frequency`; each
+sector's pulse time-scaled by 1 + d / fc as well as shifted, as TR 0702 eqs. (63)-(64), Sec. 8.3, confirmed, give for
+the echo of a still scatterer; the scaled pulse and its interpolation ours; `docs/PHYSICS_NOTES.md` 14.7), and
+`doppler: centre` keeps the old law bit for bit. No matrix row covers the reverberation's Doppler over a band, so no
+row's verdict changes. Outputs made before it with a moving platform and boundary reverberation are stale (issue
+`sonar-rar0`). The tone path's recount (D-252) and the chain view with its read-only taps (D-253) touch no conformance
+item.
+
 **State 2026-11-27, after the merge `bda7c7d` of the sixth batch (D-246 to D-250; full GPU suite as three shards
 3321 passed, 121 skipped, 5 xfailed; jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937,
 6b0935f754072e8b71696d05):** D-246 to D-250 name no matrix row and the batch did not edit this file. **Found, not
@@ -29,7 +40,7 @@ fixed (D-249, `sonar-l8yp`): the boundary reverberation's Doppler is one shift a
 (`python/gpusonar/sim/reverb.py` `_series_numpy`, `libs/sim/src/reverb.cpp`), where each frequency should shift by
 2 (v.u) f / c; no matrix row covers the reverberation's Doppler over a band, so no row's verdict changes, but every
 moving-platform reverberation measured near its Doppler ridges is in doubt until the fix (branch `revdop`; the owner:
-"FIx it"). The tone path's lobe notch (D-246), the transmit study and the hyperbolic sweep (D-247, no simulator change;
+"FIx it"; fixed by D-251, the paragraph above). The tone path's lobe notch (D-246), the transmit study and the hyperbolic sweep (D-247, no simulator change;
 the HFM echo of a mover checked as the time-scaled pulse in both engines) and the visualization (D-248: read-only, with
 opt-in taps that leave records bit-identical) touch no conformance item.
 

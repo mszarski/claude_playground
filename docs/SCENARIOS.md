@@ -9,7 +9,7 @@ pictures, all made from its YAML file:
 | Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 98 scenario files; the forty-three named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
-| Scene pages (D-248): rays and bounces per tier, beams, the boundary and water models in force with their sources, the parts of the signal, and a 3-D page with sound at each hydrophone | 13 scenarios committed under `docs/figures/scenes/` (one a family and `flank_seamount_3d`; `index.html` lists them); the others are regenerated, not committed; four scenes have no rays or sound and six no sound on a CPU (`docs/tasks/VISUALIZATION.md` sections 12 to 14) | `tools/scenario_view.py` |
+| Scene pages (D-248): rays and bounces per tier, beams, the boundary and water models in force with their sources, the parts of the signal, and a 3-D page with sound at each hydrophone | 13 scenarios committed under `docs/figures/scenes/` (one a family and `flank_seamount_3d`; `index.html` lists them); the others are regenerated, not committed; four scenes have no rays or sound and six no sound on a CPU (`docs/tasks/VISUALIZATION.md` sections 12 to 14). Since D-253 the live chain drawn on the same page (`--chain`: detections, tracks, truth; section 15), two such pages under `docs/figures/scenes/chain/`; the two pool scenes have no chain view | `tools/scenario_view.py` |
 
 - On a CPU: `tools/gallery.py --backend host` (full size) or `--quick` (thinned: fewer
   scatterers and pings, same geometry and processing). `--only a,b` picks scenarios.
@@ -17,26 +17,34 @@ pictures, all made from its YAML file:
   shows where it should.
 - On a GPU: `GPUSONAR_JOB=gallery GPUSONAR_ORACLES=1 GPUSONAR_CERES=1 tools/gpu_job.sh`, or
   `tools/gallery.py --backend cuda`.
-- Numbers below are from the full-size CUDA run on an NVIDIA L4 (Hugging Face job
-  6b054768c97b8ed4fcd78015, tree of commit `4a80876`) in `docs/figures/gallery.json`. That
-  run has every change to the default chain up to D-178, among them the detector rework
-  (`DECISIONS.md` D-93), source levels as RMS (D-102), the four changes of default of
-  D-137 to D-140 (the 12 km and `popoto_env_*` scenarios keep arrivals by energy; a
-  scenario's sound speed follows its water, 1496.8 m/s where it was 1500, for example), the
-  tracker's most-probable-pair association (D-141), detections at their reflection time
-  (D-156), the classifier's measured-position fit and outline scoring (D-157), the SAS
-  motion fixes and scene draws (D-164, D-171), the Popoto echo placement (D-172) and the
-  leading-edge range in the flank and Popoto scenes (D-178). **Except `buried_objects`**, whose entry and
-  figures are from the full-size run on an L4 at the fourth batch's tree (job 6b08c12b54072e8b71683be9,
-  committed as `8391941`); that job's other scenes were not committed, because three differ from this
-  gallery by one detection a ping and wait to be explained (issue `sonar-pli3`).
-- The file before it was the D-174 gallery (job 6b05051fc97b8ed4fcd725d4, tree `77f5b98`).
-  Against it only `flank_patrol` and the six Popoto scenes changed, through D-178; every
-  other number agrees to GPU rounding (relative 4e-4 at most) and every detection count is
-  the same. Where the text below says "before D-178" it means that file. Where a result is
-  worse than an earlier run, or different in kind, the text says so (`STATUS.md`, open
-  items 16 and 43 to 45). "The older CPU run" is a full-size CPU run from a much older
-  tree.
+- Numbers below are from the full-size CUDA run on an NVIDIA L4 at the seventh batch's tree
+  (Hugging Face job 6b0947c46c5d61fff188c465, tree `81364e0`, committed whole as `082dd21`; D-253)
+  in `docs/figures/gallery.json`. That run has every change to the default chain and simulator up to
+  D-253, among them the detector rework (`DECISIONS.md` D-93), source levels as RMS (D-102), the
+  four changes of default of D-137 to D-140 (the 12 km and `popoto_env_*` scenarios keep arrivals
+  by energy; a scenario's sound speed follows its water, 1496.8 m/s where it was 1500, for
+  example), the tracker's most-probable-pair association (D-141), detections at their reflection
+  time (D-156), the classifier's measured-position fit and outline scoring (D-157), the SAS motion
+  fixes and scene draws (D-164, D-171), the Popoto echo placement (D-172), the leading-edge range in
+  the flank and Popoto scenes (D-178), the surface reverberation's geometric-mean rule (D-216) and
+  the reverberation's Doppler per frequency (D-251).
+- **Worse against the file before it, first** (D-251): `fls_170k_traffic` gains one mover that is
+  not on a moving object (movers 3 -> 4; issue `sonar-4pon`, not explained);
+  `popoto_env_gravel_30m` confirmed tracks 3 -> 2 (one static lost). Also moved:
+  `fls_120k_transit` detections a ping 6 to 9 -> 5 to 8; `fls_120k_cluttered_seabed` confirmed
+  tracks 65 -> 66; `flank_patrol` 3 to 6 -> 4 to 6 detections a ping (static 2 -> 3, uncertain
+  2 -> 1); `popoto_env_winter_sand_200m` multipath 3 -> 4, uncertain 1 -> 0; the Popoto peaks over
+  the median by up to 0.4 dB. Every named target is tracked as before with the same class; the
+  pool, harbour, seafloor, SAS, rail and buried-object numbers agree to the digits quoted below.
+  The file before it (the D-178 gallery, job 6b054768c97b8ed4fcd78015, tree `4a80876`, with
+  `buried_objects` from job 6b08c12b54072e8b71683be9, `8391941`) predates other decisions too, so
+  not every difference is D-251's. The one-detection differences held back since D-240 (issue
+  `sonar-pli3`) are closed: superseded by the new realisation, not explained (D-253).
+- Before that, the D-174 gallery (job 6b05051fc97b8ed4fcd725d4, tree `77f5b98`): against it
+  the D-178 file changed only `flank_patrol` and the six Popoto scenes. Where the text below
+  says "before D-178" it means that file. Where a result is worse than an earlier run, or
+  different in kind, the text says so (`STATUS.md`, open items 16, 43 to 45 and 87). "The older
+  CPU run" is a full-size CPU run from a much older tree.
 - Positions of tracked objects: "from its centre" is the track's distance from the
   object's centre at the time the track's state holds (its last detection's reflection
   time, D-156); "from its outline" or "from its hull" is the distance to the nearest
@@ -45,7 +53,7 @@ pictures, all made from its YAML file:
   trial, fjord and range-dependent scenarios that are not in the gallery, is listed in
   "Every scenario file" near the end.
 - **CPU times** are from the older CPU run and were not measured again on this tree;
-  `gallery.json` now holds the CUDA run's times instead (0.3 to 92 s a scenario, 489 s
+  `gallery.json` now holds the CUDA run's times instead (0.3 to 93.1 s a scenario, 498 s
   for all 26). They are wall-clock on a 4-core x86_64 container with nothing else running. The
   host backend uses all four cores (OpenMP). An earlier version of this table was measured
   with several jobs sharing the machine and before the synthesis kernel was reworked
@@ -182,11 +190,11 @@ objects stay put.
 
 | Target | `fls_120k_transit` (300 m) | `fls_170k_transit` (450 m) | `fls_330k_transit` (300 m) |
 | --- | --- | --- | --- |
-| Boat under way, 4.0 m/s to port | tracked, 0.6 m, 3.79 m/s | tracked, 1.3 m, 4.21 m/s | tracked, 0.8 m, 4.00 m/s |
-| Boat at anchor | tracked, 1.0 m, 0.04 m/s | tracked, 2.6 m, 0.12 m/s | tracked, 1.4 m, 0.20 m/s |
-| Mooring buoy | tracked, 0.7 m, 0.12 m/s | tracked, 0.2 m, 0.04 m/s | tracked, 0.5 m, 0.07 m/s |
-| Seabed pinnacle | tracked, 4.0 m, 0.23 m/s | not in the beam | not in the beam |
-| Detections per ping / confirmed tracks | 6 to 9 / 8 | 3 to 5 / 4 | 3 to 4 / 4 |
+| Boat under way, 4.0 m/s to port | tracked, 0.6 m, 3.79 m/s | tracked, 1.3 m, 4.20 m/s | tracked, 0.8 m, 4.00 m/s |
+| Boat at anchor | tracked, 1.0 m, 0.03 m/s | tracked, 2.6 m, 0.12 m/s | tracked, 1.4 m, 0.20 m/s |
+| Mooring buoy | tracked, 0.7 m, 0.12 m/s | tracked, 0.2 m, 0.05 m/s | tracked, 0.4 m, 0.06 m/s |
+| Seabed pinnacle | tracked, 4.0 m, 0.26 m/s | not in the beam | not in the beam |
+| Detections per ping / confirmed tracks | 5 to 8 / 8 | 3 to 5 / 4 | 3 to 4 / 4 |
 | Track classes | 1 mover (the boat under way), 6 static, 1 uncertain | 1 mover, 2 static, 1 uncertain | 1 mover, 2 static, 1 uncertain |
 | Tracks called movers that are not on a moving object | 0 | 0 | 0 |
 
@@ -224,23 +232,23 @@ boat at anchor.
 
 | Quantity | Result |
 | --- | --- |
-| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.9 m from its centre, velocity 1.69, −4.73 m/s; classified mover (5.04 ± 0.09 m/s) |
+| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.9 m from its centre, velocity 1.70, −4.73 m/s; classified mover (5.04 ± 0.09 m/s) |
 | Boat at anchor | tracked, 0.8 m, 0.04 m/s; classified static |
-| Detections per ping | 54 to 63 |
-| Confirmed tracks | 65 |
-| Track classes | 1 mover, 48 static, 3 line, 13 uncertain |
+| Detections per ping | 54 to 65 |
+| Confirmed tracks | 66 |
+| Track classes | 1 mover, 53 static, 2 line, 10 uncertain |
 | Tracks called movers that are not the boat | 0 |
 
-- Everything on the bed makes tracks. From the tracks alone, 48 are static (boulders,
-  debris, the anchored boat), 3 are called line ("line": motion along a linear feature
-  such as the pipeline cannot be told from the feature standing still), and 13 jump about
-  too much to say. Before the line rule and the requirement that a mover be seen on most
+- Everything on the bed makes tracks. From the tracks alone, 53 are static (boulders,
+  debris, the anchored boat), 2 are called line ("line": motion along a linear feature
+  such as the pipeline cannot be told from the feature standing still), and 10 jump about
+  too much to say (65 tracks, 48 static, 3 line and 13 uncertain in the D-178 gallery). Before the line rule and the requirement that a mover be seen on most
   pings, 24 tracks were called movers.
 - The boat under way is the only mover. A track counts in its row only if its SNR is
   within 6 dB of the boat's (D-154); the seabed tracks in its corridor are at most 18.7 dB
   against its 25.4. Between D-141 and D-154 it was classified line, and the gallery at
   `1442de5` had 47 static, 10 line and 8 uncertain tracks; the line tracks fell to 3 in the
-  D-174 gallery (D-156, D-157).
+  D-174 gallery (D-156, D-157) and to 2 in the gallery of D-253.
 - The pipeline shows as a line across the picture, and the wake as a streak astern of the
   moving boat. The wake is a fixed cloud laid down at the start; it does not grow.
 - Direct paths only: no surface or bottom bounce to the objects.
@@ -318,11 +326,13 @@ is seen further down the beam.
 | Boat | True velocity (m/s) | Track velocity (m/s) | Position (from its centre) | Class |
 | --- | --- | --- | --- | --- |
 | Closing from 400 m | −5.98, 0.52 | −5.97, 0.48 | 4.5 m | mover, 6.01 ± 0.02 m/s |
-| Crossing at 300 m | 0.35, 3.98 | 0.37, 4.24 | 0.2 m | mover, 4.30 ± 0.18 m/s |
-| At anchor at 350 m | 0, 0 | −0.10, 0.10 | 1.5 m | static, 0.12 m/s |
+| Crossing at 300 m | 0.35, 3.98 | 0.37, 4.24 | 0.2 m | mover, 4.31 ± 0.18 m/s |
+| At anchor at 350 m | 0, 0 | −0.10, 0.09 | 1.6 m | static, 0.12 m/s |
 
-6 to 15 detections per ping gave 13 confirmed tracks for three boats. Classes: 3 mover,
-6 static, 1 line, 3 uncertain; no mover is off a moving object.
+6 to 15 detections per ping gave 13 confirmed tracks for three boats. Classes: 4 mover,
+5 static, 1 line, 3 uncertain; **one mover is not on a moving object** (none in the D-178
+gallery, where the classes were 3 mover and 6 static; issue `sonar-4pon`: which track and why
+is not known).
 
 - Each boat is 0.0 m from its outline. The closing boat's detections are on its propeller,
   5.3 m astern of amidships (D-169), hence 4.5 m from its centre.
@@ -607,8 +617,8 @@ the figure and table were from the gallery of D-179, when the sediment model was
 transmission). Since D-212 the scene uses `penetration: fluid` with medium sand's density ratio and loss at its
 own 1700 m/s (class values, not a survey): the cylinder falls 5.2 dB and the sphere 3.6 dB in the full raster
 (D-212's CPU run), cylinder over clutter 21.12 -> 20.32 dB on the L4, as D-212's CPU run gave, depths unchanged
-(`gallery.json`). The rest of that job's gallery is not committed (three scenes differ from the committed
-one by one detection a ping; issue `sonar-pli3`). The clutter level relative to the objects is still an
+(`gallery.json`). The whole gallery was regenerated at the seventh batch's tree (D-253): the scene's numbers
+are the same to the digits quoted (20.32 dB). The clutter level relative to the objects is still an
 assumption (the scenario's `rms_amplitude`), not a prediction.
 
 ## Flank array: `flank_patrol`
@@ -617,8 +627,8 @@ assumption (the scenario's `rms_amplitude`), not a prediction.
 
 | Target | Result over six pings |
 | --- | --- |
-| Submarine-like target, 56 m, +16 dB in all, 3.0 m/s along x | tracked; velocity 2.98, 0.02 m/s; 1.0 m from its outline (2.6 m from its centre); classified mover (3.02 ± 0.02 m/s) |
-| Wreck on the seabed, +12 dB, not moving | tracked; speed 0.04 m/s; 3.5 m from truth; classified static |
+| Submarine-like target, 56 m, +16 dB in all, 3.0 m/s along x | tracked; velocity 2.99, 0.02 m/s; 1.0 m from its outline (2.9 m from its centre); classified mover (3.03 ± 0.03 m/s) |
+| Wreck on the seabed, +12 dB, not moving | tracked; speed 0.06 m/s; 3.4 m from truth; classified static |
 | Small vehicle, −3 dB, 2 m/s | **not detected**: a hard target left so on purpose (below) |
 
 - **The small vehicle is a hard target on purpose (D-198; the owner, 2026-11-26: "I'd leave it
@@ -638,8 +648,9 @@ assumption (the scenario's `rms_amplitude`), not a prediction.
   power-weighted centroid of a detection made of several surface and bottom arrivals, the
   later ones stronger: the submarine read 25.8 m from its outline (26.1 m from its
   centre), velocity 2.94, −0.23 m/s, and the wreck 5.8 m.
-- 3 to 6 detections per ping gave 5 confirmed tracks for two objects: 1 mover (the
-  submarine), 2 static (one the wreck), 2 uncertain; no mover is off a moving object.
+- 4 to 6 detections per ping gave 5 confirmed tracks for two objects: 1 mover (the
+  submarine), 3 static (one the wreck), 1 uncertain; no mover is off a moving object (3 to 6
+  detections, 2 static and 2 uncertain in the D-178 gallery).
   The scene is classified since D-178. Multipath splits the wreck's echo into several
   clusters, each of which starts a track; clustering that merges them is not written
   (`STATUS.md`).
@@ -800,8 +811,8 @@ the beam, in 100 m of isovelocity water.
 
 | Quantity | Result |
 | --- | --- |
-| Ship | tracked, 0.9 m from its hull (8.2 m from its centre), velocity −5.58, −0.02 m/s (true −6, 0); classified mover (5.94 ± 0.05 m/s) |
-| Peak over map median with 8 / 16 / 32 hydrophones | 22.9 / 25.6 / 28.6 dB |
+| Ship | tracked, 0.9 m from its hull (8.4 m from its centre), velocity −5.57, −0.02 m/s (true −6, 0); classified mover (5.94 ± 0.05 m/s) |
+| Peak over map median with 8 / 16 / 32 hydrophones | 22.8 / 25.6 / 28.6 dB |
 | Detections per ping / confirmed tracks | 1 to 4 / 3 |
 | Track classes | 1 mover, 2 multipath |
 
@@ -840,9 +851,9 @@ in free field (detection probability 0.22 on one ping), two rows +1.4 dB (0.87),
 
 | Quantity | Result |
 | --- | --- |
-| Ship at 12 km | tracked, 2.1 m from its hull (9.8 m from its centre), velocity −5.67, 0.11 m/s (true −6, 0); classified mover (5.66 ± 0.50 m/s) |
+| Ship at 12 km | tracked, 2.1 m from its hull (10.9 m from its centre), velocity −5.69, 0.11 m/s (true −6, 0); classified mover (5.67 ± 0.50 m/s) |
 | Track classes | 1 mover, 11 multipath |
-| Peak over map median with 8 / 16 / 32 hydrophones | 20.1 / 23.1 / 25.6 dB |
+| Peak over map median with 8 / 16 / 32 hydrophones | 20.3 / 23.2 / 25.6 dB |
 | Detections per ping / confirmed tracks | 7 to 15 / 12 |
 | One-way loss to the target, Bellhop (no absorption) | 67.2 dB, against 81.6 dB for spherical spreading |
 
@@ -856,8 +867,9 @@ in free field (detection probability 0.22 on one ping), two rows +1.4 dB (0.87),
   uncertain tracks unattached, and why the nearest-track scoring called the ship
   `uncertain` (3.3 m/s) or `multipath` in the runs before (issue sonar-ygc). Over ten seeds
   the ship is one mover on every seed.
-- **With the leading-edge range (D-178) the ship is 9.8 m from its centre, where it was 4.7 m
-  before D-178** (2.1 m from its hull in both; 5.68 -> 5.66 m/s). Over ten seeds the median
+- **With the leading-edge range (D-178) the ship was 9.8 m from its centre, where it was 4.7 m
+  before D-178** (2.1 m from its hull in both; 5.68 -> 5.66 m/s); 10.9 m in the gallery of D-253
+  (2.1 m from its hull, 5.67 m/s). Over ten seeds the median
   distance to the hull went 2.3 -> 3.4 m, and seed 60 3.0 -> 65.4 m (track hopping,
   `DECISIONS.md` D-178). The gallery's 6.05 m/s, 68 m from truth, was the D-155 gallery's,
   before the measured-position fit (D-157) and the echo placement (D-172).
@@ -877,10 +889,10 @@ transmission loss are in `docs/scenarios/popoto_env_*.png`.
 
 | Scenario | Water | Bottom (speed, density, loss) | Range | One-way loss: Bellhop / spherical | Ship | Peak over median, 32 hydrophones |
 | --- | --- | --- | --- | --- | --- | --- |
-| `popoto_env_winter_sand_200m` | 200 m, speed rising with depth (1480 to 1483.4 m/s): a surface duct | sand: 1650 m/s, 1.9, 0.8 dB/λ | 8 km | 64.2 / 78.1 dB | tracked, 2.8 m from its hull, −5.64 m/s | 30.1 dB |
+| `popoto_env_winter_sand_200m` | 200 m, speed rising with depth (1480 to 1483.4 m/s): a surface duct | sand: 1650 m/s, 1.9, 0.8 dB/λ | 8 km | 64.2 / 78.1 dB | tracked, 2.8 m from its hull, −5.58 m/s | 30.4 dB |
 | `popoto_env_summer_mud_60m` | 60 m, warm layer over a thermocline (1522 to 1490 m/s) | mud: 1500 m/s, 1.5, 0.2 dB/λ | 4 km | 88.8 / 72.2 dB | **not detected** in six pings | 12.4 dB |
 | `popoto_env_gravel_30m` | 30 m, isovelocity | gravel: 1800 m/s, 2.0, 0.6 dB/λ | 3 km | 52.9 / 69.8 dB | tracked, **10.0 m short of its hull**, −5.57 m/s | **31.4 dB** |
-| `popoto_env_deep_silt_1000m` | 1000 m, thermocline over cold deep water; ownship at 50 m | silt: 1575 m/s, 1.7, 1.0 dB/λ | 10 km | 72.6 / 80.0 dB | detected 300 m long in range; not tracked at its true position | 11.8 dB |
+| `popoto_env_deep_silt_1000m` | 1000 m, thermocline over cold deep water; ownship at 50 m | silt: 1575 m/s, 1.7, 1.0 dB/λ | 10 km | 72.6 / 80.0 dB | detected 300 m long in range; not tracked at its true position | 11.9 dB |
 
 ![popoto_env_winter_sand_200m](figures/popoto_env_winter_sand_200m.png)
 
@@ -904,22 +916,24 @@ transmission loss are in `docs/scenarios/popoto_env_*.png`.
   three tracks there are 1 mover, 2 multipath; the mover, not on the ship's true position,
   counts as one not on a moving object, the only one in the Popoto scenes. Which track it
   is was not examined.
-- In winter over sand the ship is a mover at 6.06 ± 0.07 m/s (true 6.0), 2.8 m from its
-  hull and 17.7 m from its centre; its track reads −5.64, 0.06 m/s. The five tracks are
-  1 mover, 3 multipath and 1 uncertain, with no mover off a moving object. Before D-178 it
+- In winter over sand the ship is a mover at 5.99 ± 0.06 m/s (true 6.0), 2.8 m from its
+  hull and 19.4 m from its centre; its track reads −5.58, 0.07 m/s. The five tracks are
+  1 mover and 4 multipath, with no mover off a moving object (in the D-178 gallery 6.06 ± 0.07
+  m/s, 17.7 m from its centre, 3 multipath and 1 uncertain). Before D-178 it
   read 5.24 ± 0.38 m/s (a stray detection taken at the track's birth, `STATUS.md` item
   45), 2.7 m from its hull and 29.1 m from its centre.
 - **Over gravel the ship's track is 10.0 m short of its hull with the leading-edge range,
   where it was 33.7 m beyond it before D-178** (11.8 m from its centre, was 33.7): the
   near end of a hull at about 15° aspect read at the cluster's mean bearing, plus the
   closing up-chirp's range-Doppler coupling (D-178). It is a mover at 5.79 ± 0.07 m/s
-  (5.92 before); the 3 tracks are 1 mover, 1 multipath and 1 static, and 1 to 3 detections
-  are made per ping. The peak is 31.4 dB with 32 hydrophones (24.9 and 28.3 dB with 8 and
-  16), 3.3 dB under the 34.7 dB of the gallery at `4530dc4`: keeping arrivals by energy
+  (5.92 before D-178); **the 2 tracks are 1 mover and 1 multipath** (3 in the D-178 gallery,
+  one of them static), and 1 to 3 detections are made per ping. The peak is 31.4 dB with 32
+  hydrophones (25.0 and 28.3 dB with 8 and 16), 3.3 dB under the 34.7 dB of the gallery at `4530dc4`: keeping arrivals by energy
   (D-137) did it (`STATUS.md`, item 44).
-- In summer over mud nothing is detected; every number in `gallery.json` is as before
-  D-178. The peaks over the median and the detections per ping are the same as before
-  D-178 in all four scenes.
+- In summer over mud nothing is detected. Against the D-178 gallery the gallery of D-253
+  moves the peaks over the median by 0.4 dB at most (winter over sand 30.1 -> 30.4 dB with 32
+  hydrophones, deep silt 11.8 -> 11.9) and one ping's detections in winter over sand (3 -> 4);
+  the D-178 regeneration had left the peaks and detections a ping as before it.
 - The one-way losses in the table are from `docs/scenarios/transmission_loss.json`,
   regenerated at `e10b17f` (0.04 to 0.11 dB lower with the water's own sound speed); the
   table's rounded values did not change.
@@ -1129,7 +1143,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_12km_3row` | The same with three rows. Needs Bellhop. |
 | `popoto_12km_doppler` | `popoto_12km` with a 1 s Hann tone at 5 kHz, then the 4-6 kHz sweep (half the energy each; peak 1.0 dB higher; the ping 2 s: twice the duty the projector is sized for, an owner question). The ship's radial speed is small (−0.50 m/s): the Doppler path is not expected to help, and the scene is there to show it. Measured: tone with the bank 33.2 / 28.8 dB, sweep 21.2 / 21.3 dB (`popoto_12km`'s 24.0 / 24.6). Not in the gallery. Needs Bellhop. |
 | `popoto_12km_large_submerged` | `popoto_12km`'s water, array, platform and seed with three `large_submerged` targets (the class the owner set the 12 km requirement for first, D-235) at its low +25 dB (five +18.01 dB highlights along a 100 m hull), 50 m deep: closing at 6 m/s bow-on (range rate −5.61 m/s), oblique at 2 m/s (−0.50, 0.50 m/s from its beam's own-motion ridge) and crossing at 2 m/s (on the ridge). The shipped sweep only. Measured (`docs/tasks/DOPPLER.md` "Large submerged at 12 km", both engines, 6 pings; ours): all three detected on 6 of 6 and tracked, margins 8.0 to 11.4 dB (3 to 6 dB under the planner's point target: the hull's highlights resolved in range); `combine: cfar` +0.6 to +0.9 dB. Not in the gallery. Needs Bellhop. |
-| `popoto_12km_large_submerged_tone` | The same with a 1 s Hann tone at 6.5 kHz (0.5 kHz above the 4-6 kHz sweep, the rule of `flank_patrol_doppler_tone`), then the sweep, in one 2 s ping; half the energy each. Measured on one ping only (58 min a ping to simulate on the CPU): the tone gives the closing and oblique targets' range rates within 0.06 m/s, not the crossing one's (in the notch); 4 false tone detections beyond ±32° through the array's grating lobes at 6.5 kHz. On an L4 (D-243, job 6b08f68754072e8b7168e9c6, 6 pings): closing and oblique 6 of 6 with their rates, crossing 6 of 6 by the sweep only; 22 false detections on 4 target-free pings at the default budget with the tone path on, all the tone's, against 0 with it off; **D-246 corrects that reading: they are mostly an artefact of the simulator** (its boundary reverberation's Doppler is one shift at the record's centre frequency, 5.3 kHz on this train, so the 6.5 kHz tone sees still water at 0.815 of its physical ridge; D-249, not fixed), not a property of the tone path. With the grating-lobe notch (merged, D-246) the same pings give 25 at the notch's edge (job 6b0911926c5d61fff1888f01); the tone path's false-alarm count on this scene with a correct simulation is not known. The tone path is off by default (D-244). Not in the gallery. Needs Bellhop. |
+| `popoto_12km_large_submerged_tone` | The same with a 1 s Hann tone at 6.5 kHz (0.5 kHz above the 4-6 kHz sweep, the rule of `flank_patrol_doppler_tone`), then the sweep, in one 2 s ping; half the energy each. Measured on one ping only (58 min a ping to simulate on the CPU): the tone gives the closing and oblique targets' range rates within 0.06 m/s, not the crossing one's (in the notch); 4 false tone detections beyond ±32° through the array's grating lobes at 6.5 kHz. On an L4 (D-243, job 6b08f68754072e8b7168e9c6, 6 pings): closing and oblique 6 of 6 with their rates, crossing 6 of 6 by the sweep only; 22 false detections on 4 target-free pings at the default budget with the tone path on, all the tone's, against 0 with it off; **D-246 corrects that reading: they are mostly an artefact of the simulator** (its boundary reverberation's Doppler was one shift at the record's centre frequency, 5.3 kHz on this train, so the 6.5 kHz tone saw still water at 0.815 of its physical ridge; D-249, fixed by D-251), not a property of the tone path. With the grating-lobe notch (merged, D-246) the same pings gave 25 at the notch's edge under the old simulator (job 6b0911926c5d61fff1888f01). **With the corrected simulator (D-252, job 6b0947c354072e8b71697a5a, 4 target-free pings): 0 false detections at the default budget with the notch, 17 without it (all on a lobe's ridge), 1 with the tone path off.** The tone path is off by default (D-244, D-252). Not in the gallery. Needs Bellhop. |
 | `popoto_12km_two_ships` | `popoto_12km` with a second ship beyond the first, at one bearing and one velocity, 850 m apart in range: the test scene of echo grouping's reach (a group reaches no farther than one gate from its object, D-172). Needs Bellhop. |
 | `popoto_env_winter_sand_200m` | Gallery. The same ship at 8 km in winter water over sand (a surface duct). Needs Bellhop. |
 | `popoto_env_summer_mud_60m` | Gallery. At 4 km under a summer thermocline over mud: not detected. Needs Bellhop. |

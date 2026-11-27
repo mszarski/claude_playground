@@ -11,12 +11,18 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
   (on its beam's ridge: 0 of 3 tone pings on `popoto_12km_large_submerged`, LS.3), and, under way, targets coming nearly
   straight in or out on beams beyond 24 degrees (the grating-lobe notch: 7 to 16 % of headings at 2 m/s, `DOPPLER.md`
   GL.3). The sweep path detects all three; only the rate is missing.
-- **The tone path's false-alarm rate is not known at the default budget.** Before the grating-lobe notch, the train scene
-  at 12 km gave 22 false tone detections in 4 target-free pings at the default budget (GPU 2026-11-27, against 0 with
-  the tone path off). (Added by the document sweep of 2026-11-27: D-246 and `DOPPLER.md` GL.8 found those 22, and the
-  25 with the notch, mostly an artefact of the simulator's reverberation Doppler at the train's centre frequency,
-  D-249, not a property of the tone path.) With the notch a synthetic field gives 15 -> 0 (GL.1); a stronger field still leaves some through
-  the beams' far sidelobes (GL.1 item 2). The GPU rerun is the acceptance.
+- **The tone path's false-alarm rate is counted on one train scene, over 4 target-free pings only** (amended by the
+  document sweep after D-254; first written: "is not known at the default budget"). Before the grating-lobe notch, the
+  train scene at 12 km gave 22 false tone detections in 4 target-free pings at the default budget (GPU 2026-11-27,
+  against 0 with the tone path off). (Added by the document sweep of 2026-11-27: D-246 and `DOPPLER.md` GL.8 found those
+  22, and the 25 with the notch, mostly an artefact of the simulator's reverberation Doppler at the train's centre
+  frequency, D-249, not a property of the tone path.) With the notch a synthetic field gives 15 -> 0 (GL.1); a stronger field still leaves some through
+  the beams' far sidelobes (GL.1 item 2). The GPU rerun is the acceptance. (Added after D-254: the simulator was fixed
+  (D-251) and the rerun made (D-252, job 6b0947c354072e8b71697a5a, `popoto_12km_large_submerged_tone`, 4 target-free
+  pings, both engines agreeing): **0 false detections at the default budget with the notch (auto), 17 with it off, all
+  17 on a lobe's ridge; 1 with the tone path off.** At 3 a ping: 25 with the notch, 3 of them the tone's and 22 the
+  sweep path's; 16 with the tone path off. Not shown: more than 4 pings, the far-sidelobe case on a real scene. The tone
+  path stays off by default, D-252.)
 - **No path gives the tracker a rate**: the tracker takes the tone's coarse range sigma only (D5 not done). With
   alternating pings a 2 m/s target was called `static` (LS.1 item 4); with `combine: cfar` the crossing target was too.
 - **The sweep bank's rate is not a measurement** (LS.1 item 5: -3.4 to +7.9 m/s on a target at -0.50).

@@ -19,9 +19,9 @@ on the chain's own detector (free field, the ship-sized target); the 12 km requi
 `large_submerged` first and `ship` second (the owner, 2026-11-26), and three rows hold it for
 both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the sixth batch's tree, decisions D-246
-to D-248, as three jobs on an NVIDIA L4 (3321 passed, 121 skipped, 5 xfailed, none failed; Hugging Face
-jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05; D-250), the opt-in
+(the depth sigma now says so). The full GPU suite last ran on the seventh batch's tree, decisions D-251
+to D-253, as three jobs on an NVIDIA L4 (3392 passed, 122 skipped, 4 xfailed, none failed; Hugging Face
+jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461; D-254), the opt-in
 3-D propagation tier and the slow Bellhop3D checks included; the first suite on the fifth batch had
 failed 4 tests, because new device code had made two programs built from one library disagree in the
 last digits on the GPU (fixed, with a test that guards it, D-245); the
@@ -38,13 +38,18 @@ mud; the owner has since said 12 km is for `large_submerged` first and `ship` se
 worst sea state, the detection probabilities and the waters are still open. The sweep's Doppler
 bank exists in the live chain as an option (D-232) and with its default combiner lowers every target's
 margin by 3.4 to 5.3 dB on the scenes measured, so it stays off; an opt-in CFAR combiner and a tone path
-(D-237) give the movers their margin back. **The simulator's boundary reverberation applies Doppler as one
-shift at the record's centre frequency where each frequency should shift (D-249, found and not yet fixed;
-the owner: "FIx it"), so the reverberation Doppler of every moving-platform scene is in doubt until the
-fix.** Measured on a GPU since (D-241 to D-243): with the tone path on, 22 false detections on 4
-target-free pings at 12 km at the default budget, which D-246 found to be mostly that simulator artefact,
-not a property of the tone path, so its false-alarm rate on a train scene is not known; by the owner's
-decision the tone path stays off by default (D-244), with a grating-lobe notch merged for it (D-246); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
+(D-237) give the movers their margin back. **The simulator's boundary reverberation applied Doppler as one
+shift at the record's centre frequency where each frequency should shift (D-249); fixed, and the
+per-frequency law the default, since D-251 (the owner: "FIx it").** What got worse with it: on the
+regenerated gallery `fls_170k_traffic` has one mover not on a moving object (issue `sonar-4pon`) and
+`popoto_env_gravel_30m` one confirmed track fewer (3 -> 2); outputs made before the fix with a moving
+platform and boundary reverberation (the Doppler task files, `docs/design/popoto_12km.json`, one handoff
+example and the `docs/RESULTS.md` tables built from them) are still stale (issue `sonar-rar0`). Measured on
+a GPU (D-241 to D-243): with the tone path on, 22 false detections on 4 target-free pings at 12 km at the
+default budget, which D-246 found to be mostly that simulator artefact; counted again with the corrected
+simulator (D-252): 0 with the grating-lobe notch, 17 without it, on 4 target-free pings at the default
+budget; by the owner's decision the tone path stays off by default (D-244, D-252), with the notch merged
+for it (D-246); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
 0 of 6 pings for all three targets); with the bank on the chain still costs 3.4 to 6.0 times its cost a
 ping on the device. The owner's baseline is the plain sweep on the three-row face with every Doppler
 option off (D-244); the shipped transmitter (1 s, 197 dB) holds 12 km for both classes at the deep
@@ -65,6 +70,14 @@ and the parts of the received signal, and writes a 3-D page (three.js, vendored 
 the owner's approval) with the sound at each hydrophone. One scenario a family is committed:
 [`docs/figures/scenes/index.html`](docs/figures/scenes/index.html). Four tone-and-sweep scenes have no rays
 or sound on a CPU, six no sound, and nobody has listened to the sound yet (`docs/tasks/VISUALIZATION.md`).
+Since D-253 the same page can draw the live chain (`tools/scenario_view.py NAME --chain`, with
+`--chain-engine python|cpp|both` and `--chain-full`): the cell map, detections, tracks and the truth, read from
+the report line and from opt-in taps in both engines (the tracker's gates, associations and covariances, the
+classifier's evidence, the detector's background; default off, report lines bit-identical with taps off and
+on). For a forward-looking sonar the viewer sets `look: port` where the chain's default would put the echoes
+astern, and says so; a deployment block for the FLS is an open owner question (issue `sonar-tpex`). Two
+chain pages are committed under [`docs/figures/scenes/chain/`](docs/figures/scenes/chain/). Time stretch is the
+default sound for records under 0.5 s (the owner, 2026-11-27).
 
 ## What is in it
 
@@ -213,8 +226,8 @@ The host backend uses every core (OpenMP). Per-scenario times on four cores are 
 `docs/SCENARIOS.md`; all 26 gallery scenarios take about an hour in total, the 120 kHz transit 77 s and the
 flank patrol eleven minutes (72 before the kernel rework). Those times were measured
 before the latest changes of levels, noise and defaults. The gallery's numbers are from a
-later full-size run with the CUDA backend on an NVIDIA L4 (commit `4530dc4`), which took
-465 s for the 26 scenarios.
+later full-size run with the CUDA backend on an NVIDIA L4 at the seventh batch's tree (`81364e0`, Hugging
+Face job 6b0947c46c5d61fff188c465, D-253), whose 26 scenarios took 498 s (`gallery.json`).
 
 Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto_*`,
 `fjord_*`, `ssp_*`) and their tests are skipped; everything else runs.

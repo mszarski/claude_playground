@@ -549,7 +549,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 | At its design range, 12.7 km | ship: margin -2.6 dB, Pd 0.05; small: margin -22.6 dB, Pd 0.00 |
 | At 12 km | ship: one row's SNR 14.6 dB, margin -1.1 dB, Pd 0.22; small: margin -21.1 dB, Pd 0.00 |
 
-**Simulated trials:** `popoto_12km` (the same row as `popoto_long_range`): the ship at 12 km detected on 6 of 6 pings and tracked from ping 3 in 100 m over sand, as a mover at 6.2 m/s (image-source paths) (`docs/design/popoto_12km.json`).
+**Simulated trials:** `popoto_12km` (the same row as `popoto_long_range`): the ship at 12 km detected on 6 of 6 pings and tracked from ping 3 in 100 m over sand, as a mover at 6.2 m/s (image-source paths) (`docs/design/popoto_12km.json`; stale since D-251, made under the old reverberation Doppler, issue `sonar-rar0`).
 
 **Tests that exercise it** (under `tests/python/` unless a path is given): `test_buildspec.py`, `test_deployment_defaults.py` (the coverage picture and its site), `test_source_level.py`, `test_sim.py`, `test_hardcoded.py`; the `popoto_12km` scenario in `test_live_cpp.py`, `test_detect.py`, `test_detector.py`, `test_classify.py`, `test_realistic_scenes.py`, `tests/cpp/test_live.cpp`. Its self-tests: `tools/build_from_spec.py configs/builds/popoto_face_1x32.yaml --out DIR --self-test`.
 
