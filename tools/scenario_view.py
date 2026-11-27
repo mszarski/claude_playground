@@ -20,9 +20,10 @@ Bellhop3D for `eigenray3d`), run as separate processes.
 
 Sound (package V3/V5, viz/audio.py, viz/arrivals.py): with `--3d` the default `--audio side` writes DIR/<name>.audio/
 beside the page: the whole record of every hydrophone as a 16-bit WAV, made audible by the method its band needs (as
-recorded at or under 16 kHz, else heterodyned to 2 kHz; `--audio-method time_stretch [--stretch K]` instead), the parts
+recorded at or under 16 kHz, time-stretched for a record shorter than 0.5 s (FLS, SAS), else heterodyned to 2 kHz;
+`--audio-method` and `--stretch K` choose otherwise), the parts
 (echoes, each reverberation item through the opt-in per-item taps, noise, the direct sound, one-way sources) and the
-`--arrivals 8` strongest single arrivals of the strongest target for the hydrophones `--audio-parts` (default the first
+`--arrivals 8` strongest single arrivals (by the synthesis's own amplitude, over the targets) for the hydrophones `--audio-parts` (default the first
 and the last), a stereo pair of those two, and the page loads them. `--audio embed` puts them in the page (capped,
 viz/page3d.py), `--audio none` writes no sound. With `--traces` the ping is simulated again for its record (the trace is
 not): scenes whose previous run took longer than `--sim-limit` s (default 330) get a page without sound that says so and
@@ -112,17 +113,23 @@ def _sound(name: str, out: str, trace: dict, record, stages: dict, box, audio_op
     arr, notes = [], []
     n_arr = int(audio_opts.get("arrivals") or 0)
     if box is not None and n_arr > 0 and "out" in box and trace.get("pairs"):
-        for p in arrivals.strongest_pairs(trace, box, 0, n_arr):
+        # With the kernel's paths captured: the strongest pairs of every target by the synthesis's own amplitude (none
+        # silent); else the strongest target's by the trace's level, as before.
+        for p in arrivals.strongest_pairs(trace, box, None if box.get("kernel") is not None else 0, n_arr):
             if not p["mapped"]:
                 notes.append(f"pair out {p['out']} back {p['back']}: not found in the run's eigenrays")
                 continue
             e = arrivals.single_pair_echoes(box, p["scatterer"], p["k_captured"], p["j_captured"], engine)
-            arr.append({"samples": np.asarray(e)[pc], "what": f"one arrival of {trace['targets'][0]['label']}: outbound ray "
+            arr.append({"samples": np.asarray(e)[pc], "what": f"one arrival of {trace['targets'][p.get('target') or 0]['label']}: outbound ray "
                         f"{p['out']}, return ray {p['back']} ({p['n_surface']} surface, {p['n_bottom']} bottom bounces), "
                         "synthesised alone by the simulator (viz/arrivals.py)",
                         "out": p["out"], "back": p["back"], "delay_s": p["delay_s"], "level_db": p["level_db"],
+                        "synthesis_level_db": p.get("synthesis_level_db"), "ranked_by": p.get("ranked_by"),
                         "n_surface": p["n_surface"], "n_bottom": p["n_bottom"],
                         "channel_delay_s": {str(c): p["channel_delay_s"][c] for c in pc}})
+        if len(arr) < n_arr and box.get("kernel") is not None:
+            notes.append(f"single arrivals: {len(arr)} listed, not {n_arr}: only {len(arr)} of the targets' pairs reach "
+                         "the synthesis with a non-zero amplitude (after Lambert's law, occlusion and the beam floor)")
     elif box is not None and n_arr > 0:
         notes.append("single arrivals: none (no target with a two-way pair at this ping)")
     wc = audio_opts.get("channels")
@@ -131,7 +138,13 @@ def _sound(name: str, out: str, trace: dict, record, stages: dict, box, audio_op
                                factor=audio_opts.get("factor"), parts_channels=pc,
                                center_hz=float(audio_opts.get("center") or 2000.0), whole_channels=wc)
     m["parts_residual_db"] = residual
+    overload = any(e.get("model") == "overload" for e in trace.get("models") or [])
+    m["front_end"] = audio.front_end_note(residual, bool(float(record.metadata.adc_full_scale or 0.0) > 0.0), overload)
     m["notes"] = notes
+    m["arrivals_ranked_by"] = ("the synthesis's own amplitude over spherical spreading (viz/arrivals.py)" if box is not None
+                               and box.get("kernel") is not None else "the trace's level (spreading and reflection only)")
+    if any(n.startswith("single arrivals:") for n in notes):
+        m["warning_words"] = next(n for n in notes if n.startswith("single arrivals:"))
     m["seconds"] = round(time.perf_counter() - t0, 2)
     adir = os.path.join(out, f"{name}.audio")
     with open(os.path.join(adir, "manifest.json"), "w", encoding="utf-8") as f:
@@ -357,7 +370,8 @@ def main(argv=None) -> int:
     ap.add_argument("--audio", default=None, choices=("side", "embed", "none"),
                     help="with --3d: the ping's sound beside the page (side, the default with --3d), in it (embed, capped) or none")
     ap.add_argument("--audio-method", default="auto", choices=("auto", "as_recorded", "heterodyne", "time_stretch"),
-                    help="auto: as recorded when the band's top is at or under 16 kHz, else heterodyne to --audio-center")
+                    help="auto: as recorded when the band's top is at or under 16 kHz, time stretch for a record "
+                    "shorter than 0.5 s, else heterodyne to --audio-center")
     ap.add_argument("--stretch", type=float, default=None, help="time-stretch factor (default: the smallest whole number "
                     "that brings the band's top under 16 kHz)")
     ap.add_argument("--audio-center", type=float, default=2000.0, help="heterodyne: the band's centre after the shift (Hz)")

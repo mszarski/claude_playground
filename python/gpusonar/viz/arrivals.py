@@ -10,6 +10,13 @@ the same clock draws) and a pairing whose eigenray sets are masked to one outbou
 ray of the same scatterer: the "echoes" stage of that run is the pair's echo alone, from whichever engine the run used
 (the masking is on the Python eigenray sets both engines' pairing reads). By linearity the pairs of a target sum to
 that target's echoes (tests/python/test_scene_audio.py, both engines).
+
+Which pairs (`strongest_pairs`): ranked by the synthesis's own amplitude, not the trace's level. While active,
+`capture_ping()` also keeps the paths the synthesis kernel is handed for the first ping (`box["kernel"]`: q, p and the
+amplitude after Lambert's law with the patch's normal, occlusion and the beam floor; read only). A pair's synthesis
+level is that amplitude over the spherical spreading of its apparent path, 1 / (|q - tx| |p - rx|) (absorption left
+out; ours); a pair the kernel was not handed (a face turned away, an occluded or beam-floored path) has none and is not
+listed, so no listed arrival is silent. Without a kernel capture the trace's level ranks them, as before.
 """
 
 from __future__ import annotations
@@ -50,9 +57,24 @@ def capture_ping():
     """While active, keep the first simulated ping's call (`box["args"]`, `box["kwargs"]`, `box["rng_state"]`) and
     the outbound and return eigenray sets with the pairing's arguments (`box["out"]`, `box["back"]`, `box["pairing"]`).
     Yields the box."""
+    from .. import _gpusonar as core
     from ..sim import simulator
+    from ..sim import waveform as sampled
     box: dict = {}
     sp, twp = simulator.simulate_ping, simulator.two_way_paths
+    syn, syn_s = core.synthesize_into, sampled.synthesize
+
+    def keep_kernel(record, q, p, amp):
+        if box.get("active") and "kernel" not in box:
+            box["kernel"] = dict(q=np.array(q, float), p=np.array(p, float), amplitude=np.array(amp))
+
+    def synthesize_into(record, q, p, amp, *args, **kwargs):
+        keep_kernel(record, q, p, amp)
+        return syn(record, q, p, amp, *args, **kwargs)
+
+    def synthesize(record, waveform, q, p, amp, *args, **kwargs):
+        keep_kernel(record, q, p, amp)
+        return syn_s(record, waveform, q, p, amp, *args, **kwargs)
 
     def simulate_ping(*args, **kwargs):
         first = "args" not in box
@@ -81,10 +103,12 @@ def capture_ping():
         return twp(provider, tx_position, rx_reference, points, amplitudes, velocities, lambert, normals, engine=engine)
 
     simulator.simulate_ping, simulator.two_way_paths = simulate_ping, two_way_paths
+    core.synthesize_into, sampled.synthesize = synthesize_into, synthesize
     try:
         yield box
     finally:
         simulator.simulate_ping, simulator.two_way_paths = sp, twp
+        core.synthesize_into, sampled.synthesize = syn, syn_s
 
 
 def masked(eig, keep):
@@ -151,16 +175,50 @@ def single_pair_echoes(box, s: int, k: int, j: int, engine=None) -> np.ndarray:
     return echoes_with(box, o, b, engine)
 
 
-def strongest_pairs(trace: dict, box, target: int = 0, n: int = 8) -> list[dict]:
-    """The `n` strongest two-way pairs of trace target `target`, each mapped to the captured eigenray sets (scatterer
-    index, outbound and return ray by their delays). Pairs that cannot be mapped are returned with `mapped: False`."""
+def synthesis_level_db(box, s: int, k: int, j: int, rel: float = 1e-7) -> float | None:
+    """dB of the amplitude the synthesis kernel was handed for the pair (outbound ray k, return ray j) of scene point s,
+    over the spherical spreading of its apparent path (module docstring); None when the kernel was not handed it (or
+    no kernel was captured)."""
+    kern = box.get("kernel")
+    if kern is None or not len(kern["q"]):
+        return None
+    pr = box["pairing"]
+    if "_apparent" not in box:
+        box["_apparent"] = (box["out"].apparent_positions(pr["tx_position"]), box["back"].apparent_positions(pr["rx_reference"]))
+    q = box["_apparent"][0][s, k]
+    p = box["_apparent"][1][s, j]
+    scale = max(1.0, float(np.linalg.norm(q)), float(np.linalg.norm(p)))
+    hit = np.flatnonzero((np.abs(kern["q"] - q).max(axis=1) <= rel * scale) & (np.abs(kern["p"] - p).max(axis=1) <= rel * scale))
+    if not len(hit):
+        return None
+    a = float(np.abs(np.sum(kern["amplitude"][hit])))
+    if a <= 0.0:
+        return None
+    spread = max(float(np.linalg.norm(q - pr["tx_position"])) * float(np.linalg.norm(p - pr["rx_reference"])), 1e-12)
+    return 20.0 * float(np.log10(a / spread))
+
+
+def strongest_pairs(trace: dict, box, target: int | None = 0, n: int = 8) -> list[dict]:
+    """The `n` strongest two-way pairs of trace target `target` (None: of every target, ranked together), each mapped to the captured eigenray sets (scatterer
+    index, outbound and return ray by their delays). With the kernel's paths captured (`capture_ping`) every pair of the
+    target is mapped and ranked by its synthesis level (`synthesis_level_db`; `ranked_by` "synthesis"), and a pair the
+    kernel was not handed is left out, so fewer than `n` may come back; otherwise the trace's `level_db` ranks them
+    (`ranked_by` "trace") and pairs that cannot be mapped are returned with `mapped: False`."""
+    if target is None:
+        # Every target's pairs, ranked together (by the synthesis when the kernel was captured).
+        allp = [q for t in range(len(trace.get("targets") or [])) for q in strongest_pairs(trace, box, t, n)]
+        key = (lambda q: -q["synthesis_level_db"]) if box.get("kernel") is not None else (lambda q: -q["level_db"])
+        return sorted(allp, key=key)[:n]
     if not trace.get("targets") or target >= len(trace["targets"]):
         return []
     legs = trace["legs"][target]
     d_out = {r["k"]: r["delay_s"] for r in legs["out"]}
     d_back = {r["k"]: r["delay_s"] for r in legs["back"]}
     s = scatterer_of(box, trace["targets"][target]["position"])
-    pairs = sorted([p for p in trace["pairs"] if p.get("target", 0) == target], key=lambda p: -p["level_db"])[:n]
+    by_synthesis = box.get("kernel") is not None
+    pairs = sorted([p for p in trace["pairs"] if p.get("target", 0) == target], key=lambda p: -p["level_db"])
+    if not by_synthesis:
+        pairs = pairs[:n]
     out = []
     for p in pairs:
         ko = d_out.get(p["out"])
@@ -171,7 +229,16 @@ def strongest_pairs(trace: dict, box, target: int = 0, n: int = 8) -> list[dict]
         j = match_ray(box["back"], s, kb) if (s is not None and kb is not None) else None
         if (k is None or j is None) and s is not None:
             k, j = _split(box, s, p["delay_s"])
-        out.append(dict(p, scatterer=s, k_captured=k, j_captured=j, mapped=k is not None and j is not None))
+        mapped = k is not None and j is not None
+        if not by_synthesis:
+            out.append(dict(p, scatterer=s, k_captured=k, j_captured=j, mapped=mapped, ranked_by="trace", target=target))
+            continue
+        lvl = synthesis_level_db(box, s, k, j) if mapped else None
+        if lvl is not None:
+            out.append(dict(p, scatterer=s, k_captured=k, j_captured=j, mapped=True, ranked_by="synthesis",
+                            synthesis_level_db=lvl, target=target))
+    if by_synthesis:
+        out = sorted(out, key=lambda q: -q["synthesis_level_db"])[:n]
     return out
 
 
