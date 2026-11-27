@@ -455,7 +455,7 @@ function chainDraw(k){ if (!C) return; chainClear(); const P=C.pings[k], g=P.geo
   const st={det:0, trk:0, truth:0, ell:0, gates:0, map:false};
   if (P.map && chainOn.map){ const m=P.map, cv=document.createElement('canvas'); cv.width=m.cols; cv.height=m.rows; const cx=cv.getContext('2d'), im=cx.createImageData(m.cols, m.rows);
     const u=Uint8Array.from(atob(m.u8), ch=>ch.charCodeAt(0));
-    for (let i=0;i<u.length;i++){ const v=u[i], a=Math.min(255, v*1.6); im.data[4*i]=255; im.data[4*i+1]=Math.round(255-0.55*v); im.data[4*i+2]=Math.round(255-0.95*v); im.data[4*i+3]=a; }
+    for (let i=0;i<u.length;i++){ const v=u[i], a=Math.min(185, v*1.6); im.data[4*i]=Math.round(255-0.35*v); im.data[4*i+1]=Math.round(240-0.75*v); im.data[4*i+2]=Math.round(200-0.75*v); im.data[4*i+3]=Math.min(255, 70+a); }
     cx.putImageData(im,0,0); const tex=new THREE.CanvasTexture(cv); tex.flipY=false; tex.magFilter=THREE.NearestFilter;
     const nr=Math.min(m.cols, 120), pos=[], uv=[], idx=[];
     for (let i=0;i<=m.rows;i++) for (let j=0;j<=nr;j++){ const p=at(m.r0+m.dr*m.cols*j/nr, m.b0+m.db*i); pos.push(...L(p).toArray()); uv.push(j/nr, i/m.rows); }
@@ -471,7 +471,7 @@ function chainDraw(k){ if (!C) return; chainClear(); const P=C.pings[k], g=P.geo
       G.chain.add(points([[t.x,t.y,z]], col, 11, {depthTest:false}));
       const sp=Math.hypot(t.vx,t.vy); if (sp>1e-6){ const len=Math.max(sp*Tarrow, span*0.004); G.chain.add(new THREE.ArrowHelper(LD([t.vx/sp,t.vy/sp,0]), L([t.x,t.y,z]), len, new THREE.Color(col).getHex(), len*0.25, len*0.12)); }
       const e=ev[t.id], a=asc[t.id];
-      label(`${t.id} ${t.kind}`, [t.x,t.y,z], 'tgt', 'chain', span*1.5); st.trk++; } }
+      label(`${t.id} ${t.kind}`, [t.x,t.y,z], 'tgt', 'chain'); st.trk++; } }
   if (chainOn.truth && C.truth.length){ const tp=C.truth.map(x=>x.positions[Math.min(k, x.positions.length-1)]);
     G.chain.add(points(tp.map(p=>[p[0],p[1],z]), 0x1baf7a, 13, {depthTest:false})); C.truth.forEach((x,i)=>label(`truth: ${x.label}`, [tp[i][0],tp[i][1],z], 'surf', 'chain')); st.truth=tp.length;
     for (const t of P.tracks){ const a=asc[t.id]; if (!a||a.truth==null) continue; const x=C.truth.find(y=>y.label===a.truth); if (!x) continue; const p=x.positions[Math.min(k,x.positions.length-1)];
@@ -509,11 +509,14 @@ function chainSet(k, play){ chainK=Math.max(0, Math.min(C.n_pings-1, k)); const 
   return st; }
 function chainZoom(){ if (!C) return; const P=C.pings[chainK], g=P.geometry, o=P.ownship, z=o[2];
   const dir=b=>{ const r=b*Math.PI/180; return [Math.sin(r)*g.axis[0]+Math.cos(r)*g.broadside[0], Math.sin(r)*g.axis[1]+Math.cos(r)*g.broadside[1]]; };
-  const pts=[o, ...P.detections.map(d=>{ const u=dir(d.bearing_deg); return [o[0]+d.range_m*u[0], o[1]+d.range_m*u[1], z]; }), ...P.tracks.map(t=>[t.x,t.y,z]),
+  const pts0=[...P.detections.map(d=>{ const u=dir(d.bearing_deg); return [o[0]+d.range_m*u[0], o[1]+d.range_m*u[1], z]; }), ...P.tracks.map(t=>[t.x,t.y,z]),
              ...C.truth.map(x=>x.positions[Math.min(chainK, x.positions.length-1)])];
+  const pts = pts0.length ? pts0 : [o];       // what the chain found and the truth; the array alone when there is none
   const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]); const cx=(Math.min(...xs)+Math.max(...xs))/2, cy=(Math.min(...ys)+Math.max(...ys))/2;
-  const size=Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys), span*0.02);
-  const c=L([cx,cy,z]); c.y*=vex; ctl.target.copy(c); ctl.dist=1.5*size; ctl.el=1.25; place(); draw(); }
+  const size=Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys), span*0.03);
+  // The chain's own view: from above, the rays, beams, surface and bed hidden (their boxes unticked; tick to bring back).
+  for (const k of ['rays','beams','surface','bed','projpat','oneway','direct']){ G[k].visible=false; const el=document.querySelector(`[data-layer="${k}"]`); if (el) el.checked=false; }
+  const c=L([cx,cy,z]); c.y*=vex; ctl.target.copy(c); ctl.dist=2.0*size; ctl.az=0; ctl.el=1.5; place(); draw(); }
 window.__chainZoom = chainZoom;
 if (C){ document.body.classList.add('haschain'); const pn=$('chn'); pn.hidden=false;
   const P0=C.pings[0]||{};

@@ -307,7 +307,7 @@ def chain_missing(name: str, mode: str | None) -> str:
 
 
 def chain_view(name: str, out: str, three: str | None, traces: str | None, engine: str = "cpp", records_dir: str | None = None,
-               quick: bool = True, audio_channels=None, tap_cost: bool = False) -> dict:
+               quick: bool = True, audio_channels=None, tap_cost: bool = False, max_pings: int | None = None) -> dict:
     """The live chain's view of a scene (viz/chain.py): its pings from `records_dir` (NAME.records.h5 and NAME.truth.json,
     made once by `chain.simulate_and_cache`, with the gallery's --quick thinning when `quick`), the chain run over them
     in `engine` ("cpp", "python" or "both": the second's report lines compared with the first's) with the opt-in taps
@@ -319,7 +319,7 @@ def chain_view(name: str, out: str, three: str | None, traces: str | None, engin
     records_dir = records_dir or os.path.join(out, "records")
     truth_path = os.path.join(records_dir, f"{name}.truth.json")
     if not os.path.exists(truth_path):
-        vchain.simulate_and_cache(name, records_dir, quick=quick)
+        vchain.simulate_and_cache(name, records_dir, quick=quick, max_pings=max_pings)
     with open(truth_path, encoding="utf-8") as f:
         truth = json.load(f)
     records = vchain.read_records(os.path.join(records_dir, f"{name}.records.h5"))
@@ -478,6 +478,7 @@ def main(argv=None) -> int:
                     help="the live chain's engine; both: the C++ engine's page with any difference of the Python engine's lines")
     ap.add_argument("--chain-records", default=None, help="the record cache (default OUT/records)")
     ap.add_argument("--chain-full", action="store_true", help="simulate the scene as written (default: the gallery's --quick thinning, said on the page)")
+    ap.add_argument("--chain-pings", type=int, default=None, help="simulate at most this many pings (said on the page)")
     ap.add_argument("--chain-tap-cost", action="store_true", help="also run the chain with its taps off: cost per ping and the bit-identity of the lines")
     args = ap.parse_args(argv)
     audio_mode = args.audio or ("side" if args.html else "none")
@@ -496,7 +497,8 @@ def main(argv=None) -> int:
         for name in names:
             try:
                 facts = chain_view(name, args.out, three, args.traces, args.chain_engine, args.chain_records, not args.chain_full,
-                                   None if not args.audio_parts else [int(c) for c in args.audio_parts.split(",")], args.chain_tap_cost)
+                                   None if not args.audio_parts else [int(c) for c in args.audio_parts.split(",")], args.chain_tap_cost,
+                                   args.chain_pings)
             except Exception as exc:                  # one scene failing does not stop the others; it is reported
                 facts = {"scenario": name, "chain_error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc(limit=4)}
             with open(os.path.join(args.out, f"{name}.chain_facts.json"), "w", encoding="utf-8") as f:

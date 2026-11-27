@@ -140,7 +140,7 @@ def gallery_quick(name: str):
     return mod.QUICK.get(name), sorted(mod.RUNNERS)
 
 
-def simulate_and_cache(name: str, out_dir: str, quick: bool = False, engine: str | None = "cpp") -> dict:
+def simulate_and_cache(name: str, out_dir: str, quick: bool = False, engine: str | None = "cpp", max_pings: int | None = None) -> dict:
     """Run the scenario (with the gallery's `--quick` thinning when `quick` and it has one) and write
     `out_dir`/NAME.records.h5 (every ping) and NAME.truth.json (truth objects, scenario times, platform positions,
     what was run). Returns the truth file's content."""
@@ -155,6 +155,10 @@ def simulate_and_cache(name: str, out_dir: str, quick: bool = False, engine: str
         if fn is not None:
             fn(cfg)
             thin = "tools/gallery.py --quick thinning (QUICK[name]): fewer pings and scatterers, the same geometry"
+    if max_pings is not None and int((cfg.get("pings") or {}).get("count", 1)) > max_pings:
+        n0 = int(cfg["pings"]["count"])
+        cfg["pings"]["count"] = int(max_pings)
+        thin = ((thin + "; ") if thin else "") + f"the first {max_pings} of its {n0} pings (ours, for this CPU)"
     t0 = time.perf_counter()
     res = run_scenario(cfg, engine=engine)
     sim_s = time.perf_counter() - t0

@@ -641,3 +641,96 @@ What failed, cannot be heard or is uncertain first:
   headless Chromium: the lit hydrophones at three times equal those computed from the trace, the page's sound follows
   the selector, no console error.
 - By proxy over the full run (ours, 2026-11-27): every WAV of the parts' first hydrophone has 0.9999 or more of its energy inside the stated kept band (worst `fls_170k_transit` arrival 6) and the stated duration; no sample clipped; on `popoto_12km` (as recorded, 4-6 kHz) the echoes' centroid is 4.95 kHz and the single arrival's envelope peaks 45 ms after its trace delay of 16.06 s (inside its pulse); on `fls_120k_transit` (heterodyne, shift 118.0008 kHz) every kind's centroid lies at 1.8 to 2.0 kHz. Found wrong or empty: (1) the four `rail_*` scenes' records last 0.27 ms, under one frequency bin of the kept 3.6 kHz: their heterodyned files are silent (all zero; 272 files); the plan now carries a WARNING (`listen_plan` `warning`, on the page and in the INFO comment) and they were made again with it; (2) of the 8 strongest pairs of the strongest target, some single arrivals are silent in 12 FLS and SAS scenes (72 files): the trace ranks pairs by spreading and reflection only, while the synthesis weights a patch object's pairs by Lambert's law with the patch's normal (zero for a face turned away) and drops occluded or beam-floored paths; (3) the overload scenes' parts are before the front end, so they sum to the record within +28 dB only (the clipping is the point of those scenes)).
+
+## 15. Package V6 as done (2026-11-27): the live chain in the same viewer, and part A's fixes
+
+Every number here is **ours** (this 4-core CPU shared with other agents, no GPU, simulated records) unless named.
+
+What failed, cannot be shown or is uncertain first:
+
+- **The FLS chain view needed one setting that is not the default.** The live chain's default `look: starboard` (made
+  for a flank array) puts every echo of a forward-looking sonar, whose array lies across the bow, astern and mirrored:
+  on `fls_120k_cluttered_seabed` with the defaults the tracks lay 150 to 230 m behind the sonar, 225 to 430 m from the
+  nearest object. `viz/chain.py look_toward_boresight` sets `look: port` when the default's broadside points away from
+  the sonar's boresight and no deployment file gives `look`; the page says so in its configuration line. Nothing in
+  the chain changed. No deployment file names an FLS sonar, so the FLS views run the chain's defaults otherwise
+  (bearings -40 to 40 deg, multiscale detector, a flank array's tracker and classifier): most FLS tracks of the
+  cluttered seabed are seabed clutter classed static or multipath, which is what these settings do, not a fault drawn.
+- **Two pool scenes have no chain view**: `pool_fls_l12_5d` and `pool_fls_p4_2v`: the chain refuses their records
+  ("the receive window is shorter than three range cells", the default 1 m cell against a pool's few metres). Their
+  pages say no chain was run. SAS, rail and buried scenes are imaged along a track, not run through a line-array chain:
+  their pages say "not applicable".
+- **`popoto_env_summer_mud_60m` gives no detection on any of its 6 pings** with the deployment file's chain
+  (`configs/deploy/popoto_vehicle.yaml`); the other popoto scenes give one track on their ship. Not investigated here
+  (follow-up).
+- **Quick forms.** Every multi-ping scene but the two `popoto_env` scenes ran in the gallery's `--quick` thinning (4
+  pings, thinned scatterers or `max_arrivals`), labelled on each page. `flank_patrol` as written (6 pings) did not
+  finish its simulation in 330 s here; it ran as its gallery quick form (4 pings). Full runs belong to the GPU job:
+  `PYTHONPATH=python python3 tools/scenario_view.py NAME --chain --3d --chain-full --chain-engine both --out DIR
+  --traces TRACES` for `flank_patrol`, the six FLS transit and traffic scenes and the four popoto scenes run quick.
+- **The detector's profile on the page is approximate**: the map is block maxima of the cell map (a block of 1 to 2
+  bearings and up to a few cells), the background block means, and the thresholds the plan's nominal factor per
+  statistic over the background (the end-of-map training correction left out); a detection is decided on the native
+  map. On `fls_120k_cluttered_seabed` the near 30 to 120 m stand 10 to 20 dB over the drawn background with no
+  detection there (blanking or the sidelobe rule; not traced).
+- **Pages are busy.** With 20 tracks the 3-D labels overlap; the chain panel covers part of the info panel; the power
+  fan of a 12 km scene is a faint arc unless "zoom to the chain" is pressed (it hides rays, beams, surface and bed).
+- **Not done**: the gate drawn per track is the gate about its nearest detection only (the tap holds every gated pair);
+  no sound was listened to; the CDN pages committed refer to `NAME.chain_audio/` beside them, which is not committed.
+
+### 15.1 Part A (fixes to V3/V5)
+
+- Audio default by record (`audio.default_method`, the owner's agreement of 2026-11-27): as recorded when the band's
+  top is at or under 16 kHz; **time stretch for records shorter than 0.5 s** (FLS, SAS, rail); heterodyne for longer
+  records above 16 kHz. Stretch factor (`stretch_factor`, rule ours): the smallest whole factor bringing the band's top
+  under 16 kHz, raised towards 0.5 s of sound as far as keeps the band's centre at or above 500 Hz. A 0.27 ms rail
+  record: x1833 (0.50 s; band top 2.0 kHz); a 3 ms FLS record at 3.75-6.25 MHz: x391 (1.17 s). Named in every file's
+  INFO chunk and on the page with the rule. The four `rail_*` scenes: 290 WAV files, none all zero (before: 272 silent).
+  Four tests that asserted a heterodyne of a short record now ask for it by name (the default moved by the owner's
+  decision; nothing weakened).
+- Single arrivals by the synthesis's own amplitude (`arrivals.synthesis_level_db`): the kernel's paths are kept during
+  the capture (after Lambert's law with the patch's normal, occlusion and the beam floor), every target's pairs ranked
+  by that amplitude over spherical spreading; pairs the kernel never saw are not listed. Fewer than 8 are said on the
+  page (`warning_words`): rail scenes 1 to 6.
+- The parts and the front end (`audio.front_end_note`): every page says the parts are taken before the front end; where
+  they miss the record by more than -40 dB of its rms (ours) the sound panel says they do not sum and why (the three
+  overload scenes: "the front end clipped").
+
+### 15.2 The chain view (`viz/chain.py`, `tools/scenario_view.py --chain`)
+
+From the report line alone (no change to either engine): detections (range, bearing, snr, extent, arrivals, range
+rate and Doppler path when reported), tracks (id, kind, parent, position, velocity, speed, mean snr, seen), own-ship,
+`pings_without_nav`, and the cell map the detector reads (`LiveChain.last`, the `beamform` tap). The page draws per
+ping: the map as a textured fan at the array, detections coloured by snr (or Doppler path), tracks with history,
+velocity arrow and kind; the truth (each labelled object's centroid at the ping's time from the scenario's scene) and
+each track's nearest object with the distance (the association error); a ping slider, "step pings" with each ping's
+WAV for the selected hydrophone on one clock (the next ping when the sound ends); a 2-D chain page (`NAME.chain.png`):
+the bearing-range map with detections, tracks and truth, the plan view with covariances, the detector along a beam, a
+track table.
+
+What each new opt-in tap adds (both engines, `LiveChain(taps={"chain": [...]})`, `LiveChainCpp.set_taps/tap`):
+- `tracker` (`detect.TRACKER_TAP`): the tracks entering the update; every gated (track, detection) pair and each
+  track's nearest with d^2, cost, the prediction and the innovation covariance; what each track took; births,
+  confirmations, misses and drops with their reason; every track's state and covariance after (tentative ones too).
+  Drawn: 2-sigma covariance ellipses (purple confirmed, grey tentative), each track's gate, the detection it took.
+- `classifier` (`classify.CLASS_EVIDENCE`): per reported track the numbers the rules compared (speed, its sigma, the
+  significance needed, seen, fit rms against its limit, points fitted) and the first rule that gave the kind, then what
+  changed it (line, small extent, bounce, multipath of N). Shown in the track tables.
+- `detector`: the multiscale detector's background per cell and its plan. Shown as the profile along a chosen bearing.
+
+Read only and equal: the report lines' sha256 (without `processing_seconds`) are equal with the taps off and on, both
+engines, and equal to a build of the base `67d962b` (the method of `docs/tasks/DOPPLER.md` D3): `fls_120k_transit` and
+`popoto_12km`, 4 pings each, chain defaults: 12 of 12 (python `9284067c...` and `24aecc80...`, cpp `95346e54...` and
+`7b31641b...`). The two engines' taps agree (`test_the_two_chains_taps_are_equal`: ids and flags exact, numbers 1e-5;
+the C++ Student's t quantile 1e-5) and the two trackers' taps to 1e-8. Cost of the taps when on: within the noise of
+this shared CPU (`fls_120k_cluttered_seabed` 12.45 against 12.38 s a ping; `flank_patrol` 4.11 against 3.93 s). No
+tapped quantity lives on the device: the tracker and classifier are host code and the detector's background is
+copied to the host by the multiscale detector already, so no CUDA test was added.
+
+Fifteen chain views (both engines run, no difference beyond `test_live_cpp.py`'s tolerances on any): pages with
+three.js embedded 0.78 to 1.23 MB (limit `PAGE_LIMIT_CHAIN_EMBED` 1.5 MB), CDN (four made) 0.28 to 0.43 MB (limit 1.0 MB); the
+chain member at most 0.32 MB (`CHAIN_BUDGET` 0.56 MB, maps downsampled to `CHAIN_MAP_BUDGET`). `tools/page3d_check.js`
+checks at every ping that the detections and tracks drawn equal the report line's: 15 of 15 pages, no console error.
+Committed: `docs/figures/scenes/chain/` (two CDN pages, `flank_patrol` and `fls_120k_cluttered_seabed`, with
+screenshots). Tests: `tests/python/test_scene_chain.py` (7), new tests in `tests/python/test_live_cpp.py` (8) and
+`tests/python/test_scene_audio.py` (21).
