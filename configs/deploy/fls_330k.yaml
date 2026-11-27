@@ -1,0 +1,45 @@
+# The 330 kHz forward-looking sonar (configs/sonars/fls_330k.yaml) through the live chain:
+#   tools/sonar_live.py configs/deploy/fls_330k.yaml --replay RECORDING.h5      (or --scenario fls_330k_transit)
+# The owner (D-255): the forward-looking sonar gets its own deployment settings. docs/DEPLOYMENT.md, "A forward-looking
+# sonar", says what each value is and why; docs/CONFIGURATION.md has the keys. Everything left out keeps the chain's
+# default (gpusonar/live.py DEFAULTS).
+# The detector, tracker and classifier values are the ones tools/gallery.py has run the 120, 170 and 330 kHz transit
+# scenes with (run_fls_transit, FLS_TRACKER, before sonar-tpex); the gallery reads them from here now (fls_settings), so
+# this file is their one source. Changing one moves the gallery's FLS results: ask the owner first (CLAUDE.md).
+
+source:
+  type: container                # no front end is chosen for this sonar (its receive block is unconfirmed): recordings
+  path: /data/sonar/fls_330k.h5  # are replayed. A stream source is a follow-up once the front end is known.
+  sonar: fls_330k
+
+chain:
+  # The array is across the bow (array.axis athwartships, array.boresight forward). `boresight`: the chain takes the side
+  # the record's elements face, every ping (live.py look_side, libs/live look_starboard): ahead, bearings positive to
+  # starboard. The default, starboard (a flank array's), put every echo astern and mirrored (D-253).
+  look: boresight
+  bearings_deg: [-60.0, 60.0, 0.4]   # the sonar's fov.horizontal_deg, 120; 0.4 degrees is 0.43 of the beam (lambda / D =
+                                     # 0.92 degrees at 330 kHz over 128 x 2.2 mm)
+  # Cells of 0.48 m (19 range resolutions of c / 2B = 25 mm): the size of the highlights of a boat or a buoy, not of
+  # the kilometre-range array the chain's standing 2 m was set for (libs/live derive.hpp kStanding).
+  range_cell_m: 0.48
+  cell_statistic: mean           # each cell's mean power against a CA-CFAR threshold, as the gallery's detector
+  cfar: {pfa: 1.0e-7, guard_m: 6.0, train_m: 30.0}    # the standing 100 m and 300 m are a third of this window and more
+  min_snr_db: 13.0
+  tracker:
+    range_sigma: 1.5             # m; the standing 15 m is 40 cells here
+    bearing_sigma_deg: 0.4       # 0.43 of the beam
+    confirm_hits: 3
+    max_misses: 2
+    initial_speed_sigma: 6.0     # m/s: boats in a harbour or on a transit
+    process_noise: 0.3
+  classify:
+    min_speed: 0.5               # m/s
+    static_speed: 0.5
+    max_fit_rms: 2.5             # m; the standing 60 m is 125 cells
+    multipath: null              # no echo grouping: its 800 m excess range is longer than the whole 300 m window, so every
+                                 # farther track on a bearing would be a bounce of a nearer one; the gallery groups none
+
+output:
+  report: /data/sonar/fls_330k_%Y%m%d_%H%M%S.jsonl
+
+unconfirmed: [source]

@@ -1374,6 +1374,7 @@ void bind_live(py::module_& m) {
         if (kw.contains("sbl_kernels")) o.sbl.kernels = kw["sbl_kernels"].cast<bool>();
         if (kw.contains("hann")) o.hann = kw["hann"].cast<bool>();
         if (kw.contains("starboard")) o.starboard = kw["starboard"].cast<bool>();
+        if (kw.contains("look_boresight")) o.look_boresight = kw["look_boresight"].cast<bool>();   // look: boresight (sonar-tpex)
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
         if (kw.contains("cell_peak")) o.cell_peak = kw["cell_peak"].cast<bool>();
         if (kw.contains("cell_multiscale")) o.cell_multiscale = kw["cell_multiscale"].cast<bool>();

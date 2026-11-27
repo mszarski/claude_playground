@@ -433,7 +433,7 @@ One table. Where a module can check a convention cheaply it does (named in the l
 | File | Read by | Keys |
 | --- | --- | --- |
 | `configs/chains/<name>.yaml` | `pipeline.run` | `source: {type, ...}`, `steps: [{stage, ...}]`, `backend`, `output: {geotiff, log, debug_dir, taps: {dir, stages}}` |
-| `configs/deploy/<name>.yaml` | `tools/sonar_live.py` | `source`, `nav: {port, host}` or `nav: {static: {...}}` (with `lever_arm_m`, `mount_rpy_deg`: the navigation unit to the array), `chain`, `output: {recording, report, report_udp, taps: {dir, pings}}` |
+| `configs/deploy/<name>.yaml` | `tools/sonar_live.py` | `source` (a sonar with no stream source yet replays recordings: `{type: container, path, sonar}`, `sonar` naming the sonar the recording is of, for what picks a file by sonar), `nav: {port, host}` or `nav: {static: {...}}` (with `lever_arm_m`, `mount_rpy_deg`: the navigation unit to the array), `chain`, `output: {recording, report, report_udp, taps: {dir, pings}}` |
 | `configs/nav/<name>.yaml` | `tools/nav_adapter.py` | a mapping from a vendor's navigation stream to the chain's datagrams: `format`, `csv`, `time`, `position`, `attitude`, `velocity`, `sound_speed`, `altitude`, `water_depth`, `sigma`, `output` (`python/gpusonar/navadapter.py`; `generic_csv.yaml` is a worked example, `sprintnav_template.yaml` a template with every vendor-side entry unconfirmed) |
 
 ### Steps of a chain file: keys derived from the record, and where the defaults live
@@ -504,7 +504,7 @@ a record that still does, and the imaging, gain and synthesis entry points raise
 | `engine` | `python` (default: stage by stage, every tap) or `cpp` (`libs/live` does everything after recording) |
 | `beamformer`, `backend` | `backprojection` (the kernel), `farfield` or `mvdr`; `auto` (default: CUDA when built and present, else host), `host` or `cuda`. All three beamformers run on the device with `cuda`: `farfield` and `mvdr` through the C++ beamformers in either engine (`libs/live/src/chain.cpp` passes `backend` to `farfield_beamform` / `mvdr_beamform`; `flank.py` does the same for `engine: python`; `beamform.hpp`: transforms, steered sums, covariances, Cholesky factors and solves on the device; an MVDR covariance that is not positive definite sends that call to the host). The NumPy versions in `flank.py` are host-only references |
 | `doa`, `sbl: {grid_step_deg, max_sources, min_snr_db, dynamic_range_db, max_gates, min_contrast_db, max_iterations, tolerance}` | `map` (default: bearings from the beamformed map) or `sbl` (sparse Bayesian bearings at each detected range; runs the C++ engine). `max_gates`: ranges solved per ping, strongest first. `min_contrast_db`: a gate whose conventional spectrum peaks less than this over its median keeps the map's detection |
-| `bearings_deg`, `look`, `window` | `[first, last, step]` from broadside; `starboard` or `port`; aperture weighting |
+| `bearings_deg`, `look`, `window` | `[first, last, step]` from broadside; `starboard`, `port` or `boresight` (opt-in, sonar-tpex: on every ping the side the record's elements face, so an array across the bow looks ahead; `live.look_side`, `libs/live` `look_starboard`; the FLS deployment files say it, `DEPLOYMENT.md`, "A forward-looking sonar"); aperture weighting |
 | `range_cell_m` | power is averaged into cells this long before detection |
 | `cfar: {guard_m, train_m, false_alarms_per_ping, pfa, ...}`, `min_snr_db` | detector windows in metres (turned into cells by `core.cfar_window`: rounded up); the false-alarm budget per ping (`multiscale`) or per cell (`pfa`: `mean`, `peak`); detections below this SNR are dropped. The other `cfar` keys: below |
 | `range_doppler` | `off` (default), `ownship` or `full`: the LFM range-Doppler coupling correction (D-181; `range_doppler` for `sonar_live`). Factor f0·T/(f_stop − f_start), signed by the sweep, 0 for a waveform that is not an LFM (ours, from the LFM matched filter; textbook unconfirmed). `ownship` adds factor × the ownship's closing speed along each detection's line of sight (navigation velocity) to its range, placement and time; `full` also moves each reported track along the line of sight by factor × its own closing speed. `first_range_m` in the report stays the detector's uncorrected value |
@@ -666,7 +666,7 @@ brackets) is refused. Switches are `1` or `0`. "Derived" means: left out, the ch
 | Deployment file (`chain.` unless stated) | `sonar_live` key | Unit | Default |
 | --- | --- | --- | --- |
 | `bearings_deg: [first, last, step]` | `bearing_first_deg`, `bearing_last_deg`, `bearing_step_deg` | degrees from broadside | −40, 40, 0.5 |
-| `look` | `look` | `starboard` or `port` (any other text is refused, D-145) | `starboard` |
+| `look` | `look` | `starboard`, `port` or `boresight` (the side the elements face, every ping; sonar-tpex); any other text is refused (D-145) | `starboard` |
 | `window` | `window` | `hann` or `rect` (no weighting); any other text is refused (D-145) | `hann` |
 | `beamformer` | `beamformer` | `backprojection`, `farfield`, `mvdr` | `backprojection` |
 | `backend` | `backend` | `auto` (CUDA when built and a device is present, else host), `host`, `cuda` (an error where no CUDA device is usable; D-147) | `auto`, in the program too (D-147) |

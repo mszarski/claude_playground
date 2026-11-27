@@ -103,7 +103,7 @@ Each detection:
 | Field | Unit, frame, sign | What it is |
 | --- | --- | --- |
 | `range_m` | m, slant | c τ / 2 from the array's reference point, τ the two-way delay, c the record's sound speed (or `chain.sound_speed`). `cell_statistic: multiscale` (default): the detection's leading edge, its nearest sample above the single-sample threshold (`chain.cfar.range_estimate: first`, the default since D-160); with stacked rows a detection the elevation places (`elevation.correct_bearing`, not ambiguous) reports the elevation's own range instead, the one it is placed and timed at (D-160). With `range_estimate: centroid`: the energy-weighted mean of its samples (the default until D-160; at 12 km on `popoto_12km` behind the target by about 50 m of multipath spread, D-157). `mean`, `peak`: the energy-weighted mean of the centres of its range cells. With `chain.range_doppler: ownship` or `full` (opt-in, default `off`, D-181) the LFM range-Doppler term is added: factor × the ownship's closing speed along the detection's line of sight, factor f0·T/(f_stop − f_start), 0 for a waveform that is not an LFM; `first_range_m` stays the detector's uncorrected value (`CONFIGURATION.md`) |
-| `bearing_deg` | degrees from broadside, in the horizontal plane | 0 is broadside on the `chain.look` side; positive towards the last receive element along the array (the axis from the first element to the last). Broadside is that axis turned 90° clockwise seen from above for `look: starboard` (north to east), anticlockwise for `port`. With stacked rows and `elevation.correct_bearing`: the horizontal bearing after the elevation correction, and `cone_bearing_deg` is the line's own |
+| `bearing_deg` | degrees from broadside, in the horizontal plane | 0 is broadside on the `chain.look` side; positive towards the last receive element along the array (the axis from the first element to the last). Broadside is that axis turned 90° clockwise seen from above for `look: starboard` (north to east), anticlockwise for `port`. `look: boresight` (opt-in, sonar-tpex) takes, on every ping, whichever of the two the record's elements face ("A forward-looking sonar" below). With stacked rows and `elevation.correct_bearing`: the horizontal bearing after the elevation correction, and `cone_bearing_deg` is the line's own |
 | `snr_db` | dB | the detector's signal-to-noise ratio: "What `snr_db` is" below (the C++ line writes `null` for a value that is not finite) |
 | `extent_m`, `first_range_m` | m | multiscale detector only: the cluster's extent in range and where it starts (it covers `[first_range_m - cell / 2, first_range_m + extent_m]`) |
 | `arrivals` | list of [range m, SNR dB] | multiscale detector, two or more arrivals along range only |
@@ -1427,6 +1427,53 @@ one of several candidates. A track never waits for a depth, a sound-speed profil
 add `depth_m` to a track that exists without them. A track is called `multipath` only of a track that is itself
 classed `mover`, `static` or `line`.
 
+## A forward-looking sonar (`configs/deploy/fls_*.yaml`, `l12_5d.yaml`, `p4_2v.yaml`)
+
+The owner (D-255): the forward-looking sonar gets its own deployment settings. Nothing here has run on an FLS's
+hardware either: no front end is chosen for the 120, 170 and 330 kHz sonars, so their files replay recordings
+(`source: {type: container, path, sonar}`); the pool sonars' files name the reference rig (`nvus_scanner`). Both are
+marked `unconfirmed: [source]`.
+
+**What was wrong.** The chain's defaults are a flank array's. `look` is not "port or starboard of the vehicle": it is the
+side of the array's own axis (first element to last) its broadside is on, the axis turned 90° clockwise seen from above
+for `starboard`, anticlockwise for `port` (the report line's `bearing_deg`, above). A flank array numbered aft to fore
+has its starboard broadside to starboard. A forward-looking array lies across the bow, numbered port to starboard
+(`array.axis: [0, 1, 0]`), so its starboard broadside points astern: with the default every echo was placed behind
+the sonar, mirrored fore and aft (D-253: tracks 150 to 230 m astern; on the quick `fls_120k_transit` 20 to 265 m, each object's nearest track 219 to 471 m from it).
+`look: port` happened to give ahead for that numbering, and the viewer used it. `look: boresight` (opt-in, both engines:
+`live.look_side`, `libs/live` `look_starboard`) takes the side the record's elements face: their boresights (body
+frame, `rx_boresight` of the record) turned into the world by the receive pose and summed, against the starboard
+broadside. Ahead for an FLS however its elements are numbered, starboard for a flank array (the same report, byte for
+byte, as `starboard`); a boresight along the array or straight up or down gives no side and the chain stops on that
+ping. `starboard` and `port` are as before: report lines of `flank_patrol` (defaults; `popoto_vehicle`) and
+`popoto_elevation_free` (defaults; `popoto_vehicle_elevation` without its `sync`) hash the same before and after, in
+both engines (8 of 8).
+
+**Also wrong in kind, and set by the files.** The standing sizes the chain derives from (2 m cells, 100 m guard and
+300 m training, 15 m and 1° tracker sigmas, 60 m fit limit; `libs/live` `derive.hpp`) were set for kilometres of
+range. A pool's window (2.2 m, 5 m) is shorter than three 2 m cells, and the chain refused the pool records. Echo
+grouping (`classify.multipath`, 800 m of excess range) is longer than any FLS window: every farther track on a bearing
+would be a bounce of a nearer one. Each file switches grouping off.
+
+| File | Values, and where they come from |
+| --- | --- |
+| `fls_120k`, `fls_170k`, `fls_330k` | the settings `tools/gallery.py` ran its transit scenes with, now read from these files by the gallery (`fls_settings`; its results do not move, `tests/python/test_fls_deploy.py`): bearings −60 to 60° by 0.4° (`fov.horizontal_deg` 120; 0.43 of the 0.93° beam), cells of 0.48 m (13 or 19 range resolutions, the scale of a boat's or a buoy's highlights), `cell_statistic: mean` with `cfar.pfa` 1e-7, guard 6 m, training 30 m, `min_snr_db` 13; tracker range sigma 1.5 m, bearing sigma 0.4°, 3 hits to confirm, 2 misses, initial speed sigma 6 m/s, process noise 0.3; classifier `min_speed` and `static_speed` 0.5 m/s, `max_fit_rms` 2.5 m. Ours (the gallery's choices), not measured on hardware |
+| `l12_5d`, `p4_2v` | the floors `derive.hpp` already derives from the sonar, written out because the standing values exceed them: a cell of one range resolution (0.30 mm, 0.37 mm), guard four resolutions, training twelve, tracker range sigma one resolution and bearing sigma a sixteenth of the beam (0.055°, 0.10°), fit limit four resolutions; the fan is the transmit's insonified sector to whole steps of about 0.43 of a beam. The detector's statistic, false-alarm budget and SNR floor and the tracker's counts and speeds keep the chain's defaults: no scene has tuned anything for these sonars |
+
+**What the files give, measured** (CPU, host backend, simulated, ours). The quick `fls_120k_transit` (4 pings): every
+track ahead, each of its four objects with a track within 0.36 to 1.85 m (both engines alike; the pinnacle also
+carries extra tracks 5 to 10 m off); with the defaults every track lay astern, 219 to 471 m from the object nearest it. The pool scenes now run:
+`pool_fls_l12_5d` 9 and 8 detections on its two pings, `pool_fls_p4_2v` 127 on its one quick ping (its walls at one
+range resolution a cell; not tuned); neither confirms a track (fewer pings than the tracker's three). With the
+defaults the C++ chain still refuses them ("the receive window is shorter than three range cells"); the Python
+chain does not refuse alike (an IndexError on `l12_5d`, a run on `p4_2v`): not changed here, a follow-up.
+
+**Not done.** No file for `fls_300k` or `fls_750k`: the floors alone give 3591 detections a ping on the quick
+`harbour_fls_750k` (the speckle of every resolution cell), and a cell of a target's size is a choice nobody has made
+for those sonars. Without a file the viewer runs the chain with `look: boresight` and says so on the page. The FLS
+tracker and classifier are the gallery's, tuned on simulated transits; tuning them for the live chain would move results
+and waits on the owner.
+
 ## Keys a new sonar must review
 
 Bringing up another array, band, board or platform is a matter of files: a sonar file (`configs/sonars`), a deployment
@@ -1453,6 +1500,7 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `source.timeout` → `idle_seconds` | longer than the longest silence of the stream (a board that sends only inside its receive window is silent for the rest of the ping interval); 0 for a service that must never end by itself |
 | `source.host` → `bind` | the sonar network's interface, when the computer has several |
 | `chain.bearings_deg` | the sector is a requirement; the step should be at most half a beamwidth (a warning says when it is not) |
+| `chain.look` | `starboard` for a flank array numbered aft to fore; `boresight` for an array across the bow (a forward-looking sonar): see "A forward-looking sonar" |
 | `chain.cfar.guard_m`, `train_m` | the standing 100 m and 300 m are for echoes spread by a waveguide at kilometres; a warning says when the receive window is shorter than both sides of them. A short-range sonar should set them |
 | `chain.classify.multipath.max_excess_range` (800 m), `velocity` | the site: the longest extra path a bounce can have at the water depth and range worked; since D-155 also the range window on either side within which tracks are grouped, transitively, so too large a value merges separate objects at one bearing and velocity |
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
