@@ -252,12 +252,30 @@ def fitted_points(track, outlier_alpha: float = OUTLIER_ALPHA, origin=(0.0, 0.0)
                     (0.0, 0.0) if origin is None else origin, getattr(track, "pings", None))[4])
 
 
+def filter_speed(state, cov) -> tuple[float, float, float, tuple]:
+    """D5: the Kalman filter's velocity as a speed test: (v^T P^-1 v, |v|, sqrt(u^T P u) with u = v / |v| (0 at v = 0:
+    the larger axis' sigma), (vx, vy)), v = state[2:4], P = cov[2:4, 2:4]; the 2 x 2 inverse written out (libs/live
+    classify.cpp the same). A P that is not positive definite gives chi2 0 (never a mover)."""
+    c = np.asarray(cov, dtype=float).reshape(4, 4)
+    vx, vy = float(state[2]), float(state[3])
+    a, b, d = float(c[2, 2]), float(c[2, 3]), float(c[3, 3])
+    det = a * d - b * b
+    chi2 = (d * vx * vx - 2.0 * b * vx * vy + a * vy * vy) / det if det > 0.0 and a > 0.0 else 0.0
+    sp = float(np.hypot(vx, vy))
+    if sp > 0.0:
+        ux, uy = vx / sp, vy / sp
+        sig = float(np.sqrt(max(ux * ux * a + 2.0 * ux * uy * b + uy * uy * d, 0.0)))
+    else:
+        sig = float(np.sqrt(max(a, d, 0.0)))
+    return float(chi2), sp, sig, (vx, vy)
+
+
 def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed: float = 0.5,
                     significance: float = 5.0, min_points: int = 4, min_seen: float = 0.7,
                     max_fit_rms: float | None = None, multipath: dict | None = None,
                     linear: dict | None = None, detections: dict | None = None, time: float | None = None,
                     outlier_alpha: float = OUTLIER_ALPHA, max_fit_rms_bearing: float = 0.0,
-                    origin=None, evidence: list | None = None) -> list[TrackClass]:
+                    origin=None, evidence: list | None = None, range_rate: bool = False) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -295,6 +313,13 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     `max_fit_rms_bearing` (rad, sonar-4jm): where `max_fit_rms` is given, a track's limit is at least this times its
     fitted position's range from `origin` ((x, y); None: the multipath origin, else (0, 0)): the measured positions
     scatter across the line of sight by the range times the bearing error. 0: off (libs/live derives it from the beam).
+    `range_rate` (D5, opt-in; the live chain sets it with tracker.range_rate on): a track that took a range-rate
+    measurement (`Track.rate_updates` > 0) whose filter velocity v = state[2:4], covariance P = cov[2:4, 2:4], is
+    distinguishable from standing still, v^T P^-1 v >= significance^2, at a speed |v| >= min_speed and seen on min_seen of
+    its pings (with min_points and the fit limit as for any track) is a mover (rule mover_range_rate) when the line fit
+    does not already make it one; its velocity, speed and speed sigma (sqrt(u^T P u), u = v / |v|) are then the filter's.
+    Why a rule and not the fit: the fit's speed and sigma come from the measured positions alone, so a better velocity
+    in the filter cannot reach them (DOPPLER.md, D5). Ours. False: as before.
     `evidence` (the opt-in classifier tap, docs/tasks/VISUALIZATION.md section 15): a list, which receives one dict per
     track (`CLASS_EVIDENCE`): the numbers the rules compared and the rule that gave the kind; read only (the classes are
     the same with or without it). libs/live classify_tracks' `evidence` the same.
@@ -324,10 +349,18 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         if max_fit_rms is not None and max_fit_rms_bearing > 0.0:
             limit = max(max_fit_rms, max_fit_rms_bearing * float(np.hypot(*(np.asarray(pos, dtype=float) - here))))
         steady = max_fit_rms is None or rms <= limit
+        rate_mover, fchi2, fspeed, fsigma, fv = False, float("nan"), float("nan"), float("nan"), None
+        if range_rate and getattr(tr, "rate_updates", 0) > 0:
+            fchi2, fspeed, fsigma, fv = filter_speed(tr.state, tr.cov)
+            rate_mover = fspeed >= min_speed and fchi2 >= significance**2 and seen >= min_seen
+        fit_mover = speed >= min_speed and speed >= need * sigma and seen >= min_seen
         if n < min_points or not steady:
             kind = "uncertain"
-        elif speed >= min_speed and speed >= need * sigma and seen >= min_seen:
+        elif fit_mover:
             kind = "mover"                       # a real object is there on most pings; a glint that comes and goes is not
+        elif rate_mover:
+            kind = "mover"                       # D5: the filter's velocity, which the range rate informs (mover_range_rate)
+            v, speed, sigma = fv, fspeed, fsigma
         elif speed < static_speed and seen >= min_seen:
             kind = "static"
         elif speed < need * sigma and seen >= min_seen and speed < 3.0 * static_speed:
@@ -340,13 +373,18 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
                               sigma, rms, float(seen), snr, extent_cells=extent))
         if evidence is not None:                 # the tap: reads only
             rule = ("few_points" if n < min_points else "scatter" if not steady else
-                    {"mover": "mover", "uncertain": "uncertain_otherwise"}.get(kind) or
+                    ("mover" if fit_mover or not rate_mover else "mover_range_rate") if kind == "mover" else
+                    {"uncertain": "uncertain_otherwise"}.get(kind) or
                     ("static_slow" if speed < static_speed and seen >= min_seen else "static_insignificant"))
             evidence.append({"id": tr.id, "rows": int(n), "fitted": int(n_fit), "speed": speed, "speed_sigma": float(sigma),
                              "need": float(need), "seen": float(seen), "fit_rms": float(rms),
                              "limit": None if limit is None else float(limit), "steady": bool(steady),
                              "extent_cells": None if not np.isfinite(extent) else extent, "rule": rule, "kind": kind,
                              "later": []})
+            if range_rate:                       # D5: only with the rate on, so the tap is as before with it off
+                evidence[-1].update(rate_updates=int(getattr(tr, "rate_updates", 0)),
+                                    filter_speed=float(fspeed) if np.isfinite(fspeed) else None,
+                                    filter_chi2=float(fchi2) if np.isfinite(fchi2) else None)
     if linear:
         xy = np.array([c.position for c in out]).reshape(-1, 2)
         for i, c in enumerate(out):

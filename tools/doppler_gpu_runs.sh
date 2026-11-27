@@ -6,7 +6,9 @@
 # Sub-runs (GPUSONAR_DOPPLER_RUNS, comma separated, default tone,falsealarm,timing), in this order, each under its own
 # time limit (coreutils timeout), each writing its JSON into <out-dir> as it goes and its log to <out-dir>/<run>.log:
 #   tone        tools/doppler_tone_eval.py flank_patrol_doppler_tone --background 4 (the scene's 6 pings, both engines,
-#               the background's 4 pings), simulator and chain on the device -> doppler_tone_eval.json
+#               the background's 4 pings), simulator and chain on the device -> doppler_tone_eval.json; then again on the
+#               same cached pings with the tracker taking the tone's range rate (D5, --tracker-range-rate update, no
+#               background) -> doppler_tone_eval_rate.json (the classes before and after in one job)
 #   falsealarm  tools/doppler_bank_threshold.py --at-default: the live chain's false detections at the default budget
 #               (1e-3 a ping) on the same noise-only pings of the long-range array, bank off, combine cfar and combine
 #               max at 3 m/s (17 hypotheses a beam), in that order -> doppler_bank_at_default.json
@@ -17,8 +19,10 @@
 #               popoto_12km_large_submerged_tone (tone then sweep in one ping) and on popoto_12km_large_submerged with
 #               alternating pings (12) -> ls12_tone_train.json, ls12_tone_alternate12.json; and the train scene again
 #               with the tone path's grating-lobe notch off on the same cached pings -> ls12_tone_train_lobe_off.json
-#               (before and after the notch in one job; each JSON attributes every false detection)
-#               (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 80m; GPUSONAR_DOPPLER_LS12_ARGS appended)
+#               (before and after the notch in one job; each JSON attributes every false detection); and both scenes
+#               again on the same cached pings with the tracker taking the tone's range rate (D5, --tracker-range-rate
+#               update, no background) -> ls12_tone_train_rate.json, ls12_tone_alternate12_rate.json (the classes before
+#               and after) (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 110m (80m before D5); GPUSONAR_DOPPLER_LS12_ARGS appended)
 #   hfm12       (only when named) popoto_12km_large_submerged with the plain matched filter against the sweep bank, the
 #               linear (shipped) and the hyperbolic sweep (--set ...waveform.type=sampled, source=hfm; the bank refuses an
 #               HFM: --off-only), at 1 s and 4 s (--set ...waveform.duration=4.0), tools/doppler_bank_eval.py in this order:
@@ -101,6 +105,11 @@ if [[ $runs == *,tone,* ]]; then
   # shellcheck disable=SC2086
   run tone "${GPUSONAR_DOPPLER_TIMEOUT_TONE:-80m}" "$py" tools/doppler_tone_eval.py "$tone_scene" $tone_args --backend "$be" \
       --sim-backend "$be" --cache "$cache" --json "$out/doppler_tone_eval.json" ${GPUSONAR_DOPPLER_TONE_ARGS:-}
+  # D5: the same cached pings, the tracker taking the tone's range rate (the classes before -> after); no background.
+  # shellcheck disable=SC2086
+  run tone "${GPUSONAR_DOPPLER_TIMEOUT_TONE:-80m}" "$py" tools/doppler_tone_eval.py "$tone_scene" $tone_args --background 0 \
+      --tracker-range-rate update --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/doppler_tone_eval_rate.json" \
+      ${GPUSONAR_DOPPLER_TONE_ARGS:-}
   upload
 fi
 if [[ $runs == *,falsealarm,* ]]; then
@@ -163,12 +172,21 @@ if [[ $runs == *,ls12,* ]]; then
     # shellcheck disable=SC2086
     "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --pings 12 --max-rate 8 --truth-at reflection \
         --gate-range-m 100 --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/ls12_tone_alternate12.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
+    # D5: both scenes again on the same cached pings, the tracker taking the tone's range rate (classes before -> after).
+    # shellcheck disable=SC2086
+    "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 \
+        --background 0 --tracker-range-rate update --backend "$be" --sim-backend "$be" --cache "$cache" \
+        --json "$out/ls12_tone_train_rate.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
+    # shellcheck disable=SC2086
+    "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --pings 12 --max-rate 8 --truth-at reflection \
+        --gate-range-m 100 --tracker-range-rate update --backend "$be" --sim-backend "$be" --cache "$cache" \
+        --json "$out/ls12_tone_alternate12_rate.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
     set +f
     return "$rc"
   }
   export -f ls12
   export py out be cache
-  run ls12 "${GPUSONAR_DOPPLER_TIMEOUT_LS12:-80m}" bash -c ls12
+  run ls12 "${GPUSONAR_DOPPLER_TIMEOUT_LS12:-110m}" bash -c ls12
   upload
 fi
 if [[ $runs == *,hfm12,* ]]; then

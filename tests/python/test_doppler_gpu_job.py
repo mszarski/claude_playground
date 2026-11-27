@@ -136,6 +136,12 @@ def test_the_mode_in_its_quick_host_form(tmp_path):
     assert [r["variant"] for r in tone_t] == ["off", "tone"]
     for name in ("tone", "falsealarm", "timing"):
         assert "exit 0" in (out / f"{name}.log").read_text()
+    # D5: the second pass on the same cached pings, the tracker taking the tone's rate; the classes ping by ping in both.
+    rate = json.loads((out / "doppler_tone_eval_rate.json").read_text())
+    assert rate["tracker_range_rate"] == "update" and rate["background"] == {} and rate["pings"] == tone["pings"]
+    for res in (tone, rate):
+        for s in res["engines"]["cpp"]["on"]["targets"].values():
+            assert len(s["kinds"]) == res["pings"] and "first_mover_ping" in s and "velocity_error_m_s" in s
 
 
 # --- the tone path's false detections attributed to the grating lobes (tools/doppler_tone_eval.py) ----------------------
@@ -151,6 +157,23 @@ def test_tone_eval_passes_the_lobe_notch_switch_and_the_ls12_run_has_both_passes
         doppler_tone_eval.LOBE_NOTCH = old
     runs = (ROOT / "tools" / "doppler_gpu_runs.sh").read_text()
     assert "--tone-lobe-notch off" in runs and "ls12_tone_train_lobe_off.json" in runs and "ls12_tone_train.json" in runs
+
+
+def test_tone_eval_passes_the_tracker_range_rate_switch_and_the_runs_have_the_second_pass():
+    """D5: --tracker-range-rate reaches the chain with the tone path on only; not given, the configuration is as before; the
+    tone and ls12 sub-runs each take a second pass on the same cache with it (before -> after of the classes)."""
+    old = doppler_tone_eval.TRACKER_RATE
+    try:
+        assert "tracker" not in doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)          # as before
+        doppler_tone_eval.TRACKER_RATE = "update"
+        assert doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)["tracker"] == {"range_rate": "update"}
+        assert "tracker" not in doppler_tone_eval.chain_config("cpp", None, 3.0)
+    finally:
+        doppler_tone_eval.TRACKER_RATE = old
+    runs = (ROOT / "tools" / "doppler_gpu_runs.sh").read_text()
+    for name in ("doppler_tone_eval_rate.json", "ls12_tone_train_rate.json", "ls12_tone_alternate12_rate.json"):
+        assert name in runs
+    assert runs.count("--tracker-range-rate update") == 4          # the header's line and the three calls
 
 
 def test_the_attribution_kinds_on_a_made_geometry():

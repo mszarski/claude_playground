@@ -989,6 +989,21 @@ Report LiveChain::process(PingRecord& record) {
     Detection m{0.0, 0.0, h.snr_db, h.cells};
     m.time = t + h_range / c_range;
     m.range_sigma = h.range_sigma;                         // a tone's coarse range (D3); NaN: the tracker's
+    if (opt_.tracker.range_rate != RangeRate::Off) {
+      // D5 (opt-in): the rate, its sigma when trusted (live.py range_rate_sigma: the tone path's unless "any"; one step and
+      // the navigation's error in quadrature), and the platform in the tracker's frame (east, north from the first ping's
+      // origin) with its velocity over ground (not finite: the rate is not used).
+      m.range_rate = h.range_rate;
+      m.range_rate_step = h.range_rate_step;
+      const bool trusted = !opt_.tracker_range_rate_tone_only || h.doppler_path == 1 || h.doppler_path == 2;
+      if (trusted && std::isfinite(h.range_rate) && std::isfinite(h.range_rate_step)) {
+        m.range_rate_sigma = std::sqrt(h.range_rate_step * h.range_rate_step + opt_.tracker_range_rate_nav_sigma * opt_.tracker_range_rate_nav_sigma);
+      }
+      m.platform_x = f.origin.y - origin_.y;
+      m.platform_y = f.origin.x - origin_.x;
+      m.platform_vx = v_own.y;
+      m.platform_vy = v_own.x;
+    }
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
       const Vec3d& u = e.world;

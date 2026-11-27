@@ -142,6 +142,12 @@ struct ChainOptions {
   /// timestamps) advances by this instead (sonar-4bs; gpusonar.live `tracker.ping_interval_s`). 0: off, the default:
   /// such a ping is counted (Report::pings_without_time) and the clock stays where the transmit time puts it.
   double tracker_ping_interval_s = 0.0;
+  /// D5 (opt-in, with tracker.range_rate not Off): which detections' range rates the tracker takes: true, the tone path's
+  /// only (doppler_path 1 or 2; "tone", the default); false, every finite rate, the sweep bank's too ("any", D-232: those
+  /// scatter on extended targets). And the own ship's velocity error along the line of sight, m/s one sigma (an assumed
+  /// navigation accuracy, unconfirmed), in quadrature with the rate's step. live.py range_rate_sigma the same.
+  bool tracker_range_rate_tone_only = true;
+  double tracker_range_rate_nav_sigma = 0.05;
   // fit limit, multipath bearing, the fit limit's growth with range: derived
   ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, kDerive, false, 40.0, 2.0, true, 800.0, kDerive, 2.5, 0.0, 0.0, -1.0, -1.0,
                            std::numeric_limits<double>::quiet_NaN(), 0.0, kDerive};
