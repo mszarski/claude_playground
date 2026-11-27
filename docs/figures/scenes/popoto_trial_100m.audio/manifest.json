@@ -1,0 +1,139 @@
+{
+ "kind": "gpusonar.scene_audio",
+ "version": 1,
+ "scenario": "popoto_trial_100m",
+ "dir": "popoto_trial_100m.audio",
+ "plan": {
+  "method": "heterodyne",
+  "sonar_band_hz": [
+   20000.0,
+   35000.0
+  ],
+  "record_band_hz": [
+   0.0,
+   51200.0
+  ],
+  "sample_kind": "RealPassband",
+  "record_rate_hz": 102400.0,
+  "record_center_hz": 27500.0,
+  "record_duration_s": 0.9409375,
+  "audible_top_hz": 16000.0,
+  "rate_hz": 16000,
+  "shift_hz": 25500.099634672868,
+  "factor": 1.0,
+  "kept_hz": [
+   25700.0,
+   29300.0
+  ],
+  "kept_audio_hz": [
+   199.90036532713202,
+   3799.900365327132
+  ],
+  "center_hz": 2000.0,
+  "audio_duration_s": 0.9409375,
+  "time_scale": 1.0,
+  "misrepresents": "pitch: every frequency 25.5001 kHz lower (Doppler keeps its size in Hz, not its ratio; harmonic ratios are lost); only 3.6 kHz of the 15 kHz band is kept (the sweep's range resolution is lost); time and the envelope delay between hydrophones are kept, the carrier phase is the shifted frequency's",
+  "lost_hz": [
+   [
+    0.0,
+    25700.0
+   ],
+   [
+    29300.0,
+    51200.0
+   ]
+  ],
+  "tag": "het2000",
+  "scene_to_audio": "audio time = (time after transmit - record start) x 1",
+  "bin_offset_hz": 0.0
+ },
+ "method_words": "heterodyne: shifted down 25.5001 kHz (band centre to 2 kHz); 16 kHz output; kept 25.7-29.3 kHz, lost 0-25.7 kHz, 29.3-51.2 kHz; 0.9409 s of sound; misrepresents: pitch: every frequency 25.5001 kHz lower (Doppler keeps its size in Hz, not its ratio; harmonic ratios are lost); only 3.6 kHz of the 15 kHz band is kept (the sweep's range resolution is lost); time and the envelope delay between hydrophones are kept, the carrier phase is the shifted frequency's",
+ "record_start_s": 0.026723240350837577,
+ "record_duration_s": 0.9409375,
+ "levels": "one gain per kind for all the hydrophones of this ping: levels between hydrophones are preserved; the loudest hydrophone of each kind peaks at -1 dBFS; gains are dB from the record's sample unit to full scale, so kinds compare by their gains",
+ "gains_db": {
+  "whole": 12.353,
+  "echoes": 27.312,
+  "reverberation_0_bottom": 12.392,
+  "noise": 78.743,
+  "arrival_0": 41.036
+ },
+ "kinds": {
+  "whole": "the record as stored (after the hardware gain and the ADC)",
+  "echoes": "echoes alone (the simulator's tap after synthesis)",
+  "reverberation_0_bottom": "reverberation item 0: lambert (bottom)",
+  "noise": "ambient noise",
+  "arrival_0": "one arrival of target: outbound ray 0, return ray 0 (0 surface, 0 bottom bounces), synthesised alone by the simulator (viz/arrivals.py)"
+ },
+ "parts_channels": [
+  0
+ ],
+ "n_channels": 8,
+ "files": [
+  {
+   "channel": 0,
+   "kind": "whole",
+   "file": "h000.whole.het2000.wav",
+   "bytes": 30874,
+   "clipped": 0,
+   "peak_dbfs": -1.0
+  },
+  {
+   "channel": 0,
+   "kind": "echoes",
+   "file": "h000.echoes.het2000.wav",
+   "bytes": 30868,
+   "clipped": 0,
+   "peak_dbfs": -1.0
+  },
+  {
+   "channel": 0,
+   "kind": "reverberation_0_bottom",
+   "file": "h000.reverberation_0_bottom.het2000.wav",
+   "bytes": 30872,
+   "clipped": 0,
+   "peak_dbfs": -1.0
+  },
+  {
+   "channel": 0,
+   "kind": "noise",
+   "file": "h000.noise.het2000.wav",
+   "bytes": 30830,
+   "clipped": 0,
+   "peak_dbfs": -1.0
+  },
+  {
+   "channel": 0,
+   "kind": "arrival_0",
+   "file": "h000.arrival_0.het2000.wav",
+   "bytes": 30956,
+   "clipped": 0,
+   "peak_dbfs": -1.0
+  }
+ ],
+ "stereo": null,
+ "arrivals": [
+  {
+   "what": "one arrival of target: outbound ray 0, return ray 0 (0 surface, 0 bottom bounces), synthesised alone by the simulator (viz/arrivals.py)",
+   "out": 0,
+   "back": 0,
+   "delay_s": 0.13426063738438831,
+   "level_db": -42.236700848501776,
+   "n_surface": 0,
+   "n_bottom": 0,
+   "channel_delay_s": {
+    "0": 0.13426067
+   },
+   "kind": "arrival_0"
+  }
+ ],
+ "time": {
+  "scene_to_audio": "audio_s = (scene_s - record_start_s) * time_scale",
+  "time_scale": 1.0,
+  "record_start_s": 0.026723240350837577
+ },
+ "bytes": 154400,
+ "parts_residual_db": -573.2785386908238,
+ "notes": [],
+ "seconds": 0.64
+}
