@@ -241,3 +241,28 @@ def test_the_waveform_section_is_the_grid_less_the_closed_forms():
 
 def t_rounded(x):
     return tool()._rounded(x)
+
+
+def test_the_report_states_what_was_measured_and_no_longer_says_not_run():
+    """Sections 0 and 0a after the deep site's run (docs/tasks/doppler_deep12_eval.json; DOPPLER.md HFM.8 and "Deep site at 12 km"):
+    the stale "Not run." text is gone; the margins are said to be for an unresolved, non-moving target; each design's measured
+    acceptance is in the table, computed from the measurement's JSON; without the JSON the old text comes back."""
+    t = tool()
+    md = COMMITTED.with_suffix(".md").read_text()
+    s0 = md.split("## 0. Transmit options", 1)[1].split("## 1. The answer in tables", 1)[0]
+    assert "Not run" not in s0 and "Longer pulses through the chain are not measured" not in s0
+    assert "UNRESOLVED, NON-MOVING target of the stated strength" in s0 and "Measured against this sentence" in s0
+    M = json.loads((ROOT / "docs" / "tasks" / "doppler_deep12_eval.json").read_text())
+    for name, a in M["acceptance"].items():
+        row = next(line for line in s0.splitlines() if line.startswith(f"| {a['what']} (`{a['case']}`) |"))
+        for lb, v in a["targets"].items():
+            assert f"{v['verdict']}{'**' if v['verdict'] == 'FAIL' else ''} {v['detected']} of {v['pings']}" in row, (name, lb)
+    assert "**FAIL** 0 of 6" in next(line for line in s0.splitlines() if "(`ss3_lfm1`)" in line)
+    R = json.loads(COMMITTED.read_text())
+    real = t.DEEP12
+    try:
+        t.DEEP12 = ROOT / "no_such_file.json"
+        old = "\n".join(t.transmit_section(R) + t.waveform_section(R))
+    finally:
+        t.DEEP12 = real
+    assert "**Not run.** No transmit option other than the shipped 1 s" in old and "UNRESOLVED" not in old
