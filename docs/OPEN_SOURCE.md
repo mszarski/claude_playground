@@ -406,7 +406,7 @@ source tarball and its integrity hash, SHA-256 of the file, "used only by genera
 when the file exists); no module of the package imports it, and `tests/python/test_scene_3d.py` checks that only
 `viz/page3d.py` names it. The orbit, pan and zoom controls are our own (about 20 lines in the page), so no three.js
 add-on (`examples/jsm/controls/OrbitControls.js`, also MIT) is needed. Page sizes (ours, the 96 pages of 2026-11-27):
-embedded 0.74 to 0.89 MB; loading from the CDN about 50 to 200 kB. Limits held by the tests: 1.2 MB and 400 kB.
+embedded 0.74 to 0.89 MB; loading from the CDN 44 to 200 kB. Limits held by the tests: 1.2 MB and 400 kB.
 The optional browser check (`tools/page3d_check.js`) uses the Playwright package and its Chromium where they are
 installed (not a dependency of the suite: the test skips without them).
 

@@ -1,63 +1,265 @@
 """One self-contained HTML page per scenario, drawn in 3-D by three.js in the browser (docs/tasks/VISUALIZATION.md
-section 5; V4 prototype).
+section 5; package V4).
 
-No Python dependency: the page is written from a scene trace with the standard library. three.js (MIT, one ES
-module file, three.module.min.js of release 0.170.0: 691,648 bytes) is either loaded from a pinned public CDN
-(`three=None`, the default: a small page that needs the network) or embedded from a local copy (`three=<path>`:
-works offline, about 0.7 MB more). Mouse: drag to turn, wheel to zoom; a slider for the vertical exaggeration and
-one for time (the ping going out along the drawn eigenrays and coming back; a hydrophone lights when an arrival
-reaches it).
+No Python dependency: the page is written from a scene trace (`viz/trace.py`, with `viz/scene3d.py`'s additions when
+present) with the standard library. three.js (MIT, release 0.170.0, one ES module file, `three.module.min.js`,
+691,648 bytes) is loaded from a pinned public CDN (`three=None` or "cdn": a small page that needs the network) or
+embedded (`three="embed"`: the copy vendored under third_party/three/, or `three=<path>`: any local copy): the page
+then works offline. The camera controls are our own (no three.js add-on).
+
+What a page draws: the sea surface and the bed as distinct, labelled, semi-transparent surfaces (the surface with its
+rms height where a model sets one; the bed flat, tilted, by range, a 3-D grid or a sediment interface, as the tier
+has it; walls as planes); the projector, the hydrophones (glyphs of constant screen size, coloured by row, with the
+array's axis and look), the targets and their motion over the pings; the processing's receive beams (`viz/beams.py`)
+and the projector's pattern; the eigenrays of each leg with their bounces; one-way sources and the projector's
+direct sound; the sound-speed profile; the models in force and what is not shown. A click on a ray gives its delay,
+level and bounce list (boundary, grazing angle, loss); a hydrophone selector lists that hydrophone's arrivals. A time
+slider moves a dot along every ray and lights the hydrophones as the strongest pairs arrive. Sound is package V5;
+the live chain's taps (`trace["chain"]`) are package V6: the page keeps a `chain` member (null) for them.
+
+Size: the page holds a thinned trace. `page_data` keeps the `max_rays` strongest eigenrays a leg and the `max_pairs`
+strongest pairs, simplifies each polyline (Douglas-Peucker, tolerance 1/1000 of the scene's width across and 1/500 of
+its depth, bounce points kept) and thins further until the data fit `DATA_BUDGET` bytes, so that a CDN page stays
+under 400 kB and an embedded page under 1.2 MB (`PAGE_LIMIT_CDN`, `PAGE_LIMIT_EMBED`; ours).
 """
 
 from __future__ import annotations
 
 import html
 import json
+import math
+import os
 
 THREE_VERSION = "0.170.0"
 THREE_CDN = f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/three.module.min.js"
+VENDORED = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "third_party", "three",
+                                        "three.module.min.js"))
+DATA_BUDGET = 330_000          # bytes of page data (JSON), after thinning
+PAGE_LIMIT_CDN = 400_000       # a page that loads three.js from the CDN
+PAGE_LIMIT_EMBED = 1_200_000   # a page with three.js embedded (0.69 MB of it the library)
 
 
-def _round(v, nd=2):
+def three_source(arg: str | None) -> str | None:
+    """`--three cdn|embed|PATH` to what `write_page` takes: None (CDN) or a local file to embed. "embed" is the
+    vendored copy (an error if it is missing); None means embed when the vendored copy exists, else the CDN."""
+    if arg == "cdn":
+        return None
+    if arg == "embed":
+        if not os.path.exists(VENDORED):
+            raise FileNotFoundError(f"no vendored three.js at {VENDORED}")
+        return VENDORED
+    if arg is None:
+        return VENDORED if os.path.exists(VENDORED) else None
+    return arg
+
+
+# --- thinning -------------------------------------------------------------------------------------------------------
+
+def _rdp(points, scale, keep):
+    """Douglas-Peucker on `points` [[x, y, z]] in coordinates divided by `scale` (tolerance 1 there); indices in
+    `keep` are always kept. Returns the kept indices."""
+    n = len(points)
+    if n <= 2:
+        return list(range(n))
+    q = [[p[0] / scale[0], p[1] / scale[1], p[2] / scale[2]] for p in points]
+    marks = [False] * n
+    marks[0] = marks[-1] = True
+    for i in keep:
+        if 0 <= i < n:
+            marks[i] = True
+    anchors = [i for i in range(n) if marks[i]]
+    stack = list(zip(anchors[:-1], anchors[1:]))
+    while stack:
+        a, b = stack.pop()
+        if b - a < 2:
+            continue
+        pa, pb = q[a], q[b]
+        d = [pb[k] - pa[k] for k in range(3)]
+        ll = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+        worst, wi = -1.0, -1
+        for i in range(a + 1, b):
+            v = [q[i][k] - pa[k] for k in range(3)]
+            if ll > 0:
+                t = max(0.0, min(1.0, (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / ll))
+                w = [v[k] - t * d[k] for k in range(3)]
+            else:
+                w = v
+            e = w[0] * w[0] + w[1] * w[1] + w[2] * w[2]
+            if e > worst:
+                worst, wi = e, i
+        if worst > 1.0:
+            marks[wi] = True
+            stack += [(a, wi), (wi, b)]
+    return [i for i in range(n) if marks[i]]
+
+
+def simplify(line, bounces, scale):
+    """A polyline with fewer points (`_rdp`), its bounce points kept (the vertex nearest each bounce)."""
+    keep = []
+    for b in bounces:
+        bx = b["xyz"]
+        keep.append(min(range(len(line)), key=lambda i: sum((line[i][k] - bx[k]) ** 2 for k in range(3))))
+    return [line[i] for i in _rdp(line, scale, keep)]
+
+
+def _r(v, nd):
     if isinstance(v, float):
-        return round(v, nd)
-    if isinstance(v, list):
-        return [_round(x, nd) for x in v]
+        return round(v, nd) if math.isfinite(v) else None
+    if isinstance(v, (list, tuple)):
+        return [_r(x, nd) for x in v]
+    if isinstance(v, dict):
+        return {k: _r(x, nd) for k, x in v.items()}
     return v
 
 
-def page_data(trace: dict, max_rays: int = 8, max_pairs: int = 40) -> dict:
-    """What the page draws: the trace thinned (the `max_rays` strongest eigenrays a leg with their polylines and
-    bounces, the `max_pairs` strongest two-way pairs with their per-hydrophone delays) and rounded to 1 cm / 10 ns."""
-    legs = []
+def _db(a):
+    return round(20.0 * math.log10(max(abs(a), 1e-30)), 1)
+
+
+def _ray(r, scale, nd, prefer3d=True):
+    """One eigenray as the page holds it, or None when it has no path to draw."""
+    b3 = r.get("bellhop3d") if prefer3d else None
+    line = b3["polyline"] if b3 else r.get("polyline")
+    if line is None:
+        return None
+    bounces = b3["bounces"] if b3 else r.get("bounces") or []
+    out = {"k": r["k"], "delay": round(r["delay_s"], 8), "ns": r["n_surface"], "nb": r["n_bottom"],
+           "amp": r["amplitude"], "db": _db(r["amplitude"]), "launch": _r(r.get("launch_deg"), 2),
+           "line": _r(simplify(line, bounces, scale), nd),
+           "bounces": [{"xyz": _r(b["xyz"], nd), "b": b["boundary"], "g": _r(b.get("grazing_deg"), 1),
+                        "loss": None if b.get("loss_db") is None else _r(float(b["loss_db"]), 2)} for b in bounces]}
+    if b3:
+        out["path"] = (f"Bellhop3D's own 3-D ray (run type R, a separate process), shot about the eigenray's launch "
+                       f"angles and matched by its bounce counts: passes {b3['miss_m']:.1f} m from the target; travel "
+                       f"time along it {b3['travel_time_s']:.5f} s against the provider's delay {r['delay_s']:.5f} s")
+        out["miss"] = round(b3["miss_m"], 2)
+        out["tt"] = round(b3["travel_time_s"], 7)
+        out["three_d"] = True
+    else:
+        out["path"] = r.get("path")
+        if r.get("polyline_delay_s") is not None:
+            out["tt"] = round(r["polyline_delay_s"], 7)
+    return out
+
+
+def page_data(trace: dict, max_rays: int = 8, max_pairs: int = 40, tol: float = 1.0, nd: int = 2) -> dict:
+    """What the page draws: the trace thinned (the `max_rays` strongest drawable eigenrays a leg with their polylines
+    simplified at `tol` times the module's tolerance and their bounces, the `max_pairs` strongest two-way pairs with
+    their per-hydrophone delays) and rounded to 10**-nd m and 10 ns."""
+    s3 = trace.get("scene3d") or {}
+    pts = [trace["sonar"]["projector"]] + trace["sonar"]["hydrophones"] + [t["position"] for t in trace["targets"]]
+    span = max(max(p[0] for p in pts) - min(p[0] for p in pts), max(p[1] for p in pts) - min(p[1] for p in pts), 1.0)
+    env = trace["environment"]
+    depth = env.get("bottom_z") or env.get("bottom_z_site") or max([abs(p[2]) for p in pts] + [1.0])
+    scale = (1e-3 * tol * span, 1e-3 * tol * span, 2e-3 * tol * max(depth, 0.1))
+    legs, undrawn = [], 0
     for leg in trace["legs"]:
         out = {}
         for which in ("out", "back"):
-            rays = sorted([r for r in leg[which] if r["polyline"] is not None], key=lambda r: -r["amplitude"])[:max_rays]
-            out[which] = [{"k": r["k"], "delay": round(r["delay_s"], 8), "ns": r["n_surface"], "nb": r["n_bottom"],
-                           "amp": r["amplitude"], "line": _round(r["polyline"]),
-                           "bounces": [{"xyz": _round(b["xyz"]), "b": b["boundary"], "g": round(b["grazing_deg"], 1),
-                                        "loss": None if b["loss_db"] is None else round(b["loss_db"], 2)}
-                                       for b in r["bounces"]]} for r in rays]
+            drawable = [r for r in leg[which] if r.get("polyline") is not None or r.get("bellhop3d")]
+            undrawn += len(leg[which]) - len(drawable)
+            rays = sorted(drawable, key=lambda r: -r["amplitude"])[:max_rays]
+            out[which] = [x for x in (_ray(r, scale, nd) for r in rays) if x is not None]
+            out[which + "_total"] = len(leg[which])
         legs.append({"target": leg["target"], **out})
     pairs = sorted(trace["pairs"], key=lambda p: -p["level_db"])[:max_pairs]
+    oneway = []
+    for o in trace.get("oneway") or []:
+        rays = [x for x in (_ray(r, scale, nd) for r in sorted(o["rays"], key=lambda r: -r["amplitude"])[:max_rays]) if x]
+        arr = sorted(o["arrivals"], key=lambda a: -a["level_db"])[:max_pairs]
+        oneway.append({"label": o["label"], "position": _r(o["position"], nd), "rays": rays, "signals": o.get("signals"),
+                       "arrivals": [{"t": round(a["delay_s"], 8), "ch": [round(v, 8) for v in a["channel_delay_s"]],
+                                     "ns": a["n_surface"], "nb": a["n_bottom"], "db": round(a["level_db"], 1), "k": a["k"]}
+                                    for a in arr]})
+    direct = None
+    if trace.get("direct"):
+        d = trace["direct"]
+        direct = {"boundaries": d["boundaries"],
+                  "rays": [x for x in (_ray(r, scale, nd) for r in d["rays"][:max_rays]) if x],
+                  "arrivals": [{"t": round(a["delay_s"], 8), "ch": [round(v, 8) for v in a["channel_delay_s"]],
+                                "ns": a["n_surface"], "nb": a["n_bottom"], "k": a["k"]} for a in d["arrivals"][:max_pairs]]}
+    beams = trace.get("beams")
+    if beams:
+        beams = {"chain": beams["chain"], "broadside": beams["broadside"], "axis": beams["axis"],
+                 "aperture_m": beams.get("aperture_m"), "n_elements": beams.get("n_elements"),
+                 "center_frequency": beams.get("center_frequency"), "wavelength": beams.get("wavelength"),
+                 "element_beamwidth_az_deg": beams.get("element_beamwidth_az_deg"),
+                 "steered": [{k: s[k] for k in ("steer_deg", "peak_deg", "edges_deg")} for s in beams.get("steered") or []],
+                 "projector": None if not beams.get("projector") else
+                 {k: beams["projector"].get(k) for k in ("boresight", "beamwidth_az_deg", "beamwidth_el_deg", "boresight_rel_deg")},
+                 "projector_text": beams.get("projector_text")}
+    e = {k: env.get(k) for k in ("sound_speed", "surface_z", "bottom_z", "bottom_z_site", "bottom", "wind_speed", "ssp",
+                                 "interface", "critical_angle_deg", "bathymetry_note", "absorption",
+                                 "absorption_db_per_km", "planes", "bottom_slope", "wind_speed_propagation")}
+    if env.get("surface"):
+        e["surface"] = {k: env["surface"].get(k) for k in ("rms_height", "mean_square_slope", "wind_speed", "given")}
+        bl = env["surface"].get("bubble_loss")
+        if bl:
+            e["surface"]["bubble_loss_db_at_10deg"] = None
+            try:
+                g, l = bl["grazing_deg"], bl["loss_db"]
+                i = min(range(len(g)), key=lambda j: abs(g[j] - 10.0))
+                e["surface"]["bubble_loss_db_at_10deg"] = l[i]
+            except (KeyError, TypeError, ValueError):
+                pass
+    if env.get("bathymetry") is not None and "bed_grid" not in s3:
+        e["bathymetry"] = env["bathymetry"]                       # [[range, depth]] from the projector
+    if env.get("ssp_section"):
+        sec = env["ssp_section"]
+        step = max(1, len(sec["r"]) // 5)
+        # c[i] is the profile at range r[i] (BellhopEnv.section)
+        e["ssp_section"] = {"r": sec["r"][::step], "z": sec["z"], "c": sec["c"][::step]}
     return {
-        "scenario": trace["scenario"], "tier": trace["tier"], "sonar": {
-            k: _round(trace["sonar"][k]) for k in ("name", "mode", "band_hz", "center_frequency", "sample_kind",
-                                                   "sample_rate", "projector", "hydrophones")},
-        "environment": _round({k: trace["environment"].get(k) for k in ("sound_speed", "surface_z", "bottom_z", "bottom_z_site",
-                                                                       "bottom", "wind_speed", "ssp")}),
-        "targets": _round(trace["targets"]), "legs": legs,
+        "scenario": trace["scenario"], "tier": trace["tier"], "ping": trace.get("ping", 0), "time_s": trace.get("time_s"),
+        "sonar": {**{k: trace["sonar"].get(k) for k in ("name", "mode", "band_hz", "center_frequency", "sample_kind",
+                                                       "sample_rate", "n_channels", "source_level_db_rms")},
+                  "projector": _r(trace["sonar"]["projector"], 4), "hydrophones": _r(trace["sonar"]["hydrophones"], 4)},
+        "environment": _r(e, 3), "targets": _r(trace["targets"], 3), "legs": legs, "undrawn": undrawn,
         "pairs": [{"t": round(p["delay_s"], 8), "ch": [round(v, 8) for v in p["channel_delay_s"]], "ns": p["n_surface"],
-                   "nb": p["n_bottom"], "db": round(p["level_db"], 1)} for p in pairs],
-        "models": [{k: m[k] for k in ("area", "model", "key", "status", "chosen")} for m in trace["models"]],
+                   "nb": p["n_bottom"], "db": round(p["level_db"], 1), "target": p.get("target", 0), "out": p.get("out"),
+                   "back": p.get("back")} for p in pairs],
+        "n_pairs": len(trace["pairs"]), "oneway": oneway, "direct": direct, "beams": beams,
+        "models": [{k: m.get(k) for k in ("area", "model", "what", "key", "status", "chosen", "source")} for m in trace["models"]],
+        "missing": trace.get("missing") or [], "view": {k: v for k, v in (trace.get("view") or {}).items() if k != "track"},
+        "time_spread_taps": trace.get("time_spread_taps", False),
+        "scene3d": {"box": s3.get("box"), "bed_grid": s3.get("bed_grid"), "motion": s3.get("motion"),
+                    "bellhop3d": s3.get("bellhop3d"), "notes": s3.get("notes") or []},
+        "chain": trace.get("chain"),            # reserved for the live chain's taps (V6)
+        "limits": {"max_rays": max_rays, "max_pairs": max_pairs, "tolerance": tol},
     }
 
 
-def write_page(trace: dict, path: str, three: str | None = None, max_rays: int = 8, max_pairs: int = 40) -> dict:
-    """Write the page. `three`: a local three.module.min.js to embed (offline), or None to load it from the CDN.
-    Returns {"bytes", "embedded", "rays", "pairs"}."""
-    data = page_data(trace, max_rays, max_pairs)
+def fit_data(trace: dict, budget: int = DATA_BUDGET, max_rays: int = 8, max_pairs: int = 40) -> tuple[dict, str]:
+    """`page_data` thinned until its JSON is at most `budget` bytes: coarser polylines first, then fewer rays and
+    pairs. Returns (data, its JSON)."""
+    tol = 1.0
+    data = None
+    for _ in range(12):
+        data = page_data(trace, max_rays, max_pairs, tol)
+        blob = json.dumps(data, separators=(",", ":"))
+        if len(blob) <= budget:
+            return data, blob
+        if tol < 8.0:
+            tol *= 2.0
+        elif max_rays > 2:
+            max_rays -= 2
+        elif max_pairs > 10:
+            max_pairs //= 2
+        else:
+            break
+    data["limits"]["over_budget"] = True
+    return data, json.dumps(data, separators=(",", ":"))
+
+
+def write_page(trace: dict, path: str, three: str | None = None, max_rays: int = 8, max_pairs: int = 40,
+               png: str | None = None, index: str | None = "index.html") -> dict:
+    """Write the page. `three`: a local three.module.min.js to embed (offline; "embed" for the vendored copy), or None
+    / "cdn" to load it from the CDN. `png`: the 2-D page's file name to link (default NAME.png beside the page).
+    Returns {"bytes", "embedded", "rays", "pairs", "data_bytes", "limits"}."""
+    three = None if three in (None, "cdn") else (VENDORED if three == "embed" else three)
+    data, blob = fit_data(trace, DATA_BUDGET, max_rays, max_pairs)
+    data["links"] = {"png": png if png is not None else f"{trace['scenario']}.png", "index": index}
+    blob = json.dumps(data, separators=(",", ":"))
     if three:
         with open(three, "r", encoding="utf-8") as f:
             lib = f.read()
@@ -67,147 +269,17 @@ def write_page(trace: dict, path: str, three: str | None = None, max_rays: int =
     else:
         loader = f"const THREE = await import('{THREE_CDN}');"
         lib_tag = ""
-    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
-    page = _TEMPLATE.replace("%TITLE%", html.escape(f"{trace['scenario']} 3-D")).replace("%LIB%", lib_tag) \
-        .replace("%LOADER%", loader).replace("%DATA%", blob)
+    blob = blob.replace("</", "<\\/")
+    page = (_TEMPLATE.replace("%TITLE%", html.escape(f"{trace['scenario']} 3-D")).replace("%LIB%", lib_tag)
+            .replace("%LOADER%", loader).replace("%DATA%", blob))
     with open(path, "w", encoding="utf-8") as f:
         f.write(page)
     n_rays = sum(len(leg["out"]) + len(leg["back"]) for leg in data["legs"])
-    return {"bytes": len(page.encode("utf-8")), "embedded": bool(three), "rays": n_rays, "pairs": len(data["pairs"])}
+    return {"bytes": len(page.encode("utf-8")), "embedded": bool(three), "rays": n_rays, "pairs": len(data["pairs"]),
+            "data_bytes": len(blob), "limits": data["limits"],
+            "three_d_rays": sum(bool(r.get("three_d")) for leg in data["legs"] for w in ("out", "back") for r in leg[w])}
 
 
-_TEMPLATE = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>%TITLE%</title>
-<style>
-:root{--bg:#f7f7f5;--ink:#1d1d1b;--muted:#5d5d58;--panel:rgba(255,255,255,.92);--line:#d6d6d0}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.92);--line:#3a3d42}}
-:root[data-theme="dark"]{--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.92);--line:#3a3d42}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1.4 system-ui,sans-serif;overflow:hidden}
-#view{position:absolute;inset:0}
-.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;max-width:min(420px,calc(100% - 32px))}
-#info{left:16px;top:16px;max-height:calc(100% - 140px);overflow:auto}
-#ctl{left:16px;bottom:16px;right:16px;max-width:none;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
-#ctl input[type=range]{width:min(320px,60vw)}
-h1{font-size:15px;margin:0 0 4px} .m{color:var(--muted)} table{border-collapse:collapse;font-size:12px} td{padding:1px 6px 1px 0;vertical-align:top}
-.sw{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
-button{font:inherit}
-</style></head><body>
-<div id="view"></div>
-<div class="panel" id="info"></div>
-<div class="panel" id="ctl">
- <button id="play">play</button>
- <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
- <label>depth x <input id="vex" type="range" min="1" max="20" value="5"> <span id="vval"></span></label>
- <span class="m">drag: turn · wheel: zoom</span>
-</div>
-%LIB%
-<script type="application/json" id="trace">%DATA%</script>
-<script type="module">
-%LOADER%
-const D = JSON.parse(document.getElementById('trace').textContent);
-const CLS = {direct:['#2a78d6','direct'], surface:['#1baf7a','surface bounces only'], bottom:['#eb6834','bottom bounces only'], both:['#8e5cc4','surface and bottom']};
-const cls = (ns,nb) => ns===0&&nb===0?'direct':nb===0?'surface':ns===0?'bottom':'both';
-const env = D.environment, bz = env.bottom_z ?? env.bottom_z_site ?? 10;
-// Info panel: what is modelled here, legend.
-const info = document.getElementById('info');
-info.innerHTML = `<h1>${D.scenario}</h1><div class="m">tier ${D.tier} · ${D.sonar.name} · ${(D.sonar.band_hz[0]/1e3).toFixed(1)}-${(D.sonar.band_hz[1]/1e3).toFixed(1)} kHz · ${D.sonar.hydrophones.length} hydrophones</div>`
- + '<p>' + Object.values(CLS).map(([c,l])=>`<span class="sw" style="background:${c}"></span>${l}`).join('<br>') + '<br><span class="m">solid: out, dashed: back · balls: bounces</span></p>'
- + '<b>What is modelled here</b><table>' + D.models.map(m=>`<tr><td>${m.area}</td><td>${m.model}${m.chosen==='default'?' <span class="m">(default)</span>':''}</td><td class="m">${m.status}</td></tr>`).join('') + '</table>'
- + (env.bottom_z==null ? '<p class="m">This tier has no bottom: the bed drawn is the site depth.</p>' : '')
- + `<p class="m">surface: ${D.tier==='free_field'?'not in the propagation':'flat, pressure release'}${env.wind_speed?`; wind ${env.wind_speed} m/s (reverberation, noise)`:''}</p>`;
-// Scene. NED (x north, y east, z down) to three.js (X east, Y up, Z south).
-const view = document.getElementById('view');
-const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
-renderer.setPixelRatio(window.devicePixelRatio); view.appendChild(renderer.domElement);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(getComputedStyle(document.body).backgroundColor);
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1e6);
-const world = new THREE.Group(); scene.add(world);
-scene.add(new THREE.AmbientLight(0xffffff, 0.9)); const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(1,2,1); scene.add(dl);
-let vex = 5;
-const P = p => new THREE.Vector3(p[1], -p[2]*vex, -p[0]);
-const pts = [D.sonar.projector, ...D.sonar.hydrophones, ...D.targets.map(t=>t.position)];
-const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
-const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-const span = Math.max(x1-x0, y1-y0, bz, 1);
-let dyn = [];
-function build(){
-  world.clear(); dyn = [];
-  // Square planes wide enough for the beam fan (steered to +-40 deg out to the target range).
-  const w = 2.2*Math.max(x1-x0, y1-y0, 1), h = w, cx=(y0+y1)/2, cz=-(x0+x1)/2;
-  const plane = (depth, color, op) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({color, transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false}));
-    m.rotation.x = -Math.PI/2; m.position.set(cx, -depth*vex, cz); world.add(m); };
-  plane(env.surface_z ?? 0, 0x5dade2, D.tier==='free_field'?0.08:0.25);
-  plane(bz, 0xc8a165, env.bottom_z==null?0.15:0.55);
-  const ball = (p, r, color) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), new THREE.MeshLambertMaterial({color})); m.position.copy(P(p)); world.add(m); return m; };
-  const r0 = span/300;
-  ball(D.sonar.projector, 2*r0, 0x222222);
-  const hyd = D.sonar.hydrophones.map(p => ball(p, r0, 0x333333));
-  D.targets.forEach(t => ball(t.position, 3*r0, 0xc0392b));
-  // Receive beam fan in the horizontal plane at the array (line arrays: steered from broadside, -40 to 40 deg).
-  const H = D.sonar.hydrophones, ref = H.reduce((a,p)=>a.map((v,i)=>v+p[i]/H.length),[0,0,0]);
-  if (H.length>1){ let ax=[H[H.length-1][0]-H[0][0], H[H.length-1][1]-H[0][1]], n=Math.hypot(...ax);
-    if (n>0){ ax=ax.map(v=>v/n); let nr=[-ax[1],ax[0]]; const t0=D.targets[0]?.position;
-      if (t0 && (t0[0]-ref[0])*nr[0]+(t0[1]-ref[1])*nr[1]<0) nr=nr.map(v=>-v);
-      const R = t0? Math.hypot(t0[0]-ref[0], t0[1]-ref[1]) : span;
-      for (let k=-4;k<=4;k++){ const th=k*10*Math.PI/180, v=[Math.cos(th)*nr[0]+Math.sin(th)*ax[0], Math.cos(th)*nr[1]+Math.sin(th)*ax[1]];
-        const g=new THREE.BufferGeometry().setFromPoints([P(ref), P([ref[0]+R*v[0], ref[1]+R*v[1], ref[2]])]);
-        world.add(new THREE.Line(g, new THREE.LineBasicMaterial({color:0x2a78d6, transparent:true, opacity:0.35}))); } } }
-  // Eigenrays with their bounces; a dot per ray for the animation.
-  for (const leg of D.legs) for (const which of ['out','back']) for (const r of leg[which]) {
-    const c = new THREE.Color(CLS[cls(r.ns,r.nb)][0]);
-    const g = new THREE.BufferGeometry().setFromPoints(r.line.map(P));
-    const mat = which==='out' ? new THREE.LineBasicMaterial({color:c}) : new THREE.LineDashedMaterial({color:c, dashSize:span/80, gapSize:span/120});
-    const line = new THREE.Line(g, mat); if (which==='back') line.computeLineDistances(); world.add(line);
-    for (const b of r.bounces) ball(b.xyz, 0.8*r0, c);
-    const dot = ball(r.line[0], 1.5*r0, c); dot.visible=false;
-    // Cumulative length along the polyline (time along it taken as proportional to length).
-    const L=[0]; for (let i=1;i<r.line.length;i++){ const a=r.line[i-1], b=r.line[i]; L.push(L[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])); }
-    dyn.push({which, r, dot, L});
-  }
-  dyn.hyd = hyd;
-  const mid = new THREE.Vector3(cx, -bz*vex/2, cz);
-  target.copy(mid);
-}
-const target = new THREE.Vector3(); let az=0.9, el=0.5, dist=1.6*span;
-function place(){ camera.position.set(target.x+dist*Math.cos(el)*Math.sin(az), target.y+dist*Math.sin(el), target.z+dist*Math.cos(el)*Math.cos(az)); camera.lookAt(target); }
-function resize(){ const w=view.clientWidth, h=view.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
-let drag=null; renderer.domElement.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];});
-window.addEventListener('pointerup',()=>drag=null);
-window.addEventListener('pointermove',e=>{ if(!drag) return; az-=(e.clientX-drag[0])*0.005; el=Math.max(-1.4,Math.min(1.4, el+(e.clientY-drag[1])*0.005)); drag=[e.clientX,e.clientY]; place(); draw(); });
-renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); dist*=Math.exp(e.deltaY*0.001); place(); draw(); }, {passive:false});
-// Time: the out legs run from 0 to their delay; the back legs start when the earliest out ray reaches the target.
-const tMax = Math.max(...D.pairs.map(p=>p.t), 1e-3)*1.02, tOut = Math.min(...D.legs.flatMap(l=>l.out.map(r=>r.delay)), Infinity);
-const slider=document.getElementById('time'), tval=document.getElementById('tval');
-function setTime(t){
-  for (const d of dyn){ const t0 = d.which==='out'?0:tOut, f=(t-t0)/d.r.delay;
-    if (f<=0||f>=1){ d.dot.visible=false; continue; }
-    const s=f*d.L[d.L.length-1]; let i=1; while(i<d.L.length-1 && d.L[i]<s) i++;
-    const a=d.r.line[i-1], b=d.r.line[i], u=(s-d.L[i-1])/Math.max(d.L[i]-d.L[i-1],1e-9);
-    const p = d.which==='out' ? [a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2])] : null;
-    if (p){ d.dot.position.copy(P(p)); }
-    else { // back legs are stored from the array to the target: run them backwards
-      const sb=(1-f)*d.L[d.L.length-1]; let j=1; while(j<d.L.length-1 && d.L[j]<sb) j++;
-      const a2=d.r.line[j-1], b2=d.r.line[j], v=(sb-d.L[j-1])/Math.max(d.L[j]-d.L[j-1],1e-9);
-      d.dot.position.copy(P([a2[0]+v*(b2[0]-a2[0]), a2[1]+v*(b2[1]-a2[1]), a2[2]+v*(b2[2]-a2[2])])); }
-    d.dot.visible=true; }
-  const win = 0.004*tMax;
-  (dyn.hyd||[]).forEach((m,c)=>{ const hit = D.pairs.some(p=>Math.abs(p.ch[c]-t)<win); m.material.color.set(hit?0xffc000:0x333333); m.scale.setScalar(hit?2.2:1); });
-  tval.textContent = t.toFixed(4)+' s';
-}
-function draw(){ renderer.render(scene, camera); }
-slider.addEventListener('input',()=>{ setTime(slider.value/1000*tMax); draw(); });
-const vin=document.getElementById('vex'), vval=document.getElementById('vval');
-vex = Math.max(1, Math.round(0.35*Math.max(x1-x0,y1-y0,1)/Math.max(bz,1))); vin.value=Math.min(20,vex); vval.textContent=vex+'x';
-vin.addEventListener('input',()=>{ vex=+vin.value; vval.textContent=vex+'x'; build(); place(); setTime(slider.value/1000*tMax); draw(); });
-let playing=null; document.getElementById('play').addEventListener('click',()=>{
-  if (playing){ cancelAnimationFrame(playing); playing=null; return; }
-  const start=performance.now(), from=+slider.value>=1000?0:+slider.value;
-  const step=now=>{ const v=Math.min(1000, from+(now-start)/8); slider.value=v; setTime(v/1000*tMax); draw(); if (v<1000) playing=requestAnimationFrame(step); else playing=null; };
-  playing=requestAnimationFrame(step); });
-window.addEventListener('resize',()=>{ resize(); draw(); });
-build(); resize(); place(); setTime(tMax*0.999); draw();
-window.__ready = true;
-</script></body></html>
-"""
+_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "page3d_template.html")
+with open(_TEMPLATE_PATH, encoding="utf-8") as _f:
+    _TEMPLATE = _f.read()

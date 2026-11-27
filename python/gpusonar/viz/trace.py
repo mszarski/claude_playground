@@ -375,6 +375,7 @@ def _leg_rays(provider, eig, s: int, origin, target, frequency: float, with_path
                "n_surface": int(eig.n_surface[s, k]), "n_bottom": int(eig.n_bottom[s, k]),
                "launch_deg": float(np.degrees(np.arcsin(np.clip(eig.launch[s, k, 2], -1, 1)))),
                "arrival_deg": float(np.degrees(np.arcsin(np.clip(eig.arrival[s, k, 2], -1, 1)))),
+               "launch_azimuth_deg": float(np.degrees(np.arctan2(eig.launch[s, k, 1], eig.launch[s, k, 0]))),
                "polyline": None, "bounces": [], "path": "not drawn"}
         if not with_paths:
             pass

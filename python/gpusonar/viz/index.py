@@ -52,7 +52,7 @@ def write_index(rows: list, out: str, total_s: float | None = None, thumbs: bool
              "table{border-collapse:collapse;width:100%}td,th{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top;text-align:left}"
              ".m{color:var(--muted)} img{max-width:220px;height:auto;display:block} h2{margin-top:28px}"
              ".wrap{overflow-x:auto}</style></head><body>",
-             f"<h1>{html.escape(title)}</h1><p class='m'>One page per scenario (docs/tasks/VISUALIZATION.md). Every picture is "
+             f"<h1>{html.escape(title)}</h1><p class='m'>One 2-D page per scenario and, where made, a 3-D page (docs/tasks/VISUALIZATION.md). Every picture is "
              "the simulator's own model, not a measurement. Made by tools/scenario_view.py"
              + (f" in {total_s / 60:.1f} min" if total_s else "") + f"; {len(rows)} scenario(s).</p>"]
     fam_of = {n: (t, s) for t, s, names in FAMILIES for n in names}
@@ -63,7 +63,7 @@ def write_index(rows: list, out: str, total_s: float | None = None, thumbs: bool
         if fam != current:
             if current is not None:
                 parts.append("</table></div>")
-            parts.append(f"<h2>{html.escape(fam)}</h2><div class='wrap'><table><tr><th>scenario</th><th>tier</th><th>page</th><th>summary</th></tr>")
+            parts.append(f"<h2>{html.escape(fam)}</h2><div class='wrap'><table><tr><th>scenario</th><th>tier</th><th>page</th><th>3-D</th><th>summary</th></tr>")
             current = fam
         png = os.path.join(out, f"{n}.png")
         img = ""
@@ -72,8 +72,12 @@ def write_index(rows: list, out: str, total_s: float | None = None, thumbs: bool
         elif os.path.exists(png):
             img = f"<a href='{html.escape(n)}.png'>page</a>"
         missing = r.get("missing") or []
+        page3 = os.path.join(out, f"{n}.html")
+        three = (f"<a href='{html.escape(n)}.html'>3-D page</a><br><span class='m'>{os.path.getsize(page3) / 1e3:.0f} kB"
+                 + (f"; {r['html'].get('three_d_rays')} Bellhop3D rays" if (r.get("html") or {}).get("three_d_rays") else "")
+                 + "</span>") if os.path.exists(page3) else "<span class='m'>none</span>"
         parts.append(f"<tr><td><a href='{html.escape(n)}.png'>{html.escape(n)}</a></td><td>{html.escape(str(r.get('tier', '?')))}</td>"
-                     f"<td>{img}</td><td>{html.escape(_summary(r))}"
+                     f"<td>{img}</td><td>{three}</td><td>{html.escape(_summary(r))}"
                      + (f"<br><span class='m'>not shown: {html.escape('; '.join(missing))}</span>" if missing else "")
                      + "</td></tr>")
     if current is not None:
