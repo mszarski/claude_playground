@@ -163,6 +163,25 @@ std::vector<std::complex<float>> make_replica(const Waveform& waveform, double s
   return out;
 }
 
+std::vector<std::complex<float>> compression_filter(const Waveform& waveform, double sample_rate, double center_frequency,
+                                                    std::int64_t n_samples, const PulseCompressionOptions& opt, std::int64_t& n_fft_out) {
+  std::vector<std::complex<double>> echo, filter;
+  build(waveform, sample_rate, center_frequency, opt, echo, filter);
+  std::complex<double> norm{0.0, 0.0};
+  for (std::size_t k = 0; k < echo.size(); ++k) norm += echo[k] * std::conj(filter[k]);
+  if (!(std::abs(norm) > 0.0)) throw std::invalid_argument("pulse_compress: replica has no energy");
+
+  const auto n = static_cast<std::size_t>(n_samples);
+  const std::size_t n_fft = good_fft_size(n + filter.size());
+  // conj(FFT(filter)), scaled so a unit echo compresses to a unit peak.
+  std::vector<std::complex<float>> h(n_fft, {0.0F, 0.0F});
+  for (std::size_t k = 0; k < filter.size(); ++k) h[k] = std::complex<float>(filter[k] / std::abs(norm));
+  fft(h, false);
+  for (auto& v : h) v = std::conj(v);
+  n_fft_out = static_cast<std::int64_t>(n_fft);
+  return h;
+}
+
 #if SONAR_HAVE_CUDA
 void pulse_compress_cuda(float* data, std::int64_t n_channels, std::int64_t n, std::int64_t n_fft,
                          const std::complex<float>* h, int device);
@@ -176,19 +195,11 @@ void pulse_compress(PingRecord& record, const PulseCompressionOptions& opt, Back
   if (s.n_samples <= 0 || s.n_channels <= 0) return;
   if (!(opt.doppler_scale > 0.0)) throw std::invalid_argument("pulse_compress: doppler_scale must be positive");
 
-  std::vector<std::complex<double>> echo, filter;
-  build(record.transmit.waveform, s.sample_rate, s.center_frequency, opt, echo, filter);
-  std::complex<double> norm{0.0, 0.0};
-  for (std::size_t k = 0; k < echo.size(); ++k) norm += echo[k] * std::conj(filter[k]);
-  if (!(std::abs(norm) > 0.0)) throw std::invalid_argument("pulse_compress: replica has no energy");
-
+  std::int64_t n_fft_signed = 0;
+  const std::vector<std::complex<float>> h =
+      compression_filter(record.transmit.waveform, s.sample_rate, s.center_frequency, s.n_samples, opt, n_fft_signed);
   const auto n = static_cast<std::size_t>(s.n_samples);
-  const std::size_t n_fft = good_fft_size(n + filter.size());
-  // conj(FFT(filter)), scaled so a unit echo compresses to a unit peak.
-  std::vector<std::complex<float>> h(n_fft, {0.0F, 0.0F});
-  for (std::size_t k = 0; k < filter.size(); ++k) h[k] = std::complex<float>(filter[k] / std::abs(norm));
-  fft(h, false);
-  for (auto& v : h) v = std::conj(v);
+  const auto n_fft = static_cast<std::size_t>(n_fft_signed);
 
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA

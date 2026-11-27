@@ -39,6 +39,11 @@ a CW record its own tone), and an `off` row if none was asked. The sweep bank is
 `--backend` sets the chain's backend (host, cuda or auto; default: the deployment file's, which is auto, and auto for a scene).
 `--set KEY=VALUE` (with --scene) changes the scene as tools/doppler_tone_eval.py --set does (a plumbing check).
 `--json FILE` writes every row so far after each row (a run stopped by a time limit keeps what it had).
+`--doppler-batched` (with `--doppler` or `--doppler-tone`): one row per value of `doppler.batched` (auto, on, off; D8 of
+docs/tasks/DOPPLER.md: on the cuda backend auto is the batched bank on the device, off the per-hypothesis loop); default auto.
+With the bank or the tone path on, each row carries `doppler_stage_s`: the seconds a ping inside the Doppler stages (median
+after the first ping): prepare (the filters and geometry on the host), transfer, compress, map, fold, tone_beams,
+tone_bank, tone_cfar (core.doppler_profile), and `doppler_counts` (hypotheses, batches a ping).
 """
 from __future__ import annotations
 
@@ -117,14 +122,20 @@ def time_engine(pings, cfg: dict, engine: str, repeats: int) -> dict:
     full_rate_sync = cfg["chain"].get("sync") is not None and cfg["chain"].get("decimate") is None
     decimating = cfg["chain"].get("decimate") is not None
     backend = None
+    profiles = []          # the Doppler stages' seconds per ping after the first (core.doppler_profile; D8)
+    has_profile = hasattr(core, "doppler_profile")
     for _ in range(repeats):
         with LiveChain(dict(cfg["chain"], engine=engine)) as chain:
             backend = str(chain.backend)
-            for p in pings:
+            for i, p in enumerate(pings):
                 rec = p.copy()
+                if has_profile:
+                    core.doppler_profile(reset=True)
                 t = time.perf_counter()
                 chain.process(rec)
                 chain_s.append(time.perf_counter() - t)
+                if has_profile and i > 0:
+                    profiles.append(core.doppler_profile(reset=True))
             ref, dec, bl = chain._reference, chain._decimate, chain._blanking
         if decimating:
             for p in pings:
@@ -147,6 +158,13 @@ def time_engine(pings, cfg: dict, engine: str, repeats: int) -> dict:
     after_first = [c for i, c in enumerate(chain_s) if i % n]
     out = {"engine": engine, "backend": backend, "pings": n, "repeats": repeats,
            "chain_s_first_ping": _spread(chain_s[::n]), "chain_s_after_first": _spread(after_first)}
+    if profiles and any(q["pings"] or q["tone_calls"] for q in profiles):
+        # Inside the Doppler stages, s a ping (median after the first): the compiled stages' own clock, both formulations
+        # (the loop's compress and map are its pulse_compress and beamformer calls; the Python engine's own NumPy fold is
+        # not in it: its loop's `fold` reads 0).
+        keys = ("prepare", "transfer", "compress", "map", "fold", "tone_beams", "tone_bank", "tone_cfar")
+        out["doppler_stage_s"] = {k: round(float(np.median([q[k] for q in profiles])), 5) for k in keys}
+        out["doppler_counts"] = {k: int(np.median([q[k] for q in profiles])) for k in ("hypotheses", "batches", "batched_calls", "tone_calls")}
     if sync_s:
         out["sync_s"] = _spread(sync_s)
         out["rest_s_after_first"] = round(float(np.median(after_first)) - float(np.median(sync_s)), 4)
@@ -173,6 +191,8 @@ def main(argv=None) -> int:
     ap.add_argument("--sim-backend", choices=["host", "cuda"], default="host", help="--scene: the simulator's backend")
     ap.add_argument("--cache", help="--scene: keep the simulated records here (tools/doppler_tone_eval.py --cache names)")
     ap.add_argument("--json", help="write every row so far to this file after each row")
+    ap.add_argument("--doppler-batched", nargs="+", choices=["auto", "on", "off"], default=["auto"],
+                    help="with --doppler or --doppler-tone: one row per value of doppler.batched (D8; default auto)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="--scene: change the scene (tools/doppler_tone_eval.py --set; a plumbing check, not a measurement)")
     args = ap.parse_args(argv)
@@ -192,7 +212,14 @@ def main(argv=None) -> int:
             cfg["chain"] = dict(cfg["chain"], backend=args.backend)
         made = time.perf_counter() - t
         base = cfg["chain"]
+        rows_asked = []
         for name, dop in variants(args, tone):
+            if dop is None:
+                rows_asked.append((name, dop))
+                continue
+            for b in args.doppler_batched:
+                rows_asked.append((name if b == "auto" else f"{name}_batched_{b}", dop if b == "auto" else dict(dop, batched=b)))
+        for name, dop in rows_asked:
             cfg["chain"] = dict(base, doppler=dop) if dop is not None else dict(base)
             for engine in args.engine:
                 row = time_engine(pings, cfg, engine, args.repeats)

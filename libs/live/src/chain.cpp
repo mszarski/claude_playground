@@ -15,6 +15,7 @@
 #include "sonar/core/parallel.hpp"
 #include "sonar/detect/cfar.hpp"
 #include "sonar/live/detector.hpp"
+#include "sonar/live/doppler_batched.hpp"
 #include "sonar/dsp/baseband.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 #include "sonar/recon/backproject.hpp"
@@ -61,36 +62,46 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
 
 namespace {
 
+// The backprojection map's range grid: `fine` (n_cells x cell_samples ranges, finer than the range resolution) from the
+// record's window, or from `grid_start` (the Doppler bank: every hypothesis on the grid of the zero one, its own samples
+// read later by its coupling shift), and each cell's mean range.
+void backprojection_grid(double range_cell_m, const PingRecord& record, double grid_start, std::vector<double>& fine, std::vector<double>& last_ranges,
+                         std::int64_t& n_cells, std::int64_t& cell_samples) {
+  const double c = record.environment.sound_speed;
+  const Waveform& w = record.transmit.waveform;
+  const Samples& s = record.samples;
+  const double band = std::abs(w.f_stop - w.f_start) > 0.0 ? std::abs(w.f_stop - w.f_start) : 1.0 / w.duration;
+  const double t0 = is_given(grid_start) ? grid_start : s.start_time;
+  const double r0 = 0.5 * c * t0;
+  const double r1 = 0.5 * c * (t0 + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
+  const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(range_cell_m / (0.75 * c / (2.0 * band)))), 1);
+  const double step = range_cell_m / static_cast<double>(k);
+  cell_samples = k;
+  n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
+  if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
+  fine.assign(static_cast<std::size_t>(n_cells * k), 0.0);
+  for (std::size_t i = 0; i < fine.size(); ++i) fine[i] = r0 + step * static_cast<double>(i);
+  last_ranges.assign(static_cast<std::size_t>(n_cells), 0.0);
+  for (std::int64_t j = 0; j < n_cells; ++j) {
+    double r = 0.0;
+    for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
+    last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
+  }
+}
+
 // Cell-averaged power over bearing x range for one line of hydrophones, by the beamformer chosen.
 // `fine_out` (when not null) receives the map before the averaging, [n_bearing][n_cells * cell_samples], and its ranges.
 void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, const PingRecord& record,
               std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells, std::int64_t& cell_samples,
               std::vector<float>* fine_out = nullptr, std::vector<double>* fine_ranges_out = nullptr, double grid_start = kDerive) {
-  const double c = record.environment.sound_speed;
-  const Waveform& w = record.transmit.waveform;
-  const Samples& s = record.samples;
-  const double band = std::abs(w.f_stop - w.f_start) > 0.0 ? std::abs(w.f_stop - w.f_start) : 1.0 / w.duration;
   const auto n_b = static_cast<std::int64_t>(bearings.size());
   if (opt_.beamformer == "backprojection") {
-    // The range grid from the record's window, or from `grid_start` (the Doppler bank: every hypothesis on the grid of the
-    // zero one, its own samples read later by its coupling shift).
-    const double t0 = is_given(grid_start) ? grid_start : s.start_time;
-    const double r0 = 0.5 * c * t0;
-    const double r1 = 0.5 * c * (t0 + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
-    const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(opt_.range_cell_m / (0.75 * c / (2.0 * band)))), 1);
-    const double step = opt_.range_cell_m / static_cast<double>(k);
-    cell_samples = k;
-    n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
-    if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
-    std::vector<double> fine(static_cast<std::size_t>(n_cells * k));
-    for (std::size_t i = 0; i < fine.size(); ++i) fine[i] = r0 + step * static_cast<double>(i);
+    std::vector<double> fine;
+    backprojection_grid(opt_.range_cell_m, record, grid_start, fine, last_ranges, n_cells, cell_samples);
+    const std::int64_t k = cell_samples;
     const std::vector<float> fine_power = range_bearing_power(record, fine, bearings, opt_.hann, opt_.backend, opt_.device);
     last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
-    last_ranges.assign(static_cast<std::size_t>(n_cells), 0.0);
     for (std::int64_t j = 0; j < n_cells; ++j) {
-      double r = 0.0;
-      for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
-      last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
       for (std::int64_t b = 0; b < n_b; ++b) {
         double p = 0.0, top = 0.0;
         for (std::int64_t q = 0; q < k; ++q) {
@@ -182,12 +193,11 @@ std::vector<std::complex<float>> beam_samples(const PingRecord& record, const st
   return range_bearing_image(record, ranges, {bearing}, hann, backend, device);
 }
 
-namespace {
-std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
-                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device) {
+MapGeometry map_geometry(const PingRecord& record, const std::vector<double>& bearings, bool hann) {
   const Frame f = array_frame(record);
   const auto n = f.positions.size();
-  std::vector<std::vector<float>> weights(1, std::vector<float>(n, 1.0F));
+  MapGeometry g;
+  g.weights.assign(n, 1.0F);
   if (hann) {
     // The window is laid across the aperture and reaches zero half a pitch beyond its ends.
     std::vector<double> u(n);
@@ -200,14 +210,23 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
     const double span = hi - lo, pitch = span / static_cast<double>(std::max<std::size_t>(n - 1, 1));
     for (std::size_t i = 0; i < n; ++i) {
       const double c = std::cos(3.14159265358979323846 * u[i] / (span + pitch));
-      weights[0][i] = static_cast<float>(c * c);
+      g.weights[i] = static_cast<float>(c * c);
     }
   }
+  g.origin = f.origin;
+  for (double b : bearings) g.dirs.push_back(f.forward * std::cos(b) + f.across * std::sin(b));
+  return g;
+}
+
+namespace {
+std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
+                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device) {
+  const MapGeometry g = map_geometry(record, bearings, hann);
+  const std::vector<std::vector<float>> weights(1, g.weights);
   std::vector<Vec3d> points;
   points.reserve(ranges.size() * bearings.size());
-  for (double b : bearings) {          // bearing major: the detector wants rows of constant bearing
-    const Vec3d dir = f.forward * std::cos(b) + f.across * std::sin(b);
-    for (double r : ranges) points.push_back(f.origin + dir * r);
+  for (const Vec3d& dir : g.dirs) {    // bearing major: the detector wants rows of constant bearing
+    for (double r : ranges) points.push_back(g.origin + dir * r);
   }
   const std::vector<const PingRecord*> pings{&record};
   const recon::BpInputs inputs = recon::make_inputs(pings, &weights);
@@ -219,6 +238,27 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
   return image;
 }
 }  // namespace
+
+SweepBankStage sweep_bank_stage(const PingRecord& base, const DopplerPlan& plan, const std::vector<double>& bearings, bool hann, double range_cell_m,
+                                double blank_range, double cfar_guard_m, double cfar_train_m, double cfar_pfa, Backend backend, int device,
+                                std::int64_t batch) {
+  // The loop's grid (line_map on the zero hypothesis, its window start), blanked cells and detector window (process).
+  SweepBankStage st;
+  backprojection_grid(range_cell_m, base, base.samples.start_time, st.fine_ranges, st.ranges, st.n_cells, st.cell_samples);
+  const double c = base.environment.sound_speed;
+  const Waveform& w = base.transmit.waveform;
+  const double band = std::abs(w.f_stop - w.f_start) > 0.0 ? std::abs(w.f_stop - w.f_start) : 1.0 / w.duration;
+  if (is_given(blank_range)) {
+    while (st.skip < st.n_cells - 3 && st.ranges[static_cast<std::size_t>(st.skip)] < blank_range) ++st.skip;
+  }
+  detect::CfarWindow win;
+  win.guard_m = cfar_guard_m;
+  win.train_m = cfar_train_m;
+  const detect::CfarOptions cw = detect::cfar_window(st.ranges[1] - st.ranges[0], c / (2.0 * band), win, cfar_pfa);
+  st.maps = sweep_bank_maps(base, plan, map_geometry(base, bearings, hann), st.fine_ranges, st.n_cells, st.cell_samples, st.skip, cw.guard,
+                            cw.train, backend, device, batch);
+  return st;
+}
 
 RangeDoppler parse_range_doppler(const std::string& name) {
   if (name == "off") return RangeDoppler::Off;
@@ -432,9 +472,35 @@ Report LiveChain::process(PingRecord& record) {
   // One hypothesis, the zero one: the map without the bank, the same calls.
   const bool banked = bank_on && !(doppler_.rates.size() == 1 && doppler_.zero == 0);
   const bool normalised = banked && doppler_.combine == DopplerCombine::Cfar;
+  // D8: the batched formulation (doppler_batched.hpp): on the device with backend cuda unless `batched` is off, on the
+  // host when it is on. Not with the elevation option's rows (each row's map is its own; the loop below).
+  const DopplerBatched want_batched = opt_.doppler.batched;
+  const bool batched = banked && !stacked &&
+                       (want_batched == DopplerBatched::On || (want_batched == DopplerBatched::Auto && opt_.backend == Backend::Cuda));
+  DopplerProfile& prof = doppler_profile_accumulator();
+  using Clock = std::chrono::steady_clock;
+  const auto lap = [](Clock::time_point& t, double& to) {
+    const auto now = Clock::now();
+    to += std::chrono::duration<double>(now - t).count();
+    t = now;
+  };
   std::vector<double> given_level;           // combine cfar: the background the detector tests against (doppler.hpp)
   if (!banked) {
     map_of(record);
+  } else if (batched) {
+    // Every hypothesis, the zero one too, from the baseband record `base`: one upload a ping, batches of hypotheses,
+    // the combined map and the detector's inputs back in one download (sweep_bank_stage; live.py calls the same).
+    SweepBankStage bank = sweep_bank_stage(base, doppler_, bearings, opt_.hann, opt_.range_cell_m,
+                                           bl.enabled ? 0.5 * c * blank_edge : kDerive, opt_.cfar_guard_m, opt_.cfar_train_m, opt_.cfar_pfa,
+                                           opt_.backend, opt_.device, opt_.doppler.batch);
+    fine_ = std::move(bank.maps.fine);
+    which_ = std::move(bank.maps.which);
+    last_power = std::move(bank.maps.cells);
+    if (normalised) given_level = std::move(bank.maps.level);
+    fine_ranges_ = std::move(bank.fine_ranges);
+    last_ranges = std::move(bank.ranges);
+    n_cells = bank.n_cells;
+    cell_samples_ = bank.cell_samples;
   } else if (normalised) {
     // D3, combine cfar: each hypothesis' map normalised by its own background (the detector's estimate on its own cell
     // means, over the cells the detector will keep), the largest normalised value per sample over the beam's hypotheses
@@ -442,17 +508,23 @@ Report LiveChain::process(PingRecord& record) {
     // background as its own (live.py the same).
     NormalisedFold fold;
     std::int64_t guard_n = 0, train_n = 0;
+    ++prof.pings;
     for (std::size_t h = 0; h < doppler_.rates.size(); ++h) {
+      auto t = Clock::now();
       if (static_cast<std::int64_t>(h) == doppler_.zero) {
         map_of(record);
+        lap(t, prof.map);
       } else {
         PingRecord trial = base;
         dsp::PulseCompressionOptions pc;
         pc.doppler_scale = doppler_.scales[h];
         dsp::pulse_compress(trial, pc, opt_.backend, opt_.device);
         trial.samples.start_time += doppler_.shifts[h];
+        lap(t, prof.compress);
         map_of(trial);
+        lap(t, prof.map);
       }
+      ++prof.hypotheses;
       if (h == 0) {
         // The cells the detector keeps (blanking, as below) and its window (cfar_window, as below).
         std::int64_t skip = 0;
@@ -469,6 +541,7 @@ Report LiveChain::process(PingRecord& record) {
         normalised_start(n_b, n_cells, cell_samples_, skip, fold);
       }
       fold_normalised(doppler_, static_cast<std::int64_t>(h), fine_.data(), guard_n, train_n, fold);
+      lap(t, prof.fold);
     }
     normalised_map(fold, fine_, last_power, given_level);
     which_ = std::move(fold.which);
@@ -478,20 +551,27 @@ Report LiveChain::process(PingRecord& record) {
     // over its own hypotheses (fold_hypothesis). A loop over the existing kernels: on the CUDA backend each
     // compression and each map runs on the device as it does without the bank (cost: hypotheses x one ping's map).
     std::vector<float> best;
+    ++prof.pings;
     for (std::size_t h = 0; h < doppler_.rates.size(); ++h) {
+      auto t = Clock::now();
       if (static_cast<std::int64_t>(h) == doppler_.zero) {
         map_of(record);
+        lap(t, prof.map);
       } else {
         PingRecord trial = base;
         dsp::PulseCompressionOptions pc;
         pc.doppler_scale = doppler_.scales[h];
         dsp::pulse_compress(trial, pc, opt_.backend, opt_.device);
         trial.samples.start_time += doppler_.shifts[h];   // the echo where the zero hypothesis shows it (doppler.hpp)
+        lap(t, prof.compress);
         map_of(trial);
+        lap(t, prof.map);
       }
       const std::int64_t stride = n_b > 0 ? static_cast<std::int64_t>(fine_.size()) / n_b : 0;
       if (h == 0) fold_start(n_b, stride, best, which_);
       fold_hypothesis(doppler_, static_cast<std::int64_t>(h), fine_.data(), n_b, stride, best, which_);
+      lap(t, prof.fold);
+      ++prof.hypotheses;
     }
     fine_ = std::move(best);
     // The cells of the maximum map: their mean power, accumulated as line_map does.

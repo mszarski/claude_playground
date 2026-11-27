@@ -1,8 +1,9 @@
-set(_live_sources src/cluster.cpp src/tracker.cpp src/classify.cpp src/doa.cpp src/chain.cpp src/udp_source.cpp src/board_merge.cpp src/sync.cpp src/options.cpp src/beamform.cpp src/calibrate.cpp src/elevation.cpp src/elevation_multipath.cpp src/environment.cpp src/decimate.cpp src/tonal.cpp src/derive.cpp src/detector.cpp src/multipath_depth.cpp src/multipath_rays.cpp src/coverage.cpp src/raytrace.cpp src/doppler.cpp)
+set(_live_sources src/cluster.cpp src/tracker.cpp src/classify.cpp src/doa.cpp src/chain.cpp src/udp_source.cpp src/board_merge.cpp src/sync.cpp src/options.cpp src/beamform.cpp src/calibrate.cpp src/elevation.cpp src/elevation_multipath.cpp src/environment.cpp src/decimate.cpp src/tonal.cpp src/derive.cpp src/detector.cpp src/multipath_depth.cpp src/multipath_rays.cpp src/coverage.cpp src/raytrace.cpp src/doppler.cpp src/doppler_batched.cpp)
 if(SONAR_HAVE_CUDA)
-  list(APPEND _live_sources src/doa_cuda.cu src/beamform_cuda.cu src/detector_cuda.cu)
+  list(APPEND _live_sources src/doa_cuda.cu src/beamform_cuda.cu src/detector_cuda.cu src/doppler_cuda.cu)
   # The detector's statistic must give the host's flags: no product contracted into a fused multiply-add (detector_kernel.hpp).
-  set_source_files_properties(src/detector_cuda.cu PROPERTIES COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
+  # The Doppler stages' folds and background likewise (doppler_batched.hpp).
+  set_source_files_properties(src/detector_cuda.cu src/doppler_cuda.cu PROPERTIES COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
 endif()
 # The board merge's alignment must round as the Python engine's does (board_merge.py): no fused multiply-add.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

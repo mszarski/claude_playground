@@ -67,6 +67,16 @@ enum class DopplerCombine { Max, Cfar };
 DopplerCombine parse_doppler_combine(const std::string& name);   ///< max | cfar
 const char* doppler_combine_name(DopplerCombine c);
 
+/// Where the bank's hypotheses and the tone's filter bank are computed (D8 of docs/tasks/DOPPLER.md; doppler_batched.hpp).
+///   Auto  the batched formulation on the cuda backend (every hypothesis on the device from one upload of the baseband
+///         record to the combined map), the per-hypothesis loop on the host (the code before D8, byte for byte);
+///   On    the batched formulation on either backend (on the host: the same kernels on CPU threads, dsp::HostExec; how it
+///         is tested on a machine without a device);
+///   Off   the loop on either backend (on cuda: each hypothesis' compression and map on the device, the fold on the host).
+enum class DopplerBatched { Auto, On, Off };
+DopplerBatched parse_doppler_batched(const std::string& name);   ///< auto | on | off
+const char* doppler_batched_name(DopplerBatched b);
+
 /// D3 part B: the tone's Doppler filter bank (tone_stage below), opt-in. Every NaN is derived (plan_tone says from what).
 struct ToneOptions {
   bool enabled = false;               ///< doppler_tone = bank
@@ -110,6 +120,10 @@ struct DopplerOptions {
   double threshold_db = kDerive;
   /// The tone's Doppler filter bank (D3 part B), beside the sweep path (on with mode off too).
   ToneOptions tone;
+  /// D8: the batched formulation (DopplerBatched) and the hypotheses one batch holds (0: as many as the device's free
+  /// memory allows; doppler_batched.hpp sweep_bank_batch). Neither changes a result on the host backend with Auto.
+  DopplerBatched batched = DopplerBatched::Auto;
+  std::int64_t batch = 0;
   /// Report each detection's range rate (`range_rate_m_s`, `range_rate_step_m_s`) on the report line: off by default
   /// (docs/tasks/DOPPLER.md section 5, question 6: the report line is a contract).
   bool report = false;
@@ -182,6 +196,32 @@ void fold_normalised(const DopplerPlan& plan, std::int64_t h, const float* fine,
 /// The map the detector is handed: `fine` = ratio x reference (per cell), `cells` = cell_ratio x reference, `level` =
 /// reference (0 in the skipped cells; the chain drops them).
 void normalised_map(const NormalisedFold& fold, std::vector<float>& fine, std::vector<float>& cells, std::vector<double>& level);
+
+/// D8: the geometry of the chain's backprojection map (chain.cpp range_bearing_image): the aperture weights of the
+/// channels, the array's origin and each bearing's direction; point (b, q) is origin + dirs[b] x range q.
+struct MapGeometry {
+  std::vector<float> weights;
+  Vec3d origin;
+  std::vector<Vec3d> dirs;
+};
+
+/// D8: the sweep bank's combined map, as the chain's per-hypothesis loop leaves it: `fine` and `which` [n_bearing][n_cells
+/// x k] (the maximum, or with combine cfar the normalised map), `cells` [n_bearing][n_cells] (the detector's cell means),
+/// `level` (cfar: the background the detector is given, 0 in the skipped cells). `batch`: the hypotheses a batch held.
+struct SweepBankMaps {
+  std::vector<float> fine, cells;
+  std::vector<std::int32_t> which;
+  std::vector<double> level;
+  std::int64_t batch = 0;
+};
+
+/// D8: every hypothesis of `plan` compressed from the baseband record `base` (before compression), mapped onto
+/// `fine_ranges` (n_cells x k, the zero hypothesis' grid) by the backprojection kernel and folded, by the batched
+/// formulation (doppler_batched.hpp): on the device with Backend::Cuda, on CPU threads otherwise. combine cfar: `skip`
+/// blanked cells and the detector's window (`guard`, `train`). `batch` 0: as many hypotheses at a time as memory allows.
+SweepBankMaps sweep_bank_maps(const PingRecord& base, const DopplerPlan& plan, const MapGeometry& geometry, const std::vector<double>& fine_ranges,
+                              std::int64_t n_cells, std::int64_t k, std::int64_t skip, std::int64_t guard, std::int64_t train, Backend backend,
+                              int device, std::int64_t batch);
 
 // ------------------------------------------------------------------------------------------------------------------------
 // D3 part B: the tone's Doppler filter bank (docs/tasks/DOPPLER.md D3; gpusonar/doppler.py tone_stage), opt-in.
