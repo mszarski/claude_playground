@@ -839,8 +839,8 @@
       "refraction_on": 0.13999999999999999,
       "refraction_off": 0.12999999999999998
     },
-    "cylinder_over_clutter_db": 21.117116928100586,
-    "seconds": 19.5,
+    "cylinder_over_clutter_db": 20.32423973083496,
+    "seconds": 20.1,
     "animation": "buried_objects.gif",
     "backend": "cuda",
     "quick": false
