@@ -43,9 +43,6 @@ void check(const ReverbParams& p) {
   if (p.n_azimuth <= 0) throw std::invalid_argument("reverb: n_azimuth must be positive");
   if (p.decimation < 1) throw std::invalid_argument("reverb: decimation must be at least 1");
   if (!(p.sound_speed > 0.0)) throw std::invalid_argument("reverb: sound_speed must be positive");
-  if (p.per_frequency_doppler && !(p.center_frequency > 0.0)) {
-    throw std::invalid_argument("reverb: the per-frequency Doppler needs a positive center_frequency");
-  }
 }
 
 /// numpy.interp at x with zero outside the grid: linear between the neighbouring nodes.
@@ -196,6 +193,12 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
   first = 0;
   if (n_sectors == 0) return;
   const bool components = power.direction != nullptr;
+  if (params.per_frequency_doppler && !(fc > 0.0) && components) {
+    // Gamma = 1 + doppler / fc: a component with a shift needs a carrier (a sector's shift is zero without one).
+    for (std::int64_t m : sectors) {
+      if (power.doppler[m] != 0.0) throw std::invalid_argument("reverb: the per-frequency Doppler needs a positive center_frequency");
+    }
+  }
   // With one density for all sectors, sigma is worked out once.
   const bool shared = power.n_rows == 1 && !components;
   std::vector<double> shared_sigma;

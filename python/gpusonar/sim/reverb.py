@@ -29,11 +29,13 @@ the transmit pattern and the pattern of the first receive element weight each az
 sector and each path, at the path's own elevation at the sonar (its launch direction, not
 its grazing angle at the boundary); each sector is shifted by the Doppler of the receive
 platform's horizontal velocity towards the sector's azimuth, two-way, as if every path
-were horizontal (no elevation factor, no vertical velocity), as ONE frequency shift of the
-whole sector at the record's centre frequency fc (`doppler="centre"`, the default: right at
-fc only; a line at f should move by 2 (v . u) f / c, TR 0702 eqs. (63)-(64), so on a wide
-pulse the band's edges are off by (f - fc) / fc of the shift; `doppler="per_frequency"`
-time-scales each sector's pulse instead, see `scaled_pulse`); the arrival elevation is
+were horizontal (no elevation factor, no vertical velocity), each frequency f of the
+sector shifted by its own 2 (v . u) f / c, a time scaling of the sector's pulse
+(`doppler="per_frequency"`, the default since 2026-11-27, `scaled_pulse`; TR 0702 eqs.
+(63)-(64)). Before, the whole sector was shifted by one 2 (v . u) fc / c at the record's
+centre frequency, right at fc only (on a wide pulse the band's edges were off by
+(f - fc) / fc of the shift); `doppler="centre"` keeps that law to reproduce earlier
+records exactly. The arrival elevation is
 ignored when steering to the hydrophones (fine at the low grazing angles of long ranges);
 the boundary is flat and uniform.
 
@@ -256,10 +258,12 @@ BATCHED_ON_HOST = False
 PARALLEL_DRAWS = True
 
 
-# The Doppler of a sector (or component): "centre", one frequency shift of the whole row at the
-# record's centre frequency (the default, as before); "per_frequency", the row's pulse time-scaled
-# by Gamma = 1 + doppler / fc as well, so that every frequency f moves by doppler f / fc.
+# The Doppler of a sector (or component): "per_frequency" (the default since 2026-11-27), the row's
+# pulse time-scaled by Gamma = 1 + doppler / fc as well as shifted, so that every frequency f moves
+# by doppler f / fc; "centre", one frequency shift of the whole row at the record's centre
+# frequency (the law before, wrong away from fc; kept to reproduce earlier records exactly).
 DOPPLER_LAWS = ("centre", "per_frequency")
+DEFAULT_DOPPLER = "per_frequency"
 # Half the taps of the interpolation that time-scales the pulse (libs/sim reverb_kernel.hpp
 # kReverbScaleHalf): a Blackman-windowed sinc of 2 x 8 taps.
 SCALE_HALF_TAPS = 8
@@ -306,7 +310,7 @@ def scaled_pulse(pulse: np.ndarray, n_low: int, doppler: float, fc: float, fs_lo
 
 def check_doppler(doppler) -> str:
     """A reverberation item's `doppler`: None or one of DOPPLER_LAWS."""
-    law = "centre" if doppler is None else str(doppler)
+    law = DEFAULT_DOPPLER if doppler is None else str(doppler)
     if law not in DOPPLER_LAWS:
         raise ValueError(f"reverberation doppler: unknown law {doppler!r}; use one of {', '.join(DOPPLER_LAWS)}")
     return law
@@ -458,7 +462,7 @@ def cpp_has_components() -> bool:
 
 def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n, start_time, time0, fc, c,
                 n_azimuth, decim, n_low, velocity, carrier, real, backend, components=None, texture=None,
-                doppler="centre"):
+                doppler=None):
     """The reverberation of every channel in the record's window, [channels, n], by the C++
     generator. The random numbers are drawn here, in the order `_series_numpy` draws them
     (for each sector with power: n_low for the real part, then n_low for the imaginary
@@ -484,6 +488,8 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
             raise RuntimeError("reverberation doppler: per_frequency: this build of the C++ generator does not have it; "
                                "rebuild, or use engine='numpy'")
         extra["per_frequency"] = True
+    elif cpp_has_per_frequency():
+        extra["per_frequency"] = False                     # the old law, said explicitly (the extension's default is the new one)
     n_active = len(rows)
     offsets = np.ascontiguousarray(offsets, dtype=float)
     pulse_low = np.ascontiguousarray(pulse_low, dtype=complex)
@@ -526,12 +532,10 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,
-                  n_azimuth, decim, n_low, velocity, carrier, real, components=None, texture=None, doppler="centre"):
+                  n_azimuth, decim, n_low, velocity, carrier, real, components=None, texture=None, doppler=None):
     """The reverberation of every channel in the record's window, [channels, n], in NumPy.
     `components`, `texture` and `doppler` as in `_series_cpp`."""
     per_frequency = check_doppler(doppler) == "per_frequency"
-    if per_frequency and not fc > 0.0:
-        raise ValueError("reverberation doppler: per_frequency needs a positive centre frequency")
     fs_low = fs / decim
     t_low = times[0] + np.arange(n_low) / fs_low
     dphi = 2.0 * np.pi / n_azimuth
@@ -567,6 +571,8 @@ def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, sta
             # time-scaled, `scaled_pulse`).
             b = b * np.exp(2j * np.pi * doppler * (t_low - t_low[0]))
             if per_frequency:
+                if not fc > 0.0:
+                    raise ValueError("reverberation doppler: per_frequency needs a positive centre frequency")
                 shifted = scaled_pulse(pulse_low, n_low, doppler, fc, fs_low)
             else:
                 shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
@@ -677,12 +683,12 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     defaults (off, 0) keep earlier results.
 
     `doppler` is how a moving platform's (and moving scatterers') Doppler enters each sector or
-    component: "centre" (the default, None alike: earlier results bit for bit) shifts the whole
-    row by its Doppler at the record's centre frequency fc, right at fc only; "per_frequency"
-    time-scales the row's pulse by Gamma = 1 + doppler / fc as well (`scaled_pulse`), so that each
-    frequency f moves by its own 2 (v . u) f / c, as the echoes of targets do. It matters on a wide
-    band: on a 4.0-6.6 kHz train a 6.5 kHz tone sees the still boundary at 5.3 / 6.5 = 0.815 of
-    its physical shift under "centre".
+    component: "per_frequency" (the default, None alike, since 2026-11-27) time-scales the row's
+    pulse by Gamma = 1 + doppler / fc as well as shifting it (`scaled_pulse`), so that each
+    frequency f moves by its own 2 (v . u) f / c, as the echoes of targets do; "centre" shifts the
+    whole row by its Doppler at the record's centre frequency fc, right at fc only: the law before,
+    which reproduces earlier records bit for bit. It matters on a wide band: on a 4.0-6.6 kHz train
+    a 6.5 kHz tone saw the still boundary at 5.3 / 6.5 = 0.815 of its physical shift under "centre".
     """
     doppler = check_doppler(doppler)
     if geometry not in ("monostatic", "bistatic"):

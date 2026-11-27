@@ -61,9 +61,10 @@ struct ReverbParams {
   bool total_from_host = true, total_to_host = true;
   /// The Doppler of each sector (or component) as a time scaling of its pulse, Gamma = 1 +
   /// doppler / center_frequency, so that every frequency f is shifted by doppler f / fc
-  /// (TR 0702 eqs. (63)-(64)), instead of one frequency shift of the whole sector at fc (the
-  /// default, false: exact at fc only). python/gpusonar/sim/reverb.py `doppler="per_frequency"`.
-  bool per_frequency_doppler = false;
+  /// (TR 0702 eqs. (63)-(64)); the default since 2026-11-27. false: one frequency shift of the
+  /// whole sector at fc, exact at fc only (the law before; python/gpusonar/sim/reverb.py
+  /// `doppler="centre"`).
+  bool per_frequency_doppler = true;
 };
 
 /// Seconds in each step of the generator since the last reset (reverb_batched.hpp).

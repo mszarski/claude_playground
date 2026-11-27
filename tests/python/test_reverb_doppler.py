@@ -1,12 +1,13 @@
-"""The Doppler of boundary reverberation seen from a moving platform: one shift at the centre
-frequency (`doppler: centre`, the default) against each frequency's own shift
-(`doppler: per_frequency`, opt-in; sim/reverb.py, libs/sim reverb, the CUDA sum).
+"""The Doppler of boundary reverberation seen from a moving platform: each frequency's own shift
+(`doppler: per_frequency`, the default since 2026-11-27, the owner: "FIx it") against one shift at
+the centre frequency (`doppler: centre`, the law before, kept to reproduce earlier records;
+sim/reverb.py, libs/sim reverb, the CUDA sum).
 
 The law (TR 0702 eqs. (63)-(64), Sec. 8.3, confirmed; docs/PHYSICS_NOTES.md Sec. 3.4 and 14.1):
 the echo of a still scatterer is the pulse time-scaled by Gamma = 1 - dT/dt, so a line sent at f
 comes back at Gamma f: shifted by 2 (v . u) f / c (first order, monostatic). The default
-generator shifts a whole sector by 2 (v . u) fc / c at the record's centre frequency fc, which is
-right at fc only. On a wide pulse the difference is (f - fc) 2 (v . u) / c.
+generator shifted a whole sector by 2 (v . u) fc / c at the record's centre frequency fc, which is
+right at fc only (`centre` still does). On a wide pulse the difference is (f - fc) 2 (v . u) / c.
 
 The measurement here is independent of the generator's code path: one sector of boundary
 (a known bearing) lit for a long record, a pulse of two Hann tones 2 kHz apart, the spectrum of
@@ -101,21 +102,23 @@ def _engine(name):
 
 
 @pytest.mark.parametrize("engine", ENGINES)
-def test_each_tone_of_a_wide_pulse_takes_its_own_doppler_with_per_frequency(engine):
-    """The physical law, opt-in. Fails on the centre law by 3.70 Hz a tone (the next test)."""
+def test_each_tone_of_a_wide_pulse_takes_its_own_doppler_by_default(engine):
+    """The physical law, the default and `per_frequency` alike. Failed before the fix by 3.65 Hz a
+    tone (the generator then gave 20.28 / 20.41 Hz: the next test's numbers)."""
     eng, batched = _engine(engine)
-    got = tone_shifts([one_sector(eng, seed, doppler="per_frequency", batched=batched) for seed in range(3)])
     want = np.array([expected_shift(f, PHYSICAL) for f in TONES])
-    print(f"[revdop] {engine} per_frequency: tone shifts {np.round(got, 3)} Hz, closed form {np.round(want, 3)}")
-    assert np.all(np.abs(got - want) < TOLERANCE_HZ), (got, want)
+    for doppler in (None, "per_frequency"):
+        got = tone_shifts([one_sector(eng, seed, doppler=doppler, batched=batched) for seed in range(3)])
+        print(f"[revdop] {engine} {doppler or 'default'}: tone shifts {np.round(got, 3)} Hz, closed form {np.round(want, 3)}")
+        assert np.all(np.abs(got - want) < TOLERANCE_HZ), (got, want)
 
 
 @pytest.mark.parametrize("engine", ENGINES)
-def test_the_default_shifts_every_tone_by_the_centre_frequencys_doppler(engine):
-    """Today's law, kept as the default: every tone at the centre's shift, so each tone is off its
-    physical shift by 2 (v . u) (f - fc) / c (here -3.70 and +3.70 Hz). Default and `centre` alike."""
+def test_centre_shifts_every_tone_by_the_centre_frequencys_doppler(engine):
+    """The law before, kept as `centre`: every tone at the centre's shift, so each tone is off its
+    physical shift by 2 (v . u) (f - fc) / c (here -3.70 and +3.70 Hz)."""
     eng, batched = _engine(engine)
-    for doppler in (None, "centre"):
+    for doppler in ("centre",):
         got = tone_shifts([one_sector(eng, seed, doppler=doppler, batched=batched) for seed in range(3)])
         centre = expected_shift(FC, "centre")
         print(f"[revdop] {engine} {doppler or 'default'}: tone shifts {np.round(got, 3)} Hz, centre law {centre:.3f}")
@@ -125,12 +128,24 @@ def test_the_default_shifts_every_tone_by_the_centre_frequencys_doppler(engine):
 
 
 @pytest.mark.parametrize("engine", ["numpy", pytest.param("cpp", marks=needs_cpp)])
-def test_centre_is_the_default_bit_for_bit(engine):
+def test_per_frequency_is_the_default_bit_for_bit(engine):
     rec_a, rec_b = empty_ping(**REVERB_CASES["moving_uniform"][0]), empty_ping(**REVERB_CASES["moving_uniform"][0])
     reverb.add_reverberation(rec_a, FreeFieldProvider(C), 0.0, MU_DB, np.random.default_rng(3), engine=engine, n_azimuth=90)
     reverb.add_reverberation(rec_b, FreeFieldProvider(C), 0.0, MU_DB, np.random.default_rng(3), engine=engine, n_azimuth=90,
-                             doppler="centre")
+                             doppler="per_frequency")
     np.testing.assert_array_equal(rec_a.samples.array, rec_b.samples.array)
+
+
+@pytest.mark.parametrize("engine", ["numpy", pytest.param("cpp", marks=needs_cpp)])
+def test_a_still_platform_is_the_same_under_either_law(engine):
+    """No Doppler, nothing to scale: the two laws give the same record bit for bit."""
+    out = []
+    for law in ("centre", "per_frequency"):
+        rec = empty_ping(**REVERB_CASES["flank_32_uniform_decimated"][0])
+        reverb.add_reverberation(rec, FreeFieldProvider(C), 0.0, MU_DB, np.random.default_rng(3), engine=engine, n_azimuth=90,
+                                 doppler=law)
+        out.append(rec.samples.array)
+    np.testing.assert_array_equal(out[0], out[1])
 
 
 def test_an_unknown_doppler_law_is_refused():
@@ -188,7 +203,7 @@ def test_engines_agree_with_per_frequency(name):
     worst, rms = relative_difference(x_cpp, x_np)
     print(f"[revdop] engines {name}: worst {worst:.2e}, rms {rms:.2e}")
     assert worst < 5e-6 and rms < 5e-6, (worst, rms)
-    # and the option did something on these moving cases
+    # and the law did something on these moving cases
     x_centre, _ = run_moving(name, "numpy", doppler="centre")
     assert relative_difference(x_np, x_centre)[1] > 1e-4
 
@@ -224,8 +239,8 @@ def test_bistatic_components_agree_with_per_frequency(name, batched):
     assert worst < 5e-6 and rms < 5e-6, (worst, rms)
     rec = bistatic_ping(**ping_kw)
     reverb.add_reverberation(rec, FreeFieldProvider(C), 0.0, MU_DB, np.random.default_rng(3), engine="numpy",
-                             geometry="bistatic", **reverb_kw)
-    assert relative_difference(out["numpy"], rec.samples.array)[1] > 1e-4        # the option did something
+                             geometry="bistatic", doppler="centre", **reverb_kw)
+    assert relative_difference(out["numpy"], rec.samples.array)[1] > 1e-4        # the law did something
 
 
 @pytest.mark.parametrize("name", ["flank_32_lfm_moving", "moving_uniform"])
@@ -264,6 +279,15 @@ def test_the_scenario_item_key_reaches_the_generator(monkeypatch):
                reverberation=[dict(SCENARIO["reverberation"][0], doppler="per_frequency"), SCENARIO["reverberation"][1]])
     run_scenario(cfg, engine="numpy")
     assert seen == ["per_frequency", None]
+
+
+def test_the_scenario_item_key_centre_reproduces_the_old_law(monkeypatch):
+    from test_sim_cpp import SCENARIO
+    from gpusonar.sim.simulator import run_scenario
+    cfg = dict(SCENARIO, pings={"count": 1})
+    old = dict(cfg, reverberation=[dict(i, doppler="centre") for i in SCENARIO["reverberation"]])
+    a, b = run_scenario(old, engine="numpy").records[0], run_scenario(cfg, engine="numpy").records[0]
+    assert relative_difference(b.samples.array, a.samples.array)[1] > 1e-4    # the platform moves at 1.5 m/s: the laws differ
 
 
 # --- CUDA ------------------------------------------------------------------------------------

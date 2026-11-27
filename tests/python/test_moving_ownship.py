@@ -17,7 +17,13 @@ core = gs.core
 
 def test_reverberation_carries_ownship_doppler_by_bearing():
     """A line array moving along its own axis over a fixed seabed: reverberation arriving
-    from ahead is shifted up by 2 v f / c, from astern down by the same."""
+    from ahead is shifted up by 2 v f / c, from astern down by the same.
+
+    The spectra of six seeds are summed (2026-11-27, package revdop): one seed's centroid scatters
+    by up to 35 Hz between seeds (seed 7: +55 / -19 Hz), and seed 3 alone, which passed under the
+    old single-shift law (+47.8 / -52.8 Hz), fell just outside the 15 % below under the per-frequency
+    law (+42.9 / -52.1 Hz) because the realisation changed, not the law at fc (a CW at fc has the same
+    shift under both). The tolerances are unchanged."""
     speed, fc = 6.0, 8000.0
     sonar = SonarModel.load("flank_32", {
         "receive": {"kind": "baseband", "sample_rate": 4000.0, "window": {"range": [150.0, 900.0]}, "sensitivity_db": None},
@@ -25,16 +31,19 @@ def test_reverberation_carries_ownship_doppler_by_bearing():
                                                           "window_alpha": 0.0, "source_level_db_rms": None, "amplitude": 1.0}}})
     centroid = {}
     for v in (0.0, speed):
-        rec = simulate_ping(sonar, make_pose(position=(0, 0, -30.0), velocity=(v, 0, 0)), Scene(),
-                            environment={"sound_speed": C}, adc=False, absorption_model="none",
-                            reverberation=[{"boundary_z": 0.0, "mu_db": -27.0}], rng=np.random.default_rng(3))
-        x = rec.samples.array
-        pos = rec.rx_positions()
-        along = (pos - pos.mean(axis=0))[:, 0]
-        f = np.fft.fftfreq(x.shape[1], 1.0 / rec.samples.sample_rate)
-        for name, sin_b in (("ahead", np.sin(np.radians(70.0))), ("astern", -np.sin(np.radians(70.0)))):
-            beam = (x * np.exp(-2j * np.pi * fc / C * along * sin_b)[:, None]).sum(axis=0)
-            p = np.abs(np.fft.fft(beam)) ** 2
+        power = {}
+        for seed in range(3, 9):
+            rec = simulate_ping(sonar, make_pose(position=(0, 0, -30.0), velocity=(v, 0, 0)), Scene(),
+                                environment={"sound_speed": C}, adc=False, absorption_model="none",
+                                reverberation=[{"boundary_z": 0.0, "mu_db": -27.0}], rng=np.random.default_rng(seed))
+            x = rec.samples.array
+            pos = rec.rx_positions()
+            along = (pos - pos.mean(axis=0))[:, 0]
+            f = np.fft.fftfreq(x.shape[1], 1.0 / rec.samples.sample_rate)
+            for name, sin_b in (("ahead", np.sin(np.radians(70.0))), ("astern", -np.sin(np.radians(70.0)))):
+                beam = (x * np.exp(-2j * np.pi * fc / C * along * sin_b)[:, None]).sum(axis=0)
+                power[name] = power.get(name, 0.0) + np.abs(np.fft.fft(beam)) ** 2
+        for name, p in power.items():
             centroid[(v, name)] = float((f * p).sum() / p.sum())
     ceiling = 2 * speed * fc / C                                            # 64 Hz, dead ahead
     assert abs(centroid[(0.0, "ahead")]) < 6.0 and abs(centroid[(0.0, "astern")]) < 6.0
