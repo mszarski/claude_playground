@@ -1385,3 +1385,36 @@ with the lobe notch auto whatever the run uses, so `--tone-lobe-notch off` says 
 (`ls12_tone_train_lobe_off.json`) and on (`ls12_tone_train.json`): before and after in one job. Tests:
 `tests/python/test_doppler_gpu_job.py` (the switch and the two passes; the kinds on a made geometry; on the lobe record
 every false detection with the notch off is `lobe_ridge`, none with it).
+
+### GL.8 Why the notch did not remove the train scene's false detections on the GPU (2026-11-27): the simulator
+
+The coordinator's GPU run (Hugging Face job 6b0911926c5d61fff1888f01, branch `notch` at `f1c5d2d`, L4, cuda; ours):
+`popoto_12km_large_submerged_tone`, 4 target-free pings, default budget: 22 false tone detections with the lobe notch
+off, **25 with it on**. The cause is **not the chain**. It is the simulator.
+- **The simulator's monostatic boundary reverberation shifts each azimuth sector by its Doppler at the record's centre
+  frequency** (`python/gpusonar/sim/reverb.py`, `_series_numpy`: `doppler = 2 (v . u) fc / c`; the C++ generator the
+  same), a narrowband frequency shift for the whole pulse. On the train (4.0 to 6.6 kHz, record centre 5.3 kHz) the
+  6.5 kHz tone's still water lies at 5.3 / 6.5 = 0.815 of its physical ridge. The chain's ridges are the physical ones.
+- Evidence, GPU: the 22 detections with the notch off lie on the lobe ridge scaled by 0.815 (rate less that ridge,
+  mean -0.010 m/s, sd 0.061), not on the physical ridge (mean -0.276); with the notch on, the 25 lie 0.32 to 0.40 m/s
+  from the physical ridge, at the notch's edge (+-0.38), where the scaled ridge's far side is cut. The alternating run
+  (CW pings: the record's centre IS the tone, so the simulated Doppler is right) on the same job reports **0 false tone
+  detections in 6 tone pings with the notch on**, on the device. Before the notch the CPU run had 3 to 5 a tone ping (LS.1).
+- Evidence, host (scratch reproduction: popoto_long_range, 1.5 m/s along the line, a flat bottom 50 m below, the
+  simulator's reverberation): the strongest rate of the beam at +-60 degrees is -1.33 / +1.33 m/s on a CW record (own
+  ridge -+1.30) and -0.98 / +1.04 on the train (0.815 x 1.30 = 1.06); with the notch on the train gives 17 tone
+  detections at +-1.0 to 1.12 m/s at 31 to 39 degrees (10 off), the GPU's pattern.
+- The mask reaches every form: every detection's strongest cell lies outside every applied notch, by 0.07 to 2.5 steps
+  on that record; its parabola moves its rate at most half a step inward, which is why the attribution of `f1c5d2d`
+  (inside if within 1.0 notch width) called them "on a lobe's ridge". Now the attribution says `lobe_edge` for those,
+  `DEFECT` for a rate inside an applied notch by more than half a step (none on any record here), and counts those
+  on the ridge scaled by the record's centre frequency over the tone's.
+- So on a TRAIN the scene's reverberation is wrong for the tone, and the tone path's false detections there measure the
+  simulator, not the chain. The sweep's own reverberation on the train has the same approximation (4 to 6 kHz shifted
+  at 5.3 kHz: at most 25 % off at the band's edges). Not fixed here: it moves every simulated moving-platform scene with
+  boundary reverberation (a default result), so it is for the owner. The fix: the shift per frequency
+  (2 (v . u) f / c, i.e. a time scaling), in the frequency domain where each sector's delay is already applied, in the
+  NumPy and C++ generators and the CUDA sum; opt-in first, with before -> after on the shipped scenes.
+- Tests: `test_doppler_tone_lobes.py::test_no_tone_detection_lies_inside_a_notch_applied_to_its_beam` (the field record
+  and this reverberation train, both engines, loop and batched); the same on the device (CUDA-gated) and the batched
+  inputs carrying the mask in `test_doppler_device.py`; the attribution's kinds and DEFECT in `test_doppler_gpu_job.py`.

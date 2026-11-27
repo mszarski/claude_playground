@@ -253,3 +253,67 @@ def test_the_option_is_auto_said_only_when_off_and_checked():
     assert json.loads(core.live_options_from_text("doppler_tone=bank\ndoppler_tone_lobe_notch=off\n"))["doppler_tone_lobe_notch"] == "off"
     p = stage(ping(), OFF)["plan"]
     assert p["lobe_notch"] == "off" and p["lobes"] == [] and p["lobe_beams"] == 0 and '"lobe_notch": "off"' in p["json"]
+
+
+# --- the invariant: no reported tone detection inside a notch applied to its beam ---------------------------------------
+
+TRAIN = {"type": "sampled", "source": "train", "f_start": 4.0e+3, "f_stop": 6.6e+3,
+         "segments": [{"kind": "cw", "frequency": F, "duration": 1.0, "window_alpha": 1.0}, {"kind": "gap", "duration": 0.0},
+                      {"kind": "lfm", "f_start": 4.0e+3, "f_stop": 6.0e+3, "duration": 1.0, "window_alpha": 0.1}]}
+TONE_TRAIN = dict(TONE, tone_frequency_hz=F, tone_start_s=0.0, tone_duration_s=1.0, tone_window_alpha=1.0)
+
+
+def reverb_train_ping():
+    """popoto_12km_large_submerged_tone's train (a 6.5 kHz tone, then the 4-6 kHz sweep; the record's centre 5.3 kHz)
+    over a flat bottom 50 m below, the simulator's boundary reverberation, under way at 1.5 m/s. That reverberation
+    shifts each sector by its Doppler at the record's CENTRE frequency (sim/reverb.py), so the tone sees the still water
+    at 5.3 / 6.5 of its physical ridge, where the lobe notch's edge cuts it: the case of the GPU run of 2026-11-27,
+    many detections at the notch's edges (DOPPLER.md GL.8)."""
+    s = SonarModel.load("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8.0e+3, "window": {"range": [300.0, 1500.0]}},
+                                              "transmit": {"waveform": TRAIN}})
+    return simulate_ping(s, make_pose(position=(0.0, 0.0, 50.0), velocity=(V, 0.0, 0.0)), Scene(), environment={"sound_speed": C}, adc=False,
+                         noise_rms=1e-7, absorption_model="none", reverberation=[{"mu_db": -27.0, "boundary_z": 0.0}], rng=np.random.default_rng(3))
+
+
+def applied_mask(plan, beam):
+    """The (ridge, half-width) pairs of every notch the plan applies to `beam`: its own and its lobes'."""
+    return [(plan["ownship"][beam], plan["notch"][beam])] + [(g["ownship"], g["notch"]) for g in plan["lobes"] if g["beam"] == beam]
+
+
+def assert_outside_applied_notches(rec, tone, bearings_deg, engines=("python", "cpp"), batched=("off", "on"), backend="host"):
+    first, last, step = bearings_deg
+    b = [float(x) for x in np.radians(np.arange(first, last + 0.5 * step, step))]
+    for form in batched:
+        st = core.live_tone_stage(rec, b, doppler.tone_options(dict(tone, batched=form)), hann=True,
+                                  **({} if backend == "host" else {"backend": core.Backend.Cuda}))
+        p = st["plan"]
+        for d in st["detections"]:                     # the strongest cell itself: never inside, exactly
+            r = p["rates"][d["hypothesis"]]
+            assert all(abs(r - ridge) > half for ridge, half in applied_mask(p, d["beam"])), (form, d)
+            # Its refined rate: at most half a step further in (the parabola's reach).
+            assert all(abs(d["range_rate"] - ridge) > half - 0.5 * p["step"] - 1e-9 for ridge, half in applied_mask(p, d["beam"])), (form, d)
+        for engine in engines:
+            cfg = {"engine": engine, "backend": backend, "bearings_deg": list(bearings_deg), "doppler": dict(tone, batched=form)}
+            (rep,) = run(cfg, [rec])
+            for d in rep["detections"]:
+                if d["doppler_path"] not in ("tone", "both"):
+                    continue
+                # The beam: the nearest, or either of two when the refined bearing lies half a step between them.
+                near = np.nonzero(np.abs(np.degrees(b) - d["bearing_deg"]) <= 0.5 * step + 1e-6)[0]
+                assert any(all(abs(d["range_rate_m_s"] - ridge) > half - 0.5 * p["step"] - 1e-9 for ridge, half in applied_mask(p, int(k)))
+                           for k in near), (engine, form, d)
+    return st
+
+
+@pytest.mark.parametrize("case", ["field", "reverb_train"])
+def test_no_tone_detection_lies_inside_a_notch_applied_to_its_beam(case):
+    """Both engines, the loop and the batched form on the host, the lobe notch auto: the strongest cell of every tone
+    detection is outside every notch applied to its beam (its own and its lobes'), and its refined rate at most half a
+    step inside. On the reverberation train the stage does report detections (at the notches' edges): the invariant is
+    tested where it matters."""
+    if case == "field":
+        rec, tone = ping(field=2000, movers=((-36.0, 900.0, 1.0),)), TONE
+    else:
+        rec, tone = reverb_train_ping(), TONE_TRAIN
+    st = assert_outside_applied_notches(rec, tone, [-40.0, 40.0, 0.5])
+    assert len(st["detections"]) >= 1

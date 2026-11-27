@@ -49,7 +49,10 @@ pings that matches no target gets its bearing, range, rate, snr and path; whethe
 or an endfire notch at the tone; whether its rate lies within a lobe's notch (`on_lobe_ridge`); its distance from its
 beam's own ridge and from the nearest lobe's ridge in notch widths; and a kind: `lobe_ridge` (on a lobe's ridge),
 `notch_edge` (within 2 own-notch widths of its beam's ridge), `other` (neither: the far sidelobes of strong
-reverberation, a real echo, or unexplained), `no_rate` (a sweep detection). The lobe geometry is the plan's with
+reverberation, a real echo, or unexplained), `no_rate` (a sweep detection); `lobe_edge` (a cell just outside a lobe's
+notch, its refined rate up to half a step inside) and `DEFECT` (inside an applied notch by more than half a step: the
+summary line then starts with DEFECT); `sim_scaled_lobe_widths` (the distance from the lobe ridge times the record's
+centre frequency over the tone's: where the simulator's monostatic reverberation puts the still water on a train). The lobe geometry is the plan's with
 `tone_lobe_notch: auto` whatever the run uses (core.live_tone_plan), so a run with the notch off says how many the
 lobes would explain. One summary line per budget (and per engine for the target pings).
 """
@@ -220,8 +223,11 @@ def per_target(reports, stages, truths: dict, tone_gate: float) -> dict:
 
 def lobe_geometry(record, tone: dict | None, max_rate: float):
     """The tone plan's per-beam geometry for this record with the lobe notch auto (whatever the run uses): the chain's
-    bearings, each beam's own ridge and notch, and its lobes (visible or endfire) with their ridges and notches. None
-    when the record has no tone path (a sweep ping)."""
+    bearings, each beam's own ridge and notch, and its lobes (visible or endfire) with their ridges and notches; the
+    step between hypotheses, which lobes the run applies (LOBE_NOTCH), and the record's centre frequency over the tone's
+    (the simulator's monostatic reverberation shifts every sector by its Doppler at the record's centre frequency,
+    sim/reverb.py: on a train its still water lies at that fraction of the tone's physical ridge). None when the record
+    has no tone path (a sweep ping)."""
     from gpusonar import core, live
     if tone is None:
         return None
@@ -234,15 +240,25 @@ def lobe_geometry(record, tone: dict | None, max_rate: float):
     lobes = {}
     for g in p["lobes"]:
         lobes.setdefault(int(g["beam"]), []).append(g)
-    return {"bearings_deg": np.degrees(bearings), "ownship": list(p["ownship"]), "notch": list(p["notch"]), "lobes": lobes}
+    f_tone = float(json.loads(p["json"])["frequency_hz"])
+    return {"bearings_deg": np.degrees(bearings), "ownship": list(p["ownship"]), "notch": list(p["notch"]), "lobes": lobes,
+            "step": float(p["step"]), "lobes_applied": LOBE_NOTCH != "off",
+            "sim_scale": float(record.samples.center_frequency) / f_tone if record.samples.is_complex() else 1.0}
 
 
 def attribute(d: dict, geo) -> dict:
-    """One detection's attribution (the module's docstring says what each field is)."""
+    """One detection's attribution (the module's docstring says what each field is).
+
+    A detection's rate is its strongest cell's, refined by a parabola by at most half a step, so a detection of a cell
+    just outside a notch can read up to half a step inside it: `lobe_edge` / `notch_edge`. A rate inside an APPLIED notch
+    (the beam's own always; the lobes' unless --tone-lobe-notch off) by more than half a step cannot come from the
+    chain: `defect` True and the kind `DEFECT`. `sim_scaled_lobe_widths`: the distance from the lobe ridges scaled by
+    the record's centre frequency over the tone's (where the simulator puts the still water on a train)."""
     rate = d.get("range_rate_m_s")
     row = {"bearing_deg": d["bearing_deg"], "range_m": d["range_m"], "range_rate_m_s": rate, "snr_db": d["snr_db"],
            "path": d.get("doppler_path"), "beam_bearing_deg": None, "visible_lobe": None, "endfire_notch": None,
-           "on_lobe_ridge": None, "own_ridge_widths": None, "lobe_ridge_widths": None, "kind": "no_rate" if rate is None else "other"}
+           "on_lobe_ridge": None, "own_ridge_widths": None, "lobe_ridge_widths": None, "sim_scaled_lobe_widths": None, "defect": False,
+           "kind": "no_rate" if rate is None else "other"}
     if geo is None:
         return row
     b = int(np.argmin(np.abs(geo["bearings_deg"] - d["bearing_deg"])))
@@ -251,20 +267,38 @@ def attribute(d: dict, geo) -> dict:
                endfire_notch=any(g["endfire"] for g in lobes))
     if rate is None:
         return row
-    own = abs(rate - geo["ownship"][b]) / geo["notch"][b]
-    lobe = min((abs(rate - g["ownship"]) / g["notch"] for g in lobes), default=None)
-    row.update(own_ridge_widths=float(own), lobe_ridge_widths=None if lobe is None else float(lobe), on_lobe_ridge=lobe is not None and lobe <= 1.0)
-    row["kind"] = "lobe_ridge" if row["on_lobe_ridge"] else "notch_edge" if own <= 2.0 else "other"
+    half = 0.5 * geo["step"] + 1e-9
+    own_d, own_n = abs(rate - geo["ownship"][b]), geo["notch"][b]
+    lobe_d = [(abs(rate - g["ownship"]), g["notch"]) for g in lobes]
+    own = own_d / own_n
+    lobe = min((x / n for x, n in lobe_d), default=None)
+    scaled = min((abs(rate - geo["sim_scale"] * g["ownship"]) / g["notch"] for g in lobes), default=None)
+    deep_lobe = any(x < n - half for x, n in lobe_d)
+    edge_lobe = any(n - half <= x <= n + 2.0 * geo["step"] for x, n in lobe_d)
+    row.update(own_ridge_widths=float(own), lobe_ridge_widths=None if lobe is None else float(lobe), on_lobe_ridge=lobe is not None and lobe <= 1.0,
+               sim_scaled_lobe_widths=None if scaled is None else float(scaled))
+    row["defect"] = bool(own_d < own_n - half or (geo["lobes_applied"] and deep_lobe))
+    if row["defect"]:
+        row["kind"] = "DEFECT"
+    elif deep_lobe:
+        row["kind"] = "lobe_ridge"
+    elif edge_lobe:
+        row["kind"] = "lobe_edge"
+    elif own <= 2.0:
+        row["kind"] = "notch_edge"
     return row
 
 
 def attribution_summary(rows: list, label: str) -> str:
     beyond = sum(1 for r in rows if r["visible_lobe"] or r["endfire_notch"])
-    kinds = {k: sum(1 for r in rows if r["kind"] == k) for k in ("lobe_ridge", "notch_edge", "other", "no_rate")}
+    kinds = {k: sum(1 for r in rows if r["kind"] == k) for k in ("DEFECT", "lobe_ridge", "lobe_edge", "notch_edge", "other", "no_rate")}
+    scaled = sum(1 for r in rows if r["sim_scaled_lobe_widths"] is not None and r["sim_scaled_lobe_widths"] <= 1.0)
     rest = [f"{r['bearing_deg']:.1f} deg {r['range_rate_m_s']:+.2f} m/s {r['snr_db']:.1f} dB" for r in rows if r["kind"] == "other"][:6]
-    return (f"{label}: {beyond} of {len(rows)} beyond the lobe onset; {kinds['lobe_ridge']} on a lobe's ridge; "
-            f"{kinds['notch_edge']} at the own notch's edge (<= 2 widths); {kinds['no_rate']} without a rate (sweep); "
-            f"the rest {kinds['other']}" + (f": {', '.join(rest)}" if rest else ""))
+    head = f"DEFECT: {kinds['DEFECT']} inside an applied notch; " if kinds["DEFECT"] else ""
+    return (f"{label}: {head}{beyond} of {len(rows)} beyond the lobe onset; {kinds['lobe_ridge']} on a lobe's ridge; "
+            f"{kinds['lobe_edge']} at a lobe notch's edge; {kinds['notch_edge']} at the own notch's edge (<= 2 widths); "
+            f"{scaled} on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); "
+            f"{kinds['no_rate']} without a rate (sweep); the rest {kinds['other']}" + (f": {', '.join(rest)}" if rest else ""))
 
 
 def unmatched(reports, truths: dict, tone_gate: float, records, tone, max_rate: float) -> list:

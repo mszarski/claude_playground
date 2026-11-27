@@ -308,3 +308,27 @@ def test_the_device_tone_bank_with_the_lobe_notch_gives_the_hosts_power_and_dete
         (h,) = reports(dict(lobes.chain_cfg(engine, tone)), [rec])
         (d,) = reports(dict(lobes.chain_cfg(engine, tone), backend="cuda"), [rec])
         same_detections(h, d)
+
+
+@needs_cuda
+@pytest.mark.parametrize("case", ["field", "reverb_train"])
+def test_on_the_device_no_tone_detection_lies_inside_a_notch_applied_to_its_beam(case):
+    """The invariant of test_doppler_tone_lobes.py on the device (backend cuda: the batched tone stage there, both
+    engines): the mask reaches the device's CFAR and flags."""
+    import test_doppler_tone_lobes as lobes
+    if case == "field":
+        rec, tone = lobes.ping(field=2000, movers=((-36.0, 900.0, 1.0),)), lobes.TONE
+    else:
+        rec, tone = lobes.reverb_train_ping(), lobes.TONE_TRAIN
+    lobes.assert_outside_applied_notches(rec, tone, [-40.0, 40.0, 0.5], batched=("auto",), backend="cuda")
+
+
+def test_the_batched_inputs_carry_the_plans_notch_mask():
+    """The plumbing the device form depends on: with the lobe notch the stage tests fewer cells than without (the mask is
+    the batched form's input, tone_notch_mask), identically in the loop and the batched form on the host."""
+    lobes, rec = _lobe_ping()
+    tests = {}
+    for tone in (lobes.TONE, lobes.OFF):
+        for form in ("off", "on"):
+            tests[(tone["tone_lobe_notch"] if "tone_lobe_notch" in tone else "auto", form)] = lobes.stage(rec, dict(tone, batched=form))["tests"]
+    assert tests[("auto", "off")] == tests[("auto", "on")] < tests[("off", "off")] == tests[("off", "on")]
