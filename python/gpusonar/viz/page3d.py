@@ -15,7 +15,9 @@ and the projector's pattern; the eigenrays of each leg with their bounces; one-w
 direct sound; the sound-speed profile; the models in force and what is not shown. A click on a ray gives its delay,
 level and bounce list (boundary, grazing angle, loss); a hydrophone selector lists that hydrophone's arrivals. A time
 slider moves a dot along every ray and lights the hydrophones as the strongest pairs arrive. Sound is package V5;
-the live chain's taps (`trace["chain"]`) are package V6: the page keeps a `chain` member (null) for them.
+the live chain's view (`trace["chain"]`, viz/chain.py) is package V6: per ping the power map as a fan at the array,
+detections, tracks with their history, velocity and class, covariance ellipses and gates from the opt-in taps, the
+truth and the association error, in a panel of its own with a ping slider; a page without one says how to make it.
 
 Size: the page holds a thinned trace. `page_data` keeps the `max_rays` strongest eigenrays a leg and the `max_pairs`
 strongest pairs, simplifies each polyline (Douglas-Peucker, tolerance 1/1000 of the scene's width across and 1/500 of
@@ -39,6 +41,9 @@ PAGE_LIMIT_CDN = 400_000       # a page that loads three.js from the CDN
 PAGE_LIMIT_EMBED = 1_200_000   # a page with three.js embedded (0.69 MB of it the library)
 AUDIO_EMBED_CAP = 3_000_000    # `audio="embed"`: at most this many bytes of WAV in the page (4 MB as base64; ours)
 PAGE_LIMIT_AUDIO_EMBED = PAGE_LIMIT_EMBED + 4 * AUDIO_EMBED_CAP // 3 + 600_000   # with the envelopes and spectrograms
+# With the live chain's view (V6, viz/chain.py CHAIN_BUDGET for its JSON, the maps downsampled to fit): ours.
+PAGE_LIMIT_CHAIN_CDN = 1_000_000
+PAGE_LIMIT_CHAIN_EMBED = 1_500_000
 
 
 def three_source(arg: str | None) -> str | None:
@@ -226,7 +231,8 @@ def page_data(trace: dict, max_rays: int = 8, max_pairs: int = 40, tol: float = 
         "time_spread_taps": trace.get("time_spread_taps", False),
         "scene3d": {"box": s3.get("box"), "bed_grid": s3.get("bed_grid"), "motion": s3.get("motion"),
                     "bellhop3d": s3.get("bellhop3d"), "notes": s3.get("notes") or []},
-        "chain": trace.get("chain"),            # reserved for the live chain's taps (V6)
+        "chain": None,                          # the live chain's view (V6, viz/chain.py): added by write_page outside the budget
+        "chain_missing": trace.get("chain_missing"),
         "limits": {"max_rays": max_rays, "max_pairs": max_pairs, "tolerance": tol},
     }
 
@@ -304,6 +310,9 @@ def write_page(trace: dict, path: str, three: str | None = None, max_rays: int =
     three = None if three in (None, "cdn") else (VENDORED if three == "embed" else three)
     data, blob = fit_data(trace, DATA_BUDGET, max_rays, max_pairs)
     data["links"] = {"png": png if png is not None else f"{trace['scenario']}.png", "index": index}
+    data["chain"] = trace.get("chain")          # its own budget (viz/chain.py CHAIN_BUDGET), not the rays'
+    if data["chain"] is not None:
+        data["links"]["chain_png"] = f"{trace['scenario']}.chain.png"
     blob = json.dumps(data, separators=(",", ":"))
     if three:
         with open(three, "r", encoding="utf-8") as f:
@@ -322,6 +331,8 @@ def write_page(trace: dict, path: str, three: str | None = None, max_rays: int =
         f.write(page)
     n_rays = sum(len(leg["out"]) + len(leg["back"]) for leg in data["legs"])
     return {"bytes": len(page.encode("utf-8")), "embedded": bool(three), "rays": n_rays, "pairs": len(data["pairs"]),
+            "chain": None if data["chain"] is None else {"pings": data["chain"]["n_pings"],
+                                                         "bytes": len(json.dumps(data["chain"], separators=(",", ":")))},
             "data_bytes": len(blob), "limits": data["limits"],
             "three_d_rays": sum(bool(r.get("three_d")) for leg in data["legs"] for w in ("out", "back") for r in leg[w]),
             **ainfo}

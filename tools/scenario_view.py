@@ -210,6 +210,8 @@ def _page3d(trace: dict, name: str, out: str, three: str | None, bellhop3d: bool
     with the time it took."""
     from gpusonar.viz import page3d, scene3d
     t0 = time.perf_counter()
+    if trace.get("chain") is None and not trace.get("chain_missing"):
+        trace["chain_missing"] = chain_missing(name, (trace.get("sonar") or {}).get("mode"))
     scene3d.enrich(trace, name, bellhop3d=bellhop3d)
     info = page3d.write_page(trace, os.path.join(out, f"{name}.html"), three=three, audio=manifest,
                              audio_mode="embed" if audio_mode == "embed" else "side",
@@ -290,6 +292,93 @@ def _sound_from_trace(name: str, out: str, trace: dict, audio_opts: dict, engine
     facts = dict(_audio_facts(m), simulate_s=round(t_sim, 2), png_s=round(t_png, 2), items=drawn.get("items"),
                  png_bytes=os.path.getsize(os.path.join(out, f"{name}.png")))
     return m, facts
+
+
+CHAIN_GPU_COMMAND = ("PYTHONPATH=python python3 tools/scenario_view.py {name} --chain --3d --out DIR --traces TRACES "
+                     "--chain-engine both")
+
+
+def chain_missing(name: str, mode: str | None) -> str:
+    """What a page without a chain view says (docs/tasks/VISUALIZATION.md section 15)."""
+    if mode == "sas":
+        return ("not applicable: the live chain is a line-array range-bearing chain; a synthetic-aperture scene is imaged "
+                "along its track (recon.sas_image), not run through it")
+    return f"make it with `{CHAIN_GPU_COMMAND.format(name=name)}` (simulates every ping; the GPU job for slow scenes)"
+
+
+def chain_view(name: str, out: str, three: str | None, traces: str | None, engine: str = "cpp", records_dir: str | None = None,
+               quick: bool = True, audio_channels=None, tap_cost: bool = False) -> dict:
+    """The live chain's view of a scene (viz/chain.py): its pings from `records_dir` (NAME.records.h5 and NAME.truth.json,
+    made once by `chain.simulate_and_cache`, with the gallery's --quick thinning when `quick`), the chain run over them
+    in `engine` ("cpp", "python" or "both": the second's report lines compared with the first's) with the opt-in taps
+    on, the trace's `chain` member, the 3-D page (from `traces`/NAME.trace.json, else the static trace), a 2-D chain page
+    NAME.chain.png, NAME.chain.json and a WAV per ping for the hydrophones `audio_channels` (default the first)."""
+    from gpusonar.viz import chain as vchain
+    from gpusonar.viz import trace as tr
+    t0 = time.perf_counter()
+    records_dir = records_dir or os.path.join(out, "records")
+    truth_path = os.path.join(records_dir, f"{name}.truth.json")
+    if not os.path.exists(truth_path):
+        vchain.simulate_and_cache(name, records_dir, quick=quick)
+    with open(truth_path, encoding="utf-8") as f:
+        truth = json.load(f)
+    records = vchain.read_records(os.path.join(records_dir, f"{name}.records.h5"))
+    from gpusonar.sonar import SonarModel
+    sonar_name = SonarModel.load(truth["sonar"]).config.get("name", truth["sonar"])
+    cfg, source = vchain.chain_config(sonar_name)
+    cfg, look_note = vchain.look_toward_boresight(cfg, truth["sonar"], records[0])
+    if look_note:
+        source += "; " + look_note
+    first = "cpp" if engine in ("cpp", "both") else "python"
+    t1 = time.perf_counter()
+    runs = vchain.run_chain(records, cfg, first)
+    t_chain = time.perf_counter() - t1
+    other = None
+    if engine == "both":
+        runs2 = vchain.run_chain(records, cfg, "python")
+        other = {"engine": "python", "differences": vchain.compare_engines(runs, runs2)}
+    cost = None
+    if tap_cost:
+        t2 = time.perf_counter()
+        plain = vchain.run_chain(records, cfg, first, taps=())
+        t_plain = time.perf_counter() - t2
+        same = [json.dumps({k: v for k, v in a["report"].items() if k != "processing_seconds"}) ==
+                json.dumps({k: v for k, v in b["report"].items() if k != "processing_seconds"}) for a, b in zip(runs, plain)]
+        cost = {"with_taps_s_per_ping": sum(r["seconds"] for r in runs) / len(runs),
+                "without_taps_s_per_ping": sum(r["seconds"] for r in plain) / len(plain), "reports_identical": all(same)}
+    chans = audio_channels if audio_channels is not None else [0]
+    snd = vchain.write_chain_audio(out, name, records, chans)
+    note = (f"{len(records)} pings from {os.path.basename(records_dir)}/{name}.records.h5 (simulated once by "
+            f"viz/chain.py simulate_and_cache, engine {truth.get('engine')}, {truth.get('simulate_s')} s on this CPU)")
+    member = vchain.chain_member(runs, truth, source, first, cfg, other, snd, note)
+    if cost:
+        member["tap_cost"] = cost
+    budget = vchain.CHAIN_MAP_BUDGET
+    while vchain.chain_json_bytes(member) > vchain.CHAIN_BUDGET and budget > 40_000:
+        budget = int(budget * 0.7)
+        vchain.CHAIN_MAP_BUDGET, keep = budget, vchain.CHAIN_MAP_BUDGET
+        member = vchain.chain_member(runs, truth, source, first, cfg, other, snd, note)
+        vchain.CHAIN_MAP_BUDGET = keep
+        member["map_limits"]["budget_bytes"] = budget
+        if cost:
+            member["tap_cost"] = cost
+    with open(os.path.join(out, f"{name}.chain.json"), "w", encoding="utf-8") as f:
+        json.dump(member, f)
+    png = vchain.draw_chain_png(member, os.path.join(out, f"{name}.chain.png"), title=name)
+    src = os.path.join(traces, f"{name}.trace.json") if traces else None
+    if src and os.path.exists(src):
+        with open(src, encoding="utf-8") as f:
+            trace = json.load(f)
+    else:
+        trace = tr.static_trace(name)
+        trace["missing"].insert(0, "NO EIGENRAYS on this page (no trace given): the chain view only")
+    trace["chain"] = member
+    html = _page3d(trace, name, out, three, False)
+    return {"scenario": name, "pings": len(records), "engine": engine, "config_source": source, "seconds": round(time.perf_counter() - t0, 1),
+            "chain_s": round(t_chain, 2), "chain_bytes": vchain.chain_json_bytes(member), "html": html, "png": png,
+            "differences": None if other is None else len(other["differences"]), "tap_cost": cost,
+            "detections": [len(r["report"]["detections"]) for r in runs], "tracks": [len(r["report"]["tracks"]) for r in runs],
+            "audio_bytes": snd["bytes"]}
 
 
 def static_page3d(name: str, out: str, three: str | None, why: str, bellhop3d: bool = True) -> dict:
@@ -382,6 +471,14 @@ def main(argv=None) -> int:
     ap.add_argument("--arrivals", type=int, default=8, help="single arrivals of the strongest target (default 8; 0: none)")
     ap.add_argument("--sim-limit", type=float, default=330.0, help="with --traces and sound: simulate again only scenes "
                     "whose previous run took at most this many seconds")
+    ap.add_argument("--chain", action="store_true", help="the live chain's view of each scene named (viz/chain.py): its "
+                    "pings from --chain-records (simulated once and cached there), the chain with its opt-in taps, the "
+                    "3-D page with the chain layer (from --traces when given), NAME.chain.png and NAME.chain.json")
+    ap.add_argument("--chain-engine", default="cpp", choices=("python", "cpp", "both"),
+                    help="the live chain's engine; both: the C++ engine's page with any difference of the Python engine's lines")
+    ap.add_argument("--chain-records", default=None, help="the record cache (default OUT/records)")
+    ap.add_argument("--chain-full", action="store_true", help="simulate the scene as written (default: the gallery's --quick thinning, said on the page)")
+    ap.add_argument("--chain-tap-cost", action="store_true", help="also run the chain with its taps off: cost per ping and the bit-identity of the lines")
     args = ap.parse_args(argv)
     audio_mode = args.audio or ("side" if args.html else "none")
     audio_opts = {"mode": audio_mode, "method": args.audio_method, "factor": args.stretch, "center": args.audio_center,
@@ -395,6 +492,17 @@ def main(argv=None) -> int:
     os.makedirs(args.out, exist_ok=True)
     from gpusonar.viz import page3d
     three = page3d.three_source(args.three)
+    if args.chain:
+        for name in names:
+            try:
+                facts = chain_view(name, args.out, three, args.traces, args.chain_engine, args.chain_records, not args.chain_full,
+                                   None if not args.audio_parts else [int(c) for c in args.audio_parts.split(",")], args.chain_tap_cost)
+            except Exception as exc:                  # one scene failing does not stop the others; it is reported
+                facts = {"scenario": name, "chain_error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc(limit=4)}
+            with open(os.path.join(args.out, f"{name}.chain_facts.json"), "w", encoding="utf-8") as f:
+                json.dump(facts, f)
+            print(json.dumps(facts), flush=True)
+        return 0
     rows = []
     t_all = time.perf_counter()
     for name in names:
