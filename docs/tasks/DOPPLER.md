@@ -1207,7 +1207,7 @@ less margin than the planner's point target for an extended hull off broadside.
 
 ### LS.5 Not run on this CPU: the GPU job
 
-What was too slow here, as command lines for the GPU job (`GPUSONAR_JOB=doppler`, being added to `tools/gpu_job.sh` by
+What was too slow here, as command lines for the GPU job (`GPUSONAR_JOB=doppler`, since added to `tools/gpu_job.sh` (D-241; the sub-run `ls12`), then by
 another package; `$OUT` its output folder; Bellhop needed; each line its own step):
 
     python3 tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 --background 2 --cache "$OUT/ls12" --json "$OUT/ls12_tone_train.json"
@@ -1241,4 +1241,4 @@ code before D8. Guard: `test_doppler_device.py::test_no_kernel_template_is_insta
 (`nm` on every built `*.cu.o`; it fails on batch5's objects and passes now) and a CUDA-gated test of the default chain in
 fresh processes. The device timing of D8 above (the coordinator's L4 run: flank_patrol C++ off / max / cfar 0.116 /
 0.424 / 0.453 s) was measured with the bank's backprojection compiled with `--fmad=false`. It now runs as
-`backproject_cuda.cu` compiles it, and has not been measured again.
+`backproject_cuda.cu` compiles it, and was measured again after the fix (D-242: job 6b090cd56c5d61fff1888217; flank_patrol 0.115 -> 0.393 -> 0.418 s, off -> max -> cfar).

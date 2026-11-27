@@ -5403,3 +5403,10 @@ at 12 km".
   sweep (branch `txstudy`), the visualization (branch `viz`).
 - Correction (same day): D-242's "3.4 to 5.6 times the chain" is 3.4 to 6.0 times by its own table
   (`flank_patrol` max 0.393 / 0.115; `popoto_far_mover` cfar 0.374 / 0.062).
+- Corrections found by the document sweep (same day): D-245's "three merge conflicts" were four
+  files in two merges (`docs/handoff/TESTS.md` in the first; `docs/SCENARIOS.md`,
+  `docs/tasks/DOPPLER.md` and `tools/doppler_tone_eval.py` in the second). `docs/tasks/DOPPLER.md`
+  D8.5 said the device timing was not measured again after the fix: it was (D-242), and the sentence
+  is corrected with a pointer. Found, not fixed: `tools/software_diagrams.py` does not name
+  `libs/live/src/doppler_cuda.cu`, so its own check fails and `docs/handoff/img/backends_head.png`
+  shows nine CUDA units of ten (issue filed).
