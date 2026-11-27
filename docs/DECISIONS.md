@@ -5656,3 +5656,11 @@ agreeing.
 - One conflict in building the batch (`docs/handoff/SIMULATION.md`: the fix branch's row kept).
 - At this tree: 98 scenario files; 169 Python test files (2044 `def test_` functions); GoogleTest 218
   cases (217 `TEST` and 1 `TEST_P`).
+- Corrections found by the document sweep (same day). D-251's gallery before -> after list left out:
+  `flank_patrol` detections a ping [6,5,5,5,3,4] -> [6,6,5,5,4,4] (static 2 -> 3, uncertain 2 -> 1),
+  `popoto_env_winter_sand_200m` multipath 3 -> 4 and uncertain 1 -> 0, `popoto_12km`'s ship 9.8 ->
+  10.9 m from its centre. `flank_patrol` stands still, so its difference is not D-251's: it comes
+  from decisions since the gallery of 2026-11-24 (the differences first seen at D-240). The
+  `doppler` row of `docs/CONFIGURATION.md` said the generator's time did not change; it is corrected
+  to D-251's figures. `docs/tasks/DOPPLER.md` gets GL.9 for D-252's count. The one more skip of
+  D-254 (122 against 121) is not itemised.

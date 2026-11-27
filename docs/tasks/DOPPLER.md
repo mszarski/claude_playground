@@ -1628,3 +1628,12 @@ point, +20 dB targets) shrinks to about 1 dB on the closing hull.
 Every target is detected on 6 of 6 pings in every row. The 2 false detections of the hyperbolic
 4 s at the 1 s energy are not explained. The bank's range rates on these hulls scatter by several
 m/s (as D-232 found). Next: the deep site at sea state 4 or 5 with both sweeps (issue sonar-rctz).
+
+### GL.9 Counted again with the corrected simulator (appended 2026-11-27; D-251, D-252; nothing above rewritten)
+
+GL.8's counts were made with the simulator's centre-frequency reverberation Doppler. With the
+per-frequency law the default (D-251) and the notch, on the device (job 6b0947c354072e8b71697a5a,
+tree `81364e0`, `popoto_12km_large_submerged_tone`, 4 target-free pings, default budget, both
+engines): tone path off 1 false detection; on with the lobe notch off 17, all on a lobe's ridge; on
+with the notch (auto) 0. At 3 a ping: off 16; on with the notch 25, of which 3 are the tone's. Not
+shown: more pings, the far-sidelobe case on a real scene.
