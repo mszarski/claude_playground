@@ -157,8 +157,11 @@ def test_pop3_names_both_classes_large_submerged_first(built):
     assert "Large submerged mostly but also Large Ship is what we care about" in words and "2026-11-26" in words
     assert words.index("`large_submerged`") < words.index("`ship`")
     assert r["value"].index("large_submerged") < r["value"].index("ship")
-    for open_question in ("sea state", "detection probability", "false-alarm", "operating area"):    # still the owner's to say
+    # Still the owner's to say. The worst sea state left this list on 2026-11-27 (D-255: baseline sea state 3, alternate 5):
+    # test_pop3_states_the_baseline_and_the_alternate_by_sea_state holds what replaced it.
+    for open_question in ("detection probability", "false-alarm", "operating area", "summer_60m_mud_profile"):
         assert open_question in r["value"], open_question
+    assert "the worst sea state in which 12 km must hold" not in r["value"]
 
 
 def test_pop3_cell_is_not_a_bare_pass_while_a_site_fails(built):
@@ -220,3 +223,73 @@ def test_pop3_free_field_figures_equal_the_planners(built):
     for c in rp.REQUIREMENT_CLASSES + ("xl_auv",):
         for s in calm:
             assert X["free"][c]["margin_db"] == pytest.approx(plans[s]["classes"][c]["free_field_margin_db"], abs=0.01), (c, s)
+
+
+# --- POP-3 by sea state: the baseline and the alternate (the owner, 2026-11-27; D-255) ----------------------------------
+# "Make it sea state 5 but have that as an alternate and the baseline is sea state 3 (i.e. for testing and prototyping, so
+# the first design end to end can be ss3)." The baseline is the shipped face (1 s, 197 dB), up to sea state 3; the alternate
+# is configs/builds/popoto_face_3x32_ss5.yaml (4 s, 200 dB), at sea state 5. Every figure computed, none typed.
+
+_D255 = "Make it sea state 5 but have that as an alternate and the baseline is sea state 3"
+
+
+def _tx_grid():
+    return _json.loads(_TRADE.read_text())["transmit"]["grid"]["results"]
+
+
+def test_pop3_states_the_baseline_and_the_alternate_by_sea_state(built):
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    import reference_plan as rp
+    _, reqs, _ = built
+    r = _pop3(reqs)
+    v = r["value"]
+    assert _D255 in v and "2026-11-27" in v
+    X = rp.twelve_km_by_site()
+    D = X["designs"]
+    assert (D["baseline"]["build"], D["baseline"]["sea_state"], D["alternate"]["build"], D["alternate"]["sea_state"]) == (
+        "popoto_face_3x32", 3, "popoto_face_3x32_ss5", 5)
+    grid = _tx_grid()
+    for c in ("large_submerged", "ship"):
+        b = grid["deep_no_bottom_return__ss3__apl_1994"]["1 s 197 dB"][c]["margin_db"]
+        a = grid["deep_no_bottom_return__ss5__apl_1994"]["4 s 200 dB"][c]["margin_db"]
+        assert D["baseline"]["margins_db"][c] == pytest.approx(b, abs=1e-9) and b >= 0.0
+        assert D["alternate"]["margins_db"][c] == pytest.approx(a, abs=0.05) and a >= 0.0      # the build's own plan against the grid
+        assert D["baseline"]["next_sea_state_margins_db"][c] < 0.0                              # the baseline stops at sea state 3
+        assert f"{b:+.1f} dB" in v and f"{a:+.1f} dB" in v
+    assert v.index("the **baseline**") < v.index("up to sea state 3") < v.index("the **alternate** for sea state 5")
+    assert "`popoto_face_3x32_ss5`" in v and "4 s 200 dB" in v
+
+
+def test_pop3_status_says_what_each_design_holds_and_does_not(built):
+    """The `met` / --check logic is as before (the free-field design point); the status words name, per design, what is and is
+    not held: the sea-state-5 site by the alternate only; the summer mud's ship shadow by neither, the one reason left."""
+    _, reqs, text = built
+    r = _pop3(reqs)
+    assert r["met"] is True and r["status"] == "partly met"
+    m = r["met_text"]
+    assert "baseline" in m and "alternate" in m
+    alt_part = m.split("alternate", 1)[1]
+    assert "`deep_no_bottom_return_sea_state_5`" in alt_part
+    assert "`summer_60m_mud_profile`" in m and "by neither design" in m
+    row = next(line for line in text.splitlines() if line.startswith("| POP-3 |"))
+    assert m in row
+
+
+def test_the_design_point_table_has_the_alternates_column_at_the_sea_state_5_site(built):
+    """Computed (the alternate build's own plan at the site as stated), not typed; the shipped columns as before."""
+    from gpusonar import buildspec as bs, depthplan, environment
+    _, _, text = built
+    sec = _section(text, "The 12 km design point")
+    head = next(line for line in sec.splitlines() if line.startswith("| Site | Class |"))
+    assert "Alternate" in head and "4 s, 200 dB" in head
+    spec = bs.load("popoto_face_3x32_ss5")
+    (site,) = [e for e in environment.load_list("illustrative") if e["name"] == "deep_no_bottom_return_sea_state_5"]
+    plan = depthplan.plan(bs.derive(spec), site, bs.target_classes_of(spec, range_m=12000.0))
+    for c in ("large_submerged", "ship"):
+        line = next(line for line in sec.splitlines() if line.startswith("| `deep_no_bottom_return_sea_state_5`") and f"| `{c}` |" in line)
+        cells = [x.strip() for x in line.split("|")]
+        want = plan["classes"][c]["recommended"]
+        assert cells[5] == f"{want['margin_db']:+.1f} dB, held, at {want['own_depth_m']:.0f} m", line
+    other = next(line for line in sec.splitlines() if line.startswith("| `shelf_100m_sand`"))
+    assert [x.strip() for x in other.split("|")][5] == "not planned"
