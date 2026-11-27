@@ -89,6 +89,7 @@ header, which is the authority for the list below.
 | `GPUSONAR_CERES=1` | build Ceres 2.2.0 without SuiteSparse, so motion estimation is built and tested |
 | `GPUSONAR_HOLOSCAN_CPP=1` | install the Holoscan C++ package and build the C++ operators |
 | `GPUSONAR_HSB=1` | build Holoscan Sensor Bridge 2.7.0 (implies `GPUSONAR_HOLOSCAN_CPP=1`); where raw sockets are refused it applies the UDP-socket patch itself |
+| `GPUSONAR_SHARD=I/N` | run shard I of N of the test files only (`tools/test_shards.py`: every file in exactly one shard, weighed by `tests/python/shard_weights.json` when it exists; the C++ suites run in shard 1). The suite has passed when every shard has. Unset: everything in one job |
 | `GPUSONAR_NVUS=1` | build the ultrasound reference's native module |
 
 | `GPUSONAR_JOB=` | Runs instead of the tests | Reads | Uploads to `GPUSONAR_UPLOAD_PATH` (when `GPUSONAR_UPLOAD_REPO` is set) |

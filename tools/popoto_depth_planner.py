@@ -184,7 +184,7 @@ def physics_tables(d: dict, classes: list, r: float = 12000.0) -> dict:
     z_ship = 0.5 * (ship["depth_m"][0] + ship["depth_m"][1])
     lobe = lloyd.first_lobe_own_depth(fc, z_ship, r, c)
     own = [10.0, 30.0, round(lobe["zero_db_m"]), 150.0, round(lobe["peak_m"]), 300.0, round(lobe["first_null_m"]), 600.0]
-    surfaces = {"flat": lloyd.FLAT, "5 m/s wind (wind-law height)": lloyd.Surface(wind_speed=5.0), "9.8 m/s wind (sea state 5, wind-law height)": lloyd.Surface(wind_speed=9.8),
+    surfaces = {"flat": lloyd.FLAT, "5 m/s wind (wind-law height)": lloyd.Surface(wind_speed=5.0), "9.8 m/s wind (sea state 4, wind-law height)": lloyd.Surface(wind_speed=9.8),
                 "9.8 m/s wind with apl_1994 bubble loss": lloyd.Surface(wind_speed=9.8, bubble_model="apl_1994")}
     rows = []
     for z in own:

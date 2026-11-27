@@ -435,6 +435,12 @@ def check_choices(cfg: dict) -> None:
     if doppler.on(cfg.get("doppler")) and cfg.get("beamformer", DEFAULTS["beamformer"]) != "backprojection":
         raise ValueError(f"chain.doppler: mode sweep_bank needs beamformer backprojection (its hypotheses' maps share one range grid), not "
                          f"{cfg.get('beamformer')!r} (libs/live LiveChain refuses it too)")
+    if doppler.tone_on(cfg.get("doppler")) and cfg.get("range_doppler", "off") != "off":
+        raise ValueError("chain.doppler: tone needs range_doppler off (a tone detection's range has no sweep coupling to correct; "
+                         "libs/live LiveChain refuses it too)")
+    if doppler.tone_on(cfg.get("doppler")) and cfg.get("elevation") is not None:
+        raise ValueError("chain.doppler: tone is not made for the elevation option yet (a tone detection's coarse range has no elevation "
+                         "search; libs/live LiveChain refuses it too)")
     estimate = (cfg.get("cfar") or {}).get("range_estimate")
     if estimate is not None and estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
@@ -543,7 +549,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "multipath": bool(c.get("multipath")), "backend": cfg["backend"]}
     if cfg["range_doppler"] != "off":                  # opt-in (sonar-fyj): said only when on, so every other line is as before
         o["range_doppler"] = cfg["range_doppler"]
-    o.update(doppler.cpp_options(cfg["doppler"]))      # opt-in (D4): the flat doppler_* keys, none when off
+    o.update(doppler.all_options(cfg["doppler"]))      # opt-in (D4, D3): the flat doppler_* keys, none when off
     if cfg["cell_statistic"] == "peak":
         o["cell_peak"] = True
     o["cell_multiscale"] = cfg["cell_statistic"] == "multiscale"      # always said: the C++ default is not assumed
@@ -1205,6 +1211,11 @@ def apply_environment(record, sound_speed=float("nan"), water_depth=float("nan")
     record.environment = e
 
 
+def _finite(v):
+    """A number for the report line, None (null) when it is not finite (libs/live chain.cpp num())."""
+    return float(v) if np.isfinite(v) else None
+
+
 class LiveChain:
     """Process ping records as they arrive. `process(record)` returns the report for that ping."""
 
@@ -1283,7 +1294,7 @@ class LiveChain:
         self._t0 = None
         self.pings = 0
         self.last = {}                         # the most recent beam map and detections, for display
-        self._bank = self._which = None        # the Doppler bank's plan and its hypothesis per map sample, this ping (D4)
+        self._bank = self._which = self._normalised = None        # the Doppler bank's plan and its hypothesis per map sample, this ping (D4)
 
     # -- one ping ----------------------------------------------------------------------------
 
@@ -1401,20 +1412,47 @@ class LiveChain:
             from . import sync
             dead = {int(v) for v in cfg["dead_channels"]}
             record = sync.select_channels(record, [r for r in range(record.samples.n_channels) if r not in dead])
-        if self.resolved is None:
+        # D3: a ping whose pulse is the tone alone does not size the chain (its band is 1 / T): the sizes come from the first
+        # sweep ping, and a tone-only ping before it is reported but not tracked (libs/live chain.cpp the same).
+        tone_only_ping = (doppler.tone_on(cfg["doppler"]) and record.transmit.waveform.type != core.WaveformType.Lfm and
+                          core.live_tone_plan(record, [float(b) for b in self.bearings], doppler.tone_options(cfg["doppler"]),
+                                              float(cfg["cfar"]["false_alarms_per_ping"]))["tone_only"])
+        if self.resolved is None and not tone_only_ping:
             self._resolve(record)
         from . import recon
         bank = base = None
-        if doppler.on(cfg["doppler"]):
+        self._tone = None
+        tone_on = doppler.tone_on(cfg["doppler"])
+        # With the tone path on, the sweep bank runs on the pings that are sweeps (libs/live chain.cpp the same).
+        bank_on = doppler.on(cfg["doppler"]) and not (tone_on and record.transmit.waveform.type != core.WaveformType.Lfm)
+        if bank_on or tone_on:
             # The sweep's Doppler bank (D4): its plan from this record (libs/live plan_doppler, both engines), the baseband
             # with the room its hypotheses need, and the baseband record kept before compression for the other hypotheses.
+            # The tone's bank (D3, libs/live tone_stage, both engines) runs on that baseband record before compression.
             from .recon.fls import _state
             if _state(record).get("compressed"):
-                raise ValueError("chain.doppler: sweep_bank needs the record before pulse compression")
-            bank = doppler.plan(record, self.bearings, cfg["doppler"])
-            if not record.samples.is_complex():
-                core.to_baseband(record, max_range_rate=float(bank["baseband_max_range_rate"]), backend=self.backend)
-            base = record.copy()
+                raise ValueError(f"chain.doppler: {'sweep_bank' if bank_on else 'tone'} needs the record before pulse compression")
+            budget = float(cfg["cfar"]["false_alarms_per_ping"])
+            allowance, tone_run = 0.0, False
+            if bank_on:
+                bank = doppler.plan(record, self.bearings, cfg["doppler"])
+                allowance = float(bank["baseband_max_range_rate"])
+            if tone_on:
+                tone_run, need = doppler.tone_plan_allowance(record, self.bearings, cfg["doppler"], budget)
+                allowance = max(allowance, need)
+            if bank is not None or tone_run:
+                if not record.samples.is_complex():
+                    core.to_baseband(record, max_range_rate=allowance, backend=self.backend)
+                base = record.copy()
+                if tone_run:
+                    self._tone = doppler.tone_stage(base, self.bearings, cfg["doppler"], cfg["window"] == "hann", budget, self.backend)
+                    # A train: the sweep path compresses with the sweep part of the replica alone (libs/live sweep_only_replica).
+                    core.live_sweep_only_replica(record, doppler.tone_options(cfg["doppler"]), budget)
+                    if self._tone["plan"]["tone_only"]:
+                        # A tone-only ping: the sweep path has no map to make (libs/live chain.cpp the same).
+                        self._rows = self._subs = None
+                        self._bank, self._which, self._normalised = None, None, None
+                        return self._after_map(record, None, None, None, index, tap, sync_facts, t_wall)
         recon.prepare([record], backend=self.backend)        # baseband and pulse compression (cuFFT on a GPU)
         if tap:
             tap.records("prepare", [record])
@@ -1439,9 +1477,32 @@ class LiveChain:
                 total = f_ if total is None else total + f_
             return total, ranges_, k_
 
-        which = None
+        which = normalised = None
         if bank is None or not doppler.several(bank):
             fine, fine_ranges, k = map_of(record, subs)
+        elif doppler.merged(cfg["doppler"])["combine"] == "cfar":
+            # D3, combine cfar: each hypothesis' map normalised by its own background (the detector's estimate on its own
+            # cell means, over the cells the detector keeps), the largest normalised value per sample over the beam's
+            # hypotheses (doppler.NormalisedFold; libs/live fold_normalised); the detector is handed that maximum times the
+            # beam's centre hypothesis' background, and that background as its own.
+            fold = None
+            for h, (f_, fine_ranges, k) in doppler.hypothesis_maps(record, base, bank, lambda rec: map_of(rec, subs if rec is record else None),
+                                                                  self.backend):
+                if fold is None:
+                    n_ = f_.shape[1] // k * k
+                    ranges_ = np.asarray(fine_ranges)[:n_].reshape(-1, k).mean(axis=1)
+                    skip = 0
+                    if self._blank_range is not None:
+                        skip = min(int(np.count_nonzero(ranges_ < self._blank_range)), max(len(ranges_) - 3, 0))
+                    w_ = record.transmit.waveform
+                    res_ = record.environment.sound_speed / (2.0 * (abs(w_.f_stop - w_.f_start) or 1.0 / w_.duration))
+                    guard_, train_ = core.cfar_window(float(ranges_[1] - ranges_[0]), float(res_), guard_m=float(cfg["cfar"]["guard_m"]),
+                                                      train_m=float(cfg["cfar"]["train_m"]))
+                    fold = doppler.NormalisedFold(len(self.bearings), len(ranges_), k, skip)
+                fold.fold(bank, h, f_, guard_, train_)
+            fine, cells_, level_ = fold.maps()
+            fine_ranges = np.asarray(fine_ranges)[:fine.shape[1]]
+            which, normalised = fold.which, (cells_, level_)
         else:
             # Each hypothesis compressed from the same baseband record (the zero one is `record`, compressed by prepare)
             # and mapped by the chain's beamformer; each beam keeps the largest power over its own hypotheses
@@ -1451,7 +1512,7 @@ class LiveChain:
                                                                   self.backend):
                 fine, which = doppler.fold(bank, h, f_, fine, which)
         self._rows, self._subs = rows, subs
-        self._bank, self._which = bank, which
+        self._bank, self._which, self._normalised = bank, which, normalised
         return self._after_map(record, fine, fine_ranges, k, index, tap, sync_facts, t_wall)
 
     def _resolve(self, record) -> None:
@@ -1516,80 +1577,116 @@ class LiveChain:
     def _after_map(self, record, fine, fine_ranges, k, index, tap, sync_facts, t_wall):
         cfg = self.cfg
         rows, subs = self._rows, self._subs
-        n = fine.shape[1] // k * k
-        peak = cfg["cell_statistic"] == "peak"
-        cells = fine[:, :n].reshape(len(self.bearings), -1, k)
-        power = cells.max(axis=2) if peak else cells.mean(axis=2)
-        looks = float(np.sum(1.0 / np.arange(1, k + 1))) if peak else 1.0     # mean of the largest of k noise samples over their mean
-        ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
-        multi = cfg["cell_statistic"] == "multiscale"
-        fine, fine_ranges = fine[:, :n], np.asarray(fine_ranges)[:n]
-        bank, which = self._bank, (self._which[:, :n] if self._which is not None else None)
-        shift = float(bank["threshold_db"]) if bank is not None else 0.0      # the Doppler bank's threshold shift (0 without it)
-        if self._blank_range is not None:
-            # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
-            skip = min(int(np.count_nonzero(ranges < self._blank_range)), max(len(ranges) - 3, 0))
-            power, ranges = power[:, skip:], ranges[skip:]
-            fine, fine_ranges = fine[:, skip * k:], fine_ranges[skip * k:]
-            if which is not None:
-                which = which[:, skip * k:]
-        cell = ranges[1] - ranges[0]
-        # The window in cells of this map, by the library's one conversion (libs/detect cfar_window: rounded up, the
-        # guard at least one range resolution): the C++ chain calls the same function.
-        w_ = record.transmit.waveform
-        resolution = record.environment.sound_speed / (2.0 * (abs(w_.f_stop - w_.f_start) or 1.0 / w_.duration))
-        guard, train = core.cfar_window(float(cell), float(resolution), guard_m=float(cfg["cfar"]["guard_m"]), train_m=float(cfg["cfar"]["train_m"]))
-        background_map = None
-        if multi:
-            # Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
-            # statistics; sidelobes of a stronger cell dropped; touching cells one detection (libs/live detector.hpp).
-            n_rows = len(rows) if rows is not None else 1
-            key = (power.shape[1], k, train, n_rows, shift, None if bank is None else float(bank["pedestal_m"]))
-            if self._plan_key != key:
-                o = detector_options(cfg)
-                if bank is not None:
-                    o["threshold_offset_db"] = shift            # the Doppler bank's shift on every test (libs/live the same)
-                    o["pedestal_m"] = float(bank["pedestal_m"])  # and its pedestal along range
-                o.setdefault("merge_m", float(cfg["tracker"]["range_sigma"]))
-                o["row_tolerance_m"] = self._row_tolerance
-                if self._elevation is not None:
-                    o["min_row_elements"] = int(self._elevation["min_row_elements"])
-                self._plan = core.live_detector_plan(record, power.shape[1], k, float(cell) / k, [float(v) for v in self.bearings], n_rows,
-                                                     int(guard), int(train), cfg["window"] == "hann" and cfg["beamformer"] != "mvdr", o)
-                self._plan_key, self.detector = key, json.loads(self._plan["json"])
-            hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan)
-            if bank is not None:
-                # Each detection's coarse range rate: the hypothesis of the strongest sample of the maximum map along its
-                # nearest bearing over the range it covers (doppler.detection_hypothesis; libs/live chain.cpp the same).
-                half = 0.5 * float(ranges[1] - ranges[0])
-                for h in hits:
-                    start = h.first_range if np.isfinite(h.first_range) else h.range
-                    lo, hi = start - half, start + (h.extent if np.isfinite(h.extent) else 0.0) + half
-                    i_ = (doppler.detection_hypothesis(fine, which, fine_ranges, self.bearings, h.bearing, lo, hi) if which is not None
-                          else int(bank["zero"]))
-                    if i_ >= 0:
-                        h.range_rate, h.range_rate_step = float(bank["rates"][i_]), float(bank["step"])
+        bank = self._bank
+        if fine is None:
+            # A ping whose pulse is the tone alone (D3): no map of the sweep path is made (a tone's zero-Doppler map is its
+            # reverberation at c T / 2); its detections are the tone path's alone.
+            hits, power, ranges, background_map = [], None, None, None
         else:
-            hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
-            hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
-        # Blanking and the reference-burst filter judge a detection by its centroid, whichever range it reports (D-158;
-        # libs/live chain.cpp the same): their limits were set for it (with the leading edge the far limit would pass an
-        # echo up to its spread later than before).
-        def _at(h):
-            return h.centroid_range if np.isfinite(h.centroid_range) else h.range
-        hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] + shift and (self._blank_range is None or _at(h) >= self._blank_range)]
-        if self._reference is not None and not self._reference.get("dedicated"):
-            # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
-            # after the window opens and one just before it closes: no detections are taken there.
-            c = record.environment.sound_speed
-            s_ = record.samples
-            t_open, t_close = s_.start_time, s_.start_time + s_.n_samples / s_.sample_rate
-            pulse, burst = record.transmit.waveform.duration, float(self._reference["duration"])
-            lo = 0.5 * c * (t_open + float(self._reference["lead"]) + burst)
-            hi = 0.5 * c * (t_close - float(self._reference["tail"]) - pulse - burst)
-            hits = [h for h in hits if lo < _at(h) < hi]
-        if tap:
-            tap.arrays("beamform", power=power.astype(np.float32), ranges=ranges, bearings=self.bearings)
+            n = fine.shape[1] // k * k
+            peak = cfg["cell_statistic"] == "peak"
+            cells = fine[:, :n].reshape(len(self.bearings), -1, k)
+            power = cells.max(axis=2) if peak else cells.mean(axis=2)
+            level = None
+            if getattr(self, "_normalised", None) is not None:       # the Doppler bank, combine cfar (D3): its cells and background
+                power, level = self._normalised[0][:, :n // k], self._normalised[1][:, :n // k]
+            looks = float(np.sum(1.0 / np.arange(1, k + 1))) if peak else 1.0     # mean of the largest of k noise samples over their mean
+            ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
+            multi = cfg["cell_statistic"] == "multiscale"
+            fine, fine_ranges = fine[:, :n], np.asarray(fine_ranges)[:n]
+            bank, which = self._bank, (self._which[:, :n] if self._which is not None else None)
+            shift = float(bank["threshold_db"]) if bank is not None else 0.0      # the Doppler bank's threshold shift (0 without it)
+            if self._blank_range is not None:
+                # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
+                skip = min(int(np.count_nonzero(ranges < self._blank_range)), max(len(ranges) - 3, 0))
+                power, ranges = power[:, skip:], ranges[skip:]
+                if level is not None:
+                    level = level[:, skip:]
+                fine, fine_ranges = fine[:, skip * k:], fine_ranges[skip * k:]
+                if which is not None:
+                    which = which[:, skip * k:]
+            cell = ranges[1] - ranges[0]
+            # The window in cells of this map, by the library's one conversion (libs/detect cfar_window: rounded up, the
+            # guard at least one range resolution): the C++ chain calls the same function.
+            w_ = record.transmit.waveform
+            resolution = record.environment.sound_speed / (2.0 * (abs(w_.f_stop - w_.f_start) or 1.0 / w_.duration))
+            guard, train = core.cfar_window(float(cell), float(resolution), guard_m=float(cfg["cfar"]["guard_m"]), train_m=float(cfg["cfar"]["train_m"]))
+            background_map = None
+            if multi:
+                # Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
+                # statistics; sidelobes of a stronger cell dropped; touching cells one detection (libs/live detector.hpp).
+                n_rows = len(rows) if rows is not None else 1
+                divisor = float(bank.get("budget_divisor", 1.0)) if bank is not None else 1.0
+                key = (power.shape[1], k, train, n_rows, shift, None if bank is None else float(bank["pedestal_m"]), divisor)
+                if self._plan_key != key:
+                    o = detector_options(cfg)
+                    if divisor != 1.0:
+                        o["false_alarms_per_ping"] = float(o["false_alarms_per_ping"]) / divisor     # combine cfar: the union bound
+                    if bank is not None:
+                        o["threshold_offset_db"] = shift            # the Doppler bank's shift on every test (libs/live the same)
+                        o["pedestal_m"] = float(bank["pedestal_m"])  # and its pedestal along range
+                    o.setdefault("merge_m", float(cfg["tracker"]["range_sigma"]))
+                    o["row_tolerance_m"] = self._row_tolerance
+                    if self._elevation is not None:
+                        o["min_row_elements"] = int(self._elevation["min_row_elements"])
+                    self._plan = core.live_detector_plan(record, power.shape[1], k, float(cell) / k, [float(v) for v in self.bearings], n_rows,
+                                                         int(guard), int(train), cfg["window"] == "hann" and cfg["beamformer"] != "mvdr", o)
+                    self._plan_key, self.detector = key, json.loads(self._plan["json"])
+                if level is None:
+                    hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan)
+                else:
+                    hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan, level=level)
+                if bank is not None:
+                    # Each detection's coarse range rate: the hypothesis of the strongest sample of the maximum map along its
+                    # nearest bearing over the range it covers (doppler.detection_hypothesis; libs/live chain.cpp the same).
+                    half = 0.5 * float(ranges[1] - ranges[0])
+                    for h in hits:
+                        start = h.first_range if np.isfinite(h.first_range) else h.range
+                        lo, hi = start - half, start + (h.extent if np.isfinite(h.extent) else 0.0) + half
+                        i_ = (doppler.detection_hypothesis(fine, which, fine_ranges, self.bearings, h.bearing, lo, hi) if which is not None
+                              else int(bank["zero"]))
+                        if i_ >= 0:
+                            h.range_rate, h.range_rate_step = float(bank["rates"][i_]), float(bank["step"])
+            else:
+                hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
+                hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
+            # Blanking and the reference-burst filter judge a detection by its centroid, whichever range it reports (D-158;
+            # libs/live chain.cpp the same): their limits were set for it (with the leading edge the far limit would pass an
+            # echo up to its spread later than before).
+            def _at(h):
+                return h.centroid_range if np.isfinite(h.centroid_range) else h.range
+            hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] + shift and (self._blank_range is None or _at(h) >= self._blank_range)]
+            if self._reference is not None and not self._reference.get("dedicated"):
+                # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
+                # after the window opens and one just before it closes: no detections are taken there.
+                c = record.environment.sound_speed
+                s_ = record.samples
+                t_open, t_close = s_.start_time, s_.start_time + s_.n_samples / s_.sample_rate
+                pulse, burst = record.transmit.waveform.duration, float(self._reference["duration"])
+                lo = 0.5 * c * (t_open + float(self._reference["lead"]) + burst)
+                hi = 0.5 * c * (t_close - float(self._reference["tail"]) - pulse - burst)
+                hits = [h for h in hits if lo < _at(h) < hi]
+            if tap:
+                tap.arrays("beamform", power=power.astype(np.float32), ranges=ranges, bearings=self.bearings)
+        tone = getattr(self, "_tone", None)
+        tone_run_ = doppler.tone_on(cfg["doppler"])             # the report says the path with the tone option on (libs/live the same)
+        if tone is not None and tone["plan"]["on"]:
+            # D3: the tone path's detections join the sweep's (doppler.merge_tone; libs/live the same). On a ping whose pulse
+            # is the tone alone the zero-Doppler map is the tone's reverberation at c T / 2: its detections are not reported.
+            if tone["plan"]["tone_only"]:
+                hits = []
+            alone = doppler.merge_tone(hits, tone)
+            if self._blank_range is not None:
+                alone = [h for h in alone if h.range >= self._blank_range]
+            if self._reference is not None and not self._reference.get("dedicated"):
+                c_ = record.environment.sound_speed
+                s_ = record.samples
+                t_open, t_close = s_.start_time, s_.start_time + s_.n_samples / s_.sample_rate
+                pulse, burst = record.transmit.waveform.duration, float(self._reference["duration"])
+                lo_ = 0.5 * c_ * (t_open + float(self._reference["lead"]) + burst)
+                hi_ = 0.5 * c_ * (t_close - float(self._reference["tail"]) - pulse - burst)
+                alone = [h for h in alone if lo_ < h.range < hi_]
+            hits = hits + alone
 
         # World position of each detection: the array's own position and heading come with the record.
         rx = record.rx_positions()
@@ -1822,16 +1919,17 @@ class LiveChain:
                         alternatives = [float(origin[2] + e.range * w[2]) for w in e.alternatives]
             # The tracker's measurement is (range, bearing) about the frame origin, across then forward.
             local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
-                                          depth_alternatives=alternatives, time=t + float(out_range[i]) / c_range))
-        tracks = self.tracker.update(t, local)
+                                          depth_alternatives=alternatives, time=t + float(out_range[i]) / c_range,
+                                          range_sigma=h.range_sigma))       # a tone's coarse range (D3); NaN: the tracker's
+        tracks = self.tracker.update(t, local) if self.tracker is not None else []      # D3: a tone-only ping before the first sweep
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
-        mp = dict(c["multipath"], bearing=self._multipath_bearing, origin=(own[1], own[0])) if c.get("multipath") else None
+        mp = dict(c["multipath"], bearing=getattr(self, "_multipath_bearing", float("nan")), origin=(own[1], own[0])) if c.get("multipath") else None
         # Positions at the report's time (the ping's transmit time), not at each track's last detection (D-156). Echo
         # grouping after the elevation step below, which finds the bounces (sonar-bal).
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
-                                           outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=self._fit_rms_bearing,
+                                           outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=getattr(self, "_fit_rms_bearing", 0.0),
                                            origin=(own[1], own[0]))
         if cfg["range_doppler"] == "full" and bank is None:
             # sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
@@ -1887,8 +1985,11 @@ class LiveChain:
                                 **({"extent_m": h.extent, "first_range_m": h.first_range} if np.isfinite(h.extent) else {}),
                                 **({"arrivals": [list(a) for a in h.arrivals]} if h.arrivals and len(h.arrivals) > 1 else {}), **(x or {}),
                                 # opt-in (D4; owner question 6): the bank's coarse range rate and its resolution
-                                **({"range_rate_m_s": h.range_rate, "range_rate_step_m_s": h.range_rate_step}
-                                   if bank is not None and cfg["doppler"]["report"] else {}))
+                                **({"range_rate_m_s": _finite(h.range_rate), "range_rate_step_m_s": _finite(h.range_rate_step)}
+                                   if (bank is not None or tone_run_) and cfg["doppler"]["report"] else {}),
+                                # D3: which path found it, with the tone path on
+                                **({"doppler_path": ("sweep", "tone", "both")[h.doppler_path]}
+                                   if tone_run_ and cfg["doppler"]["report"] else {}))
                            for i_, (h, x) in enumerate(zip(hits, extra))],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.

@@ -2,12 +2,15 @@
 """The sweep's Doppler bank (D4) end to end through the live chain, both engines: each target's margin, detection and
 track with the bank off and on, the false detections on the scene's background, and the cost a ping.
 
-    tools/doppler_bank_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0] [--json FILE]
+    tools/doppler_bank_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0] [--combine max|cfar]
+                               [--json FILE]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once; its records go through `LiveChain` with the deployment defaults (bearings -40
 to 40 degrees every 0.5, backprojection, multiscale detector, sizes derived from the sonar; host backend), engine by
-engine, without the bank and with `doppler: {mode: sweep_bank, max_range_rate_m_s: --max-rate}`. Per target and ping:
+engine, without the bank and with `doppler: {mode: sweep_bank, max_range_rate_m_s: --max-rate, combine: --combine}` (max:
+D4's maximum over hypotheses; cfar: D3's per-(beam, hypothesis) normalisation, its thresholds at the budget divided by the
+hypotheses per beam). Per target and ping:
 
 - the detection it gives: the strongest detection within 60 m of range and 1.5 degrees of bearing of where the target
   is at that ping (its centre, as seen from the platform at that ping: slant range from the platform, bearing from
@@ -79,10 +82,12 @@ def truth(cfg: dict, n: int) -> dict:
     return out
 
 
-def chain_config(engine: str, bank: bool, max_rate: float, budget: float | None = None) -> dict:
+def chain_config(engine: str, bank: bool, max_rate: float, budget: float | None = None, combine: str = "max") -> dict:
     cfg = {"engine": engine, "backend": "host"}
     if bank:
         cfg["doppler"] = {"mode": "sweep_bank", "max_range_rate_m_s": max_rate, "report": True}
+        if combine != "max":
+            cfg["doppler"]["combine"] = combine
     if budget is not None:
         cfg["cfar"] = {"false_alarms_per_ping": budget}
     return cfg
@@ -145,6 +150,7 @@ def main(argv=None) -> int:
     ap.add_argument("--engines", nargs="+", default=["python", "cpp"], choices=["python", "cpp"])
     ap.add_argument("--background", type=int, default=4)
     ap.add_argument("--max-rate", type=float, default=3.0)
+    ap.add_argument("--combine", default="max", choices=["max", "cfar"])
     ap.add_argument("--json")
     a = ap.parse_args(argv)
     cfg = load_scenario_config(a.scene, expand=False)
@@ -157,11 +163,11 @@ def main(argv=None) -> int:
     say(f"{a.scene}: {len(records)} pings simulated in {time.time() - t0:.0f} s, {records[0].samples.n_channels} channels")
     truths = truth(cfg, len(records))
     result = {"scene": a.scene, "pings": len(records), "channels": int(records[0].samples.n_channels), "max_range_rate_m_s": a.max_rate,
-              "engines": {}, "background": {}}
+              "combine": a.combine, "engines": {}, "background": {}}
     for engine in a.engines:
         res = {}
         for bank in (False, True):
-            reports, seconds, thr, plan = run_chain(records, chain_config(engine, bank, a.max_rate))
+            reports, seconds, thr, plan = run_chain(records, chain_config(engine, bank, a.max_rate, combine=a.combine))
             res["on" if bank else "off"] = {"targets": per_target(reports, thr, truths), "seconds": seconds,
                                              "seconds_median_after_first": float(np.median(seconds[1:])) if len(seconds) > 1 else seconds[0],
                                              "detections_per_ping": [len(r["detections"]) for r in reports],
@@ -188,7 +194,7 @@ def main(argv=None) -> int:
         for budget in (None, 3.0):
             row = {}
             for bank in (False, True):
-                reports, _, _, _ = run_chain(back, chain_config("cpp", bank, a.max_rate, budget))
+                reports, _, _, _ = run_chain(back, chain_config("cpp", bank, a.max_rate, budget, a.combine))
                 row["on" if bank else "off"] = sum(len(r["detections"]) for r in reports)
             result["background"]["default" if budget is None else str(budget)] = dict(row, pings=len(back))
             say(f"{a.scene} background, {len(back)} pings, budget {'default' if budget is None else budget}: false detections off {row['off']}, on {row['on']}")

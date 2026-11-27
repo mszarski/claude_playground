@@ -41,14 +41,56 @@
 #include <string>
 #include <vector>
 
+#include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/live/derive.hpp"
+#include "sonar/live/detections.hpp"
 
 namespace sonar::live {
 
 enum class DopplerMode { Off, SweepBank };
 DopplerMode parse_doppler_mode(const std::string& name);   ///< off | sweep_bank
 const char* doppler_mode_name(DopplerMode m);
+
+/// How the sweep bank's hypotheses become one map (D3 of docs/tasks/DOPPLER.md).
+///   Max   the largest power over each beam's hypotheses, then the detector as it is (D4): the detector's background is
+///         estimated from that maximum, which rises 4.8 to 5.6 dB on noise for 17 to 33 hypotheses (D4, measured) and
+///         costs every target that much margin.
+///   Cfar  each (beam, hypothesis) map normalised by ITS OWN background first (the detector's background estimate,
+///         detector_background, on that hypothesis' cell means), then the largest normalised value over the beam's
+///         hypotheses, tested against thresholds planned for a budget divided by the hypotheses per beam (the union
+///         bound: P(max over N > x) <= N P(one > x); ours). The map handed to the detector is that normalised maximum
+///         times the background of the beam's centre (own-ship) hypothesis, which the detector is given as its
+///         background instead of estimating one from the maximum (multiscale_detect's `level`): a detection's snr_db
+///         is its value over its own hypothesis' background.
+enum class DopplerCombine { Max, Cfar };
+DopplerCombine parse_doppler_combine(const std::string& name);   ///< max | cfar
+const char* doppler_combine_name(DopplerCombine c);
+
+/// D3 part B: the tone's Doppler filter bank (tone_stage below), opt-in. Every NaN is derived (plan_tone says from what).
+struct ToneOptions {
+  bool enabled = false;               ///< doppler_tone = bank
+  double frequency = kDerive;         ///< Hz; NaN: the record's (a CW record); required for a train (an arbitrary record)
+  double start = 0.0;                 ///< s from the start of the pulse to the tone's start (a train's segment table)
+  double duration = kDerive;          ///< s; NaN: the record's (a CW record)
+  double window_alpha = kDerive;      ///< the tone's Tukey taper (1: Hann); NaN: the record's (a CW record)
+  double max_range_rate = kDerive;    ///< m/s either side of each beam's own-ship rate; NaN: DopplerOptions::max_range_rate
+  double step = kDerive;              ///< m/s between hypotheses; NaN: c / (4 f T), half the resolution c / (2 f T)
+  double hop = 0.25;                  ///< lags this fraction of the tone's length apart
+  double notch = kDerive;             ///< m/s half-width about each beam's own-ship rate not tested; NaN: derived (plan_tone)
+  double notch_cells = 3.0;           ///< resolution cells added to the beam's own-motion span in the derived notch
+  std::int64_t guard = 0;             ///< hypotheses either side kept out of a cell's background; 0: 2 resolution cells
+  std::int64_t train = 32;            ///< hypotheses either side in a cell's background (beyond the guard)
+  double false_alarms_per_ping = kDerive;  ///< the tone path's budget; NaN: the detector's (cfar.false_alarms_per_ping)
+  double gate_range = kDerive;        ///< m: a tone and a sweep detection this close in range are one; NaN: c T / 4
+  double gate_bearing = kDerive;      ///< rad: ... and this close in bearing; NaN: 2 degrees
+  double range_sigma = kDerive;       ///< m: the tracker's range sigma for a tone-only detection; NaN: c T / 8
+  double sidelobe_db = kDerive;       ///< a weaker group under a stronger one's bearing sidelobes; NaN: -25 dB (Hann), -7 dB (rect)
+  /// dB: a cell no more than this above what a stronger cell of its beam and lag (the ridge in the notch, or a stronger
+  /// tested cell) leaks into it through the tone's spectrum is not a detection (tone_stage step 3b). 10: the detector's
+  /// sidelobe margin (detector.hpp).
+  double leak_margin_db = 10.0;
+};
 
 struct DopplerOptions {
   DopplerMode mode = DopplerMode::Off;
@@ -61,8 +103,13 @@ struct DopplerOptions {
   /// m/s: added to the span when the record's velocity is not finite (the bank then spans the vehicle's own speed too).
   /// 2.0: the scenes' vehicle makes 1.5 m/s; set it to the vehicle's top speed (an assumption, configuration).
   double unknown_ownship = 2.0;
+  /// How the hypotheses are combined (DopplerCombine): max (D4, the default of the bank) or cfar (D3).
+  DopplerCombine combine = DopplerCombine::Max;
   /// dB every threshold of the detector (and min_snr_db) moves by; NaN: bank_threshold_db (0, measured: doppler.cpp).
+  /// With combine cfar it is added to the union bound's correction (the budget divided by the hypotheses per beam).
   double threshold_db = kDerive;
+  /// The tone's Doppler filter bank (D3 part B), beside the sweep path (on with mode off too).
+  ToneOptions tone;
   /// Report each detection's range rate (`range_rate_m_s`, `range_rate_step_m_s`) on the report line: off by default
   /// (docs/tasks/DOPPLER.md section 5, question 6: the report line is a contract).
   bool report = false;
@@ -85,6 +132,9 @@ struct DopplerPlan {
   bool velocity_known = true;
   double baseband_max_range_rate = 0.0;  ///< what to_baseband is given: 0 when the default band holds every shift
   double threshold_db = 0.0;             ///< the detector's thresholds move by this (dB)
+  DopplerCombine combine = DopplerCombine::Max;
+  /// The detector's false-alarm budget is divided by this: 1 with max; the hypotheses per beam with cfar (union bound).
+  double budget_divisor = 1.0;
   /// m: a mismatched hypothesis spreads a strong echo over +-|mismatch| T about its range (the residual chirp); the
   /// detector's range sidelobe envelope is raised to that pedestal out to per_beam x step x T (DetectorOptions::pedestal_m).
   double pedestal_m = 0.0;
@@ -112,6 +162,130 @@ DopplerPlan plan_doppler(const PingRecord& record, const std::vector<double>& be
 void fold_start(std::int64_t n_bearing, std::int64_t n, std::vector<float>& best, std::vector<std::int32_t>& which);
 void fold_hypothesis(const DopplerPlan& plan, std::int64_t h, const float* fine, std::int64_t n_bearing, std::int64_t n,
                      std::vector<float>& best, std::vector<std::int32_t>& which);
+
+/// combine cfar: the running maximum over each beam's hypotheses of the map normalised by its own background.
+struct NormalisedFold {
+  std::int64_t n_bearing = 0, stride = 0, n_cells = 0, cell_samples = 1, skip = 0;
+  std::vector<float> ratio;          ///< [n_bearing][stride] sample / the background of its cell in its hypothesis; max over h
+  std::vector<float> cell_ratio;     ///< [n_bearing][n_cells] cell mean / its background; max over h
+  std::vector<double> reference;     ///< [n_bearing][n_cells] the background of each beam's centre hypothesis
+  std::vector<std::int32_t> which;   ///< [n_bearing][stride] the hypothesis that holds `ratio`
+};
+/// Starts the fold for a map of `n_cells` cells of `cell_samples` samples per bearing row (stride n_cells x cell_samples);
+/// the first `skip` cells (blanked) are left out of every background and hold 0.
+void normalised_start(std::int64_t n_bearing, std::int64_t n_cells, std::int64_t cell_samples, std::int64_t skip, NormalisedFold& fold);
+/// Folds in hypothesis `h`'s map `fine` [n_bearing][stride]: its cell means (the mean of each cell's samples, in double),
+/// their background by detector_background(guard, train) over the cells from `skip` on, and each sample's and cell's ratio
+/// to it; a beam that does not take `h` is left alone; a tie keeps the earlier hypothesis. A background of 0 counts as
+/// 1e-300 (as the detector's floor).
+void fold_normalised(const DopplerPlan& plan, std::int64_t h, const float* fine, std::int64_t guard, std::int64_t train, NormalisedFold& fold);
+/// The map the detector is handed: `fine` = ratio x reference (per cell), `cells` = cell_ratio x reference, `level` =
+/// reference (0 in the skipped cells; the chain drops them).
+void normalised_map(const NormalisedFold& fold, std::vector<float>& fine, std::vector<float>& cells, std::vector<double>& level);
+
+// ------------------------------------------------------------------------------------------------------------------------
+// D3 part B: the tone's Doppler filter bank (docs/tasks/DOPPLER.md D3; gpusonar/doppler.py tone_stage), opt-in.
+//
+// For a transmit with a tone (a CW record, or a train whose tone segment the configuration names: frequency f, start t1,
+// length T, taper), per beam of the conventional far-field beamformer (farfield_beamform, the chain's bearings) on the
+// complex baseband record BEFORE pulse compression:
+//   1. the beam is mixed to the tone and decimated by an exact band-limited FFT cut to the band the hypotheses need,
+//      +-(2 r_max f / c + 8 / T) about the tone (r_max the largest |rate| of any hypothesis);
+//   2. for each lag l (every hop x T) and range-rate hypothesis r_k the matched filter of the tone at that rate,
+//      X = sum_m z[lH + m] w[m] exp(-i 2 pi nu_k (lH + m) / fs), w the tone's Tukey envelope (the replica's), nu_k the
+//      echo's frequency f (c - r_k) / (c + r_k) in the decimated frame (a narrowband echo: the envelope's own time scaling,
+//      under T |r| / c = 2 ms at 3 m/s and 1 s, is left out; ours); power |X|^2 / sum w^2;
+//   3. hypotheses r_k = k x step, step c / (4 f T) (half the resolution c / (2 f T): the worst loss between two, a Hann
+//      tone, is under 1 dB; ours), each beam taking the 2K + 1 nearest its own-ship rate -v . u_b as the sweep bank does;
+//   4. a NOTCH: the hypotheses within `notch` of the beam's own-ship rate are not tested and not used as background: the
+//      stationary reverberation (and every stationary target) lies there. Derived: the own-ship rate's spread over the
+//      beam's half-power width (|v| |du/db| x half the width 0.886 lambda / (L cos b), ours) plus `notch_cells` resolution
+//      cells (the Hann tone's main lobe is +-2 cells; 3 leaves its first sidelobes, ours). The sweep path keeps the
+//      stationary targets;
+//   5. the background of a cell (b, k, l) is the mean power over the beam's hypotheses `guard` + 1 to `guard` + `train`
+//      away on either side at the same lag, notch excluded: a CFAR along the RATE axis. Not along range: a ping holds
+//      too few lags for that (flank_patrol: 13 at a quarter of 1 s), and the background that matters here is flat in rate
+//      and not in range (noise; the sweep's broadband reverberation when the tone is inside its band, D2). Ours;
+//   6. a cell is flagged when its power over that background exceeds the cell-averaging factor
+//      a = N (pfa^(-1/N) - 1) (exponential power; N the training cells times step / (enbw x resolution), enbw the
+//      window's equivalent noise bandwidth in bins: neighbouring hypotheses are not independent; ours), with pfa the
+//      budget over every cell tested (the union bound: on the safe side, cells overlap);
+//   6b. a flagged cell no more than `leak_margin_db` above what a stronger cell of its beam and lag leaks into it through
+//      the matched filter's own spectrum (the window's power spectrum, its envelope) is dropped: the ridge's leakage (a
+//      strong still echo or the near reverberation outside the notch) and a strong mover's own Doppler sidelobes;
+//   7. flagged cells touching in (beam, hypothesis, lag) are one detection at its strongest cell, rate, bearing and lag
+//      refined by a parabola through the log power of the neighbours; a group no stronger than `sidelobe_db` under a
+//      stronger one's power at a nearby rate and lag is that one's bearing sidelobe and dropped.
+// A detection's range is c (t_l - t1) / 2 (t_l the lag's start after the transmit): COARSE, the tone's c T / 2 cell; its
+// rate is relative to the platform, opening positive (the sweep bank's convention). The chain (chain.cpp, live.py) merges
+// them with the sweep's detections (DopplerOptions::tone gates).
+
+struct TonePlan {
+  bool on = false;                   ///< false: this record has no tone (a sweep-only ping)
+  bool tone_only = false;            ///< the tone is the whole pulse: the sweep path has nothing to say (its detections dropped)
+  double frequency = 0.0, start = 0.0, duration = 0.0, window_alpha = 0.0;
+  double step = 0.0, resolution = 0.0;   ///< m/s
+  std::vector<double> rates;         ///< m/s, ascending, k x step
+  std::int64_t per_beam = 1;
+  std::vector<std::int64_t> first;   ///< per beam, index into rates
+  std::vector<double> ownship;       ///< per beam, m/s
+  std::vector<double> notch;         ///< per beam, m/s half-width
+  double hop = 0.0;                  ///< s between lags
+  std::int64_t guard = 0, train = 0;
+  double budget = 0.0;               ///< false detections a ping
+  double baseband_max_range_rate = 0.0;   ///< what to_baseband is given so that the tone and its shifts are kept
+  double gate_range = 0.0, gate_bearing = 0.0, range_sigma = 0.0, sidelobe_db = 0.0;
+  std::string json() const;
+};
+
+/// The tone path for `record` (before baseband or after: the allowance needs the record's waveform and sound speed) and
+/// the map's bearings. Off (on = false) when the tone bank is not enabled or the record is a linear sweep (the other ping of
+/// an alternating pair). Throws std::invalid_argument for a train (an arbitrary record) without `tone.frequency`, a tone
+/// that does not fit the pulse, or numbers out of range.
+/// `default_budget`: the tone path's false-alarm budget when ToneOptions::false_alarms_per_ping is not given (the chain
+/// passes its detector's).
+TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, double default_budget = 1e-3);
+
+struct ToneDetection {
+  double range = 0.0;        ///< m, c (t_l - t1) / 2 at the refined lag
+  double bearing = 0.0;      ///< rad
+  double range_rate = 0.0;   ///< m/s, refined
+  double snr_db = 0.0;       ///< the strongest cell over its background
+  std::int64_t cells = 0;
+  std::int64_t beam = 0, hypothesis = 0, lag = 0;   ///< the strongest cell (hypothesis: index into rates)
+};
+
+struct ToneStage {
+  TonePlan plan;
+  std::vector<ToneDetection> detections;
+  std::int64_t n_lags = 0, tests = 0;
+  double factor = 0.0;                ///< the threshold of a cell with a full background (power over its mean)
+  double fs = 0.0;                    ///< Hz, the decimated rate
+  std::vector<double> lag_ranges;     ///< m
+  /// With keep_map: [n_bearing][per_beam][n_lags] power and power over its background (0 where not tested).
+  std::vector<float> power, ratio;
+};
+
+/// The tone path on `record` (complex baseband, NOT pulse compressed; the chain keeps it before compression): the plan,
+/// the beams (farfield_beamform with the chain's aperture window), the bank, the CFAR along rate and the detections.
+ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, bool hann,
+                     double default_budget = 1e-3, Backend backend = Backend::Host, int device = 0, bool keep_map = false);
+
+/// The sweep path's replica on a train with the tone path on (D3): the record's replica (an arbitrary waveform: the train as
+/// sent) with the tone segment's samples set to zero, emission times [start, start + duration] of the plan. The tone's
+/// echo is Doppler-shifted off the zero-Doppler sweep replica's tone part (a 1 s tone tolerates c / (2 f T): 0.07 to 0.15 m/s),
+/// so with the whole train as the replica the sweep path pays the tone's half of the energy in its noise and gains nothing
+/// for a mover (measured: popoto_12km_doppler's ship 0 of 6 pings through the chain with the whole train; DOPPLER.md D3).
+/// Leaves anything that is not an arbitrary waveform with a replica alone; returns the samples zeroed.
+std::int64_t sweep_only_replica(Waveform& waveform, const TonePlan& plan);
+
+/// The chain's merge of the two paths (D3). Tone detections, strongest first, each take the strongest sweep detection not
+/// yet taken within the plan's gates (|range difference| <= gate_range, |bearing difference| <= gate_bearing): that sweep
+/// detection keeps its range and bearing (the sweep's resolution) and takes the tone's range rate and step (doppler_path
+/// 2). A tone detection that finds none is returned as a detection of its own (doppler_path 1, its coarse range, the
+/// plan's range_sigma for the tracker). Sweep detections no tone detection takes are left as they are (path 0): a
+/// stationary target seen only by the sweep and a mover seen only by the tone both survive.
+std::vector<Detection> merge_tone(std::vector<Detection>& sweep, const ToneStage& tone);
 
 /// The hypothesis a detection takes: that of the strongest sample of the maximum map along its nearest bearing row over
 /// [lo, hi] m of `fine_ranges` (the row's whole map when nothing lies there). -1 when the map holds none.

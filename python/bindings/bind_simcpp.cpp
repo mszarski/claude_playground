@@ -292,11 +292,12 @@ void bind_simcpp(py::module_& m) {
           cfg.evanescent = evanescent;
         }
         if (!roughness.is_none()) {
-          // (w2, gamma2, K0, seed, patch, refine, floor_db, bin): G-13's penetration: rough, every field stated
-          const auto r = roughness.cast<std::tuple<double, double, double, std::uint64_t, double, double, double, double>>();
+          // (w2, gamma2, K0, seed, patch, refine, floor_db, bin, max_pairs): G-13's penetration: rough, every field stated
+          const auto r =
+              roughness.cast<std::tuple<double, double, double, std::uint64_t, double, double, double, double, std::int64_t>>();
           cfg.rough = true;
           cfg.roughness = {std::get<0>(r), std::get<1>(r), std::get<2>(r), std::get<3>(r),
-                           std::get<4>(r), std::get<5>(r), std::get<6>(r), std::get<7>(r)};
+                           std::get<4>(r), std::get<5>(r), std::get<6>(r), std::get<7>(r), std::get<8>(r)};
         }
         sim::EigenraySet e;
         {
@@ -311,8 +312,9 @@ void bind_simcpp(py::module_& m) {
       "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields. With "
       "`bottom` (speed, density, attenuation dB/wavelength, water_density) and `frequency` (Hz): the opt-in fluid "
       "penetration (transmission coefficient, reciprocity factor, attenuation in the sediment; `evanescent`: the evanescent field below the critical angle). "
-      "With `roughness` (w2, gamma2, K0, seed, patch, refine, floor_db, bin) as well: penetration: rough (G-13), the "
-      "roughness-scattered bins of the sub-critical points as further rays (sonar/sim/penetration.hpp).");
+      "With `roughness` (w2, gamma2, K0, seed, patch, refine, floor_db, bin, max_pairs) as well: penetration: rough (G-13), the "
+      "roughness-scattered bins of the sub-critical points as further rays (sonar/sim/penetration.hpp); a point whose leg's rays "
+      "squared exceed max_pairs raises ValueError (the cost cap).");
 
   m.def(
       "sim_rough_patch_coefficients",

@@ -761,7 +761,7 @@ REQUIREMENT = (
     "false-alarm probability, sea state or water**. What the design has used since (not the requirement): `docs/DESIGN.md`, \"The 12 km design "
     "point\": \"The targets are the two the study uses: a ship-sized target of +25 dB and a small target of +5 dB\"; detection probability 0.5 "
     "on one ping by the chain's own detector, with a false-alarm budget of 0.001 a ping over the window; ambient noise at 5 m/s wind; free "
-    "field (no site). POP-3 is checked against the +25 dB ship only (`tools/design_report.py`). The target classes "
+    "field (no site). Since 2026-11-26 the owner has said whom it is for: 'Large submerged mostly but also Large Ship is what we care about' (D-235); `tools/design_report.py` checks POP-3 for `large_submerged` first and `ship` second, in free field and per site. The target classes "
     "(`configs/builds/targets/reference_classes.yaml`) are all **assumed** placeholders; `docs/STATUS.md` owner questions 7 and 8 and "
     "`docs/tasks/DOPPLER.md` Sec. 5 q. 4 ask for the class, its aspect, and whether a near-surface ship at 12 km in non-ducting water is a "
     "requirement at all. **So this study reports every class at every site**; which of them 12 km is for is the owner's.")
@@ -786,7 +786,7 @@ NOT_EVALUATED = [
 OWNER_QUESTIONS = [
     "**Which target class is the 12 km requirement for**, at which aspect, detection probability and false-alarm rate? The answer below changes by class: "
     "the +25 dB classes need nothing more at most sites; the +5 dB class is not reached at 12 km by any variant in the grid.",
-    "**Is the +5 dB `xl_auv` at 12 km a requirement?** If it is, no row length, row count, band, pulse or source level in the grid reaches it where "
+    "**Is the +5 dB `xl_auv` at 12 km a requirement?** (Answered by the owner, 2026-11-26, D-235: no; the requirement is for `large_submerged` first and `ship` second. The rest stands as information.) If it is, no row length, row count, band, pulse or source level in the grid reaches it where "
     "reverberation limits it; only processing that separates it from the reverberation (a Doppler-resolving tone, for a target moving radially) or a "
     "different sensing geometry would. The transmitter is now ours to choose (the owner, 2026-11-26): is a tone outside the sweep's band (or alternate tone pings) acceptable, and what is the slowest radial speed that must be seen?",
     "**Which waters?** Every site here is illustrative (Lambert values taken from the scenes that simulate the same water). A bottom-scattering "
@@ -960,11 +960,15 @@ def findings(R: dict) -> list:
     ss5 = next((s for s in R.get("sites", []) if s.get("sea_state") is not None), None)
     if ss5:
         from gpusonar import acoustics
-        out.append(f"- **Sea state 5 is 12.6 m/s in the code, 9.8 m/s in the words.** `{ss5['name']}` states `sea_state: {ss5['sea_state']}` and its title says "
-                   f"\"{ss5.get('title')}\"; `acoustics.sea_state_wind_speed({ss5['sea_state']})` gives {acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s (9.8 m/s is sea state 4 in "
-                   "that table, via secondary: UnderwaterAcoustics.jl), and the planner, `docs/design/popoto_depth_planner.json` (`wind_speed_m_s`) and this study computed with "
-                   f"{acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s. `docs/DESIGN.md` prints the site as \"sea state 5 (9.8 m/s wind)\". Either the title or the state is wrong; "
-                   "at 9.8 m/s the +25 dB classes need less (the sensitivity table: sea state 4). Reproduce: `python3 -c \"from gpusonar import acoustics; print(acoustics.sea_state_wind_speed(5))\"`.")
+        wind = f"{acoustics.sea_state_wind_speed(ss5['sea_state']):g} m/s"
+        if wind not in str(ss5.get("title")):
+            out.append(f"- **The sea state's wind in the code is not the one in the words.** `{ss5['name']}` states `sea_state: {ss5['sea_state']}` and its title says "
+                       f"\"{ss5.get('title')}\"; `acoustics.sea_state_wind_speed({ss5['sea_state']})` gives {wind} (via secondary: UnderwaterAcoustics.jl), which is what "
+                       "the planner and this study computed with. Either the title or the state is wrong.")
+        else:
+            out.append(f"- `{ss5['name']}` is computed at {wind}, the table's wind for sea state {ss5['sea_state']} (via secondary: UnderwaterAcoustics.jl). Until 2026-11-26 its "
+                       "title said 9.8 m/s, which is sea state 4 in that table; the owner chose to correct the title, so no number moved. The sensitivity table's "
+                       "sea state 4 row shows what 9.8 m/s would give.")
     a = [m(f"3x32|{b}|1s|197dB", "shelf_100m_sand", "xl_auv") for b in ("1k", "2k", "4k")]
     if all(v is not None for v in a):
         out.append(f"- **A wider band does worse at 12 km in ducted water in this model** (shelf, xl_auv, 3 x 32: 1 kHz {a[0]:+.1f}, 2 kHz {a[1]:+.1f}, 4 kHz {a[2]:+.1f} dB, bound A): "
@@ -1242,7 +1246,9 @@ def main(argv=None) -> int:
     path = out.with_suffix(".json")
     R = json.loads(path.read_text()) if path.exists() and not args.quick else {}
     R.setdefault("what", "Popoto 12 km trade study (sonar-3983): tools/popoto_trade_study.py")
-    R["git_head_when_run"] = git_head()
+    computes = args.grid or args.sensitivity or args.coverage or args.measure_rows or args.crosscheck or args.monostatic_check or args.quick
+    if computes or not R.get("git_head_when_run"):                          # --report alone computes nothing: the stamp stays the run's
+        R["git_head_when_run"] = git_head()
     if args.quick:
         sites = sites[:1] if not args.site else sites
         classes = classes[:1] if not args.cls else classes

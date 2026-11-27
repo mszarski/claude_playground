@@ -4269,7 +4269,10 @@ wrong or unverified:
   The cells, the hash and the bins are integers and agree exactly, so both engines see the same interface.
 - **Cost.** About 100-200 rays a leg for a sub-critical point (SAX99, 20-40 kHz, defaults), and the pairing takes
   every outbound ray with every return ray, so a sub-critical point's echo has 10^4 or more pairs. Eigenrays: 0.24 ms
-  a point in C++, 1.1 ms in NumPy (one thread, 200 points, ours, 2026-11-26).
+  a point in C++, 1.1 ms in NumPy (one thread, 200 points, ours, 2026-11-26). The cost cap `roughness.max_pairs`
+  (default 10^6; the owner, D-229: it raises, never truncates) estimates an echo's pairs as n^2, n the rays of the
+  point's leg (the `fluid` ray and its delay bins; the other leg, from a nearby end, crosses about as many), and
+  refuses before any pairing, naming n, n^2, the cap and the two ways out (a higher cap, a coarser `bin`). Ours.
 - **Realisation average 0.6 dB above the quadrature** of (15.14) at 15 deg, 0.3 m, 20 kHz (160 seeds; sampling
   1 sigma about 0.35 dB, the rest the cell-centre discretisation; ours, tested to 1 dB).
 

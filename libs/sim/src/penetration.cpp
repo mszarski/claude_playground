@@ -146,6 +146,7 @@ void check_roughness(const SedimentConfig& config) {
       throw std::invalid_argument("sediment: rough needs patch (m), refine, floor_db (dB) and bin (s) stated and > 0");
     }
   }
+  if (r.max_pairs < 1) throw std::invalid_argument("sediment: roughness.max_pairs must be >= 1 (ray pairs an echo)");
 }
 
 }  // namespace
@@ -235,6 +236,14 @@ double rough_sediment_radius(double depth, double k_loss, double floor_db) {
 double rough_sigma_wp(double ks_x, double ks_y, double ki_x, double ki_y, double k_w, double a_rho, double nu,
                       double delta, double w2, double gamma2, double K0) {
   return sigma_wp(ks_x, ks_y, ki_x, ki_y, Medium(k_w, a_rho, nu, delta), w2, gamma2, K0);
+}
+
+std::string rough_cost_message(std::int64_t rays, std::int64_t point, std::int64_t max_pairs) {
+  return "sediment: penetration: rough: sub-critical point " + std::to_string(point) + " has " + std::to_string(rays) +
+         " rays a leg, about " + std::to_string(rays * rays) + " ray pairs an echo, more than roughness.max_pairs " +
+         std::to_string(max_pairs) +
+         ". Nothing is truncated; either raise roughness.max_pairs (the synthesis then takes that many pairs an echo), or "
+         "give a coarser roughness.bin (fewer delay bins: fewer rays a leg)";
 }
 
 RoughBins rough_point_rays(const SedimentConfig& config, const Vec3d& source, const Vec3d& point) {
@@ -365,8 +374,18 @@ void add_rough_scattering(const SedimentConfig& config, const Vec3d& source, con
     rays[static_cast<std::size_t>(k)] =
         rough_point_rays(config, source, Vec3d{points[3 * i], points[3 * i + 1], points[3 * i + 2]});
   });
-  std::size_t extra = 0;
-  for (const RoughBins& r : rays) extra = std::max(extra, r.delay.size());
+  // The cost cap (penetration.rough_cost_check): the first point with the most rays a leg; raise, never truncate.
+  std::size_t extra = 0, worst = 0;
+  for (std::size_t s = 0; s < rays.size(); ++s) {
+    if (rays[s].delay.size() > extra) {
+      extra = rays[s].delay.size();
+      worst = s;
+    }
+  }
+  if (!rays.empty()) {
+    const auto n = static_cast<std::int64_t>(1 + extra);
+    if (n * n > config.roughness.max_pairs) throw std::invalid_argument(rough_cost_message(n, sub[worst], config.roughness.max_pairs));
+  }
   if (extra == 0) return;
   const auto k = static_cast<std::int64_t>(1 + extra);
   EigenraySet out;

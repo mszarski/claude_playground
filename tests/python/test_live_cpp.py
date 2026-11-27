@@ -1626,6 +1626,35 @@ def test_the_doppler_bank_gives_the_same_report_in_both_engines(pings):
     assert rates and all(abs(r) <= 0.5 * got[-1]["detections"][0]["range_rate_step_m_s"] + 1e-9 for r in rates)
 
 
+def test_the_doppler_banks_cfar_combiner_gives_the_same_report_in_both_engines(pings):
+    """D3 part A, `combine: cfar` (each (beam, hypothesis) normalised by its own background before the maximum): the same
+    detections, range rates and tracks from the Python chain and the C++ chain, and the same detector plan (the budget
+    divided by the hypotheses per beam)."""
+    cfar = dict(BANK, combine="cfar")
+    want, got = _bank_run(pings, "python", bank=cfar), _bank_run(pings, "cpp", bank=cfar)
+    _same_bank_reports(want, got)
+    assert all("range_rate_m_s" in d for r in got for d in r["detections"])
+    plans = {}
+    for engine in ("python", "cpp"):
+        with LiveChain(dict(CHAIN, engine=engine, doppler=cfar)) as chain:
+            chain.run(copies(pings[:1]))
+            plans[engine] = chain.detector["scales"][0]["threshold_db"]
+    assert plans["python"] == pytest.approx(plans["cpp"], abs=1e-9)
+
+
+@needs_exe
+def test_program_runs_the_cfar_combiner_like_the_python_chain(pings, tmp_path):
+    cfg = dict(CHAIN, doppler=dict(BANK, combine="cfar"))
+    with LiveChain(dict(cfg, engine="python"), recording=str(tmp_path / "rec.h5")) as chain:
+        want = chain.run(copies(pings))
+    flat = live_program_options(cfg)
+    assert flat["doppler_combine"] == "cfar"
+    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), *[f"{k}={v}" for k, v in flat.items()]],
+                         capture_output=True, text=True, timeout=600)
+    assert out.returncode == 0, out.stderr
+    _same_bank_reports(want, [json.loads(line) for line in out.stdout.splitlines()])
+
+
 @needs_exe
 def test_program_runs_the_doppler_bank_like_the_python_chain(pings, tmp_path):
     """build/bin/sonar_live with the deployment's chain section as key=value options (program_options): the Python chain's

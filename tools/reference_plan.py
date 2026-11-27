@@ -275,8 +275,99 @@ def _held(by: dict, lead: str) -> str:
             + " (median SNR " + " / ".join("—" if by[r]["median_snr_db"] is None else f"{by[r]['median_snr_db']:.1f}" for r in rows) + " dB over the local background)")
 
 
+# Whom the 12 km requirement (DESIGN.md POP-3) is for: the owner, 2026-11-26 (D-235). Primary class first.
+REQUIREMENT_CLASSES = ("large_submerged", "ship")
+REQUIREMENT_OWNER = ("2026-11-26", "Large submerged mostly but also Large Ship is what we care about")
+REQUIREMENT_OPEN = ("the worst sea state in which 12 km must hold, the detection probability and false-alarm rate, and the operating area "
+                    "(its wind, noise and bottom backscatter)")
+REQUIREMENT_BUILD = "popoto_face_3x32"
+
+
+def requirement_classes_text() -> str:
+    """'`large_submerged` first and `ship` second (the owner, 2026-11-26: "...")'."""
+    return (f"`{REQUIREMENT_CLASSES[0]}` first and `{REQUIREMENT_CLASSES[1]}` second (the owner, {REQUIREMENT_OWNER[0]}: "
+            f"\"{REQUIREMENT_OWNER[1]}\")")
+
+
+def twelve_km_by_site():
+    """The 12 km requirement's classes at the free-field design point and at each illustrative site, from the code's own figures:
+    the free-field budget of the shipped face (`buildspec.performance`, its +25 dB "ship" entry moved by each class's low target
+    strength against the ship class's) and the depth plan of that face (docs/design/popoto_depth_planner.json, recommended own
+    depth) for the sites of the trade study (docs/design/popoto_trade_study.json). None when either file is missing.
+
+    Per (site, class): margin at 12 km (one row's SNR over what the detector needs, worst over the class's depths, low target
+    strength), whether it is held, the planner's `limited_by` at 12 km, its decomposition (free field at the site's noise +
+    propagation against spherical spreading - reverberation = margin), reach and recommended own depth. Sites are ordered worst
+    first by the primary class, then the second."""
+    from gpusonar import target_classes as tc
+    P, T = _json("popoto_depth_planner.json"), _json("popoto_trade_study.json")
+    if not P or not T:
+        return None
+    plans = P["builds"][REQUIREMENT_BUILD]["plans"]
+    sites = [s["name"] for s in T["sites"] if s["name"] in plans]
+    ts_low = {c["name"]: float(np.min(np.atleast_1d(c["target_strength_db"]))) for c in tc.load("reference_classes")}
+    perf = bs.performance(bs.derive(bs.load(REQUIREMENT_BUILD)))
+    free = {}
+    for c in REQUIREMENT_CLASSES + ("xl_auv",):
+        off = ts_low[c] - ts_low["ship"]
+        free[c] = {"ts_low_db": ts_low[c], "margin_db": margin(perf, "ship") + off, "pd": pd_of(perf, "ship") if off == 0.0 else None}
+    rows = {}
+    for s in sites:
+        p = plans[s]
+        for c in REQUIREMENT_CLASSES + ("xl_auv",):
+            k, rec = p["classes"][c], p["classes"][c]["recommended"]
+            rows[(s, c)] = {"site": s, "title": p["environment"]["title"], "class": c, "margin_db": rec["margin_db"], "held": rec["margin_db"] >= 0.0,
+                            "limited_by": rec["limited_by"], "free_field_db": k["free_field_margin_db"], "propagation_db": rec["factor_db"],
+                            "reverberation_db": rec["margin_noise_only_db"] - rec["margin_db"], "reach_m": rec["reach_m"],
+                            "window_end": rec["reach_m"] >= max(p["ranges_m"]), "own_depth_m": rec["own_depth_m"], "pd": rec["detection_probability"]}
+    sites.sort(key=lambda s: tuple(rows[(s, c)]["margin_db"] for c in REQUIREMENT_CLASSES))
+    failing = {c: [s for s in sites if not rows[(s, c)]["held"]] for c in REQUIREMENT_CLASSES + ("xl_auv",)}
+    return {"build": REQUIREMENT_BUILD, "rows_on_face": perf["detection"]["rows"], "sites": sites, "rows": rows, "failing": failing, "free": free,
+            "probability": perf["detection"]["probability"], "grid_tree": T.get("git_head_when_run")}
+
+
+def _db(v: float) -> str:
+    """+1.2 / -3.4 / 0.0 (no signed zero)."""
+    return "0.0" if abs(v) < 0.05 else f"{v:+.1f}"
+
+
+def _what_costs(r: dict) -> str:
+    """The term that costs most where 12 km is not held, in words."""
+    terms = {"the site's noise (free field already short)": r["free_field_db"], "propagation (below spherical spreading)": r["propagation_db"],
+             "reverberation": -r["reverberation_db"]}
+    word, v = min(terms.items(), key=lambda kv: kv[1])
+    return word if v < 0.0 else "—"
+
+
+def twelve_km_sites_table(X: dict) -> list:
+    """The per-site table of the 12 km requirement's two classes, worst first, and xl_auv as information."""
+    L = [f"**At the illustrative sites** (`{X['build']}`, {X['rows_on_face']} rows; the depth plan, `docs/design/popoto_depth_planner.json` by `tools/popoto_depth_planner.py --shipped`, "
+         f"the same figures as `docs/design/popoto_trade_study.json` bound A; margin at 12 km of one row's SNR over what the build's detector needs for a detection probability of {X['probability']:g} "
+         "on one ping, at the low end of the class's assumed target strength, worst over its depths, at the own depth the planner recommends; free field at the site's noise + propagation against "
+         "spherical spreading − reverberation = margin; reach is the farthest range held at that depth; status **ours**, every site **illustrative**, every target strength **assumed**). "
+         f"Worst first, by `{REQUIREMENT_CLASSES[0]}`:\n",
+         "| Site | Class | Margin at 12 km | Held at 12 km | Noise or reverberation at 12 km (the planner's `limited_by`) | Free field at the site's noise / propagation / reverberation | Where not held, the largest cost | Reach | Recommended own depth |\n"
+         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for s in X["sites"]:
+        for c in REQUIREMENT_CLASSES:
+            r = X["rows"][(s, c)]
+            L.append(f"| `{s}`: {r['title']} | `{c}` | {r['margin_db']:+.1f} dB | {'yes' if r['held'] else 'no'} | {r['limited_by']} | "
+                     f"{_db(r['free_field_db'])} / {_db(r['propagation_db'])} / {_db(-r['reverberation_db'])} dB | {'—' if r['held'] else _what_costs(r)} | "
+                     f"{r['reach_m'] / 1e3:.1f} km{' (the window' + chr(39) + 's end)' if r['window_end'] else ''} | {r['own_depth_m']:.0f} m |")
+    n = len(X["sites"])
+    lines = []
+    for c in REQUIREMENT_CLASSES:
+        bad = X["failing"][c]
+        lines.append(f"`{c}` is held at {n - len(bad)} of {n} sites" + (": not at " + ", ".join(f"`{s}` ({X['rows'][(s, c)]['margin_db']:+.1f} dB, reach {X['rows'][(s, c)]['reach_m'] / 1e3:.1f} km)" for s in bad) if bad else ""))
+    L.append("\n" + "; ".join(lines) + ". The site values are illustrative, not the operating area's: which of these waters 12 km must hold in is the owner's to say.\n")
+    xl = X["failing"]["xl_auv"]
+    L.append(f"For information, not the requirement: `xl_auv` (+{X['free']['xl_auv']['ts_low_db']:g} dB at its low end, the small target of the tables below) at 12 km is held at {n - len(xl)} of {n} sites ("
+             + "; ".join(f"`{s}` {X['rows'][(s, 'xl_auv')]['margin_db']:+.1f} dB" for s in X["sites"]) + ").\n")
+    return L
+
+
 def twelve_km() -> list:
-    S, B, R, K = (_json(n) for n in ("popoto_elevation_study.json", "popoto_elevation_bench.json", "popoto_range_study.json", "popoto_12km.json"))
+    S, B, R, K =(_json(n) for n in ("popoto_elevation_study.json", "popoto_elevation_bench.json", "popoto_range_study.json", "popoto_12km.json"))
     T = bs.measured_timings()
     from gpusonar.sim.noise import wenz_spectrum_db
     r = 12000.0
@@ -294,13 +385,31 @@ def twelve_km() -> list:
     roll = dep["elevation"]["roll_sigma_deg"]
     grad = dep["elevation"]["gradient_sigma_per_s"]
     sync_us = B["scenarios"]["rehearsal"]["worst_residual_us"] if B else None
+    X = twelve_km_by_site()
     L = ["### The 12 km design point\n"]
+    if X:
+        fr = X["free"]
+        c1, c2 = REQUIREMENT_CLASSES
+        failing = [s for s in X["sites"] if s in set(X["failing"][c1]) | set(X["failing"][c2])]
+        whom = (f"**Whom 12 km is for: {requirement_classes_text()}** (requirement POP-3; classes in `configs/builds/targets/reference_classes.yaml`, every target strength **assumed**). "
+                f"At the low end of their assumed strengths `{c1}` is {fr[c1]['ts_low_db']:+g} dB and `{c2}` {fr[c2]['ts_low_db']:+g} dB, so the free-field tables below, "
+                f"which use a **ship-sized target of {fr['ship']['ts_low_db']:+g} dB**, "
+                + ("give the figures of both" if fr[c1]["ts_low_db"] == fr[c2]["ts_low_db"] else f"give `ship`'s; `{c1}` is {fr[c1]['ts_low_db'] - fr['ship']['ts_low_db']:+g} dB on them")
+                + f"; their **small target of {fr['xl_auv']['ts_low_db']:+g} dB** is the low end of `xl_auv`, "
+                "kept as **information, not the requirement**. "
+                f"In free field both classes are held at 12 km by the {X['rows_on_face']} rows (`{c1}` {fr[c1]['margin_db']:+.1f} dB, `{c2}` {fr[c2]['margin_db']:+.1f} dB); "
+                f"at the illustrative sites they are not held at " + (", ".join(f"`{s}`" for s in failing) or "none") + " (table below). "
+                f"Not yet said by the owner: {REQUIREMENT_OPEN}.")
+    else:
+        whom = "The per-site figures are pending (`docs/design/popoto_depth_planner.json` or `popoto_trade_study.json` is missing)."
     L.append("The owner: \"What does it look like for popoto at 12km though. Need that design\". This section is self-contained: what the system that detects at 12 km is, and what it can and cannot tell you there.\n"
-             f"The targets are the two the study uses: a **ship-sized target of +25 dB** and a **small target of +5 dB**. Everything is for the full face ({d3['band_hz'][0] / 1e3:g}–{d3['band_hz'][1] / 1e3:g} kHz, a {d3['pulse_s']:g} s sweep, "
+             + whom + f" Everything is for the full face ({d3['band_hz'][0] / 1e3:g}–{d3['band_hz'][1] / 1e3:g} kHz, a {d3['pulse_s']:g} s sweep, "
              f"{d3['source_level_db']:g} dB re 1 µPa at 1 m, rows of the long module, outer rows {d3['elevation']['baseline_m']:g} m apart).\n")
+    if X:
+        L.extend(twelve_km_sites_table(X))
     # summary
-    L.append("**At 12 km you get** (noise-limited budget; ship-sized target; one sigma; detection: one row's SNR, its margin over what that build's own detector needs for a detection probability of "
-             f"{p3['detection']['probability']:g} on one ping, and the probability the detector gives at that SNR):\n\n| Rows | Detection, ship (+25 dB) | Detection, small (+5 dB) | Bearing | Elevation | Depth with a measured profile | Depth without one |\n| --- | --- | --- | --- | --- | --- | --- |")
+    L.append("**At 12 km you get** (noise-limited free-field budget; ship-sized target" + (f", the low end of `{REQUIREMENT_CLASSES[0]}` and `{REQUIREMENT_CLASSES[1]}`" if X else "") + "; one sigma; detection: one row's SNR, its margin over what that build's own detector needs for a detection probability of "
+             f"{p3['detection']['probability']:g} on one ping, and the probability the detector gives at that SNR):\n\n| Rows | Detection, ship-sized (+25 dB) | Detection, small (+5 dB; `xl_auv`, information) | Bearing | Elevation | Depth with a measured profile | Depth without one |\n| --- | --- | --- | --- | --- | --- | --- |")
     for label, (_, d, perf) in main.items():
         snr_s, snr_m = row_snr(perf, "ship"), row_snr(perf, "small")
         m_s, m_m, pd_s = margin(perf, "ship"), margin(perf, "small"), pd_of(perf, "ship")

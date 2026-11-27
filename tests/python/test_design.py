@@ -120,3 +120,103 @@ def test_popoto_array_scales_by_one_number():
     assert low.aperture == pytest.approx(31 * 0.094)
     # With the defaults it is the stock eight-hydrophone board.
     assert np.allclose(SonarModel.load("popoto_array").positions, SonarModel.load("popoto_8").positions)
+
+
+# --- POP-3: whom the 12 km requirement is for (the owner, 2026-11-26; D-235) -----------------------------------------
+# The owner: "Large submerged mostly but also Large Ship is what we care about". POP-3 is checked for `large_submerged`
+# first and `ship` second, at the free-field design point and at every illustrative site of the depth plan; the
+# requirement row may not read as a bare pass while a listed site fails.
+
+import json as _json
+import re as _re
+
+_PLAN = ROOT / "docs" / "design" / "popoto_depth_planner.json"
+_TRADE = ROOT / "docs" / "design" / "popoto_trade_study.json"
+
+
+def _pop3(reqs):
+    return next(r for r in reqs if r["id"] == "POP-3")
+
+
+def _sites():
+    """The trade study's illustrative sites (docs/design/popoto_trade_study.json) and the shipped face's plans for them."""
+    sites = [s["name"] for s in _json.loads(_TRADE.read_text())["sites"]]
+    plans = _json.loads(_PLAN.read_text())["builds"]["popoto_face_3x32"]["plans"]
+    return sites, plans
+
+
+def _section(text, title):
+    return text.split(f"### {title}\n", 1)[1].split("\n### ", 1)[0]
+
+
+def test_pop3_names_both_classes_large_submerged_first(built):
+    _, reqs, _ = built
+    r = _pop3(reqs)
+    assert r["classes"] == ["large_submerged", "ship"]
+    words = r["requirement"]
+    assert "Large submerged mostly but also Large Ship is what we care about" in words and "2026-11-26" in words
+    assert words.index("`large_submerged`") < words.index("`ship`")
+    assert r["value"].index("large_submerged") < r["value"].index("ship")
+    for open_question in ("sea state", "detection probability", "false-alarm", "operating area"):    # still the owner's to say
+        assert open_question in r["value"], open_question
+
+
+def test_pop3_cell_is_not_a_bare_pass_while_a_site_fails(built):
+    _, reqs, text = built
+    r = _pop3(reqs)
+    sites, plans = _sites()
+    failing = sorted({s for s in sites for c in ("large_submerged", "ship") if plans[s]["classes"][c]["recommended"]["margin_db"] < 0.0})
+    assert failing, "the committed plan has failing sites: this test is written for that case"
+    row = next(line for line in text.splitlines() if line.startswith("| POP-3 |"))
+    cell = row.rstrip(" |").rsplit(" | ", 1)[1]
+    assert cell.strip() not in ("yes", "**yes**") and "not" in cell
+    for s in failing:
+        assert s in cell, s
+    assert r["status"] == "partly met"
+    # The design-point check itself (free field, both classes, three rows) is what `met` and --check hold.
+    assert r["met"] is True
+
+
+def test_design_point_table_per_site_equals_the_planner(built):
+    _, _, text = built
+    sec = _section(text, "The 12 km design point")
+    sites, plans = _sites()
+    trade = _json.loads(_TRADE.read_text())["answers"]["per_class_site"]
+    # The section leads with the two named classes, the primary first, and keeps xl_auv as information only.
+    head = sec.strip().split("\n\n", 1)[0]
+    assert head.index("`large_submerged`") < head.index("`ship`")
+    assert any("xl_auv" in line and "not the requirement" in line for line in sec.splitlines())
+    rows = {}
+    for line in sec.splitlines():
+        m = _re.match(r"\| `(\w+)`[^|]*\| `(large_submerged|ship)` \| ([+-]\d+\.\d) dB \| (yes|no) \|.*\| (\d+\.\d) km[^|]*\| (\d+) m \|$", line)
+        if m:
+            rows[(m[1], m[2])] = (float(m[3]), m[4], float(m[5]), float(m[6]), len(rows))
+    for s in sites:
+        for c in ("large_submerged", "ship"):
+            assert (s, c) in rows, (s, c)
+            margin, held, reach_km, depth, _ = rows[(s, c)]
+            rec = plans[s]["classes"][c]["recommended"]
+            assert margin == pytest.approx(rec["margin_db"], abs=0.051)                         # printed to 0.1 dB
+            assert margin == pytest.approx(trade[c][s]["shipped_3x32"]["A"]["margin_db"], abs=0.051)
+            assert held == ("yes" if rec["margin_db"] >= 0.0 else "no")
+            assert reach_km == pytest.approx(rec["reach_m"] / 1e3, abs=0.051)
+            assert depth == pytest.approx(rec["own_depth_m"], abs=0.5)
+    # Worst first, by the primary class.
+    order = sorted(sites, key=lambda s: rows[(s, "large_submerged")][4])
+    lsm = [plans[s]["classes"]["large_submerged"]["recommended"]["margin_db"] for s in order]
+    assert lsm == sorted(lsm)
+
+
+def test_pop3_free_field_figures_equal_the_planners(built):
+    """The design point's per-class free-field margin (buildspec.performance's ship-sized entry moved by each class's low
+    target strength) equals the depth plan's own free-field margin at every site of the design point's 5 m/s wind."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    import reference_plan as rp
+    X = rp.twelve_km_by_site()
+    sites, plans = _sites()
+    calm = [s for s in sites if plans[s]["wind_speed_m_s"] == 5.0]
+    assert len(calm) >= 4
+    for c in rp.REQUIREMENT_CLASSES + ("xl_auv",):
+        for s in calm:
+            assert X["free"][c]["margin_db"] == pytest.approx(plans[s]["classes"][c]["free_field_margin_db"], abs=0.01), (c, s)

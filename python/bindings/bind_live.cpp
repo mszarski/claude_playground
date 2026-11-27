@@ -120,6 +120,31 @@ live::DopplerOptions doppler_options(const Keys& d) {
   if (d.contains("doppler_hypotheses") && !d["doppler_hypotheses"].is_none()) o.hypotheses = d["doppler_hypotheses"].cast<std::int64_t>();
   number(d, "doppler_unknown_ownship_m_s", o.unknown_ownship);
   number(d, "doppler_threshold_db", o.threshold_db);
+  if (d.contains("doppler_combine")) o.combine = live::parse_doppler_combine(d["doppler_combine"].cast<std::string>());
+  if (d.contains("doppler_tone")) {
+    const std::string t = d["doppler_tone"].cast<std::string>();
+    if (t != "off" && t != "bank") throw std::invalid_argument("doppler_tone '" + t + "': one of off, bank");
+    o.tone.enabled = t == "bank";
+  }
+  number(d, "doppler_tone_frequency_hz", o.tone.frequency);
+  number(d, "doppler_tone_start_s", o.tone.start);
+  number(d, "doppler_tone_duration_s", o.tone.duration);
+  number(d, "doppler_tone_window_alpha", o.tone.window_alpha);
+  number(d, "doppler_tone_max_range_rate_m_s", o.tone.max_range_rate);
+  number(d, "doppler_tone_step_m_s", o.tone.step);
+  number(d, "doppler_tone_hop", o.tone.hop);
+  number(d, "doppler_tone_notch_m_s", o.tone.notch);
+  number(d, "doppler_tone_notch_cells", o.tone.notch_cells);
+  if (d.contains("doppler_tone_guard") && !d["doppler_tone_guard"].is_none()) o.tone.guard = d["doppler_tone_guard"].cast<std::int64_t>();
+  if (d.contains("doppler_tone_train") && !d["doppler_tone_train"].is_none()) o.tone.train = d["doppler_tone_train"].cast<std::int64_t>();
+  number(d, "doppler_tone_false_alarms_per_ping", o.tone.false_alarms_per_ping);
+  number(d, "doppler_tone_gate_range_m", o.tone.gate_range);
+  if (d.contains("doppler_tone_gate_bearing_deg") && !d["doppler_tone_gate_bearing_deg"].is_none()) {
+    o.tone.gate_bearing = d["doppler_tone_gate_bearing_deg"].cast<double>() * 3.14159265358979323846 / 180.0;
+  }
+  number(d, "doppler_tone_range_sigma_m", o.tone.range_sigma);
+  number(d, "doppler_tone_sidelobe_db", o.tone.sidelobe_db);
+  number(d, "doppler_tone_leak_margin_db", o.tone.leak_margin_db);
   if (d.contains("doppler_report")) o.report = d["doppler_report"].cast<bool>();
   return o;
 }
@@ -711,12 +736,117 @@ void bind_live(py::module_& m) {
         out["velocity_known"] = p.velocity_known;
         out["baseband_max_range_rate"] = p.baseband_max_range_rate;
         out["threshold_db"] = p.threshold_db;
+        out["combine"] = std::string(live::doppler_combine_name(p.combine));
+        out["budget_divisor"] = p.budget_divisor;
         out["json"] = p.json();
         return out;
       },
       py::arg("record"), py::arg("bearings"), py::arg("options"),
       "The sweep's Doppler bank for this record and the map's bearings (rad) (libs/live doppler.hpp plan_doppler): the "
       "options as the flat doppler_* keys of gpusonar.live.cpp_chain_options. Both engines take their hypotheses from it.");
+  m.def(
+      "live_sweep_only_replica",
+      [](PingRecord& record, const py::dict& options, double default_budget) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_sweep_only_replica: ");
+        const live::TonePlan p = live::plan_tone(record, {}, o, default_budget);
+        Waveform w = record.transmit.waveform;
+        const std::int64_t n = live::sweep_only_replica(w, p);
+        record.transmit.waveform = w;
+        return n;
+      },
+      py::arg("record"), py::arg("options"), py::arg("default_budget") = 1e-3,
+      "The record's train replica with its tone segment zeroed, in place, as the live chain's sweep path uses it with the "
+      "tone path on (libs/live doppler.hpp sweep_only_replica, D3). Returns the samples zeroed.");
+  m.def(
+      "live_tone_plan",
+      [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options, double default_budget) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_tone_plan: ");
+        const live::TonePlan p = live::plan_tone(record, bearings, o, default_budget);
+        py::dict out;
+        out["on"] = p.on;
+        out["tone_only"] = p.tone_only;
+        out["baseband_max_range_rate"] = p.baseband_max_range_rate;
+        out["json"] = p.json();
+        return out;
+      },
+      py::arg("record"), py::arg("bearings"), py::arg("options"), py::arg("default_budget") = 1e-3,
+      "The tone path's plan for this record (libs/live doppler.hpp plan_tone, D3): whether it runs and the baseband allowance it needs.");
+  m.def(
+      "live_tone_stage",
+      [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options, bool hann, double default_budget, bool keep_map,
+         Backend backend, int device) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_tone_stage: ");
+        live::ToneStage st;
+        {
+          py::gil_scoped_release release;
+          st = live::tone_stage(record, bearings, o, hann, default_budget, backend, device, keep_map);
+        }
+        const live::TonePlan& p = st.plan;
+        py::dict plan;
+        plan["on"] = p.on;
+        plan["tone_only"] = p.tone_only;
+        plan["frequency"] = p.frequency;
+        plan["start"] = p.start;
+        plan["duration"] = p.duration;
+        plan["window_alpha"] = p.window_alpha;
+        plan["step"] = p.step;
+        plan["resolution"] = p.resolution;
+        plan["rates"] = p.rates;
+        plan["per_beam"] = p.per_beam;
+        plan["first"] = p.first;
+        plan["ownship"] = p.ownship;
+        plan["notch"] = p.notch;
+        plan["hop"] = p.hop;
+        plan["guard"] = p.guard;
+        plan["train"] = p.train;
+        plan["budget"] = p.budget;
+        plan["baseband_max_range_rate"] = p.baseband_max_range_rate;
+        plan["gate_range"] = p.gate_range;
+        plan["gate_bearing"] = p.gate_bearing;
+        plan["range_sigma"] = p.range_sigma;
+        plan["json"] = p.json();
+        py::list dets;
+        for (const live::ToneDetection& d : st.detections) {
+          py::dict e;
+          e["range"] = d.range;
+          e["bearing"] = d.bearing;
+          e["range_rate"] = d.range_rate;
+          e["snr_db"] = d.snr_db;
+          e["cells"] = d.cells;
+          e["beam"] = d.beam;
+          e["hypothesis"] = d.hypothesis;
+          e["lag"] = d.lag;
+          dets.append(e);
+        }
+        py::dict out;
+        out["plan"] = plan;
+        out["detections"] = dets;
+        out["n_lags"] = st.n_lags;
+        out["tests"] = st.tests;
+        out["factor"] = st.factor;
+        out["fs"] = st.fs;
+        out["lag_ranges"] = st.lag_ranges;
+        if (keep_map && p.on) {
+          const auto nb = static_cast<py::ssize_t>(bearings.size()), nj = static_cast<py::ssize_t>(p.per_beam), nl = static_cast<py::ssize_t>(st.n_lags);
+          py::array_t<float> pw({nb, nj, nl}), ra({nb, nj, nl});
+          std::copy(st.power.begin(), st.power.end(), pw.mutable_data());
+          std::copy(st.ratio.begin(), st.ratio.end(), ra.mutable_data());
+          out["power"] = pw;
+          out["ratio"] = ra;
+        }
+        return out;
+      },
+      py::arg("record"), py::arg("bearings"), py::arg("options"), py::arg("hann") = true, py::arg("default_budget") = 1e-3, py::arg("keep_map") = false,
+      py::arg("backend") = Backend::Host, py::arg("device") = 0,
+      "The tone's Doppler filter bank on a complex baseband record before pulse compression (libs/live doppler.hpp tone_stage, "
+      "D3): the plan, the detections, and with keep_map the bank's power and power over background [beam, hypothesis, lag]. "
+      "Options as the flat doppler_* keys. Both engines' tone path is this function.");
   m.def("live_sweep_mismatch", &live::sweep_mismatch, py::arg("phi"),
         "|integral_0^1 exp(i phi u^2) du|: a linear sweep's compressed peak with a quadratic phase error phi at its ends (doppler.hpp).");
   m.def("live_bank_threshold_db", &live::bank_threshold_db, py::arg("per_beam"),
@@ -1156,6 +1286,14 @@ void bind_live(py::module_& m) {
            "before the first ping the sizes left to be derived are null.")
       .def("resolved", &live::LiveChain::resolved_json,
            "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
+      .def("tone", [](const live::LiveChain& c) {
+             const live::ToneStage& t = c.tone_stage_result();
+             std::string j = t.plan.json();
+             j.pop_back();
+             return j + ", \"detections\": " + std::to_string(t.detections.size()) + ", \"lags\": " + std::to_string(t.n_lags) +
+                    ", \"tests\": " + std::to_string(t.tests) + "}";
+           },
+           "The tone path of the last ping (doppler.hpp tone_stage, D3) as a JSON line: its plan, detections, lags and tests.")
       .def("doppler", [](const live::LiveChain& c) { return c.doppler_plan().json(); },
            "The Doppler bank of the last ping (doppler.hpp) as a JSON line: mode, step, hypotheses, per beam, threshold shift.")
       .def("last_hypotheses", [](const live::LiveChain& c) {
