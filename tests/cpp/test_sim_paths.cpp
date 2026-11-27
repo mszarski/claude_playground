@@ -612,7 +612,11 @@ TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {
   // one-sample pulse the series of the element at the origin is the component's sequence
   // times exp(2 pi i f_d t); an element three samples of travel further along the
   // direction receives it three samples earlier; one displaced across it, unchanged.
+  // The single-shift law (per_frequency_doppler = false, `doppler: centre`): with a one-sample
+  // pulse the shift is all of the Doppler. The per-frequency law, the default since
+  // 2026-11-27, also time-scales the pulse: the next test.
   sim::ReverbParams p;
+  p.per_frequency_doppler = false;
   p.sample_rate = 8000.0;
   p.n_samples = 256;
   p.center_frequency = 16000.0;  // a whole number of cycles per sample: no carrier phase from a lead in samples
@@ -656,6 +660,62 @@ TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {
   EXPECT_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 2, pulse.data(), 1, offsets.data(), 3,
                                   out.data()),
                std::invalid_argument);
+}
+
+TEST(Reverb, PerFrequencyDopplerTimeScalesTheOneSamplePulse) {
+  // The default law: a component's pulse is time-scaled by Gamma = 1 + doppler / fc as well as
+  // shifted. A one-sample pulse (a band-limited impulse) scaled by Gamma is the impulse's
+  // interpolating kernel at Gamma s: q(s) = sinc(Gamma s) w(Gamma s / 8) exp(2 pi i doppler s / fs),
+  // w the Blackman window over +-8 samples (reverb_kernel.hpp kReverbScaleHalf; the form written
+  // out here, not called). The element at the origin receives the shifted sequence convolved
+  // with q, circularly over the n_low samples.
+  sim::ReverbParams p;
+  p.sample_rate = 8000.0;
+  p.n_samples = 256;
+  p.center_frequency = 16000.0;
+  p.sound_speed = kC;
+  p.n_azimuth = 4;
+  p.n_low = 256;
+  ASSERT_TRUE(p.per_frequency_doppler);           // the default
+  const std::vector<double> coarse{-1.0, 1.0};
+  const double level = 0.25 * 8000.0 * 2.0 / (2.0 * kPi / 4.0);  // sigma = 0.5
+  const std::vector<double> density{level, level};
+  const std::vector<double> direction{0.0, 0.0, 1.0};
+  const double fd = 1000.0, gamma = 1.0 + fd / 16000.0;
+  const std::vector<double> doppler{fd};
+  sim::ReverbPower power{coarse.data(), 2, density.data(), 1};
+  power.direction = direction.data();
+  power.doppler = doppler.data();
+  std::mt19937 gen(5);
+  std::normal_distribution<double> normal;
+  std::vector<double> normals(2 * 256);
+  for (double& v : normals) v = normal(gen);
+  const std::vector<std::complex<double>> pulse{{1.0, 0.0}};
+  const std::vector<double> offsets{0.0, 0.0, 0.0};
+  std::vector<float> out(2 * 256);
+  sim::reverb_series(Backend::Host, p, power, normals.data(), 1, pulse.data(), 1, offsets.data(), 1, out.data());
+  const auto seq = [&](int k) {
+    const double a = 2.0 * kPi * fd * k / 8000.0;
+    return 0.5 * std::complex<double>(normals[k], normals[256 + k]) * std::complex<double>(std::cos(a), std::sin(a));
+  };
+  const auto q = [&](int s) {
+    const double x = gamma * s;
+    if (!(std::abs(x) < 8.0)) return std::complex<double>{};
+    const double sinc = x == 0.0 ? 1.0 : std::sin(kPi * x) / (kPi * x);
+    const double w = 0.42 + 0.5 * std::cos(kPi * x / 8.0) + 0.08 * std::cos(2.0 * kPi * x / 8.0);
+    const double a = 2.0 * kPi * fd * s / 8000.0;
+    return sinc * w * std::complex<double>(std::cos(a), std::sin(a));
+  };
+  double worst = 0.0, largest_change = 0.0;
+  for (int k = 0; k < 256; ++k) {
+    std::complex<double> want;
+    for (int s = -9; s <= 9; ++s) want += seq(((k - s) % 256 + 256) % 256) * q(s);
+    const std::complex<double> got(out[2 * k], out[2 * k + 1]);
+    worst = std::max(worst, std::abs(got - want));
+    largest_change = std::max(largest_change, std::abs(want - seq(k)));
+  }
+  EXPECT_LT(worst, 2e-4);
+  EXPECT_GT(largest_change, 1e-2);                  // and the scaling is not nothing (the old law's answer)
 }
 
 namespace {
