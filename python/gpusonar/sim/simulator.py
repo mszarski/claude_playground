@@ -317,6 +317,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             extra["bottom_bounces"] = str(item["bottom_bounces"])
         if item.get("scatterer_motion") is not None:
             extra["scatterer_motion"] = dict(item["scatterer_motion"])
+        # `doppler: centre | per_frequency` (sim/reverb.py): one shift per sector at the centre
+        # frequency (the default) or each frequency its own (opt-in).
+        if item.get("doppler") is not None:
+            extra["doppler"] = str(item["doppler"])
         reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]),
                                  float(item.get("mu_db", -29.0)) + offset,     # used for Lambert items only (set above); others pass `strength`
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),

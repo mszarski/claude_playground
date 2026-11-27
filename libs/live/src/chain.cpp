@@ -331,6 +331,9 @@ LiveChain::LiveChain(const ChainOptions& options)
 Report LiveChain::process(PingRecord& record) {
   const auto t_start = std::chrono::steady_clock::now();
   Report rep;
+  tracker_tapped_ = false;   // the opt-in taps hold this ping's or nothing
+  detector_tapped_ = false;
+  evidence_.clear();
   rep.ping = pings_++;
   rep.sequence = record.metadata.sequence;
   rep.time_ns = record.transmit.time_ns;
@@ -643,6 +646,7 @@ Report LiveChain::process(PingRecord& record) {
     // The statistic on the chain's backend (the device gives the host's flags: detector.hpp, multiscale_cells).
     found = multiscale_detect(fine_.data(), fine_stride, fine_offset, last_power.data(), n_b, n_cells, fine_ranges_, last_ranges, bearings,
                               co.guard, co.train, plan_, background_, opt_.backend, opt_.device, normalised ? given_level.data() : nullptr);
+    detector_tapped_ = true;   // the opt-in detector tap reads background_ (nothing else changes)
     if (bank_on) {
       // Each detection's coarse range rate: the hypothesis of the strongest sample of the maximum map along its nearest
       // bearing, over the range it covers (doppler.hpp detection_hypothesis; live.py the same).
@@ -1056,6 +1060,8 @@ Report LiveChain::process(PingRecord& record) {
     local.push_back(m);
     rep.detections.push_back(d);
   }
+  tracker_.set_tap(tap_tracker_);   // opt-in, read only
+  tracker_tapped_ = resolved_;
   const auto confirmed = resolved_ ? tracker_.update(t, local) : std::vector<const Track*>{};   // D3: see tone_only_ping
   ClassifyOptions co2 = opt_.classify;
   co2.origin_x = f.origin.y - origin_.y;
@@ -1064,7 +1070,7 @@ Report LiveChain::process(PingRecord& record) {
   // Echo grouping after the elevation step below, which finds the bounces (sonar-bal; python/gpusonar/live.py the same).
   const bool group = co2.multipath;
   co2.multipath = false;
-  std::vector<TrackClass> classes = classify_tracks(confirmed, co2);
+  std::vector<TrackClass> classes = classify_tracks(confirmed, co2, tap_classifier_ ? &evidence_ : nullptr);
   // sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
   if (opt_.range_doppler == RangeDoppler::Full && !bank_on) shift_for_target_doppler(classes, lfm_factor, co2.origin_x, co2.origin_y);
   std::vector<std::int64_t> bounces;   // tracks whose straight-line depth lies outside the water
@@ -1112,6 +1118,10 @@ Report LiveChain::process(PingRecord& record) {
   }
   // A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath after
   // grouping, an object left its members a parent that was itself multipath).
+  std::vector<std::pair<Kind, std::int64_t>> before_grouping;
+  if (tap_classifier_) {
+    for (const TrackClass& tc : classes) before_grouping.emplace_back(tc.kind, tc.parent);
+  }
   if (group) {
     co2.multipath = true;
     group_echoes(classes, co2, bounces);
@@ -1120,6 +1130,7 @@ Report LiveChain::process(PingRecord& record) {
       if (std::find(bounces.begin(), bounces.end(), tc.id) != bounces.end()) tc.kind = Kind::Multipath;
     }
   }
+  if (tap_classifier_) evidence_after_grouping(evidence_, before_grouping, classes, bounces);
   for (std::size_t i = 0; i < classes.size(); ++i) {
     rep.tracks[i].kind = kind_name(classes[i].kind);
     rep.tracks[i].parent = classes[i].parent;

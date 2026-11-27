@@ -139,7 +139,12 @@ def test_fls_120k_transit_tracks_static_and_moving_targets_from_a_moving_auv():
         assert t[name]["track_speed_m_s"] < limit, name                       # fixed in the world, though ownship moves
     # change D (the scene takes the sound speed of its 12 deg C water, 1496.8 m/s, not a typed 1500): 10, 11, 10, 13
     # detections on the four pings; at 1500 m/s 12, 11, 10, 12 (the limit was 12).
-    assert max(m["detections_per_ping"]) <= 13
+    # Package revdop (2026-11-27), the reverberation's per-frequency Doppler (the new default): 11, 9, 9, 15 (the limit
+    # was 13). The pulse is time-scaled now, so the reverberation is a new realisation (relative rms change 0.41 of the
+    # same seed's), at the same level (0.01 dB); the count scatters with the realisation: under the old law seed 1 gives
+    # 11, 13, 6, 14, and under the new 12, 12, 8, 15. The bound is the new measured maximum; it is not a statement that
+    # the clutter grew.
+    assert max(m["detections_per_ping"]) <= 15
 
 
 @pytest.mark.parametrize("name", ["fls_170k_transit", "fls_330k_transit"])

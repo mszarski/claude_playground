@@ -303,6 +303,21 @@ class LiveChain {
   // The last ping's map, for display and taps.
   std::vector<float> last_power;
   std::vector<double> last_ranges, bearings;
+  /// Opt-in taps of what exists only inside the chain (docs/tasks/VISUALIZATION.md section 15), off by default; read
+  /// only: the report is bit-identical with them on or off. python/gpusonar/live.py LiveChain `taps.chain` the same.
+  void set_taps(bool tracker, bool classifier, bool detector = false) {
+    tap_tracker_ = tracker;
+    tap_classifier_ = classifier;
+    tap_detector_ = detector;
+  }
+  /// The multiscale detector's background of each cell of the last map [n_bearing][n_cells] (row major, the shape and
+  /// ranges of last_power / last_ranges); nullptr when the tap is off or the multiscale detector did not run then.
+  const std::vector<float>* detector_tap() const { return tap_detector_ && detector_tapped_ ? &background_ : nullptr; }
+  /// The tracker's tap of the last ping (Tracker::last_tap); nullptr when it is off or the tracker did not run then.
+  const TrackerTap* tracker_tap() const { return tap_tracker_ && tracker_tapped_ ? &tracker_.last_tap() : nullptr; }
+  /// The classifier's evidence of the last ping, one per reported track in the report's order; empty when off.
+  const std::vector<ClassEvidence>& class_evidence() const { return evidence_; }
+  bool classifier_tap_on() const { return tap_classifier_; }
 
  private:
   ChainOptions opt_;
@@ -331,6 +346,8 @@ class LiveChain {
   std::int64_t last_ns_ = 0;            ///< the transmit time of the ping before
   std::int64_t clock_offset_ns_ = 0;    ///< what tracker_ping_interval_s has added to the tracker's clock (sonar-4bs)
   std::int64_t pings_without_time_ = 0; ///< Report::pings_without_time
+  bool tap_tracker_ = false, tap_classifier_ = false, tracker_tapped_ = false, tap_detector_ = false, detector_tapped_ = false;
+  std::vector<ClassEvidence> evidence_;
 };
 
 struct PassiveOptions {

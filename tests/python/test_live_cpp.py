@@ -1776,3 +1776,158 @@ def test_program_runs_the_tone_paths_lobe_notch_like_the_python_chain_and_says_i
             assert a["doppler_path"] == b["doppler_path"]
     said = [line for line in out.stderr.splitlines() if "tone grating-lobe notch" in line]
     assert len(said) == 1 and '"lobe_beams": ' in said[0], out.stderr
+
+
+# --- the opt-in chain taps (docs/tasks/VISUALIZATION.md section 15, V6): read only, equal in both engines -------------
+
+ALL_TAPS = {"chain": ["tracker", "classifier", "detector"]}
+
+
+def _line_hash(reports):
+    """sha256 of the report lines without processing_seconds (the only member that is not a function of the data)."""
+    import hashlib
+    text = "\n".join(json.dumps({k: v for k, v in r.items() if k != "processing_seconds"}, allow_nan=False) for r in reports)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _chain_with_taps(engine, records, taps):
+    with LiveChain(dict(CHAIN, engine=engine), taps=taps) as chain:
+        out = []
+        for r in records:
+            rep = chain.process(r)
+            out.append((rep, chain.chain_taps))
+    return [r for r, _ in out], [t for _, t in out]
+
+
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_chain_taps_leave_the_report_lines_bit_identical(pings, engine):
+    off, none = _chain_with_taps(engine, copies(pings), None)
+    on, taps = _chain_with_taps(engine, copies(pings), ALL_TAPS)
+    assert _line_hash(off) == _line_hash(on)
+    assert all(t is None for t in none) and all(set(t) == set(ALL_TAPS["chain"]) for t in taps)
+    assert any(t["tracker"] is not None and t["tracker"]["pairs"] for t in taps)       # the taps hold something
+
+
+def test_chain_taps_are_off_by_default_and_refuse_unknown_names(pings):
+    with LiveChain(dict(CHAIN, engine="cpp")) as chain:
+        chain.process(copies(pings)[0])
+        assert chain.chain_taps is None
+    with pytest.raises(ValueError, match="taps.chain"):
+        LiveChain(dict(CHAIN, engine="python"), taps={"chain": ["gates"]})
+    with pytest.raises(ValueError, match="tracker, classifier or detector"):
+        core.LiveChainCpp(CPP_CHAIN).set_taps(["gates"])
+
+
+def _same_tracker_tap(a, b, pos=1e-5, rel=1e-5):
+    for key in ("before", "took", "missed", "born", "confirmed_now"):
+        assert a[key] == b[key], key
+    assert [d["id"] for d in a["dropped"]] == [d["id"] for d in b["dropped"]]
+    assert [d["reason"] for d in a["dropped"]] == [d["reason"] for d in b["dropped"]]
+    assert (a["gate"], a["association"]) == (b["gate"], b["association"]) and a["time_s"] == pytest.approx(b["time_s"], abs=1e-12)
+    assert [(p["track"], p["detection"], p["gated"], p["nearest"]) for p in a["pairs"]] == \
+           [(p["track"], p["detection"], p["gated"], p["nearest"]) for p in b["pairs"]]
+    for p, q in zip(a["pairs"], b["pairs"]):
+        assert p["d2"] == pytest.approx(q["d2"], rel=rel, abs=1e-6)
+        assert (p["cost"] is None) == (q["cost"] is None)
+        if p["cost"] is not None:
+            assert p["cost"] == pytest.approx(q["cost"], rel=rel, abs=1e-6)
+        np.testing.assert_allclose(p["x"], q["x"], atol=pos)
+        np.testing.assert_allclose(p["s"], q["s"], rtol=rel, atol=1e-9)
+    assert [(t["id"], t["hits"], t["misses"], t["confirmed"]) for t in a["after"]] == \
+           [(t["id"], t["hits"], t["misses"], t["confirmed"]) for t in b["after"]]
+    for t, u in zip(a["after"], b["after"]):
+        np.testing.assert_allclose(t["state"], u["state"], atol=pos)
+        np.testing.assert_allclose(t["cov"], u["cov"], rtol=rel, atol=1e-9)
+
+
+@pytest.mark.parametrize("association", ["likelihood", "in_order"])
+def test_the_two_trackers_taps_are_equal_and_read_only(association):
+    """detect.Tracker.tap and core.LiveTracker.set_tap on the same detections (the scene of
+    test_tracker_and_classifier_match_python): the taps equal to 1e-8, and the tracks with the tap on bit-identical to
+    the tracks with it off in each engine."""
+    rng = np.random.default_rng(8)
+    opts = dict(process_noise=0.3, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0,
+                association=association)
+    py_on, py_off, cpp_on, cpp_off = detect.Tracker(**opts), detect.Tracker(**opts), core.LiveTracker(**opts), core.LiveTracker(**opts)
+    py_on.tap = True
+    cpp_on.set_tap(True)
+    assert cpp_off.last_tap() is None
+    saw = {"dropped": 0, "born": 0, "confirmed_now": 0, "outside": 0}
+    for i in range(12):
+        t = 0.5 * i
+        truth = [(200.0 + 4.0 * t, 30.0), (150.0, -40.0 + 3.0 * t)] + ([(300.0, -20.0)] if i < 5 else [])
+        dets = []
+        for x, y in truth:
+            x, y = x + 0.3 * rng.standard_normal(), y + 0.3 * rng.standard_normal()
+            dets.append((float(np.hypot(x, y)), float(np.arctan2(y, x)), float(15.0 + 5.0 * rng.random()), 2))
+        if rng.random() < 0.6:
+            dets.append((float(rng.uniform(100, 350)), float(rng.uniform(-0.6, 0.6)), 13.0, 1))
+        times = [t + d[0] / 1500.0 for d in dets]
+        mk = lambda: [detect.Detection(*d, time=times[j]) for j, d in enumerate(dets)]
+        a, a0 = py_on.update(t, mk()), py_off.update(t, mk())
+        b, b0 = cpp_on.update(t, dets, times), cpp_off.update(t, dets, times)
+        assert [(tr.id, tr.state.tobytes(), tr.cov.tobytes()) for tr in a] == [(tr.id, tr.state.tobytes(), tr.cov.tobytes()) for tr in a0]
+        assert repr(b) == repr(b0)                     # the C++ tracks, every member, bit for bit (repr: NaN rows equal)
+        _same_tracker_tap(py_on.last_tap, cpp_on.last_tap(), pos=1e-8, rel=1e-8)
+        tap = py_on.last_tap
+        for k in ("dropped", "born", "confirmed_now"):
+            saw[k] += len(tap[k])
+        saw["outside"] += sum(not p["gated"] for p in tap["pairs"])
+        # What was taken is gated; every confirmed track after the update is a track the update returned.
+        took = {(p["track"], p["detection"]) for p in tap["pairs"] if p["gated"]}
+        assert all((x["track"], x["detection"]) in took for x in tap["took"])
+        assert [x["id"] for x in tap["after"] if x["confirmed"]] == [tr.id for tr in a]
+    assert all(v > 0 for v in saw.values()), saw                         # births, confirmations, drops and misses seen
+
+
+def test_the_two_chains_taps_are_equal(pings):
+    """Both engines' chain taps on the six pings of the moving-ownship scene: the tracker's (ids, flags exact; numbers
+    to 1e-5), the classifier's evidence (rules, kinds, later changes exact; numbers to 1e-6) and the detector's
+    background (float32, to 1e-5 relative) with its plan. The significance `need` to 1e-5: the C++ engine's Student's t
+    quantile is its own approximation (classify.cpp t_ratio)."""
+    _, py = _chain_with_taps("python", copies(pings), ALL_TAPS)
+    _, cpp = _chain_with_taps("cpp", copies(pings), ALL_TAPS)
+    for a, b in zip(py, cpp):
+        assert (a["tracker"] is None) == (b["tracker"] is None)
+        if a["tracker"] is not None:
+            _same_tracker_tap(a["tracker"], b["tracker"])
+        assert [(e["id"], e["rule"], e["kind"], e["later"], e["rows"], e["fitted"], e["steady"]) for e in a["classifier"]] == \
+               [(e["id"], e["rule"], e["kind"], e["later"], e["rows"], e["fitted"], e["steady"]) for e in b["classifier"]]
+        for e, f in zip(a["classifier"], b["classifier"]):
+            for key in ("speed", "speed_sigma", "need", "seen", "fit_rms", "limit", "extent_cells"):
+                # need: the C++ classifier's Student's t quantile is its own approximation (classify.cpp t_ratio), within 1e-5
+                tol = 1e-5 if key == "need" else 1e-6
+                assert (e[key] is None) == (f[key] is None) and (e[key] is None or e[key] == pytest.approx(f[key], rel=tol, abs=1e-6)), key
+        da, db = a["detector"], b["detector"]
+        assert da["background"].shape == db["background"].shape and da["plan"] == db["plan"]
+        np.testing.assert_allclose(da["background"], db["background"], rtol=1e-5)
+        np.testing.assert_allclose(da["ranges"], db["ranges"], atol=1e-9)
+    assert {e["rule"] for t in py for e in t["classifier"]} >= {"few_points", "static_slow", "mover"}
+
+
+def test_the_classifier_evidence_says_why_each_kind(pings):
+    """The evidence's numbers are the rule's: a mover's speed clears min_speed and need x sigma, a static one's is under
+    static_speed; the evidence's kinds are the report's (no multipath here)."""
+    reports, taps_ = _chain_with_taps("python", copies(pings), {"chain": ["classifier"]})
+    c = CHAIN["classify"]
+    for rep, t in zip(reports, taps_):
+        ev = t["classifier"]
+        assert [e["id"] for e in ev] == [tr["id"] for tr in rep["tracks"]]
+        assert [e["kind"] for e in ev] == [tr["kind"] for tr in rep["tracks"]]
+        for e in ev:
+            if e["rule"] == "mover":
+                assert e["speed"] >= c["min_speed"] and e["speed"] >= e["need"] * e["speed_sigma"]
+            if e["rule"] == "static_slow":
+                assert e["speed"] < c["static_speed"]
+            if e["rule"] == "few_points":
+                assert e["rows"] < 4
+
+
+def test_the_tracker_tap_is_written_beside_the_records_by_the_tap_writer(pings, tmp_path):
+    with LiveChain(dict(CHAIN, engine="cpp"), taps={"dir": str(tmp_path / "taps"), "pings": 3, **ALL_TAPS}) as chain:
+        chain.run(copies(pings)[:3])
+    from gpusonar import taps as tapmod
+    stages = [e["stage"] for e in tapmod.manifest(tmp_path / "taps" / "ping0002")]
+    assert {"tracker", "classifier", "detector", "detector_plan", "report"} <= set(stages)
+    bg = tapmod.read_arrays(tmp_path / "taps" / "ping0002", "detector")
+    assert bg["background"].ndim == 2 and len(bg["ranges"]) == bg["background"].shape[1]

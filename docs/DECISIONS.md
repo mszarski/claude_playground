@@ -5548,3 +5548,111 @@ is `docs/design/popoto_trade_study.md` sections 0 and 0a and `docs/tasks/DOPPLER
   state 4. D-249's "about 20 to 25 %": against the true shift the applied one is 25 % off at 4 kHz
   and 17 % at 6 kHz for a 4-6 kHz band. GoogleTest at the merged tree: 217 cases (216 `TEST`, 1
   `TEST_P`), not stated in D-250.
+
+### D-251 The reverberation's Doppler is per frequency, and it is the default (issue sonar-l8yp; branch `revdop`; the owner: "FIx it"; closes D-249; a default moved)
+
+2026-11-27. Status of every number: ours. The account is `docs/PHYSICS_NOTES.md` 14.1 and 14.7 and
+`docs/handoff/SIMULATION.md`.
+
+- **Worse, first.**
+  - Every committed result simulated with a moving platform and boundary reverberation before this
+    entry used the old law. The gallery is regenerated (D-253). Still stale:
+    `docs/tasks/doppler_{baseline,bank_eval,d3_eval,large_submerged_eval}.json`,
+    `docs/design/popoto_12km.json`, `docs/handoff/examples/gallery_quick_fls_120k_transit.json` and
+    the `docs/RESULTS.md` tables built from them.
+  - The gallery on the device, before -> after (D-253's job against the committed gallery of
+    2026-11-24, which also predates other decisions): `fls_170k_traffic` gains one mover that is not
+    on a moving object (0 -> 1; movers 3 -> 4); `popoto_env_gravel_30m` confirmed tracks 3 -> 2
+    (one static lost); `fls_120k_transit` detections a ping [6,7,7,6,7,9,8,7,7,7] ->
+    [5,5,6,5,6,8,8,6,7,7]; `fls_120k_cluttered_seabed` confirmed tracks 65 -> 66. Every named
+    target is tracked as before with the same class.
+  - Two tests changed with the default, said plainly: `test_realistic_scenes.py`'s bound on
+    `fls_120k_transit`'s detections a ping went 13 -> 15 (the measured maximum under the new law);
+    `test_moving_ownship.py`'s reverberation Doppler test sums six seeds' spectra where it took one
+    (tolerances unchanged). No tolerance was loosened.
+  - The generator is 1.0 to 1.14 times slower in C++, 1.1 to 1.4 times in NumPy (host).
+- The defect measured (one lit sector at 22.5 degrees, 3 m/s, tones at 4.5 and 6.5 kHz about a
+  5.5 kHz centre): old law both tones at 20.28 / 20.41 Hz; physical 16.63 / 24.02 Hz; new law 16.63 /
+  24.01 Hz in NumPy, the C++ host and the batched form. The 6.5 kHz ridge on the 4.0-6.6 kHz train:
+  0.817 -> 1.007 of its physical place.
+- New key on reverberation items, `doppler: per_frequency | centre` (`docs/CONFIGURATION.md`);
+  the default is `per_frequency` (each row's pulse time-scaled by 1 + d / fc with a 16-tap windowed
+  sinc; the existing shift kept). `centre` reproduces earlier records bit for bit (SHA-256, four
+  scenes, both engines). Scenes with a still platform or without boundary reverberation are
+  bit-identical under the new default (eight scenes, both engines). The same approximation was in
+  the monostatic and bistatic generators and the scatterer-motion shifts; echoes, one-way sources
+  and the direct sound were already exact.
+- Levels on the 21 shipped scenes with a moving platform and boundary reverberation (CPU, quick
+  forms): whole-record within 0.1 dB everywhere; the 12 km tone-and-sweep scene's compressed beam
+  reverberation 1 to 7.8 dB lower 6 to 18 degrees off broadside (the tone's own-motion shift now at
+  its true place); twelve long-range scenes and the flank scene within 0.31 dB a block, the same
+  detections a ping, SNRs within 0.16 dB.
+- The device runs the new law in the same kernel header as the host; it built and passed in the
+  suite of D-254. Tests: `tests/python/test_reverb_doppler.py`, GoogleTest
+  `Reverb.PerFrequencyDopplerTimeScalesTheOneSamplePulse`.
+
+### D-252 The tone path at 12 km, counted again with the corrected simulator and the notch (follows D-246, D-251)
+
+2026-11-27. Ours; Hugging Face job 6b0947c354072e8b71697a5a, tree `batch7` at `81364e0`, NVIDIA L4,
+dataset folder `doppler_b7`; `popoto_12km_large_submerged_tone`, 4 target-free pings, both engines
+agreeing.
+
+- Not shown: more than 4 pings; reverberation on the flank array under way; the far-sidelobe case
+  of D-246 on a real scene.
+- **Default budget, tone path on: 0 false detections with the lobe notch (auto); 17 with it off,
+  all 17 on a lobe's ridge.** Tone path off: 1. (Before D-251, D-246: 25 and 22.) So the lobes were
+  the cause on this scene and the notch removes them; D-243's "22 in 4" was the simulator.
+- At 3 a ping: tone path off 16; on with the notch 25, of which 3 are the tone's and 22 the sweep
+  path's.
+- Detections on target pings matching no target, notch auto: 7 (2 at the own notch's edge, 5 from
+  the sweep path); notch off: 45 (38 on a lobe's ridge).
+- `flank_patrol_doppler_tone` (still platform, so unchanged by D-251): as D-241 (1 false detection
+  in 4 pings at the default budget, at the own notch's edge; 16 at 3 a ping, 12 the tone's).
+- The tone path stays off by default (D-244). The far-sidelobe remedy (issue sonar-wntj) is not
+  shown to be needed on this scene.
+
+### D-253 Visualization V6: the live chain in the viewer, opt-in taps in both engines; audio fixes (issue sonar-6k79; branch `viz6`; no default chain behaviour changed)
+
+2026-11-27. Ours. The account is `docs/tasks/VISUALIZATION.md` section 15.
+
+- **Wrong or not done, first.**
+  - The chain's default `look: starboard` (a flank array's) puts a forward-looking sonar's echoes
+    astern and mirrored (tracks 150 to 230 m behind the sonar). The VIEWER sets `look: port` when no
+    deployment file gives `look` and the default faces away from the boresight, and says so on the
+    page; the chain is unchanged. Open with the owner: a deployment block for the FLS
+    (orchestrator's recommendation).
+  - The two pool FLS scenes cannot be run by the chain's defaults (window under three range cells).
+    `popoto_env_summer_mud_60m` gives no detection on 6 pings (not investigated; the site of the
+    trade study's shadow).
+  - Most scenes were viewed in the gallery's quick form (4 pings). FLS tracks are mostly seabed
+    clutter under flank-tuned defaults. Only the rail scenes' sound was remade with the new default;
+    nobody has listened.
+- Opt-in taps, default off, read only, in both engines: the tracker's gates, associations, births,
+  confirmations and drops with their reason, each track's state and covariance; the classifier's
+  evidence per track; the detector's background. Report lines bit-identical to a build of `67d962b`
+  with taps off and with taps on (12 of 12 hashes); the engines' taps equal at 1e-5; cost within
+  noise. No report-line field, no record field.
+- The viewer's chain layer from the report line: the cell map as a fan, detections, tracks with
+  history, the truth and each track's distance from it; `--chain-engine both` showed no difference
+  between the engines on 15 scenes.
+- Audio: time stretch is the default for records under 0.5 s (the owner, 2026-11-27: "this includes
+  fls, yes of course that makes sense"); single arrivals are ranked by the synthesis's amplitude;
+  pages say the parts are taken before the front end and where they do not sum. Four existing audio
+  tests now name `method="heterodyne"`, the default having moved.
+- The gallery is regenerated on this batch's tree under D-251 and committed whole (job
+  6b0947c46c5d61fff188c465; 57 files); this also closes the one-detection differences held back
+  since D-240 (issue sonar-pli3: they are superseded by the new realisation, not explained).
+
+### D-254 The merge of D-251 to D-253 (the seventh batch)
+
+2026-11-27.
+
+- Full GPU suite on the batch's tree (branch `batch7` at `81364e0`; NVIDIA L4; three shards,
+  Hugging Face jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461; the
+  same switches as D-250): **3392 passed, 122 skipped, 4 xfailed, none failed**. Before: 3321
+  passed, 121 skipped, 5 xfailed (D-250; the fifth was `test_hsb.py`'s load-dependent one). The
+  tracker-view branch alone: 3357 passed (jobs 6b0946096c5d61fff188c2d3, 6b09460a6c5d61fff188c2d9,
+  6b09460a54072e8b71697883).
+- One conflict in building the batch (`docs/handoff/SIMULATION.md`: the fix branch's row kept).
+- At this tree: 98 scenario files; 169 Python test files (2044 `def test_` functions); GoogleTest 218
+  cases (217 `TEST` and 1 `TEST_P`).

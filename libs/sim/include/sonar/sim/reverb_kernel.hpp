@@ -96,6 +96,57 @@ SONAR_HD inline void reverb_phasor(double turns, float& c, float& s) {
   s = std::sin(a);
 }
 
+/// Half the taps of the band-limited interpolation that time-scales a pulse (per-frequency
+/// Doppler, `ReverbParams::per_frequency_doppler`): a Blackman-windowed sinc of 2 x 8 taps.
+/// Ours: measured error below -75 dB of the peak for tones up to a sixth of the rate (the
+/// generator's rate is at least four times the band, so the band lies within an eighth).
+inline constexpr std::int32_t kReverbScaleHalf = 8;
+
+/// Sample k of a pulse time-scaled by `eta`: p(eta s) for the signed sample s of k (k, or
+/// k - n_low past the middle: the pulse is periodic in n_low, as its transform is), from the
+/// pulse's own samples by band-limited interpolation. `pulse` is interleaved complex, [n_taps]
+/// (n_taps <= n_low; zero from n_taps to n_low). The echo of a still boundary seen from a
+/// moving platform is the pulse time-scaled by Gamma = 1 - dT/dt, so that a line at f comes
+/// back at Gamma f (TR 0702 eqs. (63)-(64)). python/gpusonar/sim/reverb.py scaled_pulse is the
+/// same in NumPy.
+template <class T>
+SONAR_HD inline void reverb_scaled_pulse(const T* pulse, std::int64_t n_taps, std::int64_t n_low, std::int64_t k,
+                                         double eta, double& re, double& im) {
+  constexpr std::int32_t h = kReverbScaleHalf;
+  const double pi = 3.14159265358979323846;
+  const std::int64_t s = 2 * k <= n_low ? k : k - n_low;
+  const double x = eta * static_cast<double>(s);
+  const double j0 = std::floor(x);
+  const double fr = x - j0;
+  const std::int64_t first = static_cast<std::int64_t>(j0) - h + 1;   // the taps are first .. first + 2h - 1
+  std::int64_t m = first % n_low;
+  if (m < 0) m += n_low;
+  re = 0.0;
+  im = 0.0;
+  if (!(m < n_taps || m + 2 * h - 1 >= n_low)) return;                // no tap on the pulse
+  const double sp = std::sin(pi * fr);
+  // The window's angle pi d / h at the distance d = fr - i of tap i = t - h + 1, stepped down
+  // by pi / h from tap to tap.
+  double ca = std::cos(pi * (fr + h - 1) / h), sa = std::sin(pi * (fr + h - 1) / h);
+  const double cs = std::cos(pi / h), ss = std::sin(pi / h);
+  for (std::int32_t t = 0; t < 2 * h; ++t) {
+    const std::int32_t i = t - h + 1;
+    std::int64_t idx = m + t;
+    while (idx >= n_low) idx -= n_low;
+    if (idx < n_taps) {
+      const double d = fr - static_cast<double>(i);
+      // sin(pi (fr - i)) = (-1)^i sin(pi fr)
+      const double sinc = d == 0.0 ? 1.0 : (i % 2 == 0 ? sp : -sp) / (pi * d);
+      const double window = 0.42 + 0.5 * ca + 0.08 * (2.0 * ca * ca - 1.0);
+      re += sinc * window * static_cast<double>(pulse[2 * idx]);
+      im += sinc * window * static_cast<double>(pulse[2 * idx + 1]);
+    }
+    const double nc = ca * cs + sa * ss;
+    sa = sa * cs - ca * ss;
+    ca = nc;
+  }
+}
+
 /// numpy.interp at x with zero outside the grid (the reference code walks the grid; a
 /// kernel element finds its interval by bisection).
 SONAR_HD inline double reverb_interp(double x, const double* xp, const double* fp, std::int64_t n) {
@@ -149,15 +200,33 @@ struct ReverbShapeKernel {
 
 /// The pulse of each component, shifted by the component's Doppler and zero padded:
 /// p[j, k] = pulse[k] exp(2 pi i doppler[j] k / fs_low) for k < n_taps.
+/// With `per_frequency` the pulse is also time-scaled by Gamma = 1 + doppler[j] / fc, so that
+/// every frequency f of it is shifted by doppler[j] f / fc:
+/// p[j, k] = pulse(Gamma s) exp(2 pi i doppler[j] s / fs_low), s the signed sample of k
+/// (reverb_scaled_pulse).
 struct ReverbPulseKernel {
   const float* pulse;     ///< [n_taps] interleaved complex
   const double* doppler;  ///< [count] Hz
   float* p;               ///< [count, n_low] interleaved complex
   std::int64_t n_low, n_taps;
   double fs_low;
+  bool per_frequency;
+  double center_frequency;  ///< fc, Hz: Gamma = 1 + doppler / fc (per_frequency only)
 
   SONAR_HD void operator()(std::int64_t i) const {
     const std::int64_t j = i / n_low, k = i % n_low;
+    if (per_frequency && doppler[j] != 0.0) {
+      const double d = doppler[j];
+      double re = 0.0, im = 0.0;
+      reverb_scaled_pulse(pulse, n_taps, n_low, k, 1.0 + d / center_frequency, re, im);
+      const std::int64_t s = 2 * k <= n_low ? k : k - n_low;
+      float c, sn;
+      reverb_phasor(d * (static_cast<double>(s) * (1.0 / fs_low)), c, sn);
+      const auto a = static_cast<float>(re), b = static_cast<float>(im);
+      p[2 * i] = a * c - b * sn;
+      p[2 * i + 1] = a * sn + b * c;
+      return;
+    }
     if (k >= n_taps) {
       p[2 * i] = 0.0F;
       p[2 * i + 1] = 0.0F;

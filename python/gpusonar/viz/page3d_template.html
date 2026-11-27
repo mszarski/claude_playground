@@ -27,12 +27,16 @@ button,select{font:inherit} a{color:var(--acc)}
 #snd{right:16px;bottom:96px;width:min(460px,calc(100% - 32px))}
 #snd canvas{width:100%;height:150px;display:block;background:#000;border-radius:3px;margin-top:4px}
 #snd .row{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center}
-@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}#snd{bottom:140px}}
+#chn{left:16px;bottom:76px;width:min(600px,calc(100% - 32px));max-height:44%;overflow:auto}
+#chn canvas{width:100%;height:120px;display:block;background:#fff;border:1px solid var(--line);border-radius:3px;margin-top:4px}
+body.haschain #info{max-height:calc(56% - 110px)}
+@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}#snd{bottom:140px}#chn{max-height:35%}}
 </style></head><body>
 <div id="view"></div><div id="labels"></div>
 <div class="panel" id="info"></div>
 <div class="panel" id="pick" hidden></div>
 <div class="panel" id="snd" hidden></div>
+<div class="panel" id="chn" hidden></div>
 <div class="panel" id="ctl">
  <button id="play" title="move a dot along every ray">play</button>
  <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
@@ -81,7 +85,7 @@ scene.background = new THREE.Color(getComputedStyle(document.body).backgroundCol
 const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1e7);
 scene.add(new THREE.AmbientLight(0xffffff, 1.6)); const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(0.4,1,0.3); scene.add(dl);
 const world = new THREE.Group(); scene.add(world);
-const G = {}; for (const k of ['surface','bed','beams','projpat','array','targets','motion','rays','oneway','direct']) { G[k]=new THREE.Group(); world.add(G[k]); }
+const G = {}; for (const k of ['surface','bed','beams','projpat','array','targets','motion','rays','oneway','direct','chain']) { G[k]=new THREE.Group(); world.add(G[k]); }
 let vex = 1;
 const ctl = {target:new THREE.Vector3(), az:0.85, el:0.45, dist:1.7*span};
 function place(){ const c=ctl; camera.position.set(c.target.x+c.dist*Math.cos(c.el)*Math.sin(c.az), c.target.y+c.dist*Math.sin(c.el), c.target.z+c.dist*Math.cos(c.el)*Math.cos(c.az));
@@ -262,7 +266,9 @@ function ssp(){ const W=170, Hh=120, prof=[]; if (E.ssp_section){ E.ssp_section.
 const missing = [...(D.missing||[]), ...(S3.notes||[])];
 if (D.undrawn) missing.push(`${D.undrawn} eigenray(s) of the trace have no path to draw (see above)`);
 const lim = D.limits||{}; missing.push(`page thinned: the ${lim.max_rays} strongest drawable eigenrays of each leg and the ${lim.max_pairs} strongest of ${D.n_pairs} two-way pairs; polylines simplified (tolerance x${lim.tolerance}).` + (lim.over_budget?' STILL OVER THE SIZE BUDGET.':''));
-missing.push((window.__AUDIO ? 'sound: the selected hydrophone (panel at the lower right); made audible as the panel says.' : 'sound: none beside this page (tools/scenario_view.py --audio side writes NAME.audio/ next to it).') + ' The live chain\'s tracker taps (V6) are not on this page yet.');
+missing.push(window.__AUDIO ? 'sound: the selected hydrophone (panel at the lower right); made audible as the panel says.' : 'sound: none beside this page (tools/scenario_view.py --audio side writes NAME.audio/ next to it).');
+missing.push(D.chain ? 'the live chain (panel at the lower left): what it reported on each ping, and its opt-in taps; a picture of the chain on simulated pings, not a measurement.'
+  : 'no chain run for this scene' + (D.chain_missing ? ': ' + D.chain_missing : `: make it with \`PYTHONPATH=python python3 tools/scenario_view.py ${D.scenario} --chain --out DIR\` (a line-array scene with several pings)`));
 $('info').innerHTML = `<h1>${esc(D.scenario)}</h1><div class="m">tier ${esc(D.tier)} · ${esc(D.sonar.name)} (${esc(D.sonar.mode)}) · ${fx(D.sonar.band_hz[0]/1e3,1)}–${fx(D.sonar.band_hz[1]/1e3,1)} kHz · ${H.length} hydrophone${H.length===1?'':'s'} · ${esc(D.view?.note||'ping '+D.ping)}</div>`
  + `<div><a href="${esc(D.links?.png)}">2-D page</a>${D.links?.index?` · <a href="${esc(D.links.index)}">index</a>`:''} · <span class="m">a picture of the simulator, not a measurement</span></div>`
  + `<p${RAYS.length?'':' class="warn"'}>${esc(rayNote)}</p>`
@@ -408,8 +414,9 @@ if (A){ const P=A.plan, snd=$('snd'); snd.hidden=false;
    <label>clock <select id="sclock"><option value="skip">skip the silence (start at the record)</option><option value="real">real time from the transmit</option></select></label>
    <label>rate <select id="srate">${[0.25,0.5,1,2].map(r=>`<option value="${r}"${r===1?' selected':''}>${r}×</option>`).join('')}</select></label>
    <button id="splay">play</button>${A.stereo?` <a href="${esc(A.stereo.src||A.dir+'/'+A.stereo.file)}" download>stereo pair h${A.stereo.channels.join(' + h')}</a>`:''}</div>
+   ${A.front_end && A.front_end.mismatch ? `<div class="warn" id="sfront"><b>parts ≠ record:</b> ${esc(A.front_end.statement)}</div>` : ''}${A.warning_words ? `<div class="warn">${esc(A.warning_words)}</div>` : ''}
    <canvas id="scv"></canvas><div class="m" id="sinfo"></div>
-   <details><summary>how this sound was made</summary><div class="m">${esc(A.method_words)}. ${esc(A.levels)}. Time: ${esc(A.time.scene_to_audio)} (record start ${fx(A.record_start_s,4)} s after the transmit; ${mapText}). The page's clock is the audio's: the slider, the dots on the rays and the lit hydrophones follow it. "skip the silence" starts at the record (nothing is recorded before its window opens); "real time" runs from the transmit at the chosen rate and starts the sound when the window opens. The rate changes pitch with speed (no pitch correction). Parts (echoes, each reverberation item, noise, the direct sound) and single arrivals exist for hydrophone${A.parts_channels.length>1?'s':''} ${A.parts_channels.join(', ')}; the whole record for every hydrophone. Parts are the simulator's taps before the ADC.</div></details>`;
+   <details><summary>how this sound was made</summary><div class="m">${esc(A.method_words)}. ${esc(A.levels)}. Time: ${esc(A.time.scene_to_audio)} (record start ${fx(A.record_start_s,4)} s after the transmit; ${mapText}). The page's clock is the audio's: the slider, the dots on the rays and the lit hydrophones follow it. "skip the silence" starts at the record (nothing is recorded before its window opens); "real time" runs from the transmit at the chosen rate and starts the sound when the window opens. The rate changes pitch with speed (no pitch correction). Parts (echoes, each reverberation item, noise, the direct sound) and single arrivals exist for hydrophone${A.parts_channels.length>1?'s':''} ${A.parts_channels.join(', ')}; the whole record for every hydrophone. ${esc(A.front_end ? A.front_end.statement : "Parts are the simulator's taps before the ADC.")} ${(A.notes||[]).map(esc).join(' ')}</div></details>`;
   $('skind').addEventListener('change', e=>{ setSound(sndHyd, e.target.value); });
   $('sclock').addEventListener('change', e=>{ clockMode=e.target.value; });
   $('srate').addEventListener('change', e=>{ rate=+e.target.value; audioEl.playbackRate=rate; });
@@ -431,6 +438,110 @@ if ($('ping')){ const pin=$('ping'), pval=$('pval');
   let stepper=null; pb.addEventListener('click',()=>{ if (stepper){ clearInterval(stepper); stepper=null; pb.textContent='step pings'; return; }
     pb.textContent='stop'; stepper=setInterval(()=>{ pin.value=String((+pin.value+1)%M.times.length); upd(); draw(); }, 400); }); }
 
+// ---------- the live chain (V6, viz/chain.py): what it reported on each ping, and its opt-in taps ----------
+const C = D.chain;
+let chainK = 0, chainState = null;
+const SNRC = v => { const t=Math.max(0, Math.min(1, (v-10)/25)); return new THREE.Color().setHSL(0.66-0.66*t, 0.85, 0.45); };
+const KINDC = {mover:'#eb6834', static:'#2a78d6', line:'#1baf7a', multipath:'#eda100', uncertain:'#9a9a9a'};
+const chainOn = {map:true, det:true, trk:true, truth:true, cov:true, gates:true};
+function ellipse(c, nn, ne, ee, k, z){ const a=(nn+ee)/2, b=Math.sqrt(Math.max(((nn-ee)/2)**2+ne*ne,0)), l1=a+b, l2=Math.max(a-b,0), th=0.5*Math.atan2(2*ne, nn-ee), out=[];
+  for (let i=0;i<=40;i++){ const f=2*Math.PI*i/40, u=k*Math.sqrt(l1)*Math.cos(f), v=k*Math.sqrt(l2)*Math.sin(f);
+    out.push([c[0]+u*Math.cos(th)-v*Math.sin(th), c[1]+u*Math.sin(th)+v*Math.cos(th), z]); } return out; }
+function chainClear(){ for (const o of [...G.chain.children]){ G.chain.remove(o); o.traverse?.(x=>{ x.geometry?.dispose?.(); if (x.material){ x.material.map?.dispose?.(); x.material.dispose?.(); } }); }
+  for (const l of LABELS.filter(l=>l.layer==='chain')){ l.el.remove(); } for (let i=LABELS.length-1;i>=0;i--) if (LABELS[i].layer==='chain') LABELS.splice(i,1); }
+function chainDraw(k){ if (!C) return; chainClear(); const P=C.pings[k], g=P.geometry, o=P.ownship, z=o[2];
+  const dir=b=>{ const r=b*Math.PI/180; return [Math.sin(r)*g.axis[0]+Math.cos(r)*g.broadside[0], Math.sin(r)*g.axis[1]+Math.cos(r)*g.broadside[1]]; };
+  const at=(r,b)=>{ const d=dir(b); return [o[0]+r*d[0], o[1]+r*d[1], z]; };
+  const st={det:0, trk:0, truth:0, ell:0, gates:0, map:false};
+  if (P.map && chainOn.map){ const m=P.map, cv=document.createElement('canvas'); cv.width=m.cols; cv.height=m.rows; const cx=cv.getContext('2d'), im=cx.createImageData(m.cols, m.rows);
+    const u=Uint8Array.from(atob(m.u8), ch=>ch.charCodeAt(0));
+    for (let i=0;i<u.length;i++){ const v=u[i], a=Math.min(185, v*1.6); im.data[4*i]=Math.round(255-0.35*v); im.data[4*i+1]=Math.round(240-0.75*v); im.data[4*i+2]=Math.round(200-0.75*v); im.data[4*i+3]=Math.min(255, 70+a); }
+    cx.putImageData(im,0,0); const tex=new THREE.CanvasTexture(cv); tex.flipY=false; tex.magFilter=THREE.NearestFilter;
+    const nr=Math.min(m.cols, 120), pos=[], uv=[], idx=[];
+    for (let i=0;i<=m.rows;i++) for (let j=0;j<=nr;j++){ const p=at(m.r0+m.dr*m.cols*j/nr, m.b0+m.db*i); pos.push(...L(p).toArray()); uv.push(j/nr, i/m.rows); }
+    for (let i=0;i<m.rows;i++) for (let j=0;j<nr;j++){ const a=i*(nr+1)+j; idx.push(a,a+1,a+nr+1, a+1,a+nr+2,a+nr+1); }
+    const geo=new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2)); geo.setIndex(idx);
+    const mesh=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide, depthWrite:false})); mesh.renderOrder=2; G.chain.add(mesh); st.map=true; }
+  if (chainOn.det && P.detections.length){ const pts=P.detections.map(d=>at(d.range_m, d.bearing_deg));
+    G.chain.add(points(pts, 0xffffff, 9, {colors:P.detections.map(d=>d.doppler_path==='tone'?'#1baf7a':d.doppler_path==='both'?'#8e5cc4':'#'+SNRC(d.snr_db).getHexString()), depthTest:false})); st.det=P.detections.length; }
+  const ev={}; (P.evidence||[]).forEach(e=>ev[e.id]=e); const asc={}; (P.association||[]).forEach(a=>asc[a.id]=a);
+  if (chainOn.trk){ const Tarrow=3*((C.times_s&&C.times_s.length>1)?(C.times_s[C.times_s.length-1]-C.times_s[0])/(C.times_s.length-1):1);
+    for (const t of P.tracks){ const hist=[]; for (let q=0;q<=k;q++){ const u=C.pings[q].tracks.find(x=>x.id===t.id); if (u) hist.push([u.x,u.y,z]); }
+      const col=KINDC[t.kind]||'#555'; if (hist.length>1) G.chain.add(line(hist, col, {opacity:0.95}));
+      G.chain.add(points([[t.x,t.y,z]], col, 11, {depthTest:false}));
+      const sp=Math.hypot(t.vx,t.vy); if (sp>1e-6){ const len=Math.max(sp*Tarrow, span*0.004); G.chain.add(new THREE.ArrowHelper(LD([t.vx/sp,t.vy/sp,0]), L([t.x,t.y,z]), len, new THREE.Color(col).getHex(), len*0.25, len*0.12)); }
+      const e=ev[t.id], a=asc[t.id];
+      label(`${t.id} ${t.kind}`, [t.x,t.y,z], 'tgt', 'chain'); st.trk++; } }
+  if (chainOn.truth && C.truth.length){ const tp=C.truth.map(x=>x.positions[Math.min(k, x.positions.length-1)]);
+    G.chain.add(points(tp.map(p=>[p[0],p[1],z]), 0x1baf7a, 13, {depthTest:false})); C.truth.forEach((x,i)=>label(`truth: ${x.label}`, [tp[i][0],tp[i][1],z], 'surf', 'chain')); st.truth=tp.length;
+    for (const t of P.tracks){ const a=asc[t.id]; if (!a||a.truth==null) continue; const x=C.truth.find(y=>y.label===a.truth); if (!x) continue; const p=x.positions[Math.min(k,x.positions.length-1)];
+      G.chain.add(line([[t.x,t.y,z],[p[0],p[1],z]], 0x666666, {dashed:true, dash:span/150, opacity:0.7})); } }
+  const T=P.tracker;
+  if (T && chainOn.cov) for (const t of T.after){ const [nn,ne,ee]=t.cov; G.chain.add(line(ellipse(t.pos, nn, ne, ee, 2, z), t.confirmed?0x8e5cc4:0xaaaaaa, {opacity:0.9})); st.ell++; }
+  if (T && chainOn.gates){ for (const q of T.pairs.filter(q=>q.nearest)){ const [nn,ne,ee]=q.s; G.chain.add(line(ellipse(q.pos, nn, ne, ee, T.gate, z), q.gated?0x2a78d6:0xbbbbbb, {dashed:true, dash:span/200, opacity:q.gated?0.8:0.4})); st.gates++; }
+    for (const tk of T.took){ const q=T.pairs.find(p=>p.track===tk.track && p.detection===tk.detection); const d=P.detections[tk.detection]; if (!q||!d) continue;
+      G.chain.add(line([[q.pos[0],q.pos[1],z], at(d.range_m,d.bearing_deg)], 0x2a78d6, {opacity:0.9})); } }
+  chainState=st; return st; }
+function chainProfile(k){ const cv=$('chcv'); if (!cv) return; const P=C.pings[k], m=P.map; const W=cv.width=cv.clientWidth*devicePixelRatio, Hh=cv.height=cv.clientHeight*devicePixelRatio; const g=cv.getContext('2d'); g.clearRect(0,0,W,Hh);
+  if (!m){ g.fillText('no map on this ping', 10, 20); return; }
+  const sel=$('chbeam'); let row = sel && sel.value!=='' ? +sel.value : -1;
+  if (row<0){ const d=[...P.detections].sort((a,b)=>b.snr_db-a.snr_db)[0]; row = d ? Math.max(0, Math.min(m.rows-1, Math.floor((d.bearing_deg-m.b0)/m.db))) : Math.floor(m.rows/2); }
+  const u=Uint8Array.from(atob(m.u8), ch=>ch.charCodeAt(0)), bg=m.background_u8 ? Uint8Array.from(atob(m.background_u8), ch=>ch.charCodeAt(0)) : null;
+  const sc=v=>m.lo_db+v/255*(m.hi_db-m.lo_db), X=j=>36+j/(m.cols-1)*(W-44), Y=db=>Hh-16-(db-m.lo_db)/(m.hi_db+12-m.lo_db)*(Hh-24);
+  const plot=(f,color,dash)=>{ g.beginPath(); g.setLineDash(dash||[]); g.strokeStyle=color; g.lineWidth=devicePixelRatio; for (let j=0;j<m.cols;j++){ const y=Y(f(j)); j?g.lineTo(X(j),y):g.moveTo(X(j),y); } g.stroke(); g.setLineDash([]); };
+  plot(j=>sc(u[row*m.cols+j]), '#555');
+  if (bg){ plot(j=>sc(bg[row*m.cols+j]), '#2a78d6'); (m.thresholds||[]).forEach((th,i)=>plot(j=>sc(bg[row*m.cols+j])+th.factor_db, ['#eb6834','#8e5cc4','#1baf7a','#eda100'][i%4], [4,3])); }
+  g.fillStyle='#333'; g.font=`${10*devicePixelRatio}px system-ui`; g.fillText(`bearing ${fx(m.b0+(row+0.5)*m.db,1)}°: map (grey, block max), detector background (blue), background × each statistic's factor (dashed${(m.thresholds||[]).length?': '+m.thresholds.map(t=>t.cells?t.cells+' cells':'one sample').join(', '):''})`, 38, 12*devicePixelRatio);
+  g.fillText(`${fx(m.r0,0)} m`, 36, Hh-3); g.fillText(`${fx(m.r0+m.dr*m.cols,0)} m`, W-60*devicePixelRatio, Hh-3);
+  for (const d of P.detections) if (Math.abs(d.bearing_deg-(m.b0+(row+0.5)*m.db))<=Math.abs(m.db)){ const j=(d.range_m-m.r0)/m.dr; g.fillStyle='#eb6834'; g.fillRect(X(j)-2, 14, 4, Hh-30); } }
+let chainAudio=null, chainSound=false, chainStepper=null;
+function chainHtml(k){ const P=C.pings[k], T=P.tracker, ev={}, asc={}; (P.evidence||[]).forEach(e=>ev[e.id]=e); (P.association||[]).forEach(a=>asc[a.id]=a);
+  const born=T?T.born.map(b=>b.track):[], drop=T?T.dropped:[], now=T?T.confirmed_now:[];
+  const oth=C.other_engine;
+  return `<div class="m">ping ${k} of ${C.n_pings} (report ping ${P.ping}) · ${P.detections.length} detections, ${P.tracks.length} tracks${P.pings_without_nav?` · ${P.pings_without_nav} pings without navigation`:''} · chain ${fx(P.seconds*1e3,0)} ms on this CPU${T?` · tracker: ${T.association}, gate ${T.gate}σ: ${T.took.length} taken, ${born.length} born${born.length?' ('+born.join(', ')+')':''}, ${now.length} confirmed now${now.length?' ('+now.join(', ')+')':''}, ${drop.length} dropped${drop.length?' ('+drop.map(d=>d.id+': '+d.reason).join('; ')+')':''}`:''}</div>`
+   + `<table><tr><th>id</th><th>kind</th><th>why (classifier evidence)</th><th>speed</th><th>seen</th><th>snr</th><th>truth, error</th></tr>`
+   + P.tracks.map(t=>{ const e=ev[t.id], a=asc[t.id]; return `<tr><td>${t.id}</td><td><span class="dot" style="background:${KINDC[t.kind]||'#555'}"></span>${esc(t.kind)}${t.parent!=null?' of '+t.parent:''}</td><td class="m">${e?esc(e.rule.replace(/_/g,' '))+`: ${fx(e.speed,2)} m/s vs ${fx(e.need*e.speed_sigma,2)} (need ${fx(e.need,1)}σ), fit ${fx(e.fit_rms,1)}${e.limit!=null?'/'+fx(e.limit,1):''} m, ${e.fitted}/${e.rows} pts`+(e.later.length?'; then '+esc(e.later.join(', ')):''):'–'}</td><td>${fx(t.speed_m_s,2)}</td><td>${fx(t.seen,2)}</td><td>${fx(t.mean_snr_db,1)}</td><td>${a&&a.truth!=null?esc(a.truth)+', '+fx(a.error_m,1)+' m':'–'}</td></tr>`; }).join('') + `</table>`
+   + (oth?`<div class="${oth.differences.length?'warn':'m'}">engine ${esc(oth.engine)} against ${esc(C.engine)}: ${oth.differences.length? oth.differences.length+' differences beyond the tolerances of tests/python/test_live_cpp.py: '+oth.differences.slice(0,6).map(esc).join('; ') : 'no difference beyond the tolerances of tests/python/test_live_cpp.py (counts, ids, kinds exact; ranges, bearings, positions and velocities 0.05)'}</div>`:''); }
+function chainSet(k, play){ chainK=Math.max(0, Math.min(C.n_pings-1, k)); const st=chainDraw(chainK); $('chping').value=chainK; $('chval').textContent=`${chainK}`;
+  $('chbody').innerHTML=chainHtml(chainK); chainProfile(chainK); draw();
+  if (play && chainSound && C.audio){ const c=+($('hsel').value)>=0? +($('hsel').value) : C.audio.files[0].channel; const f=C.audio.files.find(x=>x.ping===chainK && x.channel===c) || C.audio.files.find(x=>x.ping===chainK);
+    if (f){ if (!chainAudio) chainAudio=new Audio(); chainAudio.src=C.audio.dir+'/'+f.file; chainAudio.play().catch(()=>{}); $('chsnd').textContent=`h${f.channel}, ping ${chainK}`; } }
+  return st; }
+function chainZoom(){ if (!C) return; const P=C.pings[chainK], g=P.geometry, o=P.ownship, z=o[2];
+  const dir=b=>{ const r=b*Math.PI/180; return [Math.sin(r)*g.axis[0]+Math.cos(r)*g.broadside[0], Math.sin(r)*g.axis[1]+Math.cos(r)*g.broadside[1]]; };
+  const pts0=[...P.detections.map(d=>{ const u=dir(d.bearing_deg); return [o[0]+d.range_m*u[0], o[1]+d.range_m*u[1], z]; }), ...P.tracks.map(t=>[t.x,t.y,z]),
+             ...C.truth.map(x=>x.positions[Math.min(chainK, x.positions.length-1)])];
+  const pts = pts0.length ? pts0 : [o];       // what the chain found and the truth; the array alone when there is none
+  const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]); const cx=(Math.min(...xs)+Math.max(...xs))/2, cy=(Math.min(...ys)+Math.max(...ys))/2;
+  const size=Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys), span*0.03);
+  // The chain's own view: from above, the rays, beams, surface and bed hidden (their boxes unticked; tick to bring back).
+  for (const k of ['rays','beams','surface','bed','projpat','oneway','direct']){ G[k].visible=false; const el=document.querySelector(`[data-layer="${k}"]`); if (el) el.checked=false; }
+  const c=L([cx,cy,z]); c.y*=vex; ctl.target.copy(c); ctl.dist=2.0*size; ctl.az=0; ctl.el=1.5; place(); draw(); }
+window.__chainZoom = chainZoom;
+if (C){ document.body.classList.add('haschain'); const pn=$('chn'); pn.hidden=false;
+  const P0=C.pings[0]||{};
+  pn.innerHTML = `<b>live chain</b> <span class="m">(${esc(C.engine)} engine · ${esc(C.config_source)}${C.quick?' · '+esc(C.quick):''} · taps: ${C.taps.length?esc(C.taps.join(', ')):'none'})</span>`
+   + `<div><label>ping <input id="chping" type="range" min="0" max="${Math.max(C.n_pings-1,0)}" value="0" style="width:min(220px,40vw)"> <span id="chval"></span></label> <button id="chstep">step pings</button> <button id="chzoom">zoom to the chain</button>`
+   + (C.audio?` <label class="t"><input type="checkbox" id="chsndon">sound per ping</label> <span class="m" id="chsnd"></span>`:` <span class="m">no sound per ping on this page</span>`) + `</div>`
+   + `<div>${[['map','power map (fan)'],['det','detections'],['trk','tracks'],['truth','truth'],['cov','covariance (2σ)'],['gates','gates']].map(([k2,t])=>`<label class="t"><input type="checkbox" data-ch="${k2}" checked>${t}</label>`).join('')}</div>`
+   + `<div class="m">detections coloured by snr (blue 10 dB to red 35 dB; green: the tone path, purple: both); tracks by kind (${Object.entries(KINDC).map(([k2,c])=>`<span style="color:${c}">■</span> ${k2}`).join(' ')}) with their history and velocity (3 ping intervals); green dots: the truth (${esc(C.truth_rule||'none')}), dashed: each track to its nearest object (the association error); purple ellipses: each track's 2σ covariance (grey: tentative); dashed: each track's gate (${P0.tracker?P0.tracker.gate:4}σ of the innovation) about the track predicted to its nearest detection (blue: that detection is inside it, grey: outside), solid blue: the detection it took. Labels: id and kind; the table below says why and how far from the truth. In the array's horizontal plane at each ping.</div>`
+   + `<div id="chbody"></div><label class="m">detector along <select id="chbeam"><option value="">the strongest detection's bearing</option></select></label><canvas id="chcv"></canvas>`
+   + (C.audio?`<div class="m">sound per ping: ${esc(C.audio.method_words)}</div>`:'')
+   + `<div class="m">${esc(C.note||'')} <a href="${esc(D.links?.chain_png||'')}">2-D chain page</a></div>`;
+  const m0=(C.pings.find(p=>p.map)||{}).map; if (m0) for (let i=0;i<m0.rows;i++){ const o=document.createElement('option'); o.value=String(i); o.textContent=`${fx(m0.b0+(i+0.5)*m0.db,1)}°`; $('chbeam').appendChild(o); }
+  $('chbeam').addEventListener('change', ()=>chainProfile(chainK));
+  $('chzoom').addEventListener('click', chainZoom);
+  pn.querySelectorAll('[data-ch]').forEach(el=>el.addEventListener('change',()=>{ chainOn[el.dataset.ch]=el.checked; chainSet(chainK, false); }));
+  $('chping').addEventListener('input', e=>chainSet(+e.target.value, true));
+  if (C.audio) $('chsndon').addEventListener('change', e=>{ chainSound=e.target.checked; if (!chainSound && chainAudio) chainAudio.pause(); });
+  // Stepping: one clock with the sound. With sound on, the next ping comes when this ping's sound ends (at least 0.4 s).
+  const stepNext=()=>{ if (!chainStepper) return; const n=(chainK+1)%C.n_pings; chainSet(n, true);
+    const wait = chainSound && chainAudio && !chainAudio.paused ? null : 700; if (wait) chainStepper=setTimeout(stepNext, wait); };
+  $('chstep').addEventListener('click',()=>{ if (chainStepper){ clearTimeout(chainStepper); chainStepper=null; $('chstep').textContent='step pings'; if (chainAudio) chainAudio.pause(); return; }
+    $('chstep').textContent='stop'; chainStepper=1; stepNext(); });
+  if (C.audio){ chainAudio=new Audio(); chainAudio.addEventListener('ended', ()=>{ if (chainStepper) chainStepper=setTimeout(stepNext, 400); }); }
+  chainSet(Math.max(C.n_pings-1,0), false); }
+
 // ---------- vertical exaggeration, views ----------
 const vin=$('vex'), vval=$('vval');
 function setVex(v){ const old=vex; vex=Math.max(1, Math.min(60, Math.round(v))); world.scale.set(1, vex, 1); ctl.target.y*=vex/old; vin.value=vex; vval.textContent=vex+'x'+(vex===1?' (true scale)':''); place(); draw(); }
@@ -445,7 +556,11 @@ function draw(){ renderer.render(scene, camera); placeLabels(); }
 window.addEventListener('resize',()=>{ resize(); draw(); });
 setVex(Math.max(1, Math.min(60, Math.round(0.3*span/zSpan))));
 resize(); zoomAll(); vis(); setTime(tMax*0.999); draw();
-window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex, audio: !!A, audioFiles: A ? A.files.length : 0};
+window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex, audio: !!A, audioFiles: A ? A.files.length : 0,
+  chain: C ? C.n_pings : 0};
+// For a browser check (tools/page3d_check.js): the chain layer's drawn counts at a ping against the report lines'.
+window.__chain = C ? {pings: C.n_pings, set: k => { const st=chainSet(k, false); return {k: chainK, drawn_detections: st.det, drawn_tracks: st.trk, truth: st.truth, ellipses: st.ell,
+  gates: st.gates, map: st.map, report_detections: C.pings[chainK].report_counts?.detections, report_tracks: C.pings[chainK].report_counts?.tracks}; }} : null;
 // For a browser check (tests/python/test_scene_audio.py): the clock and the lit hydrophones.
 window.__viz = {setTime: t => { setTime(t); draw(); return litNow.slice(); }, lit: () => litNow.slice(), win: WIN, tMax, t2a, a2t,
   sound: () => A ? {hyd: sndHyd, kind: sndKind, src: audioEl.getAttribute('src')} : null, setSound: (c,k) => { setSound(c,k); return {hyd: sndHyd, kind: sndKind}; }};
