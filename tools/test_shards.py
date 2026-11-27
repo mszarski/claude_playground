@@ -6,7 +6,8 @@
 
 Every test file is in exactly one shard, whatever N. Files are weighed by their measured seconds in
 tests/python/shard_weights.json (written from a suite's `--durations` lines by `--weights LOG`), or, for a file not
-listed there, by the median listed weight (no file: by its count of `def test_`). The heaviest file goes first, each
+listed there (one added since), by the median listed weight (no file: by its count of `def test_`). `--weights` lists every
+file on disk: one with no test over the printed minimum gets 0.5 s. The heaviest file goes first, each
 to the lightest shard so far; ties go by name, so the split depends only on the tree. One shard of one is every file.
 """
 import argparse
@@ -77,6 +78,8 @@ def main(argv=None):
                 sec[k] = round(sec.get(k, 0.0) + v, 1)
         if not sec:
             ap.error("no --durations lines in the logs")
+        for name in files():                                                # ran, and no test of it reached the printed minimum
+            sec.setdefault(name, 0.5)
         WEIGHTS.write_text(json.dumps({"what": "seconds a test file in the GPU suite (pytest --durations=0 --durations-min=0.5; tools/test_shards.py --weights)",
                                        "seconds": dict(sorted(sec.items()))}, indent=1) + "\n")
         print(f"{len(sec)} files, {sum(sec.values()):.0f} s")
