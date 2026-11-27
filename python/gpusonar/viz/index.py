@@ -76,6 +76,12 @@ def write_index(rows: list, out: str, total_s: float | None = None, thumbs: bool
         three = (f"<a href='{html.escape(n)}.html'>3-D page</a><br><span class='m'>{os.path.getsize(page3) / 1e3:.0f} kB"
                  + (f"; {r['html'].get('three_d_rays')} Bellhop3D rays" if (r.get("html") or {}).get("three_d_rays") else "")
                  + "</span>") if os.path.exists(page3) else "<span class='m'>none</span>"
+        snd = r.get("audio") or {}
+        if snd.get("method"):
+            three += (f"<br><span class='m'>sound: {html.escape(snd['method'].replace('_', ' '))}, {snd.get('files')} WAV, "
+                      f"{(snd.get('bytes') or 0) / 1e6:.1f} MB</span>")
+        elif snd.get("skipped") or snd.get("error"):
+            three += f"<br><span class='m'>no sound: {html.escape(str(snd.get('skipped') or snd.get('error'))[:120])}</span>"
         parts.append(f"<tr><td><a href='{html.escape(n)}.png'>{html.escape(n)}</a></td><td>{html.escape(str(r.get('tier', '?')))}</td>"
                      f"<td>{img}</td><td>{three}</td><td>{html.escape(_summary(r))}"
                      + (f"<br><span class='m'>not shown: {html.escape('; '.join(missing))}</span>" if missing else "")

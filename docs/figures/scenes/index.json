@@ -228,7 +228,7 @@
   "marked": 12,
   "faint": 20,
   "html": {
-   "bytes": 57665,
+   "bytes": 67761,
    "embedded": false,
    "rays": 16,
    "pairs": 40,
@@ -239,10 +239,35 @@
     "tolerance": 1.0
    },
    "three_d_rays": 0,
+   "audio": "side",
+   "audio_bytes": 154400,
    "seconds": 0.02,
    "bellhop3d": null,
    "notes": [],
    "from": "the trace of a previous run (popoto_trial_100m.trace.json)"
+  },
+  "audio": {
+   "method": "heterodyne",
+   "tag": "het2000",
+   "rate_hz": 16000,
+   "files": 5,
+   "bytes": 154400,
+   "arrivals": 1,
+   "kinds": [
+    "arrival_0",
+    "echoes",
+    "noise",
+    "reverberation_0_bottom",
+    "whole"
+   ],
+   "parts_residual_db": -573.2785386908238,
+   "seconds": 0.64,
+   "notes": [],
+   "clipped": 0,
+   "simulate_s": 6.04,
+   "png_s": 3.34,
+   "items": 1,
+   "png_bytes": 152665
   }
  },
  {

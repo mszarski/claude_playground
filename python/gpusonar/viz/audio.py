@@ -118,6 +118,12 @@ def listen_plan(sonar_band, sample_kind: str, sample_rate: float, center_frequen
                                   f"{k:g}, exactly")
     else:
         raise ValueError(f"audio method {method!r}: auto, as_recorded, heterodyne or time_stretch")
+    plan["warning"] = None
+    if method == "heterodyne" and duration * (plan["kept_hz"][1] - plan["kept_hz"][0]) < 8.0:
+        # ours: fewer than 8 frequency bins of 1 / duration in the kept band
+        plan["warning"] = (f"the record lasts {duration * 1e3:.3g} ms: the kept band holds "
+                           f"{duration * (plan['kept_hz'][1] - plan['kept_hz'][0]):.2g} frequency bins, so the sound is a "
+                           "click or silence; time_stretch keeps the whole band and lengthens it")
     plan["lost_hz"] = [b for b in ([r_lo, plan["kept_hz"][0]], [plan["kept_hz"][1], r_hi]) if b[1] - b[0] > 1e-6]
     plan["tag"] = METHOD_TAG[method] + (f"{plan['factor']:g}" if method == "time_stretch" else
                                         f"{center_hz:g}" if method == "heterodyne" else "")
@@ -485,7 +491,8 @@ def _method_words(plan: dict) -> str:
     head = {"as_recorded": "as recorded",
             "heterodyne": f"heterodyne: shifted down {plan['shift_hz'] / 1e3:.6g} kHz (band centre to {plan.get('center_hz', 0) / 1e3:g} kHz)",
             "time_stretch": f"time stretch x{plan['factor']:g} ({plan['factor']:g} times slower and lower)"}[m]
-    return (f"{head}; {plan['rate_hz'] / 1e3:g} kHz output; kept {kept}, lost {lost}; "
+    return (("WARNING: " + plan["warning"] + ". " if plan.get("warning") else "")
+            + f"{head}; {plan['rate_hz'] / 1e3:g} kHz output; kept {kept}, lost {lost}; "
             f"{plan['audio_duration_s']:.4g} s of sound; misrepresents: {plan['misrepresents']}")
 
 

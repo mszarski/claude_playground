@@ -547,3 +547,97 @@ What a page shows (`viz/page3d.py`, its template `viz/page3d_template.html`, `vi
 - Committed: `third_party/three/` (0.69 MB), and under `docs/figures/scenes/` one CDN page per family plus
   `flank_seamount_3d` (Bellhop3D's rays), each with a 128-colour screenshot `NAME_3d.png`, and the index with a 3-D
   column (1.9 MB in all). Everything else stays in the session scratch directory.
+
+## 14. Packages V3 and V5 as done (2026-11-27): the sound at each hydrophone, and time
+
+What failed, cannot be heard or is uncertain first:
+
+- **Nothing here was listened to.** The sound was checked by proxy only (spectrum, envelope, peak times, levels;
+  section 14.3). Whether a heterodyned FLS echo is worth hearing is the owner's ear to judge.
+- **The FLS and most SAS records are milliseconds long.** Heterodyned (the default above 16 kHz, the owner's choice), a
+  3 ms FLS record (`point_grid_l12_5d`, 3.75-6.25 MHz) is 3 ms of sound: a click, and of its 2.5 MHz band only 3.6 kHz
+  is kept, so a sweep passes through the kept band in a fraction of its length. Time stretch (`--audio-method
+  time_stretch`) makes the same record 1.16 s long (factor 391) with the whole band; it is an option, not the default
+  (made for four FLS and SAS scenes as a demonstration, section 14.3). Recommendation for the owner: time stretch by
+  default for records under about 0.5 s.
+- **Six scenarios have no sound** on this CPU: `flank_bank_3d` (417 s to simulate the ping, over the run's 330 s limit), `popoto_far_mover_doppler` (538 s), and the four with no trace at all (`flank_patrol_doppler`, `flank_patrol_doppler_tone`, `flank_patrol_doppler_underway`, `popoto_12km_doppler`, section 12). Their pages say so and name the GPU-job command
+  (`PYTHONPATH=python python3 tools/scenario_view.py NAME --out DIR --3d`).
+- **Parts are before the ADC.** The parts (echoes, reverberation items, noise, ...) are the simulator's taps before the
+  hardware gain's quantisation; they sum to the record to float rounding where the record has no ADC, and to the ADC's
+  rounding where it has one (over the run: 73 of 90 records have no ADC and sum to below -500 dB; with an ADC the residual is -126 to -17 dB of the record's rms, worst `point_grid_p4_2v` at -17 dB, a record near the ADC's step). With an overload front end (the three `popoto_testauv_direct_overload*` scenes)
+  the parts are before the clipping.
+- **Heterodyne and the delay between hydrophones.** The envelope's delay is kept exactly; the carrier's phase is that of
+  the shifted frequency, so a delay the ear hears as a phase difference (below about 1.5 kHz) is not the true one. As
+  recorded and time stretch keep the delay as a time shift (sample-exact where it falls on whole samples).
+- **The page plays an HTML audio element, not WebAudio.** A page opened from a file cannot read a side file into
+  WebAudio (the browser forbids it); an audio element can play it, and its clock drives the page. The playback rate
+  changes pitch with speed (no pitch correction, stated on the page).
+- **Not done** (V3's plan row): the noise spectrum against the model's, and the time-spread taps' own spread (delay-
+  Doppler scatter). Spectrograms on the 3-D page are of the sound as heard (frequency axis labelled in both).
+- **Results that depend on the copied C++ module** (`_gpusonar...so` from the `a-rows` worktree, older than this branch;
+  not committed, deleted at the end): only the `cpp` halves of the both-engine tests and the record hashes below. The
+  full run used the NumPy engine.
+
+### 14.1 What was built
+
+- `viz/audio.py`: `listen_plan` chooses and states the method; `to_audio` is one FFT operator for every channel (the
+  analytic spectrum's bins moved to F, F - shift or F / factor; bins outside the kept band dropped; the shift is a
+  whole number of bins so the operator is exact); one gain per kind and ping for all hydrophones (levels between
+  hydrophones preserved; the loudest at -1 dBFS; the gain written); 16-bit PCM WAV with an INFO chunk naming the
+  method (standard library); `decompose` turns the simulator's taps into parts; `write_ping_audio` writes
+  `NAME.audio/`: `hNNN.KIND.TAG.wav` (TAG `rec`, `het2000`, `xK`), a stereo pair, per hydrophone `hNNN.js`
+  (matched-filter envelope and spectrogram of each kind) and `manifest.json` / `manifest.js` (method, numbers, files,
+  gains, arrivals, the time mapping). The prototype's `hydrophone_audio` / `write_wav` are kept.
+- Methods (thresholds ours): as recorded when the band's top is at or under 16 kHz (flank 6-10 kHz, Popoto 4-6 kHz),
+  at the smallest standard rate of at least 2.2 x the top (16 or 24 kHz; baseband records on their own carrier);
+  heterodyne otherwise, the band's centre to 2 kHz, 3.6 kHz kept (nothing under 200 Hz, nothing folds through 0 Hz),
+  16 kHz output; time stretch by K (default the smallest whole number bringing the top under 16 kHz), 48 kHz output.
+- Reverberation by item: `taps.sim_capture(dir, per_item=True)` (opt-in) and two read-only taps in `simulate_ping`'s
+  Python item loop: `reverberation_start` (after the echoes and a basin's tail) and `reverberation_item_<i>` with the
+  item's model and boundary. The loop is Python for both engines, so one change covers both. Bit-identical when off
+  and when on: sha256 of the record of `flank_sst_shallow` (numpy `3f09b538...`, cpp `3ccc6392...`) and
+  `sst_sediment_reverb` (numpy `8a8069b3...`, cpp `79c412cf...`) equal before and after the change, with and without
+  capture (ours).
+- One arrival alone (`viz/arrivals.py`; no simulator change): the ping's call and its two eigenray sets are kept
+  while the run goes on unchanged; `simulate_ping` is called again with reverberation, sources and noise off, the
+  generator in its kept state and the pairing given the sets masked to one outbound and one return ray of the target's
+  scatterer; the "echoes" tap of that run is the pair alone. The 8 strongest pairs of the strongest target, for the
+  parts' hydrophones (default the first and the last).
+- 2-D page: a row with the spectrogram of hydrophone 0 (the record and the echoes alone, in the water's frequencies,
+  transmit band and the 12 strongest arrivals marked) and the reverberation by item against time.
+- 3-D page (V5): a sound panel: hear (whole record, echoes, each reverberation item, noise, direct sound, sources, each
+  single arrival), hydrophone (the selector or a click), rate (0.25 to 2x), clock ("skip the silence": start where
+  the record starts; "real time": run from the transmit, the sound starting when the window opens), the spectrogram
+  and envelope of what is heard with the arrivals marked and a play head. The audio element's clock drives the page:
+  scene time = record start + audio time / time scale (1 as recorded and heterodyned, K stretched). The slider, the
+  dots along every ray and the lit hydrophones (an arrival of the 40 strongest pairs within 0.4 % of the span of its
+  delay at that hydrophone, from the trace's per-channel delays) follow it. Multi-ping scenes: "step pings" moves the
+  platform, the array, the beams and the projector over the track (rays exist for the traced ping only, said).
+- `tools/scenario_view.py`: `--audio side|embed|none` (side by default with `--3d`), `--audio-method`, `--stretch`,
+  `--audio-center`, `--audio-parts`, `--audio-channels`, `--arrivals`, `--sim-limit`; from cached traces it
+  simulates the traced ping again (same view plan and seed; checked against the trace's rate, length, channels and
+  start) for the record, redraws the 2-D page and writes the sound. The index shows each page's sound.
+
+### 14.2 Sizes
+
+- A page with side-loaded sound grows by one script tag (58 bytes); the template by 10 kB for every page (a CDN page
+  of `flank_target_1km` 68.7 kB before, 78.8 kB now, ours). Page limits unchanged (400 kB CDN, 1.2 MB embedded three.js).
+- `--audio embed`: at most 3 MB of WAV in the page (4 MB as base64), the parts' hydrophones first; what does not fit is
+  listed in the manifest (`not_embedded`); limit 5.8 MB (`PAGE_LIMIT_AUDIO_EMBED`).
+- Full run (`tools/scenario_view.py --all --3d --traces viz/all --out viz/all3d_audio --engine numpy`, the NumPy engine, ours, 2026-11-27): 1 h 49 min on this CPU (simulating the pings again 4,400 s, the sound 780 s; the rest pages and Bellhop3D shootings), 90 of 96 scenarios with sound (48 as recorded, 42 heterodyned), 6,117 WAV files of 348 MB, 102 MB of per-hydrophone data files; the directory 540 MB with the pages. A scene's sound 15 kB (`sst_asiaex`) to 27 MB (`point_grid_flank_32`, 32 hydrophones x 14.3 s at 24 kHz). Embedded pages 0.75 to 0.90 MB, 2-D pages 31 to 220 kB (under 300 kB). Time stretch for four FLS and SAS scenes (`viz/all3d_audio_stretch`): `fls_120k_transit` x9 (3.5 s a hydrophone), `sas_auv_multipath` x14, `point_grid_l12_5d` x391 (1.16 s), `buried_cylinder` x2 (6 ms: a 3 ms record).
+
+### 14.3 Checks (tests and by proxy)
+
+- `tests/python/test_scene_audio.py` (14): the plans name method, kept and lost bands; a heterodyne puts 301 kHz at
+  3 kHz and 299.2 kHz at 1.2 kHz, and 305 and 297 kHz (outside the kept band; the latter would fold through 0 Hz) are
+  absent with nothing under 200 Hz; a time stretch by 20 puts 150 kHz at 7.5 kHz and a 10 ms onset at 200 ms; WAV rate,
+  channel count, duration, INFO comment; relative levels across hydrophones (1, 0.5, 0.1 kept to 1e-9); inter-channel
+  delay sample-exact as recorded (8 input samples = 3 output samples) and stretched, the envelope's delay kept by a
+  heterodyne; per-item taps bit-identical and the parts summing to the noise stage (1e-6 of the peak) in both engines,
+  each item starting at its boundary's two-way time (surface 4 ms, volume sheet 9.3 ms, bed 22.7 ms, within 1.5 ms);
+  per-item taps off by default; the 9 single pairs of `sst_echo_level` sum to the echoes (1e-5) in both engines and
+  each, matched-filtered, peaks at the trace's delay at every hydrophone (1.5 samples); a ping's files keep the
+  record's levels between hydrophones (2e-3) and the stereo pair equals the two mono files; page sizes with sound;
+  headless Chromium: the lit hydrophones at three times equal those computed from the trace, the page's sound follows
+  the selector, no console error.
+- By proxy over the full run (ours, 2026-11-27): every WAV of the parts' first hydrophone has 0.9999 or more of its energy inside the stated kept band (worst `fls_170k_transit` arrival 6) and the stated duration; no sample clipped; on `popoto_12km` (as recorded, 4-6 kHz) the echoes' centroid is 4.95 kHz and the single arrival's envelope peaks 45 ms after its trace delay of 16.06 s (inside its pulse); on `fls_120k_transit` (heterodyne, shift 118.0008 kHz) every kind's centroid lies at 1.8 to 2.0 kHz. Found wrong or empty: (1) the four `rail_*` scenes' records last 0.27 ms, under one frequency bin of the kept 3.6 kHz: their heterodyned files are silent (all zero; 272 files); the plan now carries a WARNING (`listen_plan` `warning`, on the page and in the INFO comment) and they were made again with it; (2) of the 8 strongest pairs of the strongest target, some single arrivals are silent in 12 FLS and SAS scenes (72 files): the trace ranks pairs by spreading and reflection only, while the synthesis weights a patch object's pairs by Lambert's law with the patch's normal (zero for a face turned away) and drops occluded or beam-floored paths; (3) the overload scenes' parts are before the front end, so they sum to the record within +28 dB only (the clipping is the point of those scenes)).

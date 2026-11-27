@@ -24,11 +24,15 @@ details{margin-top:6px} summary{cursor:pointer;font-weight:600}
 label.t{display:inline-block;margin-right:10px;white-space:nowrap}
 button,select{font:inherit} a{color:var(--acc)}
 .warn{color:#b0451b}
-@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}}
+#snd{right:16px;bottom:96px;width:min(460px,calc(100% - 32px))}
+#snd canvas{width:100%;height:150px;display:block;background:#000;border-radius:3px;margin-top:4px}
+#snd .row{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center}
+@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}#snd{bottom:140px}}
 </style></head><body>
 <div id="view"></div><div id="labels"></div>
 <div class="panel" id="info"></div>
 <div class="panel" id="pick" hidden></div>
+<div class="panel" id="snd" hidden></div>
 <div class="panel" id="ctl">
  <button id="play" title="move a dot along every ray">play</button>
  <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
@@ -41,6 +45,7 @@ button,select{font:inherit} a{color:var(--acc)}
  <span class="m">drag: turn · right-drag or shift-drag: pan · wheel: zoom · click a ray or a hydrophone</span>
 </div>
 
+<script src="popoto_trial_100m.audio/manifest.js"></script>
 <script type="application/json" id="trace">{"scenario":"popoto_trial_100m","tier":"eigenray","ping":0,"time_s":0.0,"sonar":{"name":"popoto_8","mode":"flank","band_hz":[20000.0,35000.0],"center_frequency":27500.0,"sample_kind":"RealPassband","sample_rate":102400.0,"n_channels":8,"source_level_db_rms":190.0,"projector":[0.0,0.0,5.3],"hydrophones":[[-0.0945,0.0,5.0],[-0.0675,0.0,5.0],[-0.0405,0.0,5.0],[-0.0135,0.0,5.0],[0.0135,0.0,5.0],[0.0405,0.0,5.0],[0.0675,0.0,5.0],[0.0945,0.0,5.0]]},"environment":{"sound_speed":1496.824,"surface_z":0.0,"bottom_z":30.0,"bottom_z_site":null,"bottom":{"speed":1600.0,"density":1.8,"attenuation":0.5,"shear_speed":null,"sediment":null},"wind_speed":null,"ssp":{"z":[0.0,30.0],"c":[1496.824,1496.824]},"interface":null,"critical_angle_deg":20.688,"bathymetry_note":null,"absorption":"ainslie_mccolm","absorption_db_per_km":5.721,"planes":null,"bottom_slope":null,"wind_speed_propagation":0.0},"targets":[{"label":"target","position":[0.0,100.0,15.0],"amplitude":3.162}],"legs":[{"target":0,"out":[{"k":0,"delay":0.0671205,"ns":0,"nb":0,"amp":0.00986016635,"db":-40.1,"launch":5.2,"line":[[0.0,0.0,5.3],[0.0,100.0,14.74]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.067105},{"k":1,"delay":0.06816921,"ns":1,"nb":0,"amp":0.00971604604,"db":-40.3,"launch":-11.09,"line":[[0.0,0.0,5.3],[0.0,26.02,0.0],[0.0,100.0,15.07]],"bounces":[{"xyz":[0.0,26.02,0.0],"b":"surface","g":11.5,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0681796},{"k":2,"delay":0.0718803,"ns":0,"nb":1,"amp":0.006300474979999999,"db":-44.0,"launch":21.7,"line":[[0.0,0.0,5.3],[0.0,62.03,30.0],[0.0,100.0,14.88]],"bounces":[{"xyz":[0.0,62.03,30.0],"b":"bottom","g":21.7,"loss":3.31}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0719098},{"k":3,"delay":0.07478356,"ns":1,"nb":1,"amp":0.004315904339999999,"db":-47.3,"launch":-26.7,"line":[[0.0,0.0,5.3],[0.0,10.55,0.0],[0.0,70.29,30.0],[0.0,100.0,15.08]],"bounces":[{"xyz":[0.0,10.55,0.0],"b":"surface","g":26.7,"loss":-0.0},{"xyz":[0.0,70.29,30.0],"b":"bottom","g":26.7,"loss":6.23}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0747601},{"k":4,"delay":0.08143228,"ns":1,"nb":1,"amp":0.0032269326,"db":-49.8,"launch":34.42,"line":[[0.0,0.0,5.3],[0.0,35.5,30.0],[0.0,78.62,0.0],[0.0,100.0,14.87]],"bounces":[{"xyz":[0.0,35.5,30.0],"b":"bottom","g":34.8,"loss":8.13},{"xyz":[0.0,78.62,0.0],"b":"surface","g":34.8,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0813859},{"k":5,"delay":0.0856789,"ns":2,"nb":1,"amp":0.0029046454,"db":-50.7,"launch":-38.31,"line":[[0.0,0.0,5.3],[0.0,6.63,0.0],[0.0,44.2,30.0],[0.0,81.75,0.0],[0.0,100.0,14.57]],"bounces":[{"xyz":[0.0,6.64,0.0],"b":"surface","g":38.6,"loss":-0.0},{"xyz":[0.0,44.19,30.0],"b":"bottom","g":38.6,"loss":8.6},{"xyz":[0.0,81.75,0.0],"b":"surface","g":38.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0855034},{"k":6,"delay":0.09433905,"ns":1,"nb":2,"amp":0.0008639722950000001,"db":-61.3,"launch":44.77,"line":[[0.0,0.0,5.3],[0.0,24.68,30.0],[0.0,54.65,0.0],[0.0,84.62,30.0],[0.0,100.0,14.61]],"bounces":[{"xyz":[0.0,24.68,30.0],"b":"bottom","g":45.0,"loss":9.11},{"xyz":[0.0,54.65,0.0],"b":"surface","g":45.0,"loss":-0.0},{"xyz":[0.0,84.62,30.0],"b":"bottom","g":45.0,"loss":9.11}],"path":"Bellhop ray file (E), matched by bounces","tt":0.094526},{"k":7,"delay":0.09946539,"ns":2,"nb":2,"amp":0.000790225749,"db":-62.0,"launch":-47.65,"line":[[0.0,0.0,5.3],[0.0,4.78,0.0],[0.0,31.85,30.0],[0.0,58.92,0.0],[0.0,85.98,30.0],[0.0,100.0,14.47]],"bounces":[{"xyz":[0.0,4.78,0.0],"b":"surface","g":47.9,"loss":-0.0},{"xyz":[0.0,31.85,30.0],"b":"bottom","g":47.9,"loss":9.28},{"xyz":[0.0,58.92,0.0],"b":"surface","g":47.9,"loss":-0.0},{"xyz":[0.0,85.98,30.0],"b":"bottom","g":47.9,"loss":9.28}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0997305}],"out_total":16,"back":[{"k":0,"delay":0.06714014,"ns":0,"nb":0,"amp":0.00985747576,"db":-40.1,"launch":5.37,"line":[[0.0,0.0,5.0],[0.0,100.0,14.95]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.0671381},{"k":1,"delay":0.06812963,"ns":1,"nb":0,"amp":0.00972145889,"db":-40.2,"launch":-10.93,"line":[[0.0,0.0,5.0],[0.0,25.2,0.0],[0.0,100.0,14.84]],"bounces":[{"xyz":[0.0,25.2,0.0],"b":"surface","g":11.2,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.06811},{"k":2,"delay":0.0719545,"ns":0,"nb":1,"amp":0.00620080112,"db":-44.2,"launch":21.85,"line":[[0.0,0.0,5.0],[0.0,62.78,30.0],[0.0,100.0,15.18]],"bounces":[{"xyz":[0.0,62.78,30.0],"b":"bottom","g":21.7,"loss":3.31}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0719098},{"k":3,"delay":0.07469373,"ns":1,"nb":1,"amp":0.00433923164,"db":-47.3,"launch":-26.57,"line":[[0.0,0.0,5.0],[0.0,9.96,0.0],[0.0,69.69,30.0],[0.0,100.0,14.78]],"bounces":[{"xyz":[0.0,9.96,0.0],"b":"surface","g":26.7,"loss":-0.0},{"xyz":[0.0,69.69,30.0],"b":"bottom","g":26.7,"loss":6.23}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0747601},{"k":4,"delay":0.08154705,"ns":1,"nb":1,"amp":0.00321602426,"db":-49.9,"launch":34.53,"line":[[0.0,0.0,5.0],[0.0,35.55,30.0],[0.0,78.2,0.0],[0.0,100.0,15.33]],"bounces":[{"xyz":[0.0,35.55,30.0],"b":"bottom","g":35.1,"loss":8.17},{"xyz":[0.0,78.2,0.0],"b":"surface","g":35.1,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.081676},{"k":5,"delay":0.08555343,"ns":2,"nb":1,"amp":0.00290739792,"db":-50.7,"launch":-38.21,"line":[[0.0,0.0,5.0],[0.0,6.26,0.0],[0.0,43.82,30.0],[0.0,81.38,0.0],[0.0,100.0,14.87]],"bounces":[{"xyz":[0.0,6.26,0.0],"b":"surface","g":38.6,"loss":-0.0},{"xyz":[0.0,43.82,30.0],"b":"bottom","g":38.6,"loss":8.6},{"xyz":[0.0,81.38,0.0],"b":"surface","g":38.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0855034},{"k":6,"delay":0.09448062,"ns":1,"nb":2,"amp":0.000863037945,"db":-61.3,"launch":44.86,"line":[[0.0,0.0,5.0],[0.0,24.98,30.0],[0.0,54.95,0.0],[0.0,84.92,30.0],[0.0,100.0,14.9]],"bounces":[{"xyz":[0.0,24.98,30.0],"b":"bottom","g":45.0,"loss":9.11},{"xyz":[0.0,54.95,0.0],"b":"surface","g":45.0,"loss":-0.0},{"xyz":[0.0,84.92,30.0],"b":"bottom","g":45.0,"loss":9.11}],"path":"Bellhop ray file (E), matched by bounces","tt":0.094526},{"k":7,"delay":0.099317,"ns":2,"nb":2,"amp":0.000792136998,"db":-62.0,"launch":-47.57,"line":[[0.0,0.0,5.0],[0.0,4.56,0.0],[0.0,31.9,30.0],[0.0,59.25,0.0],[0.0,86.59,30.0],[0.0,100.0,15.29]],"bounces":[{"xyz":[0.0,4.56,0.0],"b":"surface","g":47.7,"loss":-0.0},{"xyz":[0.0,31.9,30.0],"b":"bottom","g":47.7,"loss":9.27},{"xyz":[0.0,59.25,0.0],"b":"surface","g":47.7,"loss":-0.0},{"xyz":[0.0,86.59,30.0],"b":"bottom","g":47.7,"loss":9.27}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0991727}],"back_total":16}],"undrawn":0,"pairs":[{"t":0.13426064,"ch":[0.13426067,0.13426065,0.13426064,0.13426064,0.13426064,0.13426064,0.13426065,0.13426067],"ns":0,"nb":0,"db":-42.2,"target":0,"out":0,"back":0},{"t":0.13525013,"ch":[0.13525016,0.13525015,0.13525014,0.13525013,0.13525013,0.13525014,0.13525015,0.13525016],"ns":1,"nb":0,"db":-42.4,"target":0,"out":0,"back":1},{"t":0.13530935,"ch":[0.13530938,0.13530937,0.13530936,0.13530935,0.13530935,0.13530936,0.13530937,0.13530938],"ns":1,"nb":0,"db":-42.4,"target":0,"out":1,"back":0},{"t":0.13629885,"ch":[0.13629888,0.13629886,0.13629885,0.13629885,0.13629885,0.13629885,0.13629886,0.13629888],"ns":2,"nb":0,"db":-42.5,"target":0,"out":1,"back":1},{"t":0.13902044,"ch":[0.13902047,0.13902046,0.13902045,0.13902044,0.13902044,0.13902045,0.13902046,0.13902047],"ns":0,"nb":1,"db":-46.1,"target":0,"out":2,"back":0},{"t":0.14000993,"ch":[0.14000996,0.14000995,0.14000994,0.14000993,0.14000993,0.14000994,0.14000995,0.14000996],"ns":1,"nb":1,"db":-46.2,"target":0,"out":2,"back":1},{"t":0.13907499,"ch":[0.13907502,0.13907501,0.139075,0.13907499,0.13907499,0.139075,0.13907501,0.13907502],"ns":0,"nb":1,"db":-46.3,"target":0,"out":0,"back":2},{"t":0.14012371,"ch":[0.14012374,0.14012372,0.14012371,0.14012371,0.14012371,0.14012371,0.14012372,0.14012374],"ns":1,"nb":1,"db":-46.4,"target":0,"out":1,"back":2},{"t":0.14181423,"ch":[0.14181425,0.14181424,0.14181423,0.14181423,0.14181423,0.14181423,0.14181424,0.14181425],"ns":1,"nb":1,"db":-49.4,"target":0,"out":0,"back":3},{"t":0.14192371,"ch":[0.14192374,0.14192372,0.14192371,0.14192371,0.14192371,0.14192371,0.14192372,0.14192374],"ns":1,"nb":1,"db":-49.4,"target":0,"out":3,"back":0},{"t":0.14286294,"ch":[0.14286297,0.14286296,0.14286295,0.14286294,0.14286294,0.14286295,0.14286296,0.14286297],"ns":2,"nb":1,"db":-49.5,"target":0,"out":1,"back":3},{"t":0.1429132,"ch":[0.14291323,0.14291321,0.1429132,0.1429132,0.1429132,0.1429132,0.14291321,0.14291323],"ns":2,"nb":1,"db":-49.5,"target":0,"out":3,"back":1},{"t":0.1438348,"ch":[0.14383482,0.14383481,0.1438348,0.1438348,0.1438348,0.1438348,0.14383481,0.14383482],"ns":0,"nb":2,"db":-50.2,"target":0,"out":2,"back":2},{"t":0.14857242,"ch":[0.14857245,0.14857243,0.14857242,0.14857242,0.14857242,0.14857242,0.14857243,0.14857245],"ns":1,"nb":1,"db":-51.9,"target":0,"out":4,"back":0},{"t":0.14866754,"ch":[0.14866757,0.14866755,0.14866755,0.14866754,0.14866754,0.14866755,0.14866755,0.14866757],"ns":1,"nb":1,"db":-52.0,"target":0,"out":0,"back":4},{"t":0.14956191,"ch":[0.14956194,0.14956193,0.14956192,0.14956191,0.14956191,0.14956192,0.14956193,0.14956194],"ns":2,"nb":1,"db":-52.1,"target":0,"out":4,"back":1},{"t":0.14971626,"ch":[0.14971628,0.14971627,0.14971626,0.14971626,0.14971626,0.14971626,0.14971627,0.14971628],"ns":2,"nb":1,"db":-52.1,"target":0,"out":1,"back":4},{"t":0.15267392,"ch":[0.15267395,0.15267394,0.15267393,0.15267393,0.15267393,0.15267393,0.15267394,0.15267395],"ns":2,"nb":1,"db":-52.8,"target":0,"out":0,"back":5},{"t":0.15281904,"ch":[0.15281907,0.15281906,0.15281905,0.15281904,0.15281904,0.15281905,0.15281906,0.15281907],"ns":2,"nb":1,"db":-52.9,"target":0,"out":5,"back":0},{"t":0.15372264,"ch":[0.15372266,0.15372265,0.15372264,0.15372264,0.15372264,0.15372264,0.15372265,0.15372266],"ns":3,"nb":1,"db":-53.0,"target":0,"out":1,"back":5},{"t":0.15380853,"ch":[0.15380856,0.15380855,0.15380854,0.15380853,0.15380853,0.15380854,0.15380855,0.15380856],"ns":3,"nb":1,"db":-53.0,"target":0,"out":5,"back":1},{"t":0.14657403,"ch":[0.14657406,0.14657404,0.14657403,0.14657403,0.14657403,0.14657403,0.14657404,0.14657406],"ns":1,"nb":2,"db":-53.3,"target":0,"out":2,"back":3},{"t":0.14673806,"ch":[0.14673809,0.14673807,0.14673807,0.14673806,0.14673806,0.14673807,0.14673807,0.14673809],"ns":1,"nb":2,"db":-53.4,"target":0,"out":3,"back":2},{"t":0.15342734,"ch":[0.15342737,0.15342736,0.15342735,0.15342735,0.15342735,0.15342735,0.15342736,0.15342737],"ns":1,"nb":2,"db":-55.9,"target":0,"out":2,"back":4},{"t":0.15338677,"ch":[0.1533868,0.15338679,0.15338678,0.15338677,0.15338677,0.15338678,0.15338679,0.1533868],"ns":1,"nb":2,"db":-56.0,"target":0,"out":4,"back":2},{"t":0.14947729,"ch":[0.14947732,0.14947731,0.1494773,0.14947729,0.14947729,0.1494773,0.14947731,0.14947732],"ns":2,"nb":2,"db":-56.5,"target":0,"out":3,"back":3},{"t":0.15743373,"ch":[0.15743375,0.15743374,0.15743373,0.15743373,0.15743373,0.15743373,0.15743374,0.15743375],"ns":2,"nb":2,"db":-56.7,"target":0,"out":2,"back":5},{"t":0.15763339,"ch":[0.15763342,0.15763341,0.1576334,0.1576334,0.1576334,0.1576334,0.15763341,0.15763342],"ns":2,"nb":2,"db":-56.9,"target":0,"out":5,"back":2},{"t":0.15612601,"ch":[0.15612603,0.15612602,0.15612601,0.15612601,0.15612601,0.15612601,0.15612602,0.15612603],"ns":2,"nb":2,"db":-59.1,"target":0,"out":4,"back":3},{"t":0.15633061,"ch":[0.15633063,0.15633062,0.15633061,0.15633061,0.15633061,0.15633061,0.15633062,0.15633063],"ns":2,"nb":2,"db":-59.1,"target":0,"out":3,"back":4},{"t":0.16037263,"ch":[0.16037266,0.16037264,0.16037263,0.16037263,0.16037263,0.16037263,0.16037264,0.16037266],"ns":3,"nb":2,"db":-60.0,"target":0,"out":5,"back":3},{"t":0.16033699,"ch":[0.16033702,0.16033701,0.160337,0.16033699,0.16033699,0.160337,0.16033701,0.16033702],"ns":3,"nb":2,"db":-60.0,"target":0,"out":3,"back":5},{"t":0.16297932,"ch":[0.16297935,0.16297934,0.16297933,0.16297932,0.16297932,0.16297933,0.16297934,0.16297935],"ns":2,"nb":2,"db":-61.7,"target":0,"out":4,"back":4},{"t":0.16698571,"ch":[0.16698573,0.16698572,0.16698571,0.16698571,0.16698571,0.16698571,0.16698572,0.16698573],"ns":3,"nb":2,"db":-62.5,"target":0,"out":4,"back":5},{"t":0.16722594,"ch":[0.16722597,0.16722596,0.16722595,0.16722594,0.16722594,0.16722595,0.16722596,0.16722597],"ns":3,"nb":2,"db":-62.6,"target":0,"out":5,"back":4},{"t":0.16147919,"ch":[0.16147922,0.16147921,0.1614792,0.16147919,0.16147919,0.1614792,0.16147921,0.16147922],"ns":1,"nb":2,"db":-63.4,"target":0,"out":6,"back":0},{"t":0.16160111,"ch":[0.16160114,0.16160113,0.16160112,0.16160112,0.16160112,0.16160112,0.16160113,0.16160114],"ns":1,"nb":2,"db":-63.4,"target":0,"out":0,"back":6},{"t":0.17123233,"ch":[0.17123235,0.17123234,0.17123233,0.17123233,0.17123233,0.17123233,0.17123234,0.17123235],"ns":4,"nb":2,"db":-63.5,"target":0,"out":5,"back":5},{"t":0.16246869,"ch":[0.16246871,0.1624687,0.16246869,0.16246869,0.16246869,0.16246869,0.1624687,0.16246871],"ns":2,"nb":2,"db":-63.5,"target":0,"out":6,"back":1},{"t":0.16264983,"ch":[0.16264985,0.16264984,0.16264983,0.16264983,0.16264983,0.16264983,0.16264984,0.16264985],"ns":2,"nb":2,"db":-63.5,"target":0,"out":1,"back":6}],"n_pairs":256,"oneway":[],"direct":null,"beams":{"chain":{"bearings_deg":[-40.0,40.0,0.5],"look":"starboard","window":"hann","source":"live chain defaults (live.DEFAULTS); no deployment file names this sonar"},"broadside":[0.0,1.0,0.0],"axis":[-1.0,0.0,0.0],"aperture_m":0.189,"n_elements":8,"center_frequency":27500.0,"wavelength":0.054429980625454545,"element_beamwidth_az_deg":null,"steered":[{"steer_deg":-40.0,"peak_deg":-40.0,"edges_deg":[-53.62500000000001,-28.75]},{"steer_deg":-20.0,"peak_deg":-20.0,"edges_deg":[-30.25,-10.375]},{"steer_deg":0.0,"peak_deg":0.0,"edges_deg":[-9.375,9.375]},{"steer_deg":20.0,"peak_deg":20.0,"edges_deg":[10.375,30.25]},{"steer_deg":40.0,"peak_deg":40.0,"edges_deg":[28.75,53.62500000000001]}],"projector":null,"projector_text":"projector: kind point, omnidirectional (the sonar gives it no beamwidth or aperture)"},"models":[{"area":"propagation","model":"eigenray","what":"Bellhop 2-D eigenrays, looked up on a range-depth grid","key":"fidelity","status":"ours","chosen":"scenario","source":"Bellhop (GPL-3, separate process), not re-validated; lookup ours"},{"area":"surface","model":"surface_pressure_release","what":"surface reflection coefficient -1","key":"propagation.surface_coefficient","status":"ours","chosen":"default","source":"pressure release"},{"area":"bottom","model":"rayleigh_fluid","what":"Rayleigh fluid half-space reflection","key":"propagation.environment.bottom","status":"via secondary","chosen":"scenario","source":"standard; sediment table via secondary (REFERENCES 3.1)"},{"area":"bottom","model":"lambert","what":"Lambert bottom scattering mu sin sin","key":"reverberation[0]","status":"via secondary","chosen":"scenario","source":"the law and -29 dB as a thesis quotes them"},{"area":"reverberation","model":"reverb_generator","what":"scattering-function reverberation","key":"reverberation","status":"confirmed; ours","chosen":"scenario","source":"TR 0702 Sec. 10-11 (idea); generator ours"},{"area":"water","model":"noise_level","what":"ambient noise at a stated level","key":"receiver.ambient_noise","status":"ours","chosen":"scenario","source":"the scenario's value"},{"area":"water","model":"ainslie_mccolm","what":"absorption, Ainslie-McColm","key":"absorption","status":"via secondary","chosen":"scenario","source":"within 3 % of 21 published values"},{"area":"water","model":"mackenzie","what":"sound speed from temperature and salinity, Mackenzie","key":"environment.temperature/salinity","status":"unconfirmed","chosen":"default","source":"held to arlpy 1.9.3; paper not opened"},{"area":"targets","model":"targets","what":"point scatterers and highlight targets","key":"scene","status":"confirmed; ours","chosen":"scenario","source":"TR 0702 Sec. 9.2 (highlights); shapes ours"}],"missing":[],"view":{"note":"ping 0 of 1 (the only ping)","ping_of_run":0,"n_pings":1},"time_spread_taps":false,"scene3d":{"box":[-15.0945,15.0945,-15.0,115.0],"bed_grid":null,"motion":{"times":[0.0],"ping_index":[0],"targets":[[[0.0,100.0,15.0]]],"moving":false,"track":[[0.0,0.0,5.0]],"ping":0,"interval":5.0},"bellhop3d":null,"notes":[]},"chain":null,"limits":{"max_rays":8,"max_pairs":40,"tolerance":1.0},"links":{"png":"popoto_trial_100m.png","index":"index.html"}}</script>
 <script type="module">
 const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js');
@@ -257,7 +262,7 @@ function ssp(){ const W=170, Hh=120, prof=[]; if (E.ssp_section){ E.ssp_section.
 const missing = [...(D.missing||[]), ...(S3.notes||[])];
 if (D.undrawn) missing.push(`${D.undrawn} eigenray(s) of the trace have no path to draw (see above)`);
 const lim = D.limits||{}; missing.push(`page thinned: the ${lim.max_rays} strongest drawable eigenrays of each leg and the ${lim.max_pairs} strongest of ${D.n_pairs} two-way pairs; polylines simplified (tolerance x${lim.tolerance}).` + (lim.over_budget?' STILL OVER THE SIZE BUDGET.':''));
-missing.push('sound at the hydrophones (package V5) and the live chain\'s tracker taps (V6) are not on this page yet.');
+missing.push((window.__AUDIO ? 'sound: the selected hydrophone (panel at the lower right); made audible as the panel says.' : 'sound: none beside this page (tools/scenario_view.py --audio side writes NAME.audio/ next to it).') + ' The live chain\'s tracker taps (V6) are not on this page yet.');
 $('info').innerHTML = `<h1>${esc(D.scenario)}</h1><div class="m">tier ${esc(D.tier)} · ${esc(D.sonar.name)} (${esc(D.sonar.mode)}) · ${fx(D.sonar.band_hz[0]/1e3,1)}–${fx(D.sonar.band_hz[1]/1e3,1)} kHz · ${H.length} hydrophone${H.length===1?'':'s'} · ${esc(D.view?.note||'ping '+D.ping)}</div>`
  + `<div><a href="${esc(D.links?.png)}">2-D page</a>${D.links?.index?` · <a href="${esc(D.links.index)}">index</a>`:''} · <span class="m">a picture of the simulator, not a measurement</span></div>`
  + `<p${RAYS.length?'':' class="warn"'}>${esc(rayNote)}</p>`
@@ -305,6 +310,7 @@ function selectRay(x){ selected=x; const set=new Set([x]); emphasise(set);
     + (x.kind==='leg'?`<div>${pairs.length} of the ${D.pairs.length} strongest pairs use it${pairs.length?`: ${pairs.slice(0,6).map(p=>`${fx(p.t,5)} s (${fx(p.db,1)} dB)`).join(', ')}`:''}</div>`:'');
   $('pick').hidden=false; $('pclose').onclick=clearSel; }
 function selectHyd(c){ $('hsel').value=String(c); if (c<0){ selPt.visible=false; clearSel(); return; }
+  if (window.__AUDIO) setSound(c, sndKind);
   selPt.geometry.setFromPoints([L(H[c])]); selPt.visible=true;
   const rows=[]; D.pairs.forEach((p,i)=>rows.push({t:p.ch[c], db:p.db, c:cls(p.ns,p.nb), what:`${D.targets[p.target]?.label}: out ${p.out}, back ${p.back}`, pair:p}));
   (D.oneway||[]).forEach(o=>o.arrivals.forEach(a=>rows.push({t:a.ch[c], db:a.db, c:cls(a.ns,a.nb), what:`one way from ${o.label}, ray ${a.k}`})));
@@ -320,34 +326,110 @@ H.forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); 
 $('hsel').addEventListener('change', e=>selectHyd(+e.target.value));
 
 // ---------- time: a dot along each ray, hydrophones light as pairs arrive ----------
+const A = window.__AUDIO || null, AD = () => (window.__AUDIO_DATA || {});
 const allT = [...D.pairs.map(p=>p.t), ...(D.oneway||[]).flatMap(o=>o.arrivals.map(a=>a.t)), ...(D.direct?D.direct.arrivals.map(a=>a.t):[])];
-const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), 1e-3)*1.02;
+const recEnd = A ? A.record_start_s + A.record_duration_s : 0;
+const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), recEnd, 1e-3)*1.02;
 const tOut = Math.min(...D.legs.flatMap(l=>l.out.map(r=>r.delay)), Infinity);
 const slider=$('time'), tval=$('tval');
 const baseCol = hydPts.geometry.getAttribute('color').array.slice();
+const WIN = 0.004*tMax;                 // a hydrophone lights while an arrival is within this of its delay there
+let tNow = tMax*0.999, litNow = [];
 function at(x, f){ const s=f*x.Lc[x.Lc.length-1]; let i=1; while(i<x.Lc.length-1 && x.Lc[i]<s) i++; const a=x.r.line[i-1], b=x.r.line[i], u=(s-x.Lc[i-1])/Math.max(x.Lc[i]-x.Lc[i-1],1e-12); return [a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2])]; }
-function setTime(t){ for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
+function litAt(t){ const out=[]; H.forEach((p,c)=>{ if (D.pairs.some(q=>Math.abs(q.ch[c]-t)<WIN) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<WIN))) out.push(c); }); return out; }
+function setTime(t){ tNow=t; const pingOk = !M || M.times.length<2 || pingIdx===tracedIdx;
+  for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
     // out legs from 0; back legs (stored array to target) run backwards from the earliest arrival at the target; one-way rays (stored array to source) backwards from 0
     let f; if (x.which==='out'||x.kind==='direct') f=t/x.r.delay; else if (x.kind==='leg') f=1-(t-tOut)/x.r.delay; else f=1-t/x.r.delay;
     const ok = x.which==='out'||x.kind==='direct' ? (f>0&&f<1) : (x.kind==='leg' ? (t>tOut && f>0 && f<1) : (f>0&&f<1));
     if (!ok){ x.dot.visible=false; continue; } x.dot.geometry.setFromPoints([L(at(x, x.kind==='direct'? 1-f : f))]); x.dot.visible=true; }
-  const col=hydPts.geometry.getAttribute('color'), win=0.004*tMax, lit=new THREE.Color(0xffc000);
-  H.forEach((p,c)=>{ const hit=D.pairs.some(q=>Math.abs(q.ch[c]-t)<win) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<win));
-    if (hit) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
-  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; }
-slider.addEventListener('input',()=>{ setTime(slider.value/1000*tMax); draw(); });
-let playing=null; $('play').addEventListener('click',()=>{ if (playing){ cancelAnimationFrame(playing); playing=null; return; }
-  const start=performance.now(), from=+slider.value>=1000?0:+slider.value;
-  const step=now=>{ const v=Math.min(1000, from+(now-start)/8); slider.value=v; setTime(v/1000*tMax); draw(); playing = v<1000 ? requestAnimationFrame(step) : null; };
-  playing=requestAnimationFrame(step); });
+  const col=hydPts.geometry.getAttribute('color'), lit=new THREE.Color(0xffc000);
+  litNow = pingOk ? litAt(t) : []; const on=new Set(litNow);
+  H.forEach((p,c)=>{ if (on.has(c)) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
+  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; slider.value=Math.round(Math.max(0,Math.min(1,t/tMax))*1000); drawPlayhead(); }
+
+// ---------- sound: the selected hydrophone's audio is the page's clock ----------
+// scene time (s after transmit) <-> audio time: audio_s = (scene_s - record_start_s) * time_scale (manifest.time).
+const t2a = t => A ? (t - A.time.record_start_s) * A.time.time_scale : 0, a2t = a => A ? A.time.record_start_s + a / A.time.time_scale : 0;
+const audioEl = new Audio(); audioEl.preload='auto'; try { audioEl.preservesPitch=false; audioEl.mozPreservesPitch=false; audioEl.webkitPreservesPitch=false; } catch(e) {}
+let sndHyd = 0, sndKind = 'whole', clockMode = 'skip', rate = 1, playing=null, wall=null;
+const fileOf = (c,k) => A && A.files.find(f=>f.channel===c && f.kind===k);
+const kindsOf = c => A ? [...new Set(A.files.filter(f=>f.channel===c).map(f=>f.kind))] : [];
+const kindName = k => k==='whole' ? 'whole record' : k.startsWith('arrival_') ? (()=>{ const a=A.arrivals.find(x=>x.kind===k); return a?`one arrival: out ${a.out}, back ${a.back} (${fx(a.level_db,1)} dB, ${fx(a.delay_s,4)} s)`:k; })() : k.replace(/_/g,' ');
+function loadData(c, then){ if (AD()[c] || !A || A.embedded) { then(); return; }
+  const sc=document.createElement('script'); sc.src=`${A.dir}/h${String(c).padStart(3,'0')}.js`; sc.onload=then; sc.onerror=then; document.head.appendChild(sc); }
+function setSound(c, k){ if (!A) return; if (!kindsOf(c).length) c = A.parts_channels[0] ?? 0; if (!fileOf(c,k)) k='whole';
+  sndHyd=c; sndKind=k; const f=fileOf(c,k); const src = f.src || `${A.dir}/${f.file}`;
+  if (audioEl.getAttribute('src')!==src){ audioEl.src=src; }
+  $('skind').innerHTML = kindsOf(c).map(x=>`<option value="${x}"${x===k?' selected':''}>${esc(kindName(x))}</option>`).join('');
+  $('sinfo').textContent = `hydrophone ${c} · ${kindName(k)} · ${A.kinds[k]||''} · gain ${fx(A.gains_db[k],1)} dB · peak ${fx(f.peak_dbfs,1)} dBFS`;
+  loadData(c, drawPlayhead); }
+let specImg=null, specKey='';
+function drawPlayhead(){ const cv=$('scv'); if (!cv || !A) return; const W=cv.width=cv.clientWidth*(window.devicePixelRatio||1), Hh=cv.height=150*(window.devicePixelRatio||1);
+  const g=cv.getContext('2d'); const d=AD()[sndHyd]; const T=A.plan.audio_duration_s, X=a=>a/T*W;
+  g.fillStyle='#000'; g.fillRect(0,0,W,Hh);
+  const sp=d&&d.spec[sndKind];
+  if (sp){ const key=sndHyd+'/'+sndKind; if (key!==specKey){ const raw=atob(sp.u8), im=g.createImageData(sp.cols, sp.rows);
+      for (let r=0;r<sp.rows;r++) for (let q=0;q<sp.cols;q++){ const v=raw.charCodeAt(r*sp.cols+q), o=4*((sp.rows-1-r)*sp.cols+q); im.data[o]=v; im.data[o+1]=Math.min(255,v*0.8); im.data[o+2]=Math.min(255,v*0.35+40*(v>0)); im.data[o+3]=255; }
+      const c2=document.createElement('canvas'); c2.width=sp.cols; c2.height=sp.rows; c2.getContext('2d').putImageData(im,0,0); specImg={c:c2, sp}; specKey=key; }
+    g.imageSmoothingEnabled=false; const x0=X(sp.t0-sp.dt/2), x1=X(sp.t0+sp.dt*(sp.cols-0.5)); g.drawImage(specImg.c, x0, 0, x1-x0, Hh*0.62); }
+  const ev=d&&d.env[sndKind];
+  if (ev){ const raw=atob(ev.u8); g.strokeStyle='#7fd3ff'; g.lineWidth=1; g.beginPath();
+    for (let i=0;i<raw.length;i++){ const a=t2a(ev.t0+i*ev.dt), y=Hh-2-(raw.charCodeAt(i)/255)*(Hh*0.36-4); if (i) g.lineTo(X(a),y); else g.moveTo(X(a),y); } g.stroke(); }
+  // arrivals at this hydrophone (the 40 strongest pairs): ticks at their audio times
+  for (const p of D.pairs){ const a=t2a(p.ch[sndHyd]); if (a<0||a>T) continue; g.strokeStyle=CLS[cls(p.ns,p.nb)][0]; g.lineWidth=1.5; g.beginPath(); g.moveTo(X(a),Hh*0.62); g.lineTo(X(a),Hh*0.66); g.stroke(); }
+  const ah=t2a(tNow); if (ah>=0 && ah<=T){ g.strokeStyle='#ffc000'; g.lineWidth=2; g.beginPath(); g.moveTo(X(ah),0); g.lineTo(X(ah),Hh); g.stroke(); }
+  g.fillStyle='#ddd'; g.font=`${10*(window.devicePixelRatio||1)}px system-ui`;
+  const fa=A.plan.kept_audio_hz, sp2=sp; if (sp2){ const fTop=sp2.df*sp2.rows; g.fillText(`${fx(fTop/1e3,1)} kHz heard (${fx(heardToTrue(fTop)/1e3,4)} kHz in the water)`, 4, 12*(window.devicePixelRatio||1)); }
+  g.fillText(`audio ${fx(T,2)} s · envelope: matched filter of this kind at this hydrophone (dB, 60 dB span)`, 4, Hh*0.66+12*(window.devicePixelRatio||1)); }
+const heardToTrue = f => A ? f * A.plan.factor + A.plan.shift_hz : f;
+function stopPlay(){ if (playing) cancelAnimationFrame(playing); playing=null; wall=null; audioEl.pause(); $('play').textContent='play'; if ($('splay')) $('splay').textContent='play'; }
+function startPlay(){ stopPlay(); let t = tNow>=tMax*0.99 ? 0 : tNow;
+  if (A && clockMode==='skip' && t < A.record_start_s) t = A.record_start_s;
+  setTime(t); $('play').textContent='pause'; if ($('splay')) $('splay').textContent='pause';
+  const useAudio = !!A;
+  const startAudio = () => { audioEl.playbackRate=rate; audioEl.currentTime=Math.max(0,t2a(tNow)); const pr=audioEl.play(); if (pr && pr.catch) pr.catch(()=>{}); };
+  if (useAudio && tNow >= A.record_start_s) startAudio();
+  const step = now => { if (useAudio && !audioEl.paused && tNow >= A.record_start_s){ setTime(a2t(audioEl.currentTime)); }
+      else { if (wall==null) wall=now; const dt=(now-wall)/1000; wall=now;
+        // without sound: the slider's 8 ms per 1/1000 of the span (V4); with sound, before the record starts: real time x rate
+        const nt = useAudio ? tNow + dt*rate : tNow + dt*tMax/8;
+        if (useAudio && tNow < A.record_start_s && nt >= A.record_start_s){ setTime(A.record_start_s); startAudio(); }
+        else setTime(Math.min(nt, tMax)); }
+      draw(); if (tNow >= tMax || (useAudio && audioEl.ended)) { stopPlay(); return; } playing=requestAnimationFrame(step); };
+  playing=requestAnimationFrame(step); }
+slider.addEventListener('input',()=>{ const t=slider.value/1000*tMax; setTime(t); if (A && !audioEl.paused) audioEl.currentTime=Math.max(0,t2a(t)); draw(); });
+$('play').addEventListener('click',()=>{ if (playing) stopPlay(); else startPlay(); });
+audioEl.addEventListener('ended', ()=>{ stopPlay(); });
+if (A){ const P=A.plan, snd=$('snd'); snd.hidden=false;
+  const mapText = P.method==='time_stretch' ? `${fx(P.factor,0)} s of sound for each second in the water` : 'one second of sound for each second in the water';
+  snd.innerHTML = `<b>sound</b> <span class="m">(${esc(P.method.replace('_',' '))}${P.method==='heterodyne'?`, −${fx(P.shift_hz/1e3,4)} kHz`:P.method==='time_stretch'?`, ×${fx(P.factor,0)} slower`:''})</span>
+   <div class="row"><label>hear <select id="skind"></select></label>
+   <label>clock <select id="sclock"><option value="skip">skip the silence (start at the record)</option><option value="real">real time from the transmit</option></select></label>
+   <label>rate <select id="srate">${[0.25,0.5,1,2].map(r=>`<option value="${r}"${r===1?' selected':''}>${r}×</option>`).join('')}</select></label>
+   <button id="splay">play</button>${A.stereo?` <a href="${esc(A.stereo.src||A.dir+'/'+A.stereo.file)}" download>stereo pair h${A.stereo.channels.join(' + h')}</a>`:''}</div>
+   <canvas id="scv"></canvas><div class="m" id="sinfo"></div>
+   <details><summary>how this sound was made</summary><div class="m">${esc(A.method_words)}. ${esc(A.levels)}. Time: ${esc(A.time.scene_to_audio)} (record start ${fx(A.record_start_s,4)} s after the transmit; ${mapText}). The page's clock is the audio's: the slider, the dots on the rays and the lit hydrophones follow it. "skip the silence" starts at the record (nothing is recorded before its window opens); "real time" runs from the transmit at the chosen rate and starts the sound when the window opens. The rate changes pitch with speed (no pitch correction). Parts (echoes, each reverberation item, noise, the direct sound) and single arrivals exist for hydrophone${A.parts_channels.length>1?'s':''} ${A.parts_channels.join(', ')}; the whole record for every hydrophone. Parts are the simulator's taps before the ADC.</div></details>`;
+  $('skind').addEventListener('change', e=>{ setSound(sndHyd, e.target.value); });
+  $('sclock').addEventListener('change', e=>{ clockMode=e.target.value; });
+  $('srate').addEventListener('change', e=>{ rate=+e.target.value; audioEl.playbackRate=rate; });
+  $('splay').addEventListener('click', ()=>{ if (playing) stopPlay(); else startPlay(); });
+  $('hsel').addEventListener('change', e=>{ const c=+e.target.value; if (c>=0) setSound(c, sndKind); });
+  setSound(A.parts_channels[0] ?? 0, 'whole'); }
 
 // ---------- ping slider ----------
 if ($('ping')){ const pin=$('ping'), pval=$('pval');
   const upd=()=>{ pingIdx=+pin.value; const t=M.times[pingIdx];
     pval.textContent=`${M.ping_index[pingIdx]} (t = ${fx(t,2)} s)` + (pingIdx===tracedIdx?' · rays traced at this ping':' · rays are traced at ping '+M.ping+' only');
     if (pingMarks) pingMarks.geometry.setFromPoints(D.targets.map((tg,i)=>L((M.targets[i]||[tg.position])[pingIdx]||tg.position)));
-    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]); vis(); };
-  pin.addEventListener('input', upd); upd(); }
+    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]);
+    if (M.track && M.track[pingIdx] && M.track[tracedIdx]){ const dd=[0,1,2].map(i=>M.track[pingIdx][i]-M.track[tracedIdx][i]); const v=LD(dd);
+      for (const k of ['array','beams','projpat']) G[k].position.copy(v); }      // the platform moves: array, beams and projector with it
+    vis(); setTime(tNow); };
+  pin.addEventListener('input', upd); upd();
+  const pb=document.createElement('button'); pb.textContent='step pings'; pb.title='step through the pings, the platform moving'; $('pingbox').appendChild(pb);
+  let stepper=null; pb.addEventListener('click',()=>{ if (stepper){ clearInterval(stepper); stepper=null; pb.textContent='step pings'; return; }
+    pb.textContent='stop'; stepper=setInterval(()=>{ pin.value=String((+pin.value+1)%M.times.length); upd(); draw(); }, 400); }); }
 
 // ---------- vertical exaggeration, views ----------
 const vin=$('vex'), vval=$('vval');
@@ -363,7 +445,10 @@ function draw(){ renderer.render(scene, camera); placeLabels(); }
 window.addEventListener('resize',()=>{ resize(); draw(); });
 setVex(Math.max(1, Math.min(60, Math.round(0.3*span/zSpan))));
 resize(); zoomAll(); vis(); setTime(tMax*0.999); draw();
-window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex};
+window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex, audio: !!A, audioFiles: A ? A.files.length : 0};
+// For a browser check (tests/python/test_scene_audio.py): the clock and the lit hydrophones.
+window.__viz = {setTime: t => { setTime(t); draw(); return litNow.slice(); }, lit: () => litNow.slice(), win: WIN, tMax, t2a, a2t,
+  sound: () => A ? {hyd: sndHyd, kind: sndKind, src: audioEl.getAttribute('src')} : null, setSound: (c,k) => { setSound(c,k); return {hyd: sndHyd, kind: sndKind}; }};
 // For a browser check (tools/page3d_check.js, tests): where on the screen a drawn ray's middle vertex is.
 window.__screenOfRay = i => { const x=RAYS[i]; if (!x) return null; world.updateMatrixWorld(); const v=L(x.r.line[Math.floor(x.r.line.length/2)]).applyMatrix4(world.matrixWorld).project(camera);
   const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x+1)/2*r.width, r.top+(1-v.y)/2*r.height]; };

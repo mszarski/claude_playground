@@ -53,6 +53,11 @@ def test_plans_name_their_method_band_and_what_they_misrepresent():
     assert fls["method"] == "heterodyne" and fls["tag"] == "het2000"
     assert fls["kept_hz"][1] - fls["kept_hz"][0] == pytest.approx(3600.0)              # 2 x (2000 - 200) Hz
     assert fls["kept_audio_hz"][0] >= audio.HET_FLOOR_HZ - 1.0 / 0.003 and "Doppler" in fls["misrepresents"]
+    # A 3 ms record holds 11 bins of the kept 3.6 kHz, 0.27 ms (a rail scene) under one: said, not silently.
+    assert fls["warning"] is None
+    short = audio.listen_plan([1.7136e6, 3.7264e6], "RealPassband", 50e6, 2.72e6, 0.00027)
+    assert "click or silence" in short["warning"] and audio._method_words(short).startswith("WARNING")
+    assert flank["warning"] is None
     st = audio.listen_plan([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003, method="time_stretch")
     assert st["factor"] == 391 and st["audio_duration_s"] == pytest.approx(0.003 * 391)
     assert st["kept_audio_hz"][1] <= 0.5 * st["rate_hz"] and "slower" in st["misrepresents"]
