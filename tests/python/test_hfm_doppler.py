@@ -314,3 +314,28 @@ def test_a_sampled_hfm_fits_the_frozen_record_and_the_bank_refuses_it():
         with pytest.raises((ValueError, RuntimeError), match="linear sweep"):
             with LiveChain(dict(CHAIN, engine=engine, doppler={"mode": "sweep_bank", "max_range_rate_m_s": 1.0})) as ch:
                 ch.process(rec.copy())
+
+
+def test_the_eval_tool_runs_a_small_case(tmp_path):
+    """tools/hfm_doppler_eval.py (the measurement of DOPPLER.md "HFM") on one ping of each waveform at 0 and 5.6 m/s, 1 s, both
+    engines: its scene (free field, still platform, the two targets closing along their lines of sight), the engines equal, the
+    HFM within 1 dB of its zero-speed margin on the point and the LFM more than 3 dB under, the HFM's range error the closed
+    form's within 1 m."""
+    import pathlib
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools"))
+    import hfm_doppler_eval as ev
+    cfg = ev.scene_config("hfm", 1.0, 5.6, 1)
+    assert cfg["fidelity"] == "free_field" and cfg["reverberation"] == [] and cfg["platform"]["velocity"] == [0.0, 0.0, 0.0]
+    assert cfg["sonar_overrides"]["transmit"]["waveform"] == {"f_start": F0, "f_stop": F1, "duration": 1.0, "window_alpha": 0.1,
+                                                              "type": "sampled", "source": "hfm"}
+    tr = ev.truth(cfg, 1, C)
+    # the 40 m of depth between the platform (10 m) and the targets (50 m) over 12 km: cos 0.19 deg
+    assert tr["point"][0]["range_rate"] == pytest.approx(-5.6, abs=1e-4) and tr["hull"][0]["range_rate"] == pytest.approx(-5.6, abs=1e-4)
+    out = tmp_path / "e.json"
+    assert ev.main(["--speeds", "0", "5.6", "--pings", "1", "--ts-offset-db", "20", "--json", str(out)]) == 0
+    res = json.loads(out.read_text())
+    assert all(c["plain"]["engines_equal"] for c in res["cases"])
+    rel = {(x["waveform"], x["target"]): x for x in res["relative"] if x["speed_m_s"] == 5.6 and x["engine"] == "cpp"}
+    assert rel[("hfm", "point")]["relative_db"] > -1.0 and rel[("lfm", "point")]["relative_db"] < -3.0
+    assert rel[("hfm", "point")]["range_error_m"] == pytest.approx(doppler.hfm_doppler(-5.6, F0, F1, 1.0, C)["range_error_m"], abs=1.0)
