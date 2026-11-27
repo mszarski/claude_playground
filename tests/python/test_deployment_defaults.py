@@ -32,8 +32,10 @@ core = gs.core
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "configs" / "deploy"
 SAND = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}
-STACKED = {"popoto_static_2row", "popoto_static_3row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_elevation_rehearsal"}
-WITH_COVERAGE = {"popoto_face_1row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_vehicle", "popoto_elevation_rehearsal"}
+STACKED = {"popoto_static_2row", "popoto_static_3row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_elevation_rehearsal",
+           "popoto_vehicle_elevation_ss5"}       # the last: the alternate design for sea state 5 (D-255)
+WITH_COVERAGE = {"popoto_face_1row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_vehicle", "popoto_elevation_rehearsal",
+                 "popoto_vehicle_elevation_ss5"}
 
 
 def deployed() -> dict:
