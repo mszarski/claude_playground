@@ -11,6 +11,7 @@ numbers for each: simulate, condition, (estimate motion,) image, (detect, track)
 
 Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out DIR]
                         [--quick]   thinned scenes and fewer pings, for a CPU
+                        [--evidence]  each track's classifier evidence in gallery.json (opt-in)
 
 Writes <out>/<scenario>.png and <out>/gallery.json. --out defaults to docs/figures (the committed
 full-size gallery) for a full run and to build/gallery_quick under the repository (not committed)
@@ -778,15 +779,37 @@ def count_false_movers(classes, moving_ends, gate):
     return int(sum(c.kind == "mover" and all(far(c, e) for e in moving_ends) for c in classes))
 
 
+# `--evidence` (opt-in, sonar-4pon): classify_and_score adds `classification.evidence`, one row per track: the classifier
+# tap's numbers (classify.CLASS_EVIDENCE: the rule that gave the kind and the numbers it compared), the track's position
+# and velocity in world (x, y) at the last ping, whether it is one of the false movers counted, and its nearest true
+# object (label, distance from its outline at the last ping). Read only; off: the output as before.
+EVIDENCE = False
+
+
+def class_evidence(classes, evidence, truth, t_last, moving_ends, gate):
+    """`classification.evidence` rows (EVIDENCE): `evidence` (classify_tracks' tap, one dict per class, in order) with
+    each class's world position and velocity, its false-mover flag (count_false_movers' test) and nearest true object."""
+    rows = []
+    for c, e in zip(classes, evidence):
+        xy = (float(c.position[1]), float(c.position[0]))
+        near = min(((outline_distance(xy, object_outline(o, t_last))[0], label) for label, o in truth.items()), default=None)
+        rows.append(dict(e, position_xy=list(xy), velocity_xy=[float(c.velocity[1]), float(c.velocity[0])],
+                         false_mover=bool(c.kind == "mover" and all(outline_distance(xy, m)[0] >= gate for m in moving_ends)),
+                         nearest=None if near is None else {"label": near[1], "distance_m": float(near[0])}))
+    return rows
+
+
 def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
     the kind given to each true object's track (object_track) and how many tracks called
     movers are not on an object that moves (count_false_movers, against each moving object's outline at the last
     ping: D-157). The classes' positions are taken at the last ping (`t_last`), as the live report gives them (D-156).
     `range_doppler` ({"factor", "origin"}, target_doppler; None: off): the target's part of the LFM coupling correction
-    (sonar-fyj), applied to the classes' positions before they are scored."""
+    (sonar-fyj), applied to the classes' positions before they are scored. With EVIDENCE, also `evidence`
+    (class_evidence), after the shift."""
     rd = kw.pop("range_doppler", None)
-    classes = classify.classify_tracks(tracks, time=t_last, **kw)
+    evidence = [] if EVIDENCE else None
+    classes = classify.classify_tracks(tracks, time=t_last, evidence=evidence, **kw)
     if rd is not None:
         classify.shift_for_target_doppler(classes, float(rd["factor"]), tuple(rd["origin"]))
     by_id = {c.id: c for c in classes}
@@ -802,6 +825,8 @@ def classify_and_score(tracks, truth, t_last, gate, **kw):
             out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
                                      "truly_moving": bool(np.hypot(*vel[:2]) > 0.0)}
     out["movers_not_on_a_moving_object"] = count_false_movers(classes, moving_ends, gate)
+    if evidence is not None:
+        out["evidence"] = class_evidence(classes, evidence, truth, t_last, moving_ends, gate)
     return classes, out
 
 
@@ -1286,10 +1311,13 @@ def main():
                     help="detection range in flank_patrol and the Popoto tracking scenes (RANGE_ESTIMATE; default %(default)s)")
     ap.add_argument("--range-doppler", choices=RANGE_DOPPLERS, default="off",
                     help="LFM range-Doppler coupling correction in the tracking scenes (RANGE_DOPPLER, sonar-fyj; default %(default)s)")
+    ap.add_argument("--evidence", action="store_true",
+                    help="add each track's classifier evidence to the tracking scenes' classification (EVIDENCE, sonar-4pon)")
     args = ap.parse_args()
-    global RANGE_ESTIMATE, RANGE_DOPPLER
+    global RANGE_ESTIMATE, RANGE_DOPPLER, EVIDENCE
     RANGE_ESTIMATE = args.range_estimate
     RANGE_DOPPLER = args.range_doppler
+    EVIDENCE = args.evidence
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
     out = output_dir(args.out, args.quick)
     out.mkdir(parents=True, exist_ok=True)
