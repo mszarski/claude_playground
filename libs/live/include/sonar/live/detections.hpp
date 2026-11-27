@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace sonar::live {
@@ -116,6 +117,38 @@ struct TrackerOptions {
   Association association = Association::Likelihood;
 };
 
+/// The tracker's opt-in tap (Tracker::set_tap; python/gpusonar/detect.py TRACKER_TAP, the same members): what one
+/// update did. Read only: the tracks are bit-identical with the tap on or off.
+struct TrackerTapTrack {
+  std::int64_t id = 0;
+  double state[4] = {0, 0, 0, 0};
+  double cov[16] = {};
+  std::int64_t hits = 0, misses = 0;
+  bool confirmed = false;
+  double time = std::numeric_limits<double>::quiet_NaN();
+};
+struct TrackerTapPair {
+  std::int64_t track = 0;      ///< id
+  std::int64_t detection = 0;  ///< index into the update's detections
+  double d2 = 0.0;             ///< squared Mahalanobis distance of the innovation
+  double cost = std::numeric_limits<double>::quiet_NaN();  ///< d2 + ln|S| (Likelihood); NaN for InOrder
+  bool gated = false;          ///< d2 < gate^2
+  bool nearest = false;        ///< the track's smallest d2 (the first on a tie), kept even outside the gate
+  double x = 0.0, y = 0.0;     ///< the track predicted to the detection's time (across, forward, m)
+  double sxx = 0.0, sxy = 0.0, syy = 0.0;  ///< the innovation covariance there
+};
+struct TrackerTap {
+  double time = std::numeric_limits<double>::quiet_NaN();
+  std::vector<TrackerTapTrack> before;   ///< the tracks entering the update (id, hits, misses, confirmed)
+  std::vector<TrackerTapPair> pairs;     ///< gated pairs and each track's nearest, in the order compared
+  std::vector<std::pair<std::int64_t, std::int64_t>> took;  ///< (track id, detection index)
+  std::vector<std::int64_t> missed;
+  std::vector<TrackerTapTrack> dropped;  ///< as they were when dropped (misses > max_misses)
+  std::vector<std::pair<std::int64_t, std::int64_t>> born;  ///< (new track id, detection index)
+  std::vector<std::int64_t> confirmed_now;
+  std::vector<TrackerTapTrack> after;    ///< every track after the update, tentative ones too
+};
+
 /// Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal plane.
 class Tracker {
  public:
@@ -128,11 +161,18 @@ class Tracker {
   /// history steps back. Returns the confirmed tracks.
   std::vector<const Track*> update(double time, const std::vector<Detection>& detections);
   const std::vector<Track>& tracks() const { return tracks_; }
+  const TrackerOptions& options() const { return opt_; }
+  /// Opt-in tap (off by default): each update then leaves what it did in last_tap(). Read only.
+  void set_tap(bool on) { tap_ = on; }
+  bool tap_on() const { return tap_; }
+  const TrackerTap& last_tap() const { return last_tap_; }
 
  private:
   TrackerOptions opt_;
   std::vector<Track> tracks_;
   std::int64_t next_id_ = 1;
+  bool tap_ = false;
+  TrackerTap last_tap_;
 };
 
 enum class Kind { Mover, Static, Line, Multipath, Uncertain };
@@ -176,8 +216,28 @@ struct ClassifyOptions {
   double max_fit_rms_bearing = 0.0;
 };
 
-/// Mover, static, line, multipath or uncertain, from each track alone (see classify.py).
-std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& options = {});
+/// The classifier's opt-in tap, per track (classify.py CLASS_EVIDENCE, the same members and rule names): the numbers
+/// the rules compared and the rule that gave the kind. Read only.
+struct ClassEvidence {
+  std::int64_t id = 0;
+  std::int64_t rows = 0, fitted = 0;
+  double speed = 0.0, speed_sigma = 0.0, need = 0.0, seen = 0.0, fit_rms = 0.0;
+  double limit = std::numeric_limits<double>::quiet_NaN();   ///< NaN: no limit (max_fit_rms < 0)
+  bool steady = true;
+  double extent_cells = std::numeric_limits<double>::quiet_NaN();
+  std::string rule, kind;
+  std::vector<std::string> later;  ///< line, small_extent, bounce, multipath:<parent or none>
+};
+
+/// Mover, static, line, multipath or uncertain, from each track alone (see classify.py). `evidence` (opt-in tap): one
+/// ClassEvidence per track appended when given.
+std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& options = {},
+                                        std::vector<ClassEvidence>* evidence = nullptr);
+
+/// The evidence's `later` after echo grouping or the bounces (classify.py evidence_after_grouping): `before` the
+/// (kind, parent) of each class before it.
+void evidence_after_grouping(std::vector<ClassEvidence>& evidence, const std::vector<std::pair<Kind, std::int64_t>>& before,
+                             const std::vector<TrackClass>& classes, const std::vector<std::int64_t>& bounces = {});
 
 /// Echo grouping (D-155, D-172; classify.py group_echoes), in place: classify_tracks' last step when options.multipath
 /// (it reads only the multipath_* fields and origin_x, origin_y). `bounces`: ids of tracks the caller knows to be bounces

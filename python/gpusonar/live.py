@@ -1216,6 +1216,27 @@ def _finite(v):
     return float(v) if np.isfinite(v) else None
 
 
+# Opt-in taps of what exists only inside the chain (docs/tasks/VISUALIZATION.md section 15): `taps={"chain": [...]}`
+# (with or without a `dir`). Each ping then leaves them in `LiveChain.chain_taps` ({name: object or None}) and, for the
+# pings a TapWriter writes, in its directory as NAME.json. Read only: the report line is bit-identical with them on or off
+# (tests/python/test_live_cpp.py). Both engines: the C++ chain behind the same names (LiveChainCpp.set_taps / tap).
+#   tracker:    detect.TRACKER_TAP (gates, associations, covariances, births, confirmations, drops)
+#   classifier: classify.CLASS_EVIDENCE per reported track, in the report's order
+#   detector:   the multiscale detector's background of each cell of the map {background [n_bearing, n_cells] float32
+#               (power, the beamform tap's shape), ranges [n_cells] m, plan (the detector's plan: each statistic's
+#               threshold factor over the background)}; None on a ping it did not run (another cell_statistic)
+CHAIN_TAPS = ("tracker", "classifier", "detector")
+
+
+def _write_chain_tap(tap: TapWriter, name: str, obj) -> None:
+    """One opt-in chain tap into a TapWriter: JSON, or for the detector its background as an array and its plan."""
+    if name == "detector" and obj is not None:
+        tap.arrays("detector", background=np.asarray(obj["background"]), ranges=np.asarray(obj["ranges"]))
+        tap.json("detector_plan", obj.get("plan"))
+    else:
+        tap.json(name, obj)
+
+
 class LiveChain:
     """Process ping records as they arrive. `process(record)` returns the report for that ping."""
 
@@ -1266,6 +1287,11 @@ class LiveChain:
         self._report = open(report_path, "w", encoding="utf-8") if report_path else None
         self._udp = (socket.socket(socket.AF_INET, socket.SOCK_DGRAM), tuple(report_udp)) if report_udp else None
         self._tap_cfg = taps or {}
+        self._chain_taps = tuple(self._tap_cfg.get("chain") or ())
+        bad = [n for n in self._chain_taps if n not in CHAIN_TAPS]
+        if bad:
+            raise ValueError(f"taps.chain: {bad}: each one of {CHAIN_TAPS}")
+        self.chain_taps = None                 # the last ping's opt-in chain taps ({name: object or None})
         self.nav = nav                         # None: the records already carry the pose (simulation, replay)
         self.pings_without_nav = 0
         self.pings_without_velocity = 0        # pings whose fix carried no velocity over ground (NavListener.velocity_given)
@@ -1290,6 +1316,8 @@ class LiveChain:
             # One C++ object does synchronisation, conditioning, beamforming, detection, bearings,
             # tracking and classification; this class keeps the navigation, recording, taps and report.
             self._cpp = core.LiveChainCpp(dict(cpp_chain_options(self.cfg, self._reference), backend=self.backend))
+            if self._chain_taps:
+                self._cpp.set_taps(list(self._chain_taps))
         self._origin = None                    # world position of the array at the first ping
         self._t0 = None
         self.pings = 0
@@ -1362,10 +1390,16 @@ class LiveChain:
             if report.get("sync") and not report["sync"]["ok"]:
                 self.boards_out_of_sync += 1
             power, ranges, _ = self._cpp.last_map()
+            if self._chain_taps:
+                self.chain_taps = {n: self._cpp.tap(n) for n in self._chain_taps}
+                if self.chain_taps.get("detector") is not None:
+                    self.chain_taps["detector"]["plan"] = self.detector
             if tap:
                 tap.records("prepare", [record])               # conditioned in place by the C++ chain
                 tap.arrays("beamform", power=power, ranges=ranges, bearings=self.bearings)
                 tap.json("report", report)
+                for n in self._chain_taps:
+                    _write_chain_tap(tap, n, self.chain_taps[n])
             self.last = {"power": power, "ranges": ranges, "hits": report["detections"], "classes": report["tracks"]}
             return self._emit(report)
         sync_facts = None
@@ -1553,6 +1587,7 @@ class LiveChain:
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
                                       depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5),
                                       association=t["association"])
+        self.tracker.tap = "tracker" in self._chain_taps             # opt-in, read only
         self.resolved = json.loads(d["json"])
 
     def _fine_map(self, record, grid_start=None):
@@ -1645,6 +1680,9 @@ class LiveChain:
                     hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan)
                 else:
                     hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan, level=level)
+                if "detector" in self._chain_taps:        # the opt-in detector tap: reads only
+                    self._detector_tap = {"background": np.asarray(background_map, dtype=np.float32), "ranges": [float(v) for v in ranges],
+                                          "plan": self.detector}
                 if bank is not None:
                     # Each detection's coarse range rate: the hypothesis of the strongest sample of the maximum map along its
                     # nearest bearing over the range it covers (doppler.detection_hypothesis; libs/live chain.cpp the same).
@@ -1930,7 +1968,11 @@ class LiveChain:
             local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
                                           depth_alternatives=alternatives, time=t + float(out_range[i]) / c_range,
                                           range_sigma=h.range_sigma))       # a tone's coarse range (D3); NaN: the tracker's
+        if self.tracker is not None:
+            self.tracker.last_tap = None
+        detector_tap, self._detector_tap = getattr(self, "_detector_tap", None), None
         tracks = self.tracker.update(t, local) if self.tracker is not None else []      # D3: a tone-only ping before the first sweep
+        evidence = [] if "classifier" in self._chain_taps else None   # the opt-in classifier tap, read only
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=getattr(self, "_multipath_bearing", float("nan")), origin=(own[1], own[0])) if c.get("multipath") else None
@@ -1939,7 +1981,7 @@ class LiveChain:
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
                                            outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=getattr(self, "_fit_rms_bearing", 0.0),
-                                           origin=(own[1], own[0]))
+                                           origin=(own[1], own[0]), evidence=evidence)
         if cfg["range_doppler"] == "full" and bank is None:
             # sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
             classify.shift_for_target_doppler(classes, lfm_factor, (own[1], own[0]))
@@ -1977,12 +2019,15 @@ class LiveChain:
                     bounces.append(c_.id)      # its straight-line depth is above the surface or below the bottom: a bounce
         # A bounce is multipath; before echo grouping, so that it is never a group's object (sonar-bal: made multipath
         # after grouping, an object left its members a parent that was itself multipath). classify.group_echoes.
+        before_grouping = [(c_.kind, c_.parent) for c_ in classes] if evidence is not None else None
         if mp:
             classify.group_echoes(classes, mp, bounces)
         else:
             for c_ in classes:
                 if c_.id in bounces:
                     c_.kind = "multipath"
+        if evidence is not None:
+            classify.evidence_after_grouping(evidence, before_grouping, classes, bounces)
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
@@ -2023,8 +2068,14 @@ class LiveChain:
         if self._coverage is not None:         # hook: one member of the report line, refreshed when something changed
             report.update(json.loads("{" + self._coverage.update(record, tuple(float(v) for v in origin), rays_bottom, rays_water) + "}"))
         report = finite_or_null(report)           # null where libs/live writes null: a non-finite snr_db, for one
+        if self._chain_taps:
+            self.chain_taps = {"tracker": self.tracker.last_tap if self.tracker is not None else None,
+                               "classifier": evidence, "detector": detector_tap}
+            self.chain_taps = {n: self.chain_taps[n] for n in self._chain_taps}
         if tap:
             tap.json("report", report)
+            for n in self._chain_taps:
+                _write_chain_tap(tap, n, self.chain_taps[n])
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}
         return self._emit(report)
 

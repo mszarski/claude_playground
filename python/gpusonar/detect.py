@@ -355,6 +355,40 @@ class Track:
 
 ASSOCIATIONS = ("likelihood", "in_order")
 
+# The tracker's opt-in tap (Tracker.tap; libs/live Tracker::set_tap, the same members): per update
+#   time_s, gate, association; before [{id, hits, misses, confirmed}] (the tracks entering the update);
+#   pairs [{track, detection, d2, cost, gated, nearest, x [2], s [sxx, sxy, syy]}]: every (track, detection) pair the
+#     association compared that lies inside the gate (d2 < gate^2), and each track's nearest pair (smallest d2, the first
+#     on a tie) even outside it; x the track predicted to the detection's time, s the innovation covariance there (m,
+#     the tracker's frame: across, forward); cost d2 + ln|s| (likelihood association; null for in_order);
+#   took [{track, detection}]; missed [ids]; dropped [{track..., reason}]; born [{track, detection}];
+#   confirmed_now [ids]; after [{id, state [4], cov [16], hits, misses, confirmed, time}] (every track, tentative too).
+# `detection` is the index into the detections given to the update (the report line's order in the live chain).
+TRACKER_TAP = ("time_s", "gate", "association", "before", "pairs", "took", "missed", "dropped", "born",
+               "confirmed_now", "after")
+
+
+def _tap_track(t: "Track") -> dict:
+    return {"id": t.id, "state": [float(v) for v in t.state], "cov": [float(v) for v in np.asarray(t.cov).reshape(-1)],
+            "hits": int(t.hits), "misses": int(t.misses), "confirmed": bool(t.confirmed), "time": float(t.time)}
+
+
+def _tap_pairs_kept(rows, gate: float) -> list:
+    """The pairs the tap keeps (TRACKER_TAP): inside the gate, or a track's nearest."""
+    nearest = {}
+    for i, r in enumerate(rows):
+        if r[0] not in nearest or r[2] < rows[nearest[r[0]]][2]:
+            nearest[r[0]] = i
+    keep = set(nearest.values())
+    out = []
+    for i, (tid, j, d2, cost, x, s) in enumerate(rows):
+        gated = d2 < gate**2
+        if gated or i in keep:
+            out.append({"track": tid, "detection": int(j), "d2": float(d2), "cost": float(cost) if np.isfinite(cost) else None,
+                        "gated": bool(gated), "nearest": i in keep, "x": [float(x[0]), float(x[1])],
+                        "s": [float(s[0, 0]), float(s[0, 1]), float(s[1, 1])]})
+    return out
+
 
 class Tracker:
     """Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal
@@ -389,6 +423,12 @@ class Tracker:
         self.tracks: list[Track] = []
         self._next_id = 1
         self._took: dict = {}
+        # Opt-in tap (docs/tasks/VISUALIZATION.md section 15, V6): with `tap` True each update leaves what it did in
+        # `last_tap` (`TRACKER_TAP`); it only reads, so the tracks are bit-identical with it on or off. libs/live
+        # Tracker::set_tap / last_tap the same.
+        self.tap = False
+        self.last_tap: dict | None = None
+        self._tap_pairs: list | None = None
 
     def _measurement_cov(self, d: Detection) -> np.ndarray:
         # Polar measurement noise rotated into Cartesian.
@@ -457,6 +497,11 @@ class Tracker:
             return cache[key]
 
         self._took = {}                              # track id -> the position of the detection it took this ping
+        tap = None
+        if self.tap:
+            tap = {"time_s": float(time), "gate": float(self.gate), "association": self.association,
+                   "before": [{"id": t.id, "hits": t.hits, "misses": t.misses, "confirmed": t.confirmed} for t in self.tracks]}
+            self._tap_pairs = []
         if self.association == "likelihood":
             unused = self._associate_by_likelihood(detections, whens, h, predicted)
         else:
@@ -469,7 +514,17 @@ class Tracker:
             t.pings.append(float(time))
             z = self._took.get(t.id)
             t.measured.append((float(z[0]), float(z[1])) if z is not None else (float("nan"), float("nan")))
+        if tap is not None:
+            tap["pairs"] = _tap_pairs_kept(self._tap_pairs, self.gate)
+            self._tap_pairs = None
+            tap["took"] = [{"track": t.id, "detection": int(self._took_index[t.id])} for t in self.tracks if t.id in self._took_index]
+            tap["missed"] = [t.id for t in self.tracks if t.misses > 0]
+            tap["dropped"] = [dict(_tap_track(t), reason=f"missed {t.misses} pings in a row > max_misses {self.max_misses}")
+                              for t in self.tracks if t.misses > self.max_misses]
+            was = {b["id"]: b["confirmed"] for b in tap["before"]}
+            tap["confirmed_now"] = [t.id for t in self.tracks if t.confirmed and not was.get(t.id, False)]
         self.tracks = [t for t in self.tracks if t.misses <= self.max_misses]
+        born = []
         for j in unused:
             d = detections[j]
             cov = np.zeros((4, 4))
@@ -484,7 +539,12 @@ class Tracker:
             tr.cells.append(int(d.cells))
             self._take_depth(tr, d)
             self.tracks.append(tr)
+            born.append({"track": tr.id, "detection": int(j)})
             self._next_id += 1
+        if tap is not None:
+            tap["born"] = born
+            tap["after"] = [_tap_track(t) for t in self.tracks]
+            self.last_tap = tap
         return [t for t in self.tracks if t.confirmed]
 
     @staticmethod
@@ -527,7 +587,10 @@ class Tracker:
                 d2 = float(y @ np.linalg.solve(s, y))
                 if d2 < self.gate**2:
                     pairs.append((not t.confirmed, d2 + float(np.log(np.linalg.det(s))), ti, j))
+                if self._tap_pairs is not None:          # the tap: reads only
+                    self._tap_pairs.append((t.id, j, d2, d2 + float(np.log(np.linalg.det(s))), x, s))
         pairs.sort()
+        self._took_index = {}
         taken: dict[int, int] = {}
         used: set[int] = set()
         for _, _, ti, j in pairs:
@@ -538,6 +601,7 @@ class Tracker:
         for ti, t in enumerate(self.tracks):
             if ti in taken:
                 j = taken[ti]
+                self._took_index[t.id] = j
                 self._take(t, detections[j], h, predicted(ti, whens[j]), whens[j])
             else:
                 t.misses += 1
@@ -546,6 +610,7 @@ class Tracker:
     def _associate_in_order(self, detections: list[Detection], whens: list[float], h: np.ndarray, predicted) -> list[int]:
         """The rule before D-141. Returns the indices of the detections no track took."""
         unused = list(range(len(detections)))
+        self._took_index = {}
         # Confirmed tracks choose first, each taking its nearest gated detection.
         order = sorted(range(len(self.tracks)), key=lambda ti: not self.tracks[ti].confirmed)
         for ti in order:
@@ -557,11 +622,14 @@ class Tracker:
                 s = h @ p @ h.T + self._measurement_cov(d)
                 y = d.xy() - h @ x
                 d2 = float(y @ np.linalg.solve(s, y))
+                if self._tap_pairs is not None:          # the tap: reads only
+                    self._tap_pairs.append((t.id, j, d2, float("nan"), x, s))
                 if d2 < best_d2:
                     best, best_d2 = j, d2
             if best is None:
                 t.misses += 1
                 continue
+            self._took_index[t.id] = best
             unused.remove(best)
             self._take(t, detections[best], h, predicted(ti, whens[best]), whens[best])
         return unused

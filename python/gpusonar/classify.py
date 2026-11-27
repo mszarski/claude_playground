@@ -257,7 +257,7 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
                     max_fit_rms: float | None = None, multipath: dict | None = None,
                     linear: dict | None = None, detections: dict | None = None, time: float | None = None,
                     outlier_alpha: float = OUTLIER_ALPHA, max_fit_rms_bearing: float = 0.0,
-                    origin=None) -> list[TrackClass]:
+                    origin=None, evidence: list | None = None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
     `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
@@ -295,6 +295,9 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     `max_fit_rms_bearing` (rad, sonar-4jm): where `max_fit_rms` is given, a track's limit is at least this times its
     fitted position's range from `origin` ((x, y); None: the multipath origin, else (0, 0)): the measured positions
     scatter across the line of sight by the range times the bearing error. 0: off (libs/live derives it from the beam).
+    `evidence` (the opt-in classifier tap, docs/tasks/VISUALIZATION.md section 15): a list, which receives one dict per
+    track (`CLASS_EVIDENCE`): the numbers the rules compared and the rule that gave the kind; read only (the classes are
+    the same with or without it). libs/live classify_tracks' `evidence` the same.
     """
     det = check_detection_rules(detections)
     if not (0.0 <= outlier_alpha < 1.0):
@@ -335,6 +338,15 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         extent = float(np.median(cells)) if cells else float("nan")
         out.append(TrackClass(tr.id, kind, (float(pos[0]), float(pos[1])), (float(v[0]), float(v[1])), speed,
                               sigma, rms, float(seen), snr, extent_cells=extent))
+        if evidence is not None:                 # the tap: reads only
+            rule = ("few_points" if n < min_points else "scatter" if not steady else
+                    {"mover": "mover", "uncertain": "uncertain_otherwise"}.get(kind) or
+                    ("static_slow" if speed < static_speed and seen >= min_seen else "static_insignificant"))
+            evidence.append({"id": tr.id, "rows": int(n), "fitted": int(n_fit), "speed": speed, "speed_sigma": float(sigma),
+                             "need": float(need), "seen": float(seen), "fit_rms": float(rms),
+                             "limit": None if limit is None else float(limit), "steady": bool(steady),
+                             "extent_cells": None if not np.isfinite(extent) else extent, "rule": rule, "kind": kind,
+                             "later": []})
     if linear:
         xy = np.array([c.position for c in out]).reshape(-1, 2)
         for i, c in enumerate(out):
@@ -353,15 +365,48 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
             # Both ahead and astern: a boat trailing a wake has tracks astern only and stays a mover.
             if int((in_row & (along > 1e-6)).sum()) >= 1 and int((in_row & (along < -1e-6)).sum()) >= 1:
                 c.kind = "line"
+                if evidence is not None:
+                    evidence[i]["later"].append("line")
     if det["min_mover_cells"] is not None:
         # After the corridor test, so that a row of small echoes along a pipeline stays a line; before echo grouping,
         # so that a track too small for an object under way does not explain others as its echoes.
-        for c in out:
+        for i, c in enumerate(out):
             if c.kind == "mover" and c.extent_cells < det["min_mover_cells"]:
                 c.kind = "uncertain"             # a glint or clutter joined into a line; NaN (no cells) leaves it
+                if evidence is not None:
+                    evidence[i]["later"].append("small_extent")
     if multipath:
+        before = [(c.kind, c.parent) for c in out]
         group_echoes(out, multipath)
+        if evidence is not None:
+            evidence_after_grouping(evidence, before, out)
     return out
+
+
+# The classifier's opt-in tap (classify_tracks `evidence`; libs/live ClassEvidence, the same members), per track:
+#   id; rows (history rows) and fitted (points in the line); speed, speed_sigma (m/s); need (the significance the speed
+#   must reach in sigmas, Student's t at the fit's degrees of freedom); seen (hits / rows); fit_rms and limit (m; limit
+#   null: none); steady (fit_rms within the limit); extent_cells (median flagged cells; null: none); rule, the first rule
+#   that gave the kind: few_points (rows < min_points), scatter (fit_rms > limit), mover (speed >= min_speed and >= need x
+#   speed_sigma, seen >= min_seen), static_slow (speed < static_speed, seen >= min_seen), static_insignificant (speed <
+#   need x speed_sigma, seen >= min_seen, speed < 3 static_speed), uncertain_otherwise; kind (that rule's kind); later:
+#   what changed it afterwards, in order: line (the corridor test), small_extent (the detections' extent rule), bounce
+#   (the live chain's elevation step), multipath:<parent id or none> (echo grouping).
+CLASS_EVIDENCE = ("id", "rows", "fitted", "speed", "speed_sigma", "need", "seen", "fit_rms", "limit", "steady",
+                  "extent_cells", "rule", "kind", "later")
+
+
+def evidence_after_grouping(evidence: list, before: list, classes: list, bounces=()) -> list:
+    """The evidence's `later` after echo grouping (or the bounces alone): `before` is [(kind, parent)] of `classes` before
+    it. A class made multipath gets "bounce" when its id is in `bounces`, then "multipath:<parent>" when grouping gave it
+    a parent (or none)."""
+    bounces = set(bounces)
+    for e, (k0, p0), c in zip(evidence, before, classes):
+        if c.id in bounces:
+            e["later"].append("bounce")
+        if c.kind == "multipath" and (k0 != "multipath" or p0 != c.parent) and not (c.id in bounces and c.parent is None):
+            e["later"].append(f"multipath:{'none' if c.parent is None else c.parent}")
+    return evidence
 
 
 def shift_for_target_doppler(classes: list[TrackClass], factor: float, origin=(0.0, 0.0)) -> list[TrackClass]:
