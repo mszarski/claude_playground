@@ -7,6 +7,7 @@ level, own depth, and processing credits, per planning site and target class, wi
     tools/popoto_trade_study.py --coverage      # the coverage picture (C++) at the build's site, at broadside and the sector's edge
     tools/popoto_trade_study.py --measure-rows  # simulator: how much stacked rows reject the shelf's reverberation (minutes)
     tools/popoto_trade_study.py --crosscheck    # simulator + live chain at two grid points against the study's prediction
+    tools/popoto_trade_study.py --transmit      # transmit options (level x pulse) on the shipped face by sea state and site (merged into the JSON)
     tools/popoto_trade_study.py --report        # docs/design/popoto_trade_study.md from the JSON
     tools/popoto_trade_study.py --quick --out /tmp/x   # one variant, one site, one class: what the test runs
 
@@ -738,6 +739,570 @@ def crosscheck(R: dict, pings: int = 6, half_window: float = 400.0, log=print) -
     return out
 
 
+# --- transmit options by sea state (--transmit; the owner, 2026-11-27: "lets have options for the transmit in different sea
+# states, like a table. you can keep the default we have now but lets make sure the trade study covers options") ----------
+
+TX_CLASSES = ("large_submerged", "ship")             # the requirement's, in its order (the owner, 2026-11-26; D-235)
+TX_GEOMETRY = (3, 32)                                 # the shipped face (configs/builds/popoto_face_3x32.yaml)
+TX_LEVELS = (197.0, 200.0, 203.0)                     # the shipped level and two 3 dB steps (projector_requirements.py's levels run to 203 dB)
+TX_PULSES = (1.0, 2.0, 4.0, 8.0)                      # every pulse at FULL level
+TX_PAIRED = (2.0, 194.0)                              # projector_selection.md Sec. 1.8 and Sec. 4 option B: the energy-limited projector's pairing
+TX_SEA_STATES = (2, 3, 4, 5, 6)                       # whole states: acoustics.sea_state_wind_speed (via secondary: UnderwaterAcoustics.jl's table)
+TX_DEEP = "deep_no_bottom_return"                     # the site that isolates the noise (no bottom: surface image and surface reverberation only)
+TX_BUBBLE_SITE = "deep_no_bottom_return_sea_state_5"  # the site that states a bubble law (apl_1994); the deep table is run with and without it
+TX_RADIAL = (0.4, 2.0, 8.0)                           # m/s radial: a crossing target at 12 km (DOPPLER.md LS.2: -0.39 m/s); the class's 2 and 8 m/s (assumed)
+TX_PINGS = (2, 4, 8)
+TX_EFFICIENCY = (0.5, 0.85)                           # transducer, amplifier: projector_selection.md Sec. 1.3's working values (ours; no part chosen)
+TX_TEXTBOOK_PINGS = ("textbook rule for N looks added incoherently in the many-look limit: the threshold falls about 5 log10 N "
+                     "(Urick, Principles of Underwater Sound, the detection-threshold chapter; status: unconfirmed, not opened in this session)")
+
+
+def tx_options() -> list:
+    """The transmit options, least energy per ping first (energy = source level + 10 log10 pulse, dB re 1 uPa^2 s at 1 m),
+    then the shorter pulse. The 4-6 kHz band as shipped throughout."""
+    opts = [(p, lv) for lv in TX_LEVELS for p in TX_PULSES] + [TX_PAIRED]
+    out = []
+    for p, lv in sorted(set(opts), key=lambda o: (round(o[1] + 10.0 * np.log10(o[0]), 6), o[0])):
+        out.append({"id": f"{p:g} s {lv:g} dB", "variant": variant_id(TX_GEOMETRY[0], TX_GEOMETRY[1], "2k", p, lv), "pulse_s": float(p), "source_level_db": float(lv),
+                    "energy_db": float(lv + 10.0 * np.log10(p)), "shipped": bool(p == SHIPPED["pulse_s"] and lv == SHIPPED["source_level_db"]),
+                    "paired": bool((p, lv) == TX_PAIRED)})
+    return out
+
+
+def tx_sites(sites: list) -> dict:
+    """{key: environment}: the deep site at each whole sea state, without a bubble law (as it states none) and with the law
+    the sea-state-5 site states; and every illustrative site at its own stated conditions."""
+    by = {e["name"]: e for e in sites}
+    out = {}
+    deep = by.get(TX_DEEP)
+    law = (by.get(TX_BUBBLE_SITE) or {}).get("bubble_model")
+    if deep is not None:
+        for law_ in [None] + ([law] if law else []):
+            for n in TX_SEA_STATES:
+                e = {k: v for k, v in copy.deepcopy(deep).items() if k not in ("wind_speed_m_s", "sea_state", "bubble_model", "title")}
+                e.update(sea_state=int(n), name=f"{TX_DEEP}__ss{n}" + (f"__{law_}" if law_ else ""),
+                         title=f"{TX_DEEP} at sea state {n}" + (f", bubble loss by the {law_} law" if law_ else ", no bubble law (as the site states)"))
+                if law_:
+                    e["bubble_model"] = law_
+                out[e["name"]] = e
+    for e in sites:
+        out[f"{e['name']}__as_stated"] = {**copy.deepcopy(e), "name": e["name"]}
+    return out
+
+
+def sweep_mismatch_loss_db(radial_m_s: float, band_hz: float, pulse_s: float, c: float) -> float:
+    """The PEAK a linear sweep's matched filter loses on an echo of radial speed r: -20 log10 M(phi), phi = pi B T |r| / c (the
+    closed form of tests/python/test_doppler_bank.py, ours; the C++ library's sweep_mismatch, which the chain's detector uses)."""
+    import gpusonar as gs
+    return float(-20.0 * np.log10(gs.core.live_sweep_mismatch(float(np.pi * band_hz * pulse_s * abs(radial_m_s) / c))))
+
+
+def tx_projector(d: dict) -> dict:
+    """Which listed projector supports the option's level across 4-6 kHz at its duty (tools/projector_candidates.py: the sheets
+    as read in docs/design/projector_selection.md, via secondary), the least depth free of cavitation by the maker's own
+    statement scaled with static pressure, and, where no single unit does, the fewest units in phase (20 log10 N on the
+    weakest frequency, mutual coupling ignored: projector_selection.md Sec. 3.2's rule; unconfirmed)."""
+    import projector_candidates as pc
+    sl, duty = float(d["source_level_db"]), float(d["pulse_s"] / d["ping_interval_s"])
+    single, arrays, none = [], [], []
+    for c in pc.CANDIDATES:
+        if pc.rated_voltage(c, duty) is None:
+            none.append(f"{c['model']}: no rating on its sheet covers {100 * duty:.0f} % duty")
+            continue
+        r = pc.evaluate(c, d, 500.0, (5.0,))
+        lv = float(min(r["level_at_rated_db"]))
+        entry = {"model": c["model"], "level_at_rated_drive_db": lv, "units": int(r["units_for_level"])}
+        if r["meets_level_across_band"]:
+            entry["least_depth_maker_m"] = r.get("least_depth_for_level_maker_m")
+            single.append(entry)
+        else:
+            per = sl - 20.0 * np.log10(entry["units"])
+            r2 = pc.evaluate(c, {**d, "source_level_db": per}, 500.0, (5.0,))
+            entry.update(level_each_db=float(per), least_depth_maker_m=r2.get("least_depth_for_level_maker_m"))
+            arrays.append(entry)
+    arrays.sort(key=lambda e: (e["units"], -e["level_at_rated_drive_db"]))
+    if single:
+        words = "; ".join(f"{e['model']} ({e['level_at_rated_drive_db']:.1f} dB at its rated drive"
+                          + (f", free of cavitation below {e['least_depth_maker_m']:.0f} m by its maker" if e.get("least_depth_maker_m") is not None else ", no cavitation statement on its sheet") + ")"
+                          for e in sorted(single, key=lambda e: -e["level_at_rated_drive_db"]))
+        status = "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
+    else:
+        a = arrays[0] if arrays else None
+        near = max(arrays, key=lambda e: e["level_at_rated_drive_db"]) if arrays else None
+        words = ("no source identified: no listed unit reaches it across 4-6 kHz at this duty"
+                 + (f" (the nearest, {near['model']}, gives {near['level_at_rated_drive_db']:.1f} dB at the rating that covers {100 * duty:.0f} % duty: {sl - near['level_at_rated_drive_db']:.1f} dB short)" if near else "") + (
+            f"; it would need {a['units']} x {a['model']} in phase ({a['level_each_db']:.1f} dB each against {a['level_at_rated_drive_db']:.1f} dB at its rated drive; "
+            + (f"each free of cavitation below {a['least_depth_maker_m']:.0f} m by its maker" if a.get("least_depth_maker_m") is not None else "no cavitation statement on its sheet")
+            + "; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)" if a else ""))
+        status = "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
+    return {"duty": duty, "single_units": single, "arrays": arrays[:3], "no_rating": none, "words": words, "status": status}
+
+
+def tx_costs(d: dict) -> dict:
+    """What an option costs that the model computes: blind range, range resolution, ping interval and duty against the two-way
+    time to 12 km, energy and power (projector_requirements.py's relations at projector_selection.md's working efficiencies),
+    the sweep's Doppler tolerance and peak loss without the bank, the bank's size, and the projector."""
+    import projector_requirements as pr
+    c, (f_lo, f_hi), T, sl = float(d["sound_speed"]), d["band_hz"], float(d["pulse_s"]), float(d["source_level_db"])
+    B = float(f_hi - f_lo)
+    e = pr.energy(sl, T, float(d["ping_interval_s"]), TX_EFFICIENCY[0], TX_EFFICIENCY[1])
+    step = c / (2.0 * B * T)
+    return {"blind_range_m": float(d["blind_range_m"]), "blind_range_formula": "c T / 2", "range_resolution_m": c / (2.0 * B), "ping_interval_s": float(d["ping_interval_s"]),
+            "two_way_12km_s": 2.0 * RANGE_M / c, "duty": T / float(d["ping_interval_s"]), "energy_db": sl + 10.0 * np.log10(T),
+            "acoustic_w": e["acoustic_w"], "from_supply_w": e["from_supply_w"], "joule_per_ping": e["joule_per_ping"], "average_w": e["average_w"],
+            "heat_in_transducer_average_w": e["heat_in_transducer_average_w"],
+            "power_assumptions": f"omnidirectional; transducer {100 * TX_EFFICIENCY[0]:g} % and amplifier {100 * TX_EFFICIENCY[1]:g} % efficient (projector_selection.md Sec. 1.3's working values; ours: no part chosen)",
+            "doppler_tolerance_m_s": step, "doppler_tolerance_formula": "c / (2 B T): the radial speed at which the plain matched filter's peak loses 0.97 dB (phi = pi / 2)",
+            "mismatch_loss_db": {f"{r:g}": sweep_mismatch_loss_db(r, B, T, c) for r in TX_RADIAL},
+            "mismatch_smear_m": {f"{r:g}": 2.0 * abs(r) * T for r in TX_RADIAL},
+            "bank_hypotheses_8_m_s": int(2 * int(np.ceil(8.0 / step - 1e-9)) + 1), "projector": tx_projector(d)}
+
+
+def tx_multi_ping(d: dict) -> dict:
+    """N pings combined: the chain has no ping-to-ping integration (tracks confirm on 3 hits: live.DEFAULTS tracker), and the
+    planner none. For scale only: what this detector would need if N pings' maps were added in power cell by cell as its rows'
+    maps are (buildspec.detection with rows x N maps; ours), which a mover at 2-8 m/s defeats unless the cells are moved with it."""
+    from gpusonar import buildspec as bs
+    det = bs.detection(d)
+    rows = int(det["rows"])
+    return {"implemented": False, "what": "not implemented in the chain or the planner: the table's columns hold one ping",
+            "detector_gain_if_added_in_power_db": {str(n): float(det["threshold_db"] - bs.detection(d, rows=rows * n)["threshold_db"]) for n in TX_PINGS},
+            "detector_gain_status": "ours: buildspec.detection with rows x N maps added in power (the rows' own machinery); not implemented for pings",
+            "motion_between_pings_m": {f"{r:g}": r * float(d["ping_interval_s"]) for r in TX_RADIAL[1:]}, "range_resolution_m": d["sound_speed"] / (2.0 * (d["band_hz"][1] - d["band_hz"][0])),
+            "textbook": TX_TEXTBOOK_PINGS}
+
+
+def run_transmit(envs: dict, classes: list, options: list, log=print, bellhop: bool = True) -> dict:
+    """The shipped 3 x 32 face with each transmit option at each environment: the planner's margin at 12 km (bound A) and its
+    parts (planned with every class of the build, as the grid is, since the planner's target-depth grid follows the classes; TX_CLASSES kept), worst over each class's depths at the low end of its strength, at the recommended own depth; and the same with the
+    plain matched filter's peak loss on a mover (TX_RADIAL), at that own depth."""
+    bs, depthplan, _ = _imports()
+    from gpusonar.sim.bellhop import find_bellhop
+    res, skipped, seconds, meta = {}, {}, {}, {}
+    for key, env in envs.items():
+        if env.get("profile") is not None and (not bellhop or find_bellhop() is None):
+            skipped[key] = "a sound-speed profile needs Bellhop (GPUSONAR_BELLHOP)"
+            log(f"{key}: skipped (needs Bellhop)")
+            continue
+        t0 = time.time()
+        cache, base_rr = {}, None
+        for o in sorted(options, key=lambda o: (o["pulse_s"], o["source_level_db"])):           # 1 s first: the longer pulses slice its factor
+            d = bs.derive(variant_spec(TX_GEOMETRY[0], TX_GEOMETRY[1], "2k", o["pulse_s"], o["source_level_db"]))
+            rr = ranges_for(d, base_rr)
+            if rr is not None:
+                seed_sliced_factor(cache, env["name"], float(d["projector_m"][2]), tuple(float(x) for x in d["band_hz"]), base_rr, rr)
+            pp = parts(d, env, classes, cache, ranges=rr)
+            if o["pulse_s"] == 1.0 and base_rr is None:
+                base_rr = pp["rr"]
+            B, c = float(d["band_hz"][1] - d["band_hz"][0]), float(d["sound_speed"])
+            row = {}
+            for cl in classes:
+                if cl["name"] not in TX_CLASSES:
+                    continue
+                x = pp["classes"].get(cl["name"])
+                if x is None:
+                    continue
+                m = margin(x["noise"], x["srr"], pp["T"], pp["G"], 0.0)
+                b = _best(m, pp["own"], pp["rr"], pp["i_r"])
+                k = b.pop("_k")
+                s = summarise(pp, cl["name"], cl.get("speed_m_s"))
+                movers = {f"{r:g}": float(margin(x["noise"], x["srr"], pp["T"], pp["G"], 0.0, echo_db=-sweep_mismatch_loss_db(r, B, float(d["pulse_s"]), c))[k, pp["i_r"]]) for r in TX_RADIAL}
+                row[cl["name"]] = {"margin_db": b["margin_db"], "own_depth_m": b["own_depth_m"], "reach_m": b["reach_m"], "noise_only_db": float(x["noise"][k, pp["i_r"]]),
+                                   "limited_by": s["A"]["limited_by"], "ceiling_db": s["A"]["reverberation_only_ceiling_db"], "threshold_db": float(pp["T"]),
+                                   "plain_filter_on_a_mover_db": movers}
+            res.setdefault(key, {})[o["id"]] = row
+            if key not in meta:
+                meta[key] = {"title": env.get("title", ""), "method": pp["plan"]["method"], "reverberation": pp["plan"]["reverberation"]["note"],
+                             "wind_speed_m_s": float(depthplan.wind_of(env)), "bubble_model": env.get("bubble_model"), "site": env["name"]}
+            log(f"transmit {key} {o['id']}: " + ", ".join(f"{c_} {v['margin_db']:+.2f}" for c_, v in row.items()) + f"  ({time.time() - t0:.0f} s)")
+        seconds[key] = round(time.time() - t0, 1)
+    return {"results": res, "skipped": skipped, "seconds": seconds, "environments": meta}
+
+
+def tx_answers(T: dict) -> dict:
+    """From the transmit grid: per table and sea state, the least energy that holds both classes and every option at that energy;
+    per option, the highest sea state up to which both hold (every state below as well), with and without the bubble law; and
+    per site at its own conditions, what energy buys."""
+    opts, res = T["options"], T["grid"]["results"]
+
+    def holds(key, oid):
+        r = (res.get(key) or {}).get(oid) or {}
+        return bool(r) and all((r.get(c) or {}).get("margin_db", -1e9) >= 0.0 for c in TX_CLASSES)
+    out = {"least_energy": {}, "highest_sea_state": {}, "energy_buys": {}}
+    for table, suffix in (("no_bubble_law", ""), ("bubble_law", f"__{T.get('bubble_law')}")):
+        for n in TX_SEA_STATES:
+            key = f"{TX_DEEP}__ss{n}{suffix}"
+            if key not in res:
+                continue
+            ok = [o for o in opts if holds(key, o["id"])]
+            if ok:
+                e0 = ok[0]["energy_db"]
+                out["least_energy"].setdefault(table, {})[str(n)] = {"energy_db": e0, "options": [o["id"] for o in ok if abs(o["energy_db"] - e0) < 0.1]}       # 3 dB a doubling: 3.01
+            else:
+                best = max(opts, key=lambda o: min(((res[key].get(o["id"]) or {}).get(c) or {}).get("margin_db", -1e9) for c in TX_CLASSES))
+                out["least_energy"].setdefault(table, {})[str(n)] = {"energy_db": None, "options": [], "best": best["id"],
+                                                                     "best_margins_db": {c: res[key][best["id"]][c]["margin_db"] for c in TX_CLASSES}}
+        for o in opts:
+            top = None
+            for n in TX_SEA_STATES:
+                if f"{TX_DEEP}__ss{n}{suffix}" not in res:
+                    break
+                if not holds(f"{TX_DEEP}__ss{n}{suffix}", o["id"]):
+                    break
+                top = n
+            out["highest_sea_state"].setdefault(table, {})[o["id"]] = top
+    lo, hi = opts[0], opts[-1]
+    for key, by in res.items():
+        if not key.endswith("__as_stated"):
+            continue
+        site = key[: -len("__as_stated")]
+        e = {}
+        for c in TX_CLASSES:
+            a, b = (by.get(lo["id"]) or {}).get(c), (by.get(hi["id"]) or {}).get(c)
+            if a and b:
+                e[c] = {"from_db": a["margin_db"], "to_db": b["margin_db"], "gained_db": b["margin_db"] - a["margin_db"], "energy_added_db": hi["energy_db"] - lo["energy_db"],
+                        "limited_by_at_most": b["limited_by"], "ceiling_db": b["ceiling_db"], "holds_at_most": b["margin_db"] >= 0.0,
+                        "least_energy_that_holds": next((o["id"] for o in opts if ((by.get(o["id"]) or {}).get(c) or {}).get("margin_db", -1e9) >= 0.0), None)}
+        both = next((o["id"] for o in opts if holds(key, o["id"])), None)
+        out["energy_buys"][site] = {"classes": e, "least_energy_both": both}
+    return out
+
+
+def tx_requirement(T: dict) -> dict:
+    """The requirement sentence the model supports for each option, derived from the table (not typed)."""
+    A, opts = T["answers"], T["options"]
+    sites_ok = {}
+    for site, v in A["energy_buys"].items():
+        sites_ok[site] = {o["id"]: all((((T["grid"]["results"].get(f"{site}__as_stated") or {}).get(o["id"]) or {}).get(c) or {}).get("margin_db", -1e9) >= 0.0 for c in TX_CLASSES)
+                          for o in opts}
+    out = {}
+    for o in opts:
+        n_plain = A["highest_sea_state"].get("no_bubble_law", {}).get(o["id"])
+        n_bub = A["highest_sea_state"].get("bubble_law", {}).get(o["id"])
+        held = [s for s in sites_ok if sites_ok[s][o["id"]]]
+        not_held = [s for s in sites_ok if not sites_ok[s][o["id"]]]
+
+        def ss(n):
+            return f"at none of sea states {TX_SEA_STATES[0]} to {TX_SEA_STATES[-1]}" if n is None else f"up to sea state {n}"
+        out[o["id"]] = (f"With {o['id']} (4-6 kHz sweep; {o['energy_db']:.1f} dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against "
+                        f"`large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, "
+                        f"an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) {ss(n_bub)} with the "
+                        f"{T.get('bubble_law')} bubble law ({ss(n_plain)} without it); at the illustrative sites' own conditions at {', '.join(held) if held else 'none'}"
+                        + (f", not at {', '.join(not_held)}" if not_held else "") + ".")
+    return out
+
+
+def run_transmit_study(sites: list, classes: list, log=print, bellhop: bool = True, envs: dict | None = None, options: list | None = None) -> dict:
+    bs, _, _ = _imports()
+    t0 = time.time()
+    options = tx_options() if options is None else options
+    cls = [c for c in classes if c["name"] in TX_CLASSES]
+    cls.sort(key=lambda c: TX_CLASSES.index(c["name"]))
+    envs = tx_sites(sites) if envs is None else envs
+    T = {"command": command_line(), "date": datetime.date.today().isoformat(), "git_head_when_run": git_head(), "classes": [c["name"] for c in cls],
+         "geometry": f"{TX_GEOMETRY[0]}x{TX_GEOMETRY[1]}", "band_hz": list(SHIPPED["band_hz"]), "bubble_law": next((e.get("bubble_model") for e in sites if e["name"] == TX_BUBBLE_SITE), None),
+         "options": [], "radial_m_s": list(TX_RADIAL)}
+    for o in options:
+        d = bs.derive(variant_spec(TX_GEOMETRY[0], TX_GEOMETRY[1], "2k", o["pulse_s"], o["source_level_db"]))
+        T["options"].append({**o, "costs": tx_costs(d)})
+    T["multi_ping"] = tx_multi_ping(bs.derive(variant_spec(TX_GEOMETRY[0], TX_GEOMETRY[1])))
+    T["grid"] = run_transmit(envs, classes, T["options"], log=log, bellhop=bellhop)     # every class planned (the target-depth grid is theirs); two kept
+    T["answers"] = tx_answers(T)
+    T["requirement"] = tx_requirement(T)
+    T["seconds"] = round(time.time() - t0, 1)
+    T["waveforms"] = tx_waveforms(T)                     # derived from the grid (recomputed by --report)
+    return T
+
+
+# --- the waveform on a mover with no bank (derived at --report from the transmit grid; docs/tasks/DOPPLER.md "HFM") -------
+
+TX_WAVE_RADIAL = (2.0, 8.0)                           # m/s closing: the class's assumed 2 to 8 m/s (reference_classes.yaml)
+TX_WAVE_MEASURED = ("docs/tasks/DOPPLER.md, \"HFM\" (docs/tasks/hfm_doppler_eval.json): the live chain, both engines, free field at 12 km, "
+                    "point and bow-on hull, 1 to 8 s")
+
+
+def tx_waveforms(T: dict) -> dict:
+    """The plain matched filter (no sweep bank: the owner's baseline) on a target closing at 2 and 8 m/s, for the shipped linear
+    sweep (LFM) and the hyperbolic sweep (HFM, `transmit.waveform: {type: sampled, source: hfm}`) of the same band, length and
+    level, at every option and deep-water sea state of the transmit grid. Derived, not run: the planner has no waveform shape
+    (an HFM of the same band, energy and taper gives the grid's zero-speed margin; its spectrum's tilt toward the low end,
+    1 / f^2, is not in the planner), and a margin less the echo's loss is the margin with that loss (both of its terms take it:
+    `margin(echo_db=)`, held in the grid's own LFM columns to 1e-3 dB). The losses are the closed forms for the PEAK,
+    untapered: the LFM's -20 log10 M(pi B T v / c) (live_sweep_mismatch; ours, tests/python/test_doppler_bank.py) and the HFM's
+    1 + (1 / eta - 1) f1 / B closing (gpusonar.doppler.hfm_doppler; ours, tests/python/test_hfm_doppler.py); the chain's detector
+    integrates over cells and loses less with the LFM (measured: TX_WAVE_MEASURED)."""
+    from gpusonar import doppler as dop
+    bs, _, _ = _imports()
+    opts, res = T["options"], T["grid"]["results"]
+    f_lo, f_hi = (float(f) for f in T["band_hz"])
+    per = {}
+    for o in opts:
+        c = float(bs.derive(variant_spec(TX_GEOMETRY[0], TX_GEOMETRY[1], "2k", o["pulse_s"], o["source_level_db"]))["sound_speed"])
+        Tp = float(o["pulse_s"])
+        lfm = {f"{v:g}": sweep_mismatch_loss_db(v, f_hi - f_lo, Tp, c) for v in TX_WAVE_RADIAL}
+        hfm = {f"{v:g}": dop.hfm_doppler(-v, f_lo, f_hi, Tp, c)["loss_db"] for v in TX_WAVE_RADIAL}
+        per[o["id"]] = {"sound_speed": c,
+                        "lfm": {"loss_db": lfm, "range_m_per_m_s": 0.5 * (f_lo + f_hi) * Tp / (f_hi - f_lo),
+                                "range_error_m": {f"{v:g}": -0.5 * (f_lo + f_hi) * Tp / (f_hi - f_lo) * v for v in TX_WAVE_RADIAL}},
+                        "hfm": {"loss_db": hfm, "range_m_per_m_s": dop.hfm_range_factor(f_lo, f_hi, Tp),
+                                "range_error_m": {f"{v:g}": dop.hfm_doppler(-v, f_lo, f_hi, Tp, c)["range_error_m"] for v in TX_WAVE_RADIAL}}}
+    deep, least = {}, {}
+    for table, suffix in (("bubble_law", f"__{T.get('bubble_law')}"), ("no_bubble_law", "")):
+        for n in TX_SEA_STATES:
+            key = f"{TX_DEEP}__ss{n}{suffix}"
+            if key not in res:
+                continue
+            row = {}
+            for o in opts:
+                r = res[key].get(o["id"]) or {}
+                row[o["id"]] = {w: {f"{v:g}": {cl: float(r[cl]["margin_db"] - per[o["id"]][w]["loss_db"][f"{v:g}"]) for cl in TX_CLASSES if cl in r}
+                                    for v in TX_WAVE_RADIAL} for w in ("lfm", "hfm")}
+            deep.setdefault(table, {})[str(n)] = row
+            for w in ("lfm", "hfm"):
+                for v in TX_WAVE_RADIAL:
+                    ok = [o for o in opts if all(row[o["id"]][w][f"{v:g}"].get(cl, -1e9) >= 0.0 for cl in TX_CLASSES)]
+                    e0 = ok[0]["energy_db"] if ok else None
+                    least.setdefault(table, {}).setdefault(str(n), {}).setdefault(w, {})[f"{v:g}"] = {
+                        "energy_db": e0, "options": [o["id"] for o in ok if abs(o["energy_db"] - e0) < 0.1] if ok else []}
+    return {"radial_m_s": list(TX_WAVE_RADIAL), "convention": "closing along the line of sight; the HFM's loss is the larger closing (an up-sweep's echo overruns the top of the band)",
+            "per_option": per, "deep": deep, "least_energy": least, "measured": TX_WAVE_MEASURED}
+
+
+def waveform_section(R: dict) -> list:
+    """## 0a: the plain filter on a mover, LFM against HFM, per sea state and option (from `tx_waveforms`)."""
+    T = R.get("transmit") or {}
+    W = T.get("waveforms")
+    if not W:
+        return []
+    opts, law = T["options"], T.get("bubble_law")
+    per, least = W["per_option"], W["least_energy"]
+    sh = next(o for o in opts if o["shipped"])["id"]
+    sp = [f"{v:g}" for v in W["radial_m_s"]]
+
+    def le(table, n, w, v):
+        x = least.get(table, {}).get(str(n), {}).get(w, {}).get(v) or {}
+        return f"{x['energy_db']:.1f} dB ({', '.join(x['options'])})" if x.get("energy_db") is not None else "none in the grid"
+
+    L = ["## 0a. The plain filter on a mover: linear against hyperbolic sweep (no sweep bank)", "",
+         "The owner's baseline has every Doppler option off, so a moving target meets the plain matched filter. This section is **derived at `--report`** from the "
+         "transmit grid above (`tx_waveforms`; no new planner run): each cell is the grid's margin less the closed-form PEAK loss of the waveform on a target closing "
+         f"at {' / '.join(sp)} m/s (the class's assumed speeds), for the shipped linear sweep (LFM) and a hyperbolic sweep (HFM: `transmit.waveform: {{type: sampled, "
+         "source: hfm}`, the same band, length, taper and level, so the same energy). Status: **ours** (closed forms held to direct correlation in "
+         "tests/python/test_doppler_bank.py and tests/python/test_hfm_doppler.py). No default moves: the shipped sweep stays linear; HFM is an option.", ""]
+    worst = []
+    for table, label in (("bubble_law", f"with the {law} law"), ("no_bubble_law", "without a bubble law")):
+        never = [str(n) for n in TX_SEA_STATES if str(n) in least.get(table, {}) and least[table][str(n)]["lfm"][sp[-1]]["energy_db"] is None]
+        worst.append(f"**With the linear sweep and no bank, a target closing at {sp[-1]} m/s** ({label}), the least energy holding both classes: "
+                     + "; ".join(f"sea state {n}: {le(table, n, 'lfm', sp[-1])}" for n in TX_SEA_STATES if str(n) in least.get(table, {}))
+                     + ("" if not never else f" (**none in the grid at sea state {', '.join(never)}**)") + "; with the hyperbolic sweep: "
+                     + "; ".join(f"sea state {n}: {le(table, n, 'hfm', sp[-1])}" for n in TX_SEA_STATES if str(n) in least.get(table, {})) + ".")
+    h, l_ = per[sh]["hfm"], per[sh]["lfm"]
+    worst.append(f"**What the HFM costs: a range bias it cannot remove without a rate.** The plain filter reads an HFM echo closing at v nearer by f1 T / B per m/s "
+                 f"({h['range_m_per_m_s']:.1f} m per m/s at the shipped {sh.split(' s ')[0]} s, i.e. 3 T at 4-6 kHz: "
+                 + ", ".join(f"{o['id'].split(' s')[0]} s: {per[o['id']]['hfm']['range_error_m'][sp[-1]]:.0f} m" for o in opts if o["source_level_db"] == 197.0)
+                 + f" at {sp[-1]} m/s); the linear sweep's coupling is f_c T / B ({l_['range_m_per_m_s']:.1f} m per m/s at 1 s), and its peak is smeared besides. "
+                 "With no bank neither gives a range rate to correct it. Also: the HFM's energy density falls as 1 / f^2 across the band (2.6 dB from 4.25 to 5.75 kHz; "
+                 "the projector's response across 4-6 kHz is not known), its compressed main lobe is 2 % wider and its first sidelobe 0.6 dB higher than the linear "
+                 "sweep's (Tukey 0.1, unwindowed filter; test_hfm_doppler.py), and the sweep bank refuses it (it takes a linear sweep only).")
+    worst.append("The HFM's closed-form peak loss is " + ", ".join(f"{per[sh]['hfm']['loss_db'][v]:.2f} dB at {v} m/s" for v in sp)
+                 + " **at every pulse length** (it does not grow with T); the linear sweep's: "
+                 + "; ".join(f"{o['id'].split(' s')[0]} s: " + " / ".join(f"{per[o['id']]['lfm']['loss_db'][v]:.1f}" for v in sp) + " dB" for o in opts if o["source_level_db"] == 197.0)
+                 + f" at {' / '.join(sp)} m/s. Measured through the chain: {W['measured']}.")
+    L += [f"- {w}" for w in worst] + [""]
+
+    def cell(x):
+        if not x or any(c not in x for c in TX_CLASSES):
+            return "—"
+        t = " / ".join(f"{x[c]:+.1f}" for c in TX_CLASSES)
+        return f"**{t}**" if all(x[c] >= 0.0 for c in TX_CLASSES) else t
+    head = "| Sea state | Waveform, closing speed | " + " | ".join(f"{o['id']}{' (shipped)' if o['shipped'] else ''}: {o['energy_db']:.1f} dB" for o in opts) + " |"
+    sep = "| --- | --- | " + " | ".join("---" for _ in opts) + " |"
+    for table, label in (("bubble_law", f"with the {law} bubble law"), ("no_bubble_law", "without a bubble law")):
+        rows = W["deep"].get(table, {})
+        if not rows:
+            continue
+        L += [f"### Deep water (`{TX_DEEP}`), {label}: margin at 12 km on a mover, plain filter", "",
+              "Each cell: `large_submerged` / `ship`, dB; **bold** where both hold. The zero-speed margin is section 0's table.", "", head, sep]
+        for n in TX_SEA_STATES:
+            if str(n) not in rows:
+                continue
+            for w in ("lfm", "hfm"):
+                for v in sp:
+                    L.append(f"| {n} | {w.upper()}, {v} m/s | " + " | ".join(cell(rows[str(n)][o["id"]][w][v]) for o in opts) + " |")
+        L.append("")
+    L += ["### The least energy that holds both classes on a mover with no bank", "",
+          "| Table | Sea state | " + " | ".join(f"{w.upper()} at {v} m/s" for w in ("lfm", "hfm") for v in sp) + " |", "| --- | --- | " + " | ".join("---" for _ in range(2 * len(sp))) + " |"]
+    for table in ("bubble_law", "no_bubble_law"):
+        for n in TX_SEA_STATES:
+            if str(n) in least.get(table, {}):
+                L.append(f"| {table.replace('_', ' ')} | {n} | " + " | ".join(le(table, n, w, v) for w in ("lfm", "hfm") for v in sp) + " |")
+    L += ["", "| Option | LFM peak loss at " + " / ".join(sp) + " m/s | LFM range shift (m per m/s; at " + sp[-1] + " m/s) | HFM peak loss at " + " / ".join(sp)
+          + " m/s | HFM range bias (m per m/s; at " + sp[-1] + " m/s) |", "| --- | --- | --- | --- | --- |"]
+    for o in opts:
+        q = per[o["id"]]
+        L.append(f"| {o['id']} | " + " / ".join(f"{q['lfm']['loss_db'][v]:.1f}" for v in sp) + f" dB | {q['lfm']['range_m_per_m_s']:.1f}; {q['lfm']['range_error_m'][sp[-1]]:+.0f} m | "
+                 + " / ".join(f"{q['hfm']['loss_db'][v]:.2f}" for v in sp) + f" dB | {q['hfm']['range_m_per_m_s']:.1f}; {q['hfm']['range_error_m'][sp[-1]]:+.0f} m |")
+    L += ["", "Not in this table: the LFM's loss as the chain's detector sees it (smaller: it integrates over cells), the sweep bank (section 0's zero-speed margins less "
+          "its threshold correction), crossing targets (0.4 m/s: section 0's cost table), several pings. Not run: the HFM at 12 km through the eigenray scene "
+          "(a GPU-job item: tools/doppler_gpu_runs.sh `hfm12`).", ""]
+    return L
+
+
+def _ss(n):
+    return "none of 2-6" if n is None else f"up to sea state {n}"
+
+
+def transmit_section(R: dict) -> list:
+    """## 0: the transmit options by sea state, for the owner (the table first, then what each costs and where energy does not help)."""
+    T = R.get("transmit")
+    if not T:
+        return []
+    opts, res, A = T["options"], T["grid"]["results"], T["answers"]
+    ship_id = next(o["id"] for o in opts if o["shipped"])
+    law = T.get("bubble_law")
+    L = ["## 0. Transmit options by sea state (`--transmit`)", "",
+         f"The owner, 2026-11-27: \"lets have options for the transmit in different sea states, like a table. you can keep the default we have now but lets make sure the trade study covers options.\" "
+         f"No default moves: the shipped transmitter ({ship_id}, 4-6 kHz) and every file stay as they are. Grid: `{T['command']}`, {T['date']}, tree `{T['git_head_when_run']}`. "
+         f"Every figure is **ours** (the repository's model: `depthplan.plan` of the shipped {T['geometry']} face at the own depth it recommends for each option, worst over the class's depths, at the LOW end of its assumed strength, bound A); "
+         "sites **illustrative**, target strengths **assumed**. Each cell: margin at 12 km, dB, `large_submerged` / `ship`; **bold** where both hold. A margin is for ONE ping and an echo with no radial speed "
+         "(or the sweep bank on); what a mover costs the plain matched filter is in the second table.", ""]
+    # worst first
+    worst = []
+    for table, label in (("bubble_law", f"with the {law} bubble law"), ("no_bubble_law", "without a bubble law")):
+        le = A["least_energy"].get(table, {})
+        none = [n for n, v in le.items() if v["energy_db"] is None]
+        if none:
+            v = le[none[0]]
+            worst.append(f"At sea state {', '.join(none)} ({label}) **no option in the grid holds both classes at the deep site**; the best is {v['best']} "
+                         f"({', '.join(f'{c} {m:+.1f}' for c, m in v['best_margins_db'].items())} dB at sea state {none[0]}).")
+    top_ship = A["highest_sea_state"].get("bubble_law", {}).get(ship_id)
+    top_ship_plain = A["highest_sea_state"].get("no_bubble_law", {}).get(ship_id)
+    worst.append(f"**The shipped transmitter ({ship_id}) holds both classes at the deep site up to sea state {top_ship} with the {law} law (sea state {top_ship_plain} without it)**; "
+                 + "; ".join(f"at sea state {n}: " + " / ".join(f"{res[f'{TX_DEEP}__ss{n}__{law}'][ship_id][c]['margin_db']:+.1f}" for c in TX_CLASSES) + " dB with the law, "
+                             + " / ".join(f"{res[f'{TX_DEEP}__ss{n}'][ship_id][c]['margin_db']:+.1f}" for c in TX_CLASSES) + " dB without"
+                             for n in TX_SEA_STATES if top_ship is None or n == top_ship + 1) + " (`large_submerged` / `ship`).")
+    for table, label in (("bubble_law", f"with the {law} law"), ("no_bubble_law", "without a bubble law")):
+        need = []
+        for n, v in A["least_energy"].get(table, {}).items():
+            if v["energy_db"] is not None and not any(next(o for o in opts if o["id"] == i)["costs"]["projector"]["single_units"] for i in v["options"]):
+                need.append(f"sea state {n} ({', '.join(v['options'])})")
+        if need:
+            worst.append(f"**The least energy that holds both classes needs a level no single listed projector gives** ({label}): " + "; ".join(need)
+                         + " (the projector column says what it would take; unconfirmed).")
+    sh = next(o for o in opts if o["shipped"])
+    worst.append(f"**Without the sweep bank (the owner's baseline) a mover pays the plain matched filter's peak loss**, and it grows with the pulse as fast as the energy does: "
+                 + "; ".join(f"{o['id']}: {o['costs']['mismatch_loss_db']['2']:.1f} / {o['costs']['mismatch_loss_db']['8']:.1f} dB at 2 / 8 m/s" for o in opts if o["source_level_db"] == 197.0)
+                 + f". Its tolerance c / (2 B T) is {sh['costs']['doppler_tolerance_m_s']:.3f} m/s at 1 s and {min(o['costs']['doppler_tolerance_m_s'] for o in opts):.3f} m/s at 8 s: "
+                 "**at every pulse length in the grid, the shipped 1 s included, the class's 2-8 m/s needs the bank** to keep the gain the table shows. "
+                 "This is the closed form for the PEAK (the planner's statistic); the chain's multiscale detector sums cells and lost less on the one measured hull (docs/tasks/DOPPLER.md LS.3: "
+                 "bank off, closing at -5.61 m/s with a 1 s sweep, 3.4 dB under the crossing target; the bank gave back +0.8 dB net). Longer pulses through the chain are not measured.")
+    eb = A["energy_buys"]
+    flat = [f"{s} `{c}` ({v['from_db']:+.1f} -> {v['to_db']:+.1f} dB for +{v['energy_added_db']:.1f} dB of energy; {v['limited_by_at_most']}"
+            + (f", ceiling {v['ceiling_db']:+.1f}" if v.get("ceiling_db") is not None else "") + ")"
+            for s, e in eb.items() for c, v in e["classes"].items() if v["gained_db"] < v["energy_added_db"] - 1.0]
+    never = [f"{s} `{c}` ({v['to_db']:+.1f} dB at the most energy)" for s, e in eb.items() for c, v in e["classes"].items() if not v["holds_at_most"]]
+    if never:
+        worst.append("**Where no option holds 12 km at the site's own conditions**: " + "; ".join(never) + ".")
+    if flat:
+        worst.append("**Where energy buys less than it costs** (reverberation sets a ceiling): " + "; ".join(flat) + ".")
+    L += [f"- {w}" for w in worst] + [""]
+    # the tables
+    def cell(r):
+        if not r or any(c not in r for c in TX_CLASSES):
+            return "—"
+        t = " / ".join(f"{r[c]['margin_db']:+.1f}" for c in TX_CLASSES)
+        return f"**{t}**" if all(r[c]["margin_db"] >= 0.0 for c in TX_CLASSES) else t
+    head = "| Sea state (wind) | " + " | ".join(f"{o['id']}{' (shipped)' if o['shipped'] else ''}{' (option B pairing)' if o['paired'] else ''}: {o['energy_db']:.1f} dB" for o in opts) + " | Least energy holding both |"
+    sep = "| --- | " + " | ".join("---" for _ in opts) + " | --- |"
+    from gpusonar import acoustics
+    for table, suffix, label in (("bubble_law", f"__{law}", f"with the {law} bubble law (as `{TX_BUBBLE_SITE}` states it)"), ("no_bubble_law", "", "without a bubble law (as `deep_no_bottom_return` states)")):
+        L += [f"### Deep water (`{TX_DEEP}`: no bottom return, isovelocity; noise-limited), {label}", "",
+              "Columns: transmit option (energy per ping, dB re 1 uPa^2 s at 1 m), least energy first.", "", head, sep]
+        for n in TX_SEA_STATES:
+            key = f"{TX_DEEP}__ss{n}{suffix}"
+            if key not in res:
+                continue
+            le = A["least_energy"].get(table, {}).get(str(n), {})
+            least = (f"{le['energy_db']:.1f} dB: {', '.join(le['options'])}" if le.get("energy_db") is not None else "none in the grid")
+            L.append(f"| {n} ({acoustics.sea_state_wind_speed(n):g} m/s) | " + " | ".join(cell(res[key].get(o["id"])) for o in opts) + f" | {least} |")
+        L.append("")
+    # costs
+    L += ["### What each option costs", "",
+          "Computed (ours): blind range c T / 2 (the receive window opens there: `operation.range_m` first range null, buildspec.window_range; the chain and the planner assume no reception "
+          "while transmitting, and the simulator does not model the projector's own sound in the window); range resolution c / (2 B), unchanged; ping interval = two-way time to the window's end "
+          f"(12.7 km) + the pulse, against {sh['costs']['two_way_12km_s']:.1f} s two-way to 12 km; power: {sh['costs']['power_assumptions']}; the plain matched filter's peak loss at 0.4 m/s "
+          "(a crossing target at 12 km) / 2 / 8 m/s radial (the class's assumed speeds), and the range the mismatched peak smears over, 2 |r| T; the bank's hypotheses at +-8 m/s, c / (2 B T) apart "
+          "(its threshold correction is measured only to 51 hypotheses: +0.78 dB at 45, DOPPLER.md LS.3); the projector by tools/projector_candidates.py's sheets.", "",
+          "| Option | Energy (dB) | Blind range | Resolution | Ping interval / duty | Acoustic / from supply in the pulse (W) | Per ping (J) / mean (W) | Tolerance c/(2BT) | Plain filter loses at 0.4 / 2 / 8 m/s (smear at 8 m/s) | Bank hypotheses (+-8 m/s) | Projector (status) |",
+          "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for o in opts:
+        k = o["costs"]
+        ml = k["mismatch_loss_db"]
+        L.append(f"| {o['id']} | {o['energy_db']:.1f} | {k['blind_range_m'] / 1e3:.2f} km | {k['range_resolution_m']:.3f} m | {k['ping_interval_s']:.1f} s / {100 * k['duty']:.1f} % | "
+                 f"{k['acoustic_w']:.0f} / {k['from_supply_w']:.0f} | {k['joule_per_ping']:.0f} / {k['average_w']:.0f} | {k['doppler_tolerance_m_s']:.3f} m/s | "
+                 f"{ml['0.4']:.1f} / {ml['2']:.1f} / {ml['8']:.1f} dB ({k['mismatch_smear_m']['8']:.0f} m) | {k['bank_hypotheses_8_m_s']} | {k['projector']['words']} ({k['projector']['status']}) |")
+    L.append("")
+    # least energy per sea state with its costs
+    L += ["### The least energy that holds both classes, per sea state, and what it costs", "",
+          "| Table | Sea state | Option(s) | Blind range | Plain filter at 2 / 8 m/s: loss, and the margins left (`large_submerged` / `ship`) | Duty | Projector |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    byid = {o["id"]: o for o in opts}
+    for table, suffix in (("bubble_law", f"__{law}"), ("no_bubble_law", "")):
+        for n, v in A["least_energy"].get(table, {}).items():
+            if v["energy_db"] is None:
+                L.append(f"| {table.replace('_', ' ')} | {n} | none in the grid (best {v['best']}: " + " / ".join(f"{m:+.1f}" for m in v["best_margins_db"].values()) + " dB) | | | | |")
+                continue
+            for oid in v["options"]:
+                o, r = byid[oid], res[f"{TX_DEEP}__ss{n}{suffix}"][oid]
+                k = o["costs"]
+                left = " ; ".join(f"{k['mismatch_loss_db'][s]:.1f} dB: " + " / ".join(f"{r[c]['plain_filter_on_a_mover_db'][s]:+.1f}" for c in TX_CLASSES) for s in ("2", "8"))
+                L.append(f"| {table.replace('_', ' ')} | {n} | {oid} ({o['energy_db']:.1f} dB) | {k['blind_range_m'] / 1e3:.2f} km | {left} | {100 * k['duty']:.1f} % | {k['projector']['words']} |")
+    L.append("")
+    # the other sites
+    sites = [s for s in eb]
+    L += ["### Every illustrative site at its own stated conditions: where energy helps and where it does not", "",
+          "| Site (conditions) | " + " | ".join(f"{o['id']}" for o in opts) + " | Least energy holding both | Energy buys (least -> most energetic option), per class |",
+          "| --- | " + " | ".join("---" for _ in opts) + " | --- | --- |"]
+    meta = T["grid"].get("environments", {})
+    for s in sites:
+        key = f"{s}__as_stated"
+        e = eb[s]
+        buys = "; ".join(f"`{c}` {v['from_db']:+.1f} -> {v['to_db']:+.1f} (+{v['gained_db']:.1f} of +{v['energy_added_db']:.1f} dB; {v['limited_by_at_most']}"
+                         + (f", ceiling {v['ceiling_db']:+.1f}" if v.get("ceiling_db") is not None else "") + ")" for c, v in e["classes"].items())
+        L.append(f"| {s} ({meta.get(key, {}).get('wind_speed_m_s', 0):g} m/s{', ' + meta[key]['bubble_model'] if meta.get(key, {}).get('bubble_model') else ''}) | "
+                 + " | ".join(cell(res[key].get(o["id"])) for o in opts) + f" | {e['least_energy_both'] or 'none in the grid'} | {buys} |")
+    for s, why in T["grid"].get("skipped", {}).items():
+        L.append(f"| {s} | not run: {why} |" + " |" * len(opts) + " |")
+    L.append("")
+    L += ["Reverberation gains nothing from energy (the echo-over-reverberation ratio holds the source level and the pulse on both sides: depthplan.reverberation_of is re the source "
+          "level and has no pulse in it), so a reverberation-limited margin rises less than the energy and stops at its ceiling; a propagation shadow (summer mud, `ship` near the surface) "
+          "needs tens of dB more than any option. Noise-limited cells rise by the level step exactly and by 10 log10 of the pulse ratio plus the detector's threshold change for the shorter "
+          "window (0.1 dB from 1 to 8 s: the window opens at the blind range).", ""]
+    # multi-ping
+    mp = T["multi_ping"]
+    L += ["**N pings combined: not implemented** in the chain or the planner: every column holds one ping; tracks confirm on 3 hits (`live.DEFAULTS` tracker), which is not an SNR gain. For scale only, not in any column: "
+          "this detector's threshold would fall by " + ", ".join(f"{v:.1f} dB for {n} pings" for n, v in mp["detector_gain_if_added_in_power_db"].items())
+          + f" if their maps were added in power cell by cell as its rows' are ({mp['detector_gain_status']}); a mover at 2 / 8 m/s moves "
+          + " / ".join(f"{v:.0f} m" for v in mp["motion_between_pings_m"].values()) + f" between pings against {mp['range_resolution_m']:.3f} m cells, so the cells would have to move with it. "
+          + "The " + mp["textbook"] + ".", ""]
+    # requirement wording
+    L += ["### The requirement as the model supports it (proposed, for the owner to accept)", "",
+          "Derived from the tables above (`tx_requirement`, recomputed by `--report`), not typed. POP-3's text in `docs/DESIGN.md` is not changed here. For the shipped transmitter:", "",
+          f"> {T['requirement'][ship_id]}", "",
+          "The same for each option (the highest whole sea state up to which both classes hold at the deep site, every lower state included; the sites held at their own conditions):", "",
+          "| Option | Energy (dB) | Deep, with the " + str(law) + " law | Deep, no bubble law | Sites held as stated | Not held |", "| --- | --- | --- | --- | --- | --- |"]
+    for o in opts:
+        hs = A["highest_sea_state"]
+        ok_s = [s for s in eb if all((((res.get(f"{s}__as_stated") or {}).get(o["id"]) or {}).get(c) or {}).get("margin_db", -1e9) >= 0.0 for c in TX_CLASSES)]
+        L.append(f"| {o['id']}{' (shipped)' if o['shipped'] else ''} | {o['energy_db']:.1f} | {_ss(hs.get('bubble_law', {}).get(o['id']))} | {_ss(hs.get('no_bubble_law', {}).get(o['id']))} | "
+                 f"{', '.join(ok_s) or 'none'} | {', '.join(s for s in eb if s not in ok_s) or 'none'} |")
+    L.append("")
+    L += ["**Not run.** No transmit option other than the shipped 1 s was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item "
+          "(the CPU here took 27 min for six 1 s pings of `popoto_12km_large_submerged`, DOPPLER.md LS.1 item 8). The command, once the evaluation tool takes a sonar override "
+          "(follow-up): `python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100` with "
+          "`sonar_overrides.transmit.waveform.duration: 4.0` (and the window opening at 3 km).", ""]
+    return L
+
+
 # --- report ---------------------------------------------------------------------------------------------------------
 
 def _rounded(x, nd: int = 3):
@@ -1018,7 +1583,7 @@ def report(R: dict) -> str:
          "depth the planner recommends for that variant, worst over the class's depths, at the LOW end of its target strength, at 12 km. **A** = rows gain nothing "
          "against reverberation (the planner's assumption, ours); **B** = rows gain their full 10 log10(rows) against it. Noise-only = the same planner with the "
          "reverberation term off. *Ceiling* = the margin with infinite source level (reverberation alone): where it is below 0, no source level closes 12 km.", "",
-         REQUIREMENT, ""] + lead(R) + ["## 1. The answer in tables", ""]
+         REQUIREMENT, ""] + lead(R) + transmit_section(R) + waveform_section(R) + ["## 1. The answer in tables", ""]
     # 1a: the shipped design per class and site
     L += ["### Is 12 km met by the shipped design (3 x 32, 4-6 kHz, 1 s, 197 dB)?", "",
           "| Site (all illustrative) | " + " | ".join(f"{c}: A / B / noise-only (limit; ceiling A)" for c in classes) + " |", "| --- | " + " | ".join("---" for _ in classes) + " |"]
@@ -1219,6 +1784,8 @@ def main(argv=None) -> int:
     ap.add_argument("--measure-rows", action="store_true", help="simulator: stacked rows against the shelf's reverberation")
     ap.add_argument("--crosscheck", action="store_true", help="simulator and live chain at two grid points against the prediction")
     ap.add_argument("--monostatic-check", action="store_true", help="the rows measurement with the simulator's default (monostatic) reverberation, one ping")
+    ap.add_argument("--transmit", action="store_true", help="the transmit options (level, pulse) on the shipped 3 x 32 face, the deep site at sea states 2-6 with and "
+                    "without the bubble law and every site as stated, for large_submerged and ship (merged into the JSON as `transmit`)")
     ap.add_argument("--report", action="store_true", help="write the .md from the JSON")
     ap.add_argument("--site", action="append", help="one of the illustrative environments (repeatable; default all)")
     ap.add_argument("--class", dest="cls", action="append", help="a target class of the build (repeatable; default all)")
@@ -1228,8 +1795,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     global _ARGV
     _ARGV = list(sys.argv[1:] if argv is None else argv)
-    if not any((args.grid, args.sensitivity, args.coverage, args.measure_rows, args.monostatic_check, args.crosscheck, args.report, args.quick)):
-        ap.error("give --grid, --sensitivity, --coverage, --measure-rows, --crosscheck, --report or --quick")
+    if not any((args.grid, args.sensitivity, args.coverage, args.measure_rows, args.monostatic_check, args.crosscheck, args.report, args.quick, args.transmit)):
+        ap.error("give --grid, --sensitivity, --coverage, --measure-rows, --crosscheck, --transmit, --report or --quick")
     bs, _, _ = _imports()
     spec3 = bs.load(BASE[3])
     classes = bs.target_classes_of(spec3, range_m=RANGE_M)
@@ -1300,9 +1867,16 @@ def main(argv=None) -> int:
     if args.crosscheck:
         R["crosscheck"] = {"command": command_line(), **crosscheck(R)}
         path.write_text(json.dumps(R, indent=1, default=float) + "\n")
+    if args.transmit:                                                        # its own tree stamp: the grid's (the report's first line) stays the grid's
+        R["transmit"] = run_transmit_study(sites, classes, bellhop=not args.no_bellhop)
+        path.write_text(json.dumps(R, indent=1, default=float) + "\n")
     if args.report:
         if R.get("grid"):
             R["answers"] = answers(R["grid"], R.get("classes") or classes)          # from the grid as it stands (the rule may be newer than the run)
+        if R.get("transmit"):                                                    # the same for the transmit table
+            R["transmit"]["answers"] = tx_answers(R["transmit"])
+            R["transmit"]["requirement"] = tx_requirement(R["transmit"])
+            R["transmit"]["waveforms"] = tx_waveforms(R["transmit"])           # LFM against HFM on a mover, no bank (section 0a)
         R["credits"] = CREDITS
         R["rounding"] = "--report rewrites this file with every number rounded to 3 decimals (dB, m, s); the tables are made from the rounded numbers"
         R = _rounded(R)

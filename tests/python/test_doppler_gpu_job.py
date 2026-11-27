@@ -1,7 +1,8 @@
 """The GPU job's Doppler mode (tools/gpu_job.sh GPUSONAR_JOB=doppler, tools/doppler_gpu_runs.sh) and the switches it uses:
 `--backend` / `--sim-backend` of tools/doppler_tone_eval.py, `--at-default` of tools/doppler_bank_threshold.py, and
 `--doppler-combine`, `--doppler-tone`, `--scene`, `--backend`, `--json` of tools/live_chain_timing.py. Each switch is
-opt-in: without it a tool does what it did. The whole mode in its quick host form (GPUSONAR_DOPPLER_QUICK=1,
+opt-in: without it a tool does what it did. Also `--set`, `--backend`, `--sim-backend` and `--off-only` of
+tools/doppler_bank_eval.py and the opt-in `hfm12` sub-run (docs/tasks/DOPPLER.md "HFM"), whose quick host form runs here. The whole mode in its quick host form (GPUSONAR_DOPPLER_QUICK=1,
 GPUSONAR_DOPPLER_BACKEND=host: the same command lines with small sizes, the scenes in free field without boundary
 reverberation) takes about ten minutes on a CPU: GPUSONAR_DOPPLER_JOB_QUICK=1 runs it."""
 import argparse
@@ -19,6 +20,7 @@ from gpusonar import core
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import doppler_bank_eval  # noqa: E402
 import doppler_bank_threshold  # noqa: E402
 import doppler_tone_eval  # noqa: E402
 import live_chain_timing  # noqa: E402
@@ -209,3 +211,85 @@ def test_the_attribution_on_the_lobe_record_explains_every_false_detection_with_
 def LiveChainFor(notch):
     from gpusonar.live import LiveChain
     return LiveChain({"engine": "cpp", "backend": "host", "doppler": {"tone": "bank", "report": True, "tone_lobe_notch": notch}})
+
+
+# --- tools/doppler_bank_eval.py's opt-in switches and the hfm12 sub-run (DOPPLER.md "HFM") --------------------------------
+
+QUICK = ["--set", "fidelity=free_field", "--set", "reverberation=[]"]
+HFM = ["--set", "sonar_overrides.transmit.waveform.type=sampled", "--set", "sonar_overrides.transmit.waveform.source=hfm"]
+OLD_KEYS = {"scene", "pings", "channels", "max_range_rate_m_s", "combine", "truth_at", "gate_range_m", "engines", "background"}
+
+
+def test_bank_eval_takes_the_backends():
+    old = doppler_bank_eval.BACKEND
+    try:
+        assert doppler_bank_eval.chain_config("cpp", True, 3.0)["backend"] == "host"           # the default, as before
+        doppler_bank_eval.BACKEND = "cuda"
+        assert doppler_bank_eval.chain_config("cpp", False, 3.0)["backend"] == "cuda"
+    finally:
+        doppler_bank_eval.BACKEND = old
+
+
+def test_bank_eval_without_the_new_switches_writes_what_it_wrote(tmp_path, monkeypatch):
+    """No new switch: the scene as loaded (here made free field by the loader, so that a CPU runs it in seconds), simulated by
+    run_scenario as before, and the result's keys the old ones."""
+    real = doppler_bank_eval.load_scenario_config
+
+    def free_field(name, expand=False):
+        cfg = real(name, expand=expand)
+        cfg.update(fidelity="free_field", reverberation=[])
+        return cfg
+    monkeypatch.setattr(doppler_bank_eval, "load_scenario_config", free_field)
+    out = tmp_path / "plain.json"
+    assert doppler_bank_eval.main(["popoto_12km_large_submerged", "--pings", "1", "--background", "0", "--engines", "cpp", "--max-rate", "0.3",
+                                   "--json", str(out)]) == 0
+    res = json.loads(out.read_text())
+    assert set(res) == OLD_KEYS and set(res["engines"]["cpp"]) == {"off", "on", "summary"}
+
+
+def test_bank_eval_changes_the_transmit_with_set_and_runs_an_hfm_without_the_bank(tmp_path):
+    """--set makes the transmit an HFM (a sampled pulse: type Arbitrary in the record) and --off-only runs the chain without
+    the bank (which refuses it); the result names the changes, the backends and the transmit; the cache names carry the
+    changes (the LFM's records are not reused for the HFM)."""
+    out, cache = tmp_path / "hfm.json", tmp_path / "cache"
+    argv = ["popoto_12km_large_submerged", "--pings", "1", "--background", "0", "--engines", "cpp", "--truth-at", "reflection",
+            "--gate-range-m", "250", "--cache", str(cache), "--json", str(out)]
+    assert doppler_bank_eval.main(argv + QUICK + HFM + ["--off-only"]) == 0
+    res = json.loads(out.read_text())
+    assert res["set"] == ["fidelity=free_field", "reverberation=[]", "sonar_overrides.transmit.waveform.type=sampled",
+                          "sonar_overrides.transmit.waveform.source=hfm"]
+    assert res["off_only"] and res["backend"] == "host" and res["sim_backend"] == "host"
+    assert res["transmit"]["type"] == "Arbitrary" and res["transmit"]["duration"] == 1.0
+    assert set(res["engines"]["cpp"]) == {"off", "summary"} and set(res["engines"]["cpp"]["summary"]) == {"closing", "oblique", "crossing"}
+    assert doppler_bank_eval.main(argv + QUICK + ["--set", "sonar_overrides.transmit.waveform.duration=4.0", "--off-only"]) == 0
+    lfm = json.loads(out.read_text())
+    assert lfm["transmit"]["type"] == "Lfm" and lfm["transmit"]["duration"] == 4.0
+    assert len(list(cache.glob("*.h5"))) == 2
+    with pytest.raises(ValueError, match="linear sweep"):           # the bank refuses an HFM: --off-only is needed
+        doppler_bank_eval.main(argv + QUICK + HFM + ["--max-rate", "0.3"])
+
+
+def test_the_hfm12_sub_run_in_its_quick_host_form(tmp_path):
+    """GPUSONAR_DOPPLER_RUNS=hfm12 with GPUSONAR_DOPPLER_QUICK=1 on the host (one free-field ping each, the bank to 0.3 m/s): the
+    six calls in their order, each JSON with its transmit (1 s and 4 s; LFM and HFM; the `eq` runs at 190.98 dB rms, the
+    1 s pulse's energy). About a minute on this CPU."""
+    out = tmp_path / "doppler"
+    env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="hfm12", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
+               PYTHON=sys.executable)
+    env.pop("GPUSONAR_UPLOAD_REPO", None)
+    got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True,
+                         timeout=1200)
+    assert got.returncode == 0, got.stdout[-4000:] + got.stderr[-2000:]
+    assert "exit 0" in (out / "hfm12.log").read_text()
+    want = {"hfm1_plain": ("Arbitrary", 1.0, True), "hfm4_plain": ("Arbitrary", 4.0, True), "hfm4eq_plain": ("Arbitrary", 4.0, True),
+            "lfm4eq_plain": ("Lfm", 4.0, True), "lfm1_cfar": ("Lfm", 1.0, False), "lfm4_cfar": ("Lfm", 4.0, False)}
+    peak = {}
+    for name, (kind, dur, off_only) in want.items():
+        res = json.loads((out / f"hfm12_{name}.json").read_text())
+        assert res["transmit"]["type"] == kind and res["transmit"]["duration"] == dur and res["off_only"] == off_only, name
+        assert set(res["engines"]["cpp"]) == ({"off", "summary"} if off_only else {"off", "on", "summary"}), name
+        assert res["combine"] == ("max" if off_only else "cfar") and res["truth_at"] == "reflection" and res["gate_range_m"] == 250.0
+        peak[name] = res["transmit"]["source_level_db_peak"]
+    # The energy bookkeeping: the eq runs 10 log10 4 under the shipped level (same energy as 1 s), the others at it.
+    assert peak["hfm4eq_plain"] == pytest.approx(peak["hfm1_plain"] - 10 * np.log10(4.0), abs=0.01)
+    assert peak["lfm4eq_plain"] == pytest.approx(peak["lfm4_cfar"] - 10 * np.log10(4.0), abs=0.01) and peak["hfm4_plain"] == peak["lfm1_cfar"]

@@ -19,6 +19,14 @@
 #               with the tone path's grating-lobe notch off on the same cached pings -> ls12_tone_train_lobe_off.json
 #               (before and after the notch in one job; each JSON attributes every false detection)
 #               (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 80m; GPUSONAR_DOPPLER_LS12_ARGS appended)
+#   hfm12       (only when named) popoto_12km_large_submerged with the plain matched filter against the sweep bank, the
+#               linear (shipped) and the hyperbolic sweep (--set ...waveform.type=sampled, source=hfm; the bank refuses an
+#               HFM: --off-only), at 1 s and 4 s (--set ...waveform.duration=4.0), tools/doppler_bank_eval.py in this order:
+#               HFM 1 s plain, HFM 4 s plain, HFM 4 s and LFM 4 s plain at the 1 s pulse's energy (source level 190.98 dB,
+#               197 - 10 log10 4), LFM 1 s plain and combine cfar, LFM 4 s plain and combine cfar -> hfm12_<wave><T>[eq]_*.json.
+#               Energy: the 4 s runs at the shipped level carry +6.02 dB over 1 s (197 + 10 log10(4 x 0.9375) dB re 1 uPa^2 s
+#               at 1 m against 196.72), the `eq` runs the 1 s pulse's 196.72. (GPUSONAR_DOPPLER_TIMEOUT_HFM12, default 150m;
+#               GPUSONAR_DOPPLER_HFM12_ARGS appended to each call; docs/tasks/DOPPLER.md "HFM")
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
 #   GPUSONAR_DOPPLER_QUICK=1       small sizes, to check the plumbing on a CPU: the tone run on popoto_12km_doppler
@@ -74,6 +82,7 @@ run() {   # run <name> <limit> <command...>: logged, limited, its status kept
   [ "$rc" -eq 0 ] || [ "$status" -ne 0 ] || status=$rc
 }
 
+hfm12_args="--max-rate 8 --background 2"     # the scene's 6 pings; the bank to 8 m/s (45 hypotheses a beam at 1 s, 173 at 4 s)
 if [ "$quick" = "1" ]; then
   # Free field and no boundary reverberation (--set): the scenes' eigenray simulation takes more than half an hour a
   # ping on a CPU; this checks the plumbing and the outputs, it measures nothing.
@@ -81,6 +90,7 @@ if [ "$quick" = "1" ]; then
   tone_scene=popoto_12km_doppler; tone_args="--pings 2 --background 1 $quick_set"
   fa_args="--pings 3 --max-rates 1"
   trial_args="--rows 1 --repeats 1"; scenes="popoto_12km"; scene_args="--scene-pings 2 $quick_set"; engines="cpp"
+  hfm12_args="--max-rate 0.3 --pings 1 --background 0 --engines cpp $quick_set"
 else
   tone_scene=flank_patrol_doppler_tone; tone_args="--background 4"
   fa_args="--pings ${GPUSONAR_DOPPLER_FA_PINGS:-4000} --max-rates 3 --max-seconds ${GPUSONAR_DOPPLER_FA_ROW_SECONDS:-780}"
@@ -159,6 +169,38 @@ if [[ $runs == *,ls12,* ]]; then
   export -f ls12
   export py out be cache
   run ls12 "${GPUSONAR_DOPPLER_TIMEOUT_LS12:-80m}" bash -c ls12
+  upload
+fi
+if [[ $runs == *,hfm12,* ]]; then
+  # Not in the default runs: the hyperbolic sweep against the linear one at 12 km, plain filter and bank (DOPPLER.md "HFM").
+  hfm12() {
+    local rc=0 w="--set sonar_overrides.transmit.waveform"
+    local hfm="$w.type=sampled $w.source=hfm" t4="$w.duration=4.0" eq="$w.source_level_db_rms=190.98"
+    set -f
+    one() {   # one <json name> <args...>
+      local name=$1
+      shift
+      # shellcheck disable=SC2086
+      "$py" tools/doppler_bank_eval.py popoto_12km_large_submerged $hfm12_args --truth-at reflection --gate-range-m 250 \
+          --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/hfm12_$name.json" "$@" ${GPUSONAR_DOPPLER_HFM12_ARGS:-} || rc=$?
+    }
+    # shellcheck disable=SC2086
+    one hfm1_plain --off-only $hfm
+    # shellcheck disable=SC2086
+    one hfm4_plain --off-only $hfm $t4
+    # shellcheck disable=SC2086
+    one hfm4eq_plain --off-only $hfm $t4 $eq
+    # shellcheck disable=SC2086
+    one lfm4eq_plain --off-only $t4 $eq
+    one lfm1_cfar --combine cfar
+    # shellcheck disable=SC2086
+    one lfm4_cfar --combine cfar $t4
+    set +f
+    return "$rc"
+  }
+  export -f hfm12
+  export py out be cache hfm12_args
+  run hfm12 "${GPUSONAR_DOPPLER_TIMEOUT_HFM12:-150m}" bash -c hfm12
   upload
 fi
 exit "$status"

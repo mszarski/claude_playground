@@ -4,6 +4,7 @@ track with the bank off and on, the false detections on the scene's background, 
 
     tools/doppler_bank_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0] [--combine max|cfar]
                                [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
+                               [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...] [--off-only]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once; its records go through `LiveChain` with the deployment defaults (bearings -40
@@ -35,6 +36,14 @@ range-Doppler coupling moves it f0 T (2 r / c) / B further).
 
 `--cache DIR`: the simulated records (the scene's and the background's) are kept there as container files and read back
 on the next run, by tools/doppler_tone_eval.py's `simulate` (the same file names: the two tools share a scene's records).
+
+Opt-in, as tools/doppler_tone_eval.py has them (without them the tool runs and writes what it did): `--backend` the chain's
+backend (default host), `--sim-backend` the simulator's (default host); `--set KEY=VALUE` changes the scene before anything
+runs (KEY dotted into the scenario, VALUE read as YAML; doppler_tone_eval.apply_sets): e.g. another transmit,
+`--set sonar_overrides.transmit.waveform.duration=4.0` or `--set sonar_overrides.transmit.waveform.type=sampled --set
+sonar_overrides.transmit.waveform.source=hfm` (docs/tasks/DOPPLER.md "HFM"); the cache's file names carry the changes.
+`--off-only`: the chain without the bank only (for a transmit the bank refuses: it takes a linear sweep only). The result
+names the backends, the changes and `off_only` when any of these is given.
 """
 from __future__ import annotations
 
@@ -56,6 +65,7 @@ from gpusonar.live import LiveChain  # noqa: E402
 from gpusonar.sim.simulator import run_scenario  # noqa: E402
 
 GATE_RANGE_M, GATE_BEARING_DEG, TRACK_GATE_M = 60.0, 1.5, 100.0
+BACKEND = "host"      # --backend: the chain's
 
 
 def say(text: str) -> None:
@@ -96,7 +106,7 @@ def truth(cfg: dict, n: int, sound_speed: float | None = None) -> dict:
 
 
 def chain_config(engine: str, bank: bool, max_rate: float, budget: float | None = None, combine: str = "max") -> dict:
-    cfg = {"engine": engine, "backend": "host"}
+    cfg = {"engine": engine, "backend": BACKEND}
     if bank:
         cfg["doppler"] = {"mode": "sweep_bank", "max_range_rate_m_s": max_rate, "report": True}
         if combine != "max":
@@ -156,6 +166,13 @@ def summary(a: dict, b: dict) -> dict:
             "range_rate_on": [q["range_rate_m_s"] for _, q in both], "true_range_rate": [q["true_range_rate_m_s"] for _, q in both]}
 
 
+def off_summary(a: dict) -> dict:
+    """Bank off only (--off-only): the mean margin over the pings detected."""
+    got = [p for p in a["pings"] if p["snr_db"] is not None]
+    return {"pings_off": len(got), "margin_off_db": float(np.mean([p["margin_db"] for p in got])) if got else None,
+            "detected_off": a["detected"], "tracked_off": a["tracked"], "kind_off": a["kind"]}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("scene")
@@ -168,16 +185,21 @@ def main(argv=None) -> int:
     ap.add_argument("--cache", help="a directory: keep the simulated records there and read them back on the next run")
     ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
     ap.add_argument("--gate-range-m", type=float, default=60.0)
+    ap.add_argument("--backend", default="host", choices=["host", "cuda", "auto"], help="the chain's backend (default host)")
+    ap.add_argument("--sim-backend", default="host", choices=["host", "cuda"], help="the simulator's backend (default host)")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene before anything runs")
+    ap.add_argument("--off-only", action="store_true", help="the chain without the bank only (a transmit the bank refuses)")
     a = ap.parse_args(argv)
-    global GATE_RANGE_M
-    GATE_RANGE_M = a.gate_range_m
+    global GATE_RANGE_M, BACKEND
+    GATE_RANGE_M, BACKEND = a.gate_range_m, a.backend
+    sys.path.insert(0, str(ROOT / "tools"))
+    import doppler_tone_eval                           # imported here: it imports this module's truth()
     sim = None
-    if a.cache:
-        sys.path.insert(0, str(ROOT / "tools"))
-        import doppler_tone_eval                       # imported here: it imports this module's truth()
+    if a.cache or a.sim_backend != "host" or a.set:
         doppler_tone_eval.CACHE = a.cache
-        sim = doppler_tone_eval.simulate
-    cfg = load_scenario_config(a.scene, expand=False)
+        doppler_tone_eval.SIM_BACKEND = a.sim_backend
+        sim = doppler_tone_eval.simulate              # pops the --set marker before simulating; caches when --cache
+    cfg = doppler_tone_eval.apply_sets(load_scenario_config(a.scene, expand=False), a.set)
     if a.pings:
         cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
     t0 = time.time()
@@ -191,9 +213,15 @@ def main(argv=None) -> int:
     truths = truth(cfg, len(records), float(records[0].environment.sound_speed) if a.truth_at == "reflection" else None)
     result = {"scene": a.scene, "pings": len(records), "channels": int(records[0].samples.n_channels), "max_range_rate_m_s": a.max_rate,
               "combine": a.combine, "truth_at": a.truth_at, "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {}}
+    if a.backend != "host" or a.sim_backend != "host" or a.set or a.off_only:
+        w = records[0].transmit.waveform
+        result.update(backend=a.backend, sim_backend=a.sim_backend, set=a.set, off_only=a.off_only,
+                      transmit={"type": str(w.type).split(".")[-1], "f_start": w.f_start, "f_stop": w.f_stop, "duration": w.duration,
+                                "source_level_db_peak": w.source_level_db})
+    banks = (False,) if a.off_only else (False, True)
     for engine in a.engines:
         res = {}
-        for bank in (False, True):
+        for bank in banks:
             reports, seconds, thr, plan = run_chain(records, chain_config(engine, bank, a.max_rate, combine=a.combine))
             res["on" if bank else "off"] = {"targets": per_target(reports, thr, truths), "seconds": seconds,
                                              "seconds_median_after_first": float(np.median(seconds[1:])) if len(seconds) > 1 else seconds[0],
@@ -201,6 +229,13 @@ def main(argv=None) -> int:
                                              "threshold_db": thr[-1], "bank": plan}
             say(f"{a.scene} {engine} bank {'on ' if bank else 'off'}: {np.median(seconds[1:]) if len(seconds) > 1 else seconds[0]:.2f} s a ping, "
                 f"threshold {thr[-1]:.2f} dB, detections a ping {[len(r['detections']) for r in reports]}")
+        if a.off_only:
+            res["summary"] = {label: off_summary(res["off"]["targets"][label]) for label in truths}
+            for label, s in sorted(res["summary"].items(), key=lambda kv: kv[1]["margin_off_db"] if kv[1]["margin_off_db"] is not None else -1e9):
+                say(f"  {label:14s} {engine}: margin {s['margin_off_db'] if s['margin_off_db'] is None else round(s['margin_off_db'], 2)} dB (bank not run); "
+                    f"detected {s['detected_off']} of {len(records)}; tracked {s['tracked_off']} ({s['kind_off']})")
+            result["engines"][engine] = res
+            continue
         res["summary"] = {label: summary(res["off"]["targets"][label], res["on"]["targets"][label]) for label in truths}
         for label, s in sorted(res["summary"].items(), key=lambda kv: kv[1].get("net_db", -1e9)):
             if s["pings_both"]:
@@ -216,18 +251,18 @@ def main(argv=None) -> int:
         bcfg["pings"] = dict(bcfg.get("pings", {}), count=int(a.background))
         bcfg["seed"] = int(cfg.get("seed", 0)) + 1000
         if sim is not None:
-            back = sim(bcfg, "background")
+            back = sim(bcfg, "background")         # the --set marker (and so the cache name) comes along with the copy
         else:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 back = run_scenario(bcfg).records
         for budget in (None, 3.0):
             row = {}
-            for bank in (False, True):
+            for bank in banks:
                 reports, _, _, _ = run_chain(back, chain_config("cpp", bank, a.max_rate, budget, a.combine))
                 row["on" if bank else "off"] = sum(len(r["detections"]) for r in reports)
             result["background"]["default" if budget is None else str(budget)] = dict(row, pings=len(back))
-            say(f"{a.scene} background, {len(back)} pings, budget {'default' if budget is None else budget}: false detections off {row['off']}, on {row['on']}")
+            say(f"{a.scene} background, {len(back)} pings, budget {'default' if budget is None else budget}: false detections off {row['off']}, on {row.get('on')}")
     if a.json:
         Path(a.json).write_text(json.dumps(result, indent=1, default=float) + "\n")
     return 0
