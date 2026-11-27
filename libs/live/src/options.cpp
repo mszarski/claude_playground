@@ -245,7 +245,12 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("sbl_max_sources")) c.sbl.max_sources = p.sbl.max_sources = static_cast<std::int32_t>(i());
   else if (is("sbl_min_snr_db")) c.sbl.min_snr_db = p.sbl.min_snr_db = v();
   else if (is("sbl_dynamic_range_db")) c.sbl.dynamic_range_db = p.sbl.dynamic_range_db = v();
-  else if (is("look")) c.starboard = p.starboard = option_choice(key, value, {"starboard", "port"}) == "starboard";
+  else if (is("look")) {
+    // boresight (opt-in, sonar-tpex): the side the record's elements face, on every ping (chain.hpp look_starboard).
+    const std::string look = option_choice(key, value, {"starboard", "port", "boresight"});
+    c.look_boresight = p.look_boresight = look == "boresight";
+    c.starboard = p.starboard = look != "port";
+  }
   else if (is("elevation")) c.elevation.enabled = p.elevation.enabled = on();
   else if (is("elevation_first_deg")) c.elevation.first_deg = p.elevation.first_deg = v();
   else if (is("elevation_last_deg")) c.elevation.last_deg = p.elevation.last_deg = v();
@@ -531,7 +536,7 @@ class Json {
 std::string options_json(const ChainOptions& c) {
   Json j;
   j.num("bearing_first_deg", c.bearing_first_deg).num("bearing_last_deg", c.bearing_last_deg).num("bearing_step_deg", c.bearing_step_deg);
-  j.text("window", c.hann ? "hann" : "rect").text("look", c.starboard ? "starboard" : "port").text("beamformer", c.beamformer);
+  j.text("window", c.hann ? "hann" : "rect").text("look", c.look_boresight ? "boresight" : (c.starboard ? "starboard" : "port")).text("beamformer", c.beamformer);
   j.integer("mvdr_subbands", c.mvdr.n_subbands).num("mvdr_loading", c.mvdr.loading);
   j.num("range_cell_m", c.range_cell_m).num("cfar_pfa", c.cfar_pfa).num("cfar_guard_m", c.cfar_guard_m).num("cfar_train_m", c.cfar_train_m);
   j.flag("cell_peak", c.cell_peak).flag("cell_multiscale", c.cell_multiscale);

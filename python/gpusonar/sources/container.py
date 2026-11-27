@@ -12,7 +12,11 @@ from .base import Source, register
 class ContainerSource(Source):
     type_name = "container"
 
-    def __init__(self, path: str, start: int = 0, stop: int | None = None):
+    def __init__(self, path: str, start: int = 0, stop: int | None = None, sonar: str | None = None):
+        # `sonar`: the sonar the recording is of, as a deployment file names it (configs/deploy/fls_*.yaml: a sonar
+        # with no stream source yet replays recordings). Read by what picks a deployment file by sonar (the viewer, the
+        # tests); not checked against the records, which carry their own geometry.
+        self.sonar = sonar
         self._reader = RecordReader(str(path))
         n = len(self._reader)
         self._start = max(0, start)

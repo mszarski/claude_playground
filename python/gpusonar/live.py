@@ -42,7 +42,8 @@ DEFAULTS = {
     "beamformer": "backprojection",            # the kernel; or "farfield" / "mvdr" (flank.py, the C++ beamformers). All three run
                                                # on `backend` below, host or CUDA
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
-    "look": "starboard",                       # which side of a line array the bearings are on
+    "look": "starboard",                       # which side of a line array the bearings are on: starboard, port, or boresight
+                                               # (the side the record's elements face, every ping: look_side; opt-in, sonar-tpex)
     # Sizes that follow from the sonar are None here: derived from the first ping's band, pulse and array by
     # libs/live derive.hpp (the one source: 2 m cells, 100 m guard, 300 m training, 15 m and 1 deg tracker sigmas, 3 deg
     # multipath gate, 60 m fit limit for a kilometre-range array of 2 kHz band or more; more for a narrower band or a
@@ -416,8 +417,32 @@ def _merge(base: dict, over: dict | None) -> dict:
 
 
 # The words a chain setting may be; libs/live options.cpp refuses anything else in the same way.
-CHOICES = {"beamformer": ("backprojection", "farfield", "mvdr"), "look": ("starboard", "port"), "window": ("hann", "rect"),
+CHOICES = {"beamformer": ("backprojection", "farfield", "mvdr"), "look": ("starboard", "port", "boresight"), "window": ("hann", "rect"),
            "backend": ("auto", "host", "cuda")}
+
+
+def look_side(record, look: str, axis=None) -> str:
+    """The side of the line array the chain's bearings are on for this record: "starboard" or "port". `look` starboard
+    or port is that side; `look: boresight` (opt-in, sonar-tpex) is the side the record's receive elements face: their
+    boresights (body frame, `geometry.rx[i].boresight`) turned into the world by the receive pose and summed, against
+    broadside on the starboard side, the array's axis `axis` (first element to last, world x, y; default from
+    `rx_positions`) turned 90 degrees clockwise seen from above, (-axis[1], axis[0]). An array across the bow (a
+    forward-looking sonar, elements facing ahead) then looks ahead whichever way its elements are numbered. A boresight
+    with no horizontal component across the array (along it, or straight up or down: within 1e-6 relative) gives no side
+    and is refused. libs/live chain.cpp look_starboard is the same rule."""
+    if look != "boresight":
+        return look
+    if axis is None:
+        rx = record.rx_positions()
+        axis = rx[-1, :2] - rx[0, :2]
+    rot = np.asarray(core.rotation_ned(*record.geometry.rx_pose.rpy), dtype=float)
+    b = rot @ np.sum([np.asarray(e.boresight, dtype=float) for e in record.geometry.rx], axis=0)
+    na, nb = float(np.hypot(axis[0], axis[1])), float(np.hypot(b[0], b[1]))
+    s = float(-axis[1] * b[0] + axis[0] * b[1])
+    if not (na > 0.0 and nb > 0.0 and np.isfinite(s)) or abs(s) <= 1e-6 * na * nb:
+        raise ValueError("LiveChain: look: boresight: the elements' boresight lies along the array or straight up or down on this "
+                         "ping, so it gives no side; give look starboard or port")
+    return "starboard" if s > 0.0 else "port"
 
 
 def check_choices(cfg: dict) -> None:
@@ -537,6 +562,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2],
          "cfar_pfa": cfg["cfar"]["pfa"],
          "min_snr_db": cfg["min_snr_db"], "hann": cfg["window"] == "hann", "starboard": cfg["look"] == "starboard",
+         **({"look_boresight": True} if cfg["look"] == "boresight" else {}),      # opt-in (sonar-tpex): said only when on
          "beamformer": cfg["beamformer"], "doa": cfg["doa"], "sbl_grid_step_deg": s["grid_step_deg"], "sbl_max_sources": int(s["max_sources"]),
          "sbl_min_snr_db": s["min_snr_db"], "sbl_dynamic_range_db": s["dynamic_range_db"],
          "sbl_max_gates": int(s["max_gates"]), "sbl_min_contrast_db": s["min_contrast_db"],
@@ -737,7 +763,8 @@ def program_options(chain: dict | None, record=None, deploy: dict | None = None)
     program_stage_options(o, record, chain)               # multipath_depth, coverage (with its detection-probability table)
     out = {}
     sync = o.pop("sync", None)
-    out["look"] = "starboard" if o.pop("starboard") else "port"
+    out["look"] = "boresight" if o.pop("look_boresight", False) else ("starboard" if o.pop("starboard") else "port")
+    o.pop("starboard", None)
     out["window"] = "hann" if o.pop("hann") else "rect"
     # Sizes the deployment file leaves out are not given either: the program derives them (derive.hpp).
     if "tracker_bearing_sigma" in o:
@@ -1739,6 +1766,7 @@ class LiveChain:
         rx = record.rx_positions()
         origin = rx.mean(axis=0)
         axis = rx[-1, :2] - rx[0, :2]
+        look = look_side(record, cfg["look"], axis)      # the side the bearings are on this ping (boresight: the elements')
         el_cfg = self._elevation if rows is not None else None
         els = [None] * len(hits)
         ladder = None                          # the rung of the sound-speed ladder this ping (elevation.profile)
@@ -1751,7 +1779,7 @@ class LiveChain:
                 el_cfg["water_depth_sigma_m"] = float(np.hypot(el_cfg["water_depth_sigma_m"], said.get("water_depth_sigma_m", 0.0)))
             # Stacked rows: the elevation of the strongest detections, from the whole array.
             from . import elevation
-            frame = elevation.array_frame(record, rows, cfg["look"])
+            frame = elevation.array_frame(record, rows, look)
             origin, axis = frame.origin, frame.along[:2]
             mean = background_map if multi else detect._window_mean(np.asarray(power, dtype=float), guard, train)[0]
             order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
@@ -1839,7 +1867,7 @@ class LiveChain:
             return {"depth_ensemble_m": [float(min(zs)), float(max(zs))]}
 
         axis = axis / max(np.linalg.norm(axis), 1e-12)
-        side = 1.0 if cfg["look"] == "starboard" else -1.0
+        side = 1.0 if look == "starboard" else -1.0
         broadside = side * np.array([-axis[1], axis[0]])
         def bend(level, rng):
             """What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims."""

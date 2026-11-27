@@ -64,30 +64,29 @@ def chain_config(sonar_name: str) -> tuple[dict, str]:
 
 
 def look_toward_boresight(config: dict, sonar_name: str, record) -> tuple[dict, str | None]:
-    """The chain's `look` (which side of the line array its bearings are on) set so that its broadside is the sonar's
-    boresight, when the configuration leaves `look` to the default and the default looks the other way: a
-    forward-looking sonar's array is across the bow, and the chain's default (starboard, for a flank array) would place
-    every echo astern, mirrored. Returns (config, a sentence for the page, or None when nothing changed)."""
-    from .. import _gpusonar as core
-    from ..live import DEFAULTS
-    from ..sonar import SonarModel
+    """The viewer's rule for a sonar no deployment file names (sonar-tpex: a deployment file states its own `look`, and
+    the FLS sonars' files say `look: boresight`): when the configuration leaves `look` to the default and the default
+    looks away from the sonar's boresight, the chain is run with `look: boresight` (the chain's own rule, live.look_side:
+    the side the record's elements face), and the page says so. A forward-looking sonar's array is across the bow, and
+    the chain's default (starboard, for a flank array) would place every echo astern, mirrored. Returns (config, a
+    sentence for the page, or None when nothing changed)."""
+    from ..live import DEFAULTS, look_side
     if "look" in config:
         return config, None
     rx = np.asarray(record.rx_positions(), float)
     axis = rx[-1, :2] - rx[0, :2]
     if float(np.linalg.norm(axis)) < 1e-9:
         return config, None
-    axis = axis / np.linalg.norm(axis)
-    sonar = SonarModel.load(sonar_name)
-    bore = np.asarray(core.rotation_ned(*record.geometry.rx_pose.rpy), float) @ np.asarray(sonar.boresight, float)
-    side = 1.0 if DEFAULTS["look"] == "starboard" else -1.0
-    broadside = side * np.array([-axis[1], axis[0]])
-    if float(broadside @ bore[:2]) >= 0.0:
+    try:
+        side = look_side(record, "boresight", axis)
+    except ValueError:
         return config, None
-    other = "port" if DEFAULTS["look"] == "starboard" else "starboard"
-    return dict(config, look=other), (f"look: {other}, not the default {DEFAULTS['look']}: chosen so that the chain's "
-                                      "broadside is the sonar's boresight (the default would place every echo on the "
-                                      "other side of the array, mirrored)")
+    if side == DEFAULTS["look"]:
+        return config, None
+    return dict(config, look="boresight"), (f"look: boresight (here {side}), not the default {DEFAULTS['look']}: no deployment "
+                                            "file names this sonar, and the default would place every echo on the other side "
+                                            "of the array, mirrored; the chain's boresight rule puts its broadside on the "
+                                            "sonar's boresight")
 
 
 # --- truth ---------------------------------------------------------------------------------------------------------------
@@ -212,16 +211,17 @@ def run_chain(records, config: dict, engine: str = "cpp", taps=("tracker", "clas
     """The live chain over copies of `records`: per ping {report, map: {power [B, R], ranges, bearings} or None, taps,
     geometry: {origin, axis, broadside} of the array as the chain places detections, tap_seconds}. The taps are opt-in
     (`taps=()` runs the chain as it is)."""
-    from ..live import LiveChain
+    from ..live import LiveChain, look_side
     cfg = dict(copy.deepcopy(config), engine=engine)
     cfg.setdefault("backend", "host")
     out = []
     with LiveChain(cfg, taps={"chain": list(taps)} if taps else None) as chain:
-        side = 1.0 if chain.cfg["look"] == "starboard" else -1.0
         for r in records:
             rec = r.copy()
             rx = np.asarray(rec.rx_positions(), float)
             axis = rx[-1, :2] - rx[0, :2]
+            look = look_side(rec, chain.cfg["look"], axis)          # the side the chain places this ping's bearings on
+            side = 1.0 if look == "starboard" else -1.0
             axis = axis / max(float(np.linalg.norm(axis)), 1e-12)
             t0 = time.perf_counter()
             rep = chain.process(rec)
@@ -234,7 +234,7 @@ def run_chain(records, config: dict, engine: str = "cpp", taps=("tracker", "clas
                      "bearings": np.asarray(chain.bearings, float)}
             out.append({"report": rep, "map": m, "taps": chain.chain_taps, "seconds": dt,
                         "geometry": {"origin": [float(v) for v in rep["ownship_xyz"]], "axis": [float(axis[0]), float(axis[1])],
-                                     "broadside": [float(side * -axis[1]), float(side * axis[0])], "look": chain.cfg["look"]},
+                                     "broadside": [float(side * -axis[1]), float(side * axis[0])], "look": look},
                         "bearings_deg": [float(v) for v in np.degrees(chain.bearings)]})
     return out
 
