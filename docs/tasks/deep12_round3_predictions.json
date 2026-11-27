@@ -1,0 +1,142 @@
+{
+ "what": "tools/deep12_eval.py --predict-cases: written BEFORE the cases were run (DOPPLER.md DM.5); ours, the planner and the measured bracket",
+ "bracket_db": {
+  "held": 5.4,
+  "not_held": 3.4
+ },
+ "cases": [
+  {
+   "case": "ss3_hfm2",
+   "design": "hyperbolic 2 s, 197 dB",
+   "energy_db": 200.0102999566398,
+   "point_predicted_margin_db": 5.7979315109881515,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": 5.758599613090336,
+   "one_highlight_predicted_db": {
+    "closing": -2.540230581460624,
+    "oblique": -1.2094421684617762,
+    "ship": 4.961863531863638
+   },
+   "bracket_verdict_resolved_hulls": "held",
+   "blind_range_m": 1500.0,
+   "duty": 0.1056338028169014,
+   "range_bias_m_per_m_s": 6.0,
+   "single_listed_projector": true,
+   "projector": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)"
+  },
+  {
+   "case": "ss3_lfm2_cfar",
+   "design": "linear 2 s, 197 dB",
+   "energy_db": 200.0102999566398,
+   "point_predicted_margin_db": 5.0479315109881515,
+   "bank_threshold_shift_db_assumed": 0.75,
+   "planner_point_margin_db": 5.758599613090336,
+   "one_highlight_predicted_db": {
+    "closing": -3.0941696304095947,
+    "oblique": -1.942092703405648,
+    "ship": 4.331916378307951
+   },
+   "bracket_verdict_resolved_hulls": "inside the bracket (between 3.4 and 5.4 dB)",
+   "blind_range_m": 1500.0,
+   "duty": 0.1056338028169014,
+   "range_bias_m_per_m_s": null,
+   "single_listed_projector": true,
+   "projector": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)"
+  },
+  {
+   "case": "ss3_hfm1p200",
+   "design": "hyperbolic 1 s, 200 dB",
+   "energy_db": 200.0,
+   "point_predicted_margin_db": 5.787632017250667,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": 5.736530860566829,
+   "one_highlight_predicted_db": {
+    "closing": -2.55053012394706,
+    "oblique": -1.2197416622003514,
+    "ship": 4.9515640645181405
+   },
+   "bracket_verdict_resolved_hulls": "held",
+   "blind_range_m": 750.0,
+   "duty": 0.055762081784386616,
+   "range_bias_m_per_m_s": 3.0,
+   "single_listed_projector": true,
+   "projector": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 29 m by its maker)"
+  },
+  {
+   "case": "ss4_hfm2",
+   "design": "hyperbolic 2 s, 197 dB",
+   "energy_db": 200.0102999566398,
+   "point_predicted_margin_db": -0.7251060346760649,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": -0.7644379325738786,
+   "one_highlight_predicted_db": {
+    "closing": -9.027963874424717,
+    "oblique": -7.73247896303885,
+    "ship": -0.8112855459610167
+   },
+   "bracket_verdict_resolved_hulls": "not held",
+   "blind_range_m": 1500.0,
+   "duty": 0.1056338028169014,
+   "range_bias_m_per_m_s": 6.0,
+   "single_listed_projector": true,
+   "projector": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)"
+  },
+  {
+   "case": "ss5_hfm8p200",
+   "design": "hyperbolic 8 s, 200 dB",
+   "energy_db": 209.03089986991944,
+   "point_predicted_margin_db": 5.088702793891715,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": 5.14393713144584,
+   "one_highlight_predicted_db": {
+    "closing": -2.9149393658389586,
+    "oblique": -1.918664053747892,
+    "ship": 2.898063603559634
+   },
+   "bracket_verdict_resolved_hulls": "inside the bracket (between 3.4 and 5.4 dB)",
+   "blind_range_m": 6000.0,
+   "duty": 0.32085561497326204,
+   "range_bias_m_per_m_s": 24.0,
+   "single_listed_projector": false,
+   "projector": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 197.0 dB at the rating that covers 32 % duty: 3.0 dB short); it would need 2 x Massa TR-1075D in phase (194.0 dB each against 197.0 dB at its rated drive; each free of cavitation below 10 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)"
+  },
+  {
+   "case": "ss5_hfm4p203",
+   "design": "hyperbolic 4 s, 203 dB",
+   "energy_db": 209.02059991327963,
+   "point_predicted_margin_db": 5.078407138667183,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": 5.06531040771185,
+   "one_highlight_predicted_db": {
+    "closing": -2.925235463720848,
+    "oblique": -1.9289597089822825,
+    "ship": 2.8877681875023837
+   },
+   "bracket_verdict_resolved_hulls": "inside the bracket (between 3.4 and 5.4 dB)",
+   "blind_range_m": 3000.0,
+   "duty": 0.19108280254777069,
+   "range_bias_m_per_m_s": 12.0,
+   "single_listed_projector": false,
+   "projector": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 201.7 dB at the rating that covers 19 % duty: 1.3 dB short); it would need 2 x Massa TR-1075D in phase (197.0 dB each against 201.7 dB at its rated drive; each free of cavitation below 18 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)"
+  },
+  {
+   "case": "ss5_hfm8p203",
+   "design": "hyperbolic 8 s, 203 dB",
+   "energy_db": 212.03089986991944,
+   "point_predicted_margin_db": 8.078508586857293,
+   "bank_threshold_shift_db_assumed": null,
+   "planner_point_margin_db": 8.13374292441142,
+   "one_highlight_predicted_db": {
+    "closing": 0.07591440559541329,
+    "oblique": 1.071141762562088,
+    "ship": 5.887303280184713
+   },
+   "bracket_verdict_resolved_hulls": "held",
+   "blind_range_m": 6000.0,
+   "duty": 0.32085561497326204,
+   "range_bias_m_per_m_s": 24.0,
+   "single_listed_projector": false,
+   "projector": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 197.0 dB at the rating that covers 32 % duty: 6.0 dB short); it would need 3 x Massa TR-1075D in phase (193.5 dB each against 197.0 dB at its rated drive; each free of cavitation below 8 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)"
+  }
+ ]
+}

@@ -52,12 +52,17 @@ DESIGN = {"lfm1": "baseline (shipped: 1 s, 197 dB)", "lfm4p200": "sea-state-5 al
 
 
 def parse_case(name: str) -> dict:
-    m = re.fullmatch(r"(ss[345])_(lfm1|hfm1|lfm4p200|hfm4p200)(_cfar)?", name)
-    if not m:
-        raise ValueError(f"deep12 case {name!r}: ss3|ss4|ss5 _ lfm1|hfm1|lfm4p200|hfm4p200 [_cfar]")
-    wave, T, sl = WAVES[m.group(2)]
-    return {"case": name, "sea_state": int(m.group(1)[2]), "key": m.group(2), "wave": wave, "pulse_s": T, "source_level_db": sl,
-            "bank": bool(m.group(3)), "design": DESIGN[m.group(2)]}
+    """ss<3|4|5>_<lfm|hfm><seconds>[p<rms level dB>][_cfar] (tools/doppler_gpu_runs.sh `deep12` reads the same form): the pulse
+    defaults to the shipped 1 s, the level to its 197 dB; the bank (`_cfar`) takes a linear sweep only."""
+    m = re.fullmatch(r"(ss[345])_((lfm|hfm)([0-9]+)(?:p([0-9]+))?)(_cfar)?", name)
+    if not m or (m.group(6) and m.group(3) != "lfm"):
+        raise ValueError(f"deep12 case {name!r}: ss3|ss4|ss5 _ <lfm|hfm><seconds>[p<level>] [_cfar, linear only]")
+    key, wave, T, sl = m.group(2), m.group(3), float(m.group(4)), float(m.group(5) or 197)
+    if T <= 0.0:
+        raise ValueError(f"deep12 case {name!r}: the pulse must be longer than 0 s")
+    design = DESIGN.get(key) or f"{'hyperbolic' if wave == 'hfm' else 'linear'} {T:g} s, {sl:g} dB"
+    return {"case": name, "sea_state": int(m.group(1)[2]), "key": key, "wave": wave, "pulse_s": T, "source_level_db": sl,
+            "bank": bool(m.group(6)), "design": design}
 
 
 _CACHE: dict = {}
@@ -164,6 +169,40 @@ def predict(case: str, threshold_db: float | None = None) -> dict:
     return out
 
 
+ROUND3 = ("ss3_hfm2", "ss3_lfm2_cfar", "ss3_hfm1p200", "ss4_hfm2", "ss5_hfm8p200", "ss5_hfm4p203", "ss5_hfm8p203")   # DOPPLER.md DM.5
+BRACKET_HELD_DB, BRACKET_NOT_DB = 5.4, 3.4          # the point's margin at which the resolved hulls were held / not held (DM.3, measured)
+
+
+def prediction(case: str) -> dict:
+    """What the planner and the measured bracket say of one case BEFORE it is run: the point's predicted chain margin, each hull's
+    one-highlight prediction, the bracket's verdict for the resolved hulls (held where the point's predicted margin is at least
+    5.4 dB, not held at 3.4 dB or less, inside the bracket between), the blind range c T / 2, the duty, the hyperbolic sweep's
+    range bias per m/s, and whether a single listed projector gives the option (the trade study's projector column)."""
+    from gpusonar import doppler as dop
+    T, envs, grid = _study()
+    k = parse_case(case)
+    P = predict(case, threshold_db=9.45373)                 # the chain's single-sample threshold in this window (detector_scales)
+    tx = json.loads((ROOT / "docs" / "design" / "popoto_trade_study.json").read_text())["transmit"]
+    opt = next((o for o in tx["options"] if o["id"] == P["option"]), None)
+    c = 1500.0
+    point = P["targets"]["point"]["predicted_chain_margin_db"]
+    shift = None
+    if k["bank"]:                       # the bank's threshold shift, measured at 1 s and 4 s (DM.2 (b)): 0.65 and 0.86 dB, taken as 0.75 here
+        shift = 0.75
+        point -= shift
+    verdict = ("held" if point >= BRACKET_HELD_DB else "not held" if point <= BRACKET_NOT_DB else "inside the bracket (between 3.4 and 5.4 dB)")
+    two_way = 2.0 * 12700.0 / c
+    out = {"case": case, "design": k["design"], "energy_db": k["source_level_db"] + 10.0 * np.log10(k["pulse_s"]),
+           "point_predicted_margin_db": point, "bank_threshold_shift_db_assumed": shift, "planner_point_margin_db": P["targets"]["point"]["planner_margin_db"],
+           "one_highlight_predicted_db": {lb: P["targets"][lb]["predicted_one_highlight_db"] - (shift or 0.0) for lb in ("closing", "oblique", "ship")},
+           "bracket_verdict_resolved_hulls": verdict, "blind_range_m": 0.5 * c * k["pulse_s"],
+           "duty": k["pulse_s"] / (two_way + k["pulse_s"]),
+           "range_bias_m_per_m_s": dop.hfm_range_factor(4000.0, 6000.0, k["pulse_s"]) if k["wave"] == "hfm" else None,
+           "single_listed_projector": (bool(opt["costs"]["projector"]["single_units"]) if opt else None),
+           "projector": (opt["costs"]["projector"]["words"] if opt else "the option is not in the trade study's grid")}
+    return out
+
+
 def measured(res: dict, bank: bool) -> dict:
     """Per target (C++ engine): detected, mean margin, tracked, class; and the Python engine's margin where it ran."""
     eng = res["engines"]
@@ -184,6 +223,10 @@ def measured(res: dict, bank: bool) -> dict:
     return out
 
 
+PREDICTIONS = ROOT / "docs" / "tasks" / "deep12_round3_predictions.json"
+_PREDICTED = {c["case"]: c for c in json.loads(PREDICTIONS.read_text())["cases"]} if PREDICTIONS.exists() else {}
+
+
 def summarise(folder: Path) -> dict:
     rows, backgrounds = [], {}
     for path in sorted(folder.glob("deep12_*.json")):
@@ -193,6 +236,7 @@ def summarise(folder: Path) -> dict:
         m = measured(res, k["bank"])
         thr = next(iter(m.values()))["threshold_db"]
         P = predict(case, thr)
+        pre = _PREDICTED.get(case)
         bg = res.get("background", {}).get("default", {})
         backgrounds[case] = {"pings": bg.get("pings"), "false_detections": bg.get("on" if k["bank"] else "off"),
                              "at_3_a_ping": (res.get("background", {}).get("3.0") or {}).get("on" if k["bank"] else "off")}
@@ -200,7 +244,11 @@ def summarise(folder: Path) -> dict:
             p = P["targets"][label]
             diff = None if x["margin_db"] is None else x["margin_db"] - p["predicted_mover_db"]
             verdict = "PASS" if 2 * x["detected"] >= x["pings"] else "FAIL"
+            before = None
+            if pre is not None and label in ("closing", "oblique"):
+                before = pre["bracket_verdict_resolved_hulls"]
             rows.append({"case": case, "sea_state": k["sea_state"], "design": k["design"], "filter": "bank cfar" if k["bank"] else "plain", "verdict": verdict,
+                         "predicted_before_run": before,
                          "target": label, **{f"measured_{a}": b for a, b in x.items()}, **{f"planner_{a}": b for a, b in p.items()},
                          "difference_db": diff})
     rows.sort(key=lambda r: (r["difference_db"] is not None, r["difference_db"] if r["difference_db"] is not None else 0.0))
@@ -256,9 +304,19 @@ def main(argv=None) -> int:
     ap.add_argument("--markdown", action="store_true")
     ap.add_argument("--predict", metavar="CASE")
     ap.add_argument("--source", help="where the case JSONs came from (jobs, tree, device), written into the result")
+    ap.add_argument("--predict-cases", nargs="*", metavar="CASE", help="the predictions of these cases (default: DM.5's), written before they are run")
     a = ap.parse_args(argv)
     if a.predict:
         print(json.dumps(predict(a.predict), indent=1, default=float))
+        return 0
+    if a.predict_cases is not None:
+        out = {"what": "tools/deep12_eval.py --predict-cases: written BEFORE the cases were run (DOPPLER.md DM.5); ours, the planner and the measured bracket",
+               "bracket_db": {"held": BRACKET_HELD_DB, "not_held": BRACKET_NOT_DB}, "cases": [prediction(c_) for c_ in (a.predict_cases or ROUND3)]}
+        text = json.dumps(out, indent=1, default=float) + "\n"
+        if a.json:
+            Path(a.json).write_text(text)
+        else:
+            print(text)
         return 0
     if not a.folder:
         ap.error("give the folder of deep12_<case>.json, or --predict CASE")

@@ -316,14 +316,15 @@ def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
     sub-run without stopping the others. It measures nothing."""
     out = tmp_path / "doppler"
     env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="deep12", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
-               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1")
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1,ss3_hfm2")
     env.pop("GPUSONAR_UPLOAD_REPO", None)
     got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True,
                          timeout=1500)
     assert got.returncode == 2, got.stdout[-4000:] + got.stderr[-2000:]           # the unknown case, and only it
-    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 4
+    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 5
     want = {"ss3_lfm1": (3, "Lfm", 1.0, 197.0, True), "ss5_hfm1": (5, "Arbitrary", 1.0, 197.0, True),
-            "ss5_lfm4p200": (5, "Lfm", 4.0, 200.0, True), "ss5_lfm4p200_cfar": (5, "Lfm", 4.0, 200.0, False)}
+            "ss5_lfm4p200": (5, "Lfm", 4.0, 200.0, True), "ss5_lfm4p200_cfar": (5, "Lfm", 4.0, 200.0, False),
+            "ss3_hfm2": (3, "Arbitrary", 2.0, 197.0, True)}          # a 2 s sampled pulse (DM.5's candidate baseline)
     for name, (ss, kind, dur, level, off_only) in want.items():
         res = json.loads((out / f"deep12_{name}.json").read_text())
         assert res["scene"] == "popoto_12km_deep_sea_state_5" and f"environment.sea_state={ss}" in res["set"], name
@@ -336,7 +337,7 @@ def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
             assert res["transmit"]["source_level_db_peak"] == pytest.approx(level + 10 * np.log10(2.0), abs=0.01), name    # rms + 3 dB
     a, b = (json.loads((out / f"deep12_{n}.json").read_text()) for n in ("ss5_lfm4p200", "ss5_lfm4p200_cfar"))
     assert a["engines"]["cpp"]["off"]["detections_per_ping"] == b["engines"]["cpp"]["off"]["detections_per_ping"]
-    assert len(list((out / "cache").glob("*.h5"))) == 2 * 3                     # three plain cases, scene and background each: the bank made none
+    assert len(list((out / "cache").glob("*.h5"))) == 2 * 4                     # four plain cases, scene and background each: the bank made none
 
 
 # --- the regen sub-run: the outputs D-251 made stale (issue sonar-rar0) -----------------------------------------------------

@@ -17,7 +17,7 @@ def test_cases_parse_and_unknown_ones_are_refused():
     k = deep12_eval.parse_case("ss5_lfm4p200_cfar")
     assert (k["sea_state"], k["wave"], k["pulse_s"], k["source_level_db"], k["bank"]) == (5, "lfm", 4.0, 200.0, True)
     assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("baseline")
-    for bad in ("ss6_lfm1", "ss3_lfm2", "ss3_hfm1_max"):
+    for bad in ("ss6_lfm1", "ss3_cw1", "ss3_lfm0", "ss3_hfm1_max"):        # ss3_lfm2 is a case since DM.5 (any pulse)
         with pytest.raises(ValueError):
             deep12_eval.parse_case(bad)
 
@@ -102,3 +102,38 @@ def test_the_committed_measurement_states_both_designs_verdicts():
         if r["target"] in ("oblique", "closing") and r["measured_detected"] == 6 and (r["case"].endswith("_cfar") or "hfm" in r["case"]):
             assert -7.0 < r["difference_db"] < -2.0, (r["case"], r["target"])
     assert all(b["false_detections"] == 0 for b in S["background_default_budget"].values())
+
+
+def test_any_pulse_and_level_parse_and_the_window_holds_the_pulse():
+    """DM.5's cases: 2 s and 8 s, 200 and 203 dB; the old names mean what they meant; the receive window takes the pulse."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sonar import SonarModel
+    for name, want in (("ss3_lfm1", ("lfm", 1.0, 197.0, False)), ("ss5_hfm4p200", ("hfm", 4.0, 200.0, False)), ("ss3_hfm2", ("hfm", 2.0, 197.0, False)),
+                       ("ss3_lfm2_cfar", ("lfm", 2.0, 197.0, True)), ("ss5_hfm8p203", ("hfm", 8.0, 203.0, False)), ("ss3_hfm1p200", ("hfm", 1.0, 200.0, False))):
+        k = deep12_eval.parse_case(name)
+        assert (k["wave"], k["pulse_s"], k["source_level_db"], k["bank"]) == want, name
+    assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("baseline")
+    with pytest.raises(ValueError):
+        deep12_eval.parse_case("ss3_hfm2_cfar")                 # the bank takes a linear sweep only
+    cfg = load_scenario_config("popoto_12km_deep_sea_state_5", expand=False)
+    for T in (2.0, 8.0):
+        s = SonarModel.load(cfg["sonar"], {**cfg["sonar_overrides"], "transmit": {"waveform": {"duration": T, "type": "sampled", "source": "hfm"}}})
+        start, n = s.window(1500.0)
+        assert start == pytest.approx(2 * 11300.0 / 1500.0) and n / s.sample_rate == pytest.approx(2 * 1400.0 / 1500.0 + T, abs=1e-3)
+
+
+def test_the_predictions_were_written_before_the_run_and_are_the_tools():
+    """docs/tasks/deep12_round3_predictions.json is what --predict-cases computes now (nothing typed), one entry per DM.5 case."""
+    got = json.loads((ROOT / "docs" / "tasks" / "deep12_round3_predictions.json").read_text())
+    assert [c["case"] for c in got["cases"]] == list(deep12_eval.ROUND3)
+    for c in got["cases"]:
+        now = deep12_eval.prediction(c["case"])
+        assert c["point_predicted_margin_db"] == pytest.approx(now["point_predicted_margin_db"], abs=1e-6)
+        assert c["bracket_verdict_resolved_hulls"] == now["bracket_verdict_resolved_hulls"]
+        k = deep12_eval.parse_case(c["case"])
+        assert c["blind_range_m"] == pytest.approx(750.0 * k["pulse_s"])
+        assert (c["range_bias_m_per_m_s"] is None) == (k["wave"] == "lfm")
+        if c["range_bias_m_per_m_s"] is not None:
+            assert c["range_bias_m_per_m_s"] == pytest.approx(3.0 * k["pulse_s"])
+    by = {c["case"]: c for c in got["cases"]}
+    assert by["ss3_hfm2"]["single_listed_projector"] and not by["ss5_hfm8p200"]["single_listed_projector"] and not by["ss5_hfm4p203"]["single_listed_projector"]

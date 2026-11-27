@@ -39,8 +39,11 @@
 #                 ss3_hfm4p200 ss3_hfm1 ss4_hfm1 ss5_hfm1, then the banks ss3_lfm1_cfar ss5_lfm4p200_cfar ss5_lfm1_cfar
 #                 ss4_lfm1_cfar ss4_lfm4p200_cfar ss3_lfm4p200_cfar
 #               (lfm1: the shipped 1 s at 197 dB, the BASELINE; lfm4p200 / hfm4p200: the sea-state-5 ALTERNATE's 4 s at
-#               200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). (GPUSONAR_DOPPLER_TIMEOUT_DEEP12, a case's
-#               limit, default 45m; GPUSONAR_DOPPLER_DEEP12_ARGS appended to each call)
+#               200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). Any case <ss>_<lfm|hfm><seconds>[p<level>][_cfar]
+#               is accepted, e.g. the energy candidates of DOPPLER.md DM.5 (only when named): ss3_hfm2, ss3_lfm2_cfar,
+#               ss3_hfm1p200, ss4_hfm2, ss5_hfm8p200, ss5_hfm4p203, ss5_hfm8p203 (their predictions, written before the run:
+#               docs/tasks/deep12_round3_predictions.json). (GPUSONAR_DOPPLER_TIMEOUT_DEEP12, a case's limit, default 45m;
+#               GPUSONAR_DOPPLER_DEEP12_ARGS appended to each call)
 #   regen       (only when named) the committed outputs D-251 made stale (issue sonar-rar0): tools/regen_stale.py reruns each
 #               stale part (`tools/regen_stale.py --list`: the parts, their commands, what is kept and why), simulator and
 #               chain on the device, one part at a time under its own limit into <out-dir>/regen/, uploaded after each; then
@@ -236,13 +239,16 @@ if [[ $runs == *,deep12,* ]]; then
     ss=${case%%_*}; rest=${case#*_}; wave=${rest%%_*}; filt=plain
     [ "$rest" = "${rest%_cfar}" ] || filt=cfar
     case "$ss" in ss3|ss4|ss5) ;; *) echo "deep12: unknown case $case (sea state ss3, ss4 or ss5)"; [ "$status" -ne 0 ] || status=2; continue;; esac
-    case "$wave" in
-      lfm1) sets="";;
-      hfm1) sets="$w.type=sampled $w.source=hfm";;
-      lfm4p200) sets="$w.duration=4.0 $w.source_level_db_rms=200.0";;
-      hfm4p200) sets="$w.duration=4.0 $w.source_level_db_rms=200.0 $w.type=sampled $w.source=hfm";;
-      *) echo "deep12: unknown case $case (waveform lfm1, hfm1, lfm4p200 or hfm4p200)"; [ "$status" -ne 0 ] || status=2; continue;;
-    esac
+    # <lfm|hfm><seconds>[p<level dB>]: the pulse (default 1 s) and its rms level (default the shipped 197 dB); the --set list is
+    # written in one order (duration, level, then the hyperbolic sweep's keys) so that a case's records are one cache file
+    if [[ $wave =~ ^(lfm|hfm)([0-9]+)(p([0-9]+))?$ ]]; then
+      shape=${BASH_REMATCH[1]}; pulse=${BASH_REMATCH[2]}; level=${BASH_REMATCH[4]:-197}; sets=""
+      [ "$pulse" = 1 ] || sets="$sets $w.duration=$pulse.0"
+      [ "$level" = 197 ] || sets="$sets $w.source_level_db_rms=$level.0"
+      [ "$shape" = lfm ] || sets="$sets $w.type=sampled $w.source=hfm"
+    else
+      echo "deep12: unknown case $case (waveform <lfm|hfm><seconds>[p<level>], e.g. lfm1, hfm4p200)"; [ "$status" -ne 0 ] || status=2; continue
+    fi
     if [ "$filt" = cfar ]; then
       case "$wave" in lfm*) mode="--combine cfar";; *) echo "deep12: $case: the bank takes a linear sweep only"; [ "$status" -ne 0 ] || status=2; continue;; esac
     else

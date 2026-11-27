@@ -1961,3 +1961,29 @@ the old runs; they are not separated.
 8. Not stale and kept (`regenerated.kept` in each file): every `flank_patrol` part (platform still: one ping's record
    SHA-256 equal under both laws), the noise-only and planner parts; not reproducible, kept as they were:
    `tone_p12_wholetrain`, the first run's truth summary.
+
+### DM.5 The energy candidates, predicted before they are run (appended 2026-11-27; issue `sonar-rctz`; not run yet)
+
+DM.3's "what the resolved hull needs" is the model and a bracket. These cases measure it; each prediction below was
+written before the run (`tools/deep12_eval.py --predict-cases --json docs/tasks/deep12_round3_predictions.json`; `tools/deep12_eval.py`
+puts it beside the measured verdict when the results are summarised). Point: the planner's predicted chain margin of the +25 dB
+point (`predict_point` at its geometry, the chain's 9.45 dB threshold; for the bank less 0.75 dB, its threshold shift measured
+0.65 / 0.86 dB at 1 / 4 s). Bracket (DM.3): the resolved hulls held where the point's margin is 5.4 dB or more, not at 3.4 dB
+or less. One highlight: the hull's prediction less 10 log10(5). Duty: the pulse over the two-way time to 12.7 km plus the
+pulse. Projector: the trade study's column (via secondary: the sheets in docs/design/projector_selection.md). Ours.
+
+| Case | Energy (dB re 1 uPa^2 s at 1 m) | Point, predicted | One highlight: closing / oblique / ship | Bracket's verdict for the resolved hulls | Blind range | Duty | Range bias (m per m/s) | A single listed projector |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ss3_hfm2` (hyperbolic 2 s, 197 dB) | 200.0 | +5.80 dB | -2.5 / -1.2 / +5.0 | held | 1.50 km | 10.6 % | 6 | yes |
+| `ss3_lfm2_cfar` (linear 2 s, 197 dB, bank) | 200.0 | +5.05 dB | -3.1 / -1.9 / +4.3 | inside the bracket (between 3.4 and 5.4 dB) | 1.50 km | 10.6 % | — | yes |
+| `ss3_hfm1p200` (hyperbolic 1 s, 200 dB) | 200.0 | +5.79 dB | -2.6 / -1.2 / +5.0 | held | 0.75 km | 5.6 % | 3 | yes |
+| `ss4_hfm2` (hyperbolic 2 s, 197 dB) | 200.0 | -0.73 dB | -9.0 / -7.7 / -0.8 | not held | 1.50 km | 10.6 % | 6 | yes |
+| `ss5_hfm8p200` (hyperbolic 8 s, 200 dB) | 209.0 | +5.09 dB | -2.9 / -1.9 / +2.9 | inside the bracket (between 3.4 and 5.4 dB) | 6.00 km | 32.1 % | 24 | no |
+| `ss5_hfm4p203` (hyperbolic 4 s, 203 dB) | 209.0 | +5.08 dB | -2.9 / -1.9 / +2.9 | inside the bracket (between 3.4 and 5.4 dB) | 3.00 km | 19.1 % | 12 | no |
+| `ss5_hfm8p203` (hyperbolic 8 s, 203 dB) | 212.0 | +8.08 dB | +0.1 / +1.1 / +5.9 | held | 6.00 km | 32.1 % | 24 | no |
+
+The one-highlight figures are under the threshold in every case but the ship's: on DM.4's runs the resolved hulls came out
+0.6 to 4.6 dB above their one-highlight prediction, so the bracket, not that figure, is the prediction to test. Neither way
+to 209 dB has a single listed projector (4 s at 203 dB: two TR-1075D in phase; 8 s at 200 dB: 3.0 dB short at 32 % duty).
+The run: the `deep12` sub-run with these cases, the sea-state-3 candidates first (GPUSONAR_DOPPLER_DEEP12_CASES); each
+case limited to 45 min; on the L4 the 4 s hyperbolic cases simulated 6 pings in 27 s (DM), the 8 s ones are untimed.
