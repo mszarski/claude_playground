@@ -734,3 +734,14 @@ checks at every ping that the detections and tracks drawn equal the report line'
 Committed: `docs/figures/scenes/chain/` (two CDN pages, `flank_patrol` and `fls_120k_cluttered_seabed`, with
 screenshots). Tests: `tests/python/test_scene_chain.py` (7), new tests in `tests/python/test_live_cpp.py` (8) and
 `tests/python/test_scene_audio.py` (21).
+
+### 15.3 Note (2026-11-27, sonar-tpex): the `look` workaround replaced
+
+The FLS sonars now have deployment files (`configs/deploy/fls_120k.yaml`, `fls_170k.yaml`, `fls_330k.yaml`,
+`l12_5d.yaml`, `p4_2v.yaml`; `DEPLOYMENT.md`, "A forward-looking sonar") that say `look: boresight`, the chain's own
+rule in both engines (the side the record's elements face). The viewer takes the look from the file and adds nothing.
+For a sonar no file names (`fls_300k`, `fls_750k`, SAS and others), `viz/chain.py look_toward_boresight` still acts when
+the default faces away from the boresight, now by setting `look: boresight` rather than `port`, and the page's
+configuration line says so. The pool scenes run through the chain with their files (section 15's "no chain view" no
+longer holds for them; their views have not been regenerated).
+

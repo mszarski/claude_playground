@@ -52,6 +52,9 @@ def test_every_stacked_row_deployment_file_searches_only_where_rays_arrive_from(
     """Found by the sonar's rows, not by a list of names: a new stacked-row file without the key fails here."""
     stacked = set()
     for name, cfg in deployed().items():
+        if SonarModel.load(cfg["source"]["sonar"]).config.get("mode") == "fls":
+            assert "elevation" not in cfg["chain"], name      # one row (sonar-tpex's files); buildspec describes board arrays only
+            continue
         if bs.describe_shipped(cfg["source"]["sonar"])["rows"] > 1:
             stacked.add(name)
             assert cfg["chain"]["elevation"]["sector_from_rays"] == {}, name      # {}: two bounces, a degree of margin, to 500 m

@@ -1,0 +1,37 @@
+# The stage 2 pool sonar, the P4-2v phased array on the reference rig (configs/sonars/p4_2v.yaml) through the live chain:
+#   tools/sonar_live.py configs/deploy/p4_2v.yaml --replay RECORDING.h5      (or --scenario pool_fls_p4_2v)
+# The owner (D-255): the forward-looking sonar gets its own deployment settings. docs/DEPLOYMENT.md, "A forward-looking
+# sonar", says what each value is and why; docs/CONFIGURATION.md has the keys. Everything left out keeps the chain's
+# default (gpusonar/live.py DEFAULTS): the detector's statistic, false-alarm budget and SNR floor, the tracker's counts
+# and speeds. No scene has tuned any of it for this sonar (a follow-up).
+# The sizes below are the floors libs/live derive.hpp derives from the sonar (its kCellsPerResolution, kGuardCells,
+# kTrainPerGuard, kBeamwidthsPerSigma, kFitRmsSigmas), written out to three figures at the sonar file's nominal sound
+# speed, 1480 m/s: the chain uses the larger of them and its standing values, which were set for a kilometre-range array
+# (2 m cells, 100 m and 300 m CFAR windows, 15 m and 1 degree tracker sigmas, 60 m fit limit): a 2 m cell is
+# 5,440 range resolutions here, and the 300 m training window is longer than the whole window, 5 m (5 to 10 m).
+# At 2 m cells the chain refused this sonar's records: fewer than three range cells in the window.
+
+source:
+  type: nvus_scanner           # the reference rig (sources/nvus_scanner.py); its window and timing are the rig's
+  sonar: p4_2v
+
+chain:
+  # The array is across the bow (array.axis athwartships, array.boresight forward). `boresight`: the chain takes the side
+  # the record's elements face, every ping (live.py look_side, libs/live look_starboard): ahead, bearings positive to
+  # starboard. The default, starboard (a flank array's), put every echo astern and mirrored (D-253).
+  look: boresight
+  # the insonified fan, +-40.1 degrees (transmit.beamwidth_az 1.4 rad), to a whole number of steps; 0.7 degrees
+  # is 0.43 of the beam (64 elements x 0.3 mm: lambda / D = 1.62 degrees at 2.72 MHz)
+  bearings_deg: [-39.9, 39.9, 0.7]
+  range_cell_m: 3.68e-4   # one range resolution, c / 2B (0.368 mm over 2.01 MHz)
+  cfar: {guard_m: 1.47e-3, train_m: 4.41e-3}   # four resolutions; three times that
+  tracker: {range_sigma: 3.68e-4, bearing_sigma_deg: 0.102}   # one resolution; a sixteenth of the beam (1.62 degrees)
+  classify:
+    max_fit_rms: 1.47e-3   # m: four resolutions
+    multipath: null              # no echo grouping: its 800 m excess range is longer than the whole window, so every
+                                 # farther track on a bearing would be a bounce of a nearer one
+
+output:
+  report: /data/sonar/p4_2v_%Y%m%d_%H%M%S.jsonl
+
+unconfirmed: [source]
