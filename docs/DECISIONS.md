@@ -5664,3 +5664,22 @@ agreeing.
   `doppler` row of `docs/CONFIGURATION.md` said the generator's time did not change; it is corrected
   to D-251's figures. `docs/tasks/DOPPLER.md` gets GL.9 for D-252's count. The one more skip of
   D-254 (122 against 121) is not itemised.
+
+### D-255 The owner's decisions on the sea state of the 12 km requirement and the FLS deployment settings (answers STATUS questions on the worst sea state and question 63)
+
+2026-11-27.
+
+- Not decided by this entry: the detection and false-alarm probabilities, the operating area, the
+  slowest radial speed, whether the design report's `--check` fails on "partly met". The transmit
+  table behind the choice is the model's (D-247); its check through the simulator and chain at sea
+  states 3 to 5 is running (issue sonar-rctz).
+- Asked for the worst sea state in which 12 km must hold, with D-247's table, **the owner: "Make it
+  sea state 5 but have that as an alternate and the baseline is sea state 3 (i.e. for testing and
+  prototyping, so the first design end to end can be ss3)."** So: the baseline design, the one built
+  and tested end to end first, is the shipped transmitter (1 s, 197 dB) with 12 km required up to
+  sea state 3; an alternate design holds 12 km up to sea state 5 with more energy a ping (by D-247:
+  +9 dB with the bubble law, for example 4 s at 200 dB). The alternate is added as its own
+  configuration; no default moves.
+- Asked whether the forward-looking sonar should get its own deployment settings (the chain's
+  default look is a flank array's and mirrors an FLS's echoes astern, D-253), **the owner: "yes."**
+  (issue sonar-tpex).
