@@ -92,6 +92,18 @@ Prior predict(const Track& t, double to, const TrackerOptions& o) {
   return out;
 }
 
+TrackerTapTrack tap_track(const Track& t) {
+  TrackerTapTrack o;
+  o.id = t.id;
+  std::copy(t.state, t.state + 4, o.state);
+  std::copy(t.cov, t.cov + 16, o.cov);
+  o.hits = t.hits;
+  o.misses = t.misses;
+  o.confirmed = t.confirmed;
+  o.time = t.time;
+  return o;
+}
+
 }  // namespace
 
 std::vector<const Track*> Tracker::update(double time, const std::vector<Detection>& detections) {
@@ -137,6 +149,35 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     t.misses = 0;
     t.confirmed = t.confirmed || t.hits >= opt_.confirm_hits;
   };
+  // The opt-in tap (read only): every pair compared, kept below when gated or a track's nearest.
+  const bool tap = tap_;
+  std::vector<TrackerTapPair> compared;
+  std::vector<std::ptrdiff_t> took_index(tracks_.size(), -1);
+  if (tap) {
+    last_tap_ = TrackerTap{};
+    last_tap_.time = time;
+    for (const Track& t : tracks_) {
+      TrackerTapTrack b;
+      b.id = t.id;
+      b.hits = t.hits;
+      b.misses = t.misses;
+      b.confirmed = t.confirmed;
+      last_tap_.before.push_back(b);
+    }
+  }
+  auto record = [&](std::size_t ti, std::size_t j, double d2, double cost, const Prior& pr, const M2& s) {
+    TrackerTapPair q;
+    q.track = tracks_[ti].id;
+    q.detection = static_cast<std::int64_t>(j);
+    q.d2 = d2;
+    q.cost = cost;
+    q.x = pr.x[0];
+    q.y = pr.x[1];
+    q.sxx = s(0, 0);
+    q.sxy = s(0, 1);
+    q.syy = s(1, 1);
+    compared.push_back(q);
+  };
   std::vector<std::size_t> unused;
   if (opt_.association == Association::Likelihood) {
     // Most probable gated pairs first, confirmed tracks before tentative ones (D-141).
@@ -156,6 +197,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
         if (d2 < opt_.gate * opt_.gate) pairs.push_back({!t.confirmed, d2 + std::log(s.determinant()), ti, j});
+        if (tap) record(ti, j, d2, d2 + std::log(s.determinant()), pr, s);
       }
     }
     std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {
@@ -172,6 +214,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       if (taken[ti] >= 0) {
         const auto j = static_cast<std::size_t>(taken[ti]);
         const Prior pr = predicted(ti, when[j]);
+        took_index[ti] = static_cast<std::ptrdiff_t>(j);
         take(tracks_[ti], detections[j], pr, when[j]);
       } else {
         ++tracks_[ti].misses;
@@ -198,6 +241,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         const M2 s = h * pr.p * h.transpose() + measurement_cov(d, opt_);
         const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
+        if (tap) record(ti, unused[k], d2, std::numeric_limits<double>::quiet_NaN(), pr, s);
         if (d2 < best_d2) {
           best = static_cast<std::ptrdiff_t>(k);
           best_d2 = d2;
@@ -210,6 +254,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       const std::size_t j = unused[static_cast<std::size_t>(best)];
       unused.erase(unused.begin() + best);
       const Prior pr = predicted(ti, when[j]);
+      took_index[ti] = static_cast<std::ptrdiff_t>(j);
       take(t, detections[j], pr, when[j]);
     }
   }
@@ -226,6 +271,39 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       t.time = time;
     }
     t.history.push_back({t.time, t.state[0], t.state[1], took[ti][0], took[ti][1], time});
+  }
+  if (tap) {
+    // Kept: inside the gate, or a track's nearest (the first smallest d2), in the order compared (detect.py _tap_pairs_kept).
+    std::vector<std::ptrdiff_t> nearest(tracks_.size(), -1);
+    for (std::size_t i = 0; i < compared.size(); ++i) {
+      for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
+        if (tracks_[ti].id != compared[i].track) continue;
+        if (nearest[ti] < 0 || compared[i].d2 < compared[static_cast<std::size_t>(nearest[ti])].d2) nearest[ti] = static_cast<std::ptrdiff_t>(i);
+      }
+    }
+    for (std::size_t i = 0; i < compared.size(); ++i) {
+      TrackerTapPair q = compared[i];
+      q.gated = q.d2 < opt_.gate * opt_.gate;
+      q.nearest = std::find(nearest.begin(), nearest.end(), static_cast<std::ptrdiff_t>(i)) != nearest.end();
+      if (q.gated || q.nearest) last_tap_.pairs.push_back(q);
+    }
+    for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
+      const Track& t = tracks_[ti];
+      if (took_index[ti] >= 0) last_tap_.took.emplace_back(t.id, static_cast<std::int64_t>(took_index[ti]));
+    }
+    for (const Track& t : tracks_) {
+      if (t.misses > 0) last_tap_.missed.push_back(t.id);
+    }
+    for (const Track& t : tracks_) {
+      if (t.misses > opt_.max_misses) last_tap_.dropped.push_back(tap_track(t));
+    }
+    for (const Track& t : tracks_) {
+      bool was = false;
+      for (const TrackerTapTrack& b : last_tap_.before) {
+        if (b.id == t.id) was = b.confirmed;
+      }
+      if (t.confirmed && !was) last_tap_.confirmed_now.push_back(t.id);
+    }
   }
   tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [this](const Track& t) { return t.misses > opt_.max_misses; }),
                 tracks_.end());
@@ -245,7 +323,11 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     tr.snr.push_back(d.snr_db);
     tr.cells.push_back(d.cells);
     take_depth(tr, d);
+    if (tap) last_tap_.born.emplace_back(tr.id, static_cast<std::int64_t>(j));
     tracks_.push_back(std::move(tr));
+  }
+  if (tap) {
+    for (const Track& t : tracks_) last_tap_.after.push_back(tap_track(t));
   }
   std::vector<const Track*> confirmed;
   for (const Track& t : tracks_) {

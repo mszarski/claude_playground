@@ -29,6 +29,102 @@ using namespace sonar;  // NOLINT(google-build-using-namespace)
 
 namespace {
 
+// --- the opt-in chain taps (docs/tasks/VISUALIZATION.md section 15): the same members as python/gpusonar/detect.py
+// TRACKER_TAP and classify.py CLASS_EVIDENCE --------------------------------------------------------------------------
+py::object finite_or_none(double v) { return std::isfinite(v) ? py::object(py::float_(v)) : py::object(py::none()); }
+
+py::dict tap_track_dict(const live::TrackerTapTrack& t) {
+  py::dict d;
+  d["id"] = t.id;
+  d["state"] = std::vector<double>(t.state, t.state + 4);
+  d["cov"] = std::vector<double>(t.cov, t.cov + 16);
+  d["hits"] = t.hits;
+  d["misses"] = t.misses;
+  d["confirmed"] = t.confirmed;
+  d["time"] = t.time;
+  return d;
+}
+
+py::dict tracker_tap_dict(const live::TrackerTap& tap, const live::TrackerOptions& o) {
+  py::dict d;
+  d["time_s"] = tap.time;
+  d["gate"] = o.gate;
+  d["association"] = o.association == live::Association::Likelihood ? "likelihood" : "in_order";
+  py::list before, pairs, took, missed, dropped, born, now, after;
+  for (const auto& b : tap.before) {
+    py::dict x;
+    x["id"] = b.id;
+    x["hits"] = b.hits;
+    x["misses"] = b.misses;
+    x["confirmed"] = b.confirmed;
+    before.append(x);
+  }
+  for (const auto& q : tap.pairs) {
+    py::dict x;
+    x["track"] = q.track;
+    x["detection"] = q.detection;
+    x["d2"] = q.d2;
+    x["cost"] = finite_or_none(q.cost);
+    x["gated"] = q.gated;
+    x["nearest"] = q.nearest;
+    x["x"] = std::vector<double>{q.x, q.y};
+    x["s"] = std::vector<double>{q.sxx, q.sxy, q.syy};
+    pairs.append(x);
+  }
+  for (const auto& [t, j] : tap.took) {
+    py::dict x;
+    x["track"] = t;
+    x["detection"] = j;
+    took.append(x);
+  }
+  for (auto id : tap.missed) missed.append(id);
+  for (const auto& t : tap.dropped) {
+    py::dict x = tap_track_dict(t);
+    x["reason"] = "missed " + std::to_string(t.misses) + " pings in a row > max_misses " + std::to_string(o.max_misses);
+    dropped.append(x);
+  }
+  for (const auto& [t, j] : tap.born) {
+    py::dict x;
+    x["track"] = t;
+    x["detection"] = j;
+    born.append(x);
+  }
+  for (auto id : tap.confirmed_now) now.append(id);
+  for (const auto& t : tap.after) after.append(tap_track_dict(t));
+  d["before"] = before;
+  d["pairs"] = pairs;
+  d["took"] = took;
+  d["missed"] = missed;
+  d["dropped"] = dropped;
+  d["born"] = born;
+  d["confirmed_now"] = now;
+  d["after"] = after;
+  return d;
+}
+
+py::list evidence_list(const std::vector<live::ClassEvidence>& ev) {
+  py::list out;
+  for (const auto& e : ev) {
+    py::dict x;
+    x["id"] = e.id;
+    x["rows"] = e.rows;
+    x["fitted"] = e.fitted;
+    x["speed"] = e.speed;
+    x["speed_sigma"] = e.speed_sigma;
+    x["need"] = e.need;
+    x["seen"] = e.seen;
+    x["fit_rms"] = e.fit_rms;
+    x["limit"] = finite_or_none(e.limit);
+    x["steady"] = e.steady;
+    x["extent_cells"] = finite_or_none(e.extent_cells);
+    x["rule"] = e.rule;
+    x["kind"] = e.kind;
+    x["later"] = e.later;
+    out.append(x);
+  }
+  return out;
+}
+
 py::dict track_dict(const live::Track& t) {
   py::dict d;
   d["id"] = t.id;
@@ -541,6 +637,13 @@ void bind_live(py::module_& m) {
            py::arg("time"), py::arg("detections"), py::arg("times") = py::none(),
            "Advance to the ping at `time` with detections [(range, bearing, snr_db, cells)]; `times`: each one's own time "
            "(s; None: the ping's).")
+      .def("set_tap", &live::Tracker::set_tap, py::arg("on"),
+           "The opt-in tap (off by default): each update then leaves what it did in last_tap(); read only.")
+      .def("last_tap", [](const live::Tracker& t) -> py::object {
+             if (!t.tap_on()) return py::none();
+             return tracker_tap_dict(t.last_tap(), t.options());
+           },
+           "What the last update did (detect.py TRACKER_TAP), or None with the tap off.")
       .def("classify",
            [](const live::Tracker& t, double min_speed, double static_speed, double significance, double min_seen,
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
@@ -1425,6 +1528,38 @@ void bind_live(py::module_& m) {
         std::copy(w.begin(), w.end(), out.mutable_data());
         return py::make_tuple(out, c.doppler_plan().rates);
       }, "The hypothesis holding each sample of the last fine map [n_bearing, n] and the hypotheses' range rates (m/s).")
+      .def("set_taps", [](live::LiveChain& c, const std::vector<std::string>& names) {
+             bool tracker = false, classifier = false, detector = false;
+             for (const std::string& n : names) {
+               if (n == "tracker") tracker = true;
+               else if (n == "classifier") classifier = true;
+               else if (n == "detector") detector = true;
+               else throw py::value_error("LiveChainCpp.set_taps: '" + n + "': tracker, classifier or detector");
+             }
+             c.set_taps(tracker, classifier, detector);
+           }, py::arg("names"),
+           "The opt-in chain taps (python/gpusonar/live.py CHAIN_TAPS): 'tracker', 'classifier', 'detector'; [] turns them off. "
+           "Read only.")
+      .def("tap", [](const live::LiveChain& c, const std::string& name) -> py::object {
+             if (name == "tracker") {
+               const live::TrackerTap* t = c.tracker_tap();
+               return t ? py::object(tracker_tap_dict(*t, c.options().tracker)) : py::object(py::none());
+             }
+             if (name == "classifier") return c.classifier_tap_on() ? py::object(evidence_list(c.class_evidence())) : py::object(py::none());
+             if (name == "detector") {
+               const std::vector<float>* b = c.detector_tap();
+               if (b == nullptr) return py::none();
+               const auto n_b = static_cast<py::ssize_t>(c.bearings.size());
+               py::array_t<float> bg({n_b, n_b > 0 ? static_cast<py::ssize_t>(b->size()) / n_b : py::ssize_t{0}});
+               std::copy(b->begin(), b->end(), bg.mutable_data());
+               py::dict d;
+               d["background"] = bg;
+               d["ranges"] = c.last_ranges;
+               return d;
+             }
+             throw py::value_error("LiveChainCpp.tap: '" + name + "': tracker, classifier or detector");
+           }, py::arg("name"),
+           "The last ping's tap `name` (detect.py TRACKER_TAP, classify.py CLASS_EVIDENCE), or None when off or not run.")
       .def("last_map", [](const live::LiveChain& c) {
         py::array_t<float> power({static_cast<py::ssize_t>(c.bearings.size()), static_cast<py::ssize_t>(c.last_ranges.size())});
         std::copy(c.last_power.begin(), c.last_power.end(), power.mutable_data());

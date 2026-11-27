@@ -8,17 +8,22 @@ in the WAV's file name, in its INFO chunk and in the manifest beside it, with wh
   rate of at least 2.2 x the top of the band; complex baseband samples are put back on their own carrier at such a
   rate. Pitch, time, Doppler and the delays between hydrophones are as recorded; what lies above half the output rate
   (noise only, outside the sonar's band) is dropped and said so.
-- `heterodyne` (the default for a band above 16 kHz, the owner's choice of 2026-11-27): every frequency moves down by
+- `heterodyne` (the default for a band above 16 kHz in a record of 0.5 s or more, the owner's choice of 2026-11-27):
+  every frequency moves down by
   the same number of hertz, so that the centre of the band sits at `center_hz` (2 kHz). Only a band `2 x (center_hz -
   floor_hz)` wide about the centre is kept (3.6 kHz: nothing below 200 Hz, nothing folds through 0 Hz); of a 20 to
   100 kHz wide FLS or SAS sweep the rest is lost, and with it the sweep's range resolution. Durations are kept; a
   Doppler shift keeps its size in hertz but not its ratio to the carrier; harmonic ratios are lost; the delay between
   hydrophones is kept in the envelope (exactly) and in the phase difference of each frequency, but the carrier's phase
   is that of the shifted frequency, so a delay heard as a phase (below about 1.5 kHz) is not the true delay.
-- `time_stretch` (an option): the record is played `factor` times slower. Every frequency is divided by the factor and
-  every duration multiplied by it (default factor: the smallest whole number that brings the top of the band under 16
-  kHz); ratios, the sweep's shape and Doppler as a ratio are kept; the sound lasts `factor` times longer; delays between
-  hydrophones are kept exactly, scaled by the factor.
+- `time_stretch` (the default for a band above 16 kHz in a record shorter than 0.5 s: every FLS and most SAS records;
+  the owner's agreement of 2026-11-27, "oh this includes fls, yes of course that makes sense"; else an option): the
+  record is played `factor` times slower. Every frequency is divided by the factor and every duration multiplied by it;
+  ratios, the sweep's shape and Doppler as a ratio are kept; the sound lasts `factor` times longer; delays between
+  hydrophones are kept exactly, scaled by the factor. The factor (`stretch_factor`, rule ours): asked for by name
+  without a factor, the smallest whole number that brings the top of the band under 16 kHz; chosen by `auto`, that
+  number raised towards a sound of at least 0.5 s (`STRETCH_MIN_SOUND_S`) as far as keeps the band's centre at or
+  above 500 Hz (`STRETCH_MIN_CENTRE_HZ`), so that a 0.27 ms rail record lasts 0.5 s instead of 63 ms.
 
 Levels: one gain per kind of signal (the whole record, echoes alone, one reverberation item, ...) for all the
 hydrophones of a ping, so that the levels between hydrophones are preserved; the loudest hydrophone peaks at -1 dBFS.
@@ -48,6 +53,34 @@ STRETCH_TOP_HZ = 16000.0          # ours: the automatic stretch factor brings th
 STANDARD_RATES = (8000, 16000, 24000, 32000, 48000)
 PEAK_DBFS = -1.0                  # the loudest hydrophone of a kind peaks here
 METHOD_TAG = {"as_recorded": "rec", "heterodyne": "het", "time_stretch": "x"}
+STRETCH_BELOW_S = 0.5             # the owner (2026-11-27): time stretch by default for records shorter than this
+STRETCH_MIN_SOUND_S = 0.5         # ours: `auto` stretches a short record to at least this much sound ...
+STRETCH_MIN_CENTRE_HZ = 500.0     # ours: ... as far as keeps the band's centre at or above this
+
+
+def default_method(sonar_band, duration: float) -> str:
+    """The method `auto` takes (the owner's rules of 2026-11-27): as recorded when the band's top is at or under 16 kHz;
+    time stretch for a record shorter than 0.5 s; heterodyne otherwise (a long record above the audible band)."""
+    hi = max(float(v) for v in sonar_band)
+    if hi <= AUDIBLE_TOP_HZ:
+        return "as_recorded"
+    return "time_stretch" if float(duration) < STRETCH_BELOW_S else "heterodyne"
+
+
+def stretch_factor(sonar_band, duration: float, auto: bool) -> tuple[float, str]:
+    """(factor, the rule in words) of a time stretch with no factor given (rule ours, module docstring)."""
+    lo, hi = sorted(float(v) for v in sonar_band)
+    k_pitch = max(1, math.ceil(max(hi, 1.0) / STRETCH_TOP_HZ))
+    rule = f"the smallest whole factor bringing the band's top ({hi / 1e3:.4g} kHz) under {STRETCH_TOP_HZ / 1e3:g} kHz: {k_pitch}"
+    if not auto:
+        return float(k_pitch), rule
+    k_dur = math.ceil(STRETCH_MIN_SOUND_S / max(float(duration), 1e-12))
+    k_low = max(1, math.floor(0.5 * (lo + hi) / STRETCH_MIN_CENTRE_HZ))
+    k = max(k_pitch, min(k_dur, k_low))
+    if k > k_pitch:
+        rule += (f"; raised to {k} for at least {STRETCH_MIN_SOUND_S:g} s of sound (a {float(duration) * 1e3:.3g} ms record"
+                 + (f", the band's centre kept at or above {STRETCH_MIN_CENTRE_HZ:g} Hz)" if k == k_low < k_dur else ")"))
+    return float(k), rule
 
 
 # --- the plan: which method, what is kept and lost ----------------------------------------------------------------
@@ -73,9 +106,11 @@ def listen_plan(sonar_band, sample_kind: str, sample_rate: float, center_frequen
     misrepresents. `sonar_band` [lo, hi] Hz (the transmit band); `duration` s of the record."""
     lo, hi = sorted(float(v) for v in sonar_band)
     r_lo, r_hi = record_band(sample_kind, sample_rate, center_frequency)
-    if method == "auto":
-        method = "as_recorded" if hi <= AUDIBLE_TOP_HZ else "heterodyne"
-    plan = {"method": method, "sonar_band_hz": [lo, hi], "record_band_hz": [r_lo, r_hi], "sample_kind": str(sample_kind),
+    chosen = method == "auto"
+    if chosen:
+        method = default_method([lo, hi], duration)
+    plan = {"method": method, "chosen_by": "auto (default_method)" if chosen else "asked for",
+            "sonar_band_hz": [lo, hi], "record_band_hz": [r_lo, r_hi], "sample_kind": str(sample_kind),
             "record_rate_hz": float(sample_rate), "record_center_hz": float(center_frequency),
             "record_duration_s": float(duration), "audible_top_hz": AUDIBLE_TOP_HZ}
     if method == "as_recorded":
@@ -103,8 +138,11 @@ def listen_plan(sonar_band, sample_kind: str, sample_rate: float, center_frequen
                                   + "; time and the envelope delay between hydrophones are kept, the carrier phase is "
                                     "the shifted frequency's")
     elif method == "time_stretch":
-        top = max(hi, 1.0)
-        k = float(factor) if factor else float(max(1, math.ceil(top / STRETCH_TOP_HZ)))
+        if factor:
+            k, rule = float(factor), "given"
+        else:
+            k, rule = stretch_factor([lo, hi], duration, auto=chosen)
+        plan["factor_rule"] = rule
         kept = [r_lo, r_hi]
         audio = [r_lo / k, r_hi / k]
         rate = _std_rate(min(2.2 * audio[1], 48000.0))
@@ -317,6 +355,28 @@ def residual_db(parts: dict, whole) -> float:
     return float(20.0 * np.log10(max(r, 1e-30) / max(np.sqrt(np.mean(np.abs(w) ** 2)), 1e-30)))
 
 
+PARTS_MISMATCH_DB = -40.0         # ours: parts that miss the record by more than this (of its rms) are said not to sum
+
+
+def front_end_note(residual_db: float | None, adc: bool, overload: bool) -> dict:
+    """What the page says about the parts and the front end (docs/tasks/VISUALIZATION.md section 14, V6 part A): the
+    parts are the simulator's taps before the front end (the ADC's rounding; an overload front end's clipping and
+    recovery), and where they miss the record by more than PARTS_MISMATCH_DB of its rms the page says they do not sum
+    to it, and why, instead of showing a silent mismatch."""
+    where = "before the front end: before " + ("the overload front end's clipping and recovery and " if overload else "") + (
+        "the ADC's rounding" if adc else "any ADC (this record has none)")
+    mismatch = residual_db is not None and residual_db > PARTS_MISMATCH_DB
+    text = f"Parts are the simulator's taps {where}."
+    if residual_db is not None:
+        text += f" The parts' sum differs from the record by {residual_db:.1f} dB of the record's rms."
+    if mismatch:
+        text += (" They do NOT sum to the record on this page: " + (
+            "the front end clipped (receive.overload); the whole record is what the front end delivered, the parts are "
+            "what reached it" if overload else "the ADC's step is near the record's level (its rounding is not in the parts)"))
+    return {"adc": bool(adc), "overload": bool(overload), "residual_db": residual_db, "mismatch": bool(mismatch),
+            "statement": text}
+
+
 # --- what the page shows beside the sound -------------------------------------------------------------------------
 
 def _u8(db, floor=-60.0):
@@ -490,7 +550,8 @@ def _method_words(plan: dict) -> str:
     lost = ", ".join(f"{a / 1e3:.4g}-{b / 1e3:.4g} kHz" for a, b in plan["lost_hz"]) or "nothing"
     head = {"as_recorded": "as recorded",
             "heterodyne": f"heterodyne: shifted down {plan['shift_hz'] / 1e3:.6g} kHz (band centre to {plan.get('center_hz', 0) / 1e3:g} kHz)",
-            "time_stretch": f"time stretch x{plan['factor']:g} ({plan['factor']:g} times slower and lower)"}[m]
+            "time_stretch": f"time stretch x{plan['factor']:g} ({plan['factor']:g} times slower and lower; factor: "
+                            f"{plan.get('factor_rule', 'given')})"}[m]
     return (("WARNING: " + plan["warning"] + ". " if plan.get("warning") else "")
             + f"{head}; {plan['rate_hz'] / 1e3:g} kHz output; kept {kept}, lost {lost}; "
             f"{plan['audio_duration_s']:.4g} s of sound; misrepresents: {plan['misrepresents']}")

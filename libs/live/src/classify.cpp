@@ -320,7 +320,9 @@ void group_echoes(std::vector<TrackClass>& out, const ClassifyOptions& o, const 
   }
 }
 
-std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o) {
+std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o,
+                                        std::vector<ClassEvidence>* evidence) {
+  const std::size_t first_evidence = evidence ? evidence->size() : 0;
   std::vector<TrackClass> out;
   for (const Track* tr : tracks) {
     std::int64_t n_fit = 0;
@@ -358,6 +360,27 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     }
     c.extent_cells = median_cells(tr->cells);
     out.push_back(c);
+    if (evidence) {   // the tap: reads only
+      ClassEvidence e;
+      e.id = c.id;
+      e.rows = n;
+      e.fitted = n_fit;
+      e.speed = c.speed;
+      e.speed_sigma = f.sigma;
+      e.need = need;
+      e.seen = c.seen;
+      e.fit_rms = f.rms;
+      e.limit = o.max_fit_rms < 0.0 ? std::numeric_limits<double>::quiet_NaN() : limit;
+      e.steady = steady;
+      e.extent_cells = c.extent_cells;
+      e.kind = kind_name(c.kind);
+      if (n < o.min_points) e.rule = "few_points";
+      else if (!steady) e.rule = "scatter";
+      else if (c.kind == Kind::Mover) e.rule = "mover";
+      else if (c.kind == Kind::Uncertain) e.rule = "uncertain_otherwise";
+      else e.rule = (c.speed < o.static_speed && c.seen >= o.min_seen) ? "static_slow" : "static_insignificant";
+      evidence->push_back(e);
+    }
   }
   if (o.linear) {
     // Other tracks in a narrow corridor ahead of and astern of a mover, along its own velocity.
@@ -376,7 +399,10 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
         if (along > 1e-6) ++ahead;
         if (along < -1e-6) ++astern;
       }
-      if (ahead >= 1 && astern >= 1) updated[i] = Kind::Line;
+      if (ahead >= 1 && astern >= 1) {
+        updated[i] = Kind::Line;
+        if (evidence) (*evidence)[first_evidence + i].later.push_back("line");
+      }
     }
     // Python changes kinds as it goes, and a track already made a line no longer counts as a mover
     // for later ones only through its own entry, which the loop above never reads: the same result.
@@ -385,12 +411,37 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
   if (o.min_mover_cells >= 0.0) {
     // After the corridor test (a row of small echoes along a pipeline stays a line), before echo grouping (a track too
     // small for an object under way explains nothing). A glint or clutter joined into a line; NaN (no cells) leaves it.
-    for (TrackClass& c : out) {
-      if (c.kind == Kind::Mover && c.extent_cells < o.min_mover_cells) c.kind = Kind::Uncertain;
+    for (std::size_t i = 0; i < out.size(); ++i) {
+      TrackClass& c = out[i];
+      if (c.kind == Kind::Mover && c.extent_cells < o.min_mover_cells) {
+        c.kind = Kind::Uncertain;
+        if (evidence) (*evidence)[first_evidence + i].later.push_back("small_extent");
+      }
     }
   }
-  if (o.multipath) group_echoes(out, o);
+  if (o.multipath) {
+    std::vector<std::pair<Kind, std::int64_t>> before;
+    for (const TrackClass& c : out) before.emplace_back(c.kind, c.parent);
+    group_echoes(out, o);
+    if (evidence) {
+      std::vector<ClassEvidence> mine(evidence->begin() + static_cast<std::ptrdiff_t>(first_evidence), evidence->end());
+      evidence_after_grouping(mine, before, out);
+      std::copy(mine.begin(), mine.end(), evidence->begin() + static_cast<std::ptrdiff_t>(first_evidence));
+    }
+  }
   return out;
+}
+
+void evidence_after_grouping(std::vector<ClassEvidence>& evidence, const std::vector<std::pair<Kind, std::int64_t>>& before,
+                             const std::vector<TrackClass>& classes, const std::vector<std::int64_t>& bounces) {
+  for (std::size_t i = 0; i < evidence.size() && i < classes.size() && i < before.size(); ++i) {
+    const TrackClass& c = classes[i];
+    const bool bounce = std::find(bounces.begin(), bounces.end(), c.id) != bounces.end();
+    if (bounce) evidence[i].later.push_back("bounce");
+    if (c.kind == Kind::Multipath && (before[i].first != Kind::Multipath || before[i].second != c.parent) && !(bounce && c.parent < 0)) {
+      evidence[i].later.push_back("multipath:" + (c.parent < 0 ? std::string("none") : std::to_string(c.parent)));
+    }
+  }
 }
 
 void shift_for_target_doppler(std::vector<TrackClass>& classes, double factor, double origin_x, double origin_y) {

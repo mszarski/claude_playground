@@ -11,6 +11,7 @@ Chromium, skipped without Node and Playwright); page sizes stay under their limi
 """
 
 import hashlib
+import math
 import json
 import os
 import shutil
@@ -49,13 +50,15 @@ def test_plans_name_their_method_band_and_what_they_misrepresent():
     flank = audio.listen_plan([6000.0, 10000.0], "RealPassband", 64000.0, 8000.0, 2.0)
     assert flank["method"] == "as_recorded" and flank["rate_hz"] == 24000 and flank["tag"] == "rec"
     assert flank["kept_hz"] == [0.0, 12000.0] and flank["lost_hz"] == [[12000.0, 32000.0]]
-    fls = audio.listen_plan([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003)
+    # A heterodyne asked for by name (since V6 a record this short is stretched by default:
+    # test_the_default_method_per_family).
+    fls = audio.listen_plan([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003, method="heterodyne")
     assert fls["method"] == "heterodyne" and fls["tag"] == "het2000"
     assert fls["kept_hz"][1] - fls["kept_hz"][0] == pytest.approx(3600.0)              # 2 x (2000 - 200) Hz
     assert fls["kept_audio_hz"][0] >= audio.HET_FLOOR_HZ - 1.0 / 0.003 and "Doppler" in fls["misrepresents"]
     # A 3 ms record holds 11 bins of the kept 3.6 kHz, 0.27 ms (a rail scene) under one: said, not silently.
     assert fls["warning"] is None
-    short = audio.listen_plan([1.7136e6, 3.7264e6], "RealPassband", 50e6, 2.72e6, 0.00027)
+    short = audio.listen_plan([1.7136e6, 3.7264e6], "RealPassband", 50e6, 2.72e6, 0.00027, method="heterodyne")
     assert "click or silence" in short["warning"] and audio._method_words(short).startswith("WARNING")
     assert flank["warning"] is None
     st = audio.listen_plan([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003, method="time_stretch")
@@ -64,6 +67,79 @@ def test_plans_name_their_method_band_and_what_they_misrepresent():
     # The Popoto 4-6 kHz baseband boards: as recorded, the carrier put back.
     popoto = audio.listen_plan([4000.0, 6000.0], "ComplexBaseband", 8000.0, 5000.0, 2.871)
     assert popoto["method"] == "as_recorded" and popoto["kept_hz"] == [1000.0, 9000.0]
+
+
+# The default method per family (the owner's rules of 2026-11-27): (band Hz, sample kind, rate Hz, centre Hz, record s,
+# the method auto must take). Bands and rates: the sonar configs as docs/tasks/VISUALIZATION.md section 4.1 counts them.
+FAMILY_RECORDS = {
+    "flank 6-10 kHz, real": ([6e3, 10e3], "RealPassband", 64e3, 8e3, 2.0, "as_recorded"),
+    "Popoto 4-6 kHz, baseband": ([4e3, 6e3], "ComplexBaseband", 8e3, 5e3, 2.871, "as_recorded"),
+    "Popoto 27.5 kHz board, 1 s": ([20e3, 35e3], "RealPassband", 102.4e3, 27.5e3, 1.0, "heterodyne"),
+    "FLS 3.75-6.25 MHz, 3 ms": ([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003, "time_stretch"),
+    "FLS 110-130 kHz, baseband 40 ms": ([110e3, 130e3], "ComplexBaseband", 40e3, 120e3, 0.04, "time_stretch"),
+    "SAS rail 1.7-3.7 MHz, 0.27 ms": ([1.7136e6, 3.7264e6], "RealPassband", 50e6, 2.72e6, 0.00027, "time_stretch"),
+    "SAS 60-120 kHz, baseband 0.3 s": ([60e3, 120e3], "ComplexBaseband", 100e3, 90e3, 0.3, "time_stretch"),
+}
+
+
+@pytest.mark.parametrize("family", list(FAMILY_RECORDS))
+def test_the_default_method_per_family(family):
+    band, kind, fs, fc, T, want = FAMILY_RECORDS[family]
+    plan = audio.listen_plan(band, kind, fs, fc, T)
+    assert plan["method"] == want and plan["chosen_by"].startswith("auto")
+    words = audio._method_words(plan)
+    assert "misrepresents" in words and plan["warning"] is None
+    if want == "time_stretch":
+        # The rule: the band's top under 16 kHz, then at least 0.5 s of sound while the band's centre stays >= 500 Hz.
+        k = plan["factor"]
+        assert band[1] / k <= audio.STRETCH_TOP_HZ
+        assert T * k >= audio.STRETCH_MIN_SOUND_S - 1e-9 or 0.5 * (band[0] + band[1]) / (k + 1) < audio.STRETCH_MIN_CENTRE_HZ
+        assert 0.5 * (band[0] + band[1]) / k >= audio.STRETCH_MIN_CENTRE_HZ or k == math.ceil(band[1] / audio.STRETCH_TOP_HZ)
+        assert f"x{k:g}" in words and "factor:" in words and plan["tag"] == f"x{k:g}"
+    # Asked for by name, time stretch keeps its old factor (the band's top under 16 kHz only).
+    st = audio.listen_plan(band, kind, fs, fc, T, method="time_stretch")
+    assert st["factor"] == max(1, math.ceil(band[1] / audio.STRETCH_TOP_HZ))
+
+
+def test_the_rail_record_is_stretched_to_half_a_second():
+    plan = audio.listen_plan([1.7136e6, 3.7264e6], "RealPassband", 50e6, 2.72e6, 0.00027)
+    assert plan["factor"] == 1852 and plan["audio_duration_s"] == pytest.approx(0.5, abs=1e-3)   # ceil(0.5 / 0.27 ms)
+    fls = audio.listen_plan([3.75e6, 6.25e6], "RealPassband", 50e6, 5e6, 0.003)
+    assert fls["factor"] == 391                         # the pitch rule already gives 1.17 s
+
+
+@pytest.mark.parametrize("family", list(FAMILY_RECORDS))
+def test_no_default_output_is_all_zeros(family):
+    """A pulse in the band, made audible by the default plan, is heard: not all zeros (the heterodyned rail records were
+    silent before, docs/tasks/VISUALIZATION.md section 14.3 (1))."""
+    band, kind, fs, fc, T, _ = FAMILY_RECORDS[family]
+    n = int(round(fs * T))
+    t = np.arange(n) / fs
+    f0 = 0.5 * (band[0] + band[1])
+    burst = np.exp(-0.5 * ((t - 0.5 * T) / (0.1 * T)) ** 2)
+    x = burst * (np.exp(2j * np.pi * (f0 - fc) * t) if "omplex" in kind else np.cos(2 * np.pi * f0 * t))
+    plan = audio.listen_plan(band, kind, fs, fc, T)
+    y = audio.to_audio(x[None, :], plan)[0]
+    assert np.max(np.abs(y)) > 1e-3 * np.max(np.abs(x))
+
+
+@pytest.mark.parametrize("name", ["rail_points", "rail_position_errors", "rail_cylinder_glint", "rail_objects"])
+def test_the_rail_scenes_default_sound_is_not_silent(name, tmp_path):
+    from gpusonar.config import load_scenario_config
+    from gpusonar.viz import catalogue
+    plan = catalogue.view_plan(load_scenario_config(name, None, expand=False))
+    rec = _run(name, "numpy", **plan["overrides"]).records[0]
+    s = rec.samples
+    p = audio.listen_plan(_band(rec), str(s.kind).split(".")[-1],
+                          float(s.sample_rate), float(s.center_frequency), s.n_samples / float(s.sample_rate))
+    assert p["method"] == "time_stretch" and p["audio_duration_s"] >= 0.45
+    y = audio.to_audio(np.asarray(s.array), p)
+    assert np.all(np.max(np.abs(y), axis=1) > 0.0)                       # every hydrophone heard
+
+
+def _band(rec):
+    w = rec.transmit.waveform
+    return sorted([float(w.f_start), float(w.f_stop)])
 
 
 def test_heterodyne_puts_a_tone_where_stated_and_nothing_folds_through_zero():
@@ -87,7 +163,7 @@ def test_heterodyne_puts_a_tone_where_stated_and_nothing_folds_through_zero():
     # Real passband at 2 MHz with a 610 kHz tone in a 580-620 kHz band: at 610 - 598 = 12 kHz? No: only 3.6 kHz kept.
     fs2 = 2e6
     t2 = np.arange(int(fs2 * 0.05)) / fs2
-    plan2 = audio.listen_plan([580e3, 620e3], "RealPassband", fs2, 0.0, 0.05)
+    plan2 = audio.listen_plan([580e3, 620e3], "RealPassband", fs2, 0.0, 0.05, method="heterodyne")
     y2 = audio.to_audio(np.cos(2 * np.pi * 601e3 * t2), plan2)
     assert _peak_freq(y2, plan2["rate_hz"])[0] == pytest.approx(601e3 - plan2["shift_hz"], abs=20.0)
     y3 = audio.to_audio(np.cos(2 * np.pi * 610e3 * t2), plan2)
@@ -153,7 +229,7 @@ def test_inter_channel_delay_is_sample_exact(tmp_path):
     assert plan2["rate_hz"] == 48000
     np.testing.assert_allclose(y2[1], np.roll(y2[0], 24), atol=1e-9 * np.max(np.abs(y2)))
     # Heterodyne: the envelope's delay is kept (the carrier's phase is the shifted frequency's, see audio.py).
-    plan3 = audio.listen_plan([280e3, 320e3], "ComplexBaseband", 100e3, 300e3, 0.2)
+    plan3 = audio.listen_plan([280e3, 320e3], "ComplexBaseband", 100e3, 300e3, 0.2, method="heterodyne")
     z = np.zeros(20000, complex)
     z[5000:5200] = np.hanning(200)
     y3 = audio.to_audio(np.stack([z, np.roll(z, 250)]), plan3)        # 2.5 ms
@@ -362,3 +438,75 @@ def test_page_lights_the_hydrophones_at_the_traces_delays_and_plays_their_sound(
     assert first["kind"] == "whole" and first["src"] == "sst_echo_level.audio/h000.whole.rec.wav"
     assert switched == {"hyd": 1, "kind": "whole"} and page_win == pytest.approx(win, rel=1e-9)
     assert info["audio"] and info["audioFiles"] == len(m["files"])
+
+
+# --- V6 part A: single arrivals by the synthesis's amplitude; the parts and the front end --------------------------
+
+def _scenario_view():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("scenario_view", os.path.join(ROOT, "tools", "scenario_view.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_single_arrivals_ranked_by_the_synthesis_are_never_silent(tmp_path):
+    """seafloor_objects_fls: the trace's strongest target (the box, its strongest patch turned away from the sonar) has
+    one pair, which the synthesis weights to zero by Lambert's law with the patch's normal: ranked by the trace, its one
+    single arrival is silent (docs/tasks/VISUALIZATION.md section 14.3 (2)). Ranked by the synthesis's own amplitude
+    over every target, each listed arrival synthesised alone is heard, and the levels come in descending order."""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.viz import catalogue
+    plan = catalogue.view_plan(load_scenario_config("seafloor_objects_fls", None, expand=False))
+    with taps.sim_capture(str(tmp_path / "t")), arrivals.capture_ping() as box:
+        result = _run("seafloor_objects_fls", "numpy", **plan["overrides"])
+    assert box.get("kernel") is not None and len(box["kernel"]["q"]) > 0
+    trace = tr.build_trace(result, engine="numpy")
+    old = dict(box)
+    old.pop("kernel")
+    by_trace = arrivals.strongest_pairs(trace, old, 0, 8)
+    silent = [p for p in by_trace if p["mapped"] and not np.any(
+        arrivals.single_pair_echoes(old, p["scatterer"], p["k_captured"], p["j_captured"]))]
+    assert silent                                                       # the old ranking gives a silent arrival here
+    pairs = arrivals.strongest_pairs(trace, box, None, 8)
+    assert 0 < len(pairs) <= 8 and all(p["ranked_by"] == "synthesis" for p in pairs)
+    levels = [p["synthesis_level_db"] for p in pairs]
+    assert levels == sorted(levels, reverse=True)
+    for p in pairs:
+        e = arrivals.single_pair_echoes(box, p["scatterer"], p["k_captured"], p["j_captured"])
+        assert np.max(np.abs(e)) > 0.0, p
+    # Every pair the kernel holds a path for is a candidate: fewer than 8 here means fewer exist, and the page says so.
+    n_all = sum(1 for t in range(len(trace["targets"])) for _ in arrivals.strongest_pairs(trace, box, t, 10 ** 6))
+    assert len(pairs) == min(8, n_all)
+    sv = _scenario_view()
+    out = tmp_path / "page"
+    out.mkdir()
+    facts = sv.view("seafloor_objects_fls", str(out), None, False, None, "numpy", audio_opts={"mode": "side"})
+    m = json.load(open(out / "seafloor_objects_fls.audio" / "manifest.json"))
+    assert len(m["arrivals"]) == len(pairs) and facts["audio"]["arrivals"] == len(pairs)
+    assert m["arrivals_ranked_by"].startswith("the synthesis")
+    if len(pairs) < 8:
+        assert m["warning_words"].startswith(f"single arrivals: {len(pairs)} listed, not 8")
+    adir = out / "seafloor_objects_fls.audio"
+    for a in m["arrivals"]:
+        for f in (x for x in m["files"] if x["kind"] == a["kind"]):
+            assert np.max(np.abs(audio.read_pcm16(str(adir / f["file"]))["samples"])) > 0.0, f["file"]
+
+
+def test_the_overload_scenes_page_says_the_parts_do_not_sum(tmp_path):
+    """popoto_testauv_direct_overload: the parts are taken before the front end, which clips; the page says so, with
+    the residual, instead of showing a silent mismatch. A scene without an overload front end (sst_echo_level) says its
+    parts are before the front end and sum to the record."""
+    sv = _scenario_view()
+    facts = sv.view("popoto_testauv_direct_overload", str(tmp_path), None, True, "cdn", "numpy", audio_opts={"mode": "side"})
+    m = json.load(open(tmp_path / "popoto_testauv_direct_overload.audio" / "manifest.json"))
+    fe = m["front_end"]
+    assert fe["overload"] and fe["mismatch"] and fe["residual_db"] > audio.PARTS_MISMATCH_DB
+    assert "before the front end" in fe["statement"] and "do NOT sum" in fe["statement"] and "clipped" in fe["statement"]
+    js = open(tmp_path / "popoto_testauv_direct_overload.audio" / "manifest.js").read()
+    assert "do NOT sum" in js and facts["html"]["audio"] == "side"
+    page = open(tmp_path / "popoto_testauv_direct_overload.html").read()
+    assert "A.front_end.mismatch" in page and "parts ≠ record" in page          # the page's warning line reads it
+    sv.view("sst_echo_level", str(tmp_path), None, False, None, "numpy", audio_opts={"mode": "side"})
+    fe2 = json.load(open(tmp_path / "sst_echo_level.audio" / "manifest.json"))["front_end"]
+    assert not fe2["overload"] and not fe2["mismatch"] and "before the front end" in fe2["statement"]
