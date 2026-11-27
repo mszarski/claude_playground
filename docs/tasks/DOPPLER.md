@@ -977,3 +977,160 @@ and the CFAR are host loops).
 - The tone path is refused with `range_doppler` other than off and with `elevation` (not made for them).
 - The tracker takes the tone's range rate nowhere (D5): only its range sigma.
 - D8: the bank and both CFARs on the GPU; the GPU suite (`tools/gpu_job.sh`) was not run.
+
+## Large submerged at 12 km (2026-11-27, branch `scene12`, issue `sonar-qbrg`): the sweep, the repaired bank and the tone
+
+Appended; nothing above was rewritten. The owner set the 12 km requirement for `large_submerged` first and the ship
+second (2026-11-26, D-235) and chose a tone outside the sweep's band in the same ping, alternating tone and sweep pings
+as the fallback. Every number here is **ours** (simulated records, the shared 4-core CPU, one thread a process, host
+backend, Bellhop eigenrays, one seed); the class's values are **assumed** (`configs/builds/targets/reference_classes.yaml`).
+Commands and every field: `docs/tasks/doppler_large_submerged_eval.json`.
+
+### LS.1 What failed, got worse, is uncertain or was not run (read first)
+
+0. **Chain finding: the tone above the band makes false tone detections through the array's grating lobes.** At 6.5 kHz
+   the 0.15 m pitch (half a wavelength at 5 kHz) is 0.65 of a wavelength, so a beam steered beyond +-32.4 degrees has a
+   grating lobe near endfire (steered to -34.75 degrees: a lobe at +74.8; ours, sin = sin(-34.75) + lambda / d). The
+   tone path's notch is centred on the steered beam's own-ship rate only, and the own-motion ridge of the water behind the grating lobe (-1.5 sin 74.8 =
+   -1.45 m/s there) is tested as a target: **3 to 5 false tone detections on every tone ping** (alternating pings 0, 2, 4:
+   5, 4, 3; the one train ping: 4), all at |bearing| 31.95 to 40.0 degrees, 15.8 to 28.7 dB, rates +-1.1 to +-1.6 m/s,
+   through both engines (one C++ function). The configured budget is 1e-3 a ping. Not fixed: which remedy is a design
+   choice for the owner (a notch about each grating lobe's own-ship rate as well, both engines through `tone_stage`; the
+   tone path's bearings limited to the grating-lobe-free sector, +-32.4 degrees here; or the tone BELOW the band,
+   e.g. 3.5 kHz, where the pitch is 0.35 of a wavelength and no lobe appears, at a coarser 0.21 m/s resolution and a
+   +-0.70 m/s notch). The sweep (4-6 kHz) has no grating lobe within +-40 degrees (from 41.5 degrees at 6 kHz).
+   The same applies to `flank_patrol_doppler_tone` (10.5 kHz on flank_32's pitch, not checked here).
+1. **The train scene (tone and sweep in one ping, the owner's chosen route) was measured on ONE ping only**: its 2 s
+   sampled train took 58 min a ping to simulate on this shared CPU (4 pings ran 69 min without finishing and were
+   stopped, as was a 3-ping run at 69 min); no tracking, no background count. Six pings with a background are a GPU-job
+   item (LS.5).
+2. **The fallback (alternating pings) was measured on 3 pairs only** (6 pings, 3 of them tone pings; one seed), and its
+   tone pings have no background count (the tool has none for `--alternate`): the tone path's false-alarm rate on this
+   water is not measured here.
+3. **The tone cannot help the crossing target, by construction**: on its beam's own-motion ridge it is inside the
+   notch on every tone ping (0 of 3) and seen by the sweep alone. Crossing targets are where the requirement's class
+   spends much of its time; only the sweep holds them (6 of 6 here).
+4. **Tracks do not get the tone's rate** (D5 not done): with alternating pings the oblique target (2 m/s, 0.50 m/s
+   closing) is tracked as `static` and the others `uncertain` (`uncertain` too from the 3 sweep pings alone, 39.8 s
+   apart); the sweep-only chain called all three `mover` over 6 pings 19.9 s apart. With the repaired bank (`combine: cfar`) the crossing target is called `static` (2 m/s across the
+   line of sight; `mover` without the bank). Both are classification regressions against the sweep-only chain on this
+   scene.
+5. **The sweep bank's range rate is not a measurement here either** (9.1 item 4): closing -7.1 to -4.1 m/s and once
+   +2.2 (true -5.6), oblique -3.4 to +7.9 (true -0.50), crossing -1.5 to -0.75 (true -0.39). The tone's rate is
+   (within 0.06 m/s, LS.3).
+6. **The repaired bank is refused on a train record** (`mode: sweep_bank` takes an LFM transmit only): on the owner's
+   chosen waveform it cannot be combined with the tone path today. Follow-up, both engines.
+7. **The evaluation tools' truth was wrong for a fast mover at 12 km**: taken at the ping's time, it is 45 m off for
+   the closing target by the time the pulse reaches it (8 s one way), and the 60 m gate about the hull's centre misses
+   its nearest highlight (50 m forward of the centre, and 14 m more of the sweep's range-Doppler coupling). The first
+   run reported it "not detected on any ping" through both engines with the bank off and on; it is detected on 6 of 6.
+   Fixed in the tools only, opt-in (`--truth-at reflection`, `--gate-range-m`; defaults unchanged, so every committed
+   run reproduces). Not a chain defect. The earlier scenes' movers have small radial speeds or are near (0.5 to 2 m/s,
+   2 to 12 km): their truth's range is off by 1 to 4 m (ours: radial speed x R / c), inside the 60 m gate.
+8. Simulation cost on this CPU: the sweep scene 6 pings in 27 min, the tone-only pings of the fallback 6 in 50 min (the
+   machine was shared, load 4 to 5). One seed; no surface Doppler spread (section 0 item 1); nothing on a GPU; the GPU
+   suite was not run.
+
+### LS.2 The scenes (`configs/scenarios/`, opt-in, new files)
+
+- `popoto_12km_large_submerged`: `popoto_12km` (100 m of isovelocity water over sand, `popoto_long_range` one row of 32,
+  ownship 1.5 m/s, seed 51, window 11.3 to 12.7 km) with the ship replaced by three `large_submerged` targets at the
+  class's LOW target strength: five highlights of +18.01 dB, 25 m apart along a 100 m hull (+25.00 dB in all, as the
+  ship is built), 50 m deep (inside the class's 30 to 300 m), at 6, 2 and 2 m/s (inside 2 to 8):
+  `closing` (-15 degrees, 12.2 km, bow-on: range rate -5.61 m/s, 6.0 m/s from its beam's ridge), `oblique` (0 degrees,
+  2 m/s at 75.5 degrees to the line of sight: -0.50 m/s, 0.50 m/s from the ridge, like `popoto_12km_doppler`'s ship at
+  0.40) and `crossing` (+15 degrees, 2 m/s across: -0.39 m/s, on the ridge). The shipped sweep only.
+- `popoto_12km_large_submerged_tone`: the same with a 1 s Hann tone at **6.5 kHz** then the 4-6 kHz sweep in one 2 s ping,
+  half the energy each (the total is the shipped sweep's, 196.72 dB re 1 uPa^2 s at 1 m). The rule, the one
+  `flank_patrol_doppler_tone` used (10.5 kHz over a 6-10 kHz sweep): **0.5 kHz above the top of the sweep's band**. No
+  number about the projector is needed (the simulator has no projector response); that the projector sends 6.5 kHz is
+  stated in the file as unconfirmed, as are the 2 s ping (10 % duty against the 5.6 % the source is sized for) and the
+  split. At 6.5 kHz the 0.15 m pitch is 0.65 of a wavelength: no grating lobe within +-32.4 degrees of broadside
+  (beyond it, LS.1 item 0).
+- The fallback, alternating pings: no file. `tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3`
+  simulates the sweep scene and a copy whose transmit is a 1 s Hann CW at 6.5 kHz with the sweep's whole energy, and
+  takes their pings in turn (tone first).
+- Tests: `tests/python/test_large_submerged_scenes.py` (9: loading and YAML numbers, each file against its base, the
+  class's values, the stated radial speeds, one thinned ping on both engines: 1.2e-8 and 1.4e-8 relative rms).
+
+### LS.3 Measured (both live-chain engines; worst first)
+
+The notch the chain computes (`libs/live/src/doppler.cpp`, the tone plan): own-motion spread over the beam's half-power
+width, 1.5 m/s x 0.5 x 0.886 lambda / L = 0.033 m/s at 6.5 kHz (independent of bearing for motion along the array), plus
+3 resolution cells of c / (2 f T) = 0.115 m/s: **+-0.38 m/s about each beam's own-ship rate** (+-0.49 m/s at 5 kHz:
+0.043 + 3 x 0.150). Hidden: any target whose radial speed over ground is within +-0.38 m/s, whatever its speed: at 2 m/s
+the headings within 11 degrees of square to the line of sight (12 % of headings), at 8 m/s within 2.7 degrees (3 %); the
+leakage rule (D3.3 (c)) may widen it near strong echoes (not separated here). On these targets: `crossing` (0.00 from the
+ridge) inside, `oblique` (0.50) and `closing` (6.0) outside.
+
+Margin = snr_db less the single-sample threshold of the plan in use (13.06 dB off; 13.85 dB with the bank, +0.78 for 45
+hypotheses a beam at 8 m/s, 51 in all), mean over the pings detected; the tone's margin is over its own CFAR's threshold
+(15.09 dB; 15.22 dB on the train ping). On the alternating and train rows the bank-off column is the sweep pings' (snr_db
+where the tool records no threshold).
+Range rate: the detection's against truth at the pulse's reflection. Python and C++ gave the same numbers to the printed
+digit (bank: every row; tone: the report lines agree within 0.05 m, 0.05 degrees, 0.05 dB and the path).
+
+| Scene / ping plan, target (range rate; from the ridge) | Bank off: detected, margin dB | `combine: cfar` (8 m/s): detected, margin, rate m/s | Tone path: detected by the tone, its margin, rate m/s | Tracked at the last ping: off / cfar / tone path |
+| --- | --- | --- | --- | --- |
+| sweep only, crossing (-0.39; 0.00) | 6 of 6, 11.41 | 6 of 6, 12.00 (+0.59), -1.50 to -0.75 | (no tone) | mover / **static** / - |
+| sweep only, closing (-5.61; 6.0) | 6 of 6, 7.98 | 6 of 6, 8.78 (+0.80), -7.1 to -4.1, once +2.2 | (no tone) | mover / mover / - |
+| sweep only, oblique (-0.50; 0.50) | 6 of 6, 9.22 | 6 of 6, 10.08 (+0.87), -3.4 to +7.9 | (no tone) | mover / mover / - |
+| alternating (3 tone + 3 sweep pings), crossing | sweep pings 3 of 3 | (not run) | **0 of 3** (in the notch) | uncertain / - / uncertain |
+| alternating, oblique | sweep pings 3 of 3 | (not run) | 3 of 3, 14.2 / 23.2 / 29.3, -0.537 / -0.477 / -0.505 | uncertain / - / **static** |
+| alternating, closing | sweep pings 3 of 3 | (not run) | 3 of 3, 25.8 / 24.0 / 17.5, -5.602 / -5.582 / -5.595 | uncertain / - / uncertain |
+| one ping of tone + sweep (train, 6.5 kHz), crossing | sweep 1 of 1, snr 24.5 (whole train as replica) | (refused on a train) | **0 of 1** (in the notch); sweep 1 of 1, snr 25.0 | (one ping) |
+| train, oblique | **0 of 1** (whole-train replica, D3.1 item 3) | (refused) | 1 of 1, `both`, tone margin 8.5, -0.551 | (one ping) |
+| train, closing | 1 of 1, snr 17.8 | (refused) | 1 of 1, `both`, tone margin 24.5, -5.598; sweep snr 18.5 | (one ping) |
+
+Background (the sweep scene without targets, 4 pings, seed + 1000): at the default budget 0 false detections off and 0
+with `cfar`; at 3 a ping 20 off and 7 with `cfar`. Cost a ping (median after the first): bank off 1.32 s (Python) /
+1.00 s (C++), `cfar` with 45 hypotheses a beam 61.2 / 53.5 s; the alternating run 1.6 / 1.4 s a ping (tone pings make
+no sweep map). Tone range errors (the tone's lag is coarse, c T / 2 = 750 m): closing +68, +28, +39 m; oblique +214,
++76, +39 m; the sweep's on the closing target -46 to -66 m (its bow highlight and the range-Doppler coupling).
+
+**Against the planner.** `tools/popoto_depth_planner.py --build popoto_face_1x32 --environment shelf_100m_sand
+--own-depth 9 11 --ts 25 --target-depth 49 51` (scratch, not committed; the shipped plan's figures for the class at this
+site are +15.4 dB for 3 x 32 at 65 m and +11.0 dB worst over 30 to 99 m for 1 x 32 at 9 m): at the scenes' own depth
+(10 m) and the targets' 50 m, **+13.5 dB of one row's SNR over the 15.8 dB the detector needs for Pd 0.5**, i.e. one row's
+SNR 29.3 dB for one +25 dB point (noise-limited: 0.6 dB from its noise-only figure). What the planner puts in its 15.8 dB
+and the chain's snr_db pays: the aperture window (1.8 dB) and the map's sampling (0.5 dB); so the planner predicts a
+chain snr_db of 27.0 dB and a margin over the 13.06 dB threshold of **13.9 dB for one point of +25 dB**. Measured
+(bank off): crossing 11.4 dB (2.5 dB under: inside 3 dB), oblique 9.2 (4.7 under), closing 8.0 (5.9 under). The two
+gaps over 3 dB are the targets' structure, not the budget: seen bow-on (closing) or obliquely (oblique: 6.3 m between
+highlights in range against the sweep's 0.38 m) the five highlights are resolved, each +18.0 dB, 7.0 dB under the
+whole; per highlight the planner predicts 6.9 dB, and the chain gives 1.1 (closing) and 2.3 dB (oblique) more,
+presumably from the neighbouring highlights and multipath arrivals within the detector's cells (not separated). Across
+the line of sight (crossing) the highlights share one range cell and add; their phases set the ping-to-ping spread
+(snr 22.1 to 26.6 dB). So 12 km is held for this class at this site through the chain on every ping, but with 3 to 6 dB
+less margin than the planner's point target for an extended hull off broadside.
+
+### LS.4 What it says
+
+1. At this site the sweep alone detects all three on every ping; the background is noise (0 false detections at the
+   default budget). The tone adds no detection here: it adds a **range rate** (within 0.06 m/s on the 8 tone looks at
+   targets outside the notch: 6 alternating, 2 in the train ping), nothing for a target on its ridge, and false
+   detections beyond +-32 degrees through the grating lobes (item 0).
+2. The repaired bank adds 0.6 to 0.9 dB net on all three (the mismatch it recovers less its +0.78 dB correction for 45
+   hypotheses a beam), and its rate is not a measurement.
+3. What the tone path needs to be useful for this class: D5 (the tracker taking the tone's rate: today a 2 m/s target is
+   called `static` on it), the bank and the tone on one train record, and the train scene through the chain at six
+   pings (GPU job, LS.5).
+
+### LS.5 Not run on this CPU: the GPU job
+
+What was too slow here, as command lines for the GPU job (`GPUSONAR_JOB=doppler`, being added to `tools/gpu_job.sh` by
+another package; `$OUT` its output folder; Bellhop needed; each line its own step):
+
+    python3 tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 --background 2 --cache "$OUT/ls12" --json "$OUT/ls12_tone_train.json"
+    python3 tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --pings 12 --max-rate 8 --truth-at reflection --gate-range-m 100 --cache "$OUT/ls12" --json "$OUT/ls12_tone_alternate12.json"
+    python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100 --cache "$OUT/ls12" --json "$OUT/ls12_bank_cfar.json"
+
+The third repeats this section's sweep-only run (27 min to simulate here, about 15 min of chains) as the check that the
+GPU's records give the same table. The tone path's false detections through the grating lobes (item 0) will be in the
+first two.
+
+Follow-ups: the grating-lobe false detections of the tone path (item 0; a design choice first); D5 (the tone's rate into
+the tracker and classifier); the sweep bank on a train record (both engines); a
+background count for `--alternate`; several seeds and the class's high target strength near broadside (+41.5 dB);
+`docs/handoff/README.md`, `handoff/SIMULATION.md` and `STATUS.md` still say 95 scenario files (96 since
+`flank_patrol_doppler_tone`, 98 now).

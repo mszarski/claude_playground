@@ -7,7 +7,8 @@
 # D3's scene): 0.5 kHz above the top of the sweep's band, here 6.0 + 0.5 = 6.5 kHz. The guard is wide against what the
 # tone needs: its largest shift at the class's top speed and the ownship's (2 x 9.5 m/s x 6.5 kHz / c = 82 Hz) plus the
 # Hann tone's main lobe (+-2 Hz). At 6.5 kHz the array's 0.15 m pitch is 0.65 of a wavelength: no grating lobe for
-# beams within +-32 degrees of broadside (the targets are within +-16).
+# beams within +-32.4 degrees of broadside (the targets are within +-16); beyond it the chain's tone path makes false
+# detections from the own-motion ridge behind the grating lobe (docs/tasks/DOPPLER.md, "Large submerged at 12 km" LS.1).
 #
 # UNCONFIRMED, waiting on the owner (docs/tasks/DOPPLER.md section 5; no projector is chosen, popoto_long_range.yaml):
 #   - that the projector sends 6.5 kHz as well as 4-6 kHz in one ping (its response there; no number for it is used:
