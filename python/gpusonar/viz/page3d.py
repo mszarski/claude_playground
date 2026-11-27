@@ -37,6 +37,8 @@ VENDORED = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 DATA_BUDGET = 330_000          # bytes of page data (JSON), after thinning
 PAGE_LIMIT_CDN = 400_000       # a page that loads three.js from the CDN
 PAGE_LIMIT_EMBED = 1_200_000   # a page with three.js embedded (0.69 MB of it the library)
+AUDIO_EMBED_CAP = 3_000_000    # `audio="embed"`: at most this many bytes of WAV in the page (4 MB as base64; ours)
+PAGE_LIMIT_AUDIO_EMBED = PAGE_LIMIT_EMBED + 4 * AUDIO_EMBED_CAP // 3 + 600_000   # with the envelopes and spectrograms
 
 
 def three_source(arg: str | None) -> str | None:
@@ -251,11 +253,54 @@ def fit_data(trace: dict, budget: int = DATA_BUDGET, max_rays: int = 8, max_pair
     return data, json.dumps(data, separators=(",", ":"))
 
 
+def audio_tag(manifest: dict | None, audio_dir: str | None = None, mode: str = "side",
+              cap: int = AUDIO_EMBED_CAP) -> tuple[str, dict]:
+    """The page's audio line and what it holds. `mode` "side" (default): one classic script tag loading
+    NAME.audio/manifest.js beside the page (a few hundred bytes in the page; each hydrophone's envelope and spectrogram
+    are loaded from NAME.audio/h<C>.js when it is chosen, its WAV by the audio element: works from a file). "embed":
+    the manifest, the data files and the WAVs inline as data: URIs, up to `cap` bytes of WAV (the whole record of
+    the parts' hydrophones and their parts first, then the other hydrophones' whole records while they fit; what
+    does not fit is listed in the manifest's `not_embedded`)."""
+    import base64
+    if not manifest:
+        return "", {"audio": None}
+    if mode == "side":
+        return (f'<script src="{html.escape(manifest["dir"])}/manifest.js"></script>',
+                {"audio": "side", "audio_bytes": manifest.get("bytes", 0)})
+    m = json.loads(json.dumps(manifest))
+    order = sorted(m["files"], key=lambda f: (f["channel"] not in m["parts_channels"], f["kind"] != "whole", f["channel"]))
+    used, kept, dropped = 0, [], []
+    for f in order:
+        if used + f["bytes"] <= cap:
+            with open(os.path.join(audio_dir, f["file"]), "rb") as fh:
+                f["src"] = "data:audio/wav;base64," + base64.b64encode(fh.read()).decode("ascii")
+            used += f["bytes"]
+            kept.append(f)
+        else:
+            dropped.append(f["file"])
+    m["files"] = kept
+    m["not_embedded"] = dropped
+    m["embedded"] = True
+    if m.get("stereo"):
+        m["stereo"] = None                                      # the pair stays a side file
+    chans = sorted({f["channel"] for f in kept})
+    data = []
+    for c in chans:
+        with open(os.path.join(audio_dir, f"h{c:03d}.js"), encoding="utf-8") as fh:
+            data.append(fh.read())
+    text = "window.__AUDIO = " + json.dumps(m, separators=(",", ":")) + ";\n" + "".join(data)
+    return (f"<script>{text.replace('</', '<\\/')}</script>",
+            {"audio": "embed", "audio_bytes": used, "audio_not_embedded": len(dropped)})
+
+
 def write_page(trace: dict, path: str, three: str | None = None, max_rays: int = 8, max_pairs: int = 40,
-               png: str | None = None, index: str | None = "index.html") -> dict:
+               png: str | None = None, index: str | None = "index.html", audio: dict | None = None,
+               audio_mode: str = "side", audio_dir: str | None = None) -> dict:
     """Write the page. `three`: a local three.module.min.js to embed (offline; "embed" for the vendored copy), or None
     / "cdn" to load it from the CDN. `png`: the 2-D page's file name to link (default NAME.png beside the page).
-    Returns {"bytes", "embedded", "rays", "pairs", "data_bytes", "limits"}."""
+    `audio`: the manifest of `viz.audio.write_ping_audio` (NAME.audio/ beside the page), loaded from the side files
+    (`audio_mode` "side") or embedded ("embed", `audio_dir` the NAME.audio directory; see `audio_tag`).
+    Returns {"bytes", "embedded", "rays", "pairs", "data_bytes", "limits", "audio", ...}."""
     three = None if three in (None, "cdn") else (VENDORED if three == "embed" else three)
     data, blob = fit_data(trace, DATA_BUDGET, max_rays, max_pairs)
     data["links"] = {"png": png if png is not None else f"{trace['scenario']}.png", "index": index}
@@ -270,14 +315,16 @@ def write_page(trace: dict, path: str, three: str | None = None, max_rays: int =
         loader = f"const THREE = await import('{THREE_CDN}');"
         lib_tag = ""
     blob = blob.replace("</", "<\\/")
+    atag, ainfo = audio_tag(audio, audio_dir, audio_mode)
     page = (_TEMPLATE.replace("%TITLE%", html.escape(f"{trace['scenario']} 3-D")).replace("%LIB%", lib_tag)
-            .replace("%LOADER%", loader).replace("%DATA%", blob))
+            .replace("%AUDIO%", atag).replace("%LOADER%", loader).replace("%DATA%", blob))
     with open(path, "w", encoding="utf-8") as f:
         f.write(page)
     n_rays = sum(len(leg["out"]) + len(leg["back"]) for leg in data["legs"])
     return {"bytes": len(page.encode("utf-8")), "embedded": bool(three), "rays": n_rays, "pairs": len(data["pairs"]),
             "data_bytes": len(blob), "limits": data["limits"],
-            "three_d_rays": sum(bool(r.get("three_d")) for leg in data["legs"] for w in ("out", "back") for r in leg[w])}
+            "three_d_rays": sum(bool(r.get("three_d")) for leg in data["legs"] for w in ("out", "back") for r in leg[w]),
+            **ainfo}
 
 
 _TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "page3d_template.html")

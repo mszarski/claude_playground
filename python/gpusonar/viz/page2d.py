@@ -508,6 +508,79 @@ def save_figure(fig, path: str, dpi: int, truecolour: bool = False) -> None:
     Image.open(buf).convert("RGB").quantize(palette=pal, dither=Image.Dither.NONE).save(path, optimize=True)
 
 
+def _draw_spectrogram(ax, x, s, trace, ch: int, what: str) -> None:
+    """Spectrogram of one channel in the water's frequencies (a baseband record about its carrier), the transmit band
+    as two lines and the strongest arrivals at this hydrophone as ticks on top."""
+    fs, t0 = s["sample_rate"], s["start_time_s"]
+    x = np.asarray(x)
+    n = len(x)
+    lo, hi = sorted(s["band_hz"])
+    # at least 16 frequency bins across the band and its margin (a real record at many times the band's rate)
+    width = (hi - lo) * 2.0 + 0.2 * hi if not np.iscomplexobj(x) else fs
+    nfft = int(min(max(64, 2 ** int(np.ceil(np.log2(max(n / 150.0, 16.0 * fs / max(width, 1e-9), 1.0))))), 16384))
+    hop = max(nfft // 2, int(np.ceil((n - nfft) / 300.0)), 1)
+    if n < nfft:
+        x = np.pad(x, (0, nfft - n))
+    starts = np.arange(0, len(x) - nfft + 1, hop)
+    w = np.hanning(nfft)
+    seg = np.stack([x[i:i + nfft] * w for i in starts])
+    if np.iscomplexobj(x):
+        S = np.fft.fftshift(np.abs(np.fft.fft(seg, axis=1)) ** 2, axes=1).T
+        f = np.fft.fftshift(np.fft.fftfreq(nfft, 1.0 / fs)) + s["center_frequency"]
+    else:
+        S = (np.abs(np.fft.rfft(seg, axis=1)) ** 2).T
+        f = np.fft.rfftfreq(nfft, 1.0 / fs)
+        pad = max(0.5 * (hi - lo), 0.1 * hi)
+        sel = (f >= max(lo - pad, 0.0)) & (f <= hi + pad)
+        S, f = S[sel], f[sel]
+    db = 10.0 * np.log10(np.maximum(S / max(float(S.max()), 1e-30), 1e-6))
+    tt = t0 + (starts + nfft / 2) / fs
+    ax.imshow(db, aspect="auto", origin="lower", cmap="gray", vmin=-60, vmax=0, interpolation="nearest",
+              extent=[tt[0], tt[-1] if len(tt) > 1 else tt[0] + nfft / fs, f[0] / 1e3, f[-1] / 1e3])
+    for b in (lo, hi):
+        ax.axhline(b / 1e3, color="#2a78d6", lw=0.8, ls="--")
+    top = f[-1] / 1e3
+    for p in sorted(trace["pairs"], key=lambda q: -q["level_db"])[:12]:
+        ax.plot([p["channel_delay_s"][ch]] * 2, [top, top - 0.06 * (top - f[0] / 1e3)], "-",
+                color=CLASS_STYLE[bounce_class(p["n_surface"], p["n_bottom"])]["color"], lw=1.5)
+    ax.set_xlabel("time after transmit (s)")
+    ax.set_ylabel("kHz (in the water)")
+    ax.set_title(f"spectrogram of {what}, hydrophone {ch}, dB re its peak (60 dB)\ndashed: the transmit band; ticks: "
+                 "the 12 strongest arrivals here", fontsize=8)
+
+
+def _draw_items(ax, stages, s) -> int:
+    """Level against time of each reverberation item (the opt-in per-item taps), with the echoes and the noise."""
+    from . import audio
+    meta = stages.get("__meta__")
+    parts = audio.decompose({k: v for k, v in stages.items() if k != "__meta__"}, meta)
+    fs, t0 = s["sample_rate"], s["start_time_s"]
+    styles = ["-", "--", ":", "-."]
+    n_items = 0
+    for i, (k, (v, what)) in enumerate(parts.items()):
+        if k == "reference_and_errors":
+            continue
+        pw = np.mean(np.abs(v) ** 2, axis=0)
+        n = max(int(fs * 0.005), 1)
+        pw = np.convolve(pw, np.ones(n) / n, mode="same")
+        if not np.any(pw > 0.0):
+            continue
+        tt = t0 + np.arange(len(pw)) / fs
+        item = k.startswith("reverberation_")
+        n_items += item
+        colour = "#eb6834" if item else {"echoes": "#2a78d6", "noise": "0.45"}.get(k, ONEWAY)
+        ax.plot(tt, 10.0 * np.log10(np.maximum(pw, 1e-30)), styles[n_items % 4] if item else "-", color=colour, lw=1.0,
+                label=k.replace("reverberation_", "item ").replace("_", " "))
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(fontsize=6.5)
+        top = ax.get_ylim()[1]
+        ax.set_ylim(max(ax.get_ylim()[0], top - 120.0), top + 3.0)
+    ax.set_xlabel("time after transmit (s)")
+    ax.set_ylabel("power, channel mean (dB)")
+    ax.set_title("reverberation by item (opt-in per-item taps), with the echoes and the noise", fontsize=8)
+    return n_items
+
+
 def draw_page(trace: dict, record, path: str, stages: dict | None = None, n_marked: int = 12, max_rays: int = 6,
               dpi: int = 72, all_rays: bool = False, truecolour: bool = False) -> dict:
     """Write the page to `path` (PNG with a fixed hue-keeping palette, or true colour with `truecolour`, or SVG by its
@@ -520,8 +593,8 @@ def draw_page(trace: dict, record, path: str, stages: dict | None = None, n_mark
     import matplotlib.pyplot as plt
 
     env = trace["environment"]
-    fig = plt.figure(figsize=(16, 21))
-    gs = fig.add_gridspec(6, 4, width_ratios=[0.75, 3, 3, 3], height_ratios=[0.12, 1.35, 1, 1, 1, 0.95],
+    fig = plt.figure(figsize=(16, 24.5))
+    gs = fig.add_gridspec(7, 4, width_ratios=[0.75, 3, 3, 3], height_ratios=[0.12, 1.35, 1, 1, 1, 0.85, 0.95],
                           hspace=0.5, wspace=0.34)
     ax_head = fig.add_subplot(gs[0, :])
     ax_ssp = fig.add_subplot(gs[1, 0])
@@ -534,7 +607,10 @@ def draw_page(trace: dict, record, path: str, stages: dict | None = None, n_mark
     ax_wf = fig.add_subplot(gs[4, 0:2])
     ax_wf2 = fig.add_subplot(gs[4, 2], sharey=ax_wf)
     ax_lvl = fig.add_subplot(gs[4, 3])
-    ax_txt = fig.add_subplot(gs[5, :])
+    ax_sg = fig.add_subplot(gs[5, 0:2])
+    ax_sg2 = fig.add_subplot(gs[5, 2])
+    ax_items = fig.add_subplot(gs[5, 3])
+    ax_txt = fig.add_subplot(gs[6, :])
     drawn = {"rays": 0, "bounces": 0, "pairs": len(trace["pairs"]), "marked": 0}
 
     # Header: what this page is, which ping, what it cannot show.
@@ -707,7 +783,26 @@ def draw_page(trace: dict, record, path: str, stages: dict | None = None, n_mark
         ax_lvl.set_ylabel("power, channel mean (dB)")
     else:
         ax_lvl.text(0.5, 0.5, "no simulator taps given", ha="center", transform=ax_lvl.transAxes)
-    ax_lvl.set_title("parts of the received signal against time,\nbefore matched filtering (items not split)", fontsize=8)
+    split = bool(stages) and any(k.startswith("reverberation_item_") for k in stages)
+    ax_lvl.set_title("parts of the received signal against time,\nbefore matched filtering"
+                     + (" (items: next row)" if split else " (items not split)"), fontsize=8)
+
+    # Spectrogram of one hydrophone: the record and the echoes alone, in the water's frequencies, arrivals marked.
+    ch = int((trace.get("audio") or {}).get("spectrogram_channel", 0))
+    _draw_spectrogram(ax_sg, np.asarray(record.samples.array)[ch], s, trace, ch, "the record")
+    if stages and "echoes" in stages and pairs:
+        _draw_spectrogram(ax_sg2, np.asarray(stages["echoes"])[ch], s, trace, ch, "echoes alone")
+    else:
+        ax_sg2.set_axis_off()
+    drawn["spectrogram_channel"] = ch
+    # Reverberation by item (sim_capture per_item: surface, bottom, volume), from the simulator's own taps.
+    drawn["items"] = _draw_items(ax_items, stages, s) if split else 0
+    if not split:
+        ax_items.text(0.5, 0.5, "reverberation by item: not tapped for this page\n(tools/scenario_view.py --audio taps it)"
+                      if any(m["key"].startswith("reverberation[") for m in trace["models"]) else
+                      "no reverberation items in this scenario", ha="center", va="center", fontsize=8,
+                      transform=ax_items.transAxes)
+        ax_items.set_axis_off()
 
     # What is modelled here: key, value, source, status.
     ax_txt.set_axis_off()

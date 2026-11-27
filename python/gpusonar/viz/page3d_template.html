@@ -24,11 +24,15 @@ details{margin-top:6px} summary{cursor:pointer;font-weight:600}
 label.t{display:inline-block;margin-right:10px;white-space:nowrap}
 button,select{font:inherit} a{color:var(--acc)}
 .warn{color:#b0451b}
-@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}}
+#snd{right:16px;bottom:96px;width:min(460px,calc(100% - 32px))}
+#snd canvas{width:100%;height:150px;display:block;background:#000;border-radius:3px;margin-top:4px}
+#snd .row{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center}
+@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}#snd{bottom:140px}}
 </style></head><body>
 <div id="view"></div><div id="labels"></div>
 <div class="panel" id="info"></div>
 <div class="panel" id="pick" hidden></div>
+<div class="panel" id="snd" hidden></div>
 <div class="panel" id="ctl">
  <button id="play" title="move a dot along every ray">play</button>
  <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
@@ -41,6 +45,7 @@ button,select{font:inherit} a{color:var(--acc)}
  <span class="m">drag: turn · right-drag or shift-drag: pan · wheel: zoom · click a ray or a hydrophone</span>
 </div>
 %LIB%
+%AUDIO%
 <script type="application/json" id="trace">%DATA%</script>
 <script type="module">
 %LOADER%
@@ -257,7 +262,7 @@ function ssp(){ const W=170, Hh=120, prof=[]; if (E.ssp_section){ E.ssp_section.
 const missing = [...(D.missing||[]), ...(S3.notes||[])];
 if (D.undrawn) missing.push(`${D.undrawn} eigenray(s) of the trace have no path to draw (see above)`);
 const lim = D.limits||{}; missing.push(`page thinned: the ${lim.max_rays} strongest drawable eigenrays of each leg and the ${lim.max_pairs} strongest of ${D.n_pairs} two-way pairs; polylines simplified (tolerance x${lim.tolerance}).` + (lim.over_budget?' STILL OVER THE SIZE BUDGET.':''));
-missing.push('sound at the hydrophones (package V5) and the live chain\'s tracker taps (V6) are not on this page yet.');
+missing.push((window.__AUDIO ? 'sound: the selected hydrophone (panel at the lower right); made audible as the panel says.' : 'sound: none beside this page (tools/scenario_view.py --audio side writes NAME.audio/ next to it).') + ' The live chain\'s tracker taps (V6) are not on this page yet.');
 $('info').innerHTML = `<h1>${esc(D.scenario)}</h1><div class="m">tier ${esc(D.tier)} · ${esc(D.sonar.name)} (${esc(D.sonar.mode)}) · ${fx(D.sonar.band_hz[0]/1e3,1)}–${fx(D.sonar.band_hz[1]/1e3,1)} kHz · ${H.length} hydrophone${H.length===1?'':'s'} · ${esc(D.view?.note||'ping '+D.ping)}</div>`
  + `<div><a href="${esc(D.links?.png)}">2-D page</a>${D.links?.index?` · <a href="${esc(D.links.index)}">index</a>`:''} · <span class="m">a picture of the simulator, not a measurement</span></div>`
  + `<p${RAYS.length?'':' class="warn"'}>${esc(rayNote)}</p>`
@@ -305,6 +310,7 @@ function selectRay(x){ selected=x; const set=new Set([x]); emphasise(set);
     + (x.kind==='leg'?`<div>${pairs.length} of the ${D.pairs.length} strongest pairs use it${pairs.length?`: ${pairs.slice(0,6).map(p=>`${fx(p.t,5)} s (${fx(p.db,1)} dB)`).join(', ')}`:''}</div>`:'');
   $('pick').hidden=false; $('pclose').onclick=clearSel; }
 function selectHyd(c){ $('hsel').value=String(c); if (c<0){ selPt.visible=false; clearSel(); return; }
+  if (window.__AUDIO) setSound(c, sndKind);
   selPt.geometry.setFromPoints([L(H[c])]); selPt.visible=true;
   const rows=[]; D.pairs.forEach((p,i)=>rows.push({t:p.ch[c], db:p.db, c:cls(p.ns,p.nb), what:`${D.targets[p.target]?.label}: out ${p.out}, back ${p.back}`, pair:p}));
   (D.oneway||[]).forEach(o=>o.arrivals.forEach(a=>rows.push({t:a.ch[c], db:a.db, c:cls(a.ns,a.nb), what:`one way from ${o.label}, ray ${a.k}`})));
@@ -320,34 +326,110 @@ H.forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); 
 $('hsel').addEventListener('change', e=>selectHyd(+e.target.value));
 
 // ---------- time: a dot along each ray, hydrophones light as pairs arrive ----------
+const A = window.__AUDIO || null, AD = () => (window.__AUDIO_DATA || {});
 const allT = [...D.pairs.map(p=>p.t), ...(D.oneway||[]).flatMap(o=>o.arrivals.map(a=>a.t)), ...(D.direct?D.direct.arrivals.map(a=>a.t):[])];
-const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), 1e-3)*1.02;
+const recEnd = A ? A.record_start_s + A.record_duration_s : 0;
+const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), recEnd, 1e-3)*1.02;
 const tOut = Math.min(...D.legs.flatMap(l=>l.out.map(r=>r.delay)), Infinity);
 const slider=$('time'), tval=$('tval');
 const baseCol = hydPts.geometry.getAttribute('color').array.slice();
+const WIN = 0.004*tMax;                 // a hydrophone lights while an arrival is within this of its delay there
+let tNow = tMax*0.999, litNow = [];
 function at(x, f){ const s=f*x.Lc[x.Lc.length-1]; let i=1; while(i<x.Lc.length-1 && x.Lc[i]<s) i++; const a=x.r.line[i-1], b=x.r.line[i], u=(s-x.Lc[i-1])/Math.max(x.Lc[i]-x.Lc[i-1],1e-12); return [a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2])]; }
-function setTime(t){ for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
+function litAt(t){ const out=[]; H.forEach((p,c)=>{ if (D.pairs.some(q=>Math.abs(q.ch[c]-t)<WIN) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<WIN))) out.push(c); }); return out; }
+function setTime(t){ tNow=t; const pingOk = !M || M.times.length<2 || pingIdx===tracedIdx;
+  for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
     // out legs from 0; back legs (stored array to target) run backwards from the earliest arrival at the target; one-way rays (stored array to source) backwards from 0
     let f; if (x.which==='out'||x.kind==='direct') f=t/x.r.delay; else if (x.kind==='leg') f=1-(t-tOut)/x.r.delay; else f=1-t/x.r.delay;
     const ok = x.which==='out'||x.kind==='direct' ? (f>0&&f<1) : (x.kind==='leg' ? (t>tOut && f>0 && f<1) : (f>0&&f<1));
     if (!ok){ x.dot.visible=false; continue; } x.dot.geometry.setFromPoints([L(at(x, x.kind==='direct'? 1-f : f))]); x.dot.visible=true; }
-  const col=hydPts.geometry.getAttribute('color'), win=0.004*tMax, lit=new THREE.Color(0xffc000);
-  H.forEach((p,c)=>{ const hit=D.pairs.some(q=>Math.abs(q.ch[c]-t)<win) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<win));
-    if (hit) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
-  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; }
-slider.addEventListener('input',()=>{ setTime(slider.value/1000*tMax); draw(); });
-let playing=null; $('play').addEventListener('click',()=>{ if (playing){ cancelAnimationFrame(playing); playing=null; return; }
-  const start=performance.now(), from=+slider.value>=1000?0:+slider.value;
-  const step=now=>{ const v=Math.min(1000, from+(now-start)/8); slider.value=v; setTime(v/1000*tMax); draw(); playing = v<1000 ? requestAnimationFrame(step) : null; };
-  playing=requestAnimationFrame(step); });
+  const col=hydPts.geometry.getAttribute('color'), lit=new THREE.Color(0xffc000);
+  litNow = pingOk ? litAt(t) : []; const on=new Set(litNow);
+  H.forEach((p,c)=>{ if (on.has(c)) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
+  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; slider.value=Math.round(Math.max(0,Math.min(1,t/tMax))*1000); drawPlayhead(); }
+
+// ---------- sound: the selected hydrophone's audio is the page's clock ----------
+// scene time (s after transmit) <-> audio time: audio_s = (scene_s - record_start_s) * time_scale (manifest.time).
+const t2a = t => A ? (t - A.time.record_start_s) * A.time.time_scale : 0, a2t = a => A ? A.time.record_start_s + a / A.time.time_scale : 0;
+const audioEl = new Audio(); audioEl.preload='auto'; try { audioEl.preservesPitch=false; audioEl.mozPreservesPitch=false; audioEl.webkitPreservesPitch=false; } catch(e) {}
+let sndHyd = 0, sndKind = 'whole', clockMode = 'skip', rate = 1, playing=null, wall=null;
+const fileOf = (c,k) => A && A.files.find(f=>f.channel===c && f.kind===k);
+const kindsOf = c => A ? [...new Set(A.files.filter(f=>f.channel===c).map(f=>f.kind))] : [];
+const kindName = k => k==='whole' ? 'whole record' : k.startsWith('arrival_') ? (()=>{ const a=A.arrivals.find(x=>x.kind===k); return a?`one arrival: out ${a.out}, back ${a.back} (${fx(a.level_db,1)} dB, ${fx(a.delay_s,4)} s)`:k; })() : k.replace(/_/g,' ');
+function loadData(c, then){ if (AD()[c] || !A || A.embedded) { then(); return; }
+  const sc=document.createElement('script'); sc.src=`${A.dir}/h${String(c).padStart(3,'0')}.js`; sc.onload=then; sc.onerror=then; document.head.appendChild(sc); }
+function setSound(c, k){ if (!A) return; if (!kindsOf(c).length) c = A.parts_channels[0] ?? 0; if (!fileOf(c,k)) k='whole';
+  sndHyd=c; sndKind=k; const f=fileOf(c,k); const src = f.src || `${A.dir}/${f.file}`;
+  if (audioEl.getAttribute('src')!==src){ audioEl.src=src; }
+  $('skind').innerHTML = kindsOf(c).map(x=>`<option value="${x}"${x===k?' selected':''}>${esc(kindName(x))}</option>`).join('');
+  $('sinfo').textContent = `hydrophone ${c} · ${kindName(k)} · ${A.kinds[k]||''} · gain ${fx(A.gains_db[k],1)} dB · peak ${fx(f.peak_dbfs,1)} dBFS`;
+  loadData(c, drawPlayhead); }
+let specImg=null, specKey='';
+function drawPlayhead(){ const cv=$('scv'); if (!cv || !A) return; const W=cv.width=cv.clientWidth*(window.devicePixelRatio||1), Hh=cv.height=150*(window.devicePixelRatio||1);
+  const g=cv.getContext('2d'); const d=AD()[sndHyd]; const T=A.plan.audio_duration_s, X=a=>a/T*W;
+  g.fillStyle='#000'; g.fillRect(0,0,W,Hh);
+  const sp=d&&d.spec[sndKind];
+  if (sp){ const key=sndHyd+'/'+sndKind; if (key!==specKey){ const raw=atob(sp.u8), im=g.createImageData(sp.cols, sp.rows);
+      for (let r=0;r<sp.rows;r++) for (let q=0;q<sp.cols;q++){ const v=raw.charCodeAt(r*sp.cols+q), o=4*((sp.rows-1-r)*sp.cols+q); im.data[o]=v; im.data[o+1]=Math.min(255,v*0.8); im.data[o+2]=Math.min(255,v*0.35+40*(v>0)); im.data[o+3]=255; }
+      const c2=document.createElement('canvas'); c2.width=sp.cols; c2.height=sp.rows; c2.getContext('2d').putImageData(im,0,0); specImg={c:c2, sp}; specKey=key; }
+    g.imageSmoothingEnabled=false; const x0=X(sp.t0-sp.dt/2), x1=X(sp.t0+sp.dt*(sp.cols-0.5)); g.drawImage(specImg.c, x0, 0, x1-x0, Hh*0.62); }
+  const ev=d&&d.env[sndKind];
+  if (ev){ const raw=atob(ev.u8); g.strokeStyle='#7fd3ff'; g.lineWidth=1; g.beginPath();
+    for (let i=0;i<raw.length;i++){ const a=t2a(ev.t0+i*ev.dt), y=Hh-2-(raw.charCodeAt(i)/255)*(Hh*0.36-4); if (i) g.lineTo(X(a),y); else g.moveTo(X(a),y); } g.stroke(); }
+  // arrivals at this hydrophone (the 40 strongest pairs): ticks at their audio times
+  for (const p of D.pairs){ const a=t2a(p.ch[sndHyd]); if (a<0||a>T) continue; g.strokeStyle=CLS[cls(p.ns,p.nb)][0]; g.lineWidth=1.5; g.beginPath(); g.moveTo(X(a),Hh*0.62); g.lineTo(X(a),Hh*0.66); g.stroke(); }
+  const ah=t2a(tNow); if (ah>=0 && ah<=T){ g.strokeStyle='#ffc000'; g.lineWidth=2; g.beginPath(); g.moveTo(X(ah),0); g.lineTo(X(ah),Hh); g.stroke(); }
+  g.fillStyle='#ddd'; g.font=`${10*(window.devicePixelRatio||1)}px system-ui`;
+  const fa=A.plan.kept_audio_hz, sp2=sp; if (sp2){ const fTop=sp2.df*sp2.rows; g.fillText(`${fx(fTop/1e3,1)} kHz heard (${fx(heardToTrue(fTop)/1e3,4)} kHz in the water)`, 4, 12*(window.devicePixelRatio||1)); }
+  g.fillText(`audio ${fx(T,2)} s · envelope: matched filter of this kind at this hydrophone (dB, 60 dB span)`, 4, Hh*0.66+12*(window.devicePixelRatio||1)); }
+const heardToTrue = f => A ? f * A.plan.factor + A.plan.shift_hz : f;
+function stopPlay(){ if (playing) cancelAnimationFrame(playing); playing=null; wall=null; audioEl.pause(); $('play').textContent='play'; if ($('splay')) $('splay').textContent='play'; }
+function startPlay(){ stopPlay(); let t = tNow>=tMax*0.99 ? 0 : tNow;
+  if (A && clockMode==='skip' && t < A.record_start_s) t = A.record_start_s;
+  setTime(t); $('play').textContent='pause'; if ($('splay')) $('splay').textContent='pause';
+  const useAudio = !!A;
+  const startAudio = () => { audioEl.playbackRate=rate; audioEl.currentTime=Math.max(0,t2a(tNow)); const pr=audioEl.play(); if (pr && pr.catch) pr.catch(()=>{}); };
+  if (useAudio && tNow >= A.record_start_s) startAudio();
+  const step = now => { if (useAudio && !audioEl.paused && tNow >= A.record_start_s){ setTime(a2t(audioEl.currentTime)); }
+      else { if (wall==null) wall=now; const dt=(now-wall)/1000; wall=now;
+        // without sound: the slider's 8 ms per 1/1000 of the span (V4); with sound, before the record starts: real time x rate
+        const nt = useAudio ? tNow + dt*rate : tNow + dt*tMax/8;
+        if (useAudio && tNow < A.record_start_s && nt >= A.record_start_s){ setTime(A.record_start_s); startAudio(); }
+        else setTime(Math.min(nt, tMax)); }
+      draw(); if (tNow >= tMax || (useAudio && audioEl.ended)) { stopPlay(); return; } playing=requestAnimationFrame(step); };
+  playing=requestAnimationFrame(step); }
+slider.addEventListener('input',()=>{ const t=slider.value/1000*tMax; setTime(t); if (A && !audioEl.paused) audioEl.currentTime=Math.max(0,t2a(t)); draw(); });
+$('play').addEventListener('click',()=>{ if (playing) stopPlay(); else startPlay(); });
+audioEl.addEventListener('ended', ()=>{ stopPlay(); });
+if (A){ const P=A.plan, snd=$('snd'); snd.hidden=false;
+  const mapText = P.method==='time_stretch' ? `${fx(P.factor,0)} s of sound for each second in the water` : 'one second of sound for each second in the water';
+  snd.innerHTML = `<b>sound</b> <span class="m">(${esc(P.method.replace('_',' '))}${P.method==='heterodyne'?`, −${fx(P.shift_hz/1e3,4)} kHz`:P.method==='time_stretch'?`, ×${fx(P.factor,0)} slower`:''})</span>
+   <div class="row"><label>hear <select id="skind"></select></label>
+   <label>clock <select id="sclock"><option value="skip">skip the silence (start at the record)</option><option value="real">real time from the transmit</option></select></label>
+   <label>rate <select id="srate">${[0.25,0.5,1,2].map(r=>`<option value="${r}"${r===1?' selected':''}>${r}×</option>`).join('')}</select></label>
+   <button id="splay">play</button>${A.stereo?` <a href="${esc(A.stereo.src||A.dir+'/'+A.stereo.file)}" download>stereo pair h${A.stereo.channels.join(' + h')}</a>`:''}</div>
+   <canvas id="scv"></canvas><div class="m" id="sinfo"></div>
+   <details><summary>how this sound was made</summary><div class="m">${esc(A.method_words)}. ${esc(A.levels)}. Time: ${esc(A.time.scene_to_audio)} (record start ${fx(A.record_start_s,4)} s after the transmit; ${mapText}). The page's clock is the audio's: the slider, the dots on the rays and the lit hydrophones follow it. "skip the silence" starts at the record (nothing is recorded before its window opens); "real time" runs from the transmit at the chosen rate and starts the sound when the window opens. The rate changes pitch with speed (no pitch correction). Parts (echoes, each reverberation item, noise, the direct sound) and single arrivals exist for hydrophone${A.parts_channels.length>1?'s':''} ${A.parts_channels.join(', ')}; the whole record for every hydrophone. Parts are the simulator's taps before the ADC.</div></details>`;
+  $('skind').addEventListener('change', e=>{ setSound(sndHyd, e.target.value); });
+  $('sclock').addEventListener('change', e=>{ clockMode=e.target.value; });
+  $('srate').addEventListener('change', e=>{ rate=+e.target.value; audioEl.playbackRate=rate; });
+  $('splay').addEventListener('click', ()=>{ if (playing) stopPlay(); else startPlay(); });
+  $('hsel').addEventListener('change', e=>{ const c=+e.target.value; if (c>=0) setSound(c, sndKind); });
+  setSound(A.parts_channels[0] ?? 0, 'whole'); }
 
 // ---------- ping slider ----------
 if ($('ping')){ const pin=$('ping'), pval=$('pval');
   const upd=()=>{ pingIdx=+pin.value; const t=M.times[pingIdx];
     pval.textContent=`${M.ping_index[pingIdx]} (t = ${fx(t,2)} s)` + (pingIdx===tracedIdx?' · rays traced at this ping':' · rays are traced at ping '+M.ping+' only');
     if (pingMarks) pingMarks.geometry.setFromPoints(D.targets.map((tg,i)=>L((M.targets[i]||[tg.position])[pingIdx]||tg.position)));
-    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]); vis(); };
-  pin.addEventListener('input', upd); upd(); }
+    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]);
+    if (M.track && M.track[pingIdx] && M.track[tracedIdx]){ const dd=[0,1,2].map(i=>M.track[pingIdx][i]-M.track[tracedIdx][i]); const v=LD(dd);
+      for (const k of ['array','beams','projpat']) G[k].position.copy(v); }      // the platform moves: array, beams and projector with it
+    vis(); setTime(tNow); };
+  pin.addEventListener('input', upd); upd();
+  const pb=document.createElement('button'); pb.textContent='step pings'; pb.title='step through the pings, the platform moving'; $('pingbox').appendChild(pb);
+  let stepper=null; pb.addEventListener('click',()=>{ if (stepper){ clearInterval(stepper); stepper=null; pb.textContent='step pings'; return; }
+    pb.textContent='stop'; stepper=setInterval(()=>{ pin.value=String((+pin.value+1)%M.times.length); upd(); draw(); }, 400); }); }
 
 // ---------- vertical exaggeration, views ----------
 const vin=$('vex'), vval=$('vval');
@@ -363,7 +445,10 @@ function draw(){ renderer.render(scene, camera); placeLabels(); }
 window.addEventListener('resize',()=>{ resize(); draw(); });
 setVex(Math.max(1, Math.min(60, Math.round(0.3*span/zSpan))));
 resize(); zoomAll(); vis(); setTime(tMax*0.999); draw();
-window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex};
+window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex, audio: !!A, audioFiles: A ? A.files.length : 0};
+// For a browser check (tests/python/test_scene_audio.py): the clock and the lit hydrophones.
+window.__viz = {setTime: t => { setTime(t); draw(); return litNow.slice(); }, lit: () => litNow.slice(), win: WIN, tMax, t2a, a2t,
+  sound: () => A ? {hyd: sndHyd, kind: sndKind, src: audioEl.getAttribute('src')} : null, setSound: (c,k) => { setSound(c,k); return {hyd: sndHyd, kind: sndKind}; }};
 // For a browser check (tools/page3d_check.js, tests): where on the screen a drawn ray's middle vertex is.
 window.__screenOfRay = i => { const x=RAYS[i]; if (!x) return null; world.updateMatrixWorld(); const v=L(x.r.line[Math.floor(x.r.line.length/2)]).applyMatrix4(world.matrixWorld).project(camera);
   const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x+1)/2*r.width, r.top+(1-v.y)/2*r.height]; };
