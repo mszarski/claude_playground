@@ -174,15 +174,22 @@ def test_committed_transmit_table_reproduces_and_leaves_the_old_report_as_it_was
     assert all(set(v) == {o["id"] for o in T["options"]} for v in res.values())
     # every computed cell: noise-limited figures move by the level step and the pulse (with the detector's threshold), reverberation less
     by = {(o["pulse_s"], o["source_level_db"]): o for o in T["options"]}
+    less, same = set(), 0
     for key, row in res.items():
         for c in ("large_submerged", "ship"):
             a = row["1 s 197 dB"][c]
             for (p, lv), o in by.items():
                 b = row[o["id"]][c]
                 step = (lv - 197.0) + 10 * np.log10(p) + a["threshold_db"] - b["threshold_db"]
-                assert abs((b["noise_only_db"] - a["noise_only_db"]) - step) < 3e-3, (key, c, o["id"])
-                if a["ceiling_db"] is not None and step > 0.5:
+                if b["own_depth_m"] == a["own_depth_m"]:                                                 # at one own depth: exactly (where the flat
+                    assert abs((b["noise_only_db"] - a["noise_only_db"]) - step) < 3e-3, (key, c, o["id"])   # optimum moves, the planner chose better)
+                    same += 1
+                assert b["margin_db"] - a["margin_db"] <= step + 3e-3, (key, c, o["id"])                  # energy never buys more than itself
+                if step > 0.5 and b["ceiling_db"] is not None and b["noise_only_db"] - b["margin_db"] > 0.1:   # where reverberation costs something: less
                     assert b["margin_db"] - a["margin_db"] < step - 1e-3 and b["margin_db"] <= b["ceiling_db"] + 2e-3, (key, c, o["id"])
-                for r, loss in o["costs"]["mismatch_loss_db"].items():
+                    less.add(key)
+                for r in o["costs"]["mismatch_loss_db"]:
                     assert b["plain_filter_on_a_mover_db"][r] <= b["margin_db"] + 2e-3
+    assert {"shelf_100m_sand__as_stated", "winter_200m_sand_profile__as_stated"} <= less
+    assert same >= 0.95 * len(res) * 2 * len(by)
     assert len(json.dumps(T)) < 300_000
