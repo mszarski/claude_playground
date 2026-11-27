@@ -977,3 +977,92 @@ and the CFAR are host loops).
 - The tone path is refused with `range_doppler` other than off and with `elevation` (not made for them).
 - The tracker takes the tone's range rate nowhere (D5): only its range sigma.
 - D8: the bank and both CFARs on the GPU; the GPU suite (`tools/gpu_job.sh`) was not run.
+
+## D8: the Doppler stages on the device (2026-11-27, branch `cuda-doppler`)
+
+Appended; nothing above was rewritten. Status of every number: ours.
+
+### D8.1 What is not verified (read first)
+
+1. **None of the device code has run on a device.** `libs/live/src/doppler_cuda.cu` was compiled here with `nvcc` 12.0
+   for sm_89 (the L4) as a separate object, and its symbols match the host code's declarations; the project was never
+   built with `SONAR_ENABLE_CUDA=ON` here and nothing was linked against cuFFT. The CUDA-gated tests of
+   `tests/python/test_doppler_device.py` skip on this machine.
+2. **The gain on the device is not measured.** The design below removes the transfers and host passes the loop makes;
+   how many seconds that saves is for the GPU job (`tools/live_chain_timing.py`, per-stage seconds now in its rows).
+3. What does not move to the device: each hypothesis' filter is still built on the host (`dsp::compression_filter`: the
+   replica and one transform of n_fft points a hypothesis, the same code as `pulse_compress`); the tone path's grouping
+   of flagged cells and its merge; the detector re-uploads the combined map (its own statistic on the device, as before);
+   the elevation option's rows keep the loop.
+
+### D8.2 Where the time went (the loop, from the code, `backend: cuda`)
+
+Per hypothesis other than the zero one, C++ engine (`chain.cpp` before D8): a host copy of the baseband record;
+`pulse_compress`: the filter built and transformed on the host, the record and the filter uploaded, the record
+downloaded; `range_bearing_power`: `make_inputs` copies the samples on the host, `backproject_cuda` uploads them, the
+points and a zero image, and downloads the image; on the host the power, the cells of the map and the fold (max), plus
+the cell means and `detector_background` (cfar). That is 5 uploads, 2 downloads and 5 to 7 host passes over the record
+or the map a hypothesis. The Python engine the same, its fold in NumPy. The tone path: the beams on the device and
+downloaded (n_beams x n samples), then per beam on the host a transform of N points, the band cut, one of M points, the
+matched filters of every (hypothesis, lag), the CFAR along rate and the leakage rule.
+
+Measured on an L4 by the coordinator (Hugging Face job 6b08c9d954072e8b71685cd6, branch `gpujob` 28e84ae,
+`tools/live_chain_timing.py`, median s a ping after the first, backend cuda), off -> max -> cfar: flank_patrol C++
+0.112 -> 3.558 -> 3.935, Python 0.196 -> 4.684 -> 5.370; popoto_far_mover C++ 0.062 -> 2.410 -> 2.766, Python 0.114 ->
+4.232 -> 4.824; popoto_12km C++ 0.019 -> 0.372 -> 0.532, Python 0.061 -> 1.063 -> 1.198. The tone path on
+popoto_12km_doppler C++ 0.033 -> 0.207, Python 0.048 -> 0.241. So the bank costs 19 to 45 times the chain on the device.
+The acceptance target of D8 is the bank's cost a ping on these three scenes after the change, by the same tool in the
+GPU job (not yet run).
+
+Transfers a ping of the loop, from the code and the scenes' sizes (a noise ping of each scene's sonar and window, a
+moving platform, bearings -40 to 40 every 0.5, `max_range_rate_m_s: 3`; scratchpad script, not committed):
+
+| Case | Channels x samples | n_fft | Hypotheses (all beams) | Map points | Loop: up / down a ping | Batched: up / down a ping |
+| --- | --- | --- | --- | --- | --- | --- |
+| flank_patrol | 32 x 50400 | 62500 | 43 | 2 895 585 | 5.12 / 1.55 GB, 301 calls | 34.6 / 23.9 MB, 1 call |
+| popoto_far_mover | 32 x 37632 | 49896 | 43 | 1 929 585 | 3.50 / 1.08 GB | 26.9 / 16.0 MB |
+| popoto_12km | 32 x 17248 | 23328 | 23 | 900 312 | 0.87 / 0.27 GB | 8.8 / 7.7 MB |
+
+### D8.3 What moved to the device, and the batching (`libs/live/include/sonar/live/doppler_batched.hpp`)
+
+- One formulation, written once as kernels over an executor (`dsp::HostExec` / `dsp::CudaExec`, as the batched
+  beamformers): `doppler.batched: auto` (default) runs it on the cuda backend and keeps the loop on the host, `on` runs it
+  on the host too (the same kernels on CPU threads: how it is tested here, bit for bit against the loop), `off` keeps the
+  loop on cuda.
+- Sweep bank: the baseband record uploaded once a ping; every channel's spectrum once per transform length (one length
+  for every hypothesis of the shipped sweeps); then per batch of hypotheses: each filter times every spectrum, one
+  batched inverse transform, the crop; **the backprojection kernel itself** (`recon::BpKernel`, unchanged: one kernel
+  for all modes) launched once per hypothesis on the device-resident compressed samples, its group carrying the
+  hypothesis' read shift in `start_time`; the fold (max) or the cell means, **the detector's own background kernels**
+  (`detector_kernel.hpp`, one row per (hypothesis, beam)) and the normalised fold (cfar). At the end the combined map's
+  cells (or `normalised_map`) and one download of the map, the hypotheses and the cells (and the background, cfar).
+  Both engines call it (`sweep_bank_stage`; Python `doppler.batched_maps`).
+- Tone path: the far-field beams are made and kept on the device (`farfield_batched_device`), then each beam's
+  transform, the band cut, one batched inverse transform, the matched filters of every (beam, hypothesis, lag), the CFAR
+  along rate and the leakage rule; power, ratio and flags come back (n_beams x hypotheses x lags, under 0.3 MB here) and
+  the grouping stays on the host.
+- Memory a ping (all buffers counted by `sweep_bank_bytes`; the transforms' work memory is cuFFT's): flank_patrol 123 MB
+  + 52.6 MB a hypothesis (max; cfar 125 + 58.3), 2.4 GB (2.6) for all 43; popoto_far_mover 85 + 38.2, 1.7 GB (1.9);
+  popoto_12km 40 + 17.8, 0.45 GB (0.53). The batch is as many hypotheses as half the device's free memory holds after
+  the fixed part (`sweep_bank_batch`; `doppler.batch` sets it): on a 24 GB L4 every case is one batch. Batches never mix
+  transform lengths and keep hypothesis order, so the fold is the same in batches of any size (tested on the host: one
+  batch, batches of 1, 2, 3, 4).
+
+### D8.4 Tests and tolerances
+
+- Host (`tests/python/test_doppler_device.py`, GoogleTest `DopplerBatched`): the batched form on the host gives the
+  loop's report lines byte for byte, flank and long-range records, max and cfar, unbatched and in batches; the maps and
+  the hypothesis of every sample likewise; the tone path's power, ratio and detections likewise; the Python engine with
+  it reports its loop's lines within the engines' tolerances. Default-off proof, D3's method (sha256 of the report lines
+  without processing_seconds, 2 pings, both engines, host backend, a build of the base `02bce49` against this branch):
+  flank_patrol and popoto_12km with the defaults, `doppler: {mode: off}` and `range_doppler: ownship` (12 of 12 equal,
+  and equal to D3's own hashes), and popoto_12km with the bank's host loop, max and cfar (4 of 4 equal). The C++ engine
+  with `batched: on` (one batch, batches of 3) gives the loop's hashes (4 of 4 equal). The Python engine with `batched:
+  on` does not (4 of 4 differ, as expected: its loop maps with its own geometry code and folds in NumPy; the batched
+  stage is the C++ one), within the engines' tolerances on the test records. Not hashed: the tone path on
+  popoto_12km_doppler (its simulation did not finish in 50 min here); the tone loop's code was moved, not changed, and
+  is held by `test_doppler_tone.py` and by the batched form's bit equality with it.
+- Device (skipped here): maps within 1e-4 of each beam's strongest sample plus 1e-4 relative (the estimate: cuFFT
+  against pocketfft and the device's sin and cos give 1e-6 to 1e-5 of the strongest sample); the winning hypothesis
+  equal on all but 1e-3 of the samples; detections within 0.05 m, 0.05 degrees, 0.05 dB and the same range rate (the
+  engines' tolerances), both engines, both combiners, one batch and batches of 1 or 2; the two engines equal on the device.
