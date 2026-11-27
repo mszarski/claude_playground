@@ -1601,3 +1601,30 @@ Follow-ups: the `hfm12` GPU run (the scene, the class's own strength, eigenrays)
 for an HFM (question for the projector selection); a range-rate source for the HFM's bias (the tone path, D5) or the bias
 stated in the report; the planner's waveform-blind zero-speed margin (the HFM's spectrum and absorption); an opening and a
 crossing target through the chain; several seeds.
+
+### HFM.8 The `hfm12` run on the device (appended 2026-11-27; D-247; nothing above rewritten)
+
+HFM.1 item 1 and HFM.6 say the 12 km scene was not run. It has been: Hugging Face job
+6b091ba66c5d61fff188a75c, branch `txstudy` at `9bb1b62`, NVIDIA L4, simulator and chain on the
+device, C++ engine, `popoto_12km_large_submerged`, 6 pings, 2 background pings; the JSON is in the
+approved dataset under `doppler_hfm12` (not committed). Ours; one seed. These records carry the
+simulator's centre-frequency reverberation Doppler (D-249).
+
+What it does not show, first: a noise-limited scene. This site is limited by reverberation, so four
+times the energy buys 1 to 2.4 dB and the hyperbolic sweep's advantage of HFM.4 (free field, a
+point, +20 dB targets) shrinks to about 1 dB on the closing hull.
+
+| Transmission (plain filter unless said) | closing, -5.6 m/s | oblique, -0.5 m/s | crossing, -0.39 m/s | false detections, 2 background pings, default budget |
+| --- | --- | --- | --- | --- |
+| linear 1 s, 197 dB (shipped) | 7.98 dB | 9.22 dB | 11.41 dB | 0 |
+| hyperbolic 1 s, 197 dB | 8.83 | 8.79 | 11.63 | 0 |
+| linear 4 s at the 1 s energy (190.98 dB) | 7.20 | 9.17 | 10.37 | 0 |
+| hyperbolic 4 s at the 1 s energy | 8.59 | 8.95 | 11.49 | 2 |
+| linear 4 s, 197 dB | 9.17 | 11.37 | 12.48 | 0 |
+| hyperbolic 4 s, 197 dB | 10.40 | 11.20 | 13.35 | 0 |
+| linear 1 s with the bank, `combine: cfar` | 8.78 | 10.08 | 12.00 | 0 |
+| linear 4 s with the bank, `combine: cfar` | 10.83 | 12.33 | 13.60 | 0 |
+
+Every target is detected on 6 of 6 pings in every row. The 2 false detections of the hyperbolic
+4 s at the 1 s energy are not explained. The bank's range rates on these hulls scatter by several
+m/s (as D-232 found). Next: the deep site at sea state 4 or 5 with both sweeps (issue sonar-rctz).

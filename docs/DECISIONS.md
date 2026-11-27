@@ -5540,3 +5540,11 @@ is `docs/design/popoto_trade_study.md` sections 0 and 0a and `docs/tasks/DOPPLER
 - At this tree: 98 scenario files; 167 Python test files (2012 `def test_` functions).
 - Not in this merge: the reverberation Doppler fix (branch `revdop`), the tracker view and audio
   fixes (branch `viz6`).
+- Corrections found by the document sweep (same day). D-247: "linear 4 s with `combine: cfar`" is
+  not a plain-filter row; the full table is `docs/tasks/DOPPLER.md` HFM.8, appended because HFM.1
+  and HFM.6 still said the scene was not run. The trade study's generated text ("Not run.", section
+  0 and 0a) still says so and is corrected with the tool at its next regeneration (issue
+  sonar-rctz). D-247's "(sea state 4 with the bubble law: -4.0 / -1.9 dB)" means NOT held at sea
+  state 4. D-249's "about 20 to 25 %": against the true shift the applied one is 25 % off at 4 kHz
+  and 17 % at 6 kHz for a 4-6 kHz band. GoogleTest at the merged tree: 217 cases (216 `TEST`, 1
+  `TEST_P`), not stated in D-250.
