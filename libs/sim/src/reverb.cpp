@@ -193,6 +193,12 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
   first = 0;
   if (n_sectors == 0) return;
   const bool components = power.direction != nullptr;
+  if (params.per_frequency_doppler && !(fc > 0.0) && components) {
+    // Gamma = 1 + doppler / fc: a component with a shift needs a carrier (a sector's shift is zero without one).
+    for (std::int64_t m : sectors) {
+      if (power.doppler[m] != 0.0) throw std::invalid_argument("reverb: the per-frequency Doppler needs a positive center_frequency");
+    }
+  }
   // With one density for all sectors, sigma is worked out once.
   const bool shared = power.n_rows == 1 && !components;
   std::vector<double> shared_sigma;
@@ -271,7 +277,8 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
                                  power.coarse, n_low,            n_taps,
                                  n_channels,   n_coarse,         fs_low,
                                  params.time0, dphi,             uniform,
-                                 shared,       params.total_from_host, params.total_to_host};
+                                 shared,       params.total_from_host, params.total_to_host,
+                                 params.per_frequency_doppler, fc};
     if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
       reverb_accumulate_cuda(setup, n_sectors, shape_fn, context, total, g_profile, device);
@@ -316,9 +323,24 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
           b[k] = cf(v);
         }
         const double per_sample = 1.0 / fs_low;
-        for (std::int64_t k = 0; k < n_taps; ++k) {
-          const double a = rate * static_cast<double>(k) * per_sample;
-          shifted[k] = cf(pulse[k] * std::complex<double>(std::cos(a), std::sin(a)));
+        if (params.per_frequency_doppler) {
+          // The pulse time-scaled by Gamma = 1 + doppler / fc as well as shifted: each
+          // frequency f of it moves by doppler f / fc (reverb_scaled_pulse, reverb_kernel.hpp).
+          const double eta = 1.0 + doppler / fc;
+          const auto* interleaved = reinterpret_cast<const double*>(pulse);
+          for (std::int64_t k = 0; k < n_low; ++k) {
+            double re = 0.0, im = 0.0;
+            reverb_scaled_pulse(interleaved, n_taps, n_low, k, eta, re, im);
+            if (re == 0.0 && im == 0.0) continue;
+            const std::int64_t signed_k = 2 * k <= n_low ? k : k - n_low;
+            const double a = rate * static_cast<double>(signed_k) * per_sample;
+            shifted[k] = cf(std::complex<double>(re, im) * std::complex<double>(std::cos(a), std::sin(a)));
+          }
+        } else {
+          for (std::int64_t k = 0; k < n_taps; ++k) {
+            const double a = rate * static_cast<double>(k) * per_sample;
+            shifted[k] = cf(pulse[k] * std::complex<double>(std::cos(a), std::sin(a)));
+          }
         }
         dsp::fft(b, static_cast<std::size_t>(n_low), false);
         dsp::fft(shifted, false);

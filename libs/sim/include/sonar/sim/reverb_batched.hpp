@@ -82,6 +82,10 @@ struct ReverbBatchSetup {
   /// its end. A caller that adds over several calls clears from_host after the first and
   /// to_host before the last: the spectrum then stays on the executor between them.
   bool from_host, to_host;
+  /// Per-frequency Doppler (ReverbParams::per_frequency_doppler): each component's pulse is
+  /// time-scaled by 1 + doppler / center_frequency as well as shifted (ReverbPulseKernel).
+  bool per_frequency;
+  double center_frequency;
 };
 
 /// The accumulated spectrum left on an executor between calls.
@@ -146,7 +150,8 @@ class ReverbBatched {
     w.lap(profile_.transform);
     if (any_shift) {
       auto p = ex_.template alloc<float>(2 * points);
-      ex_.run(count * n_low, ReverbPulseKernel{pulse_.data(), d_doppler.data(), p.data(), n_low, s_.n_taps, s_.fs_low});
+      ex_.run(count * n_low, ReverbPulseKernel{pulse_.data(), d_doppler.data(), p.data(), n_low, s_.n_taps, s_.fs_low,
+                                               s_.per_frequency, s_.center_frequency});
       ex_.fft(p.data(), n_low, count, false);
       w.lap(profile_.pulse);
       ex_.run(count * n_low, ReverbProductKernel{x.data(), p.data(), n_low, false});
