@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fjord_testauv_trial_1row 3-D</title><link rel="icon" href="data:,">
+<style>
+:root{--bg:#f4f4f1;--ink:#1d1d1b;--muted:#5d5d58;--panel:rgba(255,255,255,.93);--line:#d6d6d0;--acc:#2a78d6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.93);--line:#3a3d42}}
+:root[data-theme="dark"]{--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.93);--line:#3a3d42}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:12.5px/1.4 system-ui,sans-serif;overflow:hidden}
+#view{position:absolute;inset:0}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lab{position:absolute;left:0;top:0;white-space:nowrap;font-size:11px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,.75);color:#1d1d1b;margin:-9px 0 0 6px}
+.lab.surf{color:#174f86}.lab.bed{color:#6b4518}.lab.tgt{color:#a8201a;font-weight:600}.lab.beam{color:#1f5fae}.lab.arr{color:#333}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;box-sizing:border-box}
+#info{left:16px;top:16px;width:min(380px,calc(100% - 32px));max-height:calc(100% - 128px);overflow:auto}
+#pick{right:16px;top:16px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 128px);overflow:auto}
+#ctl{left:16px;bottom:16px;right:16px;display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center}
+#ctl input[type=range]{width:min(220px,40vw);vertical-align:middle}
+h1{font-size:15px;margin:0 0 2px} h2{font-size:12.5px;margin:8px 0 2px}
+.m{color:var(--muted)} table{border-collapse:collapse;font-size:11.5px;width:100%} td,th{padding:1px 5px 1px 0;vertical-align:top;text-align:left}
+tr.row{cursor:pointer} tr.row:hover{background:rgba(42,120,214,.12)}
+.sw{display:inline-block;width:16px;height:3px;vertical-align:middle;margin-right:5px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:middle;margin-right:5px}
+details{margin-top:6px} summary{cursor:pointer;font-weight:600}
+label.t{display:inline-block;margin-right:10px;white-space:nowrap}
+button,select{font:inherit} a{color:var(--acc)}
+.warn{color:#b0451b}
+@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}}
+</style></head><body>
+<div id="view"></div><div id="labels"></div>
+<div class="panel" id="info"></div>
+<div class="panel" id="pick" hidden></div>
+<div class="panel" id="ctl">
+ <button id="play" title="move a dot along every ray">play</button>
+ <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
+ <label>depth x <input id="vex" type="range" min="1" max="60" value="1"> <span id="vval"></span></label>
+ <button id="truescale" title="vertical exaggeration 1">true scale</button>
+ <button id="zarr" title="zoom to the hydrophones">zoom to array</button>
+ <button id="zall">whole scene</button>
+ <label>hydrophone <select id="hsel"><option value="-1">none</option></select></label>
+ <span id="pingbox"></span>
+ <span class="m">drag: turn · right-drag or shift-drag: pan · wheel: zoom · click a ray or a hydrophone</span>
+</div>
+
+<script type="application/json" id="trace">{"scenario":"fjord_testauv_trial_1row","tier":"eigenray","ping":0,"time_s":0.0,"sonar":{"name":"popoto_testauv_1row_clocks","mode":"flank","band_hz":[4000.0,6000.0],"center_frequency":5000.0,"sample_kind":"RealPassband","sample_rate":102400.0,"n_channels":32,"source_level_db_rms":197.0,"projector":[0.0052,-0.0157,10.2995],"hydrophones":[[-1.3948,0.0,10.0244],[-1.3048,0.0,10.0228],[-1.2148,0.0,10.0213],[-1.1248,0.0,10.0197],[-1.0348,0.0,10.0181],[-0.9449,0.0,10.0165],[-0.8549,0.0,10.015],[-0.7649,0.0,10.0134],[-0.6749,0.0,10.0118],[-0.5849,0.0,10.0102],[-0.4949,0.0,10.0087],[-0.4049,0.0,10.0071],[-0.315,0.0,10.0055],[-0.225,0.0,10.0039],[-0.135,0.0,10.0024],[-0.045,0.0,10.0008],[0.045,0.0,9.9992],[0.135,0.0,9.9976],[0.225,0.0,9.9961],[0.315,0.0,9.9945],[0.4049,0.0,9.9929],[0.4949,0.0,9.9913],[0.5849,0.0,9.9898],[0.6749,0.0,9.9882],[0.7649,0.0,9.9866],[0.8549,0.0,9.985],[0.9449,0.0,9.9835],[1.0348,0.0,9.9819],[1.1248,0.0,9.9803],[1.2148,0.0,9.9787],[1.3048,0.0,9.9772],[1.3948,0.0,9.9756]]},"environment":{"sound_speed":1491.7,"surface_z":0.0,"bottom_z":90.0,"bottom_z_site":null,"bottom":{"speed":1600.0,"density":1.8,"attenuation":0.5,"shear_speed":null,"sediment":null},"wind_speed":1.9,"ssp":{"z":[0.0,5.0,10.0,15.0,19.0,20.0,25.0,30.0,35.0,40.0,45.0,50.0,54.0,55.0,60.0,65.0,70.0,75.0,80.0,85.0,90.0],"c":[1480.5,1487.1,1491.7,1494.4,1495.0,1494.9,1494.5,1494.1,1493.6,1493.2,1492.8,1492.3,1492.0,1492.0,1492.1,1492.2,1492.3,1492.4,1492.4,1492.5,1492.6]},"interface":null,"critical_angle_deg":21.202,"bathymetry_note":"a bed that changes with range from the sonar: the same section on every bearing","absorption":"ainslie_mccolm","absorption_db_per_km":0.312,"planes":null,"bottom_slope":null,"wind_speed_propagation":0.0,"bathymetry":[[0,50],[100,57.1],[200,72.3],[300,84.3],[400,84.3],[500,72.8],[600,58.9],[700,53],[800,58.3],[900,68.4],[1000,76]]},"targets":[{"label":"target","position":[120.0,485.0,15.0],"amplitude":3.162}],"legs":[{"target":0,"out":[{"k":0,"delay":0.35270464,"ns":2,"nb":1,"amp":0.00152058084,"db":-56.4,"launch":-28.89,"line":[[0.01,-0.02,10.3],[4.42,17.82,0.0],[31.27,126.36,61.69],[58.86,237.87,38.22],[91.25,368.81,11.45],[98.18,396.81,5.34],[103.72,419.21,-0.0],[111.01,448.66,6.93],[120.0,485.0,14.64]],"bounces":[{"xyz":[4.42,17.83,0.0],"b":"surface","g":29.7,"loss":-0.0},{"xyz":[31.27,126.36,61.69],"b":"bottom","g":20.3,"loss":1.79},{"xyz":[103.72,419.21,-0.0],"b":"surface","g":13.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3526593},{"k":1,"delay":0.34297031,"ns":0,"nb":1,"amp":0.00151370361,"db":-56.4,"launch":24.19,"line":[[0.01,-0.02,10.3],[25.96,104.89,58.33],[50.19,202.81,46.39],[72.05,291.2,36.1],[94.11,380.36,26.21],[120.0,485.0,15.1]],"bounces":[{"xyz":[25.96,104.89,58.33],"b":"bottom","g":15.4,"loss":0.94}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3429645},{"k":2,"delay":0.34892291,"ns":1,"nb":1,"amp":0.00104581565,"db":-59.6,"launch":-25.9,"line":[[0.01,-0.02,10.3],[4.98,20.11,-0.0],[37.23,150.44,65.46],[79.47,321.18,38.68],[120.0,485.0,14.42]],"bounces":[{"xyz":[4.98,20.11,-0.0],"b":"surface","g":26.9,"loss":-0.0},{"xyz":[37.23,150.44,65.46],"b":"bottom","g":17.4,"loss":1.09}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3489785},{"k":3,"delay":0.33444766,"ns":0,"nb":0,"amp":0.00095545745,"db":-60.4,"launch":3.58,"line":[[0.01,-0.02,10.3],[10.8,43.6,12.71],[21.6,87.26,14.39],[36.21,146.34,15.66],[52.36,211.6,16.55],[69.65,281.5,17.0],[85.02,343.62,16.96],[102.56,414.49,16.41],[120.0,485.0,15.33]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.3344448},{"k":4,"delay":0.34891665,"ns":1,"nb":1,"amp":0.00061528018,"db":-64.2,"launch":-26.19,"line":[[0.01,-0.02,10.3],[5.05,20.39,-0.0],[38.01,153.6,65.95],[82.63,333.94,38.73],[120.0,485.0,17.28]],"bounces":[{"xyz":[5.05,20.39,-0.0],"b":"surface","g":26.6,"loss":-0.0},{"xyz":[38.01,153.6,65.95],"b":"bottom","g":17.0,"loss":1.06}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3487138},{"k":5,"delay":0.37687696,"ns":1,"nb":2,"amp":0.000386336207,"db":-68.3,"launch":31.06,"line":[[0.01,-0.02,10.3],[16.05,64.83,54.74],[43.51,175.84,-0.0],[85.81,346.78,84.3],[120.0,485.0,16.31]],"bounces":[{"xyz":[16.05,64.83,54.74],"b":"bottom","g":29.7,"loss":6.98},{"xyz":[43.51,175.84,-0.0],"b":"surface","g":26.5,"loss":-0.0},{"xyz":[85.8,346.78,84.3],"b":"bottom","g":25.6,"loss":5.53}],"path":"Bellhop ray file (E), matched by bounces","tt":0.375194},{"k":6,"delay":0.37557141,"ns":1,"nb":2,"amp":0.000360044825,"db":-68.9,"launch":33.92,"line":[[0.01,-0.02,10.3],[13.02,52.57,53.85],[34.77,140.51,0.0],[68.02,274.88,82.28],[120.0,485.0,16.27]],"bounces":[{"xyz":[13.02,52.57,53.85],"b":"bottom","g":34.8,"loss":8.01},{"xyz":[34.77,140.51,0.0],"b":"surface","g":31.5,"loss":-0.0},{"xyz":[68.02,274.88,82.28],"b":"bottom","g":23.9,"loss":4.6}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3766365},{"k":7,"delay":0.37688272,"ns":1,"nb":2,"amp":0.00034436601,"db":-69.3,"launch":39.07,"line":[[0.01,-0.02,10.3],[12.85,51.91,53.8],[34.31,138.66,0.0],[66.92,270.45,81.73],[120.0,485.0,13.0]],"bounces":[{"xyz":[12.85,51.91,53.8],"b":"bottom","g":35.1,"loss":8.06},{"xyz":[34.31,138.66,0.0],"b":"surface","g":31.8,"loss":-0.0},{"xyz":[66.92,270.45,81.73],"b":"bottom","g":24.2,"loss":4.8}],"path":"Bellhop ray file (E), matched by bounces","tt":0.377277}],"out_total":12,"back":[{"k":0,"delay":0.34304391,"ns":0,"nb":1,"amp":0.001611599,"db":-55.9,"launch":24.19,"line":[[-0.0,0.0,10.0],[26.23,106.0,58.5],[50.18,202.82,46.71],[72.05,291.22,36.42],[94.85,383.37,26.22],[120.0,485.0,15.46]],"bounces":[{"xyz":[26.23,106.0,58.5],"b":"bottom","g":15.4,"loss":0.93}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3430119},{"k":1,"delay":0.35259807,"ns":2,"nb":1,"amp":0.0015222313800000002,"db":-56.4,"launch":-28.87,"line":[[-0.0,0.0,10.0],[4.29,17.32,0.0],[31.11,125.73,61.59],[58.6,236.86,38.22],[91.04,367.94,11.46],[98.18,396.83,5.15],[103.52,418.41,0.0],[110.81,447.87,6.92],[120.0,485.0,14.79]],"bounces":[{"xyz":[4.29,17.32,0.0],"b":"surface","g":29.7,"loss":-0.0},{"xyz":[31.11,125.73,61.59],"b":"bottom","g":20.2,"loss":1.79},{"xyz":[103.52,418.41,-0.0],"b":"surface","g":13.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3525728},{"k":2,"delay":0.34882577,"ns":1,"nb":1,"amp":0.00113449444,"db":-58.9,"launch":-25.9,"line":[[-0.0,0.0,10.0],[4.83,19.54,-0.0],[37.04,149.71,65.34],[79.17,319.96,38.68],[120.0,485.0,14.28]],"bounces":[{"xyz":[4.83,19.54,-0.0],"b":"surface","g":26.9,"loss":-0.0},{"xyz":[37.04,149.71,65.34],"b":"bottom","g":17.3,"loss":1.09}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3488942},{"k":3,"delay":0.33444854,"ns":0,"nb":0,"amp":0.000988573651,"db":-60.1,"launch":3.58,"line":[[-0.0,0.0,10.0],[12.95,52.35,12.8],[24.02,97.07,14.36],[36.13,146.02,15.23],[54.52,220.36,15.86],[76.38,308.69,15.83],[97.84,395.44,15.0],[108.64,439.11,14.01],[120.0,485.0,12.19]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.3345177},{"k":4,"delay":0.33580129,"ns":1,"nb":0,"amp":0.000684308528,"db":-63.3,"launch":-3.58,"line":[[-0.0,0.0,10.0],[6.47,26.15,8.11],[12.93,52.26,5.78],[19.14,77.34,3.06],[24.92,100.73,-0.0],[33.51,135.42,4.36],[43.62,176.31,8.19],[54.16,218.91,11.05],[64.96,262.54,13.17],[74.22,299.95,14.4],[85.98,347.49,15.23],[102.56,414.5,15.82],[120.0,485.0,15.92]],"bounces":[{"xyz":[24.92,100.73,-0.0],"b":"surface","g":7.9,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3358042},{"k":5,"delay":0.34881846,"ns":1,"nb":1,"amp":0.000530554389,"db":-65.5,"launch":-26.19,"line":[[-0.0,0.0,10.0],[4.9,19.81,-0.0],[37.82,152.86,65.84],[82.32,332.7,38.73],[120.0,485.0,17.15]],"bounces":[{"xyz":[4.9,19.81,-0.0],"b":"surface","g":26.6,"loss":-0.0},{"xyz":[37.82,152.86,65.84],"b":"bottom","g":17.0,"loss":1.06}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3486292},{"k":6,"delay":0.37567499,"ns":1,"nb":2,"amp":0.00039878504999999993,"db":-68.0,"launch":33.92,"line":[[-0.0,0.0,10.0],[18.09,73.12,55.35],[49.42,199.73,-0.0],[96.9,391.64,83.9],[120.0,485.0,13.85]],"bounces":[{"xyz":[18.09,73.12,55.35],"b":"bottom","g":27.1,"loss":6.17},{"xyz":[49.42,199.73,-0.0],"b":"surface","g":24.0,"loss":-0.0},{"xyz":[96.9,391.64,83.9],"b":"bottom","g":29.5,"loss":6.95}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3774259},{"k":7,"delay":0.37700067,"ns":1,"nb":2,"amp":0.000384551793,"db":-68.3,"launch":39.07,"line":[[-0.0,0.0,10.0],[13.11,53.0,53.88],[34.89,141.01,0.0],[68.18,275.56,82.36],[120.0,485.0,16.6]],"bounces":[{"xyz":[13.11,53.0,53.88],"b":"bottom","g":34.8,"loss":8.01},{"xyz":[34.89,141.01,0.0],"b":"surface","g":31.5,"loss":-0.0},{"xyz":[68.18,275.56,82.36],"b":"bottom","g":23.9,"loss":4.59}],"path":"Bellhop ray file (E), matched by bounces","tt":0.3766916}],"back_total":12}],"undrawn":0,"pairs":[{"t":0.69574855,"ch":[0.69594793,0.69593499,0.69592206,0.69590915,0.69589624,0.69588335,0.69587046,0.69585758,0.69584472,0.69583186,0.69581902,0.69580618,0.69579336,0.69578054,0.69576774,0.69575494,0.69574216,0.69572939,0.69571662,0.69570387,0.69569112,0.69567839,0.69566567,0.69565295,0.69564025,0.69562756,0.69561487,0.6956022,0.69558954,0.69557689,0.69556424,0.69555161],"ns":2,"nb":2,"db":-67.2,"target":0,"out":0,"back":0},{"t":0.68601422,"ch":[0.68621359,0.68620066,0.68618773,0.68617481,0.68616191,0.68614901,0.68613613,0.68612325,0.68611039,0.68609753,0.68608469,0.68607185,0.68605903,0.68604621,0.68603341,0.68602061,0.68600783,0.68599505,0.68598229,0.68596954,0.68595679,0.68594406,0.68593133,0.68591862,0.68590592,0.68589322,0.68588054,0.68586787,0.68585521,0.68584255,0.68582991,0.68581728],"ns":0,"nb":2,"db":-67.2,"target":0,"out":1,"back":0},{"t":0.70530271,"ch":[0.70550845,0.70549511,0.70548177,0.70546845,0.70545513,0.70544183,0.70542853,0.70541524,0.70540197,0.7053887,0.70537545,0.7053622,0.70534896,0.70533573,0.70532252,0.70530931,0.70529611,0.70528293,0.70526975,0.70525658,0.70524342,0.70523027,0.70521714,0.70520401,0.70519089,0.70517778,0.70516468,0.70515159,0.70513851,0.70512544,0.70511238,0.70509933],"ns":4,"nb":2,"db":-67.7,"target":0,"out":0,"back":1},{"t":0.69556838,"ch":[0.69577412,0.69576077,0.69574744,0.69573411,0.6957208,0.69570749,0.6956942,0.69568091,0.69566764,0.69565437,0.69564111,0.69562787,0.69561463,0.6956014,0.69558819,0.69557498,0.69556178,0.69554859,0.69553542,0.69552225,0.69550909,0.69549594,0.6954828,0.69546967,0.69545655,0.69544345,0.69543035,0.69541726,0.69540418,0.69539111,0.69537805,0.695365],"ns":2,"nb":2,"db":-67.7,"target":0,"out":1,"back":1},{"t":0.7015304,"ch":[0.70174076,0.70172711,0.70171348,0.70169986,0.70168624,0.70167264,0.70165905,0.70164546,0.70163189,0.70161833,0.70160477,0.70159123,0.70157769,0.70156417,0.70155066,0.70153715,0.70152366,0.70151017,0.7014967,0.70148323,0.70146978,0.70145633,0.7014429,0.70142947,0.70141606,0.70140265,0.70138926,0.70137587,0.7013625,0.70134913,0.70133578,0.70132243],"ns":3,"nb":2,"db":-70.3,"target":0,"out":0,"back":2},{"t":0.69179607,"ch":[0.69200642,0.69199278,0.69197915,0.69196552,0.69195191,0.69193831,0.69192471,0.69191113,0.69189756,0.69188399,0.69187044,0.6918569,0.69184336,0.69182984,0.69181632,0.69180282,0.69178932,0.69177584,0.69176237,0.6917489,0.69173545,0.691722,0.69170857,0.69169514,0.69168173,0.69166832,0.69165493,0.69164154,0.69162817,0.6916148,0.69160145,0.6915881],"ns":1,"nb":2,"db":-70.3,"target":0,"out":1,"back":2},{"t":0.69196682,"ch":[0.6921662,0.69215326,0.69214034,0.69212742,0.69211451,0.69210162,0.69208873,0.69207586,0.69206299,0.69205014,0.69203729,0.69202446,0.69201163,0.69199882,0.69198601,0.69197322,0.69196043,0.69194766,0.69193489,0.69192214,0.6919094,0.69189666,0.69188394,0.69187123,0.69185852,0.69184583,0.69183315,0.69182047,0.69180781,0.69179516,0.69178252,0.69176988],"ns":1,"nb":2,"db":-70.5,"target":0,"out":2,"back":0},{"t":0.70152098,"ch":[0.70172672,0.70171338,0.70170004,0.70168672,0.7016734,0.7016601,0.7016468,0.70163352,0.70162024,0.70160697,0.70159372,0.70158047,0.70156723,0.70155401,0.70154079,0.70152758,0.70151439,0.7015012,0.70148802,0.70147485,0.70146169,0.70144855,0.70143541,0.70142228,0.70140916,0.70139605,0.70138295,0.70136986,0.70135678,0.70134371,0.70133065,0.7013176],"ns":3,"nb":2,"db":-71.0,"target":0,"out":2,"back":1},{"t":0.67749157,"ch":[0.67769094,0.67767801,0.67766508,0.67765217,0.67763926,0.67762636,0.67761348,0.6776006,0.67758774,0.67757488,0.67756204,0.6775492,0.67753638,0.67752356,0.67751076,0.67749796,0.67748518,0.6774724,0.67745964,0.67744689,0.67743414,0.67742141,0.67740868,0.67739597,0.67738327,0.67737057,0.67735789,0.67734522,0.67733256,0.6773199,0.67730726,0.67729463],"ns":0,"nb":1,"db":-71.2,"target":0,"out":3,"back":0},{"t":0.68715318,"ch":[0.68737753,0.68736298,0.68734844,0.68733392,0.6873194,0.68730489,0.68729039,0.68727591,0.68726143,0.68724696,0.68723251,0.68721806,0.68720363,0.6871892,0.68717478,0.68716038,0.68714598,0.6871316,0.68711723,0.68710286,0.68708851,0.68707417,0.68705983,0.68704551,0.6870312,0.6870169,0.6870026,0.68698832,0.68697405,0.68695979,0.68694554,0.6869313],"ns":2,"nb":1,"db":-71.4,"target":0,"out":0,"back":3},{"t":0.67741885,"ch":[0.6776432,0.67762865,0.67761411,0.67759958,0.67758507,0.67757056,0.67755606,0.67754157,0.6775271,0.67751263,0.67749817,0.67748373,0.67746929,0.67745487,0.67744045,0.67742605,0.67741165,0.67739727,0.67738289,0.67736853,0.67735418,0.67733983,0.6773255,0.67731118,0.67729686,0.67728256,0.67726827,0.67725399,0.67723972,0.67722546,0.67721121,0.67719696],"ns":0,"nb":1,"db":-71.5,"target":0,"out":1,"back":3},{"t":0.68704573,"ch":[0.68725147,0.68723812,0.68722479,0.68721146,0.68719815,0.68718484,0.68717155,0.68715826,0.68714499,0.68713172,0.68711846,0.68710522,0.68709198,0.68707875,0.68706554,0.68705233,0.68703913,0.68702594,0.68701277,0.6869996,0.68698644,0.68697329,0.68696015,0.68694702,0.68693391,0.6869208,0.6869077,0.68689461,0.68688153,0.68686846,0.6868554,0.68684235],"ns":2,"nb":1,"db":-71.7,"target":0,"out":3,"back":1},{"t":0.69774868,"ch":[0.69795903,0.69794539,0.69793175,0.69791813,0.69790452,0.69789091,0.69787732,0.69786374,0.69785016,0.6978366,0.69782304,0.6978095,0.69779597,0.69778244,0.69776893,0.69775542,0.69774193,0.69772845,0.69771497,0.69770151,0.69768805,0.69767461,0.69766117,0.69764775,0.69763433,0.69762093,0.69760753,0.69759415,0.69758077,0.69756741,0.69755405,0.69754071],"ns":2,"nb":2,"db":-73.5,"target":0,"out":2,"back":2},{"t":0.68327342,"ch":[0.68348377,0.68347013,0.6834565,0.68344287,0.68342926,0.68341566,0.68340206,0.68338848,0.68337491,0.68336134,0.68334779,0.68333425,0.68332071,0.68330719,0.68329367,0.68328017,0.68326668,0.68325319,0.68323972,0.68322625,0.6832128,0.68319935,0.68318592,0.68317249,0.68315908,0.68314567,0.68313228,0.68311889,0.68310552,0.68309215,0.6830788,0.68306545],"ns":1,"nb":1,"db":-74.3,"target":0,"out":3,"back":2},{"t":0.68850592,"ch":[0.68873231,0.68871763,0.68870296,0.6886883,0.68867365,0.68865901,0.68864439,0.68862977,0.68861516,0.68860056,0.68858597,0.6885714,0.68855683,0.68854227,0.68852773,0.68851319,0.68849866,0.68848415,0.68846964,0.68845514,0.68844066,0.68842618,0.68841172,0.68839726,0.68838282,0.68836838,0.68835396,0.68833955,0.68832514,0.68831075,0.68829637,0.68828199],"ns":3,"nb":1,"db":-74.6,"target":0,"out":0,"back":4},{"t":0.67877159,"ch":[0.67899798,0.6789833,0.67896863,0.67895397,0.67893932,0.67892468,0.67891005,0.67889543,0.67888083,0.67886623,0.67885164,0.67883706,0.6788225,0.67880794,0.67879339,0.67877886,0.67876433,0.67874981,0.67873531,0.67872081,0.67870633,0.67869185,0.67867739,0.67866293,0.67864849,0.67863405,0.67861963,0.67860521,0.67859081,0.67857642,0.67856203,0.67854766],"ns":1,"nb":1,"db":-74.7,"target":0,"out":1,"back":4},{"t":0.68337145,"ch":[0.6835958,0.68358125,0.68356672,0.68355219,0.68353767,0.68352316,0.68350867,0.68349418,0.6834797,0.68346524,0.68345078,0.68343633,0.6834219,0.68340747,0.68339306,0.68337865,0.68336426,0.68334987,0.6833355,0.68332114,0.68330678,0.68329244,0.68327811,0.68326378,0.68324947,0.68323517,0.68322088,0.68320659,0.68319232,0.68317806,0.68316381,0.68314957],"ns":1,"nb":1,"db":-74.7,"target":0,"out":2,"back":3},{"t":0.69196056,"ch":[0.69215993,0.692147,0.69213407,0.69212116,0.69210825,0.69209535,0.69208247,0.69206959,0.69205673,0.69204387,0.69203103,0.69201819,0.69200537,0.69199255,0.69197975,0.69196695,0.69195417,0.69194139,0.69192863,0.69191588,0.69190313,0.6918904,0.69187767,0.69186496,0.69185226,0.69183956,0.69182688,0.69181421,0.69180155,0.69178889,0.69177625,0.69176362],"ns":1,"nb":2,"db":-75.1,"target":0,"out":4,"back":0},{"t":0.6688962,"ch":[0.66912055,0.669106,0.66909146,0.66907693,0.66906242,0.66904791,0.66903341,0.66901892,0.66900445,0.66898998,0.66897552,0.66896108,0.66894664,0.66893222,0.6689178,0.6689034,0.668889,0.66887462,0.66886024,0.66884588,0.66883153,0.66881718,0.66880285,0.66878853,0.66877422,0.66875991,0.66874562,0.66873134,0.66871707,0.66870281,0.66868856,0.66867432],"ns":0,"nb":0,"db":-75.5,"target":0,"out":3,"back":3},{"t":0.70151472,"ch":[0.70172046,0.70170711,0.70169378,0.70168045,0.70166714,0.70165383,0.70164054,0.70162725,0.70161398,0.70160071,0.70158745,0.70157421,0.70156097,0.70154774,0.70153453,0.70152132,0.70150812,0.70149493,0.70148176,0.70146859,0.70145543,0.70144228,0.70142914,0.70141601,0.7014029,0.70138979,0.70137669,0.7013636,0.70135052,0.70133745,0.70132439,0.70131134],"ns":3,"nb":2,"db":-75.6,"target":0,"out":4,"back":1},{"t":0.70152309,"ch":[0.70173303,0.70171941,0.70170581,0.70169221,0.70167862,0.70166505,0.70165148,0.70163792,0.70162438,0.70161084,0.70159731,0.7015838,0.70157029,0.70155679,0.70154331,0.70152983,0.70151636,0.7015029,0.70148946,0.70147602,0.70146259,0.70144917,0.70143577,0.70142237,0.70140898,0.7013956,0.70138223,0.70136888,0.70135553,0.70134219,0.70132886,0.70131554],"ns":3,"nb":2,"db":-76.9,"target":0,"out":0,"back":5},{"t":0.69178876,"ch":[0.6919987,0.69198508,0.69197147,0.69195788,0.69194429,0.69193071,0.69191715,0.69190359,0.69189005,0.69187651,0.69186298,0.69184946,0.69183596,0.69182246,0.69180897,0.6917955,0.69178203,0.69176857,0.69175512,0.69174169,0.69172826,0.69171484,0.69170143,0.69168804,0.69167465,0.69166127,0.6916479,0.69163454,0.6916212,0.69160786,0.69159453,0.69158121],"ns":1,"nb":2,"db":-76.9,"target":0,"out":1,"back":5},{"t":0.6847242,"ch":[0.68495058,0.6849359,0.68492123,0.68490657,0.68489193,0.68487729,0.68486266,0.68484804,0.68483343,0.68481883,0.68480425,0.68478967,0.6847751,0.68476054,0.684746,0.68473146,0.68471693,0.68470242,0.68468791,0.68467342,0.68465893,0.68464446,0.68462999,0.68461554,0.68460109,0.68458666,0.68457223,0.68455782,0.68454341,0.68452902,0.68451464,0.68450026],"ns":2,"nb":1,"db":-77.9,"target":0,"out":2,"back":4},{"t":0.69774241,"ch":[0.69795276,0.69793912,0.69792549,0.69791186,0.69789825,0.69788465,0.69787105,0.69785747,0.6978439,0.69783033,0.69781678,0.69780324,0.6977897,0.69777618,0.69776266,0.69774916,0.69773567,0.69772218,0.69770871,0.69769524,0.69768179,0.69766834,0.69765491,0.69764148,0.69762807,0.69761466,0.69760127,0.69758788,0.69757451,0.69756114,0.69754779,0.69753444],"ns":2,"nb":2,"db":-78.1,"target":0,"out":4,"back":2},{"t":0.67024894,"ch":[0.67047533,0.67046065,0.67044598,0.67043132,0.67041667,0.67040203,0.6703874,0.67037279,0.67035818,0.67034358,0.67032899,0.67031441,0.67029985,0.67028529,0.67027074,0.67025621,0.67024168,0.67022716,0.67021266,0.67019816,0.67018368,0.6701692,0.67015474,0.67014028,0.67012584,0.6701114,0.67009698,0.67008256,0.67006816,0.67005377,0.67003938,0.67002501],"ns":1,"nb":0,"db":-78.7,"target":0,"out":3,"back":4},{"t":0.71992087,"ch":[0.72012024,0.72010731,0.72009438,0.72008147,0.72006856,0.72005566,0.72004278,0.7200299,0.72001704,0.72000418,0.71999134,0.7199785,0.71996568,0.71995286,0.71994006,0.71992726,0.71991448,0.7199017,0.71988894,0.71987619,0.71986344,0.71985071,0.71983798,0.71982527,0.71981257,0.71979987,0.71978719,0.71977452,0.71976186,0.7197492,0.71973656,0.71972393],"ns":1,"nb":3,"db":-79.1,"target":0,"out":5,"back":0},{"t":0.68336519,"ch":[0.68358954,0.68357499,0.68356045,0.68354592,0.68353141,0.6835169,0.6835024,0.68348791,0.68347344,0.68345897,0.68344451,0.68343007,0.68341563,0.68340121,0.68338679,0.68337239,0.68335799,0.68334361,0.68332923,0.68331487,0.68330052,0.68328617,0.68327184,0.68325752,0.68324321,0.6832289,0.68321461,0.68320033,0.68318606,0.6831718,0.68315755,0.68314331],"ns":1,"nb":1,"db":-79.3,"target":0,"out":4,"back":3},{"t":0.72837963,"ch":[0.72855798,0.72854641,0.72853484,0.72852329,0.72851174,0.72850021,0.72848868,0.72847716,0.72846565,0.72845415,0.72844266,0.72843118,0.72841971,0.72840825,0.72839679,0.72838535,0.72837392,0.72836249,0.72835107,0.72833967,0.72832827,0.72831688,0.72830551,0.72829414,0.72828278,0.72827143,0.72826009,0.72824876,0.72823743,0.72822612,0.72821482,0.72820352],"ns":3,"nb":3,"db":-79.3,"target":0,"out":0,"back":6},{"t":0.7186453,"ch":[0.71882365,0.71881208,0.71880051,0.71878896,0.71877741,0.71876587,0.71875435,0.71874283,0.71873132,0.71871982,0.71870833,0.71869685,0.71868538,0.71867391,0.71866246,0.71865102,0.71863958,0.71862816,0.71861674,0.71860534,0.71859394,0.71858255,0.71857117,0.7185598,0.71854845,0.7185371,0.71852575,0.71851442,0.7185031,0.71849179,0.71848048,0.71846919],"ns":1,"nb":3,"db":-79.4,"target":0,"out":1,"back":6},{"t":0.72947503,"ch":[0.72968077,0.72966742,0.72965409,0.72964076,0.72962745,0.72961414,0.72960085,0.72958756,0.72957429,0.72956102,0.72954776,0.72953452,0.72952128,0.72950805,0.72949484,0.72948163,0.72946843,0.72945524,0.72944207,0.7294289,0.72941574,0.72940259,0.72938945,0.72937632,0.72936321,0.7293501,0.729337,0.72932391,0.72931083,0.72929776,0.7292847,0.72927165],"ns":3,"nb":3,"db":-79.6,"target":0,"out":5,"back":1},{"t":0.7297053,"ch":[0.72987047,0.72985975,0.72984903,0.72983833,0.72982763,0.72981695,0.72980627,0.7297956,0.72978494,0.72977429,0.72976365,0.72975302,0.7297424,0.72973179,0.72972119,0.7297106,0.72970001,0.72968944,0.72967888,0.72966832,0.72965777,0.72964724,0.72963671,0.72962619,0.72961568,0.72960519,0.7295947,0.72958422,0.72957374,0.72956328,0.72955283,0.72954239],"ns":3,"nb":3,"db":-79.7,"target":0,"out":0,"back":7},{"t":0.71997097,"ch":[0.72013614,0.72012541,0.7201147,0.72010399,0.7200933,0.72008261,0.72007194,0.72006127,0.72005061,0.72003996,0.72002932,0.72001869,0.72000807,0.71999746,0.71998686,0.71997626,0.71996568,0.71995511,0.71994454,0.71993399,0.71992344,0.71991291,0.71990238,0.71989186,0.71988135,0.71987085,0.71986036,0.71984988,0.71983941,0.71982895,0.7198185,0.71980805],"ns":1,"nb":3,"db":-79.7,"target":0,"out":1,"back":7},{"t":0.71861533,"ch":[0.7188147,0.71880176,0.71878884,0.71877592,0.71876302,0.71875012,0.71873724,0.71872436,0.71871149,0.71869864,0.71868579,0.71867296,0.71866013,0.71864732,0.71863451,0.71862172,0.71860894,0.71859616,0.7185834,0.71857064,0.7185579,0.71854517,0.71853244,0.71851973,0.71850703,0.71849433,0.71848165,0.71846898,0.71845631,0.71844366,0.71843102,0.71841839],"ns":1,"nb":3,"db":-79.7,"target":0,"out":6,"back":0},{"t":0.71992663,"ch":[0.720126,0.72011307,0.72010014,0.72008722,0.72007432,0.72006142,0.72004854,0.72003566,0.7200228,0.72000994,0.7199971,0.71998426,0.71997144,0.71995862,0.71994582,0.71993302,0.71992024,0.71990746,0.7198947,0.71988194,0.7198692,0.71985647,0.71984374,0.71983103,0.71981833,0.71980563,0.71979295,0.71978028,0.71976762,0.71975496,0.71974232,0.71972969],"ns":1,"nb":3,"db":-80.1,"target":0,"out":7,"back":0},{"t":0.69774137,"ch":[0.6979513,0.69793768,0.69792408,0.69791048,0.6978969,0.69788332,0.69786975,0.6978562,0.69784265,0.69782911,0.69781559,0.69780207,0.69778856,0.69777507,0.69776158,0.6977481,0.69773463,0.69772118,0.69770773,0.69769429,0.69768086,0.69766745,0.69765404,0.69764064,0.69762725,0.69761388,0.69760051,0.69758715,0.6975738,0.69756046,0.69754713,0.69753382],"ns":2,"nb":2,"db":-80.1,"target":0,"out":2,"back":5},{"t":0.72816949,"ch":[0.72837523,0.72836188,0.72834855,0.72833522,0.72832191,0.7283086,0.7282953,0.72828202,0.72826874,0.72825548,0.72824222,0.72822897,0.72821574,0.72820251,0.72818929,0.72817609,0.72816289,0.7281497,0.72813652,0.72812336,0.7281102,0.72809705,0.72808391,0.72807078,0.72805766,0.72804455,0.72803145,0.72801837,0.72800529,0.72799222,0.72797916,0.72796611],"ns":3,"nb":3,"db":-80.2,"target":0,"out":6,"back":1},{"t":0.72967768,"ch":[0.72986274,0.72985074,0.72983874,0.72982675,0.72981477,0.7298028,0.72979084,0.72977889,0.72976695,0.72975502,0.72974309,0.72973118,0.72971928,0.72970738,0.72969549,0.72968362,0.72967175,0.72965989,0.72964804,0.7296362,0.72962437,0.72961255,0.72960074,0.72958894,0.72957714,0.72956536,0.72955359,0.72954182,0.72953006,0.72951832,0.72950658,0.72949485],"ns":3,"nb":3,"db":-80.6,"target":0,"out":0,"back":8},{"t":0.72948079,"ch":[0.72968653,0.72967318,0.72965985,0.72964652,0.72963321,0.7296199,0.72960661,0.72959332,0.72958004,0.72956678,0.72955352,0.72954028,0.72952704,0.72951381,0.72950059,0.72948739,0.72947419,0.729461,0.72944782,0.72943466,0.7294215,0.72940835,0.72939521,0.72938208,0.72936896,0.72935586,0.72934276,0.72932967,0.72931659,0.72930352,0.72929046,0.72927741],"ns":3,"nb":3,"db":-80.6,"target":0,"out":7,"back":1},{"t":0.71994335,"ch":[0.72012841,0.7201164,0.72010441,0.72009242,0.72008044,0.72006847,0.72005651,0.72004456,0.72003262,0.72002068,0.72000876,0.71999685,0.71998494,0.71997305,0.71996116,0.71994928,0.71993742,0.71992556,0.71991371,0.71990187,0.71989004,0.71987822,0.71986641,0.7198546,0.71984281,0.71983103,0.71981925,0.71980749,0.71979573,0.71978399,0.71977225,0.71976052],"ns":1,"nb":3,"db":-80.6,"target":0,"out":1,"back":8},{"t":0.68326611,"ch":[0.68347605,0.68346243,0.68344882,0.68343523,0.68342164,0.68340807,0.6833945,0.68338094,0.6833674,0.68335386,0.68334033,0.68332682,0.68331331,0.68329981,0.68328632,0.68327285,0.68325938,0.68324592,0.68323248,0.68321904,0.68320561,0.68319219,0.68317878,0.68316539,0.683152,0.68313862,0.68312525,0.68311189,0.68309855,0.68308521,0.68307188,0.68305856],"ns":1,"nb":1,"db":-80.9,"target":0,"out":3,"back":5}],"n_pairs":144,"oneway":[],"direct":null,"beams":{"chain":{"bearings_deg":[-60.0,60.0,0.5],"look":"starboard","window":"hann","source":"live chain, configs/deploy/popoto_testauv_1row.yaml"},"broadside":[0.0009177929761992494,0.9999995788279377,0.0],"axis":[-0.9999995788279377,0.0009177929761992494,0.0],"aperture_m":2.7895716172627414,"n_elements":32,"center_frequency":5000.0,"wavelength":0.29834,"element_beamwidth_az_deg":null,"steered":[{"steer_deg":-60.0,"peak_deg":-59.99999999999999,"edges_deg":[-69.875,-52.50000000000001]},{"steer_deg":-30.0,"peak_deg":-29.999999999999996,"edges_deg":[-35.0,-25.25]},{"steer_deg":0.0,"peak_deg":0.0,"edges_deg":[-4.25,4.25]},{"steer_deg":30.0,"peak_deg":29.999999999999996,"edges_deg":[25.25,35.0]},{"steer_deg":60.0,"peak_deg":59.99999999999999,"edges_deg":[52.50000000000001,69.875]}],"projector":null,"projector_text":"projector: kind point, omnidirectional (the sonar gives it no beamwidth or aperture)"},"models":[{"area":"propagation","model":"eigenray","what":"Bellhop 2-D eigenrays, looked up on a range-depth grid","key":"fidelity","status":"ours","chosen":"scenario","source":"Bellhop (GPL-3, separate process), not re-validated; lookup ours"},{"area":"surface","model":"surface_pressure_release","what":"surface reflection coefficient -1","key":"propagation.surface_coefficient","status":"ours","chosen":"default","source":"pressure release"},{"area":"bottom","model":"rayleigh_fluid","what":"Rayleigh fluid half-space reflection","key":"propagation.environment.bottom","status":"via secondary","chosen":"scenario","source":"standard; sediment table via secondary (REFERENCES 3.1)"},{"area":"water","model":"ssp_profile","what":"sound-speed profile in depth","key":"propagation.environment.ssp_depth/ssp_speed","status":"ours","chosen":"scenario","source":"the environment's profile"},{"area":"bottom","model":"bathymetry","what":"a bed that changes with range (one section on every bearing)","key":"propagation.environment.bathymetry","status":"ours","chosen":"scenario","source":"Bellhop bed file"},{"area":"water","model":"wenz","what":"ambient noise from the Wenz fit","key":"receiver.ambient_noise","status":"via secondary","chosen":"scenario","source":"three prints of the curves"},{"area":"water","model":"noise_statistics","what":"non-Gaussian ambient noise statistics","key":"receiver.ambient_noise.statistics","status":"confirmed; ours","chosen":"scenario","source":"sim/noise.py; K: Abraham and Lyons 2002"},{"area":"water","model":"ainslie_mccolm","what":"absorption, Ainslie-McColm","key":"absorption","status":"via secondary","chosen":"scenario","source":"within 3 % of 21 published values"},{"area":"water","model":"mackenzie","what":"sound speed from temperature and salinity, Mackenzie","key":"environment.temperature/salinity","status":"unconfirmed","chosen":"default","source":"held to arlpy 1.9.3; paper not opened"},{"area":"reverberation","model":"basin","what":"a basin's late reverberation tail","key":"basin_reverberation","status":"ours","chosen":"scenario","source":"fitted to one data set"},{"area":"targets","model":"targets","what":"point scatterers and highlight targets","key":"scene","status":"confirmed; ours","chosen":"scenario","source":"TR 0702 Sec. 9.2 (highlights); shapes ours"}],"missing":[],"view":{"note":"ping 0 of 4","ping_of_run":0,"n_pings":4},"time_spread_taps":false,"scene3d":{"box":[-74.14714331714089,192.75235692106446,-72.76806972816081,557.7523569210645],"bed_grid":null,"motion":{"times":[0.0,3.0,6.0,9.0],"ping_index":[0,1,2,3],"targets":[[[120.0,485.0,15.0],[120.0,485.0,15.0],[120.0,485.0,15.0],[120.0,485.0,15.0]]],"moving":false,"track":[[0.0,0.0,10.0],[3.0,0.0,10.0],[6.0,0.0,10.0],[9.0,0.0,10.0]],"ping":0,"interval":3.0},"bellhop3d":null,"notes":[]},"chain":null,"limits":{"max_rays":8,"max_pairs":40,"tolerance":1.0},"links":{"png":"fjord_testauv_trial_1row.png","index":"index.html"}}</script>
+<script type="module">
+const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js');
+const D = JSON.parse(document.getElementById('trace').textContent);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fx = (v, n=1) => (v == null || !isFinite(v)) ? '–' : (+v).toFixed(n);
+const CLS = {direct:['#2a78d6','direct'], surface:['#1baf7a','surface bounces only'], bottom:['#eb6834','bottom bounces only'], both:['#8e5cc4','surface and bottom']};
+const cls = (ns,nb) => ns===0&&nb===0?'direct':nb===0?'surface':ns===0?'bottom':'both';
+const ROWC = ['#1d1d1b','#c2185b','#00838f','#7b5e00','#5e35b1'];
+const E = D.environment, S3 = D.scene3d || {}, B = D.beams, M = S3.motion;
+const H = D.sonar.hydrophones, PJ = D.sonar.projector;
+const ref = H.reduce((a,p)=>a.map((v,i)=>v+p[i]/H.length),[0,0,0]);
+const allPts = [PJ, ...H, ...D.targets.map(t=>t.position), ...(D.oneway||[]).map(o=>o.position), ...((M&&M.track)||[])];
+let box = S3.box;
+if (!box){ const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]); const m=Math.max(0.15*Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)),1);
+  box=[Math.min(...xs)-m,Math.max(...xs)+m,Math.min(...ys)-m,Math.max(...ys)+m]; }
+const ox=(box[0]+box[1])/2, oy=(box[2]+box[3])/2, WX=box[1]-box[0], WY=box[3]-box[2], span=Math.max(WX,WY,1);
+const zMaxPts = Math.max(...allPts.map(p=>p[2]), 0);
+let zBed = E.bottom_z ?? E.bottom_z_site ?? null;
+if (S3.bed_grid) zBed = Math.max(...S3.bed_grid.z.flat());
+const zRef = zBed ?? Math.max(zMaxPts*1.2, 1);
+const zTop = Math.min(E.surface_z ?? 0, ...allPts.map(p=>p[2])), zBot = Math.max(zRef, zMaxPts), zSpan = Math.max(zBot-zTop, 1e-3);
+const L = p => new THREE.Vector3(p[1]-oy, -p[2], -(p[0]-ox));      // NED (x north, y east, z down) to three.js (X east, Y up, Z south)
+const LD = d => new THREE.Vector3(d[1], -d[2], -d[0]);
+
+// ---------- renderer, scene, camera, our own orbit controls ----------
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(window.devicePixelRatio); view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(getComputedStyle(document.body).backgroundColor);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1e7);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6)); const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(0.4,1,0.3); scene.add(dl);
+const world = new THREE.Group(); scene.add(world);
+const G = {}; for (const k of ['surface','bed','beams','projpat','array','targets','motion','rays','oneway','direct']) { G[k]=new THREE.Group(); world.add(G[k]); }
+let vex = 1;
+const ctl = {target:new THREE.Vector3(), az:0.85, el:0.45, dist:1.7*span};
+function place(){ const c=ctl; camera.position.set(c.target.x+c.dist*Math.cos(c.el)*Math.sin(c.az), c.target.y+c.dist*Math.sin(c.el), c.target.z+c.dist*Math.cos(c.el)*Math.cos(c.az));
+  camera.near=Math.max(c.dist*1e-3,1e-4); camera.far=c.dist*50+span*20; camera.updateProjectionMatrix(); camera.lookAt(c.target); }
+function resize(){ const w=view.clientWidth, h=view.clientHeight; renderer.setSize(w,h); camera.aspect=w/Math.max(h,1); camera.updateProjectionMatrix(); }
+let drag=null, down=null;
+renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
+renderer.domElement.addEventListener('pointerdown', e=>{ drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey}; down={x:e.clientX,y:e.clientY}; });
+window.addEventListener('pointerup', e=>{ if (down && Math.hypot(e.clientX-down.x, e.clientY-down.y)<5 && e.target===renderer.domElement) pick(e); drag=null; down=null; });
+window.addEventListener('pointermove', e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+  if (drag.pan){ const s=ctl.dist*0.0016, r=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0), u=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+    ctl.target.addScaledVector(r,-dx*s).addScaledVector(u,dy*s); }
+  else { ctl.az-=dx*0.005; ctl.el=Math.max(-1.5,Math.min(1.5,ctl.el+dy*0.005)); }
+  place(); draw(); });
+renderer.domElement.addEventListener('wheel', e=>{ e.preventDefault(); ctl.dist=Math.max(1e-3, ctl.dist*Math.exp(e.deltaY*0.0012)); place(); draw(); }, {passive:false});
+
+// ---------- glyphs and labels ----------
+const disc = (()=>{ const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); g.beginPath(); g.arc(32,32,27,0,2*Math.PI); g.fillStyle='#fff'; g.fill(); g.lineWidth=5; g.strokeStyle='rgba(0,0,0,.55)'; g.stroke(); return new THREE.CanvasTexture(c); })();
+function points(list, color, size, opts={}){ const g=new THREE.BufferGeometry().setFromPoints(list.map(L));
+  const m=new THREE.PointsMaterial({color, size, sizeAttenuation:false, map:disc, alphaTest:0.5, transparent:true, depthTest:opts.depthTest??true});
+  if (opts.colors){ g.setAttribute('color', new THREE.Float32BufferAttribute(opts.colors.flatMap(c=>new THREE.Color(c).toArray()),3)); m.vertexColors=true; m.color.set(0xffffff); }
+  const p=new THREE.Points(g,m); p.renderOrder=5; return p; }
+function line(list, color, opts={}){ const g=new THREE.BufferGeometry().setFromPoints(list.map(L));
+  const m = opts.dashed ? new THREE.LineDashedMaterial({color, dashSize:opts.dash||span/90, gapSize:(opts.dash||span/90)*0.7, transparent:true, opacity:opts.opacity??1})
+                        : new THREE.LineBasicMaterial({color, transparent:true, opacity:opts.opacity??1});
+  const l=new THREE.Line(g,m); if (opts.dashed) l.computeLineDistances(); return l; }
+const LABELS=[]; let showLabels=true;
+function label(text, p, klass, layer, near){ const el=document.createElement('div'); el.className='lab '+(klass||''); el.textContent=text; $('labels').appendChild(el); LABELS.push({el, v:L(p), layer, near}); return el; }
+function placeLabels(){ const w=view.clientWidth, h=view.clientHeight; world.updateMatrixWorld();
+  for (const l of LABELS){ const on = showLabels && (!l.layer || G[l.layer].visible) && !l.off && (!l.near || ctl.dist < l.near);
+    if (!on){ l.el.style.display='none'; continue; }
+    const v=l.v.clone().applyMatrix4(world.matrixWorld).project(camera);
+    if (v.z>1||v.z<-1||Math.abs(v.x)>1.05||Math.abs(v.y)>1.05){ l.el.style.display='none'; continue; }
+    l.el.style.display=''; l.el.style.transform=`translate(${((v.x+1)/2*w).toFixed(1)}px,${((1-v.y)/2*h).toFixed(1)}px)`; } }
+
+// ---------- surface ----------
+const free = D.tier==='free_field';
+function hplane(z, color, op, group){ const m=new THREE.Mesh(new THREE.PlaneGeometry(WY,WX), new THREE.MeshBasicMaterial({color, transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.position.set(0,-z,0); group.add(m); return m; }
+function grid(z, color, op, group, n=10){ const v=[]; for(let i=0;i<=n;i++){ const a=box[0]+WX*i/n, b=box[2]+WY*i/n; v.push(L([a,box[2],z]),L([a,box[3],z]),L([box[0],b,z]),L([box[1],b,z])); }
+  group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(v), new THREE.LineBasicMaterial({color, transparent:true, opacity:op}))); }
+const sz = E.surface_z ?? 0;
+const hasSurface = !free && !(D.tier==='sediment');
+hplane(sz, 0x3d8fd6, hasSurface?0.13:0.035, G.surface); grid(sz, 0x3d8fd6, hasSurface?0.45:0.15, G.surface);
+let surfText = hasSurface ? 'sea surface: pressure release, R = −1' : 'sea surface: not in the propagation (' + (free?'free field':'sediment tier') + ')';
+if (E.wind_speed_propagation>0) surfText += `; coherent loss of wind ${E.wind_speed_propagation} m/s`;
+if (E.surface && E.surface.rms_height){ const h=E.surface.rms_height; hplane(sz-h, 0x3d8fd6, 0.06, G.surface); hplane(sz+h, 0x3d8fd6, 0.06, G.surface);
+  surfText += `; rms height ±${fx(h,3)} m` + (E.surface.wind_speed?` (wind ${E.surface.wind_speed} m/s)`:'') + ' (time spreading)'; }
+label(surfText, [box[1], box[2], sz], 'surf', 'surface');
+
+// ---------- bed ----------
+const SAND0=new THREE.Color('#e3c48d'), SAND1=new THREE.Color('#7d5427');
+function bedMesh(V, Z, nx, ny, op){ const g=new THREE.BufferGeometry(); const pos=[], col=[], idx=[]; const z0=Math.min(...Z), z1=Math.max(...Z);
+  V.forEach((p,i)=>{ pos.push(...L(p).toArray()); const c=SAND0.clone().lerp(SAND1, z1>z0?(Z[i]-z0)/(z1-z0):0.5); col.push(c.r,c.g,c.b); });
+  for(let j=0;j<ny-1;j++) for(let i=0;i<nx-1;i++){ const a=j*nx+i; idx.push(a,a+1,a+nx, a+1,a+nx+1,a+nx); }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col,3)); g.setIndex(idx); g.computeVertexNormals();
+  const m=new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors:true, transparent:true, opacity:op, side:THREE.DoubleSide})); G.bed.add(m);
+  const lv=[]; const st=Math.max(1,Math.round(nx/12));
+  for(let j=0;j<ny;j+=st) for(let i=0;i<nx-1;i++) lv.push(L(V[j*nx+i]),L(V[j*nx+i+1]));
+  for(let i=0;i<nx;i+=st) for(let j=0;j<ny-1;j++) lv.push(L(V[j*nx+i]),L(V[(j+1)*nx+i]));
+  G.bed.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(lv), new THREE.LineBasicMaterial({color:0x5a3a14, transparent:true, opacity:0.35}))); }
+const bot = E.bottom || {};
+const botText = bot.coefficient!=null ? `constant |R| = ${fx(bot.coefficient,3)}` : bot.speed ? `fluid half-space ${fx(bot.speed,0)} m/s, density ${fx(bot.density,2)}, attenuation ${fx(bot.attenuation,2)} dB/λ`+(bot.shear_speed?`, shear ${fx(bot.shear_speed,0)} m/s (elastic)`:'')+(E.critical_angle_deg?`; critical angle ${fx(E.critical_angle_deg,1)}°`:'') : '';
+if (S3.bed_grid){ const bg=S3.bed_grid, V=[], Z=[]; bg.y.forEach((y,j)=>bg.x.forEach((x,i)=>{ V.push([x,y,bg.z[j][i]]); Z.push(bg.z[j][i]); }));
+  bedMesh(V, Z, bg.x.length, bg.y.length, 0.88);
+  const jm=Z.indexOf(Math.min(...Z)); label(`3-D bed (Bellhop3D's grid): ${fx(Math.min(...Z),0)} to ${fx(Math.max(...Z),0)} m; ${botText}`, V[jm], 'bed', 'bed'); }
+else if (E.bathymetry && E.bathymetry.length>1){ const prof=E.bathymetry;
+  const dep=r=>{ if (r<=prof[0][0]) return prof[0][1]; for(let i=1;i<prof.length;i++) if (prof[i][0]>=r){ const w=(r-prof[i-1][0])/Math.max(prof[i][0]-prof[i-1][0],1e-9); return prof[i-1][1]+w*(prof[i][1]-prof[i-1][1]); } return prof[prof.length-1][1]; };
+  const n=61, V=[], Z=[]; for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const x=box[0]+WX*i/(n-1), y=box[2]+WY*j/(n-1), z=dep(Math.hypot(x-PJ[0], y-PJ[1])); V.push([x,y,z]); Z.push(z); }
+  bedMesh(V, Z, n, n, 0.8);
+  const far=D.targets.length? D.targets[0].position : [box[1],box[3],0], rf=Math.hypot(far[0]-PJ[0], far[1]-PJ[1]);
+  label(`bed by range from the sonar (the same section on every bearing): ${fx(Math.min(...Z),0)} to ${fx(Math.max(...Z),0)} m; ${botText}`, [far[0], far[1], dep(rf)], 'bed', 'bed'); }
+else if (E.planes){ for (const pl of E.planes){ if (pl.kind==='surface') continue; const n=pl.normal, q=pl.point, bnd=pl.bounds||[];
+    const clamp=p=>{ for(const [ax,lo,hi] of bnd) p[ax]=Math.max(lo,Math.min(hi,p[ax])); return p; };
+    let C;
+    if (Math.abs(n[2])>0.5){ C=[[box[0],box[2]],[box[1],box[2]],[box[1],box[3]],[box[0],box[3]]].map(([x,y])=>clamp([x,y,q[2]-(n[0]*(x-q[0])+n[1]*(y-q[1]))/n[2]])); }
+    else { const t=[-n[1],n[0]], tn=Math.hypot(...t); const tt=[t[0]/tn,t[1]/tn]; const s=[[box[0],box[2]],[box[1],box[2]],[box[1],box[3]],[box[0],box[3]]].map(c=>(c[0]-q[0])*tt[0]+(c[1]-q[1])*tt[1]);
+      const s0=Math.min(...s), s1=Math.max(...s), zt=sz, zb=zRef*1.05; C=[[s0,zt],[s1,zt],[s1,zb],[s0,zb]].map(([u,z])=>clamp([q[0]+u*tt[0], q[1]+u*tt[1], z])); }
+    const g=new THREE.BufferGeometry().setFromPoints([C[0],C[1],C[2],C[0],C[2],C[3]].map(L)); g.computeVertexNormals();
+    const wall=pl.kind==='wall';
+    G.bed.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({color: wall?0x8a8f96:0xc9a467, transparent:true, opacity: wall?0.4:0.8, side:THREE.DoubleSide, depthWrite:!wall})));
+    G.bed.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(C.map(L)), new THREE.LineBasicMaterial({color: wall?0x3d4148:0x5a3a14})));
+    const mid=C.reduce((a,p)=>a.map((v,i)=>v+p[i]/4),[0,0,0]);
+    label(wall ? `wall (a plane), |R| = ${fx(pl.coefficient,2)}` : `bed, tilted (slope ${E.bottom_slope? E.bottom_slope.map(v=>fx(v,4)).join(', '):''}); ${botText}`, mid, 'bed', 'bed'); } }
+else if (E.interface){ const I=E.interface, zi=I.z, deep=Math.max(...D.targets.map(t=>t.position[2]), zi)+Math.max(0.3*(Math.max(...D.targets.map(t=>t.position[2]),zi)-zi), 0.05*span);
+  hplane(zi, 0xb98a46, 0.45, G.bed); grid(zi, 0x7d5427, 0.4, G.bed);
+  const slab=new THREE.Mesh(new THREE.BoxGeometry(WY, deep-zi, WX), new THREE.MeshBasicMaterial({color:0xb98a46, transparent:true, opacity:0.12, depthWrite:false})); slab.position.set(0, -(zi+deep)/2, 0); G.bed.add(slab);
+  label(`sediment interface z = ${fx(zi,2)} m: ${fx(I.sediment_speed,0)} m/s, penetration ${I.penetration}`+(I.critical_deg?`; critical angle ${fx(I.critical_deg,1)}° (evanescent below)`:'')+(I.transmission!=null?`; transmission ${fx(I.transmission,3)}`:''), [box[1],box[2],zi], 'bed', 'bed'); }
+else if (E.bottom_z!=null){ hplane(E.bottom_z, 0xc9a467, 0.75, G.bed); grid(E.bottom_z, 0x5a3a14, 0.4, G.bed);
+  label(`bed z = ${fx(E.bottom_z,1)} m (flat): ${botText}`, [box[1],box[2],E.bottom_z], 'bed', 'bed'); }
+else if (E.bottom_z_site!=null){ const z=E.bottom_z_site; G.bed.add(line([[box[0],box[2],z],[box[1],box[2],z],[box[1],box[3],z],[box[0],box[3],z],[box[0],box[2],z]], 0x8a6a3a, {dashed:true, dash:span/60}));
+  label(`site depth ${fx(z,1)} m: no bottom in the propagation (${D.tier})`, [box[1],box[2],z], 'bed', 'bed'); }
+
+// ---------- array, projector, beams, projector pattern ----------
+const rowsZ=[...new Set(H.map(p=>Math.round(p[2]*20)/20))].sort((a,b)=>a-b);
+const rowOf=H.map(p=>rowsZ.indexOf(Math.round(p[2]*20)/20));
+const hydColors=H.map((p,i)=>ROWC[rowOf[i]%ROWC.length]);
+const hydPts=points(H, 0xffffff, 7, {colors:hydColors}); G.array.add(hydPts);
+const selPt=points([H[0]], 0xff00aa, 15, {depthTest:false}); selPt.visible=false; G.array.add(selPt);
+G.array.add(points([PJ], 0x111111, 10));
+label('projector', PJ, 'arr', 'array', Math.max(Math.hypot(PJ[0]-ref[0],PJ[1]-ref[1],PJ[2]-ref[2])*40, 1e-9));
+const aperture = B?.aperture_m ?? Math.max(...H.map(p=>Math.hypot(p[0]-ref[0],p[1]-ref[1],p[2]-ref[2])))*2;
+label(`array: ${H.length} hydrophone${H.length===1?'':'s'}` + (rowsZ.length>1?` in ${rowsZ.length} rows (z ${rowsZ.map(z=>fx(z,2)).join(', ')} m)`:'') + `, aperture ${fx(aperture,2)} m` + (B&&B.chain?.look?`, look ${B.chain.look}`:''), ref, 'arr', 'array');
+if (B && H.length>1){ const La=Math.max(aperture*0.6, 0.3);
+  G.array.add(new THREE.ArrowHelper(LD(B.axis), L(ref), La, 0x444444, La*0.1, La*0.04));
+  G.array.add(new THREE.ArrowHelper(LD(B.broadside), L(ref), La, 0x2a78d6, La*0.1, La*0.04));
+  label('array axis (+)', [ref[0]+B.axis[0]*La, ref[1]+B.axis[1]*La, ref[2]], 'arr', 'array', La*30);
+  label(`look (${B.chain?.look ?? 'broadside'})`, [ref[0]+B.broadside[0]*La, ref[1]+B.broadside[1]*La, ref[2]], 'beam', 'array', La*30); }
+const Rbeam = Math.max(...D.targets.map(t=>Math.hypot(t.position[0]-ref[0], t.position[1]-ref[1])), 0)*1.08 || span*0.45;
+function fan(a0, a1, R, color, op){ const dir=a=>{ const r=a*Math.PI/180; return [Math.cos(r)*B.broadside[0]+Math.sin(r)*B.axis[0], Math.cos(r)*B.broadside[1]+Math.sin(r)*B.axis[1]]; };
+  const n=Math.max(4, Math.ceil(Math.abs(a1-a0)/2)), v=[]; for(let i=0;i<n;i++){ const d0=dir(a0+(a1-a0)*i/n), d1=dir(a0+(a1-a0)*(i+1)/n);
+    v.push(L(ref), L([ref[0]+R*d0[0], ref[1]+R*d0[1], ref[2]]), L([ref[0]+R*d1[0], ref[1]+R*d1[1], ref[2]])); }
+  const g=new THREE.BufferGeometry().setFromPoints(v); G.beams.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({color, transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false})));
+  return dir; }
+let beamText = '';
+if (B && B.chain && B.chain.bearings_deg && H.length>1){ const [b0,b1,st]=B.chain.bearings_deg; const dir=fan(b0,b1,Rbeam,0x2a78d6,0.05);
+  for (const a of [b0,b1]){ const d=dir(a); G.beams.add(line([ref,[ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]]], 0x2a78d6, {opacity:0.5})); }
+  for (const s of B.steered){ fan(s.edges_deg[0], s.edges_deg[1], Rbeam, 0x2a78d6, 0.16); const d=dir(s.peak_deg);
+    G.beams.add(line([ref,[ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]]], 0x1f5fae, {opacity:0.8}));
+    label(`${fx(s.steer_deg,0)}°: −3 dB ${fx(s.edges_deg[1]-s.edges_deg[0],1)}°`, [ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]], 'beam', 'beams'); }
+  beamText = `receive beams: ${b0} to ${b1}° by ${st}° from broadside (shaded); ${B.steered.length} of them steered with their −3 dB edges measured on the array factor of the real elements (${B.chain.window} window) times the element pattern at ${fx((B.center_frequency||0)/1e3,1)} kHz. Source: ${B.chain.source}. In the horizontal plane at the array.`; }
+else if (B && B.chain) beamText = `receive beams: none drawn (${B.chain.source})`;
+if (B && B.projector && (B.projector.beamwidth_az_deg || B.projector.beamwidth_el_deg)){ const P=B.projector, b=new THREE.Vector3(...P.boresight).normalize();
+  let h=new THREE.Vector3().crossVectors(b, new THREE.Vector3(0,0,1)); if (h.length()<1e-6) h.set(0,1,0); h.normalize(); const v=new THREE.Vector3().crossVectors(h,b).normalize();
+  const ta=Math.tan(Math.min(89,(P.beamwidth_az_deg||178)/2)*Math.PI/180), te=Math.tan(Math.min(89,(P.beamwidth_el_deg||178)/2)*Math.PI/180), Lp=Rbeam*0.35, rim=[];
+  for (let i=0;i<=48;i++){ const f=2*Math.PI*i/48; const d=b.clone().addScaledVector(h,ta*Math.cos(f)).addScaledVector(v,te*Math.sin(f)).normalize().multiplyScalar(Lp); rim.push([PJ[0]+d.x,PJ[1]+d.y,PJ[2]+d.z]); }
+  G.projpat.add(line(rim, 0xd9822b, {opacity:0.9})); for (const i of [0,12,24,36]) G.projpat.add(line([PJ, rim[i]], 0xd9822b, {opacity:0.6}));
+  label(`projector −3 dB: ${P.beamwidth_az_deg?fx(P.beamwidth_az_deg,0)+'° az':''} ${P.beamwidth_el_deg?fx(P.beamwidth_el_deg,0)+'° el':''}`, rim[0], 'beam', 'projpat'); }
+
+// ---------- targets and their motion over the pings ----------
+const tgtPts=points(D.targets.map(t=>t.position), 0xc0392b, 12); G.targets.add(tgtPts);
+D.targets.forEach((t,i)=>label(t.label, t.position, 'tgt', 'targets'));
+let pingMarks=null, pingPlat=null, pingIdx=0, tracedIdx=0;
+if (M && M.times && M.times.length>1){
+  M.ping_index.forEach((p,i)=>{ if (p<=M.ping) tracedIdx=i; }); pingIdx=tracedIdx;
+  if (M.track) { G.motion.add(line(M.track, 0x777777, {opacity:0.7})); G.motion.add(points(M.track, 0x999999, 4)); pingPlat=points([M.track[pingIdx]], 0x111111, 9); G.motion.add(pingPlat); }
+  D.targets.forEach((t,i)=>{ const tr=M.targets[i]; if (tr && M.moving) G.motion.add(line(tr, 0xc0392b, {dashed:true, dash:span/120, opacity:0.8})); });
+  if (M.moving){ pingMarks=points(D.targets.map((t,i)=>(M.targets[i]||[t.position])[pingIdx]||t.position), 0xff8c00, 10); G.motion.add(pingMarks); }
+  $('pingbox').innerHTML = `<label>ping <input id="ping" type="range" min="0" max="${M.times.length-1}" value="${pingIdx}" style="width:min(160px,30vw)"> <span id="pval"></span></label>`; }
+
+// ---------- rays ----------
+const RAYS=[];
+function addRay(r, kind, which, ti, group, name){ const c=CLS[cls(r.ns,r.nb)][0];
+  const ln=line(r.line, c, {dashed: which==='back'||kind==='oneway', dash: kind==='oneway'?span/40:undefined}); group.add(ln);
+  const bp=r.bounces.length? points(r.bounces.map(b=>b.xyz), c, 6) : null; if (bp) group.add(bp);
+  const dot=points([r.line[0]], c, 9); dot.visible=false; group.add(dot);
+  const Lc=[0]; for(let i=1;i<r.line.length;i++){ const a=r.line[i-1], b=r.line[i]; Lc.push(Lc[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])); }
+  RAYS.push({r, kind, which, ti, line:ln, bp, dot, Lc, cls:cls(r.ns,r.nb), color:c, name}); }
+D.legs.forEach(leg=>{ for (const w of ['out','back']) for (const r of leg[w]) addRay(r,'leg',w,leg.target,G.rays, `${w==='out'?'out: projector to':'back: target to array, from'} ${D.targets[leg.target]?.label}`); });
+(D.oneway||[]).forEach((o,i)=>{ G.oneway.add(points([o.position], 0x6a1b9a, 11)); label(`source: ${o.label} (one way)`, o.position, 'tgt', 'oneway');
+  for (const r of o.rays) addRay(r,'oneway','oneway',i,G.oneway, `one way: array to source ${o.label}`); });
+if (D.direct) for (const r of D.direct.rays) addRay(r,'direct','direct',0,G.direct,'the projector heard directly');
+
+// ---------- info panel ----------
+const nDrawn = RAYS.filter(x=>x.kind==='leg').length;
+const b3 = S3.bellhop3d, three_d = RAYS.filter(x=>x.r.three_d);
+let rayNote = {free_field:'rays: straight lines (free field: no surface or bottom in the propagation).',
+  image_source:'rays: image paths folded between the planes, bounce points exact (image tier).',
+  sediment:'rays: one refracted ray into the sediment (Snell, least time; exact for the tier).',
+  eigenray:'rays: Bellhop 2-D rays (ray file, matched by bounces), each placed on its target\'s bearing. PLANAR: every bearing sees the same range-depth section; 3-D adds the array, the beams and the bearings, not new propagation.'}[D.tier] || '';
+if (D.tier==='eigenray3d') rayNote = three_d.length ? `rays: Bellhop3D's own 3-D rays (run type R, a separate process), shot about each eigenray's launch angles and matched by bounce counts: ${three_d.length} drawn${b3?`, ${b3.matched} of ${b3.rays} traced eigenrays matched`:''}; they pass ${fx(Math.min(...three_d.map(x=>x.r.miss)),1)} to ${fx(Math.max(...three_d.map(x=>x.r.miss)),1)} m from the target. They leave the vertical plane where the bed turns them.`
+  : 'rays: 2-D PROJECTION (Bellhop 2-D rays on each bearing\'s section of the 3-D bed), not Bellhop3D\'s own rays. ' + (S3.notes||[]).join(' ');
+if (!RAYS.length) rayNote = (D.missing||[]).find(m=>m.startsWith('NO EIGENRAYS')) || 'no eigenray is drawn on this page (see "not shown" below).';
+const sw = (c,t,dash)=>`<span class="sw" style="background:${dash?`repeating-linear-gradient(90deg,${c} 0 5px,transparent 5px 8px)`:c}"></span>${t}`;
+const toggles = [['surface','surface'],['bed','bed'],['beams','receive beams'],['projpat','projector pattern'],['array','array'],['targets','targets'],['motion','motion over the pings'],['rays','eigenrays'],['oneway','one-way sources'],['direct','direct sound']]
+  .filter(([k])=>G[k].children.length>0);
+const classOn={direct:true,surface:true,bottom:true,both:true}, legOn={out:true,back:true}, tgtOn=D.targets.map(()=>true);
+const unique = new Set(D.models.map(m=>m.model));
+function ssp(){ const W=170, Hh=120, prof=[]; if (E.ssp_section){ E.ssp_section.c.forEach((c,i)=>prof.push({z:E.ssp_section.z, c, name:`${fx(E.ssp_section.r[i],0)} m`})); }
+  else if (E.ssp) prof.push({z:E.ssp.z, c:E.ssp.c, name:'profile'}); else prof.push({z:[0, zRef], c:[E.sound_speed, E.sound_speed], name:'isovelocity'});
+  const cs=prof.flatMap(p=>p.c), zs=prof.flatMap(p=>p.z); let c0=Math.min(...cs), c1=Math.max(...cs); if (c1-c0<2){ c0-=1; c1+=1; } const z1=Math.max(...zs, 1e-6);
+  const X=c=>28+(c-c0)/(c1-c0)*(W-36), Y=z=>8+z/z1*(Hh-24); const cols=['#2a78d6','#eb6834','#1baf7a','#8e5cc4','#555'];
+  return `<svg width="${W}" height="${Hh}" role="img" aria-label="sound speed against depth"><rect x="28" y="8" width="${W-36}" height="${Hh-24}" fill="none" stroke="#999" stroke-width=".5"/>`
+   + prof.map((p,i)=>`<polyline fill="none" stroke="${cols[i%5]}" stroke-width="1.6" points="${p.z.map((z,k)=>X(p.c[k]).toFixed(1)+','+Y(z).toFixed(1)).join(' ')}"/>`).join('')
+   + `<text x="28" y="${Hh-4}" font-size="9" fill="currentColor">${fx(c0,0)}</text><text x="${W-8}" y="${Hh-4}" font-size="9" text-anchor="end" fill="currentColor">${fx(c1,0)} m/s</text>`
+   + `<text x="2" y="14" font-size="9" fill="currentColor">0</text><text x="2" y="${Hh-16}" font-size="9" fill="currentColor">${fx(z1,0)}</text></svg>`
+   + (prof.length>1?`<div class="m">${prof.map((p,i)=>`<span style="color:${cols[i%5]}">■</span> ${p.name}`).join(' ')}</div>`:''); }
+const missing = [...(D.missing||[]), ...(S3.notes||[])];
+if (D.undrawn) missing.push(`${D.undrawn} eigenray(s) of the trace have no path to draw (see above)`);
+const lim = D.limits||{}; missing.push(`page thinned: the ${lim.max_rays} strongest drawable eigenrays of each leg and the ${lim.max_pairs} strongest of ${D.n_pairs} two-way pairs; polylines simplified (tolerance x${lim.tolerance}).` + (lim.over_budget?' STILL OVER THE SIZE BUDGET.':''));
+missing.push('sound at the hydrophones (package V5) and the live chain\'s tracker taps (V6) are not on this page yet.');
+$('info').innerHTML = `<h1>${esc(D.scenario)}</h1><div class="m">tier ${esc(D.tier)} · ${esc(D.sonar.name)} (${esc(D.sonar.mode)}) · ${fx(D.sonar.band_hz[0]/1e3,1)}–${fx(D.sonar.band_hz[1]/1e3,1)} kHz · ${H.length} hydrophone${H.length===1?'':'s'} · ${esc(D.view?.note||'ping '+D.ping)}</div>`
+ + `<div><a href="${esc(D.links?.png)}">2-D page</a>${D.links?.index?` · <a href="${esc(D.links.index)}">index</a>`:''} · <span class="m">a picture of the simulator, not a measurement</span></div>`
+ + `<p${RAYS.length?'':' class="warn"'}>${esc(rayNote)}</p>`
+ + `<div>${Object.entries(CLS).map(([k,[c,t]])=>`<label class="t"><input type="checkbox" data-cls="${k}" checked>${sw(c,t)}</label>`).join('<br>')}</div>`
+ + `<div><label class="t"><input type="checkbox" data-leg="out" checked>${sw('#555','out: projector to target')}</label><label class="t"><input type="checkbox" data-leg="back" checked>${sw('#555','back: target to array',1)}</label></div>`
+ + `<div class="m"><span class="dot" style="background:#111"></span>projector <span class="dot" style="background:${ROWC[0]}"></span>hydrophones${rowsZ.length>1?' (colour: row)':''} <span class="dot" style="background:#c0392b"></span>targets <span class="dot" style="background:#ff8c00"></span>target at the chosen ping · small dots on a ray: its bounces</div>`
+ + (D.targets.length>1?`<h2>targets</h2>`+D.targets.map((t,i)=>`<label class="t"><input type="checkbox" data-tgt="${i}" checked>${esc(t.label)}</label>`).join(''):'')
+ + `<h2>layers</h2>` + toggles.map(([k,t])=>`<label class="t"><input type="checkbox" data-layer="${k}" checked>${t}</label>`).join('') + `<label class="t"><input type="checkbox" id="labs" checked>labels</label>`
+ + `<h2>boundaries</h2><div>${esc(surfText)}</div><div>bed: ${esc(botText || (E.bottom_z_site!=null?'none in the propagation':'–'))}${E.bathymetry_note && !S3.bed_grid?` <span class="m">(${esc(E.bathymetry_note)})</span>`:''}${S3.bed_grid?' <span class="m">(the 3-D bed, drawn on a grid from the scenario\'s bathymetry, as Bellhop3D is given it)</span>':''}</div>`
+ + `<div class="m">absorption ${esc(E.absorption)}: ${fx(E.absorption_db_per_km,3)} dB/km at the band centre</div>`
+ + `<h2>beams</h2><div class="m">${esc(beamText)}</div><div class="m">${esc(B?.projector_text||'')}</div>`
+ + `<h2>sound speed</h2>${ssp()}`
+ + `<details><summary>what is modelled here (${D.models.length})</summary><table>${D.models.map(m=>`<tr><td>${esc(m.area)}</td><td>${esc(m.what||m.model)}${m.chosen==='default'?' <span class="m">(default)</span>':''}</td><td class="m">${esc(m.status)}</td></tr>`).join('')}</table></details>`
+ + `<details open><summary>not shown, or shown with a caveat (${missing.length})</summary><ul>${missing.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></details>`;
+document.querySelectorAll('[data-cls]').forEach(el=>el.addEventListener('change',()=>{ classOn[el.dataset.cls]=el.checked; vis(); }));
+document.querySelectorAll('[data-leg]').forEach(el=>el.addEventListener('change',()=>{ legOn[el.dataset.leg]=el.checked; vis(); }));
+document.querySelectorAll('[data-tgt]').forEach(el=>el.addEventListener('change',()=>{ tgtOn[+el.dataset.tgt]=el.checked; vis(); }));
+document.querySelectorAll('[data-layer]').forEach(el=>el.addEventListener('change',()=>{ G[el.dataset.layer].visible=el.checked; draw(); }));
+$('labs').addEventListener('change',e=>{ showLabels=e.target.checked; draw(); });
+function vis(){ const pingOk = !M || M.times.length<2 || pingIdx===tracedIdx;
+  for (const x of RAYS){ const on = pingOk && classOn[x.cls] && (x.kind!=='leg' || (legOn[x.which] && tgtOn[x.ti])); x.line.visible=on; if (x.bp) x.bp.visible=on; if(!on) x.dot.visible=false; }
+  draw(); }
+
+// ---------- picking: a ray, a hydrophone ----------
+const rc = new THREE.Raycaster(); let selected=null;
+function pick(e){ const r=renderer.domElement.getBoundingClientRect(); const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  rc.setFromCamera(m,camera); rc.params.Line.threshold=ctl.dist*0.006; rc.params.Points.threshold=ctl.dist*0.006;
+  if (G.array.visible){ const hh=rc.intersectObject(hydPts); if (hh.length){ selectHyd(hh[0].index); return; } }
+  const hit=rc.intersectObjects(RAYS.filter(x=>x.line.visible).map(x=>x.line), false);
+  if (hit.length) selectRay(RAYS.find(x=>x.line===hit[0].object)); else clearSel(); }
+function emphasise(set){ for (const x of RAYS){ const on=!set||set.has(x); x.line.material.opacity=on?1:0.12; x.line.material.color.set(set&&on?'#ffb000':x.color); x.line.renderOrder=on?3:0; } draw(); }
+function clearSel(){ selected=null; emphasise(null); $('pick').hidden=true; }
+function rayHtml(x){ const r=x.r; const tgt=x.kind==='leg'?D.targets[x.ti]?.label:'';
+  return `<h2>${esc(x.name)} · eigenray ${r.k}</h2><table>`
+   + `<tr><td>delay</td><td>${fx(r.delay,6)} s ${x.kind==='leg'?'(one leg)':''}</td></tr><tr><td>level</td><td>${fx(r.db,1)} dB re 1 m (spreading and reflection; no absorption, no beams)</td></tr>`
+   + `<tr><td>launch</td><td>${fx(r.launch,2)}° (positive down)</td></tr><tr><td>bounces</td><td>${r.ns} surface, ${r.nb} bottom (${CLS[x.cls][1]})</td></tr>`
+   + (r.tt!=null?`<tr><td>along the drawn ray</td><td>${fx(r.tt,6)} s (${fx((r.tt-r.delay)*1e3,3)} ms from the delay)</td></tr>`:'')
+   + (r.miss!=null?`<tr><td>miss</td><td>${fx(r.miss,2)} m from the target</td></tr>`:'') + `</table>`
+   + (r.bounces.length?`<table><tr><th>#</th><th>boundary</th><th>grazing</th><th>loss</th><th>x, y, z (m)</th></tr>${r.bounces.map((b,i)=>`<tr><td>${i+1}</td><td>${esc(b.b)}</td><td>${fx(b.g,1)}°</td><td>${b.loss==null?'–':fx(Math.abs(b.loss)<0.005?0:b.loss,2)+' dB'}</td><td class="m">${b.xyz.map(v=>fx(v,1)).join(', ')}</td></tr>`).join('')}</table>`
+     + `<div class="m">loss per bounce: the model the tier applies, evaluated at the drawn grazing angle${D.tier.startsWith('eigenray')?' (Bellhop does not report a loss per bounce: the same Rayleigh law, evaluated again)':''}.</div>`:'<div class="m">no bounce</div>')
+   + `<div class="m">${esc(r.path||'')}</div>`; }
+function selectRay(x){ selected=x; const set=new Set([x]); emphasise(set);
+  const pairs = x.kind==='leg' ? D.pairs.filter(p=>p.target===x.ti && (x.which==='out'?p.out===x.r.k:p.back===x.r.k)) : [];
+  $('pick').innerHTML = `<button id="pclose" style="float:right">close</button>` + rayHtml(x)
+    + (x.kind==='leg'?`<div>${pairs.length} of the ${D.pairs.length} strongest pairs use it${pairs.length?`: ${pairs.slice(0,6).map(p=>`${fx(p.t,5)} s (${fx(p.db,1)} dB)`).join(', ')}`:''}</div>`:'');
+  $('pick').hidden=false; $('pclose').onclick=clearSel; }
+function selectHyd(c){ $('hsel').value=String(c); if (c<0){ selPt.visible=false; clearSel(); return; }
+  selPt.geometry.setFromPoints([L(H[c])]); selPt.visible=true;
+  const rows=[]; D.pairs.forEach((p,i)=>rows.push({t:p.ch[c], db:p.db, c:cls(p.ns,p.nb), what:`${D.targets[p.target]?.label}: out ${p.out}, back ${p.back}`, pair:p}));
+  (D.oneway||[]).forEach(o=>o.arrivals.forEach(a=>rows.push({t:a.ch[c], db:a.db, c:cls(a.ns,a.nb), what:`one way from ${o.label}, ray ${a.k}`})));
+  if (D.direct) D.direct.arrivals.forEach(a=>rows.push({t:a.ch[c], db:null, c:cls(a.ns,a.nb), what:`direct sound, ray ${a.k}`}));
+  rows.sort((a,b)=>a.t-b.t);
+  $('pick').innerHTML = `<button id="pclose" style="float:right">close</button><h2>hydrophone ${c}</h2><div class="m">at ${H[c].map(v=>fx(v,3)).join(', ')} m (row ${rowOf[c]+1} of ${rowsZ.length}). Arrivals of the ${D.pairs.length} strongest of ${D.n_pairs} two-way pairs at this hydrophone, as the synthesis places them (time after transmit); click a row to show its rays.</div>`
+    + `<table><tr><th>time (s)</th><th>level</th><th>class</th><th>what</th></tr>${rows.map((r,i)=>`<tr class="row" data-i="${i}"><td>${fx(r.t,6)}</td><td>${r.db==null?'–':fx(r.db,1)+' dB'}</td><td><span class="dot" style="background:${CLS[r.c][0]}"></span></td><td>${esc(r.what)}</td></tr>`).join('')}</table>`;
+  $('pick').hidden=false; $('pclose').onclick=()=>selectHyd(-1);
+  $('pick').querySelectorAll('tr.row').forEach(el=>el.addEventListener('click',()=>{ const p=rows[+el.dataset.i].pair; if (!p) return;
+    emphasise(new Set(RAYS.filter(x=>x.kind==='leg' && x.ti===p.target && ((x.which==='out'&&x.r.k===p.out)||(x.which==='back'&&x.r.k===p.back))))); }));
+  draw(); }
+H.forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=`${i}${rowsZ.length>1?' (row '+(rowOf[i]+1)+')':''}`; $('hsel').appendChild(o); });
+$('hsel').addEventListener('change', e=>selectHyd(+e.target.value));
+
+// ---------- time: a dot along each ray, hydrophones light as pairs arrive ----------
+const allT = [...D.pairs.map(p=>p.t), ...(D.oneway||[]).flatMap(o=>o.arrivals.map(a=>a.t)), ...(D.direct?D.direct.arrivals.map(a=>a.t):[])];
+const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), 1e-3)*1.02;
+const tOut = Math.min(...D.legs.flatMap(l=>l.out.map(r=>r.delay)), Infinity);
+const slider=$('time'), tval=$('tval');
+const baseCol = hydPts.geometry.getAttribute('color').array.slice();
+function at(x, f){ const s=f*x.Lc[x.Lc.length-1]; let i=1; while(i<x.Lc.length-1 && x.Lc[i]<s) i++; const a=x.r.line[i-1], b=x.r.line[i], u=(s-x.Lc[i-1])/Math.max(x.Lc[i]-x.Lc[i-1],1e-12); return [a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2])]; }
+function setTime(t){ for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
+    // out legs from 0; back legs (stored array to target) run backwards from the earliest arrival at the target; one-way rays (stored array to source) backwards from 0
+    let f; if (x.which==='out'||x.kind==='direct') f=t/x.r.delay; else if (x.kind==='leg') f=1-(t-tOut)/x.r.delay; else f=1-t/x.r.delay;
+    const ok = x.which==='out'||x.kind==='direct' ? (f>0&&f<1) : (x.kind==='leg' ? (t>tOut && f>0 && f<1) : (f>0&&f<1));
+    if (!ok){ x.dot.visible=false; continue; } x.dot.geometry.setFromPoints([L(at(x, x.kind==='direct'? 1-f : f))]); x.dot.visible=true; }
+  const col=hydPts.geometry.getAttribute('color'), win=0.004*tMax, lit=new THREE.Color(0xffc000);
+  H.forEach((p,c)=>{ const hit=D.pairs.some(q=>Math.abs(q.ch[c]-t)<win) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<win));
+    if (hit) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
+  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; }
+slider.addEventListener('input',()=>{ setTime(slider.value/1000*tMax); draw(); });
+let playing=null; $('play').addEventListener('click',()=>{ if (playing){ cancelAnimationFrame(playing); playing=null; return; }
+  const start=performance.now(), from=+slider.value>=1000?0:+slider.value;
+  const step=now=>{ const v=Math.min(1000, from+(now-start)/8); slider.value=v; setTime(v/1000*tMax); draw(); playing = v<1000 ? requestAnimationFrame(step) : null; };
+  playing=requestAnimationFrame(step); });
+
+// ---------- ping slider ----------
+if ($('ping')){ const pin=$('ping'), pval=$('pval');
+  const upd=()=>{ pingIdx=+pin.value; const t=M.times[pingIdx];
+    pval.textContent=`${M.ping_index[pingIdx]} (t = ${fx(t,2)} s)` + (pingIdx===tracedIdx?' · rays traced at this ping':' · rays are traced at ping '+M.ping+' only');
+    if (pingMarks) pingMarks.geometry.setFromPoints(D.targets.map((tg,i)=>L((M.targets[i]||[tg.position])[pingIdx]||tg.position)));
+    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]); vis(); };
+  pin.addEventListener('input', upd); upd(); }
+
+// ---------- vertical exaggeration, views ----------
+const vin=$('vex'), vval=$('vval');
+function setVex(v){ const old=vex; vex=Math.max(1, Math.min(60, Math.round(v))); world.scale.set(1, vex, 1); ctl.target.y*=vex/old; vin.value=vex; vval.textContent=vex+'x'+(vex===1?' (true scale)':''); place(); draw(); }
+vin.addEventListener('input',()=>setVex(+vin.value));
+$('truescale').addEventListener('click',()=>setVex(1));
+function zoomAll(){ ctl.target.set(0, -(zTop+zBot)/2*vex, 0); ctl.dist=1.7*Math.max(span, zSpan*vex); ctl.az=0.85; ctl.el=0.45; place(); draw(); }
+$('zall').addEventListener('click', zoomAll);
+$('zarr').addEventListener('click',()=>{ const c=L(ref); c.y*=vex; ctl.target.copy(c);
+  if (B) { ctl.az=Math.atan2(-B.broadside[1], B.broadside[0])+0.55; ctl.el=0.35; }   /* from behind the array, looking along its look */ ctl.dist=Math.max(aperture*2.2, 0.5, Math.hypot(PJ[0]-ref[0],PJ[1]-ref[1],(PJ[2]-ref[2])*vex)*3); place(); draw(); });
+
+function draw(){ renderer.render(scene, camera); placeLabels(); }
+window.addEventListener('resize',()=>{ resize(); draw(); });
+setVex(Math.max(1, Math.min(60, Math.round(0.3*span/zSpan))));
+resize(); zoomAll(); vis(); setTime(tMax*0.999); draw();
+window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex};
+// For a browser check (tools/page3d_check.js, tests): where on the screen a drawn ray's middle vertex is.
+window.__screenOfRay = i => { const x=RAYS[i]; if (!x) return null; world.updateMatrixWorld(); const v=L(x.r.line[Math.floor(x.r.line.length/2)]).applyMatrix4(world.matrixWorld).project(camera);
+  const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x+1)/2*r.width, r.top+(1-v.y)/2*r.height]; };
+window.__ready = true;
+</script></body></html>

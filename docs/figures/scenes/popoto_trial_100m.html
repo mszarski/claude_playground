@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>popoto_trial_100m 3-D</title><link rel="icon" href="data:,">
+<style>
+:root{--bg:#f4f4f1;--ink:#1d1d1b;--muted:#5d5d58;--panel:rgba(255,255,255,.93);--line:#d6d6d0;--acc:#2a78d6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.93);--line:#3a3d42}}
+:root[data-theme="dark"]{--bg:#15171a;--ink:#e8e8e4;--muted:#a3a39d;--panel:rgba(30,32,36,.93);--line:#3a3d42}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:12.5px/1.4 system-ui,sans-serif;overflow:hidden}
+#view{position:absolute;inset:0}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lab{position:absolute;left:0;top:0;white-space:nowrap;font-size:11px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,.75);color:#1d1d1b;margin:-9px 0 0 6px}
+.lab.surf{color:#174f86}.lab.bed{color:#6b4518}.lab.tgt{color:#a8201a;font-weight:600}.lab.beam{color:#1f5fae}.lab.arr{color:#333}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;box-sizing:border-box}
+#info{left:16px;top:16px;width:min(380px,calc(100% - 32px));max-height:calc(100% - 128px);overflow:auto}
+#pick{right:16px;top:16px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 128px);overflow:auto}
+#ctl{left:16px;bottom:16px;right:16px;display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center}
+#ctl input[type=range]{width:min(220px,40vw);vertical-align:middle}
+h1{font-size:15px;margin:0 0 2px} h2{font-size:12.5px;margin:8px 0 2px}
+.m{color:var(--muted)} table{border-collapse:collapse;font-size:11.5px;width:100%} td,th{padding:1px 5px 1px 0;vertical-align:top;text-align:left}
+tr.row{cursor:pointer} tr.row:hover{background:rgba(42,120,214,.12)}
+.sw{display:inline-block;width:16px;height:3px;vertical-align:middle;margin-right:5px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:middle;margin-right:5px}
+details{margin-top:6px} summary{cursor:pointer;font-weight:600}
+label.t{display:inline-block;margin-right:10px;white-space:nowrap}
+button,select{font:inherit} a{color:var(--acc)}
+.warn{color:#b0451b}
+#snd{right:16px;bottom:96px;width:min(460px,calc(100% - 32px))}
+#snd canvas{width:100%;height:150px;display:block;background:#000;border-radius:3px;margin-top:4px}
+#snd .row{display:flex;gap:4px 10px;flex-wrap:wrap;align-items:center}
+@media (max-width:700px){#pick{top:auto;bottom:120px;max-height:40%}#snd{bottom:140px}}
+</style></head><body>
+<div id="view"></div><div id="labels"></div>
+<div class="panel" id="info"></div>
+<div class="panel" id="pick" hidden></div>
+<div class="panel" id="snd" hidden></div>
+<div class="panel" id="ctl">
+ <button id="play" title="move a dot along every ray">play</button>
+ <label>time <input id="time" type="range" min="0" max="1000" value="1000"> <span id="tval"></span></label>
+ <label>depth x <input id="vex" type="range" min="1" max="60" value="1"> <span id="vval"></span></label>
+ <button id="truescale" title="vertical exaggeration 1">true scale</button>
+ <button id="zarr" title="zoom to the hydrophones">zoom to array</button>
+ <button id="zall">whole scene</button>
+ <label>hydrophone <select id="hsel"><option value="-1">none</option></select></label>
+ <span id="pingbox"></span>
+ <span class="m">drag: turn · right-drag or shift-drag: pan · wheel: zoom · click a ray or a hydrophone</span>
+</div>
+
+<script src="popoto_trial_100m.audio/manifest.js"></script>
+<script type="application/json" id="trace">{"scenario":"popoto_trial_100m","tier":"eigenray","ping":0,"time_s":0.0,"sonar":{"name":"popoto_8","mode":"flank","band_hz":[20000.0,35000.0],"center_frequency":27500.0,"sample_kind":"RealPassband","sample_rate":102400.0,"n_channels":8,"source_level_db_rms":190.0,"projector":[0.0,0.0,5.3],"hydrophones":[[-0.0945,0.0,5.0],[-0.0675,0.0,5.0],[-0.0405,0.0,5.0],[-0.0135,0.0,5.0],[0.0135,0.0,5.0],[0.0405,0.0,5.0],[0.0675,0.0,5.0],[0.0945,0.0,5.0]]},"environment":{"sound_speed":1496.824,"surface_z":0.0,"bottom_z":30.0,"bottom_z_site":null,"bottom":{"speed":1600.0,"density":1.8,"attenuation":0.5,"shear_speed":null,"sediment":null},"wind_speed":null,"ssp":{"z":[0.0,30.0],"c":[1496.824,1496.824]},"interface":null,"critical_angle_deg":20.688,"bathymetry_note":null,"absorption":"ainslie_mccolm","absorption_db_per_km":5.721,"planes":null,"bottom_slope":null,"wind_speed_propagation":0.0},"targets":[{"label":"target","position":[0.0,100.0,15.0],"amplitude":3.162}],"legs":[{"target":0,"out":[{"k":0,"delay":0.0671205,"ns":0,"nb":0,"amp":0.00986016635,"db":-40.1,"launch":5.2,"line":[[0.0,0.0,5.3],[0.0,100.0,14.74]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.067105},{"k":1,"delay":0.06816921,"ns":1,"nb":0,"amp":0.00971604604,"db":-40.3,"launch":-11.09,"line":[[0.0,0.0,5.3],[0.0,26.02,0.0],[0.0,100.0,15.07]],"bounces":[{"xyz":[0.0,26.02,0.0],"b":"surface","g":11.5,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0681796},{"k":2,"delay":0.0718803,"ns":0,"nb":1,"amp":0.006300474979999999,"db":-44.0,"launch":21.7,"line":[[0.0,0.0,5.3],[0.0,62.03,30.0],[0.0,100.0,14.88]],"bounces":[{"xyz":[0.0,62.03,30.0],"b":"bottom","g":21.7,"loss":3.31}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0719098},{"k":3,"delay":0.07478356,"ns":1,"nb":1,"amp":0.004315904339999999,"db":-47.3,"launch":-26.7,"line":[[0.0,0.0,5.3],[0.0,10.55,0.0],[0.0,70.29,30.0],[0.0,100.0,15.08]],"bounces":[{"xyz":[0.0,10.55,0.0],"b":"surface","g":26.7,"loss":-0.0},{"xyz":[0.0,70.29,30.0],"b":"bottom","g":26.7,"loss":6.23}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0747601},{"k":4,"delay":0.08143228,"ns":1,"nb":1,"amp":0.0032269326,"db":-49.8,"launch":34.42,"line":[[0.0,0.0,5.3],[0.0,35.5,30.0],[0.0,78.62,0.0],[0.0,100.0,14.87]],"bounces":[{"xyz":[0.0,35.5,30.0],"b":"bottom","g":34.8,"loss":8.13},{"xyz":[0.0,78.62,0.0],"b":"surface","g":34.8,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0813859},{"k":5,"delay":0.0856789,"ns":2,"nb":1,"amp":0.0029046454,"db":-50.7,"launch":-38.31,"line":[[0.0,0.0,5.3],[0.0,6.63,0.0],[0.0,44.2,30.0],[0.0,81.75,0.0],[0.0,100.0,14.57]],"bounces":[{"xyz":[0.0,6.64,0.0],"b":"surface","g":38.6,"loss":-0.0},{"xyz":[0.0,44.19,30.0],"b":"bottom","g":38.6,"loss":8.6},{"xyz":[0.0,81.75,0.0],"b":"surface","g":38.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0855034},{"k":6,"delay":0.09433905,"ns":1,"nb":2,"amp":0.0008639722950000001,"db":-61.3,"launch":44.77,"line":[[0.0,0.0,5.3],[0.0,24.68,30.0],[0.0,54.65,0.0],[0.0,84.62,30.0],[0.0,100.0,14.61]],"bounces":[{"xyz":[0.0,24.68,30.0],"b":"bottom","g":45.0,"loss":9.11},{"xyz":[0.0,54.65,0.0],"b":"surface","g":45.0,"loss":-0.0},{"xyz":[0.0,84.62,30.0],"b":"bottom","g":45.0,"loss":9.11}],"path":"Bellhop ray file (E), matched by bounces","tt":0.094526},{"k":7,"delay":0.09946539,"ns":2,"nb":2,"amp":0.000790225749,"db":-62.0,"launch":-47.65,"line":[[0.0,0.0,5.3],[0.0,4.78,0.0],[0.0,31.85,30.0],[0.0,58.92,0.0],[0.0,85.98,30.0],[0.0,100.0,14.47]],"bounces":[{"xyz":[0.0,4.78,0.0],"b":"surface","g":47.9,"loss":-0.0},{"xyz":[0.0,31.85,30.0],"b":"bottom","g":47.9,"loss":9.28},{"xyz":[0.0,58.92,0.0],"b":"surface","g":47.9,"loss":-0.0},{"xyz":[0.0,85.98,30.0],"b":"bottom","g":47.9,"loss":9.28}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0997305}],"out_total":16,"back":[{"k":0,"delay":0.06714014,"ns":0,"nb":0,"amp":0.00985747576,"db":-40.1,"launch":5.37,"line":[[0.0,0.0,5.0],[0.0,100.0,14.95]],"bounces":[],"path":"Bellhop ray file (E), matched by bounces","tt":0.0671381},{"k":1,"delay":0.06812963,"ns":1,"nb":0,"amp":0.00972145889,"db":-40.2,"launch":-10.93,"line":[[0.0,0.0,5.0],[0.0,25.2,0.0],[0.0,100.0,14.84]],"bounces":[{"xyz":[0.0,25.2,0.0],"b":"surface","g":11.2,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.06811},{"k":2,"delay":0.0719545,"ns":0,"nb":1,"amp":0.00620080112,"db":-44.2,"launch":21.85,"line":[[0.0,0.0,5.0],[0.0,62.78,30.0],[0.0,100.0,15.18]],"bounces":[{"xyz":[0.0,62.78,30.0],"b":"bottom","g":21.7,"loss":3.31}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0719098},{"k":3,"delay":0.07469373,"ns":1,"nb":1,"amp":0.00433923164,"db":-47.3,"launch":-26.57,"line":[[0.0,0.0,5.0],[0.0,9.96,0.0],[0.0,69.69,30.0],[0.0,100.0,14.78]],"bounces":[{"xyz":[0.0,9.96,0.0],"b":"surface","g":26.7,"loss":-0.0},{"xyz":[0.0,69.69,30.0],"b":"bottom","g":26.7,"loss":6.23}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0747601},{"k":4,"delay":0.08154705,"ns":1,"nb":1,"amp":0.00321602426,"db":-49.9,"launch":34.53,"line":[[0.0,0.0,5.0],[0.0,35.55,30.0],[0.0,78.2,0.0],[0.0,100.0,15.33]],"bounces":[{"xyz":[0.0,35.55,30.0],"b":"bottom","g":35.1,"loss":8.17},{"xyz":[0.0,78.2,0.0],"b":"surface","g":35.1,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.081676},{"k":5,"delay":0.08555343,"ns":2,"nb":1,"amp":0.00290739792,"db":-50.7,"launch":-38.21,"line":[[0.0,0.0,5.0],[0.0,6.26,0.0],[0.0,43.82,30.0],[0.0,81.38,0.0],[0.0,100.0,14.87]],"bounces":[{"xyz":[0.0,6.26,0.0],"b":"surface","g":38.6,"loss":-0.0},{"xyz":[0.0,43.82,30.0],"b":"bottom","g":38.6,"loss":8.6},{"xyz":[0.0,81.38,0.0],"b":"surface","g":38.6,"loss":-0.0}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0855034},{"k":6,"delay":0.09448062,"ns":1,"nb":2,"amp":0.000863037945,"db":-61.3,"launch":44.86,"line":[[0.0,0.0,5.0],[0.0,24.98,30.0],[0.0,54.95,0.0],[0.0,84.92,30.0],[0.0,100.0,14.9]],"bounces":[{"xyz":[0.0,24.98,30.0],"b":"bottom","g":45.0,"loss":9.11},{"xyz":[0.0,54.95,0.0],"b":"surface","g":45.0,"loss":-0.0},{"xyz":[0.0,84.92,30.0],"b":"bottom","g":45.0,"loss":9.11}],"path":"Bellhop ray file (E), matched by bounces","tt":0.094526},{"k":7,"delay":0.099317,"ns":2,"nb":2,"amp":0.000792136998,"db":-62.0,"launch":-47.57,"line":[[0.0,0.0,5.0],[0.0,4.56,0.0],[0.0,31.9,30.0],[0.0,59.25,0.0],[0.0,86.59,30.0],[0.0,100.0,15.29]],"bounces":[{"xyz":[0.0,4.56,0.0],"b":"surface","g":47.7,"loss":-0.0},{"xyz":[0.0,31.9,30.0],"b":"bottom","g":47.7,"loss":9.27},{"xyz":[0.0,59.25,0.0],"b":"surface","g":47.7,"loss":-0.0},{"xyz":[0.0,86.59,30.0],"b":"bottom","g":47.7,"loss":9.27}],"path":"Bellhop ray file (E), matched by bounces","tt":0.0991727}],"back_total":16}],"undrawn":0,"pairs":[{"t":0.13426064,"ch":[0.13426067,0.13426065,0.13426064,0.13426064,0.13426064,0.13426064,0.13426065,0.13426067],"ns":0,"nb":0,"db":-42.2,"target":0,"out":0,"back":0},{"t":0.13525013,"ch":[0.13525016,0.13525015,0.13525014,0.13525013,0.13525013,0.13525014,0.13525015,0.13525016],"ns":1,"nb":0,"db":-42.4,"target":0,"out":0,"back":1},{"t":0.13530935,"ch":[0.13530938,0.13530937,0.13530936,0.13530935,0.13530935,0.13530936,0.13530937,0.13530938],"ns":1,"nb":0,"db":-42.4,"target":0,"out":1,"back":0},{"t":0.13629885,"ch":[0.13629888,0.13629886,0.13629885,0.13629885,0.13629885,0.13629885,0.13629886,0.13629888],"ns":2,"nb":0,"db":-42.5,"target":0,"out":1,"back":1},{"t":0.13902044,"ch":[0.13902047,0.13902046,0.13902045,0.13902044,0.13902044,0.13902045,0.13902046,0.13902047],"ns":0,"nb":1,"db":-46.1,"target":0,"out":2,"back":0},{"t":0.14000993,"ch":[0.14000996,0.14000995,0.14000994,0.14000993,0.14000993,0.14000994,0.14000995,0.14000996],"ns":1,"nb":1,"db":-46.2,"target":0,"out":2,"back":1},{"t":0.13907499,"ch":[0.13907502,0.13907501,0.139075,0.13907499,0.13907499,0.139075,0.13907501,0.13907502],"ns":0,"nb":1,"db":-46.3,"target":0,"out":0,"back":2},{"t":0.14012371,"ch":[0.14012374,0.14012372,0.14012371,0.14012371,0.14012371,0.14012371,0.14012372,0.14012374],"ns":1,"nb":1,"db":-46.4,"target":0,"out":1,"back":2},{"t":0.14181423,"ch":[0.14181425,0.14181424,0.14181423,0.14181423,0.14181423,0.14181423,0.14181424,0.14181425],"ns":1,"nb":1,"db":-49.4,"target":0,"out":0,"back":3},{"t":0.14192371,"ch":[0.14192374,0.14192372,0.14192371,0.14192371,0.14192371,0.14192371,0.14192372,0.14192374],"ns":1,"nb":1,"db":-49.4,"target":0,"out":3,"back":0},{"t":0.14286294,"ch":[0.14286297,0.14286296,0.14286295,0.14286294,0.14286294,0.14286295,0.14286296,0.14286297],"ns":2,"nb":1,"db":-49.5,"target":0,"out":1,"back":3},{"t":0.1429132,"ch":[0.14291323,0.14291321,0.1429132,0.1429132,0.1429132,0.1429132,0.14291321,0.14291323],"ns":2,"nb":1,"db":-49.5,"target":0,"out":3,"back":1},{"t":0.1438348,"ch":[0.14383482,0.14383481,0.1438348,0.1438348,0.1438348,0.1438348,0.14383481,0.14383482],"ns":0,"nb":2,"db":-50.2,"target":0,"out":2,"back":2},{"t":0.14857242,"ch":[0.14857245,0.14857243,0.14857242,0.14857242,0.14857242,0.14857242,0.14857243,0.14857245],"ns":1,"nb":1,"db":-51.9,"target":0,"out":4,"back":0},{"t":0.14866754,"ch":[0.14866757,0.14866755,0.14866755,0.14866754,0.14866754,0.14866755,0.14866755,0.14866757],"ns":1,"nb":1,"db":-52.0,"target":0,"out":0,"back":4},{"t":0.14956191,"ch":[0.14956194,0.14956193,0.14956192,0.14956191,0.14956191,0.14956192,0.14956193,0.14956194],"ns":2,"nb":1,"db":-52.1,"target":0,"out":4,"back":1},{"t":0.14971626,"ch":[0.14971628,0.14971627,0.14971626,0.14971626,0.14971626,0.14971626,0.14971627,0.14971628],"ns":2,"nb":1,"db":-52.1,"target":0,"out":1,"back":4},{"t":0.15267392,"ch":[0.15267395,0.15267394,0.15267393,0.15267393,0.15267393,0.15267393,0.15267394,0.15267395],"ns":2,"nb":1,"db":-52.8,"target":0,"out":0,"back":5},{"t":0.15281904,"ch":[0.15281907,0.15281906,0.15281905,0.15281904,0.15281904,0.15281905,0.15281906,0.15281907],"ns":2,"nb":1,"db":-52.9,"target":0,"out":5,"back":0},{"t":0.15372264,"ch":[0.15372266,0.15372265,0.15372264,0.15372264,0.15372264,0.15372264,0.15372265,0.15372266],"ns":3,"nb":1,"db":-53.0,"target":0,"out":1,"back":5},{"t":0.15380853,"ch":[0.15380856,0.15380855,0.15380854,0.15380853,0.15380853,0.15380854,0.15380855,0.15380856],"ns":3,"nb":1,"db":-53.0,"target":0,"out":5,"back":1},{"t":0.14657403,"ch":[0.14657406,0.14657404,0.14657403,0.14657403,0.14657403,0.14657403,0.14657404,0.14657406],"ns":1,"nb":2,"db":-53.3,"target":0,"out":2,"back":3},{"t":0.14673806,"ch":[0.14673809,0.14673807,0.14673807,0.14673806,0.14673806,0.14673807,0.14673807,0.14673809],"ns":1,"nb":2,"db":-53.4,"target":0,"out":3,"back":2},{"t":0.15342734,"ch":[0.15342737,0.15342736,0.15342735,0.15342735,0.15342735,0.15342735,0.15342736,0.15342737],"ns":1,"nb":2,"db":-55.9,"target":0,"out":2,"back":4},{"t":0.15338677,"ch":[0.1533868,0.15338679,0.15338678,0.15338677,0.15338677,0.15338678,0.15338679,0.1533868],"ns":1,"nb":2,"db":-56.0,"target":0,"out":4,"back":2},{"t":0.14947729,"ch":[0.14947732,0.14947731,0.1494773,0.14947729,0.14947729,0.1494773,0.14947731,0.14947732],"ns":2,"nb":2,"db":-56.5,"target":0,"out":3,"back":3},{"t":0.15743373,"ch":[0.15743375,0.15743374,0.15743373,0.15743373,0.15743373,0.15743373,0.15743374,0.15743375],"ns":2,"nb":2,"db":-56.7,"target":0,"out":2,"back":5},{"t":0.15763339,"ch":[0.15763342,0.15763341,0.1576334,0.1576334,0.1576334,0.1576334,0.15763341,0.15763342],"ns":2,"nb":2,"db":-56.9,"target":0,"out":5,"back":2},{"t":0.15612601,"ch":[0.15612603,0.15612602,0.15612601,0.15612601,0.15612601,0.15612601,0.15612602,0.15612603],"ns":2,"nb":2,"db":-59.1,"target":0,"out":4,"back":3},{"t":0.15633061,"ch":[0.15633063,0.15633062,0.15633061,0.15633061,0.15633061,0.15633061,0.15633062,0.15633063],"ns":2,"nb":2,"db":-59.1,"target":0,"out":3,"back":4},{"t":0.16037263,"ch":[0.16037266,0.16037264,0.16037263,0.16037263,0.16037263,0.16037263,0.16037264,0.16037266],"ns":3,"nb":2,"db":-60.0,"target":0,"out":5,"back":3},{"t":0.16033699,"ch":[0.16033702,0.16033701,0.160337,0.16033699,0.16033699,0.160337,0.16033701,0.16033702],"ns":3,"nb":2,"db":-60.0,"target":0,"out":3,"back":5},{"t":0.16297932,"ch":[0.16297935,0.16297934,0.16297933,0.16297932,0.16297932,0.16297933,0.16297934,0.16297935],"ns":2,"nb":2,"db":-61.7,"target":0,"out":4,"back":4},{"t":0.16698571,"ch":[0.16698573,0.16698572,0.16698571,0.16698571,0.16698571,0.16698571,0.16698572,0.16698573],"ns":3,"nb":2,"db":-62.5,"target":0,"out":4,"back":5},{"t":0.16722594,"ch":[0.16722597,0.16722596,0.16722595,0.16722594,0.16722594,0.16722595,0.16722596,0.16722597],"ns":3,"nb":2,"db":-62.6,"target":0,"out":5,"back":4},{"t":0.16147919,"ch":[0.16147922,0.16147921,0.1614792,0.16147919,0.16147919,0.1614792,0.16147921,0.16147922],"ns":1,"nb":2,"db":-63.4,"target":0,"out":6,"back":0},{"t":0.16160111,"ch":[0.16160114,0.16160113,0.16160112,0.16160112,0.16160112,0.16160112,0.16160113,0.16160114],"ns":1,"nb":2,"db":-63.4,"target":0,"out":0,"back":6},{"t":0.17123233,"ch":[0.17123235,0.17123234,0.17123233,0.17123233,0.17123233,0.17123233,0.17123234,0.17123235],"ns":4,"nb":2,"db":-63.5,"target":0,"out":5,"back":5},{"t":0.16246869,"ch":[0.16246871,0.1624687,0.16246869,0.16246869,0.16246869,0.16246869,0.1624687,0.16246871],"ns":2,"nb":2,"db":-63.5,"target":0,"out":6,"back":1},{"t":0.16264983,"ch":[0.16264985,0.16264984,0.16264983,0.16264983,0.16264983,0.16264983,0.16264984,0.16264985],"ns":2,"nb":2,"db":-63.5,"target":0,"out":1,"back":6}],"n_pairs":256,"oneway":[],"direct":null,"beams":{"chain":{"bearings_deg":[-40.0,40.0,0.5],"look":"starboard","window":"hann","source":"live chain defaults (live.DEFAULTS); no deployment file names this sonar"},"broadside":[0.0,1.0,0.0],"axis":[-1.0,0.0,0.0],"aperture_m":0.189,"n_elements":8,"center_frequency":27500.0,"wavelength":0.054429980625454545,"element_beamwidth_az_deg":null,"steered":[{"steer_deg":-40.0,"peak_deg":-40.0,"edges_deg":[-53.62500000000001,-28.75]},{"steer_deg":-20.0,"peak_deg":-20.0,"edges_deg":[-30.25,-10.375]},{"steer_deg":0.0,"peak_deg":0.0,"edges_deg":[-9.375,9.375]},{"steer_deg":20.0,"peak_deg":20.0,"edges_deg":[10.375,30.25]},{"steer_deg":40.0,"peak_deg":40.0,"edges_deg":[28.75,53.62500000000001]}],"projector":null,"projector_text":"projector: kind point, omnidirectional (the sonar gives it no beamwidth or aperture)"},"models":[{"area":"propagation","model":"eigenray","what":"Bellhop 2-D eigenrays, looked up on a range-depth grid","key":"fidelity","status":"ours","chosen":"scenario","source":"Bellhop (GPL-3, separate process), not re-validated; lookup ours"},{"area":"surface","model":"surface_pressure_release","what":"surface reflection coefficient -1","key":"propagation.surface_coefficient","status":"ours","chosen":"default","source":"pressure release"},{"area":"bottom","model":"rayleigh_fluid","what":"Rayleigh fluid half-space reflection","key":"propagation.environment.bottom","status":"via secondary","chosen":"scenario","source":"standard; sediment table via secondary (REFERENCES 3.1)"},{"area":"bottom","model":"lambert","what":"Lambert bottom scattering mu sin sin","key":"reverberation[0]","status":"via secondary","chosen":"scenario","source":"the law and -29 dB as a thesis quotes them"},{"area":"reverberation","model":"reverb_generator","what":"scattering-function reverberation","key":"reverberation","status":"confirmed; ours","chosen":"scenario","source":"TR 0702 Sec. 10-11 (idea); generator ours"},{"area":"water","model":"noise_level","what":"ambient noise at a stated level","key":"receiver.ambient_noise","status":"ours","chosen":"scenario","source":"the scenario's value"},{"area":"water","model":"ainslie_mccolm","what":"absorption, Ainslie-McColm","key":"absorption","status":"via secondary","chosen":"scenario","source":"within 3 % of 21 published values"},{"area":"water","model":"mackenzie","what":"sound speed from temperature and salinity, Mackenzie","key":"environment.temperature/salinity","status":"unconfirmed","chosen":"default","source":"held to arlpy 1.9.3; paper not opened"},{"area":"targets","model":"targets","what":"point scatterers and highlight targets","key":"scene","status":"confirmed; ours","chosen":"scenario","source":"TR 0702 Sec. 9.2 (highlights); shapes ours"}],"missing":[],"view":{"note":"ping 0 of 1 (the only ping)","ping_of_run":0,"n_pings":1},"time_spread_taps":false,"scene3d":{"box":[-15.0945,15.0945,-15.0,115.0],"bed_grid":null,"motion":{"times":[0.0],"ping_index":[0],"targets":[[[0.0,100.0,15.0]]],"moving":false,"track":[[0.0,0.0,5.0]],"ping":0,"interval":5.0},"bellhop3d":null,"notes":[]},"chain":null,"limits":{"max_rays":8,"max_pairs":40,"tolerance":1.0},"links":{"png":"popoto_trial_100m.png","index":"index.html"}}</script>
+<script type="module">
+const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js');
+const D = JSON.parse(document.getElementById('trace').textContent);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fx = (v, n=1) => (v == null || !isFinite(v)) ? '–' : (+v).toFixed(n);
+const CLS = {direct:['#2a78d6','direct'], surface:['#1baf7a','surface bounces only'], bottom:['#eb6834','bottom bounces only'], both:['#8e5cc4','surface and bottom']};
+const cls = (ns,nb) => ns===0&&nb===0?'direct':nb===0?'surface':ns===0?'bottom':'both';
+const ROWC = ['#1d1d1b','#c2185b','#00838f','#7b5e00','#5e35b1'];
+const E = D.environment, S3 = D.scene3d || {}, B = D.beams, M = S3.motion;
+const H = D.sonar.hydrophones, PJ = D.sonar.projector;
+const ref = H.reduce((a,p)=>a.map((v,i)=>v+p[i]/H.length),[0,0,0]);
+const allPts = [PJ, ...H, ...D.targets.map(t=>t.position), ...(D.oneway||[]).map(o=>o.position), ...((M&&M.track)||[])];
+let box = S3.box;
+if (!box){ const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]); const m=Math.max(0.15*Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)),1);
+  box=[Math.min(...xs)-m,Math.max(...xs)+m,Math.min(...ys)-m,Math.max(...ys)+m]; }
+const ox=(box[0]+box[1])/2, oy=(box[2]+box[3])/2, WX=box[1]-box[0], WY=box[3]-box[2], span=Math.max(WX,WY,1);
+const zMaxPts = Math.max(...allPts.map(p=>p[2]), 0);
+let zBed = E.bottom_z ?? E.bottom_z_site ?? null;
+if (S3.bed_grid) zBed = Math.max(...S3.bed_grid.z.flat());
+const zRef = zBed ?? Math.max(zMaxPts*1.2, 1);
+const zTop = Math.min(E.surface_z ?? 0, ...allPts.map(p=>p[2])), zBot = Math.max(zRef, zMaxPts), zSpan = Math.max(zBot-zTop, 1e-3);
+const L = p => new THREE.Vector3(p[1]-oy, -p[2], -(p[0]-ox));      // NED (x north, y east, z down) to three.js (X east, Y up, Z south)
+const LD = d => new THREE.Vector3(d[1], -d[2], -d[0]);
+
+// ---------- renderer, scene, camera, our own orbit controls ----------
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(window.devicePixelRatio); view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(getComputedStyle(document.body).backgroundColor);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1e7);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6)); const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(0.4,1,0.3); scene.add(dl);
+const world = new THREE.Group(); scene.add(world);
+const G = {}; for (const k of ['surface','bed','beams','projpat','array','targets','motion','rays','oneway','direct']) { G[k]=new THREE.Group(); world.add(G[k]); }
+let vex = 1;
+const ctl = {target:new THREE.Vector3(), az:0.85, el:0.45, dist:1.7*span};
+function place(){ const c=ctl; camera.position.set(c.target.x+c.dist*Math.cos(c.el)*Math.sin(c.az), c.target.y+c.dist*Math.sin(c.el), c.target.z+c.dist*Math.cos(c.el)*Math.cos(c.az));
+  camera.near=Math.max(c.dist*1e-3,1e-4); camera.far=c.dist*50+span*20; camera.updateProjectionMatrix(); camera.lookAt(c.target); }
+function resize(){ const w=view.clientWidth, h=view.clientHeight; renderer.setSize(w,h); camera.aspect=w/Math.max(h,1); camera.updateProjectionMatrix(); }
+let drag=null, down=null;
+renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
+renderer.domElement.addEventListener('pointerdown', e=>{ drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey}; down={x:e.clientX,y:e.clientY}; });
+window.addEventListener('pointerup', e=>{ if (down && Math.hypot(e.clientX-down.x, e.clientY-down.y)<5 && e.target===renderer.domElement) pick(e); drag=null; down=null; });
+window.addEventListener('pointermove', e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+  if (drag.pan){ const s=ctl.dist*0.0016, r=new THREE.Vector3().setFromMatrixColumn(camera.matrix,0), u=new THREE.Vector3().setFromMatrixColumn(camera.matrix,1);
+    ctl.target.addScaledVector(r,-dx*s).addScaledVector(u,dy*s); }
+  else { ctl.az-=dx*0.005; ctl.el=Math.max(-1.5,Math.min(1.5,ctl.el+dy*0.005)); }
+  place(); draw(); });
+renderer.domElement.addEventListener('wheel', e=>{ e.preventDefault(); ctl.dist=Math.max(1e-3, ctl.dist*Math.exp(e.deltaY*0.0012)); place(); draw(); }, {passive:false});
+
+// ---------- glyphs and labels ----------
+const disc = (()=>{ const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); g.beginPath(); g.arc(32,32,27,0,2*Math.PI); g.fillStyle='#fff'; g.fill(); g.lineWidth=5; g.strokeStyle='rgba(0,0,0,.55)'; g.stroke(); return new THREE.CanvasTexture(c); })();
+function points(list, color, size, opts={}){ const g=new THREE.BufferGeometry().setFromPoints(list.map(L));
+  const m=new THREE.PointsMaterial({color, size, sizeAttenuation:false, map:disc, alphaTest:0.5, transparent:true, depthTest:opts.depthTest??true});
+  if (opts.colors){ g.setAttribute('color', new THREE.Float32BufferAttribute(opts.colors.flatMap(c=>new THREE.Color(c).toArray()),3)); m.vertexColors=true; m.color.set(0xffffff); }
+  const p=new THREE.Points(g,m); p.renderOrder=5; return p; }
+function line(list, color, opts={}){ const g=new THREE.BufferGeometry().setFromPoints(list.map(L));
+  const m = opts.dashed ? new THREE.LineDashedMaterial({color, dashSize:opts.dash||span/90, gapSize:(opts.dash||span/90)*0.7, transparent:true, opacity:opts.opacity??1})
+                        : new THREE.LineBasicMaterial({color, transparent:true, opacity:opts.opacity??1});
+  const l=new THREE.Line(g,m); if (opts.dashed) l.computeLineDistances(); return l; }
+const LABELS=[]; let showLabels=true;
+function label(text, p, klass, layer, near){ const el=document.createElement('div'); el.className='lab '+(klass||''); el.textContent=text; $('labels').appendChild(el); LABELS.push({el, v:L(p), layer, near}); return el; }
+function placeLabels(){ const w=view.clientWidth, h=view.clientHeight; world.updateMatrixWorld();
+  for (const l of LABELS){ const on = showLabels && (!l.layer || G[l.layer].visible) && !l.off && (!l.near || ctl.dist < l.near);
+    if (!on){ l.el.style.display='none'; continue; }
+    const v=l.v.clone().applyMatrix4(world.matrixWorld).project(camera);
+    if (v.z>1||v.z<-1||Math.abs(v.x)>1.05||Math.abs(v.y)>1.05){ l.el.style.display='none'; continue; }
+    l.el.style.display=''; l.el.style.transform=`translate(${((v.x+1)/2*w).toFixed(1)}px,${((1-v.y)/2*h).toFixed(1)}px)`; } }
+
+// ---------- surface ----------
+const free = D.tier==='free_field';
+function hplane(z, color, op, group){ const m=new THREE.Mesh(new THREE.PlaneGeometry(WY,WX), new THREE.MeshBasicMaterial({color, transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.position.set(0,-z,0); group.add(m); return m; }
+function grid(z, color, op, group, n=10){ const v=[]; for(let i=0;i<=n;i++){ const a=box[0]+WX*i/n, b=box[2]+WY*i/n; v.push(L([a,box[2],z]),L([a,box[3],z]),L([box[0],b,z]),L([box[1],b,z])); }
+  group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(v), new THREE.LineBasicMaterial({color, transparent:true, opacity:op}))); }
+const sz = E.surface_z ?? 0;
+const hasSurface = !free && !(D.tier==='sediment');
+hplane(sz, 0x3d8fd6, hasSurface?0.13:0.035, G.surface); grid(sz, 0x3d8fd6, hasSurface?0.45:0.15, G.surface);
+let surfText = hasSurface ? 'sea surface: pressure release, R = −1' : 'sea surface: not in the propagation (' + (free?'free field':'sediment tier') + ')';
+if (E.wind_speed_propagation>0) surfText += `; coherent loss of wind ${E.wind_speed_propagation} m/s`;
+if (E.surface && E.surface.rms_height){ const h=E.surface.rms_height; hplane(sz-h, 0x3d8fd6, 0.06, G.surface); hplane(sz+h, 0x3d8fd6, 0.06, G.surface);
+  surfText += `; rms height ±${fx(h,3)} m` + (E.surface.wind_speed?` (wind ${E.surface.wind_speed} m/s)`:'') + ' (time spreading)'; }
+label(surfText, [box[1], box[2], sz], 'surf', 'surface');
+
+// ---------- bed ----------
+const SAND0=new THREE.Color('#e3c48d'), SAND1=new THREE.Color('#7d5427');
+function bedMesh(V, Z, nx, ny, op){ const g=new THREE.BufferGeometry(); const pos=[], col=[], idx=[]; const z0=Math.min(...Z), z1=Math.max(...Z);
+  V.forEach((p,i)=>{ pos.push(...L(p).toArray()); const c=SAND0.clone().lerp(SAND1, z1>z0?(Z[i]-z0)/(z1-z0):0.5); col.push(c.r,c.g,c.b); });
+  for(let j=0;j<ny-1;j++) for(let i=0;i<nx-1;i++){ const a=j*nx+i; idx.push(a,a+1,a+nx, a+1,a+nx+1,a+nx); }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col,3)); g.setIndex(idx); g.computeVertexNormals();
+  const m=new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors:true, transparent:true, opacity:op, side:THREE.DoubleSide})); G.bed.add(m);
+  const lv=[]; const st=Math.max(1,Math.round(nx/12));
+  for(let j=0;j<ny;j+=st) for(let i=0;i<nx-1;i++) lv.push(L(V[j*nx+i]),L(V[j*nx+i+1]));
+  for(let i=0;i<nx;i+=st) for(let j=0;j<ny-1;j++) lv.push(L(V[j*nx+i]),L(V[(j+1)*nx+i]));
+  G.bed.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(lv), new THREE.LineBasicMaterial({color:0x5a3a14, transparent:true, opacity:0.35}))); }
+const bot = E.bottom || {};
+const botText = bot.coefficient!=null ? `constant |R| = ${fx(bot.coefficient,3)}` : bot.speed ? `fluid half-space ${fx(bot.speed,0)} m/s, density ${fx(bot.density,2)}, attenuation ${fx(bot.attenuation,2)} dB/λ`+(bot.shear_speed?`, shear ${fx(bot.shear_speed,0)} m/s (elastic)`:'')+(E.critical_angle_deg?`; critical angle ${fx(E.critical_angle_deg,1)}°`:'') : '';
+if (S3.bed_grid){ const bg=S3.bed_grid, V=[], Z=[]; bg.y.forEach((y,j)=>bg.x.forEach((x,i)=>{ V.push([x,y,bg.z[j][i]]); Z.push(bg.z[j][i]); }));
+  bedMesh(V, Z, bg.x.length, bg.y.length, 0.88);
+  const jm=Z.indexOf(Math.min(...Z)); label(`3-D bed (Bellhop3D's grid): ${fx(Math.min(...Z),0)} to ${fx(Math.max(...Z),0)} m; ${botText}`, V[jm], 'bed', 'bed'); }
+else if (E.bathymetry && E.bathymetry.length>1){ const prof=E.bathymetry;
+  const dep=r=>{ if (r<=prof[0][0]) return prof[0][1]; for(let i=1;i<prof.length;i++) if (prof[i][0]>=r){ const w=(r-prof[i-1][0])/Math.max(prof[i][0]-prof[i-1][0],1e-9); return prof[i-1][1]+w*(prof[i][1]-prof[i-1][1]); } return prof[prof.length-1][1]; };
+  const n=61, V=[], Z=[]; for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const x=box[0]+WX*i/(n-1), y=box[2]+WY*j/(n-1), z=dep(Math.hypot(x-PJ[0], y-PJ[1])); V.push([x,y,z]); Z.push(z); }
+  bedMesh(V, Z, n, n, 0.8);
+  const far=D.targets.length? D.targets[0].position : [box[1],box[3],0], rf=Math.hypot(far[0]-PJ[0], far[1]-PJ[1]);
+  label(`bed by range from the sonar (the same section on every bearing): ${fx(Math.min(...Z),0)} to ${fx(Math.max(...Z),0)} m; ${botText}`, [far[0], far[1], dep(rf)], 'bed', 'bed'); }
+else if (E.planes){ for (const pl of E.planes){ if (pl.kind==='surface') continue; const n=pl.normal, q=pl.point, bnd=pl.bounds||[];
+    const clamp=p=>{ for(const [ax,lo,hi] of bnd) p[ax]=Math.max(lo,Math.min(hi,p[ax])); return p; };
+    let C;
+    if (Math.abs(n[2])>0.5){ C=[[box[0],box[2]],[box[1],box[2]],[box[1],box[3]],[box[0],box[3]]].map(([x,y])=>clamp([x,y,q[2]-(n[0]*(x-q[0])+n[1]*(y-q[1]))/n[2]])); }
+    else { const t=[-n[1],n[0]], tn=Math.hypot(...t); const tt=[t[0]/tn,t[1]/tn]; const s=[[box[0],box[2]],[box[1],box[2]],[box[1],box[3]],[box[0],box[3]]].map(c=>(c[0]-q[0])*tt[0]+(c[1]-q[1])*tt[1]);
+      const s0=Math.min(...s), s1=Math.max(...s), zt=sz, zb=zRef*1.05; C=[[s0,zt],[s1,zt],[s1,zb],[s0,zb]].map(([u,z])=>clamp([q[0]+u*tt[0], q[1]+u*tt[1], z])); }
+    const g=new THREE.BufferGeometry().setFromPoints([C[0],C[1],C[2],C[0],C[2],C[3]].map(L)); g.computeVertexNormals();
+    const wall=pl.kind==='wall';
+    G.bed.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({color: wall?0x8a8f96:0xc9a467, transparent:true, opacity: wall?0.4:0.8, side:THREE.DoubleSide, depthWrite:!wall})));
+    G.bed.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(C.map(L)), new THREE.LineBasicMaterial({color: wall?0x3d4148:0x5a3a14})));
+    const mid=C.reduce((a,p)=>a.map((v,i)=>v+p[i]/4),[0,0,0]);
+    label(wall ? `wall (a plane), |R| = ${fx(pl.coefficient,2)}` : `bed, tilted (slope ${E.bottom_slope? E.bottom_slope.map(v=>fx(v,4)).join(', '):''}); ${botText}`, mid, 'bed', 'bed'); } }
+else if (E.interface){ const I=E.interface, zi=I.z, deep=Math.max(...D.targets.map(t=>t.position[2]), zi)+Math.max(0.3*(Math.max(...D.targets.map(t=>t.position[2]),zi)-zi), 0.05*span);
+  hplane(zi, 0xb98a46, 0.45, G.bed); grid(zi, 0x7d5427, 0.4, G.bed);
+  const slab=new THREE.Mesh(new THREE.BoxGeometry(WY, deep-zi, WX), new THREE.MeshBasicMaterial({color:0xb98a46, transparent:true, opacity:0.12, depthWrite:false})); slab.position.set(0, -(zi+deep)/2, 0); G.bed.add(slab);
+  label(`sediment interface z = ${fx(zi,2)} m: ${fx(I.sediment_speed,0)} m/s, penetration ${I.penetration}`+(I.critical_deg?`; critical angle ${fx(I.critical_deg,1)}° (evanescent below)`:'')+(I.transmission!=null?`; transmission ${fx(I.transmission,3)}`:''), [box[1],box[2],zi], 'bed', 'bed'); }
+else if (E.bottom_z!=null){ hplane(E.bottom_z, 0xc9a467, 0.75, G.bed); grid(E.bottom_z, 0x5a3a14, 0.4, G.bed);
+  label(`bed z = ${fx(E.bottom_z,1)} m (flat): ${botText}`, [box[1],box[2],E.bottom_z], 'bed', 'bed'); }
+else if (E.bottom_z_site!=null){ const z=E.bottom_z_site; G.bed.add(line([[box[0],box[2],z],[box[1],box[2],z],[box[1],box[3],z],[box[0],box[3],z],[box[0],box[2],z]], 0x8a6a3a, {dashed:true, dash:span/60}));
+  label(`site depth ${fx(z,1)} m: no bottom in the propagation (${D.tier})`, [box[1],box[2],z], 'bed', 'bed'); }
+
+// ---------- array, projector, beams, projector pattern ----------
+const rowsZ=[...new Set(H.map(p=>Math.round(p[2]*20)/20))].sort((a,b)=>a-b);
+const rowOf=H.map(p=>rowsZ.indexOf(Math.round(p[2]*20)/20));
+const hydColors=H.map((p,i)=>ROWC[rowOf[i]%ROWC.length]);
+const hydPts=points(H, 0xffffff, 7, {colors:hydColors}); G.array.add(hydPts);
+const selPt=points([H[0]], 0xff00aa, 15, {depthTest:false}); selPt.visible=false; G.array.add(selPt);
+G.array.add(points([PJ], 0x111111, 10));
+label('projector', PJ, 'arr', 'array', Math.max(Math.hypot(PJ[0]-ref[0],PJ[1]-ref[1],PJ[2]-ref[2])*40, 1e-9));
+const aperture = B?.aperture_m ?? Math.max(...H.map(p=>Math.hypot(p[0]-ref[0],p[1]-ref[1],p[2]-ref[2])))*2;
+label(`array: ${H.length} hydrophone${H.length===1?'':'s'}` + (rowsZ.length>1?` in ${rowsZ.length} rows (z ${rowsZ.map(z=>fx(z,2)).join(', ')} m)`:'') + `, aperture ${fx(aperture,2)} m` + (B&&B.chain?.look?`, look ${B.chain.look}`:''), ref, 'arr', 'array');
+if (B && H.length>1){ const La=Math.max(aperture*0.6, 0.3);
+  G.array.add(new THREE.ArrowHelper(LD(B.axis), L(ref), La, 0x444444, La*0.1, La*0.04));
+  G.array.add(new THREE.ArrowHelper(LD(B.broadside), L(ref), La, 0x2a78d6, La*0.1, La*0.04));
+  label('array axis (+)', [ref[0]+B.axis[0]*La, ref[1]+B.axis[1]*La, ref[2]], 'arr', 'array', La*30);
+  label(`look (${B.chain?.look ?? 'broadside'})`, [ref[0]+B.broadside[0]*La, ref[1]+B.broadside[1]*La, ref[2]], 'beam', 'array', La*30); }
+const Rbeam = Math.max(...D.targets.map(t=>Math.hypot(t.position[0]-ref[0], t.position[1]-ref[1])), 0)*1.08 || span*0.45;
+function fan(a0, a1, R, color, op){ const dir=a=>{ const r=a*Math.PI/180; return [Math.cos(r)*B.broadside[0]+Math.sin(r)*B.axis[0], Math.cos(r)*B.broadside[1]+Math.sin(r)*B.axis[1]]; };
+  const n=Math.max(4, Math.ceil(Math.abs(a1-a0)/2)), v=[]; for(let i=0;i<n;i++){ const d0=dir(a0+(a1-a0)*i/n), d1=dir(a0+(a1-a0)*(i+1)/n);
+    v.push(L(ref), L([ref[0]+R*d0[0], ref[1]+R*d0[1], ref[2]]), L([ref[0]+R*d1[0], ref[1]+R*d1[1], ref[2]])); }
+  const g=new THREE.BufferGeometry().setFromPoints(v); G.beams.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({color, transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false})));
+  return dir; }
+let beamText = '';
+if (B && B.chain && B.chain.bearings_deg && H.length>1){ const [b0,b1,st]=B.chain.bearings_deg; const dir=fan(b0,b1,Rbeam,0x2a78d6,0.05);
+  for (const a of [b0,b1]){ const d=dir(a); G.beams.add(line([ref,[ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]]], 0x2a78d6, {opacity:0.5})); }
+  for (const s of B.steered){ fan(s.edges_deg[0], s.edges_deg[1], Rbeam, 0x2a78d6, 0.16); const d=dir(s.peak_deg);
+    G.beams.add(line([ref,[ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]]], 0x1f5fae, {opacity:0.8}));
+    label(`${fx(s.steer_deg,0)}°: −3 dB ${fx(s.edges_deg[1]-s.edges_deg[0],1)}°`, [ref[0]+Rbeam*d[0], ref[1]+Rbeam*d[1], ref[2]], 'beam', 'beams'); }
+  beamText = `receive beams: ${b0} to ${b1}° by ${st}° from broadside (shaded); ${B.steered.length} of them steered with their −3 dB edges measured on the array factor of the real elements (${B.chain.window} window) times the element pattern at ${fx((B.center_frequency||0)/1e3,1)} kHz. Source: ${B.chain.source}. In the horizontal plane at the array.`; }
+else if (B && B.chain) beamText = `receive beams: none drawn (${B.chain.source})`;
+if (B && B.projector && (B.projector.beamwidth_az_deg || B.projector.beamwidth_el_deg)){ const P=B.projector, b=new THREE.Vector3(...P.boresight).normalize();
+  let h=new THREE.Vector3().crossVectors(b, new THREE.Vector3(0,0,1)); if (h.length()<1e-6) h.set(0,1,0); h.normalize(); const v=new THREE.Vector3().crossVectors(h,b).normalize();
+  const ta=Math.tan(Math.min(89,(P.beamwidth_az_deg||178)/2)*Math.PI/180), te=Math.tan(Math.min(89,(P.beamwidth_el_deg||178)/2)*Math.PI/180), Lp=Rbeam*0.35, rim=[];
+  for (let i=0;i<=48;i++){ const f=2*Math.PI*i/48; const d=b.clone().addScaledVector(h,ta*Math.cos(f)).addScaledVector(v,te*Math.sin(f)).normalize().multiplyScalar(Lp); rim.push([PJ[0]+d.x,PJ[1]+d.y,PJ[2]+d.z]); }
+  G.projpat.add(line(rim, 0xd9822b, {opacity:0.9})); for (const i of [0,12,24,36]) G.projpat.add(line([PJ, rim[i]], 0xd9822b, {opacity:0.6}));
+  label(`projector −3 dB: ${P.beamwidth_az_deg?fx(P.beamwidth_az_deg,0)+'° az':''} ${P.beamwidth_el_deg?fx(P.beamwidth_el_deg,0)+'° el':''}`, rim[0], 'beam', 'projpat'); }
+
+// ---------- targets and their motion over the pings ----------
+const tgtPts=points(D.targets.map(t=>t.position), 0xc0392b, 12); G.targets.add(tgtPts);
+D.targets.forEach((t,i)=>label(t.label, t.position, 'tgt', 'targets'));
+let pingMarks=null, pingPlat=null, pingIdx=0, tracedIdx=0;
+if (M && M.times && M.times.length>1){
+  M.ping_index.forEach((p,i)=>{ if (p<=M.ping) tracedIdx=i; }); pingIdx=tracedIdx;
+  if (M.track) { G.motion.add(line(M.track, 0x777777, {opacity:0.7})); G.motion.add(points(M.track, 0x999999, 4)); pingPlat=points([M.track[pingIdx]], 0x111111, 9); G.motion.add(pingPlat); }
+  D.targets.forEach((t,i)=>{ const tr=M.targets[i]; if (tr && M.moving) G.motion.add(line(tr, 0xc0392b, {dashed:true, dash:span/120, opacity:0.8})); });
+  if (M.moving){ pingMarks=points(D.targets.map((t,i)=>(M.targets[i]||[t.position])[pingIdx]||t.position), 0xff8c00, 10); G.motion.add(pingMarks); }
+  $('pingbox').innerHTML = `<label>ping <input id="ping" type="range" min="0" max="${M.times.length-1}" value="${pingIdx}" style="width:min(160px,30vw)"> <span id="pval"></span></label>`; }
+
+// ---------- rays ----------
+const RAYS=[];
+function addRay(r, kind, which, ti, group, name){ const c=CLS[cls(r.ns,r.nb)][0];
+  const ln=line(r.line, c, {dashed: which==='back'||kind==='oneway', dash: kind==='oneway'?span/40:undefined}); group.add(ln);
+  const bp=r.bounces.length? points(r.bounces.map(b=>b.xyz), c, 6) : null; if (bp) group.add(bp);
+  const dot=points([r.line[0]], c, 9); dot.visible=false; group.add(dot);
+  const Lc=[0]; for(let i=1;i<r.line.length;i++){ const a=r.line[i-1], b=r.line[i]; Lc.push(Lc[i-1]+Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])); }
+  RAYS.push({r, kind, which, ti, line:ln, bp, dot, Lc, cls:cls(r.ns,r.nb), color:c, name}); }
+D.legs.forEach(leg=>{ for (const w of ['out','back']) for (const r of leg[w]) addRay(r,'leg',w,leg.target,G.rays, `${w==='out'?'out: projector to':'back: target to array, from'} ${D.targets[leg.target]?.label}`); });
+(D.oneway||[]).forEach((o,i)=>{ G.oneway.add(points([o.position], 0x6a1b9a, 11)); label(`source: ${o.label} (one way)`, o.position, 'tgt', 'oneway');
+  for (const r of o.rays) addRay(r,'oneway','oneway',i,G.oneway, `one way: array to source ${o.label}`); });
+if (D.direct) for (const r of D.direct.rays) addRay(r,'direct','direct',0,G.direct,'the projector heard directly');
+
+// ---------- info panel ----------
+const nDrawn = RAYS.filter(x=>x.kind==='leg').length;
+const b3 = S3.bellhop3d, three_d = RAYS.filter(x=>x.r.three_d);
+let rayNote = {free_field:'rays: straight lines (free field: no surface or bottom in the propagation).',
+  image_source:'rays: image paths folded between the planes, bounce points exact (image tier).',
+  sediment:'rays: one refracted ray into the sediment (Snell, least time; exact for the tier).',
+  eigenray:'rays: Bellhop 2-D rays (ray file, matched by bounces), each placed on its target\'s bearing. PLANAR: every bearing sees the same range-depth section; 3-D adds the array, the beams and the bearings, not new propagation.'}[D.tier] || '';
+if (D.tier==='eigenray3d') rayNote = three_d.length ? `rays: Bellhop3D's own 3-D rays (run type R, a separate process), shot about each eigenray's launch angles and matched by bounce counts: ${three_d.length} drawn${b3?`, ${b3.matched} of ${b3.rays} traced eigenrays matched`:''}; they pass ${fx(Math.min(...three_d.map(x=>x.r.miss)),1)} to ${fx(Math.max(...three_d.map(x=>x.r.miss)),1)} m from the target. They leave the vertical plane where the bed turns them.`
+  : 'rays: 2-D PROJECTION (Bellhop 2-D rays on each bearing\'s section of the 3-D bed), not Bellhop3D\'s own rays. ' + (S3.notes||[]).join(' ');
+if (!RAYS.length) rayNote = (D.missing||[]).find(m=>m.startsWith('NO EIGENRAYS')) || 'no eigenray is drawn on this page (see "not shown" below).';
+const sw = (c,t,dash)=>`<span class="sw" style="background:${dash?`repeating-linear-gradient(90deg,${c} 0 5px,transparent 5px 8px)`:c}"></span>${t}`;
+const toggles = [['surface','surface'],['bed','bed'],['beams','receive beams'],['projpat','projector pattern'],['array','array'],['targets','targets'],['motion','motion over the pings'],['rays','eigenrays'],['oneway','one-way sources'],['direct','direct sound']]
+  .filter(([k])=>G[k].children.length>0);
+const classOn={direct:true,surface:true,bottom:true,both:true}, legOn={out:true,back:true}, tgtOn=D.targets.map(()=>true);
+const unique = new Set(D.models.map(m=>m.model));
+function ssp(){ const W=170, Hh=120, prof=[]; if (E.ssp_section){ E.ssp_section.c.forEach((c,i)=>prof.push({z:E.ssp_section.z, c, name:`${fx(E.ssp_section.r[i],0)} m`})); }
+  else if (E.ssp) prof.push({z:E.ssp.z, c:E.ssp.c, name:'profile'}); else prof.push({z:[0, zRef], c:[E.sound_speed, E.sound_speed], name:'isovelocity'});
+  const cs=prof.flatMap(p=>p.c), zs=prof.flatMap(p=>p.z); let c0=Math.min(...cs), c1=Math.max(...cs); if (c1-c0<2){ c0-=1; c1+=1; } const z1=Math.max(...zs, 1e-6);
+  const X=c=>28+(c-c0)/(c1-c0)*(W-36), Y=z=>8+z/z1*(Hh-24); const cols=['#2a78d6','#eb6834','#1baf7a','#8e5cc4','#555'];
+  return `<svg width="${W}" height="${Hh}" role="img" aria-label="sound speed against depth"><rect x="28" y="8" width="${W-36}" height="${Hh-24}" fill="none" stroke="#999" stroke-width=".5"/>`
+   + prof.map((p,i)=>`<polyline fill="none" stroke="${cols[i%5]}" stroke-width="1.6" points="${p.z.map((z,k)=>X(p.c[k]).toFixed(1)+','+Y(z).toFixed(1)).join(' ')}"/>`).join('')
+   + `<text x="28" y="${Hh-4}" font-size="9" fill="currentColor">${fx(c0,0)}</text><text x="${W-8}" y="${Hh-4}" font-size="9" text-anchor="end" fill="currentColor">${fx(c1,0)} m/s</text>`
+   + `<text x="2" y="14" font-size="9" fill="currentColor">0</text><text x="2" y="${Hh-16}" font-size="9" fill="currentColor">${fx(z1,0)}</text></svg>`
+   + (prof.length>1?`<div class="m">${prof.map((p,i)=>`<span style="color:${cols[i%5]}">■</span> ${p.name}`).join(' ')}</div>`:''); }
+const missing = [...(D.missing||[]), ...(S3.notes||[])];
+if (D.undrawn) missing.push(`${D.undrawn} eigenray(s) of the trace have no path to draw (see above)`);
+const lim = D.limits||{}; missing.push(`page thinned: the ${lim.max_rays} strongest drawable eigenrays of each leg and the ${lim.max_pairs} strongest of ${D.n_pairs} two-way pairs; polylines simplified (tolerance x${lim.tolerance}).` + (lim.over_budget?' STILL OVER THE SIZE BUDGET.':''));
+missing.push((window.__AUDIO ? 'sound: the selected hydrophone (panel at the lower right); made audible as the panel says.' : 'sound: none beside this page (tools/scenario_view.py --audio side writes NAME.audio/ next to it).') + ' The live chain\'s tracker taps (V6) are not on this page yet.');
+$('info').innerHTML = `<h1>${esc(D.scenario)}</h1><div class="m">tier ${esc(D.tier)} · ${esc(D.sonar.name)} (${esc(D.sonar.mode)}) · ${fx(D.sonar.band_hz[0]/1e3,1)}–${fx(D.sonar.band_hz[1]/1e3,1)} kHz · ${H.length} hydrophone${H.length===1?'':'s'} · ${esc(D.view?.note||'ping '+D.ping)}</div>`
+ + `<div><a href="${esc(D.links?.png)}">2-D page</a>${D.links?.index?` · <a href="${esc(D.links.index)}">index</a>`:''} · <span class="m">a picture of the simulator, not a measurement</span></div>`
+ + `<p${RAYS.length?'':' class="warn"'}>${esc(rayNote)}</p>`
+ + `<div>${Object.entries(CLS).map(([k,[c,t]])=>`<label class="t"><input type="checkbox" data-cls="${k}" checked>${sw(c,t)}</label>`).join('<br>')}</div>`
+ + `<div><label class="t"><input type="checkbox" data-leg="out" checked>${sw('#555','out: projector to target')}</label><label class="t"><input type="checkbox" data-leg="back" checked>${sw('#555','back: target to array',1)}</label></div>`
+ + `<div class="m"><span class="dot" style="background:#111"></span>projector <span class="dot" style="background:${ROWC[0]}"></span>hydrophones${rowsZ.length>1?' (colour: row)':''} <span class="dot" style="background:#c0392b"></span>targets <span class="dot" style="background:#ff8c00"></span>target at the chosen ping · small dots on a ray: its bounces</div>`
+ + (D.targets.length>1?`<h2>targets</h2>`+D.targets.map((t,i)=>`<label class="t"><input type="checkbox" data-tgt="${i}" checked>${esc(t.label)}</label>`).join(''):'')
+ + `<h2>layers</h2>` + toggles.map(([k,t])=>`<label class="t"><input type="checkbox" data-layer="${k}" checked>${t}</label>`).join('') + `<label class="t"><input type="checkbox" id="labs" checked>labels</label>`
+ + `<h2>boundaries</h2><div>${esc(surfText)}</div><div>bed: ${esc(botText || (E.bottom_z_site!=null?'none in the propagation':'–'))}${E.bathymetry_note && !S3.bed_grid?` <span class="m">(${esc(E.bathymetry_note)})</span>`:''}${S3.bed_grid?' <span class="m">(the 3-D bed, drawn on a grid from the scenario\'s bathymetry, as Bellhop3D is given it)</span>':''}</div>`
+ + `<div class="m">absorption ${esc(E.absorption)}: ${fx(E.absorption_db_per_km,3)} dB/km at the band centre</div>`
+ + `<h2>beams</h2><div class="m">${esc(beamText)}</div><div class="m">${esc(B?.projector_text||'')}</div>`
+ + `<h2>sound speed</h2>${ssp()}`
+ + `<details><summary>what is modelled here (${D.models.length})</summary><table>${D.models.map(m=>`<tr><td>${esc(m.area)}</td><td>${esc(m.what||m.model)}${m.chosen==='default'?' <span class="m">(default)</span>':''}</td><td class="m">${esc(m.status)}</td></tr>`).join('')}</table></details>`
+ + `<details open><summary>not shown, or shown with a caveat (${missing.length})</summary><ul>${missing.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></details>`;
+document.querySelectorAll('[data-cls]').forEach(el=>el.addEventListener('change',()=>{ classOn[el.dataset.cls]=el.checked; vis(); }));
+document.querySelectorAll('[data-leg]').forEach(el=>el.addEventListener('change',()=>{ legOn[el.dataset.leg]=el.checked; vis(); }));
+document.querySelectorAll('[data-tgt]').forEach(el=>el.addEventListener('change',()=>{ tgtOn[+el.dataset.tgt]=el.checked; vis(); }));
+document.querySelectorAll('[data-layer]').forEach(el=>el.addEventListener('change',()=>{ G[el.dataset.layer].visible=el.checked; draw(); }));
+$('labs').addEventListener('change',e=>{ showLabels=e.target.checked; draw(); });
+function vis(){ const pingOk = !M || M.times.length<2 || pingIdx===tracedIdx;
+  for (const x of RAYS){ const on = pingOk && classOn[x.cls] && (x.kind!=='leg' || (legOn[x.which] && tgtOn[x.ti])); x.line.visible=on; if (x.bp) x.bp.visible=on; if(!on) x.dot.visible=false; }
+  draw(); }
+
+// ---------- picking: a ray, a hydrophone ----------
+const rc = new THREE.Raycaster(); let selected=null;
+function pick(e){ const r=renderer.domElement.getBoundingClientRect(); const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  rc.setFromCamera(m,camera); rc.params.Line.threshold=ctl.dist*0.006; rc.params.Points.threshold=ctl.dist*0.006;
+  if (G.array.visible){ const hh=rc.intersectObject(hydPts); if (hh.length){ selectHyd(hh[0].index); return; } }
+  const hit=rc.intersectObjects(RAYS.filter(x=>x.line.visible).map(x=>x.line), false);
+  if (hit.length) selectRay(RAYS.find(x=>x.line===hit[0].object)); else clearSel(); }
+function emphasise(set){ for (const x of RAYS){ const on=!set||set.has(x); x.line.material.opacity=on?1:0.12; x.line.material.color.set(set&&on?'#ffb000':x.color); x.line.renderOrder=on?3:0; } draw(); }
+function clearSel(){ selected=null; emphasise(null); $('pick').hidden=true; }
+function rayHtml(x){ const r=x.r; const tgt=x.kind==='leg'?D.targets[x.ti]?.label:'';
+  return `<h2>${esc(x.name)} · eigenray ${r.k}</h2><table>`
+   + `<tr><td>delay</td><td>${fx(r.delay,6)} s ${x.kind==='leg'?'(one leg)':''}</td></tr><tr><td>level</td><td>${fx(r.db,1)} dB re 1 m (spreading and reflection; no absorption, no beams)</td></tr>`
+   + `<tr><td>launch</td><td>${fx(r.launch,2)}° (positive down)</td></tr><tr><td>bounces</td><td>${r.ns} surface, ${r.nb} bottom (${CLS[x.cls][1]})</td></tr>`
+   + (r.tt!=null?`<tr><td>along the drawn ray</td><td>${fx(r.tt,6)} s (${fx((r.tt-r.delay)*1e3,3)} ms from the delay)</td></tr>`:'')
+   + (r.miss!=null?`<tr><td>miss</td><td>${fx(r.miss,2)} m from the target</td></tr>`:'') + `</table>`
+   + (r.bounces.length?`<table><tr><th>#</th><th>boundary</th><th>grazing</th><th>loss</th><th>x, y, z (m)</th></tr>${r.bounces.map((b,i)=>`<tr><td>${i+1}</td><td>${esc(b.b)}</td><td>${fx(b.g,1)}°</td><td>${b.loss==null?'–':fx(Math.abs(b.loss)<0.005?0:b.loss,2)+' dB'}</td><td class="m">${b.xyz.map(v=>fx(v,1)).join(', ')}</td></tr>`).join('')}</table>`
+     + `<div class="m">loss per bounce: the model the tier applies, evaluated at the drawn grazing angle${D.tier.startsWith('eigenray')?' (Bellhop does not report a loss per bounce: the same Rayleigh law, evaluated again)':''}.</div>`:'<div class="m">no bounce</div>')
+   + `<div class="m">${esc(r.path||'')}</div>`; }
+function selectRay(x){ selected=x; const set=new Set([x]); emphasise(set);
+  const pairs = x.kind==='leg' ? D.pairs.filter(p=>p.target===x.ti && (x.which==='out'?p.out===x.r.k:p.back===x.r.k)) : [];
+  $('pick').innerHTML = `<button id="pclose" style="float:right">close</button>` + rayHtml(x)
+    + (x.kind==='leg'?`<div>${pairs.length} of the ${D.pairs.length} strongest pairs use it${pairs.length?`: ${pairs.slice(0,6).map(p=>`${fx(p.t,5)} s (${fx(p.db,1)} dB)`).join(', ')}`:''}</div>`:'');
+  $('pick').hidden=false; $('pclose').onclick=clearSel; }
+function selectHyd(c){ $('hsel').value=String(c); if (c<0){ selPt.visible=false; clearSel(); return; }
+  if (window.__AUDIO) setSound(c, sndKind);
+  selPt.geometry.setFromPoints([L(H[c])]); selPt.visible=true;
+  const rows=[]; D.pairs.forEach((p,i)=>rows.push({t:p.ch[c], db:p.db, c:cls(p.ns,p.nb), what:`${D.targets[p.target]?.label}: out ${p.out}, back ${p.back}`, pair:p}));
+  (D.oneway||[]).forEach(o=>o.arrivals.forEach(a=>rows.push({t:a.ch[c], db:a.db, c:cls(a.ns,a.nb), what:`one way from ${o.label}, ray ${a.k}`})));
+  if (D.direct) D.direct.arrivals.forEach(a=>rows.push({t:a.ch[c], db:null, c:cls(a.ns,a.nb), what:`direct sound, ray ${a.k}`}));
+  rows.sort((a,b)=>a.t-b.t);
+  $('pick').innerHTML = `<button id="pclose" style="float:right">close</button><h2>hydrophone ${c}</h2><div class="m">at ${H[c].map(v=>fx(v,3)).join(', ')} m (row ${rowOf[c]+1} of ${rowsZ.length}). Arrivals of the ${D.pairs.length} strongest of ${D.n_pairs} two-way pairs at this hydrophone, as the synthesis places them (time after transmit); click a row to show its rays.</div>`
+    + `<table><tr><th>time (s)</th><th>level</th><th>class</th><th>what</th></tr>${rows.map((r,i)=>`<tr class="row" data-i="${i}"><td>${fx(r.t,6)}</td><td>${r.db==null?'–':fx(r.db,1)+' dB'}</td><td><span class="dot" style="background:${CLS[r.c][0]}"></span></td><td>${esc(r.what)}</td></tr>`).join('')}</table>`;
+  $('pick').hidden=false; $('pclose').onclick=()=>selectHyd(-1);
+  $('pick').querySelectorAll('tr.row').forEach(el=>el.addEventListener('click',()=>{ const p=rows[+el.dataset.i].pair; if (!p) return;
+    emphasise(new Set(RAYS.filter(x=>x.kind==='leg' && x.ti===p.target && ((x.which==='out'&&x.r.k===p.out)||(x.which==='back'&&x.r.k===p.back))))); }));
+  draw(); }
+H.forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=`${i}${rowsZ.length>1?' (row '+(rowOf[i]+1)+')':''}`; $('hsel').appendChild(o); });
+$('hsel').addEventListener('change', e=>selectHyd(+e.target.value));
+
+// ---------- time: a dot along each ray, hydrophones light as pairs arrive ----------
+const A = window.__AUDIO || null, AD = () => (window.__AUDIO_DATA || {});
+const allT = [...D.pairs.map(p=>p.t), ...(D.oneway||[]).flatMap(o=>o.arrivals.map(a=>a.t)), ...(D.direct?D.direct.arrivals.map(a=>a.t):[])];
+const recEnd = A ? A.record_start_s + A.record_duration_s : 0;
+const tMax = Math.max(...allT, ...RAYS.map(x=>x.r.delay), recEnd, 1e-3)*1.02;
+const tOut = Math.min(...D.legs.flatMap(l=>l.out.map(r=>r.delay)), Infinity);
+const slider=$('time'), tval=$('tval');
+const baseCol = hydPts.geometry.getAttribute('color').array.slice();
+const WIN = 0.004*tMax;                 // a hydrophone lights while an arrival is within this of its delay there
+let tNow = tMax*0.999, litNow = [];
+function at(x, f){ const s=f*x.Lc[x.Lc.length-1]; let i=1; while(i<x.Lc.length-1 && x.Lc[i]<s) i++; const a=x.r.line[i-1], b=x.r.line[i], u=(s-x.Lc[i-1])/Math.max(x.Lc[i]-x.Lc[i-1],1e-12); return [a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2])]; }
+function litAt(t){ const out=[]; H.forEach((p,c)=>{ if (D.pairs.some(q=>Math.abs(q.ch[c]-t)<WIN) || (D.oneway||[]).some(o=>o.arrivals.some(a=>Math.abs(a.ch[c]-t)<WIN))) out.push(c); }); return out; }
+function setTime(t){ tNow=t; const pingOk = !M || M.times.length<2 || pingIdx===tracedIdx;
+  for (const x of RAYS){ if (!x.line.visible){ x.dot.visible=false; continue; }
+    // out legs from 0; back legs (stored array to target) run backwards from the earliest arrival at the target; one-way rays (stored array to source) backwards from 0
+    let f; if (x.which==='out'||x.kind==='direct') f=t/x.r.delay; else if (x.kind==='leg') f=1-(t-tOut)/x.r.delay; else f=1-t/x.r.delay;
+    const ok = x.which==='out'||x.kind==='direct' ? (f>0&&f<1) : (x.kind==='leg' ? (t>tOut && f>0 && f<1) : (f>0&&f<1));
+    if (!ok){ x.dot.visible=false; continue; } x.dot.geometry.setFromPoints([L(at(x, x.kind==='direct'? 1-f : f))]); x.dot.visible=true; }
+  const col=hydPts.geometry.getAttribute('color'), lit=new THREE.Color(0xffc000);
+  litNow = pingOk ? litAt(t) : []; const on=new Set(litNow);
+  H.forEach((p,c)=>{ if (on.has(c)) col.setXYZ(c, lit.r, lit.g, lit.b); else col.setXYZ(c, baseCol[3*c], baseCol[3*c+1], baseCol[3*c+2]); });
+  col.needsUpdate=true; tval.textContent=t.toFixed(5)+' s'; slider.value=Math.round(Math.max(0,Math.min(1,t/tMax))*1000); drawPlayhead(); }
+
+// ---------- sound: the selected hydrophone's audio is the page's clock ----------
+// scene time (s after transmit) <-> audio time: audio_s = (scene_s - record_start_s) * time_scale (manifest.time).
+const t2a = t => A ? (t - A.time.record_start_s) * A.time.time_scale : 0, a2t = a => A ? A.time.record_start_s + a / A.time.time_scale : 0;
+const audioEl = new Audio(); audioEl.preload='auto'; try { audioEl.preservesPitch=false; audioEl.mozPreservesPitch=false; audioEl.webkitPreservesPitch=false; } catch(e) {}
+let sndHyd = 0, sndKind = 'whole', clockMode = 'skip', rate = 1, playing=null, wall=null;
+const fileOf = (c,k) => A && A.files.find(f=>f.channel===c && f.kind===k);
+const kindsOf = c => A ? [...new Set(A.files.filter(f=>f.channel===c).map(f=>f.kind))] : [];
+const kindName = k => k==='whole' ? 'whole record' : k.startsWith('arrival_') ? (()=>{ const a=A.arrivals.find(x=>x.kind===k); return a?`one arrival: out ${a.out}, back ${a.back} (${fx(a.level_db,1)} dB, ${fx(a.delay_s,4)} s)`:k; })() : k.replace(/_/g,' ');
+function loadData(c, then){ if (AD()[c] || !A || A.embedded) { then(); return; }
+  const sc=document.createElement('script'); sc.src=`${A.dir}/h${String(c).padStart(3,'0')}.js`; sc.onload=then; sc.onerror=then; document.head.appendChild(sc); }
+function setSound(c, k){ if (!A) return; if (!kindsOf(c).length) c = A.parts_channels[0] ?? 0; if (!fileOf(c,k)) k='whole';
+  sndHyd=c; sndKind=k; const f=fileOf(c,k); const src = f.src || `${A.dir}/${f.file}`;
+  if (audioEl.getAttribute('src')!==src){ audioEl.src=src; }
+  $('skind').innerHTML = kindsOf(c).map(x=>`<option value="${x}"${x===k?' selected':''}>${esc(kindName(x))}</option>`).join('');
+  $('sinfo').textContent = `hydrophone ${c} · ${kindName(k)} · ${A.kinds[k]||''} · gain ${fx(A.gains_db[k],1)} dB · peak ${fx(f.peak_dbfs,1)} dBFS`;
+  loadData(c, drawPlayhead); }
+let specImg=null, specKey='';
+function drawPlayhead(){ const cv=$('scv'); if (!cv || !A) return; const W=cv.width=cv.clientWidth*(window.devicePixelRatio||1), Hh=cv.height=150*(window.devicePixelRatio||1);
+  const g=cv.getContext('2d'); const d=AD()[sndHyd]; const T=A.plan.audio_duration_s, X=a=>a/T*W;
+  g.fillStyle='#000'; g.fillRect(0,0,W,Hh);
+  const sp=d&&d.spec[sndKind];
+  if (sp){ const key=sndHyd+'/'+sndKind; if (key!==specKey){ const raw=atob(sp.u8), im=g.createImageData(sp.cols, sp.rows);
+      for (let r=0;r<sp.rows;r++) for (let q=0;q<sp.cols;q++){ const v=raw.charCodeAt(r*sp.cols+q), o=4*((sp.rows-1-r)*sp.cols+q); im.data[o]=v; im.data[o+1]=Math.min(255,v*0.8); im.data[o+2]=Math.min(255,v*0.35+40*(v>0)); im.data[o+3]=255; }
+      const c2=document.createElement('canvas'); c2.width=sp.cols; c2.height=sp.rows; c2.getContext('2d').putImageData(im,0,0); specImg={c:c2, sp}; specKey=key; }
+    g.imageSmoothingEnabled=false; const x0=X(sp.t0-sp.dt/2), x1=X(sp.t0+sp.dt*(sp.cols-0.5)); g.drawImage(specImg.c, x0, 0, x1-x0, Hh*0.62); }
+  const ev=d&&d.env[sndKind];
+  if (ev){ const raw=atob(ev.u8); g.strokeStyle='#7fd3ff'; g.lineWidth=1; g.beginPath();
+    for (let i=0;i<raw.length;i++){ const a=t2a(ev.t0+i*ev.dt), y=Hh-2-(raw.charCodeAt(i)/255)*(Hh*0.36-4); if (i) g.lineTo(X(a),y); else g.moveTo(X(a),y); } g.stroke(); }
+  // arrivals at this hydrophone (the 40 strongest pairs): ticks at their audio times
+  for (const p of D.pairs){ const a=t2a(p.ch[sndHyd]); if (a<0||a>T) continue; g.strokeStyle=CLS[cls(p.ns,p.nb)][0]; g.lineWidth=1.5; g.beginPath(); g.moveTo(X(a),Hh*0.62); g.lineTo(X(a),Hh*0.66); g.stroke(); }
+  const ah=t2a(tNow); if (ah>=0 && ah<=T){ g.strokeStyle='#ffc000'; g.lineWidth=2; g.beginPath(); g.moveTo(X(ah),0); g.lineTo(X(ah),Hh); g.stroke(); }
+  g.fillStyle='#ddd'; g.font=`${10*(window.devicePixelRatio||1)}px system-ui`;
+  const fa=A.plan.kept_audio_hz, sp2=sp; if (sp2){ const fTop=sp2.df*sp2.rows; g.fillText(`${fx(fTop/1e3,1)} kHz heard (${fx(heardToTrue(fTop)/1e3,4)} kHz in the water)`, 4, 12*(window.devicePixelRatio||1)); }
+  g.fillText(`audio ${fx(T,2)} s · envelope: matched filter of this kind at this hydrophone (dB, 60 dB span)`, 4, Hh*0.66+12*(window.devicePixelRatio||1)); }
+const heardToTrue = f => A ? f * A.plan.factor + A.plan.shift_hz : f;
+function stopPlay(){ if (playing) cancelAnimationFrame(playing); playing=null; wall=null; audioEl.pause(); $('play').textContent='play'; if ($('splay')) $('splay').textContent='play'; }
+function startPlay(){ stopPlay(); let t = tNow>=tMax*0.99 ? 0 : tNow;
+  if (A && clockMode==='skip' && t < A.record_start_s) t = A.record_start_s;
+  setTime(t); $('play').textContent='pause'; if ($('splay')) $('splay').textContent='pause';
+  const useAudio = !!A;
+  const startAudio = () => { audioEl.playbackRate=rate; audioEl.currentTime=Math.max(0,t2a(tNow)); const pr=audioEl.play(); if (pr && pr.catch) pr.catch(()=>{}); };
+  if (useAudio && tNow >= A.record_start_s) startAudio();
+  const step = now => { if (useAudio && !audioEl.paused && tNow >= A.record_start_s){ setTime(a2t(audioEl.currentTime)); }
+      else { if (wall==null) wall=now; const dt=(now-wall)/1000; wall=now;
+        // without sound: the slider's 8 ms per 1/1000 of the span (V4); with sound, before the record starts: real time x rate
+        const nt = useAudio ? tNow + dt*rate : tNow + dt*tMax/8;
+        if (useAudio && tNow < A.record_start_s && nt >= A.record_start_s){ setTime(A.record_start_s); startAudio(); }
+        else setTime(Math.min(nt, tMax)); }
+      draw(); if (tNow >= tMax || (useAudio && audioEl.ended)) { stopPlay(); return; } playing=requestAnimationFrame(step); };
+  playing=requestAnimationFrame(step); }
+slider.addEventListener('input',()=>{ const t=slider.value/1000*tMax; setTime(t); if (A && !audioEl.paused) audioEl.currentTime=Math.max(0,t2a(t)); draw(); });
+$('play').addEventListener('click',()=>{ if (playing) stopPlay(); else startPlay(); });
+audioEl.addEventListener('ended', ()=>{ stopPlay(); });
+if (A){ const P=A.plan, snd=$('snd'); snd.hidden=false;
+  const mapText = P.method==='time_stretch' ? `${fx(P.factor,0)} s of sound for each second in the water` : 'one second of sound for each second in the water';
+  snd.innerHTML = `<b>sound</b> <span class="m">(${esc(P.method.replace('_',' '))}${P.method==='heterodyne'?`, −${fx(P.shift_hz/1e3,4)} kHz`:P.method==='time_stretch'?`, ×${fx(P.factor,0)} slower`:''})</span>
+   <div class="row"><label>hear <select id="skind"></select></label>
+   <label>clock <select id="sclock"><option value="skip">skip the silence (start at the record)</option><option value="real">real time from the transmit</option></select></label>
+   <label>rate <select id="srate">${[0.25,0.5,1,2].map(r=>`<option value="${r}"${r===1?' selected':''}>${r}×</option>`).join('')}</select></label>
+   <button id="splay">play</button>${A.stereo?` <a href="${esc(A.stereo.src||A.dir+'/'+A.stereo.file)}" download>stereo pair h${A.stereo.channels.join(' + h')}</a>`:''}</div>
+   <canvas id="scv"></canvas><div class="m" id="sinfo"></div>
+   <details><summary>how this sound was made</summary><div class="m">${esc(A.method_words)}. ${esc(A.levels)}. Time: ${esc(A.time.scene_to_audio)} (record start ${fx(A.record_start_s,4)} s after the transmit; ${mapText}). The page's clock is the audio's: the slider, the dots on the rays and the lit hydrophones follow it. "skip the silence" starts at the record (nothing is recorded before its window opens); "real time" runs from the transmit at the chosen rate and starts the sound when the window opens. The rate changes pitch with speed (no pitch correction). Parts (echoes, each reverberation item, noise, the direct sound) and single arrivals exist for hydrophone${A.parts_channels.length>1?'s':''} ${A.parts_channels.join(', ')}; the whole record for every hydrophone. Parts are the simulator's taps before the ADC.</div></details>`;
+  $('skind').addEventListener('change', e=>{ setSound(sndHyd, e.target.value); });
+  $('sclock').addEventListener('change', e=>{ clockMode=e.target.value; });
+  $('srate').addEventListener('change', e=>{ rate=+e.target.value; audioEl.playbackRate=rate; });
+  $('splay').addEventListener('click', ()=>{ if (playing) stopPlay(); else startPlay(); });
+  $('hsel').addEventListener('change', e=>{ const c=+e.target.value; if (c>=0) setSound(c, sndKind); });
+  setSound(A.parts_channels[0] ?? 0, 'whole'); }
+
+// ---------- ping slider ----------
+if ($('ping')){ const pin=$('ping'), pval=$('pval');
+  const upd=()=>{ pingIdx=+pin.value; const t=M.times[pingIdx];
+    pval.textContent=`${M.ping_index[pingIdx]} (t = ${fx(t,2)} s)` + (pingIdx===tracedIdx?' · rays traced at this ping':' · rays are traced at ping '+M.ping+' only');
+    if (pingMarks) pingMarks.geometry.setFromPoints(D.targets.map((tg,i)=>L((M.targets[i]||[tg.position])[pingIdx]||tg.position)));
+    if (pingPlat) pingPlat.geometry.setFromPoints([L(M.track[pingIdx])]);
+    if (M.track && M.track[pingIdx] && M.track[tracedIdx]){ const dd=[0,1,2].map(i=>M.track[pingIdx][i]-M.track[tracedIdx][i]); const v=LD(dd);
+      for (const k of ['array','beams','projpat']) G[k].position.copy(v); }      // the platform moves: array, beams and projector with it
+    vis(); setTime(tNow); };
+  pin.addEventListener('input', upd); upd();
+  const pb=document.createElement('button'); pb.textContent='step pings'; pb.title='step through the pings, the platform moving'; $('pingbox').appendChild(pb);
+  let stepper=null; pb.addEventListener('click',()=>{ if (stepper){ clearInterval(stepper); stepper=null; pb.textContent='step pings'; return; }
+    pb.textContent='stop'; stepper=setInterval(()=>{ pin.value=String((+pin.value+1)%M.times.length); upd(); draw(); }, 400); }); }
+
+// ---------- vertical exaggeration, views ----------
+const vin=$('vex'), vval=$('vval');
+function setVex(v){ const old=vex; vex=Math.max(1, Math.min(60, Math.round(v))); world.scale.set(1, vex, 1); ctl.target.y*=vex/old; vin.value=vex; vval.textContent=vex+'x'+(vex===1?' (true scale)':''); place(); draw(); }
+vin.addEventListener('input',()=>setVex(+vin.value));
+$('truescale').addEventListener('click',()=>setVex(1));
+function zoomAll(){ ctl.target.set(0, -(zTop+zBot)/2*vex, 0); ctl.dist=1.7*Math.max(span, zSpan*vex); ctl.az=0.85; ctl.el=0.45; place(); draw(); }
+$('zall').addEventListener('click', zoomAll);
+$('zarr').addEventListener('click',()=>{ const c=L(ref); c.y*=vex; ctl.target.copy(c);
+  if (B) { ctl.az=Math.atan2(-B.broadside[1], B.broadside[0])+0.55; ctl.el=0.35; }   /* from behind the array, looking along its look */ ctl.dist=Math.max(aperture*2.2, 0.5, Math.hypot(PJ[0]-ref[0],PJ[1]-ref[1],(PJ[2]-ref[2])*vex)*3); place(); draw(); });
+
+function draw(){ renderer.render(scene, camera); placeLabels(); }
+window.addEventListener('resize',()=>{ resize(); draw(); });
+setVex(Math.max(1, Math.min(60, Math.round(0.3*span/zSpan))));
+resize(); zoomAll(); vis(); setTime(tMax*0.999); draw();
+window.__page = {rays: RAYS.length, legRays: nDrawn, threeD: three_d.length, hydrophones: H.length, labels: LABELS.length, vex, audio: !!A, audioFiles: A ? A.files.length : 0};
+// For a browser check (tests/python/test_scene_audio.py): the clock and the lit hydrophones.
+window.__viz = {setTime: t => { setTime(t); draw(); return litNow.slice(); }, lit: () => litNow.slice(), win: WIN, tMax, t2a, a2t,
+  sound: () => A ? {hyd: sndHyd, kind: sndKind, src: audioEl.getAttribute('src')} : null, setSound: (c,k) => { setSound(c,k); return {hyd: sndHyd, kind: sndKind}; }};
+// For a browser check (tools/page3d_check.js, tests): where on the screen a drawn ray's middle vertex is.
+window.__screenOfRay = i => { const x=RAYS[i]; if (!x) return null; world.updateMatrixWorld(); const v=L(x.r.line[Math.floor(x.r.line.length/2)]).applyMatrix4(world.matrixWorld).project(camera);
+  const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x+1)/2*r.width, r.top+(1-v.y)/2*r.height]; };
+window.__ready = true;
+</script></body></html>

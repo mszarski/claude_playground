@@ -165,25 +165,39 @@ def export_wav(record, path, channels=None, normalise: bool = True) -> dict:
 
 # --- inside the simulator ------------------------------------------------------------------------
 
-_sim = {"dir": None, "ping": -1, "step": 0, "meta": []}
+_sim = {"dir": None, "ping": -1, "step": 0, "meta": [], "per_item": False}
 SIM_STAGES = ("echoes", "reverberation", "reference_and_clocks", "noise", "hardware_gain", "adc")
 
 
 @contextlib.contextmanager
-def sim_capture(directory):
+def sim_capture(directory, per_item: bool = False):
     """While active, every simulated ping saves its samples after each simulator stage:
-    <dir>/ping0000_1_echoes.npy and so on, and sim_taps.json describing them."""
+    <dir>/ping0000_1_echoes.npy and so on, and sim_taps.json describing them.
+
+    `per_item=True` (opt-in, for the scene pages' sound: python/gpusonar/viz/audio.py) also saves the samples before
+    the first reverberation item (stage `reverberation_start`, after the echoes and a basin's late tail) and after
+    each item i (`reverberation_item_<i>`, with the item's model and boundary in its entry). The reverberation items
+    run in one Python loop in sim/simulator.py whatever the engine, so these taps exist for both engines; like every
+    tap they only read the record (it is bit-identical with or without them)."""
     os.makedirs(str(directory), exist_ok=True)
-    _sim.update(dir=str(directory), ping=-1, step=0, meta=[])
+    _sim.update(dir=str(directory), ping=-1, step=0, meta=[], per_item=bool(per_item))
     try:
         yield
     finally:
         with open(os.path.join(_sim["dir"], "sim_taps.json"), "w", encoding="utf-8") as f:
             json.dump(_sim["meta"], f, indent=1)
-        _sim.update(dir=None)
+        _sim.update(dir=None, per_item=False)
 
 
-def sim_tap(record, stage: str, samples=None) -> None:
+def sim_item_tap(record, stage: str, info=None) -> None:
+    """A per-item reverberation tap (`sim_capture(..., per_item=True)`); does nothing otherwise. `info`: a dict, or a
+    callable returning one (called only while capturing)."""
+    if _sim["dir"] is None or not _sim["per_item"]:
+        return
+    sim_tap(record, stage, info=info() if callable(info) else info)
+
+
+def sim_tap(record, stage: str, samples=None, info: dict | None = None) -> None:
     """Called by the simulator after each of its stages; does nothing unless capturing."""
     if _sim["dir"] is None:
         return
@@ -196,7 +210,7 @@ def sim_tap(record, stage: str, samples=None) -> None:
     np.save(os.path.join(_sim["dir"], name), x)
     _sim["meta"].append({"ping": _sim["ping"], "stage": stage, "file": name, "sample_rate": record.samples.sample_rate,
                          "center_frequency": record.samples.center_frequency, "start_time": record.samples.start_time,
-                         "rms": float(np.sqrt(np.mean(np.abs(x) ** 2)))})
+                         "rms": float(np.sqrt(np.mean(np.abs(x) ** 2))), **({"info": info} if info else {})})
 
 
 def read_sim_taps(directory, ping: int = 0) -> dict:

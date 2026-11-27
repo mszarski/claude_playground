@@ -610,3 +610,134 @@ TEST(Options, DopplerBatchedKeysAreReadAndEchoedOnlyWhenSet) {
     EXPECT_THROW(read_options(m, pa, b), std::invalid_argument) << bad;
   }
 }
+
+// --- The tone path's grating-lobe notch (doppler.hpp plan_tone step 4b) -------------------------------------------------
+
+TEST(DopplerToneLobes, TheLobesAreTheVisibleSinesOfTheSteeringPlusWholePeriods) {
+  // A pitch of 0.65 wavelengths (popoto_long_range at 6.5 kHz: 0.15 m, lambda 0.2308 m): one lobe from 32.6 degrees.
+  const double lam = kC / 6500.0, d = 0.15, period = lam / d;
+  EXPECT_TRUE(grating_lobes(0.0, d, lam).empty());
+  EXPECT_TRUE(grating_lobes(30.0 * kDeg, d, lam).empty());
+  const std::vector<double> g = grating_lobes(-34.75 * kDeg, d, lam);
+  ASSERT_EQ(g.size(), 1U);
+  EXPECT_NEAR(g[0], std::asin(std::sin(-34.75 * kDeg) + period), 1e-15);
+  EXPECT_NEAR(g[0] / kDeg, 75.57, 0.01);     // near endfire (DOPPLER.md LS.1: 74.8 at the scene's sound speed; 1500 m/s here)
+  const std::vector<double> m = grating_lobes(34.75 * kDeg, d, lam);       // the mirror: m = -1
+  ASSERT_EQ(m.size(), 1U);
+  EXPECT_NEAR(m[0], -g[0], 1e-12);
+  // Pitch exactly half a wavelength: none for any bearing inside +-90 degrees; at endfire the other endfire (the
+  // half-wavelength line's own ambiguity there).
+  for (double b : {0.0, 30.0, 60.0, 89.0, -89.9}) EXPECT_TRUE(grating_lobes(b * kDeg, 0.5, 1.0).empty()) << b;
+  const std::vector<double> e = grating_lobes(0.5 * kPi, 0.5, 1.0);
+  ASSERT_EQ(e.size(), 1U);
+  EXPECT_NEAR(e[0], -0.5 * kPi, 1e-6);
+  // A lobe exactly at endfire: pitch one wavelength, broadside: two, at -90 and +90 degrees, in increasing m.
+  const std::vector<double> two = grating_lobes(0.0, 1.0, 1.0);
+  ASSERT_EQ(two.size(), 2U);
+  EXPECT_DOUBLE_EQ(two[0], -0.5 * kPi);
+  EXPECT_DOUBLE_EQ(two[1], 0.5 * kPi);
+  // Several lobes: pitch 2.5 wavelengths at broadside, sines +-0.4, +-0.8.
+  const std::vector<double> many = grating_lobes(0.0, 2.5, 1.0);
+  ASSERT_EQ(many.size(), 4U);
+  const double want[] = {-0.8, -0.4, 0.4, 0.8};
+  for (std::size_t i = 0; i < 4; ++i) EXPECT_NEAR(std::sin(many[i]), want[i], 1e-12) << i;
+  // Just beyond endfire: invisible without slack, at endfire with it.
+  const double s0 = 1.01 - period;                                        // sin g = 1.01
+  EXPECT_TRUE(grating_lobes(std::asin(s0), d, lam).empty());
+  const std::vector<double> near = grating_lobes(std::asin(s0), d, lam, 0.02);
+  ASSERT_EQ(near.size(), 1U);
+  EXPECT_DOUBLE_EQ(near[0], 0.5 * kPi);
+  // Not a geometry: nothing.
+  EXPECT_TRUE(grating_lobes(0.3, 0.0, lam).empty());
+  EXPECT_TRUE(grating_lobes(0.3, d, -1.0).empty());
+  EXPECT_TRUE(grating_lobes(0.3, std::nan(""), lam).empty());
+}
+
+TEST(DopplerToneLobes, TheLinesPitchIsTheUniformSpacingOfItsDistinctCoordinates) {
+  EXPECT_DOUBLE_EQ(uniform_pitch({0.0, 0.15, 0.30, 0.45}), 0.15);
+  EXPECT_NEAR(uniform_pitch({0.45, 0.0, 0.30, 0.15}), 0.15, 1e-15);       // any order
+  EXPECT_NEAR(uniform_pitch({0.0, 0.0, 0.15, 0.15, 0.30, 0.30}), 0.15, 1e-15);   // two rows of one line
+  EXPECT_EQ(uniform_pitch({0.0, 0.1, 0.3}), 0.0);                          // not uniform
+  EXPECT_EQ(uniform_pitch({0.2}), 0.0);
+  EXPECT_EQ(uniform_pitch({0.2, 0.2}), 0.0);
+}
+
+TEST(DopplerToneLobes, TheMaskNotchesEachLobesRidgeAndNothingWhenTheLinesPitchIsHalfAWavelength) {
+  // tone_record's line: 16 x 0.075 m at 8 kHz, 0.4 of a wavelength: no lobe; under way along the line: no lobe added,
+  // the mask the beam's own notch alone.
+  PingRecord r = tone_record({}, 0.0, 1);
+  r.geometry.tx_pose.velocity = r.geometry.rx_pose.velocity = Vec3d{1.5, 0.0, 0.0};
+  const TonePlan p = plan_tone(r, tone_bearings(), tone_options());
+  EXPECT_NEAR(p.pitch, kPitch, 1e-12);
+  EXPECT_TRUE(p.lobes.empty());
+  EXPECT_EQ(p.lobe_beams, 0);
+  // The same line spread to 0.15 m (0.8 of a wavelength at 8 kHz): beams beyond about 14 degrees get a lobe whose
+  // ridge is 1.5 x lambda / d = 2.34 m/s from theirs, each with a notch; the mask covers both ridges.
+  PingRecord wide = r;
+  for (std::size_t e = 0; e < wide.geometry.rx.size(); ++e) wide.geometry.rx[e].lever_arm.x *= 2.0;
+  const TonePlan q = plan_tone(wide, tone_bearings(), tone_options());
+  EXPECT_NEAR(q.pitch, 2.0 * kPitch, 1e-12);
+  ASSERT_FALSE(q.lobes.empty());
+  EXPECT_GT(q.lobe_beams, 0);
+  const std::vector<unsigned char> mask = tone_notch_mask(q);
+  std::int64_t checked = 0;
+  for (const ToneLobe& g : q.lobes) {
+    EXPECT_NEAR(g.ownship, -1.5 * std::sin(g.direction), 1e-9);
+    if (!g.endfire) EXPECT_NEAR(std::abs(g.ownship - q.ownship[static_cast<std::size_t>(g.beam)]), 1.5 * (kC / kFc) / (2.0 * kPitch), 1e-9);
+    for (std::int64_t j = 0; j < q.per_beam; ++j) {
+      const double rate = q.rates[static_cast<std::size_t>(q.first[static_cast<std::size_t>(g.beam)] + j)];
+      if (std::abs(rate - g.ownship) <= g.notch) {
+        EXPECT_EQ(mask[static_cast<std::size_t>(g.beam * q.per_beam + j)], 1);
+        ++checked;
+      }
+    }
+  }
+  EXPECT_GT(checked, 0);
+  // Off: no lobe, the mask the beam's own notch alone; the hidden interval is the mask's difference times the step.
+  DopplerOptions off = tone_options();
+  off.tone.lobe_notch = ToneLobeNotch::Off;
+  const TonePlan o = plan_tone(wide, tone_bearings(), off);
+  EXPECT_TRUE(o.lobes.empty());
+  const std::vector<unsigned char> own = tone_notch_mask(o);
+  for (std::size_t b = 0; b < q.first.size(); ++b) {
+    std::int64_t extra = 0;
+    for (std::int64_t j = 0; j < q.per_beam; ++j) {
+      const std::size_t at = b * static_cast<std::size_t>(q.per_beam) + static_cast<std::size_t>(j);
+      EXPECT_GE(mask[at], own[at]);
+      extra += mask[at] && !own[at];
+    }
+    EXPECT_DOUBLE_EQ(q.lobe_hidden[b], static_cast<double>(extra) * q.step);
+  }
+  // A still platform: every ridge at 0, the lobes listed but adding nothing.
+  PingRecord still = wide;
+  still.geometry.tx_pose.velocity = still.geometry.rx_pose.velocity = Vec3d{0.0, 0.0, 0.0};
+  const TonePlan s = plan_tone(still, tone_bearings(), tone_options());
+  EXPECT_FALSE(s.lobes.empty());
+  EXPECT_EQ(s.lobe_beams, 0);
+  // An unknown velocity: no lobe notch (every ridge is 0).
+  PingRecord lost = wide;
+  lost.geometry.tx_pose.velocity = lost.geometry.rx_pose.velocity = Vec3d{std::nan(""), 0.0, 0.0};
+  EXPECT_TRUE(plan_tone(lost, tone_bearings(), tone_options()).lobes.empty());
+  // A line that is not uniform: no lobe notch.
+  PingRecord odd = wide;
+  odd.geometry.rx[3].lever_arm.x += 0.03;
+  const TonePlan u = plan_tone(odd, tone_bearings(), tone_options());
+  EXPECT_EQ(u.pitch, 0.0);
+  EXPECT_TRUE(u.lobes.empty());
+}
+
+TEST(Options, ToneLobeNotchKeysAreReadAndEchoedOnlyWhenSet) {
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(a.doppler.tone.lobe_notch, ToneLobeNotch::Auto);
+  EXPECT_EQ(options_json(a).find("doppler_tone_lobe"), std::string::npos);
+  std::istringstream t("doppler_tone_lobe_notch=off\ndoppler_tone_lobe_floor_db=-30\n");
+  read_options(a, pa, t);
+  EXPECT_EQ(a.doppler.tone.lobe_notch, ToneLobeNotch::Off);
+  EXPECT_DOUBLE_EQ(a.doppler.tone.lobe_floor_db, -30.0);
+  EXPECT_NE(options_json(a).find("\"doppler_tone_lobe_notch\": \"off\""), std::string::npos);
+  EXPECT_NE(options_json(a).find("\"doppler_tone_lobe_floor_db\": -30"), std::string::npos);
+  ChainOptions m;
+  std::istringstream b("doppler_tone_lobe_notch=on\n");
+  EXPECT_THROW(read_options(m, pa, b), std::invalid_argument);
+}

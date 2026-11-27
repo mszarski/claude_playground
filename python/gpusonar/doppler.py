@@ -63,7 +63,12 @@ DEFAULTS = {
     "tone_range_sigma_m": None,     # the tracker's range sigma for a tone-only detection; None: c T / 8
     "tone_sidelobe_db": None,       # None: -25 dB with the Hann aperture, -7 dB rectangular
     "tone_leak_margin_db": 10.0,    # a cell no more than this above a stronger cell's leak through the tone's spectrum is dropped
+    # "auto": each beam's visible grating lobes at the tone's frequency get a notch about their own-motion ridge too (libs/live
+    # doppler.hpp step 4b; nothing changes where no lobe is visible); "off": the steered direction's notch alone (comparison).
+    "tone_lobe_notch": "auto",
+    "tone_lobe_floor_db": -40.0,    # dB: a beam whose response towards endfire is at least this gets the endfire ridge notched too
 }
+TONE_LOBE_NOTCH = ("auto", "off")
 TONES = ("off", "bank")
 TONE_KEYS = ("frequency_hz", "start_s", "duration_s", "window_alpha", "max_range_rate_m_s", "step_m_s", "hop", "notch_m_s", "notch_cells",
              "guard", "train", "false_alarms_per_ping", "gate_range_m", "gate_bearing_deg", "range_sigma_m", "sidelobe_db",
@@ -90,6 +95,10 @@ def merged(cfg: dict | None) -> dict:
         raise ValueError(f"chain.doppler.batch = {d['batch']}: hypotheses, 1 or more (None: as memory allows)")
     if d["tone"] not in TONES:
         raise ValueError(f"chain.doppler.tone: {d['tone']!r} ({' or '.join(TONES)})")
+    if d["tone_lobe_notch"] not in TONE_LOBE_NOTCH:
+        raise ValueError(f"chain.doppler.tone_lobe_notch: {d['tone_lobe_notch']!r} ({' or '.join(TONE_LOBE_NOTCH)})")
+    if not np.isfinite(float(d["tone_lobe_floor_db"])):
+        raise ValueError(f"chain.doppler.tone_lobe_floor_db = {d['tone_lobe_floor_db']}: a finite number of dB")
     if not (0.0 < float(d["tone_hop"]) <= 1.0):
         raise ValueError(f"chain.doppler.tone_hop = {d['tone_hop']}: a fraction of the tone above 0, at most 1")
     if int(d["tone_train"]) < 1 or (d["tone_guard"] is not None and int(d["tone_guard"]) < 0):
@@ -164,6 +173,10 @@ def tone_options(cfg: dict | None) -> dict:
         v = d["tone_" + key]
         if v is not None:
             o["doppler_tone_" + key] = int(v) if key in ("guard", "train") else float(v)
+    if d["tone_lobe_notch"] != "auto":           # only when not the default: every flat option line as it was
+        o["doppler_tone_lobe_notch"] = d["tone_lobe_notch"]
+    if float(d["tone_lobe_floor_db"]) != -40.0:
+        o["doppler_tone_lobe_floor_db"] = float(d["tone_lobe_floor_db"])
     o.update(_batched_options(d))
     return o
 
@@ -327,3 +340,70 @@ def tone_from_sonar(sonar, index: int = 0) -> dict:
     s = segs[index]
     return {"tone": "bank", "tone_frequency_hz": float(s.frequencies[0]), "tone_start_s": float(s.start),
             "tone_duration_s": float(s.duration), "tone_window_alpha": float(s.window_alpha)}
+
+
+# --- the hyperbolic sweep's Doppler (analysis only: the chain does not call these; docs/tasks/DOPPLER.md "HFM") -----------
+#
+# Ours, derived (and held to a direct correlation in tests/python/test_hfm_doppler.py). A hyperbolic sweep (`source: hfm`,
+# sim/waveform.py) has the instantaneous period 1 / f(u) = 1 / f0 + k u, k = (1 / f1 - 1 / f0) / T, so its phase is
+# phi(u) = ln(1 + k f0 u) / k. An echo of range rate r (opening positive) is the pulse time-scaled by eta = (c - r) / (c + r),
+# and phi(eta t) = ln(1 + k f0 eta t) / k = ln(eta) / k + phi(t + tau) with
+#
+#     tau = (1 / eta - 1) / (k f0) = (1 / eta - 1) f1 T / (f0 - f1)                    (exact, every speed)
+#
+# because 1 + k f0 eta t = eta (1 + k f0 (t + tau)) when 1 / eta = 1 + k f0 tau. So the echo is the pulse ADVANCED by tau,
+# times a constant phase, over the part of the band the two share: the matched filter peaks tau early, in full phase, and
+# loses only the pulse's ends that fall outside the replica (the edges of the band). Two consequences:
+#
+# - range bias: the peak reads c tau / 2 nearer, i.e. the range is off by  - c tau / 2 = r c / (c - r) f1 T / (f1 - f0):
+#   hfm_range_factor x r to first order, f1 T / B (f1 = f_stop), against the linear sweep's coupling f_c T / B
+#   (chain.hpp lfm_range_doppler_factor). An up-sweep reads a closing echo nearer, as the linear one does.
+# - peak loss: the echo's envelope w(eta t / T) against the replica's w((t + tau) / T) over their overlap. Untapered (w = 1),
+#   the peak over the matched one is the overlap over T: 1 + (1 / eta - 1) f1 / B for a closing echo of an up-sweep (it
+#   overruns the top of the band) and 1 - (1 / eta - 1) f0 / B for an opening one (it falls off the bottom): independent of
+#   the pulse length T. A Tukey taper softens the cut edges: less loss.
+# The textbook statement this agrees with (the HFM is "optimally Doppler tolerant") is the GSFM dissertation's
+# (arXiv:1809.11009, Ch. 2, as docs/design/projector_selection.md [A2] records it: via secondary); the relations above are ours.
+
+def hfm_range_factor(f_start: float, f_stop: float, duration: float) -> float:
+    """s: f_stop T / (f_stop - f_start). An HFM echo of range rate r (opening positive) reads hfm_range_factor x r farther
+    (to first order in r / c; `hfm_doppler` gives the exact value): the linear sweep's coupling has f_c in place of f_stop."""
+    sweep = float(f_stop) - float(f_start)
+    if sweep == 0.0:
+        raise ValueError("hfm_range_factor: f_start and f_stop must differ")
+    return float(f_stop) * float(duration) / sweep
+
+
+def _tukey(x: np.ndarray, alpha: float) -> np.ndarray:
+    w = np.where((x >= 0.0) & (x <= 1.0), 1.0, 0.0)
+    if alpha > 0.0:
+        lo, hi = (x >= 0.0) & (x < 0.5 * alpha), (x > 1.0 - 0.5 * alpha) & (x <= 1.0)
+        w = np.where(lo, 0.5 * (1.0 - np.cos(2.0 * np.pi * x / alpha)), w)
+        w = np.where(hi, 0.5 * (1.0 - np.cos(2.0 * np.pi * (1.0 - x) / alpha)), w)
+    return w
+
+
+def hfm_doppler(range_rate: float, f_start: float, f_stop: float, duration: float, sound_speed: float,
+                window_alpha: float = 0.0, points: int = 200001) -> dict:
+    """The plain matched filter of a hyperbolic sweep on an echo of range rate r (m/s, opening positive), ours (above):
+    {"peak_ratio": the compressed peak over the matched one (amplitude), "loss_db": -20 log10 of it, "time_shift_s": tau
+    (the peak comes tau early), "range_error_m": - c tau / 2 (the reported range less the true one)}. The filter is the
+    unwindowed replica (as the chain's `prepare` compresses), normalised so that a matched echo peaks at 1. `window_alpha`:
+    the pulse's Tukey taper (the envelope overlap is integrated on `points` samples; untapered it is the closed form)."""
+    c, T, f0, f1 = float(sound_speed), float(duration), float(f_start), float(f_stop)
+    eta = (c - float(range_rate)) / (c + float(range_rate))
+    tau = (1.0 / eta - 1.0) * f1 * T / (f0 - f1)
+    # The echo e(t) = w(eta t / T) exp(i ln(eta) / k) s(t + tau), t in [0, T / eta]; the replica at the peak's lag is
+    # w((t + tau) / T) s(t + tau): the overlap is t + tau in [0, T].
+    lo, hi = max(0.0, -tau), min(T / eta, T - tau)
+    if hi <= lo:
+        ratio = 0.0
+    elif window_alpha <= 0.0:
+        ratio = (hi - lo) / T
+    else:
+        t = np.linspace(lo, hi, int(points))
+        num = np.trapezoid(_tukey(eta * t / T, window_alpha) * _tukey((t + tau) / T, window_alpha), t)
+        u = np.linspace(0.0, 1.0, int(points))
+        ratio = float(num / (T * np.trapezoid(_tukey(u, window_alpha) ** 2, u)))
+    return {"peak_ratio": float(ratio), "loss_db": float(-20.0 * np.log10(ratio)) if ratio > 0.0 else float("inf"),
+            "time_shift_s": float(tau), "range_error_m": float(-0.5 * c * tau)}
