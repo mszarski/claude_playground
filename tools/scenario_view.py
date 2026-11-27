@@ -183,8 +183,8 @@ def main(argv=None) -> int:
             from gpusonar.viz import catalogue
             err = f"{type(exc).__name__}: {exc}"
             if isinstance(exc, TimeoutError):
-                err += (f". Listed for the GPU job: GPUSONAR_JOB=... is not needed; run there "
-                        f"`PYTHONPATH=python python3 tools/scenario_view.py {name} --out DIR` (CUDA synthesis), or here with more time")
+                err += (f". Listed for the GPU job (CUDA synthesis): `PYTHONPATH=python python3 tools/scenario_view.py {name} "
+                        "--out DIR`, or run it here without --timeout")
             failure_page(name, args.out, err + ("" if isinstance(exc, TimeoutError) else "\n" + traceback.format_exc(limit=3)))
             fam, short = catalogue.scenario_family(name)
             facts = {"scenario": name, "family": fam, "family_short": short, "error": err,
