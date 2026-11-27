@@ -47,7 +47,7 @@
 #               writes the committed files' names into <out-dir> (doppler_bank_eval.json, doppler_d3_eval.json,
 #               doppler_large_submerged_eval.json, doppler_baseline.json, popoto_12km.json) with the stale parts replaced.
 #               Parts (GPUSONAR_DOPPLER_REGEN_PARTS, comma separated; default bank,d3,ls,baseline,p12km). (A part's limit:
-#               GPUSONAR_DOPPLER_TIMEOUT_REGEN, default 60m)
+#               GPUSONAR_DOPPLER_TIMEOUT_REGEN, default 60m; GPUSONAR_DOPPLER_REGEN_TREE: the tree to name, as a job's archive has no git)
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
 #   GPUSONAR_DOPPLER_QUICK=1       small sizes, to check the plumbing on a CPU: the tone run on popoto_12km_doppler
@@ -267,7 +267,7 @@ if [[ $runs == *,regen,* ]]; then
     run regen "${GPUSONAR_DOPPLER_TIMEOUT_REGEN:-60m}" "$py" tools/regen_stale.py run --parts "$part" --out "$out" --backend "$be" --cache "$cache" $regen_quick
     upload
   done
-  run regen 10m "$py" tools/regen_stale.py merge --out "$out" --backend "$be" --tree "$(git rev-parse --short HEAD 2> /dev/null || echo unknown)"
+  run regen 10m "$py" tools/regen_stale.py merge --out "$out" --backend "$be" --tree "${GPUSONAR_DOPPLER_REGEN_TREE:-$(git rev-parse --short HEAD 2> /dev/null || echo unknown)}"
   upload
 fi
 exit "$status"

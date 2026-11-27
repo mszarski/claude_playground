@@ -1637,3 +1637,72 @@ tree `81364e0`, `popoto_12km_large_submerged_tone`, 4 target-free pings, default
 engines): tone path off 1 false detection; on with the lobe notch off 17, all on a lobe's ridge; on
 with the notch (auto) 0. At 3 a ping: off 16; on with the notch 25, of which 3 are the tone's. Not
 shown: more pings, the far-sidelobe case on a real scene.
+
+## Deep site at 12 km: the transmit table's noise-limited claims through the simulator and the chain (2026-11-27, branch `deepsea`, issue `sonar-rctz`; prepared, the device run not yet made)
+
+Appended; nothing above was rewritten. The trade study's transmit table (`docs/design/popoto_trade_study.md` sections 0
+and 0a; D-247) rests on the deep, noise-limited site, but the only real-scene run (HFM.8) was the reverberation-limited
+shelf. The owner has since set the requirement's sea state (D-255): the **baseline** is the shipped face (1 s, 197 dB)
+up to sea state 3; an **alternate**, `configs/builds/popoto_face_3x32_ss5.yaml` (the same face with 4 s at 200 dB, the
+least energy with a single listed projector that holds both classes at sea state 5 with the bubble law: +2.0 / +2.9 dB
+by the planner), at sea state 5. This section is the acceptance check of both. Every number is **ours**.
+
+### DS.1 Where the scene and the planner differ, and what is not known (read first)
+
+1. **The ambient noise is the planner's at the band centre and not across the band.** Both are Wenz at the site's wind
+   and shipping 0.5 (`tests/python/test_deep12_scenes.py`, to 1e-9 dB at 5 kHz, sea states 3, 4, 5 and 5 m/s). The
+   simulator's spectrum is +1.62 dB at 4 kHz and -1.37 dB at 6 kHz against the centre; its band mean is +0.13 dB, the
+   planner's flat: the scene is 0.13 dB noisier.
+2. Absorption is the planner's at 5 kHz (Ainslie-McColm at 12 C, 50 m: equal to 1e-12); across the band two-way at
+   12 km 5.96 / 7.79 / 9.96 dB at 4 / 5 / 6 kHz; on the compressed peak that is +0.02 dB against the centre's figure.
+   Sound speed: 1497.6 m/s in the scene (Mackenzie at 12 C, 35 PSU, 50 m) against the planner's 1500.
+3. The surface: the rough surface's height and the bubble loss at a bounce are the planner's (`lloyd.Surface`; the
+   bubble loss from the simulator's table within 2 %). The planner's peak keeps only the coherent part; the simulator
+   adds the scattered rest as later taps (`time_spread.surface`), which the chain's detector may collect.
+4. **The site's `bubble_model` does not reach the simulator by itself**: the scene states it again in
+   `time_spread.surface.bubble_loss_db` (the test holds the two equal). Changing that would change the simulator's
+   reading of every environment with a bubble law (none shipped); not done.
+5. The detector: the chain's single-sample threshold in this 11.3-12.7 km window is 9.45 dB (three rows added in power,
+   `--chain-set elevation={}`), the planner's 9.89 dB for the build's 0.75-12.7 km window: `tools/deep12_eval.py`
+   predicts the chain's margin against the threshold the chain used.
+6. Geometry: one own depth, 225 m (the planner's for `ship` at both deep sites; for `large_submerged` alone it
+   recommends 245 m at 5 m/s, 395 m at sea state 5, 445 m at sea state 3); the hulls at 50 m, the ship at 4 m. The
+   planner's figure at the scene's geometry is not the table's (worst over the class's depths): at sea state 3 the point
+   +2.74 against the table's +2.36 dB, the ship +9.01 against +3.32 dB (a near-surface target in a constructive lobe).
+7. Not in the planner: the hulls' five highlights resolve in range off broadside (DOPPLER.md LS.3: 3 to 6 dB under a
+   point); the chain's multiscale detector sums cells, so the linear sweep loses less on a mover than the closed form.
+8. The bank with rows runs the per-hypothesis path, not D8's batched one (which takes one row): its cost on the device
+   with 3 rows and 173 hypotheses a beam at 4 s is not measured.
+
+### DS.2 The scenes (`configs/scenarios/`, opt-in, new files)
+
+`popoto_12km_deep` (the planning site `deep_no_bottom_return` by name) and `popoto_12km_deep_sea_state_5`
+(`deep_no_bottom_return_sea_state_5` by name, the apl_1994 law); sea states 3 and 4 by `--set environment.sea_state=N`.
+Image-source paths, direct and surface image only: the cheapest tier that carries the surface path, its roughness, the
+bubble loss and the site's noise, and the planner's own paths ("direct path and surface image (no bottom return),
+isovelocity"); no Bellhop is needed (the water has no profile). The three-row face at 225 m under way at 1.5 m/s;
+`popoto_12km_large_submerged`'s three hulls unchanged, a ship at +29.2 degrees (range rate -3.65 m/s) and a +25 dB point
+moving with the platform (range rate 0: the planner's zero-speed prediction for every waveform). Cost on this CPU:
+17 s a ping (1 s linear, 96 channels), 567 s a ping (4 s hyperbolic, sampled).
+
+### DS.3 The run (`tools/doppler_gpu_runs.sh` sub-run `deep12`; `tools/deep12_eval.py` sets each case against the planner)
+
+Cases `ss{3,4,5}_{lfm1, lfm4p200, hfm4p200, hfm1}` with the plain filter and `_cfar` (the bank, 8 m/s) for the linear ones;
+6 pings and 4 target-free pings each; C++ chain, and the Python chain on `ss3_lfm1` (the baseline's acceptance). The 4 s
+cases are the alternate's energy (200 dB); the 4 s at 197 dB of the first brief is dropped for it. CPU trials of one to
+three pings (not results; plumbing): at sea state 3 the baseline's point +3.29 dB against +2.79 predicted (3 of 3), the
+crossing hull +2.53 against +1.76 (3 of 3), and the closing hull, the oblique hull and the ship not detected on any of
+3 pings with the plain filter (predicted -11.5, +1.1, -2.1 dB with the closed form's loss).
+
+### DS.4 The stale outputs of D-251 (issue `sonar-rar0`; `tools/regen_stale.py --list`)
+
+Stale (a moving platform and boundary reverberation), rerun by the `regen` sub-run: `doppler_bank_eval.json`'s
+`popoto_far_mover` and `popoto_12km`; `doppler_d3_eval.json`'s two `cfar_scenes` and `tone_p12`;
+`doppler_large_submerged_eval.json`'s `bank`, `alternate` and `train_one_ping`; `doppler_baseline.json`'s runs with a
+moving platform (`fp_v15`, `fp_v15_lfm`, `fm_*`, `k12_*`, `sp_scene`, `rs_mono`, `rs_bi`); `docs/design/popoto_12km.json`
+whole. Not stale: every part from `flank_patrol` (platform still; one ping's record SHA-256 equal under `doppler:
+per_frequency` and `doppler: centre` here), the noise-only and planner parts. Kept as they were and not reproducible at
+this tree: `tone_p12_wholetrain` (before 51d2b12 and 80df69d) and the first run's truth summary (LS.1 item 7).
+Regenerated here: `docs/handoff/examples/gallery_quick_fls_120k_transit.json` (confirmed tracks 7 -> 10, the three more
+`uncertain` and `static` clutter; detections a ping [10, 11, 10, 13] -> [11, 9, 9, 15]; with `doppler: centre` the old
+numbers come back exactly); `examples/classify_rules_eval_quick.md` rerun: unchanged.
