@@ -4,6 +4,9 @@
     tools/doppler_bank_threshold.py [--sonar long_range|flank] [--pings 60] [--max-per-beam 33] [--budgets 3,1,0.3]
                                     [--seed 7000] [--json FILE]
     tools/doppler_bank_threshold.py --reverb flank_patrol [--pings 6] [--budgets 3,1] [--json FILE]
+    tools/doppler_bank_threshold.py --at-default [--sonar long_range|flank] [--combines off,max,cfar] [--max-rates 3]
+                                    [--pings 3000] [--budget 1e-3] [--backend auto] [--workers 4] [--max-seconds S]
+                                    [--seed 30000] [--json FILE]
 
 The bank keeps, per map sample, the largest power over 2K + 1 range-rate hypotheses one tolerance (c / (2 B T)) apart.
 That maximum is not the statistic the multiscale detector's thresholds were planned for: its background (the mean of
@@ -31,6 +34,20 @@ normalised by its own background, the thresholds planned for the budget divided 
 bound), on the same noise-only pings at each budget and each --max-rates value: the counts side by side, the ratio, the
 three-sigma Poisson interval of the ratio, and the single-sample threshold of each plan (the correction in dB). With
 --reverb SCENE the same on the scene's reverberation-only pings (its targets removed, its own seed + 1000).
+
+`--at-default` (for the GPU job, tools/gpu_job.sh GPUSONAR_JOB=doppler): the live chain itself (C++ engine, the map and
+the bank's kernels on `--backend`) at ONE budget, the default (1e-3 false detections a ping, as shipped) unless --budget,
+on the SAME noise-only pings for every combiner (white noise drawn as tools/detector_search_factor.py --at-default draws
+it, on --workers threads; ping i the stream SeedSequence(seed).spawn(pings)[i]): without the bank (`off`), with D4's
+maximum (`max`, the thresholds not moved) and with D3's `cfar` (the budget divided by the hypotheses a beam), each at
+each --max-rates value. As in that tool the chain's 9 dB floor on what it reports (`min_snr_db`) is set to 0, so that the
+count is the detector's own, and the detections above the floor are counted beside it. Per row: the count, the count a
+ping over the budget, its exact 95 % Poisson interval, the single-sample threshold, the time a ping. A row stops at
+--max-seconds (said, with the pings done). The JSON is written after each row and every 500 pings.
+How many pings: at the budget, n pings expect n x 1e-3 false detections; a zero count bounds the rate under 3.7 / n
+(exact two-sided 95 %), and the 95 % interval of a count at the budget spans 0.21 to 2.9 of it at 3000 pings (3
+expected), 0.48 to 1.8 at 10 000, 0.71 to 1.4 at 40 000. On the shared 4-core CPU a ping took 0.86 s without the bank and
+14.3 s with it at 3 m/s (17 a beam, max or cfar).
 
 Output: one line per (N, budget) and a JSON file. The fit in libs/live doppler.hpp (kBankThresholdSlopeDb) is a straight
 line in ln N through the long-range array's shifts at the budgets measured; run it again and compare before changing the
@@ -217,19 +234,115 @@ def chain_counts(records, budgets, max_rates, combine: str, bearings=None, log=s
     return out
 
 
+def at_default(name: str, combines, max_rates, pings: int, budget: float, seed: int, backend: str = "auto", workers: int = 4,
+               max_seconds: float | None = None, store: Path | None = None, log=say) -> dict:
+    """The live chain's false detections on noise-only pings at `budget` (the default as shipped), without the bank and
+    with each combiner and rate, on the same pings: count, ratio to the budget, exact 95 % interval, time a ping."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    from detector_search_factor import MIN_SNR_DB, noise_pings, poisson_interval
+    sonar_name, overrides = SONARS[name]
+    sonar = SonarModel.load(sonar_name, overrides)
+    tpl = sonar.make_record(core.Pose(), environment={"sound_speed": 1500.0})
+    arr = tpl.samples.array
+    zero_hi = poisson_interval(0)[1]
+    out = {"sonar": sonar_name, "budget": budget, "asked": pings, "seed": seed, "noise_rms": NOISE_RMS, "min_snr_db": 0.0,
+           "floor_db": MIN_SNR_DB, "samples_shape": list(arr.shape),
+           "resolves": {"zero_count_upper_95_per_ping": zero_hi / pings, "expected_at_budget": budget * pings,
+                        "interval_at_budget_95": [v / pings for v in poisson_interval(int(round(budget * pings)))]},
+           "rows": {}}
+    variants = []
+    for c in combines:
+        if c == "off":
+            variants.append(("off", None))
+        else:
+            for rate in max_rates:
+                variants.append((f"{c}/{rate:g}", {"mode": "sweep_bank", "max_range_rate_m_s": float(rate), "combine": c}))
+
+    def save():
+        if store is not None:
+            store.write_text(json.dumps(out, indent=1, default=float) + "\n")
+
+    for key, dop in variants:
+        cfg = dict(CHAIN, engine="cpp", backend=backend, min_snr_db=0.0)
+        if budget != 1e-3:
+            cfg["cfar"] = {"false_alarms_per_ping": float(budget)}
+        if dop is not None:
+            cfg["doppler"] = dop
+        found, reported, done, detections = 0, 0, 0, []
+        t0 = time.time()
+        stopped = False
+
+        def row(complete: bool) -> dict:
+            lo, hi = poisson_interval(found)
+            r_lo, r_hi = poisson_interval(reported)
+            n = max(done, 1)
+            return {"combine": key.split("/")[0], "doppler": dop, "per_beam": per_beam, "pings": done, "asked": pings, "complete": complete,
+                    "stopped_for_time": stopped, "backend": used, "seconds": round(time.time() - t0, 1),
+                    "seconds_a_ping": (time.time() - t0) / n, "found": found, "per_ping": found / n, "ratio": found / (budget * n),
+                    "ratio_95": [lo / (budget * n), hi / (budget * n)], "reported": reported, "reported_ratio": reported / (budget * n),
+                    "reported_ratio_95": [r_lo / (budget * n), r_hi / (budget * n)], "threshold_db": thr, "detections": detections}
+
+        with LiveChain(cfg) as chain:
+            used = chain.backend.name if hasattr(chain.backend, "name") else str(chain.backend)
+            per_beam, thr = 1, None
+            for i, x in enumerate(noise_pings(arr.shape, np.iscomplexobj(arr), pings, seed, workers)):
+                rec = tpl.copy()
+                rec.samples.array = x
+                rec.transmit.time_ns = int(i) * 20_000_000_000            # a ping every 20 s
+                dets = chain.process(rec)["detections"]
+                if thr is None:
+                    thr = float(chain.detector["scales"][0]["threshold_db"])
+                    if dop is not None:
+                        per_beam = int(json.loads(chain._cpp.doppler()).get("per_beam", 1))
+                done += 1
+                found += len(dets)
+                reported += sum(1 for d in dets if d.get("snr_db") is not None and d["snr_db"] > MIN_SNR_DB)
+                detections += [{"ping": i, "range_m": d.get("range_m"), "bearing_deg": d.get("bearing_deg"), "snr_db": d.get("snr_db"),
+                                "range_rate_m_s": d.get("range_rate_m_s")} for d in dets]
+                if done % 500 == 0:
+                    out["rows"][key] = row(False)
+                    save()
+                    log(f"{key}: {done} pings, {found} false detections, {(time.time() - t0) / done:.3f} s a ping")
+                if max_seconds is not None and time.time() - t0 > max_seconds:
+                    stopped = True
+                    log(f"{key}: stopped after {max_seconds:g} s at {done} pings")
+                    break
+        e = out["rows"][key] = row(not stopped)
+        save()
+        log(f"{sonar_name} {key} ({per_beam} a beam) on {used}: {found} false detections in {done} pings = {e['per_ping']:.2e} a ping, "
+            f"{e['ratio']:.2f} of the budget (95 %: {e['ratio_95'][0]:.2f} to {e['ratio_95'][1]:.2f}); above the {MIN_SNR_DB:g} dB floor "
+            f"{reported}; single-sample threshold {thr:.3f} dB; {e['seconds_a_ping']:.3f} s a ping")
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sonar", default="long_range", choices=sorted(SONARS))
-    ap.add_argument("--pings", type=int, default=60)
+    ap.add_argument("--pings", type=int, help="default 60; --at-default 3000")
     ap.add_argument("--max-per-beam", type=int, default=33)
     ap.add_argument("--budgets", default="3,0.3")
-    ap.add_argument("--seed", type=int, default=7000)
+    ap.add_argument("--seed", type=int, help="default 7000; --at-default 30000")
     ap.add_argument("--json")
     ap.add_argument("--chain", choices=["cfar"], help="count the live chain's detections without the bank and with this combiner")
     ap.add_argument("--max-rates", default="3", help="--chain: the bank's max_range_rate_m_s values, comma separated")
     ap.add_argument("--reverb", help="--chain: a scene whose reverberation-only pings are counted instead of noise")
+    ap.add_argument("--at-default", action="store_true", help="the live chain at the default budget on the same noise pings: off, max, cfar")
+    ap.add_argument("--combines", default="off,max,cfar", help="--at-default: off (no bank), max, cfar, comma separated")
+    ap.add_argument("--budget", type=float, default=1e-3, help="--at-default: false detections a ping (default: as shipped)")
+    ap.add_argument("--backend", default="auto", choices=["auto", "host", "cuda"], help="--at-default: the chain's backend")
+    ap.add_argument("--workers", type=int, default=4, help="--at-default: threads drawing the noise")
+    ap.add_argument("--max-seconds", type=float, help="--at-default: stop each row after this long")
     a = ap.parse_args(argv)
     budgets = [float(v) for v in a.budgets.split(",")]
+    if a.at_default:
+        at_default(a.sonar, [c for c in a.combines.split(",") if c], [float(v) for v in a.max_rates.split(",")],
+                   3000 if a.pings is None else a.pings, a.budget, 30000 if a.seed is None else a.seed,
+                   a.backend, a.workers, a.max_seconds, Path(a.json) if a.json else None)
+        return 0
+    if a.pings is None:
+        a.pings = 60
+    if a.seed is None:
+        a.seed = 7000
     if a.chain:
         rates = [float(v) for v in a.max_rates.split(",")]
         if a.reverb:

@@ -191,6 +191,11 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("doppler_unknown_ownship_m_s")) c.doppler.unknown_ownship = option_nonnegative(key, value);
   else if (is("doppler_threshold_db")) c.doppler.threshold_db = v();   // NaN (nan): measured (bank_threshold_db)
   else if (is("doppler_combine")) c.doppler.combine = parse_doppler_combine(value);   // max | cfar (doppler.hpp; D3)
+  else if (is("doppler_batched")) c.doppler.batched = parse_doppler_batched(value);   // auto | on | off (doppler.hpp; D8)
+  else if (is("doppler_batch")) {                                  // hypotheses a batch holds; 0: as memory allows
+    c.doppler.batch = i();
+    if (c.doppler.batch < 0) throw std::invalid_argument("doppler_batch: 0 (as memory allows) or more hypotheses");
+  }
   else if (is("doppler_tone")) {                                   // off | bank: the tone's Doppler filter bank (doppler.hpp; D3)
     if (value != "off" && value != "bank") throw std::invalid_argument("doppler_tone '" + value + "': one of off, bank");
     c.doppler.tone.enabled = value == "bank";
@@ -546,6 +551,9 @@ std::string options_json(const ChainOptions& c) {
       .num("doppler_tone_gate_range_m", tone.gate_range).num("doppler_tone_gate_bearing_deg", tone.gate_bearing / kDeg)
       .num("doppler_tone_range_sigma_m", tone.range_sigma).num("doppler_tone_sidelobe_db", tone.sidelobe_db)
       .num("doppler_tone_leak_margin_db", tone.leak_margin_db);
+  // D8: written only when not the default, so that every line before D8 is the one it was.
+  if (dop.batched != DopplerBatched::Auto) j.text("doppler_batched", doppler_batched_name(dop.batched));
+  if (dop.batch != 0) j.integer("doppler_batch", dop.batch);
   j.num("min_snr_db", c.min_snr_db).text("doa", c.doa).integer("gate_fft", c.gate_fft).num("sbl_grid_step_deg", c.sbl_grid_step_deg)
       .integer("sbl_max_gates", c.sbl_max_gates).num("sbl_min_contrast_db", c.sbl_min_contrast_db).integer("sbl_max_iterations", c.sbl.max_iterations)
       .num("sbl_tolerance", c.sbl.tolerance).integer("sbl_max_sources", c.sbl.max_sources).num("sbl_dynamic_range_db", c.sbl.dynamic_range_db)

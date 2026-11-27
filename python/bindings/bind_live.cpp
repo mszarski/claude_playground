@@ -15,6 +15,7 @@
 #include "sonar/live/board_merge.hpp"
 #include "sonar/live/chain.hpp"
 #include "sonar/live/decimate.hpp"
+#include "sonar/live/doppler_batched.hpp"
 #include "sonar/live/environment.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/option_value.hpp"
@@ -121,6 +122,8 @@ live::DopplerOptions doppler_options(const Keys& d) {
   number(d, "doppler_unknown_ownship_m_s", o.unknown_ownship);
   number(d, "doppler_threshold_db", o.threshold_db);
   if (d.contains("doppler_combine")) o.combine = live::parse_doppler_combine(d["doppler_combine"].cast<std::string>());
+  if (d.contains("doppler_batched")) o.batched = live::parse_doppler_batched(d["doppler_batched"].cast<std::string>());
+  if (d.contains("doppler_batch") && !d["doppler_batch"].is_none()) o.batch = d["doppler_batch"].cast<std::int64_t>();
   if (d.contains("doppler_tone")) {
     const std::string t = d["doppler_tone"].cast<std::string>();
     if (t != "off" && t != "bank") throw std::invalid_argument("doppler_tone '" + t + "': one of off, bank");
@@ -847,6 +850,96 @@ void bind_live(py::module_& m) {
       "The tone's Doppler filter bank on a complex baseband record before pulse compression (libs/live doppler.hpp tone_stage, "
       "D3): the plan, the detections, and with keep_map the bank's power and power over background [beam, hypothesis, lag]. "
       "Options as the flat doppler_* keys. Both engines' tone path is this function.");
+  m.def(
+      "live_sweep_bank",
+      [](const PingRecord& base, const std::vector<double>& bearings, const py::dict& options, bool hann, double range_cell_m, double blank_range,
+         double guard_m, double train_m, double pfa, Backend backend, int device) {
+        const Keys kw(options);
+        const live::DopplerOptions o = doppler_options(kw);
+        kw.refuse_unread("live_sweep_bank: ");
+        live::SweepBankStage st;
+        {
+          py::gil_scoped_release release;
+          const live::DopplerPlan plan = live::plan_doppler(base, bearings, o);
+          st = live::sweep_bank_stage(base, plan, bearings, hann, range_cell_m, blank_range, guard_m, train_m, pfa, backend, device, o.batch);
+        }
+        const auto nb = static_cast<py::ssize_t>(bearings.size()), nf = static_cast<py::ssize_t>(st.fine_ranges.size());
+        const auto nc = static_cast<py::ssize_t>(st.n_cells);
+        py::array_t<float> fine({nb, nf}), cells({nb, nc});
+        py::array_t<std::int32_t> which({nb, nf});
+        std::copy(st.maps.fine.begin(), st.maps.fine.end(), fine.mutable_data());
+        std::copy(st.maps.which.begin(), st.maps.which.end(), which.mutable_data());
+        std::copy(st.maps.cells.begin(), st.maps.cells.end(), cells.mutable_data());
+        py::dict out;
+        out["fine"] = fine;
+        out["which"] = which;
+        out["cells"] = cells;
+        if (!st.maps.level.empty()) {
+          py::array_t<double> level({nb, nc});
+          std::copy(st.maps.level.begin(), st.maps.level.end(), level.mutable_data());
+          out["level"] = level;
+        } else {
+          out["level"] = py::none();
+        }
+        out["fine_ranges"] = py::array_t<double>(nf, st.fine_ranges.data());
+        out["ranges"] = py::array_t<double>(nc, st.ranges.data());
+        out["k"] = st.cell_samples;
+        out["skip"] = st.skip;
+        out["batch"] = st.maps.batch;
+        return out;
+      },
+      py::arg("base"), py::arg("bearings"), py::arg("options"), py::arg("hann"), py::arg("range_cell_m"), py::arg("blank_range"),
+      py::arg("guard_m"), py::arg("train_m"), py::arg("pfa"), py::arg("backend") = Backend::Host, py::arg("device") = 0,
+      "D8: the sweep bank's combined map by its batched formulation (libs/live chain.hpp sweep_bank_stage; on the device with "
+      "backend Cuda, on CPU threads otherwise) for the baseband record `base` before compression: fine and which [bearing, fine "
+      "range] (the maximum, or with combine cfar the normalised map), cells [bearing, cell], level (cfar: the background the "
+      "detector is given; None with max), fine_ranges, ranges, k, skip, batch. blank_range: m, NaN for none. Options as the "
+      "flat doppler_* keys. Both engines' batched bank is this function.");
+  m.def(
+      "live_sweep_bank_layout",
+      [](std::int64_t n_channels, std::int64_t n_samples, std::int64_t max_fft, std::int64_t n_hypotheses, std::int64_t n_bearings,
+         std::int64_t n_cells, std::int64_t cell_samples, std::int64_t skip, std::int64_t train, bool cfar, bool sloped, std::int64_t budget_bytes,
+         std::int64_t asked, const std::vector<std::int64_t>& n_fft) {
+        const live::SweepBankBytes b = live::sweep_bank_bytes(n_channels, n_samples, max_fft, n_hypotheses, n_bearings, n_cells, cell_samples, skip,
+                                                              train, cfar, sloped);
+        const std::int64_t batch = live::sweep_bank_batch(b, n_hypotheses, budget_bytes, asked);
+        py::dict d;
+        d["fixed"] = b.fixed;
+        d["per_hypothesis"] = b.per_hypothesis;
+        d["batch"] = batch;
+        d["runs"] = live::sweep_bank_runs(n_fft, batch);
+        return d;
+      },
+      py::arg("n_channels"), py::arg("n_samples"), py::arg("max_fft"), py::arg("n_hypotheses"), py::arg("n_bearings"), py::arg("n_cells"),
+      py::arg("cell_samples"), py::arg("skip"), py::arg("train"), py::arg("cfar"), py::arg("sloped"), py::arg("budget_bytes"),
+      py::arg("asked") = 0, py::arg("n_fft") = std::vector<std::int64_t>{},
+      "D8: the batched sweep bank's memory (bytes fixed and per hypothesis a batch holds), the batch for a budget (or `asked` "
+      "when above 0) and the batches over `n_fft` (each hypothesis' transform length): [first, count] pairs "
+      "(libs/live doppler_batched.hpp sweep_bank_bytes, sweep_bank_batch, sweep_bank_runs).");
+  m.def(
+      "doppler_profile",
+      [](bool reset) {
+        const live::DopplerProfile p = live::doppler_profile();
+        if (reset) live::doppler_profile_reset();
+        py::dict d;
+        d["prepare"] = p.prepare;
+        d["transfer"] = p.transfer;
+        d["compress"] = p.compress;
+        d["map"] = p.map;
+        d["fold"] = p.fold;
+        d["tone_beams"] = p.tone_beams;
+        d["tone_bank"] = p.tone_bank;
+        d["tone_cfar"] = p.tone_cfar;
+        d["pings"] = p.pings;
+        d["hypotheses"] = p.hypotheses;
+        d["batches"] = p.batches;
+        d["tone_calls"] = p.tone_calls;
+        d["batched_calls"] = p.batched_calls;
+        return d;
+      },
+      py::arg("reset") = false,
+      "Seconds in each part of the Doppler stages (the sweep bank, the tone path) since the last reset, both formulations "
+      "and both engines' compiled parts (libs/live doppler_batched.hpp DopplerProfile); `reset` clears it after reading.");
   m.def("live_sweep_mismatch", &live::sweep_mismatch, py::arg("phi"),
         "|integral_0^1 exp(i phi u^2) du|: a linear sweep's compressed peak with a quadratic phase error phi at its ends (doppler.hpp).");
   m.def("live_bank_threshold_db", &live::bank_threshold_db, py::arg("per_beam"),

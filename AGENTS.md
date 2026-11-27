@@ -90,7 +90,7 @@ ctest --test-dir <build dir> -R 'Tracker\.' --output-on-failure    # one GoogleT
   (and the others known) are in `docs/handoff/TESTS.md` section 4.
 - GPU: the full GPU suite runs through `tools/gpu_job.sh` in the GPU job (`docs/handoff/TESTS.md`; launch
   mechanics in `docs/HANDOFF.md` section 4) and is run before every merge. `bash tools/gpu_job.sh --help`
-  lists its switches and job modes (`GPUSONAR_JOB=benchmark|gallery|elevbench|liveablate|benchall|clseval|falsealarm|motion`).
+  lists its switches and job modes (`GPUSONAR_JOB=benchmark|gallery|elevbench|liveablate|benchall|clseval|falsealarm|doppler|motion`).
 - Oracles: `tools/build_oracles.sh <out-dir>` builds Bellhop, Bellhop3D and KRAKEN (needs `gfortran`) and
   prints the `export` line as its last line.
 

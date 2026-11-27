@@ -45,10 +45,17 @@
 #                                               detector's false detections at the default budget on noise-only pings
 #                                               (issue sonar-ydi; GPUSONAR_FA_ARGS appended, e.g. "--maps long_range");
 #                                               uploads at_default.json to GPUSONAR_UPLOAD_PATH, default falsealarm
+#        GPUSONAR_JOB=doppler tools/gpu_job.sh  (with GPUSONAR_ORACLES=1: Bellhop for the eigenray scenes) the Doppler
+#                                               measurements a CPU cannot finish (docs/tasks/DOPPLER.md D3.1, table 9.5):
+#                                               tools/doppler_gpu_runs.sh /work/doppler, simulator and chain on the device;
+#                                               GPUSONAR_DOPPLER_RUNS=tone,falsealarm,timing (default all), each under its own
+#                                               limit; doppler_tone_eval.json, doppler_bank_at_default.json, timing_*.json and
+#                                               the logs, uploaded after each sub-run to GPUSONAR_UPLOAD_PATH, default doppler
+#                                               (bash tools/doppler_gpu_runs.sh --help lists its variables)
 #        GPUSONAR_JOB=motion tools/gpu_job.sh  (with GPUSONAR_CERES=1) the motion-estimation tests
 #                                               (tests/python/test_motion*.py), then tools/motion_study.py timing
 #                                               (delay estimation: NumPy, C++ host, CUDA); log only, nothing uploaded
-# Uploads (gallery, elevbench, liveablate, benchall, clseval, falsealarm) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
+# Uploads (gallery, elevbench, liveablate, benchall, clseval, falsealarm, doppler) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
 case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
@@ -192,6 +199,14 @@ if [ "${GPUSONAR_JOB:-tests}" = "falsealarm" ]; then
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/falsealarm/at_default.json ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/falsealarm "${GPUSONAR_UPLOAD_PATH:-falsealarm}" --type dataset > /dev/null
   fi
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "doppler" ]; then
+  # The tone scene end to end, the bank's false detections at the default budget and a ping's cost with the bank, on the
+  # device (tools/doppler_gpu_runs.sh: each sub-run limited, its JSON written as it goes and uploaded after it).
+  status=0
+  bash tools/doppler_gpu_runs.sh /work/doppler || status=$?
+  ls -l /work/doppler
   exit "$status"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "motion" ]; then

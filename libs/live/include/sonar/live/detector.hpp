@@ -190,6 +190,10 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
 /// file). `train_cells` [n_cells] receives the number of independent training cells the estimate is worth.
 void detector_background(const float* cell_mean, std::int64_t n_bearing, std::int64_t n_cells, std::int64_t guard, std::int64_t train,
                          std::vector<double>& background, std::vector<double>& train_cells);
+/// The window detector_background uses on `n_cells` cells: each cell's offset of its training cells' centroid (cells; 0
+/// where balanced) and whether the background follows a slope. What the kernels of detector_kernel.hpp are given when
+/// the background is computed batched (the sweep bank's combine cfar on the device, doppler_batched.hpp).
+void detector_background_window(std::int64_t n_cells, std::int64_t guard, std::int64_t train, std::vector<double>& offset, bool& sloped);
 
 /// The detector's statistic, cell by cell [n_bearing * n_cells]: what multiscale_detect tests before it drops sidelobes
 /// and groups.
