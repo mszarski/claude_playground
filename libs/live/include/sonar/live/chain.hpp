@@ -262,6 +262,22 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
 std::vector<std::complex<float>> beam_samples(const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann,
                                               Backend backend = Backend::Host, int device = 0);
 
+/// The geometry range_bearing_power maps with (aperture weights, the array's origin, each bearing's direction).
+MapGeometry map_geometry(const PingRecord& record, const std::vector<double>& bearings, bool hann);
+
+/// D8 (docs/tasks/DOPPLER.md): the sweep bank's combined map for the baseband record `base` (before compression) by the
+/// batched formulation (doppler.hpp sweep_bank_maps), on the grid, blanked cells and detector window the chain's loop uses
+/// (`blank_range` m, NaN: none). What LiveChain::process does with `doppler.batched` on (or auto on the cuda backend),
+/// and what the Python engine calls (gpusonar.doppler.batched_maps).
+struct SweepBankStage {
+  SweepBankMaps maps;
+  std::vector<double> fine_ranges, ranges;
+  std::int64_t n_cells = 0, cell_samples = 1, skip = 0;
+};
+SweepBankStage sweep_bank_stage(const PingRecord& base, const DopplerPlan& plan, const std::vector<double>& bearings, bool hann, double range_cell_m,
+                                double blank_range, double cfar_guard_m, double cfar_train_m, double cfar_pfa, Backend backend, int device,
+                                std::int64_t batch);
+
 class LiveChain {
  public:
   explicit LiveChain(const ChainOptions& options = {});

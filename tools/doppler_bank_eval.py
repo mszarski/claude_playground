@@ -3,7 +3,7 @@
 track with the bank off and on, the false detections on the scene's background, and the cost a ping.
 
     tools/doppler_bank_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0] [--combine max|cfar]
-                               [--json FILE]
+                               [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once; its records go through `LiveChain` with the deployment defaults (bearings -40
@@ -26,6 +26,15 @@ The background: the scene with its targets removed (reverberation and noise as t
 pings, counted at the default budget and at 3 false detections a ping (cfar.false_alarms_per_ping), bank off and on.
 
 Cost: the chain's processing_seconds a ping (the first ping left out), per engine, off and on.
+
+`--truth-at reflection` (default `ping`, as every committed run): each target's truth is taken where it is when the
+pulse reaches it (one-way delay R / c after the ping, the platform at that time too) instead of at the ping's time: at
+12 km that is 8 s, 45 m for a target closing at 5.6 m/s. `--gate-range-m` (default 60): the range gate about the
+target's centre (a 100 m hull seen bow-on puts its nearest highlight 50 m short of the centre, and the sweep's
+range-Doppler coupling moves it f0 T (2 r / c) / B further).
+
+`--cache DIR`: the simulated records (the scene's and the background's) are kept there as container files and read back
+on the next run, by tools/doppler_tone_eval.py's `simulate` (the same file names: the two tools share a scene's records).
 """
 from __future__ import annotations
 
@@ -59,8 +68,10 @@ def centre(item) -> np.ndarray:
     return np.asarray(item["origin"], dtype=float)
 
 
-def truth(cfg: dict, n: int) -> dict:
-    """Per target label: per ping (slant range m, bearing deg, x north, y east, range rate m/s opening) from the platform."""
+def truth(cfg: dict, n: int, sound_speed: float | None = None) -> dict:
+    """Per target label: per ping (slant range m, bearing deg, x north, y east, range rate m/s opening) from the platform.
+    With `sound_speed`, at the time the pulse reaches the target (the ping's time plus the one-way delay, from the
+    ping-time range) instead of at the ping's time."""
     plat = cfg.get("platform", {})
     p0, vp = np.asarray(plat.get("position", [0, 0, 0]), dtype=float), np.asarray(plat.get("velocity", [0, 0, 0]), dtype=float)
     dt = float(cfg.get("pings", {}).get("interval", 1.0))
@@ -73,6 +84,8 @@ def truth(cfg: dict, n: int) -> dict:
         rows = []
         for i in range(n):
             t = i * dt
+            if sound_speed:
+                t += float(np.linalg.norm((c0 + v * t) - (p0 + vp * t))) / float(sound_speed)
             p, c = p0 + vp * t, c0 + v * t
             d = c - p
             u = d / np.linalg.norm(d)
@@ -152,18 +165,32 @@ def main(argv=None) -> int:
     ap.add_argument("--max-rate", type=float, default=3.0)
     ap.add_argument("--combine", default="max", choices=["max", "cfar"])
     ap.add_argument("--json")
+    ap.add_argument("--cache", help="a directory: keep the simulated records there and read them back on the next run")
+    ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
+    ap.add_argument("--gate-range-m", type=float, default=60.0)
     a = ap.parse_args(argv)
+    global GATE_RANGE_M
+    GATE_RANGE_M = a.gate_range_m
+    sim = None
+    if a.cache:
+        sys.path.insert(0, str(ROOT / "tools"))
+        import doppler_tone_eval                       # imported here: it imports this module's truth()
+        doppler_tone_eval.CACHE = a.cache
+        sim = doppler_tone_eval.simulate
     cfg = load_scenario_config(a.scene, expand=False)
     if a.pings:
         cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
     t0 = time.time()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        records = run_scenario(copy.deepcopy(cfg)).records
+    if sim is not None:
+        records = sim(cfg)
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            records = run_scenario(copy.deepcopy(cfg)).records
     say(f"{a.scene}: {len(records)} pings simulated in {time.time() - t0:.0f} s, {records[0].samples.n_channels} channels")
-    truths = truth(cfg, len(records))
+    truths = truth(cfg, len(records), float(records[0].environment.sound_speed) if a.truth_at == "reflection" else None)
     result = {"scene": a.scene, "pings": len(records), "channels": int(records[0].samples.n_channels), "max_range_rate_m_s": a.max_rate,
-              "combine": a.combine, "engines": {}, "background": {}}
+              "combine": a.combine, "truth_at": a.truth_at, "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {}}
     for engine in a.engines:
         res = {}
         for bank in (False, True):
@@ -188,9 +215,12 @@ def main(argv=None) -> int:
         bcfg["scene"] = []
         bcfg["pings"] = dict(bcfg.get("pings", {}), count=int(a.background))
         bcfg["seed"] = int(cfg.get("seed", 0)) + 1000
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            back = run_scenario(bcfg).records
+        if sim is not None:
+            back = sim(bcfg, "background")
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                back = run_scenario(bcfg).records
         for budget in (None, 3.0):
             row = {}
             for bank in (False, True):

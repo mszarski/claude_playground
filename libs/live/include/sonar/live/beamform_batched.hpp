@@ -59,9 +59,11 @@ class BeamformStopwatch {
 
 /// `samples` [n_el][n] interleaved complex (conditioned), `w` [n_el], `tau` [n_b][n_el];
 /// `out` [n_b][n] interleaved complex.
+/// The beams left where they were made (the executor's memory), [n_b][n] interleaved complex: what farfield_batched
+/// downloads, and what the tone's Doppler filter bank takes on the device (doppler_batched.hpp).
 template <class Exec>
-void farfield_batched(Exec& ex, const float* samples, const float* w, const double* tau, std::int64_t n,
-                      std::int64_t n_el, std::int64_t n_b, double df, double fc, float* out, BeamformProfile& profile) {
+auto farfield_batched_device(Exec& ex, const float* samples, const float* w, const double* tau, std::int64_t n,
+                             std::int64_t n_el, std::int64_t n_b, double df, double fc, BeamformProfile& profile) {
   BeamformStopwatch watch;
   auto x = ex.upload(samples, static_cast<std::size_t>(2 * n_el * n));
   auto d_w = ex.upload(w, static_cast<std::size_t>(n_el));
@@ -75,9 +77,17 @@ void farfield_batched(Exec& ex, const float* samples, const float* w, const doub
   watch.lap(profile.sum);
   ex.fft(beams.data(), n, n_b, true);
   watch.lap(profile.transform);
+  ++profile.farfield_calls;
+  return beams;
+}
+
+template <class Exec>
+void farfield_batched(Exec& ex, const float* samples, const float* w, const double* tau, std::int64_t n,
+                      std::int64_t n_el, std::int64_t n_b, double df, double fc, float* out, BeamformProfile& profile) {
+  auto beams = farfield_batched_device(ex, samples, w, tau, n, n_el, n_b, df, fc, profile);
+  BeamformStopwatch watch;
   ex.download(beams, out);
   watch.lap(profile.transfer);
-  ++profile.farfield_calls;
 }
 
 struct MvdrBatchedInput {

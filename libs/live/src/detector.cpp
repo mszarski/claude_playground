@@ -367,6 +367,13 @@ void detector_background(const float* cell_mean, std::int64_t n_b, std::int64_t 
   }
 }
 
+void detector_background_window(std::int64_t n_cells, std::int64_t guard, std::int64_t train, std::vector<double>& offset, bool& sloped) {
+  std::vector<double> worth;
+  BackgroundWindow bw = background_window(n_cells, guard, train, worth);
+  offset = std::move(bw.offset);
+  sloped = bw.sloped;
+}
+
 #if SONAR_HAVE_CUDA
 // detector_cuda.cu: the kernels of detector_kernel.hpp on the device.
 void multiscale_cells_cuda(const float* fine, std::int64_t fine_stride, std::int64_t fine_offset, const float* cell_mean, std::int64_t n_b,

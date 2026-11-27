@@ -39,6 +39,13 @@ struct PulseCompressionOptions {
 void pulse_compress(PingRecord& record, const PulseCompressionOptions& options = {},
                     Backend backend = Backend::Host, int device = 0);
 
+/// The filter pulse_compress multiplies every channel's spectrum by: conj(FFT(replica)) scaled so that a unit echo
+/// compresses to a unit peak, the replica zero-padded to `n_fft` = good_fft_size(n_samples + replica length) (returned).
+/// pulse_compress calls it; the sweep's Doppler bank (libs/live doppler_batched.hpp) takes each hypothesis' filter from it.
+std::vector<std::complex<float>> compression_filter(const Waveform& waveform, double sample_rate, double center_frequency,
+                                                    std::int64_t n_samples, const PulseCompressionOptions& options,
+                                                    std::int64_t& n_fft);
+
 /// The baseband replica used above, sampled at `sample_rate` (complex, interleaved).
 std::vector<std::complex<float>> make_replica(const Waveform& waveform, double sample_rate,
                                               double center_frequency,

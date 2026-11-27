@@ -4,7 +4,8 @@ its path (sweep, tone, both), range rate and range error, its track, the tone's 
 scene's background, and the cost a ping.
 
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
-                               [--alternate HZ] [--cache DIR] [--json FILE]
+                               [--alternate HZ] [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
+                               [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -29,6 +30,15 @@ The background: the scene with its targets removed (new draws, seed + 1000), --b
 budget and at 3 false detections a ping (both paths' budgets), tone path off and on, by path.
 
 Cost: the chain's processing_seconds a ping (the first ping left out), per engine, off and on.
+
+`--backend` is the chain's backend (default host, as above; cuda for the GPU job, tools/gpu_job.sh GPUSONAR_JOB=doppler) and
+`--sim-backend` the simulator's (default host; cuda: the C++ synthesis and reverberation on the device). The JSON is
+written after each engine and after the background (a run stopped by a time limit keeps what it had); the result names
+both backends. `--set KEY=VALUE` changes the scene before anything runs (KEY dotted into the scenario, VALUE read as
+YAML), for a check of the plumbing on a CPU, e.g. `--set fidelity=free_field --set "reverberation=[]"`: not a measurement
+of the scene; the result lists the changes and the cache's file names carry them.
+`--truth-at` and `--gate-range-m`: as tools/doppler_bank_eval.py's (the truth at the pulse's reflection time; the sweep
+detection's range gate).
 """
 from __future__ import annotations
 
@@ -61,12 +71,18 @@ def say(text: str) -> None:
 
 
 CACHE = None          # --cache DIR: simulated records kept as container files, read back on the next run of the same scene
+BACKEND = "host"      # --backend: the chain's
+SIM_BACKEND = "host"  # --sim-backend: the simulator's (host or cuda)
 
 
 def simulate(cfg: dict, tag: str = "scene"):
     path = None
     if CACHE is not None:
-        key = f"{cfg.get('name', 'scene')}_{tag}_{int(cfg.get('pings', {}).get('count', 1))}_{int(cfg.get('seed', 0))}.h5"
+        key = f"{cfg.get('name', 'scene')}_{tag}_{int(cfg.get('pings', {}).get('count', 1))}_{int(cfg.get('seed', 0))}"
+        if cfg.get("_sets"):
+            import hashlib
+            key += "_set" + hashlib.sha1("\n".join(cfg["_sets"]).encode()).hexdigest()[:8]
+        key += ".h5" if SIM_BACKEND == "host" else f"_{SIM_BACKEND}.h5"
         path = Path(CACHE) / key
         if path.exists():
             from gpusonar.sources.container import ContainerSource
@@ -74,7 +90,9 @@ def simulate(cfg: dict, tag: str = "scene"):
                 return list(src)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        records = run_scenario(copy.deepcopy(cfg)).records
+        run_cfg = copy.deepcopy(cfg)
+        run_cfg.pop("_sets", None)
+        records = run_scenario(run_cfg, backend=sim_backend(SIM_BACKEND)).records
     if path is not None:
         from gpusonar import core
         Path(CACHE).mkdir(parents=True, exist_ok=True)
@@ -83,6 +101,31 @@ def simulate(cfg: dict, tag: str = "scene"):
             writer.write(r)
         writer.close()
     return records
+
+
+def apply_sets(cfg: dict, sets) -> dict:
+    """The scenario with each KEY=VALUE of --set applied (KEY dotted, VALUE read as YAML); `cfg` itself is changed."""
+    import yaml
+    for item in sets or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise ValueError(f"--set {item!r}: KEY=VALUE")
+        *path, last = key.split(".")
+        node = cfg
+        for k in path:
+            node = node.setdefault(k, {})
+        node[last] = yaml.safe_load(value)
+    if sets:
+        cfg["_sets"] = list(sets)
+    return cfg
+
+
+def sim_backend(name: str):
+    """The simulator's backend for --sim-backend (run_scenario takes the core enum)."""
+    from gpusonar import core
+    if name not in ("host", "cuda"):
+        raise ValueError(f"simulator backend {name!r} (host or cuda)")
+    return core.Backend.Cuda if name == "cuda" else core.Backend.Host
 
 
 def tone_keys(cfg: dict) -> dict:
@@ -94,7 +137,7 @@ def tone_keys(cfg: dict) -> dict:
 
 
 def chain_config(engine: str, tone: dict | None, max_rate: float, budget: float | None = None) -> dict:
-    cfg = {"engine": engine, "backend": "host"}
+    cfg = {"engine": engine, "backend": BACKEND}
     if tone is not None:
         cfg["doppler"] = dict(tone, report=True, max_range_rate_m_s=max_rate)
         if budget is not None:
@@ -186,10 +229,16 @@ def main(argv=None) -> int:
     ap.add_argument("--alternate", type=float, help="Hz: alternate tone-only (at this frequency) and sweep-only pings of SCENE")
     ap.add_argument("--json")
     ap.add_argument("--cache", help="a directory: keep the simulated records there and read them back on the next run")
+    ap.add_argument("--backend", default="host", choices=["host", "cuda", "auto"], help="the chain's backend (default host)")
+    ap.add_argument("--sim-backend", default="host", choices=["host", "cuda"], help="the simulator's backend (default host)")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene (a plumbing check, not a measurement)")
+    ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
+    ap.add_argument("--gate-range-m", type=float, default=60.0)
     a = ap.parse_args(argv)
-    global CACHE
-    CACHE = a.cache
-    cfg = load_scenario_config(a.scene, expand=False)
+    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M
+    CACHE, BACKEND, SIM_BACKEND = a.cache, a.backend, a.sim_backend
+    GATE_RANGE_M = a.gate_range_m
+    cfg = apply_sets(load_scenario_config(a.scene, expand=False), a.set)
     t0 = time.time()
     energy = None
     if a.alternate:
@@ -200,11 +249,22 @@ def main(argv=None) -> int:
             cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
         records, tone, eval_cfg = simulate(cfg), tone_keys(cfg), cfg
     say(f"{a.scene}: {len(records)} pings simulated in {time.time() - t0:.0f} s, {records[0].samples.n_channels} channels; tone {tone}")
-    truths = truth(eval_cfg, len(records))
     c = float(records[0].environment.sound_speed)
+    truths = truth(eval_cfg, len(records), c if a.truth_at == "reflection" else None)
     tone_gate = 0.25 * c * float(tone.get("tone_duration_s") or records[0].transmit.waveform.duration)
     result = {"scene": a.scene, "alternate_hz": a.alternate, "tone_energy_db": energy, "pings": len(records),
-              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "engines": {}, "background": {}}
+              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "truth_at": a.truth_at,
+              "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {},
+              "backend": a.backend, "sim_backend": a.sim_backend, "simulated_s": round(time.time() - t0, 1), "set": a.set}
+
+    def store():
+        """The result so far (the C++ reports, kept for the comparison, left out)."""
+        if a.json:
+            out = {k: v for k, v in result.items() if k != "engines"}
+            out["engines"] = {e: {n: ({k: v for k, v in r.items() if k != "reports"} if isinstance(r, dict) else r) for n, r in res_e.items()}
+                              for e, res_e in result["engines"].items()}
+            Path(a.json).write_text(json.dumps(out, indent=1, default=float) + "\n")
+    store()                                   # the simulation's time, before the chains run
     for engine in a.engines:
         res = {}
         for name, t in (("off", None), ("on", tone)):
@@ -232,6 +292,7 @@ def main(argv=None) -> int:
                     f"{[None if p['snr_db'] is None else round(p['snr_db'], 1) for p in s['pings']]}, rate {[None if v is None else round(v, 3) for v in rr]} "
                     f"(true {round(s['pings'][0]['true_range_rate_m_s'], 3)}), tone margin {tm}; tracked {s['tracked']} ({s['kind']})")
         result["engines"][engine] = res
+        store()
     if len(a.engines) == 2:
         # The two engines' report lines, detection by detection (python's are kept only to compare here).
         same = True
@@ -246,6 +307,7 @@ def main(argv=None) -> int:
                     same = False
         result["engines_equal_on"] = same
         say(f"{a.scene}: the engines' report lines with the tone path {'agree' if same else 'DIFFER'} (0.05 m, 0.05 deg, 0.05 dB, path)")
+        store()
     for engine in a.engines:
         for name in ("off", "on"):
             result["engines"][engine][name].pop("reports", None)
@@ -265,8 +327,8 @@ def main(argv=None) -> int:
             result["background"]["default" if budget is None else str(budget)] = dict(row, pings=len(back))
             say(f"{a.scene} background, {len(back)} pings, budget {'default' if budget is None else budget}: false detections off {row['off']}, "
                 f"on {row['on']} (tone alone {row['on_tone_only']})")
-    if a.json:
-        Path(a.json).write_text(json.dumps(result, indent=1, default=float) + "\n")
+            store()
+    store()
     return 0
 
 

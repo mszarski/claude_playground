@@ -65,4 +65,8 @@ void multiscale_cells_cuda(const float* fine, std::int64_t fine_stride, std::int
   download(flag, d_flag, n);
 }
 
+void launch_on_device(const DetectorMedianKernel& kernel, std::int64_t n) { parallel_for_cuda(n, kernel); }
+void launch_on_device(const DetectorRowKernel& kernel, std::int64_t n) { parallel_for_cuda(n, kernel); }
+void launch_on_device(const DetectorCellKernel& kernel, std::int64_t n) { parallel_for_cuda(n, kernel); }
+
 }  // namespace sonar::live

@@ -17,7 +17,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 TOOLS = sorted(p.name for p in (ROOT / "tools").glob("*.py"))
 SCRIPTS = sorted(p.name for p in (ROOT / "tools").glob("*.sh"))
-OUT_DIR_SCRIPTS = ("build_hsb.sh", "build_nvus_reference.sh", "build_oracles.sh")
+OUT_DIR_SCRIPTS = ("build_hsb.sh", "build_nvus_reference.sh", "build_oracles.sh", "doppler_gpu_runs.sh")
 
 # tool -> (condition under which it cannot answer --help here, reason)
 SKIP = {}
@@ -77,4 +77,4 @@ def test_scripts_refuse_a_missing_or_option_like_output_directory(name, args, tm
 
 
 def test_every_script_is_covered():
-    assert set(SCRIPTS) == {"build_hsb.sh", "build_nvus_reference.sh", "build_oracles.sh", "gpu_job.sh", "test.sh"}
+    assert set(SCRIPTS) == {"build_hsb.sh", "build_nvus_reference.sh", "build_oracles.sh", "doppler_gpu_runs.sh", "gpu_job.sh", "test.sh"}

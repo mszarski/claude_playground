@@ -1480,6 +1480,15 @@ class LiveChain:
         which = normalised = None
         if bank is None or not doppler.several(bank):
             fine, fine_ranges, k = map_of(record, subs)
+        elif rows is None and doppler.batched(cfg["doppler"], self.backend):
+            # D8: every hypothesis, the zero one too, from the baseband record by the batched formulation (on the device with
+            # the cuda backend: one upload a ping, the combined map and the detector's inputs back in one download); the
+            # function libs/live chain.cpp calls (doppler.batched_maps, sweep_bank_stage).
+            st = doppler.batched_maps(base, self.bearings, cfg["doppler"], cfg["window"] == "hann", cfg["range_cell_m"], self._blank_range,
+                                      cfg["cfar"]["guard_m"], cfg["cfar"]["train_m"], cfg["cfar"]["pfa"], self.backend)
+            fine, fine_ranges, k, which = st["fine"], st["fine_ranges"], int(st["k"]), st["which"]
+            if st["level"] is not None:
+                normalised = (st["cells"], st["level"])
         elif doppler.merged(cfg["doppler"])["combine"] == "cfar":
             # D3, combine cfar: each hypothesis' map normalised by its own background (the detector's estimate on its own
             # cell means, over the cells the detector keeps), the largest normalised value per sample over the beam's

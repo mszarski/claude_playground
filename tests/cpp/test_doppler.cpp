@@ -14,6 +14,7 @@
 #include "sonar/live/chain.hpp"
 #include "sonar/live/detector.hpp"
 #include "sonar/live/doppler.hpp"
+#include "sonar/live/doppler_batched.hpp"
 #include "sonar/live/options.hpp"
 
 using namespace sonar;        // NOLINT(google-build-using-namespace)
@@ -548,3 +549,64 @@ TEST(DopplerTone, TheChainReportsTheToneAndOffIsAsBefore) {
 }
 
 }  // namespace
+
+// --- D8: the batched formulation (doppler_batched.hpp) -------------------------------------------------------------------
+
+TEST(DopplerBatched, TheBatchIsWhatTheBudgetHoldsAndRunsNeverMixTransformLengths) {
+  const SweepBankBytes b = sweep_bank_bytes(4, 1000, 2048, 9, 3, 50, 4, 0, 8, false, false);
+  EXPECT_EQ(b.per_hypothesis, 8 * 2048 + 8 * 4 * 2048 + 8 * 4 * 1000 + 8 * 3 * 50 * 4);
+  EXPECT_EQ(sweep_bank_batch(b, 9, b.fixed + 4 * b.per_hypothesis, 0), 4);
+  EXPECT_EQ(sweep_bank_batch(b, 9, b.fixed + 4 * b.per_hypothesis - 1, 0), 3);
+  EXPECT_EQ(sweep_bank_batch(b, 9, 0, 0), 1);
+  EXPECT_EQ(sweep_bank_batch(b, 9, std::int64_t{1} << 40, 0), 9);
+  EXPECT_EQ(sweep_bank_batch(b, 9, 0, 2), 2);
+  EXPECT_EQ(sweep_bank_batch(b, 9, 0, 20), 9);
+  EXPECT_EQ(sweep_bank_runs({8, 8, 8, 8, 9, 9, 8}, 3), (std::vector<std::int64_t>{0, 3, 3, 1, 4, 2, 6, 1}));
+  EXPECT_EQ(sweep_bank_runs({5, 5, 5}, 0), (std::vector<std::int64_t>{0, 1, 1, 1, 2, 1}));
+}
+
+TEST(DopplerBatched, OnTheHostTheBatchedBankIsTheLoopLineForLine) {
+  // The same kernels on CPU threads in the loop's order: the report and the maps bit for bit, both combiners, one batch
+  // and batches of 1 and 4.
+  for (const DopplerCombine combine : {DopplerCombine::Max, DopplerCombine::Cfar}) {
+    PingRecord a = empty_record();
+    add_echo(a, 250.0, 2.0, 0.2);
+    add_noise(a, 0.05, 4);
+    ChainOptions loop = options(true);
+    loop.doppler.combine = combine;
+    LiveChain ref(loop);
+    PingRecord ra_rec = a;
+    Report ra = ref.process(ra_rec);
+    ra.processing_seconds = 0.0;
+    ASSERT_GE(ra.detections.size(), 1U);
+    for (const std::int64_t batch : {std::int64_t{0}, std::int64_t{1}, std::int64_t{4}}) {
+      ChainOptions on = loop;
+      on.doppler.batched = DopplerBatched::On;
+      on.doppler.batch = batch;
+      LiveChain chain(on);
+      PingRecord rb_rec = a;
+      Report rb = chain.process(rb_rec);
+      rb.processing_seconds = 0.0;
+      EXPECT_EQ(ra.json(), rb.json()) << doppler_combine_name(combine) << " batch " << batch;
+      EXPECT_EQ(chain.last_power, ref.last_power);
+      EXPECT_EQ(chain.last_ranges, ref.last_ranges);
+      EXPECT_EQ(chain.last_hypotheses(), ref.last_hypotheses());
+    }
+  }
+}
+
+TEST(Options, DopplerBatchedKeysAreReadAndEchoedOnlyWhenSet) {
+  ChainOptions a;
+  PassiveOptions pa;
+  EXPECT_EQ(options_json(a).find("doppler_batch"), std::string::npos);
+  std::istringstream t("doppler_batched=on\ndoppler_batch=3\n");
+  read_options(a, pa, t);
+  EXPECT_EQ(a.doppler.batched, DopplerBatched::On);
+  EXPECT_EQ(a.doppler.batch, 3);
+  EXPECT_NE(options_json(a).find("\"doppler_batched\": \"on\", \"doppler_batch\": 3"), std::string::npos);
+  for (const char* bad : {"doppler_batched=yes\n", "doppler_batch=-1\n"}) {
+    ChainOptions m;
+    std::istringstream b(bad);
+    EXPECT_THROW(read_options(m, pa, b), std::invalid_argument) << bad;
+  }
+}

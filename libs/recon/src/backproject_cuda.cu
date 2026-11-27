@@ -209,4 +209,6 @@ void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
   }
 }
 
+void launch_on_device(const BpKernel& kernel, std::int64_t n_points) { parallel_for_cuda(n_points, kernel); }
+
 }  // namespace sonar::recon

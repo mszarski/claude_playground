@@ -26,6 +26,7 @@ from . import _gpusonar as core
 
 MODES = ("off", "sweep_bank")
 COMBINES = ("max", "cfar")
+BATCHED = ("auto", "on", "off")
 DEFAULTS = {
     "mode": "off",                  # "sweep_bank": the bank of time-scaled sweep replicas (an LFM transmit only)
     "max_range_rate_m_s": 3.0,      # target range rates (over ground, along each beam) spanned either side of the beam's own-ship rate
@@ -37,6 +38,12 @@ DEFAULTS = {
                                     # normalised value tested at the budget / hypotheses per beam (D3; libs/live doppler.hpp)
     "threshold_db": None,           # dB every detector threshold (and min_snr_db) moves by; None: libs/live bank_threshold_db (0)
     "report": False,                # each detection's range_rate_m_s and range_rate_step_m_s on the report line (owner question 6)
+    # D8 (libs/live doppler_batched.hpp): where the bank's hypotheses and the tone's filter bank are computed. "auto": the
+    # batched formulation on the cuda backend (every hypothesis on the device from one upload of the baseband record to
+    # the combined map), the per-hypothesis loop on the host (as before D8); "on": the batched formulation on either
+    # backend (on the host the same kernels on CPU threads: how it is tested without a device); "off": the loop on either.
+    "batched": "auto",
+    "batch": None,                  # hypotheses one batch holds; None: as many as the device's free memory allows
     # The tone's Doppler filter bank (D3 part B; libs/live doppler.hpp tone_stage), beside the sweep path, on with mode off too.
     "tone": "off",                  # "bank": the tone path on (a CW record, or a train whose tone segment is named below)
     "tone_frequency_hz": None,      # Hz; None: the record's (a CW record); a train needs it (its segment table)
@@ -77,6 +84,10 @@ def merged(cfg: dict | None) -> dict:
         raise ValueError(f"chain.doppler.step_m_s = {d['step_m_s']}: a speed above 0 (None: c / (2 B T))")
     if d["hypotheses"] is not None and (int(d["hypotheses"]) != d["hypotheses"] or int(d["hypotheses"]) < 1 or int(d["hypotheses"]) % 2 == 0):
         raise ValueError(f"chain.doppler.hypotheses = {d['hypotheses']}: an odd count (None: from max_range_rate_m_s)")
+    if d["batched"] not in BATCHED:
+        raise ValueError(f"chain.doppler.batched: {d['batched']!r} ({' or '.join(BATCHED)})")
+    if d["batch"] is not None and (int(d["batch"]) != d["batch"] or int(d["batch"]) < 1):
+        raise ValueError(f"chain.doppler.batch = {d['batch']}: hypotheses, 1 or more (None: as memory allows)")
     if d["tone"] not in TONES:
         raise ValueError(f"chain.doppler.tone: {d['tone']!r} ({' or '.join(TONES)})")
     if not (0.0 < float(d["tone_hop"]) <= 1.0):
@@ -108,7 +119,34 @@ def cpp_options(cfg: dict | None) -> dict:
         o["doppler_threshold_db"] = float(d["threshold_db"])
     if d["combine"] != "max":
         o["doppler_combine"] = d["combine"]
+    o.update(_batched_options(d))
     return o
+
+
+def _batched_options(d: dict) -> dict:
+    """The flat doppler_batched / doppler_batch keys (D8), only when not the defaults: every other line as it was."""
+    o = {}
+    if d["batched"] != "auto":
+        o["doppler_batched"] = d["batched"]
+    if d["batch"] is not None:
+        o["doppler_batch"] = int(d["batch"])
+    return o
+
+
+def batched(cfg: dict | None, backend) -> bool:
+    """Whether the sweep bank runs by its batched formulation (D8): `batched: on`, or `auto` on the cuda backend."""
+    b = merged(cfg)["batched"]
+    return b == "on" or (b == "auto" and backend == core.Backend.Cuda)
+
+
+def batched_maps(base, bearings, cfg: dict | None, hann: bool, range_cell_m: float, blank_range, guard_m: float, train_m: float,
+                 pfa: float, backend) -> dict:
+    """The sweep bank's combined map by its batched formulation from the baseband record `base` (before compression):
+    libs/live sweep_bank_stage (core.live_sweep_bank), the function the C++ chain calls. On the device with the cuda
+    backend, on CPU threads otherwise. Returns fine, which, cells, level (cfar; None with max), fine_ranges, ranges, k."""
+    return core.live_sweep_bank(base, [float(b) for b in bearings], cpp_options(cfg), hann=bool(hann), range_cell_m=float(range_cell_m),
+                                blank_range=float("nan") if blank_range is None else float(blank_range), guard_m=float(guard_m),
+                                train_m=float(train_m), pfa=float(pfa), backend=backend)
 
 
 def tone_on(cfg: dict | None) -> bool:
@@ -126,6 +164,7 @@ def tone_options(cfg: dict | None) -> dict:
         v = d["tone_" + key]
         if v is not None:
             o["doppler_tone_" + key] = int(v) if key in ("guard", "train") else float(v)
+    o.update(_batched_options(d))
     return o
 
 

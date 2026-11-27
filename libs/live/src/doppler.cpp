@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <iomanip>
@@ -14,6 +15,8 @@
 #include "sonar/dsp/fft.hpp"
 #include "sonar/live/beamform.hpp"
 #include "sonar/live/detector.hpp"
+#include "sonar/live/doppler_batched.hpp"
+#include "sonar/dsp/exec_host.hpp"
 
 namespace sonar::live {
 
@@ -32,6 +35,15 @@ DopplerCombine parse_doppler_combine(const std::string& name) {
 }
 
 const char* doppler_combine_name(DopplerCombine c) { return c == DopplerCombine::Cfar ? "cfar" : "max"; }
+
+DopplerBatched parse_doppler_batched(const std::string& name) {
+  if (name == "auto") return DopplerBatched::Auto;
+  if (name == "on") return DopplerBatched::On;
+  if (name == "off") return DopplerBatched::Off;
+  throw std::invalid_argument("doppler batched '" + name + "': one of auto, on, off");
+}
+
+const char* doppler_batched_name(DopplerBatched b) { return b == DopplerBatched::On ? "on" : b == DopplerBatched::Off ? "off" : "auto"; }
 
 namespace {
 // |integral_{-1/2}^{1/2} exp(i 4 phi (u - x0)^2) du| by Simpson's rule fine enough for the phase.
@@ -306,6 +318,11 @@ std::int64_t detection_hypothesis(const float* best, const std::int32_t* which, 
 
 namespace sonar::live {
 
+#if SONAR_HAVE_CUDA
+// doppler_cuda.cu: the batched tone bank on the device (doppler_batched.hpp).
+void tone_bank_cuda(const ToneBankBatchedInput& in, float* power, float* ratio, unsigned char* flag, DopplerProfile& prof, int device);
+#endif
+
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 
@@ -431,10 +448,20 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
   const TonePlan& p = st.plan;
   if (!p.on || bearings.empty()) return st;
   if (!record.samples.is_complex()) throw std::invalid_argument("doppler tone: the record must be complex baseband (before pulse compression)");
-  const BeamMap beams = farfield_beamform(record, bearings, hann ? "hann" : "rect", backend, device);
+  // D8: the bank, its CFAR and the leakage rule by the batched formulation (doppler_batched.hpp) on the device, or on
+  // the host when asked (doppler.batched on); the loop below otherwise (the code before D8). On the device the beams
+  // stay where the beamformer makes them; on the host the batched form takes the reference beamformer's beams.
+  const bool batched = options.batched == DopplerBatched::On || (options.batched == DopplerBatched::Auto && backend == Backend::Cuda);
+  const bool device_beams = batched && backend == Backend::Cuda;
+  DopplerProfile& prof = doppler_profile_accumulator();
+  const auto t_beams = std::chrono::steady_clock::now();
+  BeamMap beams;
+  if (!device_beams) beams = farfield_beamform(record, bearings, hann ? "hann" : "rect", backend, device);
+  if (!device_beams) prof.tone_beams += std::chrono::duration<double>(std::chrono::steady_clock::now() - t_beams).count();
+  ++prof.tone_calls;
   const Samples& s = record.samples;
   const double c = record.environment.sound_speed, fs = s.sample_rate, fc = s.center_frequency, t0 = s.start_time;
-  const auto n = static_cast<std::size_t>(beams.n_samples);
+  const auto n = static_cast<std::size_t>(device_beams ? s.n_samples : beams.n_samples);
   const auto n_b = static_cast<std::int64_t>(bearings.size());
   // 1. Mix each beam to the tone and cut the band the hypotheses need (an exact FFT decimation, zero-padded so that the
   //    window's length does not wrap).
@@ -472,9 +499,108 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
       phasor[k * static_cast<std::size_t>(L) + static_cast<std::size_t>(m)] = win[static_cast<std::size_t>(m)] * std::complex<double>(std::cos(ph), std::sin(ph));
     }
   }
-  // 2. The bank: power [b][j][l], j the beam's own hypotheses.
   const std::int64_t J = p.per_beam, NL = st.n_lags;
+  // The notch, the tests counted and the CFAR's factor (step 3), and the leakage rule's envelope and margin (step 3b),
+  // made before the bank: the batched form takes them as inputs.
+  std::vector<unsigned char> notched(static_cast<std::size_t>(n_b * J), 0);
+  for (std::int64_t b = 0; b < n_b; ++b) {
+    for (std::int64_t j = 0; j < J; ++j) {
+      const double r = p.rates[static_cast<std::size_t>(p.first[static_cast<std::size_t>(b)] + j)];
+      notched[static_cast<std::size_t>(b * J + j)] = std::abs(r - p.ownship[static_cast<std::size_t>(b)]) <= p.notch[static_cast<std::size_t>(b)] ? 1 : 0;
+    }
+  }
+  std::int64_t tested = 0;
+  for (std::int64_t b = 0; b < n_b; ++b) {
+    for (std::int64_t j = 0; j < J; ++j) tested += notched[static_cast<std::size_t>(b * J + j)] ? 0 : 1;
+  }
+  st.tests = tested * NL;
+  const double pfa = st.tests > 0 ? std::min(p.budget / static_cast<double>(st.tests), 0.5) : 0.5;
+  const double independent = std::min(1.0, p.step / (enbw * p.resolution));
+  const auto factor_for = [&](double count) {
+    const double n_eff = std::max(count * independent, 1.0);
+    return n_eff * (std::pow(pfa, -1.0 / n_eff) - 1.0);
+  };
+  st.factor = factor_for(static_cast<double>(2 * p.train));
+  const auto leak_envelope = [&]() {
+    const double dnu = 2.0 * p.step * p.frequency / c;
+    std::vector<double> env(static_cast<std::size_t>(J + 1), 0.0);
+    for (std::int64_t d = 0; d <= J; ++d) {
+      std::complex<double> acc(0.0, 0.0);
+      for (std::int64_t m = 0; m < L; ++m) {
+        const double ph = -2.0 * kPi * static_cast<double>(d) * dnu * static_cast<double>(m) / st.fs;
+        acc += win[static_cast<std::size_t>(m)] * std::complex<double>(std::cos(ph), std::sin(ph));
+      }
+      env[static_cast<std::size_t>(d)] = std::norm(acc) / (sw * sw);
+    }
+    for (std::int64_t d = J - 1; d >= 0; --d) env[static_cast<std::size_t>(d)] = std::max(env[static_cast<std::size_t>(d)], env[static_cast<std::size_t>(d + 1)]);
+    return env;
+  };
+  const double margin = std::pow(10.0, 0.1 * options.tone.leak_margin_db);
   std::vector<float> power(static_cast<std::size_t>(n_b * J * NL), 0.0F);
+  std::vector<float> ratio(power.size(), 0.0F);
+  std::vector<std::array<std::int64_t, 3>> flagged;
+  if (batched) {
+    const std::vector<double> env = leak_envelope();
+    std::vector<double> factor(static_cast<std::size_t>(2 * p.train + 1));
+    for (std::size_t q = 0; q < factor.size(); ++q) factor[q] = factor_for(static_cast<double>(q));
+    std::vector<unsigned char> flag(power.size(), 0);
+    ToneBankBatchedInput in;
+    std::vector<float> w;
+    std::vector<double> tau;
+    if (device_beams) {
+      w = aperture_weights(record, hann ? "hann" : "rect");
+      tau = steering_delays(record, bearings);
+      in.samples = s.data.data();
+      in.w = w.data();
+      in.tau = tau.data();
+      in.n_el = s.n_channels;
+      in.df = fs / static_cast<double>(n);
+      in.fc = fc;
+    } else {
+      in.beams = reinterpret_cast<const float*>(beams.data.data());
+    }
+    in.n_b = n_b;
+    in.n = static_cast<std::int64_t>(n);
+    in.N = static_cast<std::int64_t>(N);
+    in.M = static_cast<std::int64_t>(M);
+    in.h = h;
+    in.shift = shift;
+    in.L = L;
+    in.H = H;
+    in.J = J;
+    in.NL = NL;
+    in.n_r = static_cast<std::int64_t>(n_r);
+    in.scale = static_cast<double>(M) / static_cast<double>(N);
+    in.sw2 = sw2;
+    in.phasor = reinterpret_cast<const double*>(phasor.data());
+    in.first = p.first.data();
+    in.notched = notched.data();
+    in.factor = factor.data();
+    in.guard = p.guard;
+    in.train = p.train;
+    in.env = env.data();
+    in.margin = margin;
+    if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      tone_bank_cuda(in, power.data(), ratio.data(), flag.data(), prof, device);
+#else
+      throw std::runtime_error("doppler tone: built without the CUDA backend");
+#endif
+    } else {
+      dsp::HostExec ex;
+      tone_bank_batched(ex, in, power.data(), ratio.data(), flag.data(), prof);
+    }
+    // The flagged cells in the loop's order (beam, lag, hypothesis), after its leakage rule.
+    for (std::int64_t b = 0; b < n_b; ++b) {
+      for (std::int64_t l = 0; l < NL; ++l) {
+        for (std::int64_t j = 0; j < J; ++j) {
+          if (flag[static_cast<std::size_t>((b * J + j) * NL + l)]) flagged.push_back({b, p.first[static_cast<std::size_t>(b)] + j, l});
+        }
+      }
+    }
+  } else {
+  const auto t_bank = std::chrono::steady_clock::now();
+  // 2. The bank: power [b][j][l], j the beam's own hypotheses.
   std::vector<std::complex<float>> buf(N), dec(M);
   for (std::int64_t b = 0; b < n_b; ++b) {
     std::fill(buf.begin(), buf.end(), std::complex<float>(0.0F, 0.0F));
@@ -499,28 +625,9 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
       }
     }
   }
+  prof.tone_bank += std::chrono::duration<double>(std::chrono::steady_clock::now() - t_bank).count();
+  const auto t_cfar = std::chrono::steady_clock::now();
   // 3. The CFAR along rate, outside the notch.
-  std::vector<unsigned char> notched(static_cast<std::size_t>(n_b * J), 0);
-  for (std::int64_t b = 0; b < n_b; ++b) {
-    for (std::int64_t j = 0; j < J; ++j) {
-      const double r = p.rates[static_cast<std::size_t>(p.first[static_cast<std::size_t>(b)] + j)];
-      notched[static_cast<std::size_t>(b * J + j)] = std::abs(r - p.ownship[static_cast<std::size_t>(b)]) <= p.notch[static_cast<std::size_t>(b)] ? 1 : 0;
-    }
-  }
-  std::int64_t tested = 0;
-  for (std::int64_t b = 0; b < n_b; ++b) {
-    for (std::int64_t j = 0; j < J; ++j) tested += notched[static_cast<std::size_t>(b * J + j)] ? 0 : 1;
-  }
-  st.tests = tested * NL;
-  const double pfa = st.tests > 0 ? std::min(p.budget / static_cast<double>(st.tests), 0.5) : 0.5;
-  const double independent = std::min(1.0, p.step / (enbw * p.resolution));
-  const auto factor_for = [&](double count) {
-    const double n_eff = std::max(count * independent, 1.0);
-    return n_eff * (std::pow(pfa, -1.0 / n_eff) - 1.0);
-  };
-  st.factor = factor_for(static_cast<double>(2 * p.train));
-  std::vector<float> ratio(power.size(), 0.0F);
-  std::vector<std::array<std::int64_t, 3>> flagged;
   for (std::int64_t b = 0; b < n_b; ++b) {
     for (std::int64_t l = 0; l < NL; ++l) {
       for (std::int64_t j = 0; j < J; ++j) {
@@ -549,18 +656,7 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
   //     normalised power spectrum, |sum w[m] exp(-i 2 pi d dnu m / fs)|^2 / (sum w)^2 (dnu: the hypotheses' spacing in Hz),
   //     its running maximum outward (ours; the detector's sidelobe rule along range and bearing, detector.hpp, along rate).
   if (!flagged.empty()) {
-    const double dnu = 2.0 * p.step * p.frequency / c;
-    std::vector<double> env(static_cast<std::size_t>(J + 1), 0.0);
-    for (std::int64_t d = 0; d <= J; ++d) {
-      std::complex<double> acc(0.0, 0.0);
-      for (std::int64_t m = 0; m < L; ++m) {
-        const double ph = -2.0 * kPi * static_cast<double>(d) * dnu * static_cast<double>(m) / st.fs;
-        acc += win[static_cast<std::size_t>(m)] * std::complex<double>(std::cos(ph), std::sin(ph));
-      }
-      env[static_cast<std::size_t>(d)] = std::norm(acc) / (sw * sw);
-    }
-    for (std::int64_t d = J - 1; d >= 0; --d) env[static_cast<std::size_t>(d)] = std::max(env[static_cast<std::size_t>(d)], env[static_cast<std::size_t>(d + 1)]);
-    const double margin = std::pow(10.0, 0.1 * options.tone.leak_margin_db);
+    const std::vector<double> env = leak_envelope();
     const auto pw = [&](std::int64_t b, std::int64_t j, std::int64_t l) { return static_cast<double>(power[static_cast<std::size_t>((b * J + j) * NL + l)]); };
     std::vector<std::array<std::int64_t, 3>> kept;
     for (const auto& f : flagged) {
@@ -580,6 +676,8 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
     }
     flagged = std::move(kept);
   }
+  prof.tone_cfar += std::chrono::duration<double>(std::chrono::steady_clock::now() - t_cfar).count();
+  }   // the loop (not re-indented: as before D8)
   // 4. Groups of touching flagged cells (beam, global hypothesis, lag), one detection each.
   const std::size_t F = flagged.size();
   std::vector<std::size_t> parent(F);
