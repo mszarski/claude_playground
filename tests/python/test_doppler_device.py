@@ -268,3 +268,43 @@ def test_the_device_tone_bank_gives_the_hosts_power_and_detections(engine):
     (h,) = reports(dict(CHAIN, engine=engine, doppler=tone), [rec])
     (d,) = reports(dict(CHAIN, engine=engine, backend="cuda", doppler=tone), [rec])
     same_detections(h, d)
+
+
+# --- the tone path's grating-lobe notch (doppler.hpp plan_tone step 4b) on either backend --------------------------------
+
+def _lobe_ping():
+    import test_doppler_tone_lobes as lobes
+    return lobes, lobes.ping(field=1000, movers=((-36.0, 900.0, 1.0),))
+
+
+def test_the_batched_tone_bank_with_the_lobe_notch_on_the_host_is_the_loop_bit_for_bit():
+    """The lobe notch is a mask the batched form takes as it is (tone_notch_mask): on the host its power, ratio and
+    detections are the loop's bit for bit, with the notch and without it."""
+    lobes, rec = _lobe_ping()
+    for tone in (lobes.TONE, lobes.OFF):
+        a = lobes.stage(rec, tone, keep_map=True)
+        b = lobes.stage(rec, dict(tone, batched="on"), keep_map=True)
+        assert np.array_equal(a["power"], b["power"]) and np.array_equal(a["ratio"], b["ratio"])
+        assert a["detections"] == b["detections"] and len(a["detections"]) >= 1
+    assert lobes.stage(rec, lobes.TONE)["plan"]["lobe_beams"] > 0
+
+
+@needs_cuda
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_the_device_tone_bank_with_the_lobe_notch_gives_the_hosts_power_and_detections(engine):
+    """On the device with the lobe notch (auto) and without (off): power within the module's tolerance, the same
+    detections (0.05 m, 1e-3 m/s, 0.05 dB), and the chain's lines within the engines' tolerances."""
+    lobes, rec = _lobe_ping()
+    for tone in (lobes.TONE, lobes.OFF):
+        opts = doppler.tone_options(tone)
+        host = core.live_tone_stage(rec, lobes.bearings(), opts, hann=True, keep_map=True)
+        dev = core.live_tone_stage(rec, lobes.bearings(), opts, hann=True, keep_map=True, backend=core.Backend.Cuda)
+        nb = host["power"].shape[0]
+        assert_maps_close(dev["power"].reshape(nb, -1), host["power"].reshape(nb, -1))
+        assert len(dev["detections"]) == len(host["detections"]) >= 1
+        for a, b in zip(dev["detections"], host["detections"]):
+            assert a["range"] == pytest.approx(b["range"], abs=0.05) and a["range_rate"] == pytest.approx(b["range_rate"], abs=1e-3)
+            assert a["snr_db"] == pytest.approx(b["snr_db"], abs=0.05)
+        (h,) = reports(dict(lobes.chain_cfg(engine, tone)), [rec])
+        (d,) = reports(dict(lobes.chain_cfg(engine, tone), backend="cuda"), [rec])
+        same_detections(h, d)

@@ -333,7 +333,65 @@ std::size_t pow2_at_least(std::size_t n) {
 }
 }  // namespace
 
-TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& o, double default_budget) {
+ToneLobeNotch parse_tone_lobe_notch(const std::string& name) {
+  if (name == "auto") return ToneLobeNotch::Auto;
+  if (name == "off") return ToneLobeNotch::Off;
+  throw std::invalid_argument("doppler tone_lobe_notch '" + name + "': one of auto, off");
+}
+
+const char* tone_lobe_notch_name(ToneLobeNotch n) { return n == ToneLobeNotch::Off ? "off" : "auto"; }
+
+std::vector<double> grating_lobes(double bearing, double pitch, double wavelength, double slack) {
+  std::vector<double> out;
+  if (!(pitch > 0.0) || !std::isfinite(pitch) || !(wavelength > 0.0) || !std::isfinite(wavelength) || !std::isfinite(bearing)) return out;
+  const double s0 = std::sin(bearing), period = wavelength / pitch, reach = 1.0 + std::max(slack, 0.0) + 1e-12;
+  // |s0 + m period| >= |m| period - |s0|: no visible lobe once that exceeds the reach.
+  const auto m_max = static_cast<std::int64_t>(std::floor((reach + std::abs(s0)) / period));
+  for (std::int64_t m = -m_max; m <= m_max; ++m) {
+    if (m == 0) continue;
+    const double s = s0 + static_cast<double>(m) * period;
+    if (std::abs(s) <= reach) out.push_back(std::asin(std::clamp(s, -1.0, 1.0)));
+  }
+  return out;
+}
+
+double uniform_pitch(std::vector<double> along, double tolerance) {
+  if (along.size() < 2) return 0.0;
+  std::sort(along.begin(), along.end());
+  const double span = along.back() - along.front();
+  if (!(span > 0.0) || !std::isfinite(span)) return 0.0;
+  std::vector<double> distinct{along.front()};
+  for (double x : along) {
+    if (x - distinct.back() > 1e-6 * span) distinct.push_back(x);
+  }
+  if (distinct.size() < 2) return 0.0;
+  const double pitch = (distinct.back() - distinct.front()) / static_cast<double>(distinct.size() - 1);
+  for (std::size_t i = 1; i < distinct.size(); ++i) {
+    if (std::abs(distinct[i] - distinct[i - 1] - pitch) > tolerance * pitch) return 0.0;
+  }
+  return pitch;
+}
+
+std::vector<unsigned char> tone_notch_mask(const TonePlan& p) {
+  const auto n_b = static_cast<std::int64_t>(p.first.size()), J = p.per_beam;
+  std::vector<unsigned char> notched(static_cast<std::size_t>(n_b * J), 0);
+  for (std::int64_t b = 0; b < n_b; ++b) {
+    for (std::int64_t j = 0; j < J; ++j) {
+      const double r = p.rates[static_cast<std::size_t>(p.first[static_cast<std::size_t>(b)] + j)];
+      notched[static_cast<std::size_t>(b * J + j)] = std::abs(r - p.ownship[static_cast<std::size_t>(b)]) <= p.notch[static_cast<std::size_t>(b)] ? 1 : 0;
+    }
+  }
+  // Step 4b: the grating lobes' ridges (doppler.hpp); none when off, unknown velocity or no visible lobe.
+  for (const ToneLobe& g : p.lobes) {
+    for (std::int64_t j = 0; j < J; ++j) {
+      const double r = p.rates[static_cast<std::size_t>(p.first[static_cast<std::size_t>(g.beam)] + j)];
+      if (std::abs(r - g.ownship) <= g.notch) notched[static_cast<std::size_t>(g.beam * J + j)] = 1;
+    }
+  }
+  return notched;
+}
+
+TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& o, double default_budget, bool hann) {
   TonePlan p;
   const ToneOptions& t = o.tone;
   if (!t.enabled) return p;
@@ -414,6 +472,62 @@ TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings
   for (std::int64_t k = lo; k <= hi; ++k) p.rates.push_back(static_cast<double>(k) * p.step);
   p.first.resize(bearings.size());
   for (std::size_t b = 0; b < bearings.size(); ++b) p.first[b] = centre[b] - K - lo;
+  // 4b. The grating lobes' own-motion ridges (doppler.hpp step 4b): the same width rule as the beam's own notch, at g.
+  p.lobe_notch = t.lobe_notch;
+  std::vector<double> along;                               // the hydrophones' coordinates along the line
+  for (const Vec3d& q : pos) along.push_back(dot(q - pos[0], across));
+  p.pitch = uniform_pitch(along);
+  p.lobe_hidden.assign(bearings.size(), 0.0);
+  if (t.lobe_notch == ToneLobeNotch::Auto && known && p.pitch > 0.0 && length > 0.0) {
+    if (!std::isfinite(t.lobe_floor_db)) throw std::invalid_argument("doppler tone_lobe_floor_db: a finite number of dB");
+    // The beam's response towards a sine s: the array factor of its aperture weights at the tone, over its main lobe's.
+    const std::vector<float> aw = aperture_weights(record, hann ? "hann" : "rect");
+    double wsum = 0.0;
+    for (float x : aw) wsum += static_cast<double>(x);
+    const auto response_db = [&](double s, double s0) {
+      std::complex<double> acc(0.0, 0.0);
+      for (std::size_t i = 0; i < along.size() && i < aw.size(); ++i) {
+        const double ph = 2.0 * kPi * along[i] * (s - s0) / lambda;
+        acc += static_cast<double>(aw[i]) * std::complex<double>(std::cos(ph), std::sin(ph));
+      }
+      return 20.0 * std::log10(std::max(std::abs(acc) / std::max(std::abs(wsum), 1e-300), 1e-300));
+    };
+    const auto add = [&](std::size_t b, double g, bool endfire, double level) {
+      const double cg = std::cos(g), sg = std::sin(g);
+      const Vec3d u = forward * cg + across * sg, du = forward * (-sg) + across * cg;
+      const double width = 0.886 * lambda / (length * std::max(std::abs(cg), 0.05));
+      ToneLobe lobe;
+      lobe.beam = static_cast<std::int64_t>(b);
+      lobe.direction = g;
+      lobe.ownship = -dot(v, u);
+      lobe.notch = is_given(t.notch) ? t.notch : std::abs(dot(v, du)) * 0.5 * width + t.notch_cells * p.resolution;
+      lobe.endfire = endfire;
+      lobe.response_db = level;
+      p.lobes.push_back(lobe);
+    };
+    for (std::size_t b = 0; b < bearings.size(); ++b) {
+      for (const double g : grating_lobes(bearings[b], p.pitch, lambda)) add(b, g, false, 0.0);
+      // The endfire water through the skirt of a lobe centred beyond it (doppler.hpp step 4b), either side.
+      for (const double side : {-1.0, 1.0}) {
+        const double level = response_db(side, std::sin(bearings[b]));
+        if (level >= t.lobe_floor_db) add(b, side * 0.5 * kPi, true, level);
+      }
+    }
+    if (!p.lobes.empty()) {
+      TonePlan own = p;
+      own.lobes.clear();
+      const std::vector<unsigned char> before = tone_notch_mask(own), after = tone_notch_mask(p);
+      for (std::size_t b = 0; b < bearings.size(); ++b) {
+        std::int64_t extra = 0;
+        for (std::int64_t j = 0; j < p.per_beam; ++j) {
+          const std::size_t at = b * static_cast<std::size_t>(p.per_beam) + static_cast<std::size_t>(j);
+          extra += (after[at] && !before[at]) ? 1 : 0;
+        }
+        p.lobe_hidden[b] = static_cast<double>(extra) * p.step;
+        p.lobe_beams += extra > 0 ? 1 : 0;
+      }
+    }
+  }
   // Baseband: the band to_baseband keeps must hold the tone and its shifts in its untapered part.
   double r_top = 0.0;
   for (double r : p.rates) r_top = std::max(r_top, std::abs(r));
@@ -436,6 +550,17 @@ std::string TonePlan::json() const {
       << ", \"hypotheses\": " << rates.size() << ", \"per_beam\": " << per_beam << ", \"hop_s\": " << hop << ", \"guard\": " << guard
       << ", \"train\": " << train << ", \"budget\": " << budget << ", \"baseband_max_range_rate_m_s\": " << baseband_max_range_rate
       << ", \"gate_range_m\": " << gate_range << ", \"gate_bearing_rad\": " << gate_bearing << ", \"range_sigma_m\": " << range_sigma;
+    // Step 4b, only when it says something (a lobe notch added, or the option off): every line before it as it was.
+    if (lobe_beams > 0 || lobe_notch == ToneLobeNotch::Off) {
+      double widest = 0.0, total = 0.0;
+      for (double x : lobe_hidden) {
+        widest = std::max(widest, x);
+        total += x;
+      }
+      s << ", \"lobe_notch\": \"" << tone_lobe_notch_name(lobe_notch) << "\", \"pitch_m\": " << pitch << ", \"lobes\": " << lobes.size()
+        << ", \"lobe_beams\": " << lobe_beams << ", \"lobe_hidden_max_m_s\": " << widest << ", \"lobe_hidden_mean_m_s\": "
+        << (lobe_hidden.empty() ? 0.0 : total / static_cast<double>(lobe_hidden.size()));
+    }
   }
   s << "}";
   return s.str();
@@ -444,7 +569,7 @@ std::string TonePlan::json() const {
 ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, bool hann,
                      double default_budget, Backend backend, int device, bool keep_map) {
   ToneStage st;
-  st.plan = plan_tone(record, bearings, options, default_budget);
+  st.plan = plan_tone(record, bearings, options, default_budget, hann);
   const TonePlan& p = st.plan;
   if (!p.on || bearings.empty()) return st;
   if (!record.samples.is_complex()) throw std::invalid_argument("doppler tone: the record must be complex baseband (before pulse compression)");
@@ -502,13 +627,8 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
   const std::int64_t J = p.per_beam, NL = st.n_lags;
   // The notch, the tests counted and the CFAR's factor (step 3), and the leakage rule's envelope and margin (step 3b),
   // made before the bank: the batched form takes them as inputs.
-  std::vector<unsigned char> notched(static_cast<std::size_t>(n_b * J), 0);
-  for (std::int64_t b = 0; b < n_b; ++b) {
-    for (std::int64_t j = 0; j < J; ++j) {
-      const double r = p.rates[static_cast<std::size_t>(p.first[static_cast<std::size_t>(b)] + j)];
-      notched[static_cast<std::size_t>(b * J + j)] = std::abs(r - p.ownship[static_cast<std::size_t>(b)]) <= p.notch[static_cast<std::size_t>(b)] ? 1 : 0;
-    }
-  }
+  // The beam's own notch (step 4) and its grating lobes' (step 4b): the batched form takes the mask as it is.
+  const std::vector<unsigned char> notched = tone_notch_mask(p);
   std::int64_t tested = 0;
   for (std::int64_t b = 0; b < n_b; ++b) {
     for (std::int64_t j = 0; j < J; ++j) tested += notched[static_cast<std::size_t>(b * J + j)] ? 0 : 1;

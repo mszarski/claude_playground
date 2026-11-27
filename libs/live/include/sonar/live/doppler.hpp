@@ -77,6 +77,13 @@ enum class DopplerBatched { Auto, On, Off };
 DopplerBatched parse_doppler_batched(const std::string& name);   ///< auto | on | off
 const char* doppler_batched_name(DopplerBatched b);
 
+/// The tone path's notch about the own-motion ridge seen through each beam's grating lobes (plan_tone, step 4b):
+///   Auto  on wherever a beam has a visible grating lobe at the tone's frequency (nothing changes where none is);
+///   Off   the steered direction's notch alone (the tone path before 2026-11-27: for comparison).
+enum class ToneLobeNotch { Auto, Off };
+ToneLobeNotch parse_tone_lobe_notch(const std::string& name);   ///< auto | off
+const char* tone_lobe_notch_name(ToneLobeNotch n);
+
 /// D3 part B: the tone's Doppler filter bank (tone_stage below), opt-in. Every NaN is derived (plan_tone says from what).
 struct ToneOptions {
   bool enabled = false;               ///< doppler_tone = bank
@@ -100,6 +107,12 @@ struct ToneOptions {
   /// tested cell) leaks into it through the tone's spectrum is not a detection (tone_stage step 3b). 10: the detector's
   /// sidelobe margin (detector.hpp).
   double leak_margin_db = 10.0;
+  /// The grating lobes' notches (ToneLobeNotch; plan_tone step 4b). Auto: on with the tone path.
+  ToneLobeNotch lobe_notch = ToneLobeNotch::Auto;
+  /// dB: a beam whose response towards endfire (either side; the aperture window's array factor at the tone, over its
+  /// main lobe's) is at least this gets the endfire ridge notched too (step 4b: the skirt of a lobe centred just beyond
+  /// endfire). -40: ours (doppler.hpp step 4b says why).
+  double lobe_floor_db = -40.0;
 };
 
 struct DopplerOptions {
@@ -242,6 +255,37 @@ SweepBankMaps sweep_bank_maps(const PingRecord& base, const DopplerPlan& plan, c
 //      beam's half-power width (|v| |du/db| x half the width 0.886 lambda / (L cos b), ours) plus `notch_cells` resolution
 //      cells (the Hann tone's main lobe is +-2 cells; 3 leaves its first sidelobes, ours). The sweep path keeps the
 //      stationary targets;
+//   4b. GRATING LOBES (tone_lobe_notch auto, the default with the tone path): a uniform line of pitch d steered to b has,
+//      at the tone's wavelength lambda, a grating lobe wherever sin g = sin b + m lambda / d (m a non-zero integer) is
+//      visible, |sin g| <= 1 (the array factor of the far-field beamformer is periodic in sin with period lambda / d: the
+//      lobe is the main lobe again, at its level for omnidirectional elements; the aperture window shapes both alike and
+//      lowers neither; an element pattern would, and none is configured: ours). Above the sweep's band (the tone 0.5 kHz
+//      above it, the shipped rule) the pitch is more than half a wavelength: 0.65 at 6.5 kHz on popoto_long_range's
+//      0.15 m, lobes from |b| = 32.6 degrees (c 1500 m/s; the endfire rule below from 24); 0.66 at 10.5 kHz on
+//      flank_32's 0.094 m, from 31.3 degrees (the endfire rule from 23).
+//      The still water seen through the lobe lies at -v . u_g, not at the beam's -v . u_b: for motion along the line
+//      the two differ by |v| m lambda / d (2.31 m/s at 1.5 m/s and 6.5 kHz), well inside the bank's span, and the
+//      lobe's own-motion ridge is tested as a target unless it is notched too (measured: 3 to 5 false tone detections
+//      on every tone ping of popoto_12km_large_submerged, DOPPLER.md "Large submerged at 12 km" LS.1 item 0). So each
+//      visible lobe's ridge gets a notch of the same rule as step 4 at g: |v . du_g| x half the width 0.886 lambda /
+//      (L max(|cos g|, 0.05)) plus notch_cells resolution cells (or tone_notch_m_s when given). A lobe centred just
+//      BEYOND endfire still receives the endfire water through its skirt, where the water is densest in sine (an
+//      interval ds of sine spans dtheta = ds / cos theta): measured on a still field all round, beams at 24 to 31.5
+//      degrees whose lobe centre is invisible reported the endfire ridge (rates 1.41 to 1.55 m/s, 19 to 39 dB) once
+//      the visible lobes were notched (ours, tests/python/test_doppler_tone_lobes.py's record). So a beam whose
+//      response towards endfire (the array factor of its aperture weights at the tone, either side, over its main
+//      lobe's) is at least tone_lobe_floor_db (-40 dB) gets the endfire ridge notched too, by the same rule at
+//      g = +-90 degrees. -40 dB, ours: a ridge up to about 55 dB over the noise in the beam's own lobe then stays
+//      under the CFAR's 15 dB; the Hann aperture's response towards endfire is -44 to -160 dB on every beam within
+//      +-50 degrees where no lobe is near (flank_32 at 8 kHz, popoto_long_range at 5 kHz), -38 to -0.1 dB from 24
+//      degrees at 6.5 kHz on popoto_long_range. Lobe directions are taken in the beam's half-plane (forward
+//      cos g + across sin g) as step 4 takes the beam's: for a velocity across the line the mirror half differs by
+//      2 v_across cos g, not notched (small near endfire, where the lobes fall). Only a UNIFORM line has lobes here:
+//      the hydrophones' coordinates along the line (rows that share them count once) equally spaced to 1e-3 of the
+//      pitch; any other array takes no lobe notch (TonePlan::pitch 0). With the velocity unknown every beam's ridge
+//      is 0 and so is every lobe's: nothing is added. Where a lobe's ridge falls inside the beam's own notch (a still
+//      platform: every ridge at 0) nothing changes, bit for bit. The cost: a target whose rate lies in a lobe's notch
+//      is not reported by the tone (the sweep path still sees it); TonePlan::lobe_hidden says how much per beam;
 //   5. the background of a cell (b, k, l) is the mean power over the beam's hypotheses `guard` + 1 to `guard` + `train`
 //      away on either side at the same lag, notch excluded: a CFAR along the RATE axis. Not along range: a ping holds
 //      too few lags for that (flank_patrol: 13 at a quarter of 1 s), and the background that matters here is flat in rate
@@ -260,6 +304,27 @@ SweepBankMaps sweep_bank_maps(const PingRecord& base, const DopplerPlan& plan, c
 // rate is relative to the platform, opening positive (the sweep bank's convention). The chain (chain.cpp, live.py) merges
 // them with the sweep's detections (DopplerOptions::tone gates).
 
+/// A visible grating lobe of one beam at the tone's frequency and the notch about its own-motion ridge (step 4b).
+struct ToneLobe {
+  std::int64_t beam = 0;
+  double direction = 0.0;            ///< rad from broadside, the map's convention (clamped to +-pi/2 at endfire)
+  double ownship = 0.0;              ///< m/s: the range rate of still water along the lobe, -v . u_g
+  double notch = 0.0;                ///< m/s half-width about it not tested
+  bool endfire = false;              ///< true: added for the beam's response towards endfire (lobe_floor_db), not a visible lobe's centre
+  double response_db = 0.0;          ///< the beam's response in that direction over its main lobe's (0 for a visible lobe's centre)
+};
+
+/// The directions (rad from broadside) of the visible grating lobes of a uniform line of `pitch` m steered to `bearing`
+/// rad at `wavelength` m: asin(sin b + m lambda / d) for every non-zero integer m with |sin b + m lambda / d| <= 1 + slack
+/// (sine clamped to +-1: a lobe just beyond endfire counts at endfire), in increasing m. Empty for a pitch or wavelength
+/// that is not positive and finite. A pitch of half a wavelength or less has none for |bearing| < pi/2 with slack 0.
+std::vector<double> grating_lobes(double bearing, double pitch, double wavelength, double slack = 0.0);
+
+/// The pitch of a uniform line from the hydrophones' coordinates along it (m; any order; coordinates within 1e-6 of the
+/// span count once: rows of one line): the mean spacing when every spacing is within `tolerance` of it (relative), else
+/// 0 (not uniform, or fewer than two distinct coordinates).
+double uniform_pitch(std::vector<double> along, double tolerance = 1e-3);
+
 struct TonePlan {
   bool on = false;                   ///< false: this record has no tone (a sweep-only ping)
   bool tone_only = false;            ///< the tone is the whole pulse: the sweep path has nothing to say (its detections dropped)
@@ -275,8 +340,20 @@ struct TonePlan {
   double budget = 0.0;               ///< false detections a ping
   double baseband_max_range_rate = 0.0;   ///< what to_baseband is given so that the tone and its shifts are kept
   double gate_range = 0.0, gate_bearing = 0.0, range_sigma = 0.0, sidelobe_db = 0.0;
+  /// Step 4b: the line's pitch (m; 0: not a uniform line, no lobe notch), every beam's visible lobes with their notches
+  /// (none with lobe_notch off or the velocity unknown), per beam the rate interval the lobes' notches hide beyond the
+  /// beam's own notch (m/s: its hypotheses notched by a lobe only, times step), and the beams with any.
+  ToneLobeNotch lobe_notch = ToneLobeNotch::Auto;
+  double pitch = 0.0;
+  std::vector<ToneLobe> lobes;
+  std::vector<double> lobe_hidden;
+  std::int64_t lobe_beams = 0;
   std::string json() const;
 };
+
+/// The notch of every (beam, own hypothesis) of `plan`, [n_beams][per_beam], 1 not tested: the beam's own (step 4,
+/// |r - ownship| <= notch) or any of its lobes' (step 4b). tone_stage's, on either backend.
+std::vector<unsigned char> tone_notch_mask(const TonePlan& plan);
 
 /// The tone path for `record` (before baseband or after: the allowance needs the record's waveform and sound speed) and
 /// the map's bearings. Off (on = false) when the tone bank is not enabled or the record is a linear sweep (the other ping of
@@ -284,7 +361,9 @@ struct TonePlan {
 /// that does not fit the pulse, or numbers out of range.
 /// `default_budget`: the tone path's false-alarm budget when ToneOptions::false_alarms_per_ping is not given (the chain
 /// passes its detector's).
-TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, double default_budget = 1e-3);
+/// `hann`: the aperture window the tone's beams take (tone_stage's; step 4b's endfire response uses it).
+TonePlan plan_tone(const PingRecord& record, const std::vector<double>& bearings, const DopplerOptions& options, double default_budget = 1e-3,
+                   bool hann = true);
 
 struct ToneDetection {
   double range = 0.0;        ///< m, c (t_l - t1) / 2 at the refined lag
