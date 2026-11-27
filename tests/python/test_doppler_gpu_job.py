@@ -337,3 +337,50 @@ def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
     a, b = (json.loads((out / f"deep12_{n}.json").read_text()) for n in ("ss5_lfm4p200", "ss5_lfm4p200_cfar"))
     assert a["engines"]["cpp"]["off"]["detections_per_ping"] == b["engines"]["cpp"]["off"]["detections_per_ping"]
     assert len(list((out / "cache").glob("*.h5"))) == 2 * 3                     # three plain cases, scene and background each: the bank made none
+
+
+# --- the regen sub-run: the outputs D-251 made stale (issue sonar-rar0) -----------------------------------------------------
+
+import regen_stale  # noqa: E402
+
+# Keys of each file that are not results (metadata), for the inventory below.
+_META = {"docs/tasks/doppler_bank_eval.json": {"tool"}, "docs/tasks/doppler_d3_eval.json": {"status", "commands", "not_measured"},
+         "docs/tasks/doppler_large_submerged_eval.json": {"what", "commands"}, "docs/tasks/doppler_baseline.json": {"what", "status", "tree", "environment", "notes"}}
+
+
+def test_the_stale_inventory_names_every_part_of_each_file_once():
+    """Each committed file's parts are either stale (rerun) or kept with a reason: none left out, none in both, every one there."""
+    for path, items in regen_stale.STALE.items():
+        d = json.loads((ROOT / path).read_text())
+        stale = {k for k, *_ in items}
+        kept = set(regen_stale.KEPT.get(path, {}))
+        assert not stale & kept, path
+        if stale == {"*"}:
+            continue
+        for key in stale | kept:
+            regen_stale._get(d, key)                                     # present
+        top = {k.split(".")[0] for k in stale | kept}
+        for parent in {k.split(".")[0] for k in stale | kept if "." in k}:
+            assert set(d[parent]) == {k.split(".", 1)[1] for k in stale | kept if k.startswith(parent + ".")}, (path, parent)
+        assert set(d) - _META[path] == top, path
+
+
+def test_the_regen_sub_run_in_its_quick_host_form(tmp_path):
+    """GPUSONAR_DOPPLER_RUNS=regen, quick, on the host: one free-field ping of a part of each file; the merge writes the committed
+    files' names with the parts run replaced, the rest as committed, and says what was replaced and what was not. Measures nothing."""
+    out = tmp_path / "doppler"
+    env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="regen", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_REGEN_PARTS="bank,d3,ls,baseline")
+    env.pop("GPUSONAR_UPLOAD_REPO", None)
+    got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=1500)
+    assert got.returncode == 0, got.stdout[-4000:] + got.stderr[-2000:]
+    for path, replaced in (("docs/tasks/doppler_bank_eval.json", ["scenes.popoto_12km"]), ("docs/tasks/doppler_d3_eval.json", ["cfar_scenes.popoto_12km"]),
+                           ("docs/tasks/doppler_large_submerged_eval.json", ["bank"]), ("docs/tasks/doppler_baseline.json", ["runs.rs_mono"])):
+        new, old = json.loads((out / pathlib.Path(path).name).read_text()), json.loads((ROOT / path).read_text())
+        assert new["regenerated"]["replaced"] == replaced and new["regenerated"]["backend"] == "host", path
+        assert set(new) == set(old) | {"regenerated"}, path
+        for key in regen_stale.KEPT[path]:
+            assert regen_stale._get(new, key) == regen_stale._get(old, key), (path, key)          # kept parts as committed
+        assert regen_stale._get(new, replaced[0]) != regen_stale._get(old, replaced[0]), path
+    assert not (out / "popoto_12km.json").exists()                                                 # not asked for
+    assert json.loads((out / "doppler_baseline.json").read_text())["runs"]["rs_mono"]["command"].endswith("--sim-backend host")

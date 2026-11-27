@@ -41,6 +41,13 @@
 #               (lfm1: the shipped 1 s at 197 dB, the BASELINE; lfm4p200 / hfm4p200: the sea-state-5 ALTERNATE's 4 s at
 #               200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). (GPUSONAR_DOPPLER_TIMEOUT_DEEP12, a case's
 #               limit, default 45m; GPUSONAR_DOPPLER_DEEP12_ARGS appended to each call)
+#   regen       (only when named) the committed outputs D-251 made stale (issue sonar-rar0): tools/regen_stale.py reruns each
+#               stale part (`tools/regen_stale.py --list`: the parts, their commands, what is kept and why), simulator and
+#               chain on the device, one part at a time under its own limit into <out-dir>/regen/, uploaded after each; then
+#               writes the committed files' names into <out-dir> (doppler_bank_eval.json, doppler_d3_eval.json,
+#               doppler_large_submerged_eval.json, doppler_baseline.json, popoto_12km.json) with the stale parts replaced.
+#               Parts (GPUSONAR_DOPPLER_REGEN_PARTS, comma separated; default bank,d3,ls,baseline,p12km). (A part's limit:
+#               GPUSONAR_DOPPLER_TIMEOUT_REGEN, default 60m)
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
 #   GPUSONAR_DOPPLER_QUICK=1       small sizes, to check the plumbing on a CPU: the tone run on popoto_12km_doppler
@@ -249,5 +256,18 @@ if [[ $runs == *,deep12,* ]]; then
         --set environment.sea_state="${ss#ss}" $sets --json "$out/deep12_$case.json" ${GPUSONAR_DOPPLER_DEEP12_ARGS:-}
     upload
   done
+fi
+if [[ $runs == *,regen,* ]]; then
+  # Not in the default runs: the outputs D-251 made stale (sonar-rar0), regenerated under their own names; nothing under docs/ is written.
+  regen_parts=${GPUSONAR_DOPPLER_REGEN_PARTS:-bank,d3,ls,baseline,p12km}
+  regen_quick=""
+  [ "$quick" != "1" ] || regen_quick="--quick"
+  for part in ${regen_parts//,/ }; do
+    # shellcheck disable=SC2086
+    run regen "${GPUSONAR_DOPPLER_TIMEOUT_REGEN:-60m}" "$py" tools/regen_stale.py run --parts "$part" --out "$out" --backend "$be" --cache "$cache" $regen_quick
+    upload
+  done
+  run regen 10m "$py" tools/regen_stale.py merge --out "$out" --backend "$be" --tree "$(git rev-parse --short HEAD 2> /dev/null || echo unknown)"
+  upload
 fi
 exit "$status"
