@@ -20,7 +20,12 @@ sea state, class, geometry and energy, from the trade study's own functions (too
   sweep: `sweep_mismatch_loss_db`; hyperbolic: gpusonar.doppler.hfm_doppler); for the bank, the zero-speed one;
 - `table_db`: the trade study's own cell (docs/design/popoto_trade_study.json, `--transmit`: worst over the class's depths
   at its recommended own depth, low target strength) where the grid has the option, and its plain-filter mover columns;
-- `difference_db`: measured less predicted (`predicted_mover_db`), on the pings detected.
+- `difference_db`: measured less predicted (`predicted_mover_db`), on the pings detected;
+- `predicted_one_highlight_db`: `predicted_mover_db` less 10 log10(highlights): what ONE of a hull's equal highlights should
+  give when the hull's highlights are resolved in range and the detector tests each alone (its multiscale scales here are
+  the single sample and a 2 m cell: `detector_scales`);
+- `verdict`: PASS when the target is detected on at least half the pings (the design's detection probability, 0.5 on one
+  ping), else FAIL.
 
 Status of every number: ours (simulation, one seed; sites illustrative; target strengths assumed).
 """
@@ -68,6 +73,35 @@ def _study():
     return _CACHE["T"], _CACHE["envs"], _CACHE["grid"]
 
 
+def _geometry():
+    """(highlights, range extent of the hull along the line of sight at the first ping, m) per label, from the scene file."""
+    from gpusonar.config import load_scenario_config
+    cfg = load_scenario_config(SCENE, expand=False)
+    p0 = np.asarray(cfg["platform"]["position"], float)
+    n, ext = {}, {}
+    for it in cfg["scene"]:
+        pos = np.asarray(it["positions"], float)
+        u = np.mean(pos, axis=0) - p0
+        u /= np.linalg.norm(u)
+        n[it["label"]] = len(pos)
+        ext[it["label"]] = float(np.ptp(pos @ u))
+    return n, ext
+
+
+HIGHLIGHTS, EXTENT = _geometry()
+
+
+def detector_scales(pulse_s: float = 1.0) -> list:
+    """The multiscale detector's scales the chain tests in this scene's window (three rows added: elevation {}): length (m),
+    looks, single-test threshold (dB), from gpusonar.live.detector_plan on the sonar's template record."""
+    from gpusonar import buildspec as bs, live
+    from gpusonar.config import deep_merge, load_scenario_config, load_sonar_config
+    cfg = load_scenario_config(SCENE, expand=False)
+    sonar = deep_merge(load_sonar_config(cfg["sonar"]), {**cfg["sonar_overrides"], "transmit": {"waveform": {"duration": float(pulse_s)}}})
+    plan = live.detector_plan(bs.detector_template(sonar), {"elevation": {}})
+    return [{"length_m": sc["length_m"], "looks": sc["looks"], "threshold_db": sc["threshold_db"]} for sc in json.loads(plan["json"])["scales"]]
+
+
 def targets() -> dict:
     """{label: (total target strength dB, depth m, horizontal range m at the first ping, mean range rate over 6 pings at the
     reflection)} of the scene, from its file and doppler_bank_eval's truth."""
@@ -101,7 +135,8 @@ def predict(case: str, threshold_db: float | None = None) -> dict:
     oid = f"{k['pulse_s']:g} s {k['source_level_db']:g} dB"
     cell = (grid.get(env["name"]) or {}).get(oid) or {}
     out = {"case": k, "environment": env["name"], "own_depth_m": own, "option": oid, "targets": {}}
-    for label, (ts, z, r, rate) in targets().items():
+    T_ = targets()
+    for label, (ts, z, r, rate) in T_.items():
         key = (env["name"], k["pulse_s"], k["source_level_db"], ts, z, r)
         if key not in _CACHE:
             with warnings.catch_warnings():
@@ -117,7 +152,10 @@ def predict(case: str, threshold_db: float | None = None) -> dict:
         else:
             loss = float(dop.hfm_doppler(rate, f_lo, f_hi, k["pulse_s"], c)["loss_db"])
         cl = CLASS_OF[label]
-        out["targets"][label] = {"class": cl, "ts_db": ts, "depth_m": z, "range_m": r, "range_rate_m_s": rate,
+        n = HIGHLIGHTS[label]
+        out["targets"][label] = {"class": cl, "ts_db": ts, "depth_m": z, "range_m": r, "range_rate_m_s": rate, "highlights": n,
+                                 "highlight_range_extent_m": EXTENT[label],
+                                 "predicted_one_highlight_db": zero - float(loss) - 10.0 * np.log10(n),
                                  "planner_margin_db": float(p["margin_db"]), "limited_by": p["limited_by"], "factor_db": float(p["factor_db"]),
                                  "chain_snr_expected_db": float(p["chain_snr_expected_db"]), "threshold_used_db": thr,
                                  "predicted_chain_margin_db": zero, "closed_form_loss_db": float(loss), "predicted_mover_db": zero - float(loss),
@@ -161,24 +199,49 @@ def summarise(folder: Path) -> dict:
         for label, x in m.items():
             p = P["targets"][label]
             diff = None if x["margin_db"] is None else x["margin_db"] - p["predicted_mover_db"]
-            rows.append({"case": case, "sea_state": k["sea_state"], "design": k["design"], "filter": "bank cfar" if k["bank"] else "plain",
+            verdict = "PASS" if 2 * x["detected"] >= x["pings"] else "FAIL"
+            rows.append({"case": case, "sea_state": k["sea_state"], "design": k["design"], "filter": "bank cfar" if k["bank"] else "plain", "verdict": verdict,
                          "target": label, **{f"measured_{a}": b for a, b in x.items()}, **{f"planner_{a}": b for a, b in p.items()},
                          "difference_db": diff})
     rows.sort(key=lambda r: (r["difference_db"] is not None, r["difference_db"] if r["difference_db"] is not None else 0.0))
     return {"what": "tools/deep12_eval.py: the deep12 cases measured through the chain against the planner (ours)", "folder": str(folder),
-            "rows": rows, "background_default_budget": backgrounds}
+            "detector_scales": {"1 s": detector_scales(1.0), "4 s": detector_scales(4.0)}, "highlights": HIGHLIGHTS, "highlight_range_extent_m": EXTENT,
+            "rows": rows, "background_default_budget": backgrounds} | {"acceptance": None}
+
+
+ACCEPTANCE = {"baseline": ("ss3_lfm1", "the baseline (shipped: 1 s, 197 dB, linear, plain filter) at sea state 3"),
+              "alternate": ("ss5_lfm4p200", "the sea-state-5 alternate as configured (4 s, 200 dB, linear, plain filter) at sea state 5"),
+              "alternate_bank": ("ss5_lfm4p200_cfar", "the alternate's energy, linear with the bank (combine: cfar) at sea state 5"),
+              "alternate_hfm": ("ss5_hfm4p200", "the alternate's energy, hyperbolic, plain filter, at sea state 5")}
+
+
+def acceptance(S: dict) -> dict:
+    """Per design (ACCEPTANCE): each target's verdict, detected pings, mean margin and the planner's prediction (with the closed
+    form's loss); `accepted` only when every hull and the ship pass."""
+    R = {(r["case"], r["target"]): r for r in S["rows"]}
+    out = {}
+    for name, (case, words) in ACCEPTANCE.items():
+        if not any(k[0] == case for k in R):
+            continue
+        t = {lb: {"verdict": R[(case, lb)]["verdict"], "detected": R[(case, lb)]["measured_detected"], "pings": R[(case, lb)]["measured_pings"],
+                  "margin_db": R[(case, lb)]["measured_margin_db"], "predicted_db": R[(case, lb)]["planner_predicted_mover_db"],
+                  "class": R[(case, lb)]["planner_class"]} for lb in HIGHLIGHTS if (case, lb) in R}
+        out[name] = {"case": case, "what": words, "targets": t,
+                     "accepted": all(v["verdict"] == "PASS" for lb, v in t.items() if lb != "point")}
+    return out
 
 
 def markdown(S: dict) -> str:
-    L = ["| Case | Design | Filter | Target (range rate m/s) | Detected | Measured margin dB | Predicted, zero speed | Closed-form loss | Predicted | Measured - predicted | Planner's margin (table) | Tracked (class) |",
-         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    L = ["| Case | Design | Filter | Target (range rate m/s) | Verdict | Detected | Measured margin dB | Predicted, zero speed | Closed-form loss | Predicted | Measured - predicted | One highlight, predicted | Planner at the scene / table's worst depth | Tracked (class) |",
+         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
 
     def f(v, fmt="+.2f"):
         return "-" if v is None else format(v, fmt)
     for r in S["rows"]:
-        L.append(f"| {r['case']} | {r['design']} | {r['filter']} | {r['target']} ({r['planner_range_rate_m_s']:+.2f}) | {r['measured_detected']} of {r['measured_pings']} | "
+        L.append(f"| {r['case']} | {r['design']} | {r['filter']} | {r['target']} ({r['planner_range_rate_m_s']:+.2f}) | {r['verdict']} | {r['measured_detected']} of {r['measured_pings']} | "
                  f"{f(r['measured_margin_db'])} | {f(r['planner_predicted_chain_margin_db'])} | {f(r['planner_closed_form_loss_db'], '.2f')} | "
-                 f"{f(r['planner_predicted_mover_db'])} | {f(r['difference_db'])} | {f(r['planner_planner_margin_db'])} ({f(r['planner_table_db'])}) | "
+                 f"{f(r['planner_predicted_mover_db'])} | {f(r['difference_db'])} | {f(r['planner_predicted_one_highlight_db']) if r['planner_highlights'] > 1 else '-'} | "
+                 f"{f(r['planner_planner_margin_db'])} / {f(r['planner_table_db'])} | "
                  f"{'yes' if r['measured_tracked'] else 'no'} ({r['measured_kind'] or '-'}) |")
     L += ["", "| Case | Target-free pings | False detections, default budget | At 3 a ping |", "| --- | --- | --- | --- |"]
     for case, b in sorted(S["background_default_budget"].items()):
@@ -192,6 +255,7 @@ def main(argv=None) -> int:
     ap.add_argument("--json")
     ap.add_argument("--markdown", action="store_true")
     ap.add_argument("--predict", metavar="CASE")
+    ap.add_argument("--source", help="where the case JSONs came from (jobs, tree, device), written into the result")
     a = ap.parse_args(argv)
     if a.predict:
         print(json.dumps(predict(a.predict), indent=1, default=float))
@@ -199,6 +263,15 @@ def main(argv=None) -> int:
     if not a.folder:
         ap.error("give the folder of deep12_<case>.json, or --predict CASE")
     S = summarise(Path(a.folder))
+    S["acceptance"] = acceptance(S)
+    S["command"] = "tools/deep12_eval.py DIR " + " ".join(x for x in (argv if argv is not None else sys.argv[1:]) if x != a.folder and x != a.source).replace("--source", "--source SOURCE")
+    if a.source:
+        S["source"] = a.source
+    S["folder"] = Path(a.folder).name
+    S["seconds"] = {}
+    for path in sorted(Path(a.folder).glob("deep12_*.json")):
+        res = json.loads(path.read_text())
+        S["seconds"][path.stem[len("deep12_"):]] = {e: {k: v.get("seconds_median_after_first") for k, v in res["engines"][e].items() if k in ("off", "on")} for e in res["engines"]}
     if a.json:
         Path(a.json).write_text(json.dumps(S, indent=1, default=float) + "\n")
     if a.markdown or not a.json:

@@ -67,3 +67,38 @@ def test_the_summary_reads_the_sub_runs_json_and_puts_the_worst_difference_first
                                               "ss5_lfm4p200_cfar": {"pings": 4, "false_detections": 1, "at_3_a_ping": 7}}
     text = deep12_eval.markdown(S)
     assert text.count("\n| ss") == 12 and "sea-state-5 alternate" in text
+
+
+def test_verdicts_one_highlight_and_the_detector_scales():
+    """PASS at half the pings or more (the design's Pd 0.5 a ping); a hull's one-highlight prediction is 10 log10(5) under its own;
+    the detector tests the single sample and a 2 m cell only in this window, shorter than every resolved hull's extent."""
+    P = deep12_eval.predict("ss3_hfm4p200")["targets"]
+    for label in ("closing", "oblique", "ship"):
+        assert P[label]["highlights"] == 5 and P[label]["predicted_one_highlight_db"] == pytest.approx(P[label]["predicted_mover_db"] - 6.9897, abs=1e-3)
+        assert P[label]["highlight_range_extent_m"] > 20.0
+    assert P["crossing"]["highlight_range_extent_m"] < 1.0 and P["point"]["highlights"] == 1
+    scales = deep12_eval.detector_scales(1.0)
+    assert [s["length_m"] for s in scales] == [0.375, 2]
+    labels = ("closing", "oblique", "crossing", "ship", "point")
+    S = {"rows": []}
+    for n, case in ((3, "ss3_lfm1"), (2, "ss5_hfm4p200")):
+        for lb in labels:
+            S["rows"].append({"case": case, "target": lb, "verdict": "PASS" if 2 * n >= 6 else "FAIL", "measured_detected": n, "measured_pings": 6,
+                              "measured_margin_db": 1.0, "planner_predicted_mover_db": 0.5, "planner_class": "large_submerged"})
+    A = deep12_eval.acceptance(S)
+    assert A["baseline"]["accepted"] and not A["alternate_hfm"]["accepted"] and "alternate" not in A
+
+
+def test_the_committed_measurement_states_both_designs_verdicts():
+    """docs/tasks/doppler_deep12_eval.json (the L4 run): the point agrees with the planner within 1 dB wherever it is detected on
+    every ping; the resolved hulls fall 2 to 7 dB under their own prediction with the filters that take no Doppler loss."""
+    S = json.loads((ROOT / "docs" / "tasks" / "doppler_deep12_eval.json").read_text())
+    A = S["acceptance"]
+    assert not A["baseline"]["accepted"] and not A["alternate"]["accepted"]
+    assert [lb for lb, v in A["baseline"]["targets"].items() if v["verdict"] == "FAIL"] == ["closing", "oblique", "ship"]
+    for r in S["rows"]:
+        if r["target"] == "point" and r["measured_detected"] == 6:
+            assert abs(r["difference_db"]) < 1.0, r["case"]
+        if r["target"] in ("oblique", "closing") and r["measured_detected"] == 6 and (r["case"].endswith("_cfar") or "hfm" in r["case"]):
+            assert -7.0 < r["difference_db"] < -2.0, (r["case"], r["target"])
+    assert all(b["false_detections"] == 0 for b in S["background_default_budget"].values())
