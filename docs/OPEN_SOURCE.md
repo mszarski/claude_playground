@@ -123,6 +123,13 @@ Roles: depend / vendor / port / test-oracle only / reference reading only / reje
 | FFTW | github.com/FFTW/fftw3 | **GPL-2.0-or-later** (COPYING) | 2026-10-17 (HEAD a7b679c) | — | cloned only; apt candidate 3.3.10 | reject for core; test-oracle only with sign-off | pyFFTW's own wrapper is BSD-3 per PyPI but it still links FFTW |
 | cuFFT | NVIDIA CUDA toolkit | proprietary: PyPI `nvidia-cufft-cu12` metadata says `LicenseRef-NVIDIA-Proprietary`; EULA text unverified | PyPI 11.4.1.4 | — | in use since D-42: the toolkit's `libcufft` (11.x with CUDA 12), run on T4 and A10G | depend (GPU FFT, dynamic link, CUDA build only) | Baseband conversion and pulse compression; pocketfft stays the host FFT |
 
+### 2g. Visualisation (since 2026-11-26)
+
+| Project | URL | Licence (as read) | Last activity | Validation evidence | Verified here | PROPOSED role | Notes |
+|---|---|---|---|---|---|---|---|
+| three.js | github.com/mrdoob/three.js; npm `three` | MIT (LICENSE in the npm package; SPDX header `MIT` in `build/three.module.min.js`) | npm `three@0.170.0` (release 170) used; newer releases exist (not checked) | very wide use (WebGL scene library) | `npm pack three@0.170.0` into the session scratchpad; `build/three.module.min.js` (691,648 bytes, one self-contained ES module) loaded in headless Chromium (Playwright) and drawn: the 3-D prototype pages of `docs/tasks/viz_prototype/` | optional viewer library, **never** imported by the suite: loaded by the HTML pages `gpusonar.viz.page3d` writes, from a pinned CDN URL (`cdn.jsdelivr.net/npm/three@0.170.0`) or embedded from a local copy (`--three PATH`, offline) | The owner approved a viewer dependency on 2026-11-26 ("dependency is fine"); nothing is vendored in the repository yet (section 3.14) |
+| Plotly (Python) | github.com/plotly/plotly.py | MIT (wheel metadata `License-Expression: MIT`) | PyPI 7.2.0 | wide use | wheel downloaded and unpacked in the scratchpad only, not installed: 40.4 MB unpacked, needs `narwhals`; `plotly.min.js` inside it is 4,815,814 bytes | not used (rejected for the 3-D viewer, section 3.14) | An embedded page would carry the 4.8 MB script; the CDN form needs the network like three.js |
+
 ## 3. Notes on the non-obvious items
 
 ### 3.1 Holoscan SDK 5.0 is a breaking release with a narrow platform matrix
@@ -380,6 +387,18 @@ the project.
 statistics, the coverage picture, tonal analysis, noise fitting and the environment loader
 are written here. Eigen became a private build dependency of `libs/detect` as well (it was
 already required; MPL-2.0, header only, row in 2f).
+
+### 3.14 The 3-D scene viewer: three.js in the page, no Python dependency (2026-11-26)
+
+`docs/tasks/VISUALIZATION.md` section 5. Checked first: none of plotly, pyvista, vispy, trimesh, k3d, pythreejs,
+pygltflib or vtk is installed here. Chosen: the page is written by our own code (`python/gpusonar/viz/page3d.py`,
+standard library only) and drawn by three.js in the browser, so one mechanism serves the interactive view (open
+the page) and the export (the page is the export). Rejected: Plotly (MIT, 40.4 MB installed plus `narwhals`, 4.8 MB
+of script in every embedded page, animation by frames only); pyvista/VTK (BSD-3, large binary wheels, a desktop
+window, HTML export through a further package; not measured); k3d and pythreejs (MIT/BSD, notebook widgets, not a
+standalone page). A page that loads three.js from the CDN is 14 to 65 kB for the two prototype scenes and needs the
+network; embedded, 706 and 756 kB, and works offline. Vendoring the one file (0.69 MB, MIT) under a future
+`third_party/` with its LICENSE would make offline pages reproducible; not done in this package.
 
 ## 4. ASASIN coverage map
 
