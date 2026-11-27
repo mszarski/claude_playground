@@ -63,7 +63,11 @@ def same_detections(a, b):
     for x, y in zip(a["detections"], b["detections"]):
         assert x["range_m"] == pytest.approx(y["range_m"], abs=0.05) and x["bearing_deg"] == pytest.approx(y["bearing_deg"], abs=0.05)
         assert x["snr_db"] == pytest.approx(y["snr_db"], abs=0.05)
-        assert x.get("range_rate_m_s") == y.get("range_rate_m_s")
+        rx, ry = x.get("range_rate_m_s"), y.get("range_rate_m_s")
+        # The sweep bank's rate is a hypothesis of its grid; the tone's is interpolated between filters from their
+        # powers, so the device's differs from the host's by the powers' float difference (seen on an L4: 2.1e-8 m/s
+        # on 1 m/s). 1e-5 m/s is far under one filter's step.
+        assert (rx is None) == (ry is None) and (rx is None or rx == pytest.approx(ry, abs=1.0e-5)), (rx, ry)
 
 
 def baseband_of(rec, bearings, cfg):
