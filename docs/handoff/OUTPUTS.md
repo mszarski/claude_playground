@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the gallery is unchanged since; the text was brought to D-201 on 2026-11-26 and to D-229 and D-234 the same day): the gallery pictures, the headline numbers with their sources, what a
+decision D-181 (the gallery is unchanged since except `buried_objects`, regenerated after D-240; the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day and to D-240 on 2026-11-27): the gallery pictures, the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -265,9 +265,12 @@ over bare seabed (`ghost.calibration_cube.at_copy_over_bare_seabed_db`).
 
 ### 1.6 Buried objects: `buried_objects`
 
-**Wrong or missing:** the sediment model is one refracted path with unit transmission: no
-sediment attenuation and no angle-dependent transmission loss. The clutter level against
-the objects is therefore an assumption of the scenario file, not a prediction.
+**Wrong or missing:** the sediment is a class, not a survey (1700 m/s, medium sand; D-212). Since
+D-212 the scene uses `penetration: fluid` (a transmission coefficient per leg and attenuation along the
+sediment leg) where it had one refracted path with unit transmission; the entry and figures below were
+regenerated for it only after D-240 (L4, job 6b08c12b54072e8b71683be9, commit `8391941`): cylinder over
+clutter 21.12 -> 20.32 dB, as D-212 predicted; the depths did not move. The clutter level against the
+objects is still an assumption of the scenario file, not a prediction.
 
 ![buried_objects](../figures/buried_objects.png)
 
@@ -279,7 +282,7 @@ Two depth slices (at the cylinder's top, 0.25 m, and the sphere's top, 0.14 m) a
 | `cylinder_top_depth_m` | 0.25 | 0.26 | 0.23 |
 | `sphere_top_depth_m` | 0.14 | 0.14 | 0.13 |
 
-`cylinder_over_clutter_db`: 21.1 dB.
+`cylinder_over_clutter_db`: 20.3 dB (`gallery.json`: 20.32; 21.12 before the regeneration).
 
 ### 1.7 Flank array: `flank_patrol`
 
@@ -466,8 +469,11 @@ state 5, −116.1 dB in the summer mud shadow), and at three sites no variant in
 (−96.1, −4.7 dB) and are met at the other four (ship +8.8 deep, +21.3 shelf, +10.2 slope, +29.8 dB winter
 sand). One row of 32 holds 12 km wherever three rows do. One sea state of wind or 3 dB of bottom
 scattering changes which geometries hold 12 km. Against the chain: `xl_auv` at 8 km within 0.7 dB, the
-ship at 12 km 4.8 dB low. Requirement POP-3 names no class, detection probability or sea state: what
-12 km is for is the owner's (`STATUS.md` questions 51 to 54).
+ship at 12 km 4.8 dB low. Since D-235 the owner has said 12 km is for `large_submerged` first and `ship`
+second; since D-238 `DESIGN.md`'s POP-3 reads "partly met" (free field yes with three rows, +2.9 dB; not at
+`deep_no_bottom_return_sea_state_5` or `summer_60m_mud_profile`) and "The 12 km design point" has the
+per-site table. The detection probability, the false-alarm rate, the worst sea state and the waters are
+still the owner's (`STATUS.md` questions 51, 52 and 55).
 
 Link budget, free field, spherical spreading, steady point echo in noise. Source:
 `docs/design/derived.json`, `requirements` entry `POP-3` (written by
@@ -838,7 +844,7 @@ Runtimes are given only where a document records one.
 
 | Output | Committed? | Command | Where | Runtime |
 | --- | --- | --- | --- | --- |
-| Gallery: `docs/figures/<scene>.png`, `.gif`, `gallery.json`, `*_leg1_full.png` | yes (57 files) | `tools/gallery.py --backend cuda`, as job mode `gallery` with `GPUSONAR_ORACLES=1 GPUSONAR_CERES=1`; then copy the uploaded folder into `docs/figures/` | GPU | 489 s for the 26 scenes on an L4, about 40 min for the job with its builds |
+| Gallery: `docs/figures/<scene>.png`, `.gif`, `gallery.json`, `*_leg1_full.png` | yes (57 files; the job of the fourth batch's tree was committed for `buried_objects` only: three scenes differ by one detection a ping, `sonar-pli3`) | `tools/gallery.py --backend cuda`, as job mode `gallery` with `GPUSONAR_ORACLES=1 GPUSONAR_CERES=1`; then copy the uploaded folder into `docs/figures/` | GPU | 489 s for the 26 scenes on an L4, about 40 min for the job with its builds |
 | The same on a CPU, full size | would overwrite the committed gallery: pass `--out` | `tools/gallery.py --backend host [--only a,b] --out <dir>` | CPU; Popoto and flank scenes need `GPUSONAR_BELLHOP` | seconds to 14 min a scene on four cores (older run, `SCENARIOS.md`) |
 | Thinned gallery for a quick look | no (`build/gallery_quick/`) | `tools/gallery.py --quick` | CPU | not recorded; `tests/python/test_realistic_scenes.py` runs the same thinned scenes |
 | Geometry diagrams `docs/scenarios/<name>.png` | yes | `tools/scenario_diagrams.py [--only a,b]` | CPU; Bellhop scenes need the oracle | not recorded |
@@ -849,6 +855,7 @@ Runtimes are given only where a document records one.
 | `docs/design/popoto_range_study.json`, `.png` | yes | `tools/popoto_range_study.py` | CPU | not recorded |
 | `docs/design/popoto_trade_study.json`, `.md` (D-233) | yes | `tools/popoto_trade_study.py --grid`, then `--sensitivity`, `--coverage`, `--measure-rows`, `--crosscheck` (each merged into the JSON), then `--report` for the `.md`; the profile sites need `GPUSONAR_BELLHOP`; `OMP_NUM_THREADS=1` advised | CPU | not recorded; `--measure-rows` takes minutes (its docstring) |
 | `docs/tasks/doppler_bank_eval.json`, `doppler_bank_threshold.json` (D-232) | yes | `tools/doppler_bank_eval.py SCENE --background 4` per scene, the scenes gathered under `scenes` (the file's `tool` line; Bellhop for the eigenray scenes); `tools/doppler_bank_threshold.py [--reverb SCENE] --json FILE` | CPU | not recorded; the bank costs 22 to 51 times the chain a ping on the scenes (`docs/tasks/DOPPLER.md` table 9.5) |
+| `docs/tasks/doppler_d3_eval.json` (D-237) | yes | the commands in its `commands` block: `tools/doppler_bank_threshold.py --chain cfar ...`, `tools/doppler_bank_eval.py SCENE --combine cfar --background 4`, `tools/doppler_tone_eval.py` (`--alternate 10.5e+3` on `flank_patrol`; `popoto_12km_doppler`); Bellhop for the eigenray scenes | CPU | `flank_patrol_doppler_tone` did not finish in 4 h 40 min (its block `not_measured`); a GPU-job item (`sonar-iu67`) |
 | Ten-seed evaluation: `classify_rules_eval.json`, `.md`, `captures/` | only the JSON of some runs, as `docs/benchmarks/classify_rules_eval_<commit>.json`; captures stay in the dataset | job mode `clseval` with `GPUSONAR_ORACLES=1`, `GPUSONAR_CLSEVAL_ARGS="--seeds 10 --commit <hash>"` | GPU | about 50 min for 12 scenes x 10 seeds on an L4 |
 | False-alarm count `at_default.json` | no; the table is in `RESULTS.md` | job mode `falsealarm` (`GPUSONAR_FA_ARGS`, e.g. `--maps long_range --pings 100000`) | GPU | long: the three-row static map timed out at about 43 000 pings |
 | `docs/benchmarks/bench_*`, `session_*`, `conditioning_*` | yes | job mode `benchmark` (`docs/benchmarks/README.md` has each file's exact settings); the job prints one `BENCHMARK_JSON {...}` line to save | GPU | not recorded; a rerun is a new measurement, not a regeneration |

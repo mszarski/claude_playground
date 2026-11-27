@@ -4,7 +4,8 @@ Refreshed 2026-11-24 at commit `933972b` on branch `claude/gpu-sonar-suite-u289p
 (decisions to D-181; the version before this one was written 2026-11-19 at `2160fe8` and
 stopped at D-144), and brought to D-201 and the opt-in 3-D propagation tier on 2026-11-26, then to
 D-225 (the merge `b88c458`) the same day: only the state lines and the statements that merge made false; then
-to D-234 (the merge `4057d65` of the third batch) the same day, the same way. These notes are for whoever picks the work up next, a person or a coding
+to D-234 (the merge `4057d65` of the third batch) the same day, the same way; then to D-240 (the merge `8581533` of the
+fourth batch) on 2026-11-27, the same way. These notes are for whoever picks the work up next, a person or a coding
 model. `docs/STATUS.md` is the authoritative list of what works and what is wrong; this
 file tells you how to work here and where the edges are. The wider handoff set is in
 `docs/handoff/` (start at `docs/handoff/README.md`).
@@ -157,7 +158,11 @@ those skips; with `GPUSONAR_REQUIRE_ORACLES=1` they fail instead. Other switches
 `docs/handoff/TESTS.md` section 1): `GPUSONAR_BELLHOP3D` (Bellhop3D; else `bellhop3d.exe` beside
 Bellhop), `GPUSONAR_SLOW_ORACLES=1` (the 8-minute acceptance of the `eigenray3d` tier, not part of
 the suite; its skip names no oracle variable, so `GPUSONAR_REQUIRE_ORACLES=1` does not fail it),
-`GPUSONAR_HSB_STUDY=1` and `GPUSONAR_HSB_TIMING=1` (Sensor Bridge measurements, not tests).
+`GPUSONAR_HSB_STUDY=1` and `GPUSONAR_HSB_TIMING=1` (Sensor Bridge measurements, not tests),
+`GPUSONAR_DOPPLER_STUDY=1` (the margin tests of the Doppler scenes) and `GPUSONAR_DOPPLER_CHAIN=1` (the
+chain's acceptance on `flank_patrol_doppler_tone`; not run yet: the scene's simulation did not finish in
+4 h 40 min on this machine, D-237); in the GPU job,
+`GPUSONAR_SHARD=I/N` (one shard of the test files, D-239).
 
 The Holoscan and Sensor Bridge tests cannot run here (the SDK cannot be imported in this
 container); they skip locally and run in the GPU job.
@@ -192,6 +197,19 @@ The full suite before a merge (what "2278 passed, 102 skipped, 1 xfailed" was ru
 ```bash
 launch_named.sh <name>.tar.gz l4x1 3h -e GPUSONAR_ORACLES=1 -e GPUSONAR_CERES=1 \
   -e GPUSONAR_HOLOSCAN_CPP=1 -e GPUSONAR_HSB=1 -e GPUSONAR_REQUIRE_ORACLES=1
+```
+
+The same suite in shards (D-239): three jobs at once, the same switches plus `GPUSONAR_SHARD`; each shard
+runs its share of the test files (`tools/test_shards.py`, weights in `tests/python/shard_weights.json`;
+the C++ suites in shard 1). **The suite has passed when every shard has.** Each shard pays the whole build,
+so three cost more GPU time than one job; the first trial was done about 60 minutes after launch, against
+85 minutes of tests alone unsharded (D-239).
+
+```bash
+for i in 1 2 3; do
+  launch_named.sh <name>.tar.gz l4x1 3h -e GPUSONAR_ORACLES=1 -e GPUSONAR_CERES=1 \
+    -e GPUSONAR_HOLOSCAN_CPP=1 -e GPUSONAR_HSB=1 -e GPUSONAR_REQUIRE_ORACLES=1 -e GPUSONAR_SHARD=$i/3
+done
 ```
 
 Job modes of `tools/gpu_job.sh` (its header, `bash tools/gpu_job.sh --help`, lists every
@@ -232,11 +250,11 @@ Flavours and pitfalls:
 | Need | Read |
 | --- | --- |
 | The handoff set: entry point, hardware, software, tests, outputs | `docs/handoff/README.md`, `HARDWARE.md`, `SOFTWARE.md`, `TESTS.md`, `OUTPUTS.md` |
-| What works, what is wrong, questions for the owner | `docs/STATUS.md` (open items 1 to 67, owner questions 1 to 54) |
-| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-234; later entries amend earlier ones) |
+| What works, what is wrong, questions for the owner | `docs/STATUS.md` (open items 1 to 72, owner questions 1 to 55) |
+| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-240; later entries amend earlier ones) |
 | Every measured number and its source | `docs/RESULTS.md` (the Sensor Bridge numbers of D-153 to D-192 are summarised there, and D-193 to D-201 in a summary table before "Not yet measured"; D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only) |
 | Scenes, with figures and per-scene results | `docs/SCENARIOS.md`, `docs/figures/` (gallery of D-179) |
-| Work waiting on owner input, written as briefs for an agent | `docs/tasks/VEHICLE_ADAPTERS.md` (`sonar-o7m`), `docs/tasks/REAL_DATA.md` (`sonar-sul`); `docs/tasks/PROPAGATION_3D.md` (`sonar-rcq`: the scope of 3-D propagation, its packages P1 to P6 done, owner questions in section 6); `docs/tasks/DOPPLER.md` (`sonar-u1fu`: packages D2 and D4 done, D3 next; its question 1 answered, D-231) |
+| Work waiting on owner input, written as briefs for an agent | `docs/tasks/VEHICLE_ADAPTERS.md` (`sonar-o7m`), `docs/tasks/REAL_DATA.md` (`sonar-sul`); `docs/tasks/PROPAGATION_3D.md` (`sonar-rcq`: the scope of 3-D propagation, its packages P1 to P6 done, owner questions in section 6); `docs/tasks/DOPPLER.md` (`sonar-u1fu`: packages D2, D4 and D3 done, "D3 done" says what was not measured; its question 1 answered, D-231) |
 | The Popoto array design, budget, builds | `docs/DESIGN.md` (generated by `tools/design_report.py`), `docs/REFERENCE_DESIGN.md`, `docs/DEPLOYMENT.md`, `docs/design/` (the 12 km trade study per site and class: `docs/design/popoto_trade_study.md`, D-233) |
 | Config keys | `docs/CONFIGURATION.md`; files in `configs/{sonars,scenarios,environments,deploy,builds,chains,nav}` |
 | Physics and paper reading | `docs/PHYSICS_NOTES.md`, `docs/PAPER_NOTES.md`, `docs/REFERENCES.md` |
@@ -265,10 +283,13 @@ Code worth knowing first:
   process; `docs/tasks/PROPAGATION_3D.md`).
 - `tools/popoto_12km_study.py`, `tools/fjord_rehearsal.py`, `tools/design_report.py`: the
   studies behind the design documents.
+- `tools/doppler_tone_eval.py` (D-237: the tone path end to end through both engines, per target and
+  ping, with the background's false detections) and `tools/doppler_bank_threshold.py --chain cfar` (the
+  CFAR combiner's false detections on noise); `tools/test_shards.py` (D-239: the shard a GPU job runs).
 
-## 6. State of verification (to D-234)
+## 6. State of verification (to D-240)
 
-- **GPU, latest (NVIDIA L4, HF job 6b084a4cd91f621b930b6331, the third 2026-11-26 batch's tree `0a8b477` of D-230 to D-233, merged as `4057d65`, with `GPUSONAR_SLOW_ORACLES=1`): 2886 passed, 111 skipped, 4 xfailed, none failed** (D-234; the eight more skips than D-229's 103 are the five opt-in margin tests of `test_doppler_scenes.py` and three `--help` checks of the new tools). Before it, the second batch's tree `de3717b`: 2823 passed, 103 skipped, 4 xfailed (job 6b080457d91f621b930a652a, D-229); the merged tree `b88c458`: 2763 passed, 102 skipped, 4 xfailed (job 6b07ea74d91f621b930a343d; D-225, which lists the six failures of that batch's earlier suites and their fixes). Before them, D-202's tree: 2301 passed, 102 skipped (job 6b079ab0d91f621b93098915); D-201's: 2278 passed, 102 skipped, 1 xfailed (job 6b078a26d91f621b93096bc7).
+- **GPU, latest (NVIDIA L4, HF job 6b08b9f554072e8b71681cd2, the fourth 2026-11-26 batch's tree `da015ba` of D-236 to D-239, merged as `8581533`, with `GPUSONAR_SLOW_ORACLES=1`): 2933 passed, 113 skipped, 4 xfailed, none failed** (D-240; the two more skips than D-234's 111 are the chain acceptance on `flank_patrol_doppler_tone`, which needs `GPUSONAR_DOPPLER_CHAIN=1`, and one `--help` check of a new tool). The sharding (D-239) was added on top and passed as three shards: 2941 passed, 114 skipped, 4 xfailed (jobs 6b08c1c16c5d61fff1879ac2, 6b08c1c254072e8b71683e13, 6b08c1c36c5d61fff1879ac7; the eight tests of `test_shards.py` and one more `--help` skip). Before it, the third batch's tree `0a8b477`: 2886 passed, 111 skipped, 4 xfailed (job 6b084a4cd91f621b930b6331, D-234); the second batch's tree `de3717b`: 2823 passed, 103 skipped, 4 xfailed (job 6b080457d91f621b930a652a, D-229); the merged tree `b88c458`: 2763 passed, 102 skipped, 4 xfailed (job 6b07ea74d91f621b930a343d; D-225, which lists the six failures of that batch's earlier suites and their fixes). Before them, D-202's tree: 2301 passed, 102 skipped (job 6b079ab0d91f621b93098915); D-201's: 2278 passed, 102 skipped, 1 xfailed (job 6b078a26d91f621b93096bc7).
   CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and
   Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`. The skips are data and tools not in the
   job and the opt-in measurements. The 3-D work after D-201 (`eigenray3d`, `flank_seamount_3d`)
@@ -279,10 +300,12 @@ Code worth knowing first:
   owner"). Since then each package ran its affected test files locally and the whole suite on the
   GPU job. A whole CPU run at HEAD is not on record.
 - The gallery (`docs/figures/`, `gallery.json`) is from the L4 job 6b054768c97b8ed4fcd78015
-  on tree `4a80876` (D-179). D-180 to D-201 change no default result of a gallery scene. Since the
-  merge of 2026-11-26 it is stale for `buried_objects` (D-212: `penetration: fluid`), and the Popoto
-  and flank scenes' surface reverberation fell about 1 dB (D-216) without a re-measurement; a GPU
-  gallery job is due (`docs/STATUS.md`, the list of stale generated files; issue `sonar-tmvu`, still open at D-234).
+  on tree `4a80876` (D-179), except `buried_objects`, regenerated at the fourth batch's tree (job
+  6b08c12b54072e8b71683be9, commit `8391941`: cylinder over clutter 21.12 -> 20.32 dB, as D-212
+  predicted). D-180 to D-201 change no default result of a gallery scene. The rest of that job's
+  gallery was not committed: three scenes differ from the committed one by one detection a ping
+  (`sonar-pli3`). The Popoto and flank scenes' surface reverberation fell about 1 dB (D-216) without a
+  re-measurement (`docs/STATUS.md`, the list of stale generated files; issue `sonar-tmvu`, still open at D-240).
 - Not in either suite: the generator's self-tests. Last recorded result 42 of 42 on both
   engines for the six builds (D-143, 2026-11-19); since then only checked that every
   deploy and build file is accepted by both engines (D-166, D-177).
@@ -350,7 +373,8 @@ Numbers are in the `DECISIONS.md` entries. Issues named here are open in `bd` un
 | (2026-11-26) | The opt-in `eigenray3d` tier (Bellhop3D), the cross-slope warning, one top-level `bathymetry`, `flank_seamount_3d` (`docs/tasks/PROPAGATION_3D.md` P1 to P6) | No reverberation over relief at that tier; its acceptance test takes 8 minutes and runs only with `GPUSONAR_SLOW_ORACLES=1` (the entry is D-202) |
 | D-204 to D-225 (2026-11-26) | Five 3-D scenes; the general image construction in C++; the conformance alignments applied (grain-size relations, the fit's small-slope and prior, elastic rock in the simulator, Bellhop and the live chain, `dahl_1997` and the geometric-mean bistatic rule, the large-scale slope law); `penetration: fluid` (the two buried scenes) and `rough`; the engine never silent and recorded; the link budget's reverberation term; four papers and five site rows | Surface reverberation about 1 dB lower in multipath scenes; SPACE'08 steep tails 1.89 measured over model, the Kirchhoff tail rejected as the cause; rock shear unconfirmed; `rough` costly on large scenes; design budgets noise-only (no site states scattering); three fit tests and two other tests weakened (D-216, D-223, D-225); gallery and `sst_validation` stale |
 | D-226 to D-229 (2026-11-26) | Williams-Jackson (1998) and Jackson-Briggs (1992) as opt-ins; the sites' boundary scattering in the depth plan and the coverage pictures; the Doppler workstream scoped (`docs/tasks/DOPPLER.md`); the owner's answers 36 to 42 | The +5 dB class over the 100 m shelf reaches 2.56 km in the plan (8.02 to 9.58 before); every site value illustrative; `flank_patrol` worst margin error 3.4 dB; simulated surface reverberation has no Doppler spread at long range |
-| D-230 to D-234 (2026-11-26) | The library sediment fit takes a row (D-230); pulse trains and four Doppler scenes (D-231); the sweep's Doppler bank in both engines, opt-in (D-232); the Popoto 12 km trade study (D-233); the merge (D-234) | **The bank lowers every target's margin 3.4 to 5.3 dB and stays off** (`sonar-094p`, `sonar-ef64`, `sonar-itzy`); a tone in the sweep's band is masked by the sweep's reverberation (10.9 against 39.8 dB; `sonar-3in1` for the ±3 dB scatter); **the +5 dB class is not reached at 12 km at any illustrative site**, POP-3 names no class (`sonar-bh5c`, `sonar-b1p0`); not merged: the tone path (D3) and branch `a-rows` |
+| D-235 to D-240 (2026-11-26 and 27) | The owner's answers on the 12 km requirement and the sea-state labels (D-235); the rows' gain against reverberation (`reverberation_rows_gain`), `reach_limited_by` and the `penetration: rough` cost cap `roughness.max_pairs`, opt-in (D-236); Doppler D3, both engines, opt-in: `doppler.combine: cfar` and `doppler.tone: bank`, the scene `flank_patrol_doppler_tone` (D-237); POP-3 for `large_submerged` first and `ship` second, per site (D-238); the GPU suite in shards, `GPUSONAR_SHARD=I/N` (D-239); the merge (D-240) | **The tone above the band is not measured end to end** (its simulation did not finish in 4 h 40 min on a CPU; `sonar-iu67`); the tone path's leakage rule was designed on the records that showed 43 to 50 false detections a ping (not an independent test); the default chain finds the ship on `popoto_12km_doppler` on 0 of 6 pings (a pulse train compressed whole); **POP-3 reads "partly met"** (not at the sea-state-5 and summer-mud sites); `cfar` costs the still wreck 0.48 dB; the Python chain's nonsense on a short CW record; three shards cost more GPU time than one job; not merged: `gpujob`, `scene12`, `viz`, the CUDA port (`sonar-ca0o`) |
+| D-230 to D-234 (2026-11-26) | The library sediment fit takes a row (D-230); pulse trains and four Doppler scenes (D-231); the sweep's Doppler bank in both engines, opt-in (D-232); the Popoto 12 km trade study (D-233); the merge (D-234) | **The bank lowers every target's margin 3.4 to 5.3 dB and stays off** (`sonar-094p`, `sonar-ef64`, `sonar-itzy`); a tone in the sweep's band is masked by the sweep's reverberation (10.9 against 39.8 dB; `sonar-3in1` for the ±3 dB scatter); **the +5 dB class is not reached at 12 km at any illustrative site**, POP-3 names no class (`sonar-bh5c`, `sonar-b1p0`); not merged: the tone path (D3) and branch `a-rows` (both merged since, D-240) |
 
 **Tooling and configuration**
 
@@ -365,8 +389,11 @@ From `.beads/issues.jsonl` as of 2026-11-26 (the tree of D-201 and the 3-D work)
 176. P1: 6 (3 in progress, 3 open); P2: 7, all open; P3: 39 (1 in progress); P4: 25 (1 in progress).
 Recounted from the export at `76e01a5` (after D-234's follow-ups were filed; counted from the file, not
 with `bd`): 96 not closed of 208; P1: 8 (5 in progress, 3 open); P2: 11, all open; P3: 50, all open; P4:
-27 (1 in progress). The themes below were made from the first count; the rows "Doppler" and "The 12 km
-requirement" were added at D-234.
+27 (1 in progress). Recounted from the export at `02bce49` (after the fourth merge and the gallery
+difference were filed; counted from the file, not with `bd`): 101 not closed of 214; P1: 12 (6 in progress,
+6 open); P2: 12, all open; P3: 50, all open; P4: 27 (1 in progress). The themes below were made from the
+first count; the rows "Doppler" and "The 12 km requirement" were added at D-234, "Visualization" and the
+fourth merge's issues at D-240.
 "In progress" on a milestone issue means the milestone is not closed, not that someone is working on
 it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documentation set
 (`sonar-4mu`) were closed on 2026-11-24 and 25.
@@ -376,8 +403,9 @@ it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documen
 | Waiting on the owner | `sonar-o7m` (P1) vehicle adapters: board samples and navigation; `sonar-sul` (P1) calibration and the live chain on real data; `sonar-9a2` (P2) board timing: capture-start stamping, clock rates, the channel map; `sonar-68e` (P2) the grating lobe beyond ±42° at 6 kHz; `sonar-2e9e` (P3) the fjord beds' 12-arrival limit; `sonar-ya2c` (P2) whether SAS scenes carry bed multipath |
 | Milestones not closed | `sonar-l59` (P1) M11 Holoscan integration; `sonar-3s7` (P1) M13 performance model and Jetson; `sonar-k29` (P1) stacked rows for elevation |
 | Link budget | `sonar-w2w3` (P1): the reverberation term exists since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`); since D-227 the depth plan and the coverage picture include the sites' scattering (illustrative values; the +5 dB class over the 100 m shelf 8.0 to 9.6 → 2.56 km in the plan); the free-field budgets stay noise-only and say so |
-| Doppler | `sonar-u1fu` (P1, in progress) the workstream: D2 and D4 merged (D-231, D-232), D3 next (the tone outside the sweep's band, a CFAR per beam and hypothesis); `sonar-094p` (P2) the bank's false alarms at the default budget and its cost on a GPU; `sonar-ef64` (P3) the bank's sidelobe detections under very strong echoes; `sonar-itzy` (P3) the winning hypothesis for elevation and SBL; `sonar-3in1` (P3) the tone margins' scatter (more background pings, the clipped window) |
-| The 12 km requirement | `sonar-bh5c` (P1) the owner: what the 12 km requirement is for, the operating area's wind and bottom backscatter, whether 32 a row is fixed, the "sea state 5" label; `sonar-3983` (P1, in progress) the trade study; `sonar-b1p0` (P2) its follow-ups: own depth by reach, the rows measurement at more sites and pings, the ship's 4.8 dB cross-check gap |
+| Doppler | `sonar-u1fu` (P1, in progress) the workstream: D2, D4 and D3 merged (D-231, D-232, D-237: `doppler.combine: cfar`, `doppler.tone: bank`, opt-in); `sonar-iu67` (P1) the GPU job mode `GPUSONAR_JOB=doppler` and its three runs (branch `gpujob`, not merged; takes in `sonar-094p`); `sonar-ca0o` (P1, in progress) the CUDA port of the tone path and the per-cell detectors; `sonar-094p` (P2) the bank's false alarms at the default budget and its cost on a GPU; `sonar-ef64` (P3) the bank's sidelobe detections under very strong echoes; `sonar-itzy` (P3) the winning hypothesis for elevation and SBL; `sonar-3in1` (P3) the tone margins' scatter (more background pings, the clipped window) |
+| The 12 km requirement | `sonar-bh5c` (P1) the owner: what the 12 km requirement is for, the operating area's wind and bottom backscatter, whether 32 a row is fixed, the "sea state 5" label; `sonar-3983` (P1, in progress) the trade study; `sonar-b1p0` (P2) its follow-ups: own depth by reach, the rows measurement at more sites and pings, the ship's 4.8 dB cross-check gap; `sonar-qbrg` (P1) scenes with `large_submerged` at 12 km (branch `scene12`, not merged). Since D-235 the owner has said whom 12 km is for (`large_submerged` first, `ship` second); POP-3 reads "partly met" (D-238) |
+| Visualization | `sonar-6k79` (P1) rays, bounces and the received signal at each hydrophone for every scenario (branch `viz`, not merged; its design `docs/tasks/VISUALIZATION.md` is on that branch only) |
 | Hardware design | `sonar-mu3` (P2) sync reference generator, input protection, power, mechanical and depth rating, FLS and SAS front ends, hydrophones; `sonar-68e` (P2) above |
 | Detector and false alarms | `sonar-031` (P3) two-row cell mean 1.26 times its share; `sonar-4xn` (P3) three-row static count; `sonar-xl7` (P3) 9 dB floor on stacked rows; `sonar-gg6` (P4) constants against budget; `sonar-9hy` (P3) leading edge with blanking and burst filter |
 | Tracking and classification at long range | `sonar-tlc` (P3) association among many arrivals in one gate; `sonar-36z` (P3) grouping velocity gate; `sonar-69f` (P3) outlier test power; `sonar-kal` (P3) long-range clutter scene; `sonar-ome` (P3) bounce grouping with multipath on; `sonar-dqc` (P3) parabola fallback; `sonar-2o5` (P3) winter-sand stray detection; `sonar-9b8` (P3) gravel peak and position; `sonar-t4u` (P3) function defaults differ from the chain's; `sonar-i28` (P4) two-ship scene; `sonar-7q0` (P4) SNR-weighted fit; `sonar-bu3` (P4) gallery bearing sigma; `sonar-y7k` (P4) `tracker.ping_interval_s` in configs |
@@ -387,6 +415,7 @@ it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documen
 | Motion estimation (SAS) | `sonar-0bc` (P3) retune lambda2; `sonar-dix` (P3) bathymetry also moves the DVL seabed; `sonar-7k2` (P3) along-track surge; `sonar-oii` (P4) delays below the model; `sonar-b6r` (P4) CUDA delay estimation slower than host |
 | Sensor Bridge, streams and receive | `sonar-02c` (P2) a host with Sensor Bridge's own socket setup, and RoCE; `sonar-pnyv` (P2) clock-rate keys ignored by the Holoscan application and `receive` for a whole-array stream; `sonar-a75` (P3) unexplained a10g-large losses, the 0.25 s lead not enforced; `sonar-6rs` (P3) the first loopback case of a job; `sonar-4zx` (P3) `flank_32` 5 ms bound on a10g-large; `sonar-57w` (P3) no issue for a real board on that path; `sonar-ui5` (P3) `receive` at a non-nominal speed, multi-board; `sonar-thu` (P3) receive follow-ups; `sonar-3wd` (P3) idle stop on GPU; `sonar-l6j` (P3) `serve --backend cuda`; `sonar-e2u` (P4) pace table on L4; `sonar-vmm` (P4) thread count and scheduler; `sonar-qei` (P4) window layout speed against the record's speed |
 | Performance | `sonar-1m4` (P3) keep the fine map on the device; `sonar-egj` (P4) rerun the `minefield_sas` benchmark row |
+| Generated outputs | `sonar-tmvu` (P2) regenerate on GPU what is stale (`sst_validation`, `sst_pursuit.png`, `live_popoto_12km_report.jsonl`; `buried_objects` done after D-240); `sonar-pli3` (P2) explain three gallery scenes' one-detection differences before committing the whole gallery |
 | Simulator | `sonar-rcq` (P3, in progress) 3-D propagation; `sonar-7iy` (P3) relief reverberation's bounce legs; `sonar-9le` (P3) high-frequency surface; `sonar-3k1` (P3) bottom as published, layered seafloor; `sonar-64sm` (P3) surface model at low wind; `sonar-yus6` (P3) rough-surface loss in range-dependent water; `sonar-6t5` (P3) ping-to-ping coherence; `sonar-f3mi` (P3) `fls_170k_transit` reverberation; `sonar-8qn9` (P3) old-form walls; `sonar-6fc` (P4, in progress) K texture correlation; `sonar-ugc` (P4) per-element patterns; `sonar-pup` (P4) water per bearing; `sonar-5bf2` (P4) small items from the M12 audit; `sonar-ttr1` (P4) diagrams for walls and a tilted bed |
 | Configuration and tools | `sonar-1yq` (P3) five readers on plain `yaml.safe_load`; `sonar-ess` (P4) build diagram annotation |
 
@@ -402,7 +431,7 @@ Five lists. Nothing in them can be settled from the repository.
 
 | List | Where | Count | About |
 | --- | --- | --- | --- |
-| Open questions for the project owner | `docs/STATUS.md`, section of that name | 54 numbered (35 when this table was written); 1 to 12 are the Popoto array, and 17, 19, 22, 28, 29, 35 to 43 and 50 are marked applied or answered | rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site; then wire format (13-15), defaults not applied (16, 18, 20, 21), reading and older items (23-27); raised since D-182 (30-34): board timing, the grating lobe, the fjord beds, SAS with bed multipath, 3-D propagation; Doppler (43-49, from `docs/tasks/DOPPLER.md` section 5; 43, the transmitter, answered: free to choose along with the Popoto, D-231); the default bistatic roughness model (50, answered); what the 12 km requirement is for, the operating area, 32 a row, the "sea state 5" label (51-54, from the trade study; `sonar-bh5c`) |
+| Open questions for the project owner | `docs/STATUS.md`, section of that name | 55 numbered (35 when this table was written); 1 to 12 are the Popoto array, and 17, 19, 22, 28, 29, 35 to 43, 50 and 54 are marked applied or answered, 51 in part | rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site; then wire format (13-15), defaults not applied (16, 18, 20, 21), reading and older items (23-27); raised since D-182 (30-34): board timing, the grating lobe, the fjord beds, SAS with bed multipath, 3-D propagation; Doppler (43-49, from `docs/tasks/DOPPLER.md` section 5; 43, the transmitter, answered: free to choose along with the Popoto, D-231); the default bistatic roughness model (50, answered); what the 12 km requirement is for, the operating area, 32 a row, the "sea state 5" label (51-54, from the trade study; `sonar-bh5c`; 51 answered in part, D-235: `large_submerged` first and `ship` second, still open the worst sea state, the detection and false-alarm probabilities and the slowest radial speed; 54 answered, the labels corrected); whether `--check` fails on "partly met" (55, D-238) |
 | Vehicle adapters | `docs/tasks/VEHICLE_ADAPTERS.md` section 3 (issue `sonar-o7m`) | 17 | the boards' output format, timing and transmit signal; the navigation unit's interface; the clock between them; the lever arm |
 | Real data | `docs/tasks/REAL_DATA.md` section 3 (issue `sonar-sul`) | 11 | which data exists (FLS log, SAS image, Popoto recording), its instruments, levels, geometry and navigation |
 | Doppler | `docs/tasks/DOPPLER.md` section 5 (issue `sonar-u1fu`; the same as `STATUS.md` questions 43 to 49) | 7; 1 answered (the transmitter is free to choose along with the Popoto, 2026-11-26, D-231) | the slowest target speed of interest, whether stationary targets must stay detectable, the 12 km class and aspect (now `STATUS.md` question 51), the navigation unit's velocity accuracy, a `range_rate_m_s` report field, real data with a CW transmit |
@@ -420,7 +449,10 @@ decimate-first correction by board (asked for by the owner, D-192, D-195); the K
 `flank_patrol`'s small vehicle left as a hard target (D-198); Bellhop3D as an opt-in provider
 run as a separate process (2026-11-26); the answers to `STATUS.md` questions 36 to 42 (D-229; the
 library fit's row of 36 built, D-230); the transmitter (projector, drive board, waveform) free to
-choose along with the Popoto (2026-11-26, D-231).
+choose along with the Popoto (2026-11-26, D-231); the 12 km requirement is for `large_submerged` first and
+`ship` second, and the sea-state labels corrected (D-235); the GPU suite in shards (D-239); the Doppler
+GPU job mode and the CUDA port agreed, and the visualization workstream asked for (2026-11-26, as the
+issues `sonar-iu67`, `sonar-ca0o` and `sonar-6k79` record).
 
 ## 10. Design numbers to keep straight
 

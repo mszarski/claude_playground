@@ -15,6 +15,13 @@ unchanged, small-slope kept, D-229); the sites state their boundary scattering a
 pictures include it (D-227). The rows below that said "in progress, not merged" or "not done" for these carry a
 "D-226" or "D-227" note.
 
+**State 2026-11-27, after the merge `8581533` of the fourth batch (D-235 to D-240; full GPU suite 2933 passed, 113
+skipped, 4 xfailed; job 6b08b9f554072e8b71681cd2; as three shards 2941 passed, 114 skipped, 4 xfailed):** D-235 to
+D-240 name no matrix row and the batch did not edit this file. The `penetration: rough` cost cap (D-236,
+`roughness.max_pairs`) raises before any pairing and never truncates, so it changes no conformance item under the
+cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
+the sharding) touch no conformance item.
+
 **State 2026-11-26, after the merge `4057d65` of the third batch (D-230 to D-234; full GPU suite 2886 passed, 111
 skipped, 4 xfailed; job 6b084a4cd91f621b930b6331):** D-230 to D-233 name no matrix row and the batch did not edit this file. The library sediment fit takes a
 row as the tool does (D-230, opt-in; A10 carries a note); the rest of the batch (pulse trains, the sweep's Doppler bank,

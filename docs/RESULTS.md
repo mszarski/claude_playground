@@ -3475,15 +3475,36 @@ Every number here is ours, on simulated records or the planner's model; none is 
 | Stacked rows against reverberation, shelf, bistatic generator, one site, 3 pings | today's chain gains 2.47 dB (2 rows) and 3.38 dB (3 rows); the planner assumes 0 | D-233; `docs/design/popoto_trade_study.md` section 5 |
 | The trade study against the chain (simulator and C++ chain) | `xl_auv` at 8 km within 0.7 dB; ship at 12 km 4.8 dB low | D-233; `docs/design/popoto_trade_study.md` section 6 |
 
+## Measured in D-235 to D-240 (the fourth 2026-11-26 batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records or the planner's model (CPU, host backend, Bellhop); none is
+from real water and none from a GPU, except the suite and gallery jobs named.
+
+| What | Result | Source |
+| --- | --- | --- |
+| The tone above the sweep's band in one ping (`flank_patrol_doppler_tone`) through the chain | **not measured**: simulating its 6 pings did not finish in 4 h 40 min on this CPU | D-237; `docs/tasks/DOPPLER.md` D3.1; `sonar-iu67` |
+| The tone path's false detections on `flank_patrol`'s tone pings | **43 to 50 a ping** at the notch's edges on the first run; 1, 0, 0 with the leakage rule, which was designed on the same records (not an independent test); one (2983 m, 22.8°, +0.24 m/s, 18.4 dB) unexplained | D-237; `docs/tasks/DOPPLER.md` D3.1, D3.3 |
+| The default chain on `popoto_12km_doppler` (a train compressed whole) | ship on **0 of 6** pings; 6 of 6 with the tone path on (the sweep part of the replica alone); the tone gives the rate on 1 ping of 6 (-0.573 m/s, true -0.499) | D-237; `docs/tasks/doppler_d3_eval.json` |
+| `doppler.combine: cfar`, margin off -> cfar (D-232's max), 6 pings | wreck (still) 14.63 -> **14.15** (9.33), -0.48 dB against a +0.69 dB correction; `popoto_12km` ship 9.11 -> 9.63 (5.57); `popoto_far_mover` ship 12.35 -> 13.65 (8.84); `flank_patrol` submarine 11.69 -> 13.20 (8.32); small vehicle on 3 of 6 pings (1 off or max) | D-237; `docs/tasks/DOPPLER.md` D3.2 |
+| The CFAR combiner on noise, long-range array, 60 pings | 0.66 to 0.86 of the off count at 3, 1 and 0.3 false detections a ping; not measured at the default budget | D-237; `docs/tasks/DOPPLER.md` D3.2 |
+| The tone path on alternating pings, `flank_patrol` (tone at 10.5 kHz, then the sweep) | small vehicle on 3 of 3 tone pings, range rate 1.972 to 1.992 m/s (true 2.00), tone margin 19.5 to 26.0 dB; submarine 2 of 3; the wreck in the notch, kept by the sweep pings | D-237; `docs/tasks/DOPPLER.md` D3.3 |
+| POP-3, `large_submerged` and `ship`, 3 x 32, margin at 12 km | free field +2.9 dB both (one row -1.1); `deep_no_bottom_return_sea_state_5` -7.1, -6.1; `summer_60m_mud_profile` -4.7, -96.1; met at the other four sites; status "partly met" (no computed number moved) | D-238; `docs/DESIGN.md` |
+| `reverberation_rows_gain` with the trade study's measured 3.38 dB (an input, not a default), `xl_auv`, 3 x 32 face, shelf | reach 2.56 -> 8.02 km, margin at 12 km -4.62 -> -3.92 dB; `incoherent` is 3.99 dB for 3 rows, 2.54 dB for 2; default bit-identical over 23 dumped outputs | D-236 |
+| `roughness.max_pairs` | default 1 000 000; the most an existing test needs is 116 964; under the cap nothing moved (SHA-256, both engines) | D-236 |
+| The GPU suite in shards | three L4 jobs done about 60 minutes after launch, against 85 minutes of tests alone unsharded; shards of 22, 28 and 36 minutes of tests by count, planned 28 each by weight (not yet run) | D-239 |
+| The gallery's `buried_objects` on an L4 at the fourth batch's tree | cylinder over clutter 21.12 -> 20.32 dB (D-212's prediction); depths unchanged; the job's other scenes not committed (three differ by one detection a ping, `sonar-pli3`) | job 6b08c12b54072e8b71683be9; commit `8391941` |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-201 and the 3-D work) ran its affected test files.
-The full GPU suite last ran on the third 2026-11-26 batch's tree (`0a8b477`, D-234): 2886 passed, 111
-skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face job 6b084a4cd91f621b930b6331). Also not
-measured: Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
+rerun since, and each later package (D-158 to D-240) ran its affected test files.
+The full GPU suite last ran on the fourth 2026-11-26 batch's tree (`da015ba`, D-240): 2933 passed, 113
+skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face job 6b08b9f554072e8b71681cd2); with the
+sharding on top, as three shards, 2941 passed, 114 skipped, 4 xfailed (D-239). Also not
+measured: the tone above the band in one ping through the chain, and the CFAR combiner's false-alarm
+rate at the default budget (`sonar-iu67`); Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
 (D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the
 sweep's Doppler bank on a GPU and its false-alarm rate at the default budget (`sonar-094p`); the link
 budget and coverage against measured reverberation (every site value is illustrative). Anything on real

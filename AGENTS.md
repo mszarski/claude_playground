@@ -101,6 +101,7 @@ ctest --test-dir <build dir> -R 'Tracker\.' --output-on-failure    # one GoogleT
 | `GPUSONAR_KRAKEN_DIR=<dir>` | the KRAKEN normal-mode cross-checks |
 | `GPUSONAR_REQUIRE_ORACLES=1` | an oracle test that would skip fails instead (`tests/python/oracle_gate.py`) |
 | `GPUSONAR_SLOW_ORACLES=1` | the slow `eigenray3d` acceptance against Bellhop3D (not part of the suite) |
+| `GPUSONAR_DOPPLER_CHAIN=1` | the chain's acceptance on `flank_patrol_doppler_tone` in `test_doppler_scenes.py` (needs Bellhop; not part of the suite; never run yet: the scene's simulation did not finish in 4 h 40 min on a CPU, D-237) |
 | `GPUSONAR_HSB_STUDY=1`, `GPUSONAR_HSB_TIMING=1` | Sensor Bridge measurements in `test_hsb.py` (opt-in studies, not tests) |
 | `GPUSONAR_DOPPLER_STUDY=1` | the five margin tests of `test_doppler_scenes.py` (minutes a scene on a CPU; not part of the suite, D-231) |
 | `GPUSONAR_SIM_ENGINE=numpy` or `cpp` | which simulator engine the tests use (unset: C++ when built, else NumPy with one warning); `cpp` on a module without the C++ simulator raises `EngineUnavailable`, which the tests turn into a skip (`sim/engine.py`, `tests/python/conftest.py`) |

@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 95 scenario files; the forty named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 96 scenario files; the forty-one named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -25,7 +25,10 @@ pictures, all made from its YAML file:
   tracker's most-probable-pair association (D-141), detections at their reflection time
   (D-156), the classifier's measured-position fit and outline scoring (D-157), the SAS
   motion fixes and scene draws (D-164, D-171), the Popoto echo placement (D-172) and the
-  leading-edge range in the flank and Popoto scenes (D-178).
+  leading-edge range in the flank and Popoto scenes (D-178). **Except `buried_objects`**, whose entry and
+  figures are from the full-size run on an L4 at the fourth batch's tree (job 6b08c12b54072e8b71683be9,
+  committed as `8391941`); that job's other scenes were not committed, because three differ from this
+  gallery by one detection a ping and wait to be explained (issue `sonar-pli3`).
 - The file before it was the D-174 gallery (job 6b05051fc97b8ed4fcd725d4, tree `77f5b98`).
   Against it only `flank_patrol` and the six Popoto scenes changed, through D-178; every
   other number agrees to GPU rounding (relative 4e-4 at most) and every detection count is
@@ -596,14 +599,16 @@ perturbed case, not yet imaged with correction).
 | --- | --- | --- | --- |
 | Depth of the cylinder's brightest return | top at 0.25 m, axis at 0.30 m | 0.26 m | 0.23 m |
 | Depth of the sphere's brightest return | top at 0.14 m | 0.14 m | 0.13 m |
-| Cylinder over sediment clutter | — | 21.1 dB | — |
+| Cylinder over sediment clutter | — | 20.3 dB | — |
 
-**Stale since 2026-11-26 (D-212):** the figure and the table above are from the gallery of D-179, when the
-sediment model was one refracted path with unit transmission. The scene now uses `penetration: fluid` with
-medium sand's density ratio and loss at its own 1700 m/s (class values, not a survey): on the CPU the cylinder
-falls 5.2 dB and the sphere 3.6 dB in the full raster, cylinder over clutter 21.12 -> 20.32 dB, depths
-unchanged (the agent's run; a GPU gallery job will regenerate the figure). The clutter level relative to the
-objects is still an assumption (the scenario's `rms_amplitude`), not a prediction.
+**Regenerated on 2026-11-27, after D-240** (L4, job 6b08c12b54072e8b71683be9, commit `8391941`; until then
+the figure and table were from the gallery of D-179, when the sediment model was one refracted path with unit
+transmission). Since D-212 the scene uses `penetration: fluid` with medium sand's density ratio and loss at its
+own 1700 m/s (class values, not a survey): the cylinder falls 5.2 dB and the sphere 3.6 dB in the full raster
+(D-212's CPU run), cylinder over clutter 21.12 -> 20.32 dB on the L4, as D-212's CPU run gave, depths unchanged
+(`gallery.json`). The rest of that job's gallery is not committed (three scenes differ from the committed
+one by one detection a ping; issue `sonar-pli3`). The clutter level relative to the objects is still an
+assumption (the scenario's `rms_amplitude`), not a prediction.
 
 ## Flank array: `flank_patrol`
 
@@ -989,10 +994,10 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 95 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 96 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Forty files have no geometry diagram in `docs/scenarios/` yet: the four Doppler scenes of `sonar-u1fu` (the
+set. Forty-one files have no geometry diagram in `docs/scenarios/` yet: the five Doppler scenes of `sonar-u1fu` (the
 geometry of `flank_patrol`, `popoto_far_mover` and `popoto_12km`, whose diagrams apply), `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
 scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
@@ -1007,8 +1012,8 @@ is an error unless named under `environment_overrides`. Two kinds of inconsisten
 kept as they were and are named in the files (D-101): 9 Bellhop scenarios reflect eigenrays
 from a flat surface in a windy sea, and 21 simulate a bottom the record does not mention.
 Those are D-101's counts; later scenes followed the same pattern, and counted in the tree at
-D-234, 20 files name `propagation.wind_speed` under `environment_overrides` (the four Doppler
-scenes of D-231 among them) and 37 state `water_depth_known: false`.
+D-240, 21 files name `propagation.wind_speed` under `environment_overrides` (the five Doppler
+scenes of D-231 and D-237 among them) and 38 state `water_depth_known: false`.
 The third is resolved: of the 47 scenarios that typed a sound speed disagreeing with their
 temperature, 44 now take the speed the water gives (1496.8 m/s at 12 deg C and 35 PSU,
 1489.8 at 10 deg C, 1482.4 in the fresh-water tank at 20 deg C) and three keep theirs on
