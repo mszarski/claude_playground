@@ -1574,9 +1574,12 @@ is unchanged (`test_reverb_doppler.py::test_per_frequency_keeps_the_level_agains
 over 6 seeds, 0.005 dB over the record). A still platform without moving scatterers is bit for bit the same under
 either law (no shift, nothing scaled). Cost: the per-sector work is the same two transforms as before plus one
 interpolation of the pulse (16 multiply-adds a pulse sample); the old code already transformed a shifted pulse per
-sector, so nothing that was shared becomes per sector. Measured generator time on the host (C++, the two laws in one
-process, a shared machine, so +-15 % is noise): FLS scenes 0.8 to 1.3 x, the Popoto scenes 0.9 to 1.5 x
-(`popoto_far_mover_doppler` 24.8 -> 36.8 s), `sst_pursuit` (bistatic, many components, 20 m/s) 1.44 x.
+sector, so nothing that was shared becomes per sector. Measured generator time on the host, one ping's items, four
+calls each on an idle core: `fls_120k_transit` C++ 1.92 -> 1.95 s (1.0 x), NumPy 2.77 -> 3.10 s (1.1 x);
+`popoto_far_mover` (image sources) C++ 3.2 -> 3.6 s (1.14 x), NumPy 5.4 -> 7.5 s (1.4 x). Inside whole scene runs on a
+shared machine: 0.8 to 1.5 x, `sst_pursuit` (bistatic, many components, 20 m/s) 1.44 x. On the device the scaled pulse
+is one more element-wise kernel step (16 taps and three double-precision sine-cosine pairs a pulse sample; estimate,
+not measured: milliseconds a call on an L4, beside the transforms).
 
 | Measured (ours) | `centre` (before) | `per_frequency` (now) | closed form |
 |---|---|---|---|
