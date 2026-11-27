@@ -152,6 +152,102 @@ The same for each option (the highest whole sea state up to which both classes h
 
 **Not run.** No transmit option other than the shipped 1 s was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item (the CPU here took 27 min for six 1 s pings of `popoto_12km_large_submerged`, DOPPLER.md LS.1 item 8). The command, once the evaluation tool takes a sonar override (follow-up): `python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100` with `sonar_overrides.transmit.waveform.duration: 4.0` (and the window opening at 3 km).
 
+## 0a. The plain filter on a mover: linear against hyperbolic sweep (no sweep bank)
+
+The owner's baseline has every Doppler option off, so a moving target meets the plain matched filter. This section is **derived at `--report`** from the transmit grid above (`tx_waveforms`; no new planner run): each cell is the grid's margin less the closed-form PEAK loss of the waveform on a target closing at 2 / 8 m/s (the class's assumed speeds), for the shipped linear sweep (LFM) and a hyperbolic sweep (HFM: `transmit.waveform: {type: sampled, source: hfm}`, the same band, length, taper and level, so the same energy). Status: **ours** (closed forms held to direct correlation in tests/python/test_doppler_bank.py and tests/python/test_hfm_doppler.py). No default moves: the shipped sweep stays linear; HFM is an option.
+
+- **With the linear sweep and no bank, a target closing at 8 m/s** (with the apl_1994 law), the least energy holding both classes: sea state 2: 203.0 dB (1 s 203 dB); sea state 3: none in the grid; sea state 4: none in the grid; sea state 5: none in the grid; sea state 6: none in the grid (**none in the grid at sea state 3, 4, 5, 6**); with the hyperbolic sweep: sea state 2: 197.0 dB (1 s 197 dB, 2 s 194 dB); sea state 3: 197.0 dB (1 s 197 dB, 2 s 194 dB); sea state 4: 203.0 dB (1 s 203 dB, 2 s 200 dB, 4 s 197 dB); sea state 5: 206.0 dB (2 s 203 dB, 4 s 200 dB, 8 s 197 dB); sea state 6: 212.0 dB (8 s 203 dB).
+- **With the linear sweep and no bank, a target closing at 8 m/s** (without a bubble law), the least energy holding both classes: sea state 2: 203.0 dB (1 s 203 dB); sea state 3: none in the grid; sea state 4: none in the grid; sea state 5: none in the grid; sea state 6: none in the grid (**none in the grid at sea state 3, 4, 5, 6**); with the hyperbolic sweep: sea state 2: 197.0 dB (1 s 197 dB, 2 s 194 dB); sea state 3: 197.0 dB (1 s 197 dB, 2 s 194 dB); sea state 4: 200.0 dB (1 s 200 dB, 2 s 197 dB); sea state 5: 206.0 dB (2 s 203 dB, 4 s 200 dB, 8 s 197 dB); sea state 6: 212.0 dB (8 s 203 dB).
+- **What the HFM costs: a range bias it cannot remove without a rate.** The plain filter reads an HFM echo closing at v nearer by f1 T / B per m/s (3.0 m per m/s at the shipped 1 s, i.e. 3 T at 4-6 kHz: 1 s: -24 m, 2 s: -48 m, 4 s: -95 m, 8 s: -191 m at 8 m/s); the linear sweep's coupling is f_c T / B (2.5 m per m/s at 1 s), and its peak is smeared besides. With no bank neither gives a range rate to correct it. Also: the HFM's energy density falls as 1 / f^2 across the band (2.6 dB from 4.25 to 5.75 kHz; the projector's response across 4-6 kHz is not known), its compressed main lobe is 2 % wider and its first sidelobe 0.6 dB higher than the linear sweep's (Tukey 0.1, unwindowed filter; test_hfm_doppler.py), and the sweep bank refuses it (it takes a linear sweep only).
+- The HFM's closed-form peak loss is 0.07 dB at 2 m/s, 0.28 dB at 8 m/s **at every pulse length** (it does not grow with T); the linear sweep's: 1 s: 8.8 / 14.8 dB; 2 s: 11.7 / 17.8 dB; 4 s: 14.8 / 20.9 dB; 8 s: 17.8 / 23.9 dB at 2 / 8 m/s. Measured through the chain: docs/tasks/DOPPLER.md, "HFM" (docs/tasks/hfm_doppler_eval.json): the live chain, both engines, free field at 12 km, point and bow-on hull, 1 to 8 s.
+
+### Deep water (`deep_no_bottom_return`), with the apl_1994 bubble law: margin at 12 km on a mover, plain filter
+
+Each cell: `large_submerged` / `ship`, dB; **bold** where both hold. The zero-speed margin is section 0's table.
+
+| Sea state | Waveform, closing speed | 1 s 197 dB (shipped): 197.0 dB | 2 s 194 dB: 197.0 dB | 1 s 200 dB: 200.0 dB | 2 s 197 dB: 200.0 dB | 1 s 203 dB: 203.0 dB | 2 s 200 dB: 203.0 dB | 4 s 197 dB: 203.0 dB | 2 s 203 dB: 206.0 dB | 4 s 200 dB: 206.0 dB | 8 s 197 dB: 206.0 dB | 4 s 203 dB: 209.0 dB | 8 s 200 dB: 209.0 dB | 8 s 203 dB: 212.0 dB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | LFM, 2 m/s | **+0.5 / +0.7** | -2.4 / -2.1 | **+3.5 / +3.7** | **+0.6 / +0.9** | **+6.5 / +6.7** | **+3.6 / +3.9** | **+0.6 / +0.8** | **+6.6 / +6.9** | **+3.6 / +3.8** | **+0.6 / +0.9** | **+6.6 / +6.8** | **+3.6 / +3.9** | **+6.6 / +6.9** |
+| 2 | LFM, 8 m/s | -5.5 / -5.2 | -8.5 / -8.3 | -2.5 / -2.2 | -5.5 / -5.3 | **+0.5 / +0.8** | -2.5 / -2.3 | -5.5 / -5.3 | **+0.5 / +0.7** | -2.5 / -2.3 | -5.5 / -5.3 | **+0.5 / +0.7** | -2.5 / -2.3 | **+0.5 / +0.7** |
+| 2 | HFM, 2 m/s | **+9.2 / +9.5** | **+9.2 / +9.5** | **+12.2 / +12.5** | **+12.2 / +12.5** | **+15.2 / +15.5** | **+15.2 / +15.5** | **+15.3 / +15.5** | **+18.2 / +18.5** | **+18.3 / +18.5** | **+18.4 / +18.6** | **+21.3 / +21.5** | **+21.4 / +21.6** | **+24.4 / +24.6** |
+| 2 | HFM, 8 m/s | **+9.0 / +9.3** | **+9.0 / +9.3** | **+12.0 / +12.3** | **+12.0 / +12.3** | **+15.0 / +15.3** | **+15.0 / +15.3** | **+15.1 / +15.3** | **+18.0 / +18.3** | **+18.1 / +18.3** | **+18.1 / +18.4** | **+21.1 / +21.3** | **+21.1 / +21.4** | **+24.1 / +24.4** |
+| 3 | LFM, 2 m/s | -6.4 / -5.5 | -9.3 / -8.4 | -3.4 / -2.5 | -6.3 / -5.4 | -0.4 / +0.5 | -3.3 / -2.4 | -6.3 / -5.4 | -0.3 / +0.6 | -3.3 / -2.4 | -6.3 / -5.4 | -0.4 / +0.6 | -3.3 / -2.4 | -0.3 / +0.6 |
+| 3 | LFM, 8 m/s | -12.4 / -11.4 | -15.4 / -14.5 | -9.4 / -8.4 | -12.4 / -11.5 | -6.4 / -5.4 | -9.4 / -8.5 | -12.4 / -11.5 | -6.4 / -5.5 | -9.4 / -8.5 | -12.4 / -11.5 | -6.4 / -5.5 | -9.4 / -8.5 | -6.4 / -5.5 |
+| 3 | HFM, 2 m/s | **+2.3 / +3.3** | **+2.3 / +3.3** | **+5.3 / +6.3** | **+5.3 / +6.3** | **+8.3 / +9.3** | **+8.3 / +9.3** | **+8.3 / +9.3** | **+11.3 / +12.3** | **+11.3 / +12.3** | **+11.4 / +12.4** | **+14.3 / +15.3** | **+14.4 / +15.4** | **+17.4 / +18.4** |
+| 3 | HFM, 8 m/s | **+2.1 / +3.0** | **+2.1 / +3.1** | **+5.1 / +6.0** | **+5.1 / +6.1** | **+8.1 / +9.0** | **+8.1 / +9.1** | **+8.1 / +9.1** | **+11.1 / +12.1** | **+11.1 / +12.1** | **+11.2 / +12.2** | **+14.1 / +15.1** | **+14.2 / +15.2** | **+17.2 / +18.2** |
+| 4 | LFM, 2 m/s | -12.8 / -10.7 | -15.6 / -13.6 | -9.8 / -7.7 | -12.6 / -10.6 | -6.8 / -4.7 | -9.6 / -7.6 | -12.7 / -10.6 | -6.6 / -4.6 | -9.7 / -7.6 | -12.6 / -10.6 | -6.7 / -4.6 | -9.7 / -7.6 | -6.7 / -4.6 |
+| 4 | LFM, 8 m/s | -18.7 / -16.7 | -21.8 / -19.7 | -15.7 / -13.7 | -18.8 / -16.7 | -12.7 / -10.7 | -15.8 / -13.7 | -18.8 / -16.7 | -12.8 / -10.7 | -15.8 / -13.7 | -18.8 / -16.7 | -12.8 / -10.7 | -15.8 / -13.7 | -12.8 / -10.7 |
+| 4 | HFM, 2 m/s | -4.0 / -2.0 | -4.0 / -1.9 | -1.0 / +1.0 | -1.0 / +1.1 | **+2.0 / +4.0** | **+2.0 / +4.1** | **+2.0 / +4.1** | **+5.0 / +7.1** | **+5.0 / +7.1** | **+5.1 / +7.2** | **+8.0 / +10.1** | **+8.1 / +10.2** | **+11.1 / +13.2** |
+| 4 | HFM, 8 m/s | -4.2 / -2.2 | -4.2 / -2.2 | -1.2 / +0.8 | -1.2 / +0.8 | **+1.8 / +3.8** | **+1.8 / +3.8** | **+1.8 / +3.9** | **+4.8 / +6.8** | **+4.8 / +6.9** | **+4.9 / +7.0** | **+7.8 / +9.9** | **+7.9 / +10.0** | **+10.9 / +12.9** |
+| 5 | LFM, 2 m/s | -15.9 / -15.0 | -18.7 / -17.8 | -12.9 / -12.0 | -15.7 / -14.8 | -9.9 / -9.0 | -12.7 / -11.8 | -15.8 / -14.9 | -9.7 / -8.8 | -12.8 / -11.9 | -15.7 / -14.8 | -9.8 / -8.9 | -12.8 / -11.8 | -9.8 / -8.9 |
+| 5 | LFM, 8 m/s | -21.8 / -20.9 | -24.9 / -23.9 | -18.8 / -17.9 | -21.9 / -20.9 | -15.8 / -14.9 | -18.9 / -17.9 | -21.9 / -20.9 | -15.9 / -15.0 | -18.9 / -18.0 | -21.9 / -20.9 | -15.9 / -15.0 | -18.9 / -17.9 | -15.9 / -15.0 |
+| 5 | HFM, 2 m/s | -7.1 / -6.2 | -7.1 / -6.2 | -4.1 / -3.2 | -4.1 / -3.2 | -1.1 / -0.2 | -1.1 / -0.2 | -1.1 / -0.2 | **+1.9 / +2.8** | **+1.9 / +2.8** | **+2.0 / +2.9** | **+4.9 / +5.8** | **+5.0 / +5.9** | **+8.0 / +8.9** |
+| 5 | HFM, 8 m/s | -7.3 / -6.4 | -7.3 / -6.4 | -4.3 / -3.4 | -4.3 / -3.4 | -1.3 / -0.4 | -1.3 / -0.4 | -1.3 / -0.4 | **+1.7 / +2.6** | **+1.7 / +2.6** | **+1.8 / +2.7** | **+4.7 / +5.6** | **+4.8 / +5.7** | **+7.7 / +8.7** |
+| 6 | LFM, 2 m/s | -22.1 / -22.1 | -25.0 / -25.0 | -19.1 / -19.1 | -22.0 / -22.0 | -16.1 / -16.1 | -19.0 / -19.0 | -22.0 / -22.0 | -16.0 / -16.0 | -19.1 / -19.0 | -22.0 / -22.0 | -16.1 / -16.0 | -19.1 / -19.0 | -16.1 / -16.0 |
+| 6 | LFM, 8 m/s | -28.1 / -28.1 | -31.1 / -31.1 | -25.1 / -25.1 | -28.1 / -28.1 | -22.1 / -22.1 | -25.1 / -25.1 | -28.1 / -28.1 | -22.1 / -22.1 | -25.1 / -25.1 | -28.1 / -28.1 | -22.2 / -22.1 | -25.2 / -25.1 | -22.2 / -22.1 |
+| 6 | HFM, 2 m/s | -13.4 / -13.4 | -13.4 / -13.4 | -10.4 / -10.4 | -10.4 / -10.4 | -7.4 / -7.4 | -7.4 / -7.4 | -7.3 / -7.3 | -4.4 / -4.4 | -4.4 / -4.3 | -4.3 / -4.3 | -1.4 / -1.3 | -1.3 / -1.3 | **+1.7 / +1.7** |
+| 6 | HFM, 8 m/s | -13.6 / -13.6 | -13.6 / -13.6 | -10.6 / -10.6 | -10.6 / -10.6 | -7.6 / -7.6 | -7.6 / -7.6 | -7.6 / -7.5 | -4.6 / -4.6 | -4.6 / -4.5 | -4.5 / -4.5 | -1.6 / -1.6 | -1.5 / -1.5 | **+1.5 / +1.5** |
+
+### Deep water (`deep_no_bottom_return`), without a bubble law: margin at 12 km on a mover, plain filter
+
+Each cell: `large_submerged` / `ship`, dB; **bold** where both hold. The zero-speed margin is section 0's table.
+
+| Sea state | Waveform, closing speed | 1 s 197 dB (shipped): 197.0 dB | 2 s 194 dB: 197.0 dB | 1 s 200 dB: 200.0 dB | 2 s 197 dB: 200.0 dB | 1 s 203 dB: 203.0 dB | 2 s 200 dB: 203.0 dB | 4 s 197 dB: 203.0 dB | 2 s 203 dB: 206.0 dB | 4 s 200 dB: 206.0 dB | 8 s 197 dB: 206.0 dB | 4 s 203 dB: 209.0 dB | 8 s 200 dB: 209.0 dB | 8 s 203 dB: 212.0 dB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | LFM, 2 m/s | **+0.7 / +1.1** | -2.1 / -1.8 | **+3.7 / +4.1** | **+0.9 / +1.2** | **+6.7 / +7.1** | **+3.9 / +4.2** | **+0.8 / +1.2** | **+6.9 / +7.2** | **+3.8 / +4.2** | **+0.9 / +1.2** | **+6.8 / +7.2** | **+3.9 / +4.2** | **+6.9 / +7.2** |
+| 2 | LFM, 8 m/s | -5.2 / -4.9 | -8.2 / -7.9 | -2.2 / -1.9 | -5.2 / -4.9 | **+0.8 / +1.1** | -2.2 / -1.9 | -5.2 / -4.9 | **+0.8 / +1.1** | -2.2 / -1.9 | -5.2 / -4.9 | **+0.8 / +1.1** | -2.2 / -1.9 | **+0.8 / +1.1** |
+| 2 | HFM, 2 m/s | **+9.5 / +9.8** | **+9.5 / +9.8** | **+12.5 / +12.8** | **+12.5 / +12.8** | **+15.5 / +15.8** | **+15.5 / +15.8** | **+15.5 / +15.9** | **+18.5 / +18.8** | **+18.5 / +18.9** | **+18.6 / +18.9** | **+21.5 / +21.9** | **+21.6 / +21.9** | **+24.6 / +24.9** |
+| 2 | HFM, 8 m/s | **+9.3 / +9.6** | **+9.3 / +9.6** | **+12.3 / +12.6** | **+12.3 / +12.6** | **+15.3 / +15.6** | **+15.3 / +15.6** | **+15.3 / +15.6** | **+18.3 / +18.6** | **+18.3 / +18.6** | **+18.4 / +18.7** | **+21.3 / +21.6** | **+21.4 / +21.7** | **+24.4 / +24.7** |
+| 3 | LFM, 2 m/s | -3.7 / -3.1 | -6.6 / -5.9 | -0.7 / -0.1 | -3.6 / -2.9 | **+2.3 / +2.9** | -0.6 / +0.1 | -3.6 / -3.0 | **+2.4 / +3.1** | -0.6 / +0.0 | -3.6 / -2.9 | **+2.4 / +3.0** | -0.6 / +0.1 | **+2.4 / +3.1** |
+| 3 | LFM, 8 m/s | -9.7 / -9.0 | -12.7 / -12.0 | -6.7 / -6.0 | -9.7 / -9.0 | -3.7 / -3.0 | -6.7 / -6.0 | -9.7 / -9.0 | -3.7 / -3.0 | -6.7 / -6.0 | -9.7 / -9.0 | -3.7 / -3.0 | -6.7 / -6.0 | -3.7 / -3.0 |
+| 3 | HFM, 2 m/s | **+5.0 / +5.7** | **+5.0 / +5.7** | **+8.0 / +8.7** | **+8.0 / +8.7** | **+11.0 / +11.7** | **+11.0 / +11.7** | **+11.1 / +11.7** | **+14.0 / +14.7** | **+14.1 / +14.7** | **+14.2 / +14.8** | **+17.1 / +17.7** | **+17.2 / +17.8** | **+20.2 / +20.8** |
+| 3 | HFM, 8 m/s | **+4.8 / +5.5** | **+4.8 / +5.5** | **+7.8 / +8.5** | **+7.8 / +8.5** | **+10.8 / +11.5** | **+10.8 / +11.5** | **+10.9 / +11.5** | **+13.8 / +14.5** | **+13.9 / +14.5** | **+14.0 / +14.6** | **+16.9 / +17.5** | **+17.0 / +17.6** | **+20.0 / +20.6** |
+| 4 | LFM, 2 m/s | -9.0 / -7.4 | -11.9 / -10.2 | -6.0 / -4.4 | -8.9 / -7.2 | -3.0 / -1.4 | -5.9 / -4.2 | -8.9 / -7.3 | -2.9 / -1.2 | -5.9 / -4.3 | -8.9 / -7.2 | -2.9 / -1.3 | -5.9 / -4.3 | -2.9 / -1.3 |
+| 4 | LFM, 8 m/s | -14.9 / -13.3 | -18.0 / -16.4 | -11.9 / -10.3 | -15.0 / -13.4 | -8.9 / -7.3 | -12.0 / -10.4 | -15.0 / -13.4 | -9.0 / -7.4 | -12.0 / -10.4 | -15.0 / -13.4 | -9.0 / -7.4 | -12.0 / -10.4 | -9.0 / -7.4 |
+| 4 | HFM, 2 m/s | -0.2 / +1.4 | -0.2 / +1.4 | **+2.8 / +4.4** | **+2.8 / +4.4** | **+5.8 / +7.4** | **+5.8 / +7.4** | **+5.8 / +7.4** | **+8.8 / +10.4** | **+8.8 / +10.4** | **+8.9 / +10.5** | **+11.8 / +13.4** | **+11.9 / +13.5** | **+14.9 / +16.5** |
+| 4 | HFM, 8 m/s | -0.5 / +1.2 | -0.4 / +1.2 | **+2.5 / +4.2** | **+2.6 / +4.2** | **+5.5 / +7.2** | **+5.6 / +7.2** | **+5.6 / +7.2** | **+8.6 / +10.2** | **+8.6 / +10.2** | **+8.7 / +10.3** | **+11.6 / +13.2** | **+11.7 / +13.3** | **+14.7 / +16.3** |
+| 5 | LFM, 2 m/s | -14.7 / -11.6 | -17.6 / -14.5 | -11.7 / -8.6 | -14.6 / -11.5 | -8.7 / -5.6 | -11.6 / -8.5 | -14.6 / -11.5 | -8.6 / -5.5 | -11.6 / -8.5 | -14.6 / -11.5 | -8.6 / -5.5 | -11.6 / -8.5 | -8.6 / -5.5 |
+| 5 | LFM, 8 m/s | -20.7 / -17.6 | -23.7 / -20.6 | -17.7 / -14.6 | -20.7 / -17.6 | -14.7 / -11.6 | -17.7 / -14.6 | -20.7 / -17.6 | -14.7 / -11.6 | -17.7 / -14.6 | -20.7 / -17.6 | -14.7 / -11.6 | -17.7 / -14.6 | -14.7 / -11.6 |
+| 5 | HFM, 2 m/s | -6.0 / -2.9 | -5.9 / -2.9 | -3.0 / +0.1 | -2.9 / +0.1 | **+0.0 / +3.1** | **+0.1 / +3.1** | **+0.1 / +3.2** | **+3.1 / +6.1** | **+3.1 / +6.2** | **+3.2 / +6.3** | **+6.1 / +9.2** | **+6.2 / +9.2** | **+9.2 / +12.2** |
+| 5 | HFM, 8 m/s | -6.2 / -3.1 | -6.1 / -3.1 | -3.2 / -0.1 | -3.1 / -0.1 | -0.2 / +2.9 | -0.1 / +2.9 | -0.1 / +3.0 | **+2.9 / +5.9** | **+2.9 / +6.0** | **+3.0 / +6.0** | **+5.9 / +9.0** | **+6.0 / +9.0** | **+9.0 / +12.0** |
+| 6 | LFM, 2 m/s | -22.1 / -21.5 | -25.0 / -24.4 | -19.1 / -18.5 | -22.0 / -21.4 | -16.1 / -15.5 | -19.0 / -18.4 | -22.0 / -21.4 | -16.0 / -15.4 | -19.1 / -18.4 | -22.0 / -21.4 | -16.1 / -15.4 | -19.1 / -18.4 | -16.1 / -15.4 |
+| 6 | LFM, 8 m/s | -28.1 / -27.5 | -31.1 / -30.5 | -25.1 / -24.5 | -28.1 / -27.5 | -22.1 / -21.5 | -25.1 / -24.5 | -28.1 / -27.5 | -22.2 / -21.5 | -25.2 / -24.5 | -28.1 / -27.5 | -22.2 / -21.5 | -25.2 / -24.5 | -22.2 / -21.5 |
+| 6 | HFM, 2 m/s | -13.4 / -12.8 | -13.4 / -12.8 | -10.4 / -9.8 | -10.4 / -9.8 | -7.4 / -6.8 | -7.4 / -6.8 | -7.4 / -6.7 | -4.4 / -3.8 | -4.4 / -3.7 | -4.3 / -3.7 | -1.4 / -0.7 | -1.3 / -0.7 | **+1.6 / +2.3** |
+| 6 | HFM, 8 m/s | -13.6 / -13.0 | -13.6 / -13.0 | -10.6 / -10.0 | -10.6 / -10.0 | -7.6 / -7.0 | -7.6 / -7.0 | -7.6 / -6.9 | -4.6 / -4.0 | -4.6 / -3.9 | -4.5 / -3.9 | -1.6 / -1.0 | -1.5 / -0.9 | **+1.4 / +2.1** |
+
+### The least energy that holds both classes on a mover with no bank
+
+| Table | Sea state | LFM at 2 m/s | LFM at 8 m/s | HFM at 2 m/s | HFM at 8 m/s |
+| --- | --- | --- | --- | --- | --- |
+| bubble law | 2 | 197.0 dB (1 s 197 dB) | 203.0 dB (1 s 203 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) |
+| bubble law | 3 | none in the grid | none in the grid | 197.0 dB (1 s 197 dB, 2 s 194 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) |
+| bubble law | 4 | none in the grid | none in the grid | 203.0 dB (1 s 203 dB, 2 s 200 dB, 4 s 197 dB) | 203.0 dB (1 s 203 dB, 2 s 200 dB, 4 s 197 dB) |
+| bubble law | 5 | none in the grid | none in the grid | 206.0 dB (2 s 203 dB, 4 s 200 dB, 8 s 197 dB) | 206.0 dB (2 s 203 dB, 4 s 200 dB, 8 s 197 dB) |
+| bubble law | 6 | none in the grid | none in the grid | 212.0 dB (8 s 203 dB) | 212.0 dB (8 s 203 dB) |
+| no bubble law | 2 | 197.0 dB (1 s 197 dB) | 203.0 dB (1 s 203 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) |
+| no bubble law | 3 | 203.0 dB (1 s 203 dB) | none in the grid | 197.0 dB (1 s 197 dB, 2 s 194 dB) | 197.0 dB (1 s 197 dB, 2 s 194 dB) |
+| no bubble law | 4 | none in the grid | none in the grid | 200.0 dB (1 s 200 dB, 2 s 197 dB) | 200.0 dB (1 s 200 dB, 2 s 197 dB) |
+| no bubble law | 5 | none in the grid | none in the grid | 203.0 dB (1 s 203 dB, 2 s 200 dB, 4 s 197 dB) | 206.0 dB (2 s 203 dB, 4 s 200 dB, 8 s 197 dB) |
+| no bubble law | 6 | none in the grid | none in the grid | 212.0 dB (8 s 203 dB) | 212.0 dB (8 s 203 dB) |
+
+| Option | LFM peak loss at 2 / 8 m/s | LFM range shift (m per m/s; at 8 m/s) | HFM peak loss at 2 / 8 m/s | HFM range bias (m per m/s; at 8 m/s) |
+| --- | --- | --- | --- | --- |
+| 1 s 197 dB | 8.8 / 14.8 dB | 2.5; -20 m | 0.07 / 0.28 dB | 3.0; -24 m |
+| 2 s 194 dB | 11.7 / 17.8 dB | 5.0; -40 m | 0.07 / 0.28 dB | 6.0; -48 m |
+| 1 s 200 dB | 8.8 / 14.8 dB | 2.5; -20 m | 0.07 / 0.28 dB | 3.0; -24 m |
+| 2 s 197 dB | 11.7 / 17.8 dB | 5.0; -40 m | 0.07 / 0.28 dB | 6.0; -48 m |
+| 1 s 203 dB | 8.8 / 14.8 dB | 2.5; -20 m | 0.07 / 0.28 dB | 3.0; -24 m |
+| 2 s 200 dB | 11.7 / 17.8 dB | 5.0; -40 m | 0.07 / 0.28 dB | 6.0; -48 m |
+| 4 s 197 dB | 14.8 / 20.9 dB | 10.0; -80 m | 0.07 / 0.28 dB | 12.0; -95 m |
+| 2 s 203 dB | 11.7 / 17.8 dB | 5.0; -40 m | 0.07 / 0.28 dB | 6.0; -48 m |
+| 4 s 200 dB | 14.8 / 20.9 dB | 10.0; -80 m | 0.07 / 0.28 dB | 12.0; -95 m |
+| 8 s 197 dB | 17.8 / 23.9 dB | 20.0; -160 m | 0.07 / 0.28 dB | 24.0; -191 m |
+| 4 s 203 dB | 14.8 / 20.9 dB | 10.0; -80 m | 0.07 / 0.28 dB | 12.0; -95 m |
+| 8 s 200 dB | 17.8 / 23.9 dB | 20.0; -160 m | 0.07 / 0.28 dB | 24.0; -191 m |
+| 8 s 203 dB | 17.8 / 23.9 dB | 20.0; -160 m | 0.07 / 0.28 dB | 24.0; -191 m |
+
+Not in this table: the LFM's loss as the chain's detector sees it (smaller: it integrates over cells), the sweep bank (section 0's zero-speed margins less its threshold correction), crossing targets (0.4 m/s: section 0's cost table), several pings. Not run: the HFM at 12 km through the eigenray scene (a GPU-job item: tools/doppler_gpu_runs.sh `hfm12`).
+
 ## 1. The answer in tables
 
 ### Is 12 km met by the shipped design (3 x 32, 4-6 kHz, 1 s, 197 dB)?

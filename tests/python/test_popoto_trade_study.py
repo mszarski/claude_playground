@@ -4,6 +4,8 @@ bound A is the depth planner's own figure, and it runs end to end on one case.""
 import copy
 import importlib.util
 import json
+
+import pytest
 import pathlib
 import sys
 
@@ -162,9 +164,14 @@ def test_committed_transmit_table_reproduces_and_leaves_the_old_report_as_it_was
     R = json.loads(COMMITTED.read_text())
     T = R["transmit"]
     md = COMMITTED.with_suffix(".md").read_text()
-    new = "\n".join(t.transmit_section(R)) + "\n"
+    new = "\n".join(t.transmit_section(R) + t.waveform_section(R)) + "\n"
     assert new in md and md.replace(new, "", 1) == t.report({k: v for k, v in R.items() if k != "transmit"})
-    assert md.index("## 0. Transmit options") < md.index("## 1. The answer in tables")
+    assert md.index("## 0. Transmit options") < md.index("## 0a. The plain filter on a mover") < md.index("## 1. The answer in tables")
+    # Section 0a (LFM against HFM on a mover, derived at --report) is an addition: without `waveforms` the report is the one
+    # before it, byte for byte (section 0 included), and the transmit section does not read it.
+    old_T = {k: v for k, v in T.items() if k != "waveforms"}
+    assert t.transmit_section(dict(R, transmit=old_T)) == t.transmit_section(R)
+    assert md.replace("\n".join(t.waveform_section(R)) + "\n", "", 1) == t.report(dict(R, transmit=old_T))
     res, grid = T["grid"]["results"], R["grid"]["results"]["3x32|2k|1s|197dB"]
     for site in grid:
         for c in ("large_submerged", "ship"):
@@ -193,3 +200,44 @@ def test_committed_transmit_table_reproduces_and_leaves_the_old_report_as_it_was
     assert {"shelf_100m_sand__as_stated", "winter_200m_sand_profile__as_stated"} <= less
     assert same >= 0.95 * len(res) * 2 * len(by)
     assert len(json.dumps(T)) < 300_000
+
+
+def test_the_waveform_section_is_the_grid_less_the_closed_forms():
+    """Section 0a's cells: each option's grid margin less the closed-form peak loss on a mover closing at 2 and 8 m/s, the
+    linear sweep's (live_sweep_mismatch, as section 0's own mover columns: equal to them) and the hyperbolic one's
+    (doppler.hfm_doppler); the HFM's loss does not grow with the pulse, its range bias does (f1 T / B)."""
+    from gpusonar import doppler
+    R = json.loads(COMMITTED.read_text())
+    T = R["transmit"]
+    W = T["waveforms"]
+    assert W == t_rounded(tool().tx_waveforms(T))
+    res = T["grid"]["results"]
+    law = T["bubble_law"]
+    for o in T["options"]:
+        q = W["per_option"][o["id"]]
+        assert q["hfm"]["loss_db"]["8"] == pytest.approx(0.281, abs=2e-3) and q["hfm"]["loss_db"]["2"] == pytest.approx(0.070, abs=2e-3)
+        assert q["hfm"]["range_m_per_m_s"] == pytest.approx(3.0 * o["pulse_s"], abs=1e-3)
+        assert q["lfm"]["loss_db"]["8"] == pytest.approx(o["costs"]["mismatch_loss_db"]["8"], abs=2e-3)
+        for n in (2, 6):
+            for table, suffix in (("bubble_law", f"__{law}"), ("no_bubble_law", "")):
+                r = res[f"deep_no_bottom_return__ss{n}{suffix}"][o["id"]]
+                cell = W["deep"][table][str(n)][o["id"]]
+                for c in ("large_submerged", "ship"):
+                    assert cell["lfm"]["8"][c] == pytest.approx(r[c]["plain_filter_on_a_mover_db"]["8"], abs=3e-3)
+                    assert cell["hfm"]["2"][c] == pytest.approx(r[c]["margin_db"] - doppler.hfm_doppler(-2.0, 4e3, 6e3, o["pulse_s"], q["sound_speed"])["loss_db"], abs=3e-3)
+    # The finding the section leads with: closing at 8 m/s with no bank, the linear sweep holds both classes at sea state 2
+    # only with 203 dB a ping (the grid's top level at 1 s) and at no higher state; the hyperbolic one holds them up to sea
+    # state 6 at the energy that holds a still target (section 0's least energy), except one marginal cell: without a bubble
+    # law at sea state 5 its 0.28 dB at 8 m/s takes `large_submerged` under 0 at 203 dB, one 3 dB step more (206 dB).
+    le = W["least_energy"]["bubble_law"]
+    assert le["2"]["lfm"]["8"]["options"] == ["1 s 203 dB"] and all(le[str(n)]["lfm"]["8"]["energy_db"] is None for n in (3, 4, 5, 6))
+    for table in ("bubble_law", "no_bubble_law"):
+        for n in (2, 3, 4, 5, 6):
+            still = T["answers"]["least_energy"][table][str(n)]["energy_db"]
+            assert W["least_energy"][table][str(n)]["hfm"]["2"]["energy_db"] == pytest.approx(still, abs=0.01)
+            step = 3.01 if (table, n) == ("no_bubble_law", 5) else 0.0
+            assert W["least_energy"][table][str(n)]["hfm"]["8"]["energy_db"] == pytest.approx(still + step, abs=0.01), (table, n)
+
+
+def t_rounded(x):
+    return tool()._rounded(x)
