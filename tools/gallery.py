@@ -12,6 +12,7 @@ numbers for each: simulate, condition, (estimate motion,) image, (detect, track)
 Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out DIR]
                         [--quick]   thinned scenes and fewer pings, for a CPU
                         [--evidence]  each track's classifier evidence in gallery.json (opt-in)
+                        [--reverb doppler=centre] [--reverb bistatic_rule=mean_angle]  an old reverberation law (opt-in)
 
 Writes <out>/<scenario>.png and <out>/gallery.json. --out defaults to docs/figures (the committed
 full-size gallery) for a full run and to build/gallery_quick under the repository (not committed)
@@ -779,6 +780,27 @@ def count_false_movers(classes, moving_ends, gate):
     return int(sum(c.kind == "mover" and all(far(c, e) for e in moving_ends) for c in classes))
 
 
+# `--reverb KEY=VALUE` (opt-in, repeatable, sonar-4pon): a law put on the scenario's reverberation items before the run,
+# to rerun a gallery scene under a law before a default moved: `doppler=centre` (every item: the reverberation Doppler
+# before D-251) and `bistatic_rule=mean_angle` (the items whose law reads it, sim/simulator.py: the bistatic surface and
+# bottom laws before D-216 A3). Nothing else is accepted.
+REVERB_OPTIONS = {"doppler": ("centre", "per_frequency"), "bistatic_rule": ("geometric_mean", "mean_angle")}
+BISTATIC_MODELS = ("chapman_harris", "kraus_surface", "searay_bottom", "bubble_layer_surface")
+
+
+def apply_reverb_options(cfg, options):
+    """Put each `KEY=VALUE` of `options` (REVERB_OPTIONS) on the scenario `cfg`'s reverberation items, in place:
+    `doppler` on every item, `bistatic_rule` on those of BISTATIC_MODELS. Returns `cfg`; refuses anything else."""
+    for opt in options:
+        key, _, value = str(opt).partition("=")
+        if value not in REVERB_OPTIONS.get(key, ()):
+            raise ValueError(f"--reverb {opt!r}: one of " + ", ".join(f"{k}={v}" for k, vs in REVERB_OPTIONS.items() for v in vs))
+        for item in cfg.get("reverberation") or []:
+            if key == "doppler" or item.get("model", "lambert") in BISTATIC_MODELS:
+                item[key] = value
+    return cfg
+
+
 # `--evidence` (opt-in, sonar-4pon): classify_and_score adds `classification.evidence`, one row per track: the classifier
 # tap's numbers (classify.CLASS_EVIDENCE: the rule that gave the kind and the numbers it compared), the track's position
 # and velocity in world (x, y) at the last ping, whether it is one of the false movers counted, and its nearest true
@@ -1313,6 +1335,9 @@ def main():
                     help="LFM range-Doppler coupling correction in the tracking scenes (RANGE_DOPPLER, sonar-fyj; default %(default)s)")
     ap.add_argument("--evidence", action="store_true",
                     help="add each track's classifier evidence to the tracking scenes' classification (EVIDENCE, sonar-4pon)")
+    ap.add_argument("--reverb", action="append", default=[], metavar="KEY=VALUE",
+                    help="a law on every reverberation item that reads it: doppler=centre (before D-251), "
+                         "bistatic_rule=mean_angle (before D-216 A3); repeatable (REVERB_OPTIONS, sonar-4pon)")
     args = ap.parse_args()
     global RANGE_ESTIMATE, RANGE_DOPPLER, EVIDENCE
     RANGE_ESTIMATE = args.range_estimate
@@ -1331,6 +1356,7 @@ def main():
         cfg = load_scenario_config(name)
         if args.quick and name in QUICK:
             QUICK[name](cfg)
+        apply_reverb_options(cfg, args.reverb)
         t = time.perf_counter()
         out_ = RUNNERS[name](name, cfg, backend, args.quick)
         fig, metrics = out_[0], out_[1]
@@ -1351,6 +1377,8 @@ def main():
             metrics["range_estimate"] = args.range_estimate                # a gallery.json without it: centroid
         if args.range_doppler != "off" and RUNNERS[name] in (run_flank, run_popoto_far, run_fls_transit):
             metrics["range_doppler"] = args.range_doppler                  # opt-in: said only when on
+        if args.reverb:
+            metrics["reverb"] = list(args.reverb)                          # opt-in: said only when given
         fig.savefig(out / f"{name}.png", dpi=110)
         plt.close(fig)
         summary[name] = metrics

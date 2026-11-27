@@ -66,3 +66,23 @@ def test_evidence_names_the_false_mover_and_why(gallery, monkeypatch):
     assert g["velocity_xy"] == pytest.approx([0.0, 3.0], abs=0.05)
     assert by[1]["nearest"]["label"] == "boat" and by[1]["nearest"]["distance_m"] < 0.2 and not by[1]["false_mover"]
     assert by[2]["kind"] == "static" and by[2]["nearest"]["label"] == "anchored"
+
+
+def test_reverb_options_restore_an_old_law_on_the_items_that_take_it(gallery):
+    """`--reverb doppler=centre --reverb bistatic_rule=mean_angle` (opt-in, sonar-4pon): the laws before D-251 and
+    D-216 put on a scenario's reverberation items, so a GPU job can rerun a gallery scene under them. `doppler` goes on
+    every item; `bistatic_rule` only on the surface and bottom laws that read it (sim/simulator.py), not on Lambert.
+    No option: the configuration untouched."""
+    from gpusonar.config import load_scenario_config
+    cfg = load_scenario_config("fls_170k_traffic")
+    before = [dict(it) for it in cfg["reverberation"]]
+    gallery.apply_reverb_options(cfg, [])
+    assert cfg["reverberation"] == before
+    gallery.apply_reverb_options(cfg, ["doppler=centre", "bistatic_rule=mean_angle"])
+    lam, ch = cfg["reverberation"]
+    assert lam == dict(before[0], doppler="centre") and "bistatic_rule" not in lam
+    assert ch == dict(before[1], doppler="centre", bistatic_rule="mean_angle")
+    with pytest.raises(ValueError):
+        gallery.apply_reverb_options(cfg, ["doppler=sideways"])
+    with pytest.raises(ValueError):
+        gallery.apply_reverb_options(cfg, ["mu_db=-20"])
