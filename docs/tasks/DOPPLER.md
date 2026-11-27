@@ -1242,3 +1242,198 @@ code before D8. Guard: `test_doppler_device.py::test_no_kernel_template_is_insta
 fresh processes. The device timing of D8 above (the coordinator's L4 run: flank_patrol C++ off / max / cfar 0.116 /
 0.424 / 0.453 s) was measured with the bank's backprojection compiled with `--fmad=false`. It now runs as
 `backproject_cuda.cu` compiles it, and was measured again after the fix (D-242: job 6b090cd56c5d61fff1888217; flank_patrol 0.115 -> 0.393 -> 0.418 s, off -> max -> cfar).
+
+## Grating-lobe notch for the tone path (2026-11-27, branch `notch`, issue `sonar-bc5r`)
+
+Appended; nothing above was rewritten. The owner (2026-11-27): "i guess implement the notching with the tone path but the
+default is still not the tone path? lets make sure we have test coverage and docs for both and understand tradeoffs."
+So the tone path (opt-in) gets the notch; the default chain (the plain sweep, every Doppler option off) is unchanged,
+byte for byte; both paths' tests are listed below; the trade-offs are `docs/design/doppler_tradeoffs.md`. Every number
+here is **ours** (simulated records made in the tests, the shared CPU, host backend) unless named otherwise.
+
+### GL.1 What failed, got worse, is uncertain or was not run (read first)
+
+1. **The diagnosis of LS.1 item 0 was right but incomplete.** Notching each beam's visible grating lobes (sin g =
+   sin b + m lambda / d, |sin g| <= 1) removed the false detections at 32 to 40 degrees, and uncovered weaker ones at 24
+   to 31.5 degrees whose lobe centre lies just BEYOND endfire: the lobe's skirt still takes in the endfire water, where
+   the water is densest in sine (dtheta = ds / cos theta). The remedy therefore also notches the endfire ridge of every
+   beam whose response towards endfire (the aperture's array factor at the tone, over its main lobe's) is at least
+   `tone_lobe_floor_db` (-40 dB, ours). Its cost is the larger part of the table in GL.3.
+2. **What is left: the far sidelobes of strong reverberation.** On a field of 2000 still scatterers all round (the test
+   record), false tone detections without the lobe notch -> with it: **15 -> 0** in 6 pings at -35 dB each, **15 -> 2**
+   at -30 dB, **11 -> 5** in 4 pings at -25 dB; at 5 kHz (no lobe) 0, 0 and 2. A strong field reaches every beam
+   through its far sidelobes (-40 to -60 dB, Hann) at every rate within +-|v| (the own speed), which no notch about one
+   ridge removes; the tone path before this package has the same at 5 kHz. Not fixed (follow-up: a leakage rule across
+   beams, as 6b is along rate).
+3. **The scenes were not rerun here.** `popoto_12km_large_submerged_tone` and the alternating run take 58 min a ping and
+   50 min on this CPU. GPU baseline (the coordinator's run of 2026-11-27, Hugging Face job 6b08f68754072e8b7168e9c6,
+   tree `d54deb9`; ours, not yet in the repository): 4 target-free pings of the train scene, at the default budget
+   **0 false detections with the tone path off, 22 with it on (all 22 the tone's)**; at 3 a ping 14 and 37. Expected
+   after this package: near 0 at the default budget, because the 3 to 5 a ping of LS.1 all lay at 32 to 40 degrees
+   on the lobes' ridge (rates +-1.1 to 1.6 m/s), which are now not tested; what could remain is item 2's mechanism
+   (the reverberation of that scene is weaker than the test's -30 dB field: unmeasured). Acceptance: `GPUSONAR_JOB=doppler
+   GPUSONAR_DOPPLER_RUNS=ls12` (`tools/doppler_gpu_runs.sh`) on this branch.
+4. **`flank_patrol_doppler_tone` is not affected.** Its platform is still: every lobe's ridge is the beam's own (0 m/s),
+   so the lobe notch adds no cell (proved bit for bit on a still flank_32 record at 10.5 kHz, test (d)). Its 12 tone
+   false detections in 4 background pings at 3 a ping are its budget (12); the 1 at the default budget (and D3.1 item 2's
+   one) is not a grating lobe and is not explained. A flank array under way at 10.5 kHz has the defect (GL.3).
+5. **Device code: no change, never run.** The device form takes the notch mask as it is (`ToneBankBatchedInput::notched`,
+   made on the host by `tone_notch_mask`); the batched form on the host gives the loop's power, ratio and detections bit
+   for bit with the lobe notch (test). The CUDA-gated tests (2 new) skip here; `nvcc` is not on this machine.
+6. Limits of the rule: only a UNIFORM line takes a lobe notch (rows sharing coordinates count once; any other array
+   none: `pitch` 0 in the plan); lobe directions are taken in the beam's half-plane, so a velocity ACROSS the line
+   (crab) leaves the mirror half's ridge, 2 v_across cos g away, unnotched (small near endfire); omnidirectional
+   elements (none configured: the lobe at the main lobe's level; a real element pattern lowers it and is not known:
+   unconfirmed hardware, it would live in config).
+
+### GL.2 The remedy (`libs/live/include/sonar/live/doppler.hpp` step 4b; both engines, both backends)
+
+- `plan_tone` lists, per beam, every visible grating lobe and the endfire directions that pass the floor, each with
+  its ridge -v . u_g and a notch by the beam's own rule at g (own-motion spread over the half-power width plus
+  `tone_notch_cells` resolution cells, or `tone_notch_m_s` when given). `tone_notch_mask` makes the (beam, hypothesis)
+  mask from the beam's notch and its lobes'; `tone_stage` (the loop and the batched form, host and device) takes it.
+  The Python engine calls the same C++ function; only the option words are written twice (`gpusonar/doppler.py`).
+- `doppler.tone_lobe_notch: auto | off` (default `auto`: on whenever the tone path is on and a lobe adds a hypothesis;
+  `off` for comparison) and `doppler.tone_lobe_floor_db` (-40). Written to the C++ options and their JSON only when not
+  the default.
+- Said, not reported: the plan carries `lobes`, `lobe_hidden` (m/s per beam), `lobe_beams` and, when any, in its JSON
+  `lobe_beams`, `lobe_hidden_max_m_s`; `sonar_live` prints it once on stderr ("tone grating-lobe notch"). The report
+  line is unchanged (a contract: section 5, question 6).
+- Arithmetic (GoogleTest `DopplerToneLobes`): the lobes at -34.75 degrees (one, 75.57 degrees at 1500 m/s), its mirror;
+  pitch exactly half a wavelength (none inside +-90; at endfire steering the other endfire); a lobe exactly at endfire
+  (pitch one wavelength: -90 and +90); several (2.5 wavelengths: sines +-0.4, +-0.8); just beyond endfire with and
+  without slack; the pitch of a line (any order, two rows, not uniform); the mask, its hidden interval, a still
+  platform, an unknown velocity, a non-uniform line; the options.
+
+### GL.3 What it costs: the extra blind interval per beam (from `plan_tone`; platform 1.5 m/s along the line)
+
+The lobe's ridge lies |v| lambda / d from the beam's in radial speed over ground (2.31 m/s on popoto_long_range at
+6.5 kHz, 2.28 on flank_32 at 10.5 kHz): CLOSING targets on port beams (negative bearings), OPENING on starboard (the
+mirror). Hidden: m/s of the beam's hypotheses notched by a lobe and not by the beam's own notch (+-0.38 m/s on
+popoto_long_range at 6.5 kHz, +-0.25 on flank_32 at 10.5 kHz). Headings hidden: the share of all headings of a target at
+that speed whose radial speed over ground falls in the lobes' notches (the beam's own notch excluded; the own notch
+alone hides 12 % at 2 m/s and 3 % at 8 m/s at 6.5 kHz, LS.3). Inside +-22 degrees nothing is added. Ours; scratch
+script on `core.live_tone_stage`, c 1500 m/s, `max_range_rate_m_s` 3 (8 gives the same rows).
+
+| Array, tone | Bearing (deg, either side) | Visible lobe: direction deg, ridge m/s from the beam's +- notch | Endfire response, ridge +- notch | Hidden m/s | Headings hidden at 2 m/s | at 8 m/s |
+| --- | --- | --- | --- | --- | --- | --- |
+| popoto_long_range 6.5 kHz | 40 | 63.6, 2.31 +- 0.38 | -33.9 dB, 2.46 +- 0.35 | 0.87 | 8.5 % | 3.7 % |
+| | 36 | 71.9, 2.31 +- 0.38 | -6.4 dB, 2.38 +- 0.35 | 0.75 | 8.5 % | 3.3 % |
+| | 34 | 78.3, 2.31 +- 0.38 | -1.1 dB, 2.34 +- 0.35 | 0.81 | 8.5 % | 3.2 % |
+| | 32 | none | -0.2 dB, 2.29 +- 0.35 | 0.69 | 7.2 % | 2.9 % |
+| | 28 | none | -13.8 dB, 2.20 +- 0.35 | 0.69 | 12.1 % | 2.9 % |
+| | 24 | none | -37.7 dB, 2.11 +- 0.35 | 0.69 | 15.6 % | 2.9 % |
+| | 22 and less | none | under -40 dB | 0 | 0 | 0 |
+| flank_32 10.5 kHz | 40 | 61.3, 2.28 +- 0.25 | -33.7 dB, 2.46 +- 0.21 | 0.68 | 0.0 % | 2.7 % |
+| | 36 | 68.7, 2.28 +- 0.25 | -13.7 dB, 2.38 +- 0.21 | 0.57 | 0.0 % | 2.3 % |
+| | 32 | 81.8, 2.28 +- 0.25 | -0.3 dB, 2.29 +- 0.21 | 0.50 | 0.0 % | 2.0 % |
+| | 28 | none | -6.8 dB, 2.20 +- 0.21 | 0.43 | 3.2 % | 1.8 % |
+| | 24 | none | -31.5 dB, 2.11 +- 0.21 | 0.43 | 10.3 % | 1.8 % |
+| | 22 and less | none | under -40 dB | 0 | 0 | 0 |
+
+At 2 m/s the lobe band (2.11 to 2.31 m/s +- the notch) is the target coming nearly straight in (or out): 7 to 16 % of
+headings on popoto_long_range; at 8 m/s 3 to 4 %. A 2 m/s `large_submerged` closing bow-on at -36 degrees is not
+reported by the tone; the sweep path still detects it (test (c)). The interval scales with the own speed (|v| lambda / d)
+and vanishes on a still platform.
+
+### GL.4 Tests (both engines; new files and additions)
+
+`tests/python/test_doppler_tone_lobes.py` (11): the lobes from the geometry and the endfire rule against an array factor
+computed in the test; (a) the field record: false tone detections with the lobe notch off, none with it (the stage and
+the chain, both engines; the code before this package gives 2 on this record, both engines: fails before, passes
+after); (b) a mover at -36 degrees outside every notch: the same detection and rate with and without; (c) a mover on its
+beam's lobe ridge: not reported by the tone with the notch, reported without, and the sweep ping of the pair reports it
+either way; (d) no visible lobe (5 kHz under way) and a still platform (flank_32, 10.5 kHz): auto equals off bit for bit
+(stage power, ratio, detections, tests, factor; the report lines of both engines); the option. `test_live_cpp.py` (2):
+the two engines equal with the notch and without; `sonar_live` on the recording gives the Python chain's lines and says
+the notch once on stderr. `test_doppler_device.py` (3): the batched form on the host equals the loop with the notch bit
+for bit; on the device (CUDA, skipped here) power and detections against the host, both engines. GoogleTest
+`DopplerToneLobes` (3) and `Options.ToneLobeNotchKeysAreReadAndEchoedOnlyWhenSet`. `tests/python/test_doppler_paths.py`
+(7): the coverage gaps below.
+
+### GL.5 Default-off and no-lobe proof
+
+sha256 of the report lines without processing_seconds (D3's method), host backend, a build of the base `d54deb9`
+against this branch: flank_patrol and popoto_12km, 2 pings, defaults, `doppler: {mode: off}` and `range_doppler:
+ownship`, both engines (12 of 12 equal, and equal to D8's flank_patrol hashes); the tone path on records with no lobe
+added (flank_32 CW 8 kHz under way and still, flank_32 10.5 kHz still, popoto_long_range 5 kHz under way), both
+engines' report lines and the stage's power, ratio and detections (12 of 12 equal). 24 of 24.
+
+### GL.6 Both paths: what each does and the test that holds it
+
+| Path | Behaviour | Held by |
+| --- | --- | --- |
+| plain sweep (default) | off and `mode: off` are the chain as before, byte for byte | `test_live_cpp.py::test_the_doppler_bank_is_off_by_default_and_off_is_as_before`; hash proofs (D3, D8, GL.5; scratch, not tests) |
+| plain sweep | no Doppler field on the report line (sweep ping and train ping), no rate for a mover | **new** `test_doppler_paths.py::test_the_default_chain_reports_no_doppler_field_and_gives_a_mover_no_rate` |
+| plain sweep | a train compressed whole (D-237: 0 of 6 on `popoto_12km_doppler`); the replica untouched | **new** `test_doppler_paths.py::test_the_default_chain_compresses_a_train_whole_and_pays_for_it`; `test_doppler_tone.py` train test |
+| plain sweep | a short CW: the C++ chain refuses it, the Python chain maps nonsense (a divergence, D3.1 item 7) | `test_doppler_tone.py::test_a_cw_mover_is_missed_today_and_found_by_the_tone_bank_with_its_range_rate` |
+| plain sweep | still and moving targets detected, tracked, the engines equal | `test_live_cpp.py` (the parity tests), `test_live.py` |
+| plain sweep | `range_doppler` ownship / full | `test_live_cpp.py::test_range_doppler_*` |
+| sweep bank (max, cfar) | plan, fold, threshold, both engines, batched and device | `test_doppler_bank.py`, `test_doppler_cfar.py`, `test_live_cpp.py` bank tests, `test_doppler_device.py`, GoogleTest `Doppler*` |
+| tone | the matched filter of the tone per rate (against NumPy, 0.1 dB) | `test_doppler_tone.py::test_the_bank_is_the_matched_filter_of_the_tone_at_each_rate` |
+| tone | plan: step, notch, allowance; a sweep ping has no tone path | `test_doppler_tone.py::test_the_plan_spaces_...`, GoogleTest `DopplerTone.ThePlan...` |
+| tone | a CW mover found with its rate; a still target not given a Doppler (the notch) | `test_doppler_tone.py::test_a_cw_mover_...`, `test_a_still_target_is_not_given_a_doppler`, GoogleTest `DopplerTone.AMoverIsFound...` |
+| tone | the leakage rule | `test_doppler_tone.py::test_a_strong_still_echo_leaks_no_detection_out_of_the_notch` |
+| tone | **the grating lobes' and endfire ridges notched; the cost; nothing changed without a lobe** | **new** `test_doppler_tone_lobes.py`, GoogleTest `DopplerToneLobes` |
+| tone | train: the sweep's range, the tone's rate; sweep-only replica; a train without its tone refused | `test_doppler_tone.py` train tests |
+| tone | alternating pings, one tracker, the engines equal | `test_doppler_tone.py::test_alternating_*` |
+| tone | the merge; the tone's range sigma for the tracker | GoogleTest `DopplerTone.TheMergeLends...`, `test_doppler_tone.py::test_a_detections_own_range_sigma_...` |
+| tone | the budget on noise (loosened: 3 and 30 a ping) | `test_doppler_tone.py::test_on_noise_the_tone_path_stays_inside_its_budget` |
+| tone | off by default, said only when on, unknown words refused | `test_doppler_tone.py::test_the_option_is_off_...`, **new** `test_doppler_tone_lobes.py::test_the_option_is_auto_...` |
+| tone | refused with `range_doppler` (both engines) and `elevation` (both, and the C++ chain itself) | `test_doppler_tone.py::test_the_option_is_off_...`; **new** `test_doppler_paths.py::test_the_tone_path_is_refused_with_elevation_and_range_doppler_in_both_engines` |
+| tone | batched on the host = the loop, bit for bit; the device = the host (CUDA, skipped here) | `test_doppler_device.py` tone tests (**new** lobe variants) |
+| tone | `sonar_live` runs it like the Python chain | **new** `test_live_cpp.py::test_program_runs_the_tone_paths_lobe_notch_like_the_python_chain_and_says_it` |
+| tone | the scene acceptance (`flank_patrol_doppler_tone`) | `test_doppler_scenes.py::test_the_chain_with_the_tone_path_sees_the_small_vehicle_and_keeps_the_wreck` (gated `GPUSONAR_DOPPLER_CHAIN=1`, not run here) |
+
+Gaps not closed: the false-alarm rate at the DEFAULT budget is counted only in GPU runs, for the plain sweep and for the
+tone path (no test can count 1e-3 a ping on a CPU); the far-sidelobe false detections of strong reverberation (GL.1
+item 2) have no remedy and no test that asserts them; the tone path with `mode: sweep_bank` on the same chain (a
+train's bank is refused, LS.1 item 6; an alternating pair with both on) has no end-to-end test; the mirror half's ridge
+for a velocity across the line (GL.1 item 6) is untested; a multi-row array's plan is tested only through
+`uniform_pitch`; the Python engine's CW nonsense (D3.1 item 7) is stated by a test, not fixed; the tracker does not use
+the tone's rate (D5).
+
+### GL.7 The attribution of false detections (`tools/doppler_tone_eval.py`, added after GL.1 to GL.6)
+
+Every false detection on the background pings and every detection on the target pings that matches no target is saved
+in the JSON with its bearing, range, rate, snr and path, whether its beam has a visible lobe or an endfire notch, whether
+its rate lies within a lobe's notch, and its distance from its beam's own ridge and from the nearest lobe's ridge in notch
+widths; kinds `lobe_ridge`, `notch_edge` (within 2 own-notch widths), `other`, `no_rate`. The geometry is the plan's
+with the lobe notch auto whatever the run uses, so `--tone-lobe-notch off` says how many the lobes would explain. The
+`ls12` sub-run of `tools/doppler_gpu_runs.sh` now runs the train scene twice on the same cached pings, the notch off
+(`ls12_tone_train_lobe_off.json`) and on (`ls12_tone_train.json`): before and after in one job. Tests:
+`tests/python/test_doppler_gpu_job.py` (the switch and the two passes; the kinds on a made geometry; on the lobe record
+every false detection with the notch off is `lobe_ridge`, none with it).
+
+### GL.8 Why the notch did not remove the train scene's false detections on the GPU (2026-11-27): the simulator
+
+The coordinator's GPU run (Hugging Face job 6b0911926c5d61fff1888f01, branch `notch` at `f1c5d2d`, L4, cuda; ours):
+`popoto_12km_large_submerged_tone`, 4 target-free pings, default budget: 22 false tone detections with the lobe notch
+off, **25 with it on**. The cause is **not the chain**. It is the simulator.
+- **The simulator's monostatic boundary reverberation shifts each azimuth sector by its Doppler at the record's centre
+  frequency** (`python/gpusonar/sim/reverb.py`, `_series_numpy`: `doppler = 2 (v . u) fc / c`; the C++ generator the
+  same), a narrowband frequency shift for the whole pulse. On the train (4.0 to 6.6 kHz, record centre 5.3 kHz) the
+  6.5 kHz tone's still water lies at 5.3 / 6.5 = 0.815 of its physical ridge. The chain's ridges are the physical ones.
+- Evidence, GPU: the 22 detections with the notch off lie on the lobe ridge scaled by 0.815 (rate less that ridge,
+  mean -0.010 m/s, sd 0.061), not on the physical ridge (mean -0.276); with the notch on, the 25 lie 0.32 to 0.40 m/s
+  from the physical ridge, at the notch's edge (+-0.38), where the scaled ridge's far side is cut. The alternating run
+  (CW pings: the record's centre IS the tone, so the simulated Doppler is right) on the same job reports **0 false tone
+  detections in 6 tone pings with the notch on**, on the device. Before the notch the CPU run had 3 to 5 a tone ping (LS.1).
+- Evidence, host (scratch reproduction: popoto_long_range, 1.5 m/s along the line, a flat bottom 50 m below, the
+  simulator's reverberation): the strongest rate of the beam at +-60 degrees is -1.33 / +1.33 m/s on a CW record (own
+  ridge -+1.30) and -0.98 / +1.04 on the train (0.815 x 1.30 = 1.06); with the notch on the train gives 17 tone
+  detections at +-1.0 to 1.12 m/s at 31 to 39 degrees (10 off), the GPU's pattern.
+- The mask reaches every form: every detection's strongest cell lies outside every applied notch, by 0.07 to 2.5 steps
+  on that record; its parabola moves its rate at most half a step inward, which is why the attribution of `f1c5d2d`
+  (inside if within 1.0 notch width) called them "on a lobe's ridge". Now the attribution says `lobe_edge` for those,
+  `DEFECT` for a rate inside an applied notch by more than half a step (none on any record here), and counts those
+  on the ridge scaled by the record's centre frequency over the tone's.
+- So on a TRAIN the scene's reverberation is wrong for the tone, and the tone path's false detections there measure the
+  simulator, not the chain. The sweep's own reverberation on the train has the same approximation (4 to 6 kHz shifted
+  at 5.3 kHz: at most 25 % off at the band's edges). Not fixed here: it moves every simulated moving-platform scene with
+  boundary reverberation (a default result), so it is for the owner. The fix: the shift per frequency
+  (2 (v . u) f / c, i.e. a time scaling), in the frequency domain where each sector's delay is already applied, in the
+  NumPy and C++ generators and the CUDA sum; opt-in first, with before -> after on the shipped scenes.
+- Tests: `test_doppler_tone_lobes.py::test_no_tone_detection_lies_inside_a_notch_applied_to_its_beam` (the field record
+  and this reverberation train, both engines, loop and batched); the same on the device (CUDA-gated) and the batched
+  inputs carrying the mask in `test_doppler_device.py`; the attribution's kinds and DEFECT in `test_doppler_gpu_job.py`.

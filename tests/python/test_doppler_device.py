@@ -321,3 +321,67 @@ def test_the_default_chain_on_the_device_gives_the_same_lines_in_fresh_processes
     lines = [subprocess.run([sys.executable, "-c", _DEFAULT_RUN, here, mode], capture_output=True, text=True, check=True, env=env).stdout
              for mode in ("plain", "plain", "bank_first")]
     assert lines[0] and lines[0] == lines[1] == lines[2]
+
+
+# --- the tone path's grating-lobe notch (doppler.hpp plan_tone step 4b) on either backend --------------------------------
+
+def _lobe_ping():
+    import test_doppler_tone_lobes as lobes
+    return lobes, lobes.ping(field=1000, movers=((-36.0, 900.0, 1.0),))
+
+
+def test_the_batched_tone_bank_with_the_lobe_notch_on_the_host_is_the_loop_bit_for_bit():
+    """The lobe notch is a mask the batched form takes as it is (tone_notch_mask): on the host its power, ratio and
+    detections are the loop's bit for bit, with the notch and without it."""
+    lobes, rec = _lobe_ping()
+    for tone in (lobes.TONE, lobes.OFF):
+        a = lobes.stage(rec, tone, keep_map=True)
+        b = lobes.stage(rec, dict(tone, batched="on"), keep_map=True)
+        assert np.array_equal(a["power"], b["power"]) and np.array_equal(a["ratio"], b["ratio"])
+        assert a["detections"] == b["detections"] and len(a["detections"]) >= 1
+    assert lobes.stage(rec, lobes.TONE)["plan"]["lobe_beams"] > 0
+
+
+@needs_cuda
+@pytest.mark.parametrize("engine", ["python", "cpp"])
+def test_the_device_tone_bank_with_the_lobe_notch_gives_the_hosts_power_and_detections(engine):
+    """On the device with the lobe notch (auto) and without (off): power within the module's tolerance, the same
+    detections (0.05 m, 1e-3 m/s, 0.05 dB), and the chain's lines within the engines' tolerances."""
+    lobes, rec = _lobe_ping()
+    for tone in (lobes.TONE, lobes.OFF):
+        opts = doppler.tone_options(tone)
+        host = core.live_tone_stage(rec, lobes.bearings(), opts, hann=True, keep_map=True)
+        dev = core.live_tone_stage(rec, lobes.bearings(), opts, hann=True, keep_map=True, backend=core.Backend.Cuda)
+        nb = host["power"].shape[0]
+        assert_maps_close(dev["power"].reshape(nb, -1), host["power"].reshape(nb, -1))
+        assert len(dev["detections"]) == len(host["detections"]) >= 1
+        for a, b in zip(dev["detections"], host["detections"]):
+            assert a["range"] == pytest.approx(b["range"], abs=0.05) and a["range_rate"] == pytest.approx(b["range_rate"], abs=1e-3)
+            assert a["snr_db"] == pytest.approx(b["snr_db"], abs=0.05)
+        (h,) = reports(dict(lobes.chain_cfg(engine, tone)), [rec])
+        (d,) = reports(dict(lobes.chain_cfg(engine, tone), backend="cuda"), [rec])
+        same_detections(h, d)
+
+
+@needs_cuda
+@pytest.mark.parametrize("case", ["field", "reverb_train"])
+def test_on_the_device_no_tone_detection_lies_inside_a_notch_applied_to_its_beam(case):
+    """The invariant of test_doppler_tone_lobes.py on the device (backend cuda: the batched tone stage there, both
+    engines): the mask reaches the device's CFAR and flags."""
+    import test_doppler_tone_lobes as lobes
+    if case == "field":
+        rec, tone = lobes.ping(field=2000, movers=((-36.0, 900.0, 1.0),)), lobes.TONE
+    else:
+        rec, tone = lobes.reverb_train_ping(), lobes.TONE_TRAIN
+    lobes.assert_outside_applied_notches(rec, tone, [-40.0, 40.0, 0.5], batched=("auto",), backend="cuda")
+
+
+def test_the_batched_inputs_carry_the_plans_notch_mask():
+    """The plumbing the device form depends on: with the lobe notch the stage tests fewer cells than without (the mask is
+    the batched form's input, tone_notch_mask), identically in the loop and the batched form on the host."""
+    lobes, rec = _lobe_ping()
+    tests = {}
+    for tone in (lobes.TONE, lobes.OFF):
+        for form in ("off", "on"):
+            tests[(tone["tone_lobe_notch"] if "tone_lobe_notch" in tone else "auto", form)] = lobes.stage(rec, dict(tone, batched=form))["tests"]
+    assert tests[("auto", "off")] == tests[("auto", "on")] < tests[("off", "off")] == tests[("off", "on")]

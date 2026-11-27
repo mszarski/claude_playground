@@ -198,6 +198,7 @@ int main(int argc, char** argv) {
     live::Navigation nav(chain_options.nav);
     live::NavCounts nav_counts;                 // pings without a fix, and without a velocity from navigation
     std::int64_t done = 0, split_reports = 0;
+    bool lobes_said = false;                    // the tone path's grating-lobe notch, said once (stderr)
     // A report too long for one datagram goes out as several complete lines ("part": [k, n]); never cut.
     auto send_report = [&](const std::vector<std::string>& datagrams) {
       if (!out_socket) return;
@@ -222,6 +223,12 @@ int main(int argc, char** argv) {
                                                                    : "; without tracker_ping_interval_s the tracker has no time between such pings");
       }
       report << rep.json() << "\n" << std::flush;
+      // The tone path's grating-lobe notch (doppler.hpp step 4b): which beams carry one and what it hides, at the first
+      // ping that has any (stderr only: the report line is a contract).
+      if (!lobes_said && chain.tone_stage_result().plan.lobe_beams > 0) {
+        std::fprintf(stderr, "sonar_live: tone grating-lobe notch %s\n", chain.tone_stage_result().plan.json().c_str());
+        lobes_said = true;
+      }
       if (out_socket) send_report(rep.datagrams(report_bytes));
       if (done == 0) {
         std::fprintf(stderr, "sonar_live: chain settings %s\n", chain.resolved_json().c_str());

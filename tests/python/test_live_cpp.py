@@ -1718,3 +1718,61 @@ def test_the_doppler_bank_is_off_by_default_and_off_is_as_before(pings, engine):
     assert json.dumps([strip(r) for r in a]) == json.dumps([strip(r) for r in b])
     quiet = _bank_run(pings[:2], engine, bank=dict(BANK, report=False))
     assert not any("range_rate_m_s" in d for r in quiet for d in r["detections"])
+
+
+# --- the tone path's grating-lobe notch (libs/live doppler.hpp plan_tone step 4b): both engines -------------------------
+
+def _lobe_records():
+    """test_doppler_tone_lobes.py's records: the long-range array, a 6.5 kHz tone, under way along the line; a still field
+    all round plus a mover outside every notch (-36 degrees, opening 1.0 m/s) and a sweep ping after it."""
+    import test_doppler_tone_lobes as lobes
+    return [lobes.ping(field=2000, movers=((-36.0, 900.0, 1.0),)), lobes.ping(wave=lobes.LFM, movers=((-36.0, 902.0, 1.0),), seed=9, sequence=1)]
+
+
+def test_the_tone_paths_lobe_notch_gives_the_same_report_in_both_engines():
+    """With the lobe notch (auto, the default with the tone path) and without it (off): the Python chain and the C++ chain
+    give the same detections, paths and range rates (test_doppler_tone.py's tolerances), and with it no tone detection
+    beyond the mover."""
+    import test_doppler_tone_lobes as lobes
+    recs = _lobe_records()
+    for tone in (lobes.TONE, lobes.OFF):
+        want, got = (lobes.run(lobes.chain_cfg(engine, tone), recs) for engine in ("python", "cpp"))
+        for w, g in zip(want, got):
+            assert len(w["detections"]) == len(g["detections"]), (w["detections"], g["detections"])
+            for a, b in zip(w["detections"], g["detections"]):
+                for key in ("range_m", "bearing_deg", "snr_db"):
+                    assert a[key] == pytest.approx(b[key], abs=0.05), key
+                assert a["doppler_path"] == b["doppler_path"]
+                assert (a["range_rate_m_s"] is None) == (b["range_rate_m_s"] is None)
+                if a["range_rate_m_s"] is not None:
+                    assert a["range_rate_m_s"] == pytest.approx(b["range_rate_m_s"], abs=0.01)
+        tones = [d for d in got[0]["detections"] if d["doppler_path"] in ("tone", "both")]
+        if tone is lobes.TONE:
+            assert len(tones) == 1 and abs(tones[0]["bearing_deg"] + 36.0) < 2.0, tones
+        else:
+            assert len(tones) > 1
+
+
+@needs_exe
+def test_program_runs_the_tone_paths_lobe_notch_like_the_python_chain_and_says_it(tmp_path):
+    """build/bin/sonar_live on the recording: the Python chain's report lines, and once on stderr which beams carry a
+    grating-lobe notch (the report line is a contract: nothing added there)."""
+    import test_doppler_tone_lobes as lobes
+    from gpusonar import live
+    cfg = lobes.chain_cfg("python", lobes.TONE)
+    with LiveChain(cfg, recording=str(tmp_path / "rec.h5")) as chain:
+        want = chain.run([r.copy() for r in _lobe_records()])
+    flat = live.program_options(cfg)
+    assert flat["doppler_tone"] == "bank" and "doppler_tone_lobe_notch" not in flat
+    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), *[f"{k}={v}" for k, v in flat.items()]],
+                         capture_output=True, text=True, timeout=600)
+    assert out.returncode == 0, out.stderr
+    got = [json.loads(line) for line in out.stdout.splitlines()]
+    assert len(got) == len(want)
+    for w, g in zip(want, got):
+        assert len(w["detections"]) == len(g["detections"])
+        for a, b in zip(w["detections"], g["detections"]):
+            assert a["range_m"] == pytest.approx(b["range_m"], abs=0.05) and a["bearing_deg"] == pytest.approx(b["bearing_deg"], abs=0.05)
+            assert a["doppler_path"] == b["doppler_path"]
+    said = [line for line in out.stderr.splitlines() if "tone grating-lobe notch" in line]
+    assert len(said) == 1 and '"lobe_beams": ' in said[0], out.stderr

@@ -148,8 +148,30 @@ live::DopplerOptions doppler_options(const Keys& d) {
   number(d, "doppler_tone_range_sigma_m", o.tone.range_sigma);
   number(d, "doppler_tone_sidelobe_db", o.tone.sidelobe_db);
   number(d, "doppler_tone_leak_margin_db", o.tone.leak_margin_db);
+  number(d, "doppler_tone_lobe_floor_db", o.tone.lobe_floor_db);
+  if (d.contains("doppler_tone_lobe_notch")) o.tone.lobe_notch = live::parse_tone_lobe_notch(d["doppler_tone_lobe_notch"].cast<std::string>());
   if (d.contains("doppler_report")) o.report = d["doppler_report"].cast<bool>();
   return o;
+}
+
+// The tone plan's grating-lobe notch (doppler.hpp step 4b) into a binding dict.
+void lobe_fields(py::dict& out, const live::TonePlan& p) {
+  out["lobe_notch"] = std::string(live::tone_lobe_notch_name(p.lobe_notch));
+  out["pitch"] = p.pitch;
+  py::list lobes;
+  for (const live::ToneLobe& g : p.lobes) {
+    py::dict e;
+    e["beam"] = g.beam;
+    e["direction"] = g.direction;
+    e["ownship"] = g.ownship;
+    e["notch"] = g.notch;
+    e["endfire"] = g.endfire;
+    e["response_db"] = g.response_db;
+    lobes.append(e);
+  }
+  out["lobes"] = lobes;
+  out["lobe_hidden"] = p.lobe_hidden;
+  out["lobe_beams"] = p.lobe_beams;
 }
 
 live::DecimateOptions decimate_options(const Keys& d) {
@@ -764,19 +786,25 @@ void bind_live(py::module_& m) {
       "tone path on (libs/live doppler.hpp sweep_only_replica, D3). Returns the samples zeroed.");
   m.def(
       "live_tone_plan",
-      [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options, double default_budget) {
+      [](const PingRecord& record, const std::vector<double>& bearings, const py::dict& options, double default_budget, bool hann) {
         const Keys kw(options);
         const live::DopplerOptions o = doppler_options(kw);
         kw.refuse_unread("live_tone_plan: ");
-        const live::TonePlan p = live::plan_tone(record, bearings, o, default_budget);
+        const live::TonePlan p = live::plan_tone(record, bearings, o, default_budget, hann);
         py::dict out;
         out["on"] = p.on;
         out["tone_only"] = p.tone_only;
         out["baseband_max_range_rate"] = p.baseband_max_range_rate;
         out["json"] = p.json();
+        lobe_fields(out, p);
+        // Each beam's own ridge and notch (step 4), for a tool that attributes detections (tools/doppler_tone_eval.py).
+        out["ownship"] = p.ownship;
+        out["notch"] = p.notch;
+        out["resolution"] = p.resolution;
+        out["step"] = p.step;
         return out;
       },
-      py::arg("record"), py::arg("bearings"), py::arg("options"), py::arg("default_budget") = 1e-3,
+      py::arg("record"), py::arg("bearings"), py::arg("options"), py::arg("default_budget") = 1e-3, py::arg("hann") = true,
       "The tone path's plan for this record (libs/live doppler.hpp plan_tone, D3): whether it runs and the baseband allowance it needs.");
   m.def(
       "live_tone_stage",
@@ -814,6 +842,7 @@ void bind_live(py::module_& m) {
         plan["gate_bearing"] = p.gate_bearing;
         plan["range_sigma"] = p.range_sigma;
         plan["json"] = p.json();
+        lobe_fields(plan, p);
         py::list dets;
         for (const live::ToneDetection& d : st.detections) {
           py::dict e;

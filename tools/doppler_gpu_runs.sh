@@ -15,7 +15,9 @@
 #               flank_patrol_doppler_tone when the tone run left its records in the cache) -> timing_*.json
 #   ls12        (only when named) the large submerged class at 12 km: tools/doppler_tone_eval.py on
 #               popoto_12km_large_submerged_tone (tone then sweep in one ping) and on popoto_12km_large_submerged with
-#               alternating pings (12) -> ls12_tone_train.json, ls12_tone_alternate12.json
+#               alternating pings (12) -> ls12_tone_train.json, ls12_tone_alternate12.json; and the train scene again
+#               with the tone path's grating-lobe notch off on the same cached pings -> ls12_tone_train_lobe_off.json
+#               (before and after the notch in one job; each JSON attributes every false detection)
 #               (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 80m; GPUSONAR_DOPPLER_LS12_ARGS appended)
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
@@ -143,6 +145,11 @@ if [[ $runs == *,ls12,* ]]; then
     # shellcheck disable=SC2086
     "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 \
         --background 4 --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/ls12_tone_train.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
+    # The same pings (the cache) with the grating-lobe notch off: the tone path as before the notch (DOPPLER.md GL).
+    # shellcheck disable=SC2086
+    "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --max-rate 8 --truth-at reflection --gate-range-m 100 \
+        --background 4 --backend "$be" --sim-backend "$be" --cache "$cache" --tone-lobe-notch off \
+        --json "$out/ls12_tone_train_lobe_off.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?
     # shellcheck disable=SC2086
     "$py" tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --pings 12 --max-rate 8 --truth-at reflection \
         --gate-range-m 100 --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/ls12_tone_alternate12.json" ${GPUSONAR_DOPPLER_LS12_ARGS:-} || rc=$?

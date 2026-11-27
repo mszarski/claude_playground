@@ -217,6 +217,8 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("doppler_tone_range_sigma_m")) c.doppler.tone.range_sigma = v();
   else if (is("doppler_tone_sidelobe_db")) c.doppler.tone.sidelobe_db = v();
   else if (is("doppler_tone_leak_margin_db")) c.doppler.tone.leak_margin_db = v();
+  else if (is("doppler_tone_lobe_floor_db")) c.doppler.tone.lobe_floor_db = v();
+  else if (is("doppler_tone_lobe_notch")) c.doppler.tone.lobe_notch = parse_tone_lobe_notch(value);   // auto | off (doppler.hpp step 4b)
   else if (is("doppler_report")) c.doppler.report = on();
   else if (is("range_doppler")) c.range_doppler = parse_range_doppler(value);   // off | ownship | full (sonar-fyj)   // centroid | first (D-157); unset: chain_range_estimate (D-158)
   // The two flags as gpusonar.live.cpp_chain_options names them, for a tool that passes its keys on as they are.
@@ -551,6 +553,9 @@ std::string options_json(const ChainOptions& c) {
       .num("doppler_tone_gate_range_m", tone.gate_range).num("doppler_tone_gate_bearing_deg", tone.gate_bearing / kDeg)
       .num("doppler_tone_range_sigma_m", tone.range_sigma).num("doppler_tone_sidelobe_db", tone.sidelobe_db)
       .num("doppler_tone_leak_margin_db", tone.leak_margin_db);
+  // The grating lobes' notch (doppler.hpp step 4b): written only when not the default (auto), as D8's keys below.
+  if (tone.lobe_notch != ToneLobeNotch::Auto) j.text("doppler_tone_lobe_notch", tone_lobe_notch_name(tone.lobe_notch));
+  if (tone.lobe_floor_db != ToneOptions{}.lobe_floor_db) j.num("doppler_tone_lobe_floor_db", tone.lobe_floor_db);
   // D8: written only when not the default, so that every line before D8 is the one it was.
   if (dop.batched != DopplerBatched::Auto) j.text("doppler_batched", doppler_batched_name(dop.batched));
   if (dop.batch != 0) j.integer("doppler_batch", dop.batch);

@@ -63,7 +63,12 @@ DEFAULTS = {
     "tone_range_sigma_m": None,     # the tracker's range sigma for a tone-only detection; None: c T / 8
     "tone_sidelobe_db": None,       # None: -25 dB with the Hann aperture, -7 dB rectangular
     "tone_leak_margin_db": 10.0,    # a cell no more than this above a stronger cell's leak through the tone's spectrum is dropped
+    # "auto": each beam's visible grating lobes at the tone's frequency get a notch about their own-motion ridge too (libs/live
+    # doppler.hpp step 4b; nothing changes where no lobe is visible); "off": the steered direction's notch alone (comparison).
+    "tone_lobe_notch": "auto",
+    "tone_lobe_floor_db": -40.0,    # dB: a beam whose response towards endfire is at least this gets the endfire ridge notched too
 }
+TONE_LOBE_NOTCH = ("auto", "off")
 TONES = ("off", "bank")
 TONE_KEYS = ("frequency_hz", "start_s", "duration_s", "window_alpha", "max_range_rate_m_s", "step_m_s", "hop", "notch_m_s", "notch_cells",
              "guard", "train", "false_alarms_per_ping", "gate_range_m", "gate_bearing_deg", "range_sigma_m", "sidelobe_db",
@@ -90,6 +95,10 @@ def merged(cfg: dict | None) -> dict:
         raise ValueError(f"chain.doppler.batch = {d['batch']}: hypotheses, 1 or more (None: as memory allows)")
     if d["tone"] not in TONES:
         raise ValueError(f"chain.doppler.tone: {d['tone']!r} ({' or '.join(TONES)})")
+    if d["tone_lobe_notch"] not in TONE_LOBE_NOTCH:
+        raise ValueError(f"chain.doppler.tone_lobe_notch: {d['tone_lobe_notch']!r} ({' or '.join(TONE_LOBE_NOTCH)})")
+    if not np.isfinite(float(d["tone_lobe_floor_db"])):
+        raise ValueError(f"chain.doppler.tone_lobe_floor_db = {d['tone_lobe_floor_db']}: a finite number of dB")
     if not (0.0 < float(d["tone_hop"]) <= 1.0):
         raise ValueError(f"chain.doppler.tone_hop = {d['tone_hop']}: a fraction of the tone above 0, at most 1")
     if int(d["tone_train"]) < 1 or (d["tone_guard"] is not None and int(d["tone_guard"]) < 0):
@@ -164,6 +173,10 @@ def tone_options(cfg: dict | None) -> dict:
         v = d["tone_" + key]
         if v is not None:
             o["doppler_tone_" + key] = int(v) if key in ("guard", "train") else float(v)
+    if d["tone_lobe_notch"] != "auto":           # only when not the default: every flat option line as it was
+        o["doppler_tone_lobe_notch"] = d["tone_lobe_notch"]
+    if float(d["tone_lobe_floor_db"]) != -40.0:
+        o["doppler_tone_lobe_floor_db"] = float(d["tone_lobe_floor_db"])
     o.update(_batched_options(d))
     return o
 

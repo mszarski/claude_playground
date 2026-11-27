@@ -6,6 +6,7 @@ scene's background, and the cost a ping.
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
                                [--alternate HZ] [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
                                [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...]
+                               [--tone-lobe-notch auto|off]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -39,6 +40,21 @@ YAML), for a check of the plumbing on a CPU, e.g. `--set fidelity=free_field --s
 of the scene; the result lists the changes and the cache's file names carry them.
 `--truth-at` and `--gate-range-m`: as tools/doppler_bank_eval.py's (the truth at the pulse's reflection time; the sweep
 detection's range gate).
+
+`--tone-lobe-notch auto|off`: the tone path's grating-lobe notch (libs/live doppler.hpp step 4b; not given: the chain's
+default, auto). The simulated records do not depend on it: two runs with the same --cache take the same pings.
+
+Attribution (always, in the JSON): every false detection on the background pings and every detection on the target
+pings that matches no target gets its bearing, range, rate, snr and path; whether its beam has a visible grating lobe
+or an endfire notch at the tone; whether its rate lies within a lobe's notch (`on_lobe_ridge`); its distance from its
+beam's own ridge and from the nearest lobe's ridge in notch widths; and a kind: `lobe_ridge` (on a lobe's ridge),
+`notch_edge` (within 2 own-notch widths of its beam's ridge), `other` (neither: the far sidelobes of strong
+reverberation, a real echo, or unexplained), `no_rate` (a sweep detection); `lobe_edge` (a cell just outside a lobe's
+notch, its refined rate up to half a step inside) and `DEFECT` (inside an applied notch by more than half a step: the
+summary line then starts with DEFECT); `sim_scaled_lobe_widths` (the distance from the lobe ridge times the record's
+centre frequency over the tone's: where the simulator's monostatic reverberation puts the still water on a train). The lobe geometry is the plan's with
+`tone_lobe_notch: auto` whatever the run uses (core.live_tone_plan), so a run with the notch off says how many the
+lobes would explain. One summary line per budget (and per engine for the target pings).
 """
 from __future__ import annotations
 
@@ -73,6 +89,7 @@ def say(text: str) -> None:
 CACHE = None          # --cache DIR: simulated records kept as container files, read back on the next run of the same scene
 BACKEND = "host"      # --backend: the chain's
 SIM_BACKEND = "host"  # --sim-backend: the simulator's (host or cuda)
+LOBE_NOTCH = None     # --tone-lobe-notch: auto | off (None: the chain's default)
 
 
 def simulate(cfg: dict, tag: str = "scene"):
@@ -140,6 +157,8 @@ def chain_config(engine: str, tone: dict | None, max_rate: float, budget: float 
     cfg = {"engine": engine, "backend": BACKEND}
     if tone is not None:
         cfg["doppler"] = dict(tone, report=True, max_range_rate_m_s=max_rate)
+        if LOBE_NOTCH is not None:
+            cfg["doppler"]["tone_lobe_notch"] = LOBE_NOTCH
         if budget is not None:
             cfg["doppler"]["tone_false_alarms_per_ping"] = budget
     if budget is not None:
@@ -202,6 +221,103 @@ def per_target(reports, stages, truths: dict, tone_gate: float) -> dict:
     return out
 
 
+def lobe_geometry(record, tone: dict | None, max_rate: float):
+    """The tone plan's per-beam geometry for this record with the lobe notch auto (whatever the run uses): the chain's
+    bearings, each beam's own ridge and notch, and its lobes (visible or endfire) with their ridges and notches; the
+    step between hypotheses, which lobes the run applies (LOBE_NOTCH), and the record's centre frequency over the tone's
+    (the simulator's monostatic reverberation shifts every sector by its Doppler at the record's centre frequency,
+    sim/reverb.py: on a train its still water lies at that fraction of the tone's physical ridge). None when the record
+    has no tone path (a sweep ping)."""
+    from gpusonar import core, live
+    if tone is None:
+        return None
+    first, last, step = live.DEFAULTS["bearings_deg"]
+    bearings = np.radians(np.arange(first, last + 0.5 * step, step))
+    opts = doppler.tone_options(dict(tone, max_range_rate_m_s=max_rate, tone_lobe_notch="auto"))
+    p = core.live_tone_plan(record, [float(b) for b in bearings], opts, 1e-3, hann=live.DEFAULTS["window"] == "hann")
+    if not p["on"]:
+        return None
+    lobes = {}
+    for g in p["lobes"]:
+        lobes.setdefault(int(g["beam"]), []).append(g)
+    f_tone = float(json.loads(p["json"])["frequency_hz"])
+    return {"bearings_deg": np.degrees(bearings), "ownship": list(p["ownship"]), "notch": list(p["notch"]), "lobes": lobes,
+            "step": float(p["step"]), "lobes_applied": LOBE_NOTCH != "off",
+            "sim_scale": float(record.samples.center_frequency) / f_tone if record.samples.is_complex() else 1.0}
+
+
+def attribute(d: dict, geo) -> dict:
+    """One detection's attribution (the module's docstring says what each field is).
+
+    A detection's rate is its strongest cell's, refined by a parabola by at most half a step, so a detection of a cell
+    just outside a notch can read up to half a step inside it: `lobe_edge` / `notch_edge`. A rate inside an APPLIED notch
+    (the beam's own always; the lobes' unless --tone-lobe-notch off) by more than half a step cannot come from the
+    chain: `defect` True and the kind `DEFECT`. `sim_scaled_lobe_widths`: the distance from the lobe ridges scaled by
+    the record's centre frequency over the tone's (where the simulator puts the still water on a train)."""
+    rate = d.get("range_rate_m_s")
+    row = {"bearing_deg": d["bearing_deg"], "range_m": d["range_m"], "range_rate_m_s": rate, "snr_db": d["snr_db"],
+           "path": d.get("doppler_path"), "beam_bearing_deg": None, "visible_lobe": None, "endfire_notch": None,
+           "on_lobe_ridge": None, "own_ridge_widths": None, "lobe_ridge_widths": None, "sim_scaled_lobe_widths": None, "defect": False,
+           "kind": "no_rate" if rate is None else "other"}
+    if geo is None:
+        return row
+    b = int(np.argmin(np.abs(geo["bearings_deg"] - d["bearing_deg"])))
+    lobes = geo["lobes"].get(b, [])
+    row.update(beam_bearing_deg=float(geo["bearings_deg"][b]), visible_lobe=any(not g["endfire"] for g in lobes),
+               endfire_notch=any(g["endfire"] for g in lobes))
+    if rate is None:
+        return row
+    half = 0.5 * geo["step"] + 1e-9
+    own_d, own_n = abs(rate - geo["ownship"][b]), geo["notch"][b]
+    lobe_d = [(abs(rate - g["ownship"]), g["notch"]) for g in lobes]
+    own = own_d / own_n
+    lobe = min((x / n for x, n in lobe_d), default=None)
+    scaled = min((abs(rate - geo["sim_scale"] * g["ownship"]) / g["notch"] for g in lobes), default=None)
+    deep_lobe = any(x < n - half for x, n in lobe_d)
+    edge_lobe = any(n - half <= x <= n + 2.0 * geo["step"] for x, n in lobe_d)
+    row.update(own_ridge_widths=float(own), lobe_ridge_widths=None if lobe is None else float(lobe), on_lobe_ridge=lobe is not None and lobe <= 1.0,
+               sim_scaled_lobe_widths=None if scaled is None else float(scaled))
+    row["defect"] = bool(own_d < own_n - half or (geo["lobes_applied"] and deep_lobe))
+    if row["defect"]:
+        row["kind"] = "DEFECT"
+    elif deep_lobe:
+        row["kind"] = "lobe_ridge"
+    elif edge_lobe:
+        row["kind"] = "lobe_edge"
+    elif own <= 2.0:
+        row["kind"] = "notch_edge"
+    return row
+
+
+def attribution_summary(rows: list, label: str) -> str:
+    beyond = sum(1 for r in rows if r["visible_lobe"] or r["endfire_notch"])
+    kinds = {k: sum(1 for r in rows if r["kind"] == k) for k in ("DEFECT", "lobe_ridge", "lobe_edge", "notch_edge", "other", "no_rate")}
+    scaled = sum(1 for r in rows if r["sim_scaled_lobe_widths"] is not None and r["sim_scaled_lobe_widths"] <= 1.0)
+    rest = [f"{r['bearing_deg']:.1f} deg {r['range_rate_m_s']:+.2f} m/s {r['snr_db']:.1f} dB" for r in rows if r["kind"] == "other"][:6]
+    head = f"DEFECT: {kinds['DEFECT']} inside an applied notch; " if kinds["DEFECT"] else ""
+    return (f"{label}: {head}{beyond} of {len(rows)} beyond the lobe onset; {kinds['lobe_ridge']} on a lobe's ridge; "
+            f"{kinds['lobe_edge']} at a lobe notch's edge; {kinds['notch_edge']} at the own notch's edge (<= 2 widths); "
+            f"{scaled} on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); "
+            f"{kinds['no_rate']} without a rate (sweep); the rest {kinds['other']}" + (f": {', '.join(rest)}" if rest else ""))
+
+
+def unmatched(reports, truths: dict, tone_gate: float, records, tone, max_rate: float) -> list:
+    """The detections of the target pings that match no target (pick's gates), attributed."""
+    rows = []
+    for i, (rep, rec) in enumerate(zip(reports, records)):
+        geo = lobe_geometry(rec, tone, max_rate)
+        for d in rep["detections"]:
+            hit = False
+            for rows_t in truths.values():
+                tr = rows_t[i]
+                if (abs(d["range_m"] - tr["range"]) < GATE_RANGE_M and abs(d["bearing_deg"] - tr["bearing"]) < GATE_BEARING_DEG) or \
+                        (abs(d["range_m"] - tr["range"]) < tone_gate and abs(d["bearing_deg"] - tr["bearing"]) < 2.0):
+                    hit = True
+            if not hit:
+                rows.append(dict(attribute(d, geo), ping=i))
+    return rows
+
+
 def alternate_records(cfg: dict, hz: float, pings: int):
     """Tone-only and sweep-only pings in turn (tone first): the scene as shipped and with a 1 s Hann tone at `hz` carrying
     the sweep's whole energy, each simulated with 2 x pings and taken in turn."""
@@ -234,9 +350,10 @@ def main(argv=None) -> int:
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene (a plumbing check, not a measurement)")
     ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
     ap.add_argument("--gate-range-m", type=float, default=60.0)
+    ap.add_argument("--tone-lobe-notch", choices=["auto", "off"], help="the tone path's grating-lobe notch (default: the chain's, auto)")
     a = ap.parse_args(argv)
-    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M
-    CACHE, BACKEND, SIM_BACKEND = a.cache, a.backend, a.sim_backend
+    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M, LOBE_NOTCH
+    CACHE, BACKEND, SIM_BACKEND, LOBE_NOTCH = a.cache, a.backend, a.sim_backend, a.tone_lobe_notch
     GATE_RANGE_M = a.gate_range_m
     cfg = apply_sets(load_scenario_config(a.scene, expand=False), a.set)
     t0 = time.time()
@@ -255,7 +372,8 @@ def main(argv=None) -> int:
     result = {"scene": a.scene, "alternate_hz": a.alternate, "tone_energy_db": energy, "pings": len(records),
               "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "truth_at": a.truth_at,
               "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {},
-              "backend": a.backend, "sim_backend": a.sim_backend, "simulated_s": round(time.time() - t0, 1), "set": a.set}
+              "backend": a.backend, "sim_backend": a.sim_backend, "simulated_s": round(time.time() - t0, 1), "set": a.set,
+              "tone_lobe_notch": a.tone_lobe_notch or "auto (the chain's default)"}
 
     def store():
         """The result so far (the C++ reports, kept for the comparison, left out)."""
@@ -280,6 +398,13 @@ def main(argv=None) -> int:
             res[name] = {"targets": targets, "seconds": seconds,
                          "seconds_median_after_first": float(np.median(seconds[1:])) if len(seconds) > 1 else seconds[0],
                          "detections_per_ping": [len(r["detections"]) for r in reports], "reports": reports if engine == "cpp" else None}
+            if t is not None:
+                use_records = records[1::2] if (name == "off" and a.alternate) else records
+                use_truths = {k: v[1::2] for k, v in truths.items()} if (name == "off" and a.alternate) else truths
+                rows = unmatched(reports, use_truths, tone_gate, use_records, t, a.max_rate)
+                res[name]["unmatched"] = rows
+                res[name]["unmatched_summary"] = attribution_summary(rows, f"{a.scene} {engine} tone {name}, detections matching no target")
+                say("  " + res[name]["unmatched_summary"])
             if t is not None and stages and stages[-1] is not None:
                 res[name]["tone_plan"] = json.loads(stages[-1]["plan"]["json"])
                 res[name]["tone_factor_db"] = float(10 * np.log10(stages[-1]["factor"])) if stages[-1]["plan"]["on"] else None
@@ -324,9 +449,16 @@ def main(argv=None) -> int:
                 row[name] = sum(len(r["detections"]) for r in reports)
                 if t is not None:
                     row["on_tone_only"] = sum(1 for r in reports for d in r["detections"] if d.get("doppler_path") == "tone")
+                    rows = [dict(attribute(d, lobe_geometry(rec, t, a.max_rate)), ping=i)
+                            for i, (rep, rec) in enumerate(zip(reports, back)) for d in rep["detections"]]
+                    row["attribution"] = rows
+                    row["attribution_summary"] = attribution_summary(
+                        rows, f"{a.scene} background, budget {'default' if budget is None else budget}, tone path on "
+                              f"(lobe notch {a.tone_lobe_notch or 'auto'})")
             result["background"]["default" if budget is None else str(budget)] = dict(row, pings=len(back))
             say(f"{a.scene} background, {len(back)} pings, budget {'default' if budget is None else budget}: false detections off {row['off']}, "
                 f"on {row['on']} (tone alone {row['on_tone_only']})")
+            say("  " + row["attribution_summary"])
             store()
     store()
     return 0
