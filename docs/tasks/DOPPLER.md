@@ -1223,3 +1223,167 @@ the tracker and classifier); the sweep bank on a train record (both engines); a
 background count for `--alternate`; several seeds and the class's high target strength near broadside (+41.5 dB);
 `docs/handoff/README.md`, `handoff/SIMULATION.md` and `STATUS.md` still say 95 scenario files (96 since
 `flank_patrol_doppler_tone`, 98 now).
+
+## HFM: the hyperbolic sweep with the plain matched filter on a mover (2026-11-27, branch `txstudy`, issue `sonar-vjq7`)
+
+Appended; nothing above was rewritten. The owner's baseline (2026-11-27) is the plain sweep with every Doppler option off,
+and the transmitter is a free design choice. The trade study's transmit table found that the shipped linear sweep's peak
+loss on a mover grows with the pulse as fast as its energy (section 0 of `docs/design/popoto_trade_study.md`). This
+package asks whether a hyperbolic sweep (`transmit.waveform: {type: sampled, source: hfm}`, already in the simulator) makes
+"plain filter, long pulse" work with no bank. Every number is **ours** (simulation; closed forms derived here); commands
+and every field: `docs/tasks/hfm_doppler_eval.json`. No default moves; no chain file changed.
+
+### HFM.1 What failed, is uncertain or was not run (read first)
+
+1. **Not run through the 12 km eigenray scene.** The chain measurement is in FREE FIELD at 12 km (no multipath, no
+   reverberation, Wenz noise), from a STILL platform, with both targets 20 dB above the class's low end (at +25 dB the
+   free-field 1 s margin is about 0 dB, too little to measure a 20 dB loss). The scene itself (eigenrays, bottom, the
+   1.5 m/s platform, the class at +25 dB), LFM and HFM, 1 s and 4 s, plain and bank: the GPU-job sub-run `hfm12`
+   (HFM.6), not run.
+2. **The HFM's cost is a range bias the plain filter cannot remove**: an up-sweep reads a closing echo nearer by
+   f1 T / B per m/s, 3 T m per m/s at 4-6 kHz (measured on the point: -17 m at 1 s and 5.6 m/s, -67 m at 4 s, -191 m at
+   8 s and 8 m/s). The plain filter gives no range rate to correct it. The linear sweep is no better: its coupling is
+   f_c T / B (5/6 of the HFM's: -20 m at 1 s and 8 m/s, measured -20; -168 m at 8 s) and its peak is smeared besides;
+   only the sweep bank gives a (coarse) rate, and it refuses an HFM (it takes a linear sweep only, `plan_doppler`).
+3. **The hull's range errors are not interpretable** (the strongest of its five highlights, 0 to 100 m behind the bow,
+   varies from ping to ping); the point's are the bias. The hull's relative margins are.
+4. One seed; 3 pings a case (2 with the bank at 1 s; 1 at 2 and 4 s); the HFM's relative margin scatters by up to
+   0.8 dB (8 s, 2 m/s: -0.8 on the point) about the closed form's 0.0 to 0.2 dB.
+5. Not measured: reverberation (the HFM separates nothing from it, as the LFM's bank does not: section 3.3 item 5),
+   the surface's Doppler spread, opening targets (closed form: smaller loss, 0.05 / 0.19 dB at 2 / 8 m/s), several
+   targets per beam, the false-alarm rate (unchanged by construction: same band, same detector), a GPU.
+6. The projector: the HFM puts its energy density as 1 / f^2 across the band (2.6 dB more at 4.25 kHz than at
+   5.75 kHz, measured on the 1 s pulse); whether a projector sends that at the same peak level is not known (no
+   projector is chosen), and the planner has no waveform shape (the trade study's zero-speed margins are the LFM's).
+
+### HFM.2 Theory (ours, derived; `gpusonar.doppler.hfm_doppler`, `hfm_range_factor`; `tests/python/test_hfm_doppler.py`)
+
+An echo of range rate r (opening positive) is the pulse time-scaled by eta = (c - r) / (c + r) (the simulator's exact
+model, tested above). The **linear sweep** keeps a quadratic phase error of pi B T |r| / c at its ends after the delay
+takes the linear term (D4, `tests/python/test_doppler_bank.py`): it grows with B T, so a longer pulse loses more. The
+**hyperbolic sweep** has phase phi(u) = ln(1 + k f0 u) / k, k = (1/f1 - 1/f0) / T, and
+
+    phi(eta t) = ln(eta) / k + phi(t + tau),    tau = (1/eta - 1) f1 T / (f0 - f1)     (exact)
+
+so the scaled echo IS the pulse advanced by tau, in phase, over the band both share. Hence (4-6 kHz, c = 1500 m/s):
+
+| | 2 m/s closing | 5.6 m/s | 8 m/s | grows with T? |
+| --- | --- | --- | --- | --- |
+| HFM peak loss, untapered: 1 + (1/eta - 1) f1 / B (the band lost at the top) | 0.07 dB | 0.20 dB | 0.28 dB | no |
+| HFM peak loss, Tukey 0.1 (the simulator's pulse) | 0.02 dB | 0.11 dB | 0.18 dB | no |
+| HFM range bias, - c tau / 2 = r c / (c - r) f1 T / B (3 T m per m/s) | -6 T m | -16.7 T m | -23.9 T m | yes |
+| LFM peak loss, -20 log10 M(pi B T v / c), at 1 / 2 / 4 / 8 s | 8.8 / 11.7 / 14.8 / 17.8 dB | 13.2 / 16.4 / 19.3 / 22.4 | 14.8 / 17.8 / 20.9 / 23.9 | yes |
+| LFM range coupling, f_c T / B (2.5 T m per m/s) | -5 T m | -14 T m | -20 T m | yes |
+
+Checked by direct correlation of the time-scaled pulse with the unscaled replica at continuous lags (1, 2, 4, 8 s;
+taper 0 and 0.1; +-2, 5.6, 8 m/s): the peak within 0.02 dB of the closed form, its lag within 10 microseconds (7.5 mm).
+Source: ours, derived (the identity and both closed forms); the general statement that the HFM is "optimally Doppler
+tolerant" is the GSFM dissertation's (arXiv:1809.11009, Ch. 2) as `docs/design/projector_selection.md` [A2] records it:
+via secondary (not reopened here). What the HFM costs at zero speed (1 s, Tukey 0.1, the chain's unwindowed filter;
+same test): -3 dB main lobe 0.359 m against the LFM's 0.352 m (2 % wider), first sidelobe -12.7 dB against -13.3 dB,
+the 1 / f^2 spectrum (item 6); and no range rate.
+
+### HFM.3 The simulator and the chain on an HFM record (no defect found; nothing changed)
+
+- Simulator: a plain HFM's echo of a point closing at 8 m/s is the pulse time-scaled by (c + v) / (c - v) to 7.7e-8
+  relative rms in BOTH engines (C++ `pair_sampled` and NumPy), and the unscaled pulse advanced by tau to 1e-5 inside the
+  shared band; C++ against NumPy on a 1 s HFM, 32 channels, moving platform, absorption: 4.3e-9. (The existing Doppler
+  tests covered a sampled burst pair, codes and trains; this is the plain HFM.)
+- Record: an HFM is type Arbitrary with its real replica and rate in the existing fields (frozen schema; no change).
+- Chain: both engines compress through `core.pulse_compress` (`recon.prepare`), whose `build_arbitrary` builds the filter
+  from the RECORD's replica, not an LFM from `f_start` / `f_stop`. Proof (test): at zero speed the HFM's detection is
+  58.04 dB against the LFM's 58.00 dB of the same energy (a linear replica on an HFM echo would lose tens of dB); the two
+  engines' reports agree to the C++ engine's printed digits (1e-6 relative). The only waveform branches in the chain are
+  the bank and the tone path (Doppler options, refused or not taken for an Arbitrary record) and the `range_doppler`
+  correction (0 for anything but an analytic LFM; off by default). So no fix, and no default-off proof is needed.
+
+### HFM.4 Measured through the chain (`tools/hfm_doppler_eval.py --pulses 1 2 4 8 --pings 3 --ts-offset-db 20`; both engines equal on every case)
+
+Free field, 12 km, still platform; `point` +45 dB at -10 degrees and `hull` 5 x 38.01 dB bow-on at +10 degrees, both
+closing along their lines of sight; each waveform at 197 dB rms, so the energy rises with T and is the same for LFM and
+HFM at each T. Each cell: margin change against the same waveform, pulse and energy at zero speed, point / hull (dB),
+then the closed-form peak loss; worst first. Zero-speed margins (point / hull): 1 s 18.9 / 12.1, 2 s
+22.1 / 15.4, 4 s 24.9 / 18.1, 8 s 28.0 / 21.0 dB (LFM; HFM within 0.2 dB of them).
+
+| Pulse, waveform | 2 m/s | 5.6 m/s | 8 m/s | Point's range error at 2 / 5.6 / 8 m/s (m) |
+| --- | --- | --- | --- | --- |
+| 8 s LFM | -15.7 / -12.1 (17.8) | -19.7 / -13.0 (22.4) | **-22.0 / -14.0** (23.9) | -36 / -97 / -168 |
+| 4 s LFM | -12.5 / -12.3 (14.8) | -16.5 / -11.7 (19.3) | -18.1 / -11.9 (20.9) | -19 / -51 / -73 |
+| 2 s LFM | -9.9 / -9.0 (11.7) | -13.9 / -12.0 (16.4) | -14.9 / -10.9 (17.8) | -10 / -26 / -36 |
+| 1 s LFM (shipped) | -7.1 / -6.5 (8.8) | -10.5 / -10.1 (13.2) | -12.3 / -10.8 (14.8) | -5 / -13 / -20 |
+| 1 s LFM, bank `combine: cfar` to 8 m/s (45 a beam), against the plain zero-speed margin | -0.2 / -0.6 | -0.5 / -0.7 | -0.6 / -0.5 | -5 / -14 / -20 |
+| 8 s HFM | -0.8 / +0.0 (0.0) | -0.1 / +0.5 (0.1) | +0.2 / +0.4 (0.2) | -48 / -134 / -191 |
+| 4 s HFM | -0.2 / +0.1 (0.0) | -0.4 / +0.3 (0.1) | +0.2 / +0.4 (0.2) | -24 / -67 / -95 |
+| 2 s HFM | +0.2 / +0.3 (0.0) | -0.0 / +0.6 (0.1) | +0.5 / +0.5 (0.2) | -12 / -33 / -47 |
+| 1 s HFM | -0.0 / +0.2 (0.0) | -0.1 / +0.8 (0.1) | +0.0 / +0.7 (0.2) | -6 / -17 / -24 |
+
+The bank at 2 and 4 s (`tools/hfm_doppler_eval.py --pulses 2 4 --waveforms lfm --pings 1 --ts-offset-db 20 --bank --engines
+cpp --bank-engines cpp`: ONE ping a case, C++ only), against the plain zero-speed margin of the same ping draw (point /
+hull, dB):
+
+| Pulse, LFM with `combine: cfar` to 8 m/s | 0 m/s | 2 m/s | 5.6 m/s | 8 m/s | Point's range error at 2 / 5.6 / 8 m/s (m) | Cost a ping |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 s (87 hypotheses a beam) | -0.9 / -0.9 | -1.4 / -1.0 | -1.6 / -0.8 | -0.9 / -0.7 | -10 / -28 / -40 | 87 s |
+| 4 s (173 a beam) | -1.0 / -1.0 | -0.8 / -0.8 | -1.3 / -0.7 | -0.8 / -0.9 | -20 / -56 / -80 | 188 s |
+
+So the bank holds the LFM's margin on a mover at every length tried, at 0.2 to 1.6 dB under the plain zero-speed margin
+(its threshold correction and the maximum's background; 0.2 to 0.7 at 1 s) and at 45 to 180 times the plain chain's cost
+on this CPU; the
+HFM holds it with the plain filter at the plain chain's cost, and within the scatter of the zero-speed margin. The bank's
+range is the LFM's coupling uncorrected (`range_doppler` off): f_c T / B per m/s, as the plain HFM's is f1 T / B.
+
+The chain's detector integrates over cells, so the linear sweep loses 1.7 to 9.9 dB less than its peak's closed form (most
+on the hull, whose smeared highlights share cells), but the loss still grows with T: **on a mover the linear sweep's
+margin stays where the 1 s pulse's is, whatever its energy** (point at 8 m/s: 6.6, 7.2, 6.8, 6.0 dB at 1, 2, 4, 8 s,
+while the zero-speed margin rises 9.1 dB). The HFM keeps the zero-speed margin within the scatter at every T and speed,
+so its energy is bought on movers too. Cost a ping (C++, host, this CPU): plain 0.9 to 1.2 s for every pulse and either
+waveform; the 1 s bank 42.5 s (45 hypotheses a beam).
+
+### HFM.5 The trade study (`tools/popoto_trade_study.py --report`, section 0a, derived; old sections byte-identical)
+
+Each transmit option's planner margin less the closed-form peak loss closing at 2 and 8 m/s, LFM and HFM. Least energy
+that holds both `large_submerged` and `ship` at 12 km on a mover with NO bank, deep water with the apl_1994 bubble law
+(without it in brackets where different):
+
+| Sea state | LFM at 2 m/s | LFM at 8 m/s | HFM at 2 m/s | HFM at 8 m/s |
+| --- | --- | --- | --- | --- |
+| 2 | 197 dB (1 s 197) | 203 dB (1 s 203 only) | 197 dB (1 s 197, 2 s 194) | 197 dB |
+| 3 | none in the grid (203 dB, 1 s 203) | none | 197 dB | 197 dB |
+| 4 | none | none | 203 dB (1 s 203, 2 s 200, 4 s 197) [200 dB] | 203 dB [200 dB] |
+| 5 | none | none | 206 dB (2 s 203, 4 s 200, 8 s 197) [203 dB] | 206 dB [206 dB: the 0.28 dB takes `large_submerged` under at 203] |
+| 6 | none | none | 212 dB (8 s 203) | 212 dB |
+
+So with the plain filter the HFM needs the same energy as a still target (section 0's least energy) at every sea state
+but one marginal cell; the LFM holds an 8 m/s mover only at sea state 2 and 203 dB, and at sea state 3 and above no
+option in the grid holds a mover at 2 m/s with the bubble law. The planner's margins are for the PEAK; the chain lost
+less with the LFM (HFM.4), so the LFM columns are pessimistic by 2 to 10 dB, the HFM columns are not.
+
+### HFM.6 Not run on this CPU: the GPU job (`GPUSONAR_JOB=doppler`, `GPUSONAR_DOPPLER_RUNS=hfm12`)
+
+`tools/doppler_gpu_runs.sh` sub-run `hfm12` (only when named; default limit 150 min, `GPUSONAR_DOPPLER_TIMEOUT_HFM12`):
+`tools/doppler_bank_eval.py popoto_12km_large_submerged --max-rate 8 --background 2 --truth-at reflection --gate-range-m
+250 --backend cuda --sim-backend cuda --cache $OUT/cache` with, in order: HFM 1 s `--off-only`; HFM 4 s `--off-only`;
+HFM and LFM 4 s at 190.98 dB rms `--off-only` (the 1 s pulse's energy, 196.72 dB re 1 uPa^2 s at 1 m); LFM 1 s and 4 s
+`--combine cfar` (plain and bank; 45 and 173 hypotheses a beam). The 4 s runs at 197 dB carry +6.02 dB of energy over 1 s.
+The HFM is set by `--set sonar_overrides.transmit.waveform.type=sampled --set ...source=hfm`, the length by `--set
+...duration=4.0` (new opt-in switches of `doppler_bank_eval.py`: `--set`, `--backend`, `--sim-backend`, `--off-only`).
+Its quick host form (one free-field ping each) runs in `tests/python/test_doppler_gpu_job.py` (about a minute). Risk: a
+sampled 4 s pulse through the eigenray reverberation is the slow case on a CPU (D3.1 item 1); on the device not timed.
+
+### HFM.7 What it says
+
+1. **Yes**: with the plain filter an HFM of 4-6 kHz holds its zero-speed margin on a target closing at 2 to 8 m/s, at
+   1 s and at 4 s: within -0.4 to +0.8 dB through both engines (-0.8 to +0.6 at 2 and 8 s), 0.02 to 0.18 dB by the closed form,
+   independent of the pulse. The shipped linear sweep loses 6.5 to 12.3 dB at 1 s and 11.7 to 18.1 dB at 4 s on the same
+   targets; the bank recovers it at 45 times the cost and loses 0.2 to 0.7 dB to its threshold correction (2 and 4 s: 0.7
+   to 1.6 dB, at 87 and 180 times).
+2. What the HFM costs: the range bias (3 T m per m/s, uncorrectable without a rate; the LFM's coupling is 2.5 T and also
+   uncorrected with no bank), its 1 / f^2 spectrum on an unknown projector, 2 % in resolution and 0.6 dB in the first
+   sidelobe, no range rate and no bank. It needs no chain change and no schema change.
+3. For the owner: "plain filter, long pulse" becomes a valid design with an HFM; with a linear sweep it is not (a longer
+   pulse buys nothing on a mover). Not a default: the shipped sweep stays linear until the owner chooses.
+
+Follow-ups: the `hfm12` GPU run (the scene, the class's own strength, eigenrays); the projector's response across the band
+for an HFM (question for the projector selection); a range-rate source for the HFM's bias (the tone path, D5) or the bias
+stated in the report; the planner's waveform-blind zero-speed margin (the HFM's spectrum and absorption); an opening and a
+crossing target through the chain; several seeds.

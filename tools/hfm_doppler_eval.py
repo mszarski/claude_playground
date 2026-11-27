@@ -27,7 +27,7 @@ HFM reads f1 T / B metres per m/s nearer: 192 m at 8 s and 8 m/s) and 1.5 degree
 threshold of the plan; range error = the detection's strongest arrival less the true range (the point's; the hull's BOW
 highlight, the nearest). The closed forms (gpusonar.doppler `hfm_doppler`, the C++ library's `sweep_mismatch` for the LFM)
 are written beside each case. `--bank`: the LFM cases also with `doppler: {mode: sweep_bank, combine: cfar,
-max_range_rate_m_s: max speed}` (45 hypotheses a beam at 1 s and 8 m/s; 89 at 2 s): the engines of `--bank-engines`.
+max_range_rate_m_s: max speed}` (45 hypotheses a beam at 1 s and 8 m/s, 87 at 2 s, 173 at 4 s): the engines of `--bank-engines`.
 """
 from __future__ import annotations
 
