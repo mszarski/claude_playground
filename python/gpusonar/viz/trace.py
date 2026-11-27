@@ -362,6 +362,14 @@ def _leg_rays(provider, eig, s: int, origin, target, frequency: float, with_path
     if with_paths and general:
         nodes = plane_nodes(p, points if points is not None else np.asarray(target, float)[None], eig.delay.shape[1])
     used = set()
+    cands = []                                                # each Bellhop ray once: cut at the range, its bounces
+    for bi, cand in enumerate(br or []):
+        rz = _cut_at_range(cand["rz"], rng)
+        if len(rz) < 2 or rz[-1, 0] < rng - 1e-6:
+            continue
+        b = _bellhop_bounces(rz, env2)
+        ns = sum(1 for _, n in b if n == "surface")
+        cands.append((bi, rz, b, ns, len(b) - ns))
     for k in np.flatnonzero(eig.valid[s]):
         ray = {"k": int(k), "delay_s": float(eig.delay[s, k]), "amplitude": float(abs(eig.amplitude[s, k])),
                "n_surface": int(eig.n_surface[s, k]), "n_bottom": int(eig.n_bottom[s, k]),
@@ -409,15 +417,10 @@ def _leg_rays(provider, eig, s: int, origin, target, frequency: float, with_path
                                "interface cells, not a ray")
         elif br is not None:
             best, score = None, np.inf
-            for bi, cand in enumerate(br):
-                rz = _cut_at_range(cand["rz"], rng)
-                if len(rz) < 2 or rz[-1, 0] < rng - 1e-6:
+            for bi, rz, b, ns, nb in cands:
+                if ns != ray["n_surface"] or nb != ray["n_bottom"]:
                     continue
-                b = _bellhop_bounces(rz, env2)
-                ns = sum(1 for _, n in b if n == "surface")
-                if ns != ray["n_surface"] or len(b) - ns != ray["n_bottom"]:
-                    continue
-                miss = abs(rz[-1, 1] - target[2]) + 0.1 * abs(cand["alpha_deg"] - ray["launch_deg"]) + (50.0 if bi in used else 0.0)
+                miss = abs(rz[-1, 1] - target[2]) + 0.1 * abs(br[bi]["alpha_deg"] - ray["launch_deg"]) + (50.0 if bi in used else 0.0)
                 if miss < score:
                     best, score = (bi, rz, b), miss
             if best is not None:
@@ -755,6 +758,7 @@ _SOURCES = {
     "ssp_profile": ("sound-speed profile in depth", "the environment's profile", "ours"),
     "ssp_range": ("water that changes with range (rings about the sonar)", "Bellhop 'Q' field", "ours"),
     "bathymetry": ("a bed that changes with range (one section on every bearing)", "Bellhop bed file", "ours"),
+    "bathymetry3d": ("a 3-D bed (sim/bathymetry.py), relief across and along the look", "Bellhop3D bed grid ('R'); relief illustrative", "ours"),
     "penetration": ("sediment penetration", "J&R (2007) (8.18)...(15.16) through the notes; split ours", "confirmed; ours"),
     "basin": ("a basin's late reverberation tail", "fitted to one data set", "ours"),
     "direct_overload": ("projector direct sound / front-end overload", "closed forms", "ours"),
@@ -772,6 +776,13 @@ _SOURCES = {
     "relief": ("relief and penetration of the reverberation bed", "sim/reverb_relief.py", "ours"),
     "specular_exclusion": ("specular exclusion in the reverberation", "sim/reverb_specular.py", "ours"),
 }
+
+
+def _short_value(v):
+    """A bed description in a few words: its kind and its numbers (no long tables)."""
+    if isinstance(v, dict):
+        return {k: (_short_value(x) if isinstance(x, dict) else x) for k, x in v.items() if not isinstance(x, (list, tuple)) or len(x) <= 4}
+    return v
 
 
 def _entry(area, model, key, value, chosen="scenario"):
@@ -814,8 +825,11 @@ def models_in_force(cfg: dict, provider=None, sonar=None) -> list[dict]:
             out.append(_entry("water", "ssp_profile", "propagation.environment.ssp_depth/ssp_speed", f"{len(e['ssp_depth'])} points"))
         if e.get("ssp_range") is not None:
             out.append(_entry("water", "ssp_range", "propagation.environment.ssp_range", e["ssp_range"]))
-        if e.get("bathymetry") is not None or prop_cfg.get("bathymetry") is not None or cfg.get("bathymetry") is not None:
-            out.append(_entry("bottom", "bathymetry", "bathymetry", "given"))
+        if tier == "eigenray3d" and (prop_cfg.get("bathymetry") is not None or cfg.get("bathymetry") is not None):
+            b3 = prop_cfg.get("bathymetry") or cfg.get("bathymetry")
+            out.append(_entry("bottom", "bathymetry3d", "bathymetry", _short_value(b3)))
+        elif e.get("bathymetry") is not None or prop_cfg.get("bathymetry") is not None or cfg.get("bathymetry") is not None:
+            out.append(_entry("bottom", "bathymetry", "propagation.environment.bathymetry", "given"))
     if tier == "sediment":
         pen = prop_cfg.get("penetration", "constant")
         val = {"penetration": pen, "interface_z": prop_cfg.get("interface_z")}
