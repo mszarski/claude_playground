@@ -278,9 +278,16 @@ def _held(by: dict, lead: str) -> str:
 # Whom the 12 km requirement (DESIGN.md POP-3) is for: the owner, 2026-11-26 (D-235). Primary class first.
 REQUIREMENT_CLASSES = ("large_submerged", "ship")
 REQUIREMENT_OWNER = ("2026-11-26", "Large submerged mostly but also Large Ship is what we care about")
-REQUIREMENT_OPEN = ("the worst sea state in which 12 km must hold, the detection probability and false-alarm rate, and the operating area "
-                    "(its wind, noise and bottom backscatter)")
+REQUIREMENT_OPEN = ("the detection probability and false-alarm rate, the operating area (its wind, noise and bottom backscatter), and whether 12 km "
+                    "must hold in the summer mud's shadow (`summer_60m_mud_profile`, where the ship is not held by any option of the trade study)")
 REQUIREMENT_BUILD = "popoto_face_3x32"
+# The sea state of the requirement: the owner, 2026-11-27 (D-255). The baseline is the shipped face up to sea state 3; the alternate,
+# its own build, at sea state 5. The margins are read from the trade study's transmit grid and the alternate's own plan, not typed.
+REQUIREMENT_SEA_STATE_OWNER = ("2026-11-27", "Make it sea state 5 but have that as an alternate and the baseline is sea state 3 (i.e. for testing and "
+                               "prototyping, so the first design end to end can be ss3)")
+REQUIREMENT_DESIGNS = {"baseline": {"build": "popoto_face_3x32", "option": "1 s 197 dB", "sea_state": 3},
+                       "alternate": {"build": "popoto_face_3x32_ss5", "option": "4 s 200 dB", "sea_state": 5}}
+SEA_STATE_SITE = "deep_no_bottom_return_sea_state_5"        # the illustrative site the alternate is for
 
 
 def requirement_classes_text() -> str:
@@ -322,8 +329,80 @@ def twelve_km_by_site():
                             "window_end": rec["reach_m"] >= max(p["ranges_m"]), "own_depth_m": rec["own_depth_m"], "pd": rec["detection_probability"]}
     sites.sort(key=lambda s: tuple(rows[(s, c)]["margin_db"] for c in REQUIREMENT_CLASSES))
     failing = {c: [s for s in sites if not rows[(s, c)]["held"]] for c in REQUIREMENT_CLASSES + ("xl_auv",)}
+    designs, alternate_rows = requirement_designs(T)
+    # A site the baseline does not hold is "covered" when the alternate holds both classes there (its own plan).
+    covered = [s for s in sites if all((alternate_rows.get((s, c)) or {}).get("held") for c in REQUIREMENT_CLASSES)]
     return {"build": REQUIREMENT_BUILD, "rows_on_face": perf["detection"]["rows"], "sites": sites, "rows": rows, "failing": failing, "free": free,
-            "probability": perf["detection"]["probability"], "grid_tree": T.get("git_head_when_run")}
+            "probability": perf["detection"]["probability"], "grid_tree": T.get("git_head_when_run"), "designs": designs,
+            "alternate_rows": alternate_rows, "covered_by_alternate": covered}
+
+
+def requirement_designs(T: dict) -> tuple:
+    """(designs, alternate_rows): per design (REQUIREMENT_DESIGNS) its build, sea state and transmit option, and both classes'
+    margins at 12 km at the deep site at that sea state with the bubble law the sea-state-5 site states (the trade study's
+    transmit grid, docs/design/popoto_trade_study.json; the alternate's from its OWN build's plan at that site, which the grid's
+    cell equals: tests/python/test_alternate_design.py), with the baseline's at the next sea state; and the alternate's plan at
+    SEA_STATE_SITE as stated, per class (margin, held, own depth). Ours; sites illustrative, target strengths assumed."""
+    from gpusonar import depthplan, environment
+    grid = ((T.get("transmit") or {}).get("grid") or {}).get("results") or {}
+    law = next((e.get("bubble_model") for e in environment.load_list("illustrative") if e["name"] == SEA_STATE_SITE), None)
+    designs = {}
+    for name, dsg in REQUIREMENT_DESIGNS.items():
+        n = dsg["sea_state"]
+        cell = (grid.get(f"deep_no_bottom_return__ss{n}__{law}") or {}).get(dsg["option"]) or {}
+        nxt = (grid.get(f"deep_no_bottom_return__ss{n + 1}__{law}") or {}).get(dsg["option"]) or {}
+        designs[name] = {**dsg, "bubble_law": law, "margins_db": {c: (cell.get(c) or {}).get("margin_db") for c in REQUIREMENT_CLASSES},
+                         "next_sea_state_margins_db": {c: (nxt.get(c) or {}).get("margin_db") for c in REQUIREMENT_CLASSES}}
+    spec = bs.load(REQUIREMENT_DESIGNS["alternate"]["build"])
+    (site,) = [e for e in environment.load_list("illustrative") if e["name"] == SEA_STATE_SITE]
+    plan = depthplan.plan(bs.derive(spec), site, bs.target_classes_of(spec, range_m=12000.0))
+    alternate_rows = {}
+    for c in REQUIREMENT_CLASSES:
+        rec = plan["classes"][c]["recommended"]
+        alternate_rows[(SEA_STATE_SITE, c)] = {"margin_db": rec["margin_db"], "held": rec["margin_db"] >= 0.0, "own_depth_m": rec["own_depth_m"]}
+    designs["alternate"]["margins_db"] = {c: alternate_rows[(SEA_STATE_SITE, c)]["margin_db"] for c in REQUIREMENT_CLASSES}
+    M = _deep12()
+    if M:
+        for name in REQUIREMENT_DESIGNS:
+            designs[name]["measured"] = M["acceptance"].get(name)
+        designs["alternate"]["measured_other_filters"] = {k: M["acceptance"].get(k) for k in ("alternate_bank", "alternate_hfm") if M["acceptance"].get(k)}
+    designs["alternate"]["grid_margins_db"] = {c: ((grid.get(f"deep_no_bottom_return__ss5__{law}") or {}).get(REQUIREMENT_DESIGNS["alternate"]["option"]) or {}).get(c, {}).get("margin_db")
+                                               for c in REQUIREMENT_CLASSES}
+    return designs, alternate_rows
+
+
+def _deep12():
+    """docs/tasks/doppler_deep12_eval.json (tools/deep12_eval.py: the deep site through the simulator and both chain engines), or None."""
+    path = ROOT / "docs" / "tasks" / "doppler_deep12_eval.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def measured_words(a: dict) -> str:
+    """'**fails** for `closing` 0 of 6, ...; passes `crossing` 6 of 6, ...' of one design's measured acceptance."""
+    bad = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "FAIL"]
+    good = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "PASS"]
+    return ("**fails** for " + ", ".join(bad) + "; " if bad else "") + "passes " + (", ".join(good) or "nothing")
+
+
+def designs_text(X: dict) -> str:
+    """The requirement by sea state, one sentence per design, the figures computed (`requirement_designs`)."""
+    D = X["designs"]
+    b, a = D["baseline"], D["alternate"]
+    c1, c2 = REQUIREMENT_CLASSES
+
+    def m(d, k="margins_db"):
+        return f"`{c1}` {d[k][c1]:+.1f} dB, `{c2}` {d[k][c2]:+.1f} dB"
+    return (f"**By sea state (the owner, {REQUIREMENT_SEA_STATE_OWNER[0]}: \"{REQUIREMENT_SEA_STATE_OWNER[1]}\"; D-255)**: the **baseline** "
+            f"(`{b['build']}`, the shipped transmitter, {b['option']}) holds both classes at 12 km at the deep site with the {b['bubble_law']} bubble law up to sea state {b['sea_state']} "
+            f"({m(b)} at sea state {b['sea_state']}; at sea state {b['sea_state'] + 1}: {m(b, 'next_sea_state_margins_db')}); the **alternate** for sea state {a['sea_state']} "
+            f"(`{a['build']}`, the same face with {a['option']}) holds both at sea state {a['sea_state']} ({m(a)}, its own plan at `{SEA_STATE_SITE}`), "
+            "each for an echo with no radial speed (`docs/design/popoto_trade_study.md` sections 0 and 0a; ours, illustrative sites, assumed target strengths)."
+            + (" **Measured** through the simulator and both chain engines at that site (`docs/tasks/doppler_deep12_eval.json`, `docs/tasks/DOPPLER.md` \"Deep site at 12 km\"; "
+               "ours, one seed, 6 pings; held: detected on half the pings or more): the planner's margins hold for an unresolved, non-moving target (the +25 dB point), not for the "
+               f"class's hull whose five highlights resolve in range; the baseline at sea state {b['sea_state']} {measured_words(b['measured'])}; the alternate as configured (linear, plain filter) "
+               f"at sea state {a['sea_state']} {measured_words(a['measured'])}"
+               + "".join(f"; {o['what'].replace('the alternate' + chr(39) + 's energy, ', '')}: {measured_words(o)}" for o in a.get("measured_other_filters", {}).values()) + "."
+               if b.get("measured") and a.get("measured") else ""))
 
 
 def _db(v: float) -> str:
@@ -346,12 +425,15 @@ def twelve_km_sites_table(X: dict) -> list:
          "on one ping, at the low end of the class's assumed target strength, worst over its depths, at the own depth the planner recommends; free field at the site's noise + propagation against "
          "spherical spreading − reverberation = margin; reach is the farthest range held at that depth; status **ours**, every site **illustrative**, every target strength **assumed**). "
          f"Worst first, by `{REQUIREMENT_CLASSES[0]}`:\n",
-         "| Site | Class | Margin at 12 km | Held at 12 km | Noise or reverberation at 12 km (the planner's `limited_by`) | Free field at the site's noise / propagation / reverberation | Where not held, the largest cost | Reach | Recommended own depth |\n"
-         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+         f"| Site | Class | Margin at 12 km | Held at 12 km | Alternate (`{REQUIREMENT_DESIGNS['alternate']['build']}`, {REQUIREMENT_DESIGNS['alternate']['option'].replace(' s ', ' s, ')}): margin at 12 km, own depth | Noise or reverberation at 12 km (the planner's `limited_by`) | Free field at the site's noise / propagation / reverberation | Where not held, the largest cost | Reach | Recommended own depth |\n"
+         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    alt = X.get("alternate_rows") or {}
     for s in X["sites"]:
         for c in REQUIREMENT_CLASSES:
             r = X["rows"][(s, c)]
-            L.append(f"| `{s}`: {r['title']} | `{c}` | {r['margin_db']:+.1f} dB | {'yes' if r['held'] else 'no'} | {r['limited_by']} | "
+            a = alt.get((s, c))
+            a_txt = "not planned" if a is None else f"{a['margin_db']:+.1f} dB, {'held' if a['held'] else 'not held'}, at {a['own_depth_m']:.0f} m"
+            L.append(f"| `{s}`: {r['title']} | `{c}` | {r['margin_db']:+.1f} dB | {'yes' if r['held'] else 'no'} | {a_txt} | {r['limited_by']} | "
                      f"{_db(r['free_field_db'])} / {_db(r['propagation_db'])} / {_db(-r['reverberation_db'])} dB | {'—' if r['held'] else _what_costs(r)} | "
                      f"{r['reach_m'] / 1e3:.1f} km{' (the window' + chr(39) + 's end)' if r['window_end'] else ''} | {r['own_depth_m']:.0f} m |")
     n = len(X["sites"])
@@ -359,7 +441,9 @@ def twelve_km_sites_table(X: dict) -> list:
     for c in REQUIREMENT_CLASSES:
         bad = X["failing"][c]
         lines.append(f"`{c}` is held at {n - len(bad)} of {n} sites" + (": not at " + ", ".join(f"`{s}` ({X['rows'][(s, c)]['margin_db']:+.1f} dB, reach {X['rows'][(s, c)]['reach_m'] / 1e3:.1f} km)" for s in bad) if bad else ""))
-    L.append("\n" + "; ".join(lines) + ". The site values are illustrative, not the operating area's: which of these waters 12 km must hold in is the owner's to say.\n")
+    L.append("\n" + "; ".join(lines) + ". The site values are illustrative, not the operating area's: which of these waters 12 km must hold in is the owner's to say."
+             + (f" The alternate (`{REQUIREMENT_DESIGNS['alternate']['build']}`, planned at `{SEA_STATE_SITE}` only) holds both classes at " + ", ".join(f"`{s}`" for s in X["covered_by_alternate"]) + "."
+                if X.get("covered_by_alternate") else "") + "\n")
     xl = X["failing"]["xl_auv"]
     L.append(f"For information, not the requirement: `xl_auv` (+{X['free']['xl_auv']['ts_low_db']:g} dB at its low end, the small target of the tables below) at 12 km is held at {n - len(xl)} of {n} sites ("
              + "; ".join(f"`{s}` {X['rows'][(s, 'xl_auv')]['margin_db']:+.1f} dB" for s in X["sites"]) + ").\n")
@@ -399,7 +483,7 @@ def twelve_km() -> list:
                 "kept as **information, not the requirement**. "
                 f"In free field both classes are held at 12 km by the {X['rows_on_face']} rows (`{c1}` {fr[c1]['margin_db']:+.1f} dB, `{c2}` {fr[c2]['margin_db']:+.1f} dB); "
                 f"at the illustrative sites they are not held at " + (", ".join(f"`{s}`" for s in failing) or "none") + " (table below). "
-                f"Not yet said by the owner: {REQUIREMENT_OPEN}.")
+                + designs_text(X) + f" Not yet said by the owner: {REQUIREMENT_OPEN}.")
     else:
         whom = "The per-site figures are pending (`docs/design/popoto_depth_planner.json` or `popoto_trade_study.json` is missing)."
     L.append("The owner: \"What does it look like for popoto at 12km though. Need that design\". This section is self-contained: what the system that detects at 12 km is, and what it can and cannot tell you there.\n"

@@ -31,6 +31,30 @@
 #               Energy: the 4 s runs at the shipped level carry +6.02 dB over 1 s (197 + 10 log10(4 x 0.9375) dB re 1 uPa^2 s
 #               at 1 m against 196.72), the `eq` runs the 1 s pulse's 196.72. (GPUSONAR_DOPPLER_TIMEOUT_HFM12, default 150m;
 #               GPUSONAR_DOPPLER_HFM12_ARGS appended to each call; docs/tasks/DOPPLER.md "HFM")
+#   deep12      (only when named) the trade study's noise-limited site (issue sonar-rctz; DOPPLER.md "Deep site at 12 km"):
+#               popoto_12km_deep_sea_state_5 (the deep planning site with the apl_1994 bubble law, the three-row face at
+#               225 m, rows added in power: --chain-set elevation={}) at sea states 3, 4, 5 (--set environment.sea_state),
+#               tools/doppler_bank_eval.py, C++ chain (and the Python chain on the baseline's case), 6 pings and 4
+#               target-free pings a case. One call a case, each under its own limit, its JSON deep12_<case>.json written
+#               and uploaded as soon as it ends; every plain case first, then the bank (`combine: cfar`, 8 m/s) on the
+#               linear ones, which reads the plain case's records from the cache. Cases (GPUSONAR_DOPPLER_DEEP12_CASES,
+#               comma separated, in the order given; default all, in this order):
+#                 ss3_lfm1 ss5_lfm4p200 ss5_hfm4p200 ss5_lfm1 ss4_lfm1 ss4_lfm4p200 ss4_hfm4p200 ss3_lfm4p200
+#                 ss3_hfm4p200 ss3_hfm1 ss4_hfm1 ss5_hfm1, then the banks ss3_lfm1_cfar ss5_lfm4p200_cfar ss5_lfm1_cfar
+#                 ss4_lfm1_cfar ss4_lfm4p200_cfar ss3_lfm4p200_cfar
+#               (lfm1: the shipped 1 s at 197 dB, the BASELINE; lfm4p200 / hfm4p200: the sea-state-5 ALTERNATE's 4 s at
+#               200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). Any case <ss>_<lfm|hfm><seconds>[p<level>][_cfar]
+#               is accepted, e.g. the energy candidates of DOPPLER.md DM.5 (only when named): ss3_hfm2, ss3_lfm2_cfar,
+#               ss3_hfm1p200, ss4_hfm2, ss5_hfm8p200, ss5_hfm4p203, ss5_hfm8p203 (their predictions, written before the run:
+#               docs/tasks/deep12_round3_predictions.json). (GPUSONAR_DOPPLER_TIMEOUT_DEEP12, a case's limit, default 45m;
+#               GPUSONAR_DOPPLER_DEEP12_ARGS appended to each call)
+#   regen       (only when named) the committed outputs D-251 made stale (issue sonar-rar0): tools/regen_stale.py reruns each
+#               stale part (`tools/regen_stale.py --list`: the parts, their commands, what is kept and why), simulator and
+#               chain on the device, one part at a time under its own limit into <out-dir>/regen/, uploaded after each; then
+#               writes the committed files' names into <out-dir> (doppler_bank_eval.json, doppler_d3_eval.json,
+#               doppler_large_submerged_eval.json, doppler_baseline.json, popoto_12km.json) with the stale parts replaced.
+#               Parts (GPUSONAR_DOPPLER_REGEN_PARTS, comma separated; default bank,d3,ls,baseline,p12km). (A part's limit:
+#               GPUSONAR_DOPPLER_TIMEOUT_REGEN, default 60m; GPUSONAR_DOPPLER_REGEN_TREE: the tree to name, as a job's archive has no git)
 # Variables:
 #   GPUSONAR_DOPPLER_BACKEND       the chain's and the simulator's backend (default cuda; host for a check on a CPU)
 #   GPUSONAR_DOPPLER_QUICK=1       small sizes, to check the plumbing on a CPU: the tone run on popoto_12km_doppler
@@ -87,6 +111,7 @@ run() {   # run <name> <limit> <command...>: logged, limited, its status kept
 }
 
 hfm12_args="--max-rate 8 --background 2"     # the scene's 6 pings; the bank to 8 m/s (45 hypotheses a beam at 1 s, 173 at 4 s)
+deep12_args="--max-rate 8 --background 4"    # the scene's 6 pings, 4 target-free pings; the bank to 8 m/s
 if [ "$quick" = "1" ]; then
   # Free field and no boundary reverberation (--set): the scenes' eigenray simulation takes more than half an hour a
   # ping on a CPU; this checks the plumbing and the outputs, it measures nothing.
@@ -95,6 +120,7 @@ if [ "$quick" = "1" ]; then
   fa_args="--pings 3 --max-rates 1"
   trial_args="--rows 1 --repeats 1"; scenes="popoto_12km"; scene_args="--scene-pings 2 $quick_set"; engines="cpp"
   hfm12_args="--max-rate 0.3 --pings 1 --background 0 --engines cpp $quick_set"
+  deep12_args="--max-rate 0.3 --pings 1 --background 1 --set fidelity=free_field --set reverberation=[] --set time_spread={}"
 else
   tone_scene=flank_patrol_doppler_tone; tone_args="--background 4"
   fa_args="--pings ${GPUSONAR_DOPPLER_FA_PINGS:-4000} --max-rates 3 --max-seconds ${GPUSONAR_DOPPLER_FA_ROW_SECONDS:-780}"
@@ -219,6 +245,53 @@ if [[ $runs == *,hfm12,* ]]; then
   export -f hfm12
   export py out be cache hfm12_args
   run hfm12 "${GPUSONAR_DOPPLER_TIMEOUT_HFM12:-150m}" bash -c hfm12
+  upload
+fi
+if [[ $runs == *,deep12,* ]]; then
+  # Not in the default runs: the deep site at sea states 3 to 5, the baseline and the sea-state-5 alternate (D-255). One call a
+  # case, each its own limit and its JSON uploaded at once: the plain cases first (the table's main rows arrive early), the
+  # banks last, on the plain cases' cached records (the same --set list in the same order gives the same cache file).
+  w="--set sonar_overrides.transmit.waveform"
+  deep12_cases=${GPUSONAR_DOPPLER_DEEP12_CASES:-ss3_lfm1,ss5_lfm4p200,ss5_hfm4p200,ss5_lfm1,ss4_lfm1,ss4_lfm4p200,ss4_hfm4p200,ss3_lfm4p200,ss3_hfm4p200,ss3_hfm1,ss4_hfm1,ss5_hfm1,ss3_lfm1_cfar,ss5_lfm4p200_cfar,ss5_lfm1_cfar,ss4_lfm1_cfar,ss4_lfm4p200_cfar,ss3_lfm4p200_cfar}
+  for case in ${deep12_cases//,/ }; do
+    ss=${case%%_*}; rest=${case#*_}; wave=${rest%%_*}; filt=plain
+    [ "$rest" = "${rest%_cfar}" ] || filt=cfar
+    case "$ss" in ss3|ss4|ss5) ;; *) echo "deep12: unknown case $case (sea state ss3, ss4 or ss5)"; [ "$status" -ne 0 ] || status=2; continue;; esac
+    # <lfm|hfm><seconds>[p<level dB>]: the pulse (default 1 s) and its rms level (default the shipped 197 dB); the --set list is
+    # written in one order (duration, level, then the hyperbolic sweep's keys) so that a case's records are one cache file
+    if [[ $wave =~ ^(lfm|hfm)([0-9]+)(p([0-9]+))?$ ]]; then
+      shape=${BASH_REMATCH[1]}; pulse=${BASH_REMATCH[2]}; level=${BASH_REMATCH[4]:-197}; sets=""
+      [ "$pulse" = 1 ] || sets="$sets $w.duration=$pulse.0"
+      [ "$level" = 197 ] || sets="$sets $w.source_level_db_rms=$level.0"
+      [ "$shape" = lfm ] || sets="$sets $w.type=sampled $w.source=hfm"
+    else
+      echo "deep12: unknown case $case (waveform <lfm|hfm><seconds>[p<level>], e.g. lfm1, hfm4p200)"; [ "$status" -ne 0 ] || status=2; continue
+    fi
+    if [ "$filt" = cfar ]; then
+      case "$wave" in lfm*) mode="--combine cfar";; *) echo "deep12: $case: the bank takes a linear sweep only"; [ "$status" -ne 0 ] || status=2; continue;; esac
+    else
+      mode="--off-only"
+    fi
+    engines="--engines cpp"
+    [ "$case" != ss3_lfm1 ] || engines="--engines python cpp"     # the baseline's acceptance through both engines
+    # shellcheck disable=SC2086
+    run deep12 "${GPUSONAR_DOPPLER_TIMEOUT_DEEP12:-45m}" "$py" tools/doppler_bank_eval.py popoto_12km_deep_sea_state_5 $deep12_args $engines $mode \
+        --truth-at reflection --gate-range-m 250 --chain-set 'elevation={}' --backend "$be" --sim-backend "$be" --cache "$cache" \
+        --set environment.sea_state="${ss#ss}" $sets --json "$out/deep12_$case.json" ${GPUSONAR_DOPPLER_DEEP12_ARGS:-}
+    upload
+  done
+fi
+if [[ $runs == *,regen,* ]]; then
+  # Not in the default runs: the outputs D-251 made stale (sonar-rar0), regenerated under their own names; nothing under docs/ is written.
+  regen_parts=${GPUSONAR_DOPPLER_REGEN_PARTS:-bank,d3,ls,baseline,p12km}
+  regen_quick=""
+  [ "$quick" != "1" ] || regen_quick="--quick"
+  for part in ${regen_parts//,/ }; do
+    # shellcheck disable=SC2086
+    run regen "${GPUSONAR_DOPPLER_TIMEOUT_REGEN:-60m}" "$py" tools/regen_stale.py run --parts "$part" --out "$out" --backend "$be" --cache "$cache" $regen_quick
+    upload
+  done
+  run regen 10m "$py" tools/regen_stale.py merge --out "$out" --backend "$be" --tree "${GPUSONAR_DOPPLER_REGEN_TREE:-$(git rev-parse --short HEAD 2> /dev/null || echo unknown)}"
   upload
 fi
 exit "$status"

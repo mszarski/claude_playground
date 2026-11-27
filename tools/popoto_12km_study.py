@@ -147,19 +147,27 @@ def _span(d: dict) -> tuple:
     return lo, max(lo + ext, float(d["range_m"]))
 
 
+BACKEND, SIM_BACKEND = "host", "host"      # --backend, --sim-backend (opt-in): the chain's and the simulator's; host as every committed run
+
+
+def _sim_backend():
+    from gpusonar import core
+    return core.Backend.Cuda if SIM_BACKEND == "cuda" else core.Backend.Host
+
+
 def measure(cfg: dict, rows: int, engine: str = "cpp") -> dict:
     """Simulate, run the chain, score the ship. A detection is the ship's when the ranges it covers (`_span`) reach the ship's
     own to within 20 m: with many bounced arrivals merged into one detection its mean range lies behind the ship by a share of
     its extent. A track is the ship's within 30 m of the ship or of the ranges its detection covers on that ping."""
     t0 = time.time()
-    records = run_scenario(copy.deepcopy(cfg)).records
+    records = run_scenario(copy.deepcopy(cfg), backend=_sim_backend()).records
     t_sim = time.time() - t0
     ship = cfg["scene"][0]
     pos0 = np.asarray(ship["positions"] if "positions" in ship else [ship["origin"]], dtype=float)
     vel = np.asarray(ship.get("velocity", [0, 0, 0]), dtype=float)
     interval = float(cfg["pings"]["interval"])
     chain = chain_for(rows, water_depth(cfg))
-    with LiveChain(dict(chain, engine=engine, backend="host")) as live:
+    with LiveChain(dict(chain, engine=engine, backend=BACKEND)) as live:
         reports = live.run(records)
     out = {"rows": rows, "pings": len(reports), "ping_interval_s": interval, "simulate_seconds": round(t_sim, 1),
            "chain_seconds_per_ping": float(np.median([r["processing_seconds"] for r in reports])), "per_ping": []}
@@ -253,9 +261,14 @@ def main(argv=None):
     ap.add_argument("--merge", action="store_true", help="keep the cases already in the file and add or replace the ones run now")
     ap.add_argument("--no-envs", action="store_true", help="leave out the popoto_env_* environments (each takes minutes with Bellhop)")
     ap.add_argument("--classes", action="store_true", help="only the target-class cases (ship at depth, submerged mover, cylinder): written under class_cases, the rest of the file kept")
+    ap.add_argument("--backend", choices=("host", "cuda", "auto"), default="host", help="the chain's backend (opt-in; default host, as every committed run)")
+    ap.add_argument("--sim-backend", choices=("host", "cuda"), default="host", help="the simulator's backend (opt-in; default host)")
+    ap.add_argument("--out", help="the JSON to write (and, with --merge or --classes, to start from; default docs/design/popoto_12km.json)")
     args = ap.parse_args(argv)
+    global BACKEND, SIM_BACKEND
+    BACKEND, SIM_BACKEND = args.backend, args.sim_backend
     have = find_bellhop() is not None
-    out_path = ROOT / "docs" / "design" / "popoto_12km.json"
+    out_path = Path(args.out) if args.out else ROOT / "docs" / "design" / "popoto_12km.json"
     if args.classes:
         return class_cases(args, have, out_path)
     R = {"bellhop": bool(have and not args.quick), "ship": "five points of +18 dB over 120 m at 4 m depth, crossing at 6 m/s (the popoto_12km scenario's)", "cases": {}}

@@ -3,43 +3,43 @@
     "pings": 4,
     "scatterers": 785,
     "detections_per_ping": [
-      10,
       11,
-      10,
-      13
+      9,
+      9,
+      15
     ],
-    "confirmed_tracks": 7,
+    "confirmed_tracks": 10,
     "classification": {
       "counts": {
         "mover": 0,
-        "static": 6,
+        "static": 7,
         "line": 0,
         "multipath": 0,
-        "uncertain": 1
+        "uncertain": 3
       },
       "targets": {
         "boat_under_way": {
           "kind": "uncertain",
-          "speed_m_s": 3.640901524315561,
-          "speed_sigma_m_s": 0.6918154329440523,
+          "speed_m_s": 3.631865325747874,
+          "speed_sigma_m_s": 0.705731220866594,
           "truly_moving": true
         },
         "boat_at_anchor": {
           "kind": "static",
-          "speed_m_s": 0.3656543432030904,
-          "speed_sigma_m_s": 0.3837981888014471,
+          "speed_m_s": 0.2640269648085569,
+          "speed_sigma_m_s": 0.49561127795137433,
           "truly_moving": false
         },
         "mooring_buoy": {
           "kind": "static",
-          "speed_m_s": 0.009968226998549344,
-          "speed_sigma_m_s": 0.05534838248809555,
+          "speed_m_s": 0.006280515603103452,
+          "speed_sigma_m_s": 0.05724777508457342,
           "truly_moving": false
         },
         "pinnacle": {
           "kind": "static",
-          "speed_m_s": 0.08187043006153867,
-          "speed_sigma_m_s": 0.1749357116625577,
+          "speed_m_s": 0.06214710041104543,
+          "speed_sigma_m_s": 0.15502391126104084,
           "truly_moving": false
         }
       },
@@ -49,61 +49,61 @@
       "boat_under_way": {
         "tracked": true,
         "position_error_m": 0.0,
-        "centroid_error_m": 0.6753440040928537,
+        "centroid_error_m": 0.6710145278089252,
         "true_velocity_xy": [
           0.0,
           -4.0
         ],
         "track_velocity_xy": [
-          -0.0444882860082248,
-          -3.4345992969022907
+          -0.04299477074610614,
+          -3.4260330335946385
         ],
-        "track_speed_m_s": 3.4348874126925413
+        "track_speed_m_s": 3.426302802963158
       },
       "boat_at_anchor": {
         "tracked": true,
         "position_error_m": 0.0,
-        "centroid_error_m": 2.2591266736800386,
+        "centroid_error_m": 2.2552600670321024,
         "true_velocity_xy": [
           0.0,
           0.0
         ],
         "track_velocity_xy": [
-          -0.3198318223256007,
-          -0.134095827749109
+          -0.21766472363631606,
+          -0.12076288569793725
         ],
-        "track_speed_m_s": 0.3468055443499041
+        "track_speed_m_s": 0.2489208839727332
       },
       "mooring_buoy": {
         "tracked": true,
-        "position_error_m": 0.5178819444574649,
-        "centroid_error_m": 0.5178819444574649,
+        "position_error_m": 0.5188193126314093,
+        "centroid_error_m": 0.5188193126314093,
         "true_velocity_xy": [
           0.0,
           0.0
         ],
         "track_velocity_xy": [
-          0.006781396637925055,
-          0.006641788938424861
+          0.005627633419715478,
+          0.0014762295532024863
         ],
-        "track_speed_m_s": 0.009492138887703028
+        "track_speed_m_s": 0.005818033310359003
       },
       "pinnacle": {
         "tracked": true,
         "position_error_m": 0.0,
-        "centroid_error_m": 0.2971023460661769,
+        "centroid_error_m": 0.3116289993337812,
         "true_velocity_xy": [
           0.0,
           0.0
         ],
         "track_velocity_xy": [
-          -0.06280699993297452,
-          -0.04524066482080119
+          -0.03811575371300109,
+          0.04538850724932836
         ],
-        "track_speed_m_s": 0.07740437322276268
+        "track_speed_m_s": 0.0592699525175488
       }
     },
-    "seconds": 25.0,
+    "seconds": 39.8,
     "backend": "host",
     "quick": true
   }

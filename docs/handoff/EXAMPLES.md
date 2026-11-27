@@ -504,13 +504,13 @@ python3 tools/classify_rules_eval.py --backend host --quick --scenes fls_120k_tr
 `docs/figures`.
 
 ```
-[fls_120k_transit] {"pings": 4, "scatterers": 785, "detections_per_ping": [10, 11, 10, 13], "confirmed_tracks": 7,
-  "classification": {"counts": {"mover": 0, "static": 6, "line": 0, "multipath": 0, "uncertain": 1},
-    "targets": {"boat_under_way": {"kind": "uncertain", "speed_m_s": 3.64, "speed_sigma_m_s": 0.69, "truly_moving": true},
-                "boat_at_anchor": {"kind": "static", "speed_m_s": 0.37, ...}, "mooring_buoy": {"kind": "static", ...}, "pinnacle": {"kind": "static", ...}},
+[fls_120k_transit] {"pings": 4, "scatterers": 785, "detections_per_ping": [11, 9, 9, 15], "confirmed_tracks": 10,
+  "classification": {"counts": {"mover": 0, "static": 7, "line": 0, "multipath": 0, "uncertain": 3},
+    "targets": {"boat_under_way": {"kind": "uncertain", "speed_m_s": 3.63, "speed_sigma_m_s": 0.71, "truly_moving": true},
+                "boat_at_anchor": {"kind": "static", "speed_m_s": 0.26, ...}, "mooring_buoy": {"kind": "static", ...}, "pinnacle": {"kind": "static", ...}},
     "movers_not_on_a_moving_object": 0},
-  "targets": {"boat_under_way": {"tracked": true, "position_error_m": 0.0, "centroid_error_m": 0.68, "true_velocity_xy": [0.0, -4.0], "track_velocity_xy": [-0.044, -3.43], ...}, ...},
-  "seconds": 25.0, "backend": "host", "quick": true}
+  "targets": {"boat_under_way": {"tracked": true, "position_error_m": 0.0, "centroid_error_m": 0.67, "true_velocity_xy": [0.0, -4.0], "track_velocity_xy": [-0.043, -3.43], ...}, ...},
+  "seconds": 39.8, "backend": "host", "quick": true}
 ```
 
 ![Gallery, quick mode](examples/gallery_quick_fls_120k_transit.png)
@@ -519,10 +519,14 @@ Left: the first ping's fan with the true positions circled. Right: the tracks in
 over four pings. The committed picture is the tool's figure reduced to 75 % and 128 colours to
 stay small (PIL: `im.convert('RGB').resize(..., Image.LANCZOS).quantize(colors=128)`); the numbers are in `examples/gallery_quick_fls_120k_transit.json`. All four objects
 are tracked within their outlines; the boat under way has the right velocity (−3.43 against −4.0
-m/s after four pings) and is `uncertain`: the full-size run has ten pings (`OUTPUTS.md`). **Stale since
-D-251** (issue `sonar-rar0`): this output and its JSON were made under the old reverberation Doppler (one
-shift at the centre frequency); the scene has a moving platform and boundary reverberation, so a rerun at
-this tree gives other numbers (not rerun for this page).
+m/s after four pings) and is `uncertain`: the full-size run has ten pings (`OUTPUTS.md`). **Regenerated
+2026-11-27 under D-251's per-frequency reverberation Doppler** (issue `sonar-rar0`; the command above, this
+CPU, host backend; ours). Before -> after, worse first: confirmed tracks 7 -> 10 (the three more are
+`uncertain` 1 -> 3 and `static` 6 -> 7: seabed and surface clutter, none on a named object); detections a ping
+[10, 11, 10, 13] -> [11, 9, 9, 15]; the boat at anchor's track speed 0.35 -> 0.25 m/s; the boat under way's
+track velocity -3.43 -> -3.43 m/s (its class `uncertain` as before); every named object tracked within its
+outline as before. With the reverberation items set to `doppler: centre` (the old law) the same command gives
+the committed numbers of before exactly, so all of the change is D-251's.
 
 The evaluation's table (`examples/classify_rules_eval_quick.md`), one scene and one seed:
 

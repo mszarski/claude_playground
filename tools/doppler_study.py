@@ -267,11 +267,19 @@ def radial_speed(item, platform):
     return float((vt - vp) @ u), float(-vp @ u)
 
 
+SIM_BACKEND = "host"      # --sim-backend (opt-in): the simulator's backend; the processing here is NumPy either way
+
+
+def _sim_backend():
+    from gpusonar import core
+    return core.Backend.Cuda if SIM_BACKEND == "cuda" else core.Backend.Host
+
+
 def run(cfg, pings):
     _, run_scenario, _, _, _ = _imports()
     cfg = copy.deepcopy(cfg)
     cfg["pings"] = dict(cfg.get("pings", {}), count=int(pings))
-    return run_scenario(cfg).records
+    return run_scenario(cfg, backend=_sim_backend()).records
 
 
 def hypotheses(duration, fc, c, vmax):
@@ -457,7 +465,7 @@ def cmd_reverb_spectrum(args):
                propagation=dict(surface_z=0.0, max_order=1),
                platform=dict(position=[0, 0, 10.0], rpy=[0, 0, 0], velocity=[float(args.speed), 0, 0]),
                pings=dict(count=1, interval=10.0), scene=[], reverberation=[rev], receiver=dict(adc=False), seed=3)
-    rec = run_scenario(cfg).records[0]
+    rec = run_scenario(cfg, backend=_sim_backend()).records[0]
     x, fs, fc, c, _ = baseband(rec)
     rows = []
     for deg in np.arange(-80.0, 80.0 + 1e-9, 10.0):
@@ -611,7 +619,12 @@ def main(argv=None):
     fd.add_argument("--channels", type=int, help="hydrophones to simulate (default: the scene's)")
     fd.add_argument("--fidelity", help="replace the scene's propagation tier (e.g. free_field, the check that nothing fades)")
     fd.add_argument("--json", help="write the results here")
+    for q in (r, m, fd):
+        q.add_argument("--sim-backend", choices=("host", "cuda"), default="host",
+                       help="the simulator's backend (opt-in; default host, as every committed run; the processing is NumPy either way)")
     args = p.parse_args(argv)
+    global SIM_BACKEND
+    SIM_BACKEND = args.sim_backend
     args.waveform = getattr(args, "waveform", "scene")
     args.platform_speed = getattr(args, "platform_speed", None)
     args.mute = getattr(args, "mute", None)

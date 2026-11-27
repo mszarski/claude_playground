@@ -1195,6 +1195,214 @@
     "receive.boards",
     "receive.reference"
    ]
+  },
+  {
+   "build": "popoto_face_3x32_ss5",
+   "stage": "6a: full face, 3 x 32, alternate for sea state 5",
+   "title": "Full face, three rows of 32, sea-state-5 transmitter (alternate)",
+   "sonar_file": "configs/sonars/popoto_long_range_3row_ss5.yaml",
+   "clocks_file": "configs/sonars/popoto_long_range_3row_ss5_clocks.yaml",
+   "deploy_file": "configs/deploy/popoto_vehicle_elevation_ss5.yaml",
+   "row_module": "long_4p8m",
+   "platform": {
+    "name": "full_face",
+    "kind": "vehicle",
+    "span_m": 9.0,
+    "height_m": 2.0,
+    "usable_span_m": 7.0,
+    "max_depth_m": 500.0,
+    "row_baseline_m": 1.5,
+    "mounting": "flat vertical face"
+   },
+   "rows": 3,
+   "per_row": [
+    32,
+    32,
+    32
+   ],
+   "channels": 96,
+   "pitch_m": 0.15,
+   "row_length_m": 4.65,
+   "pitch_wavelengths_top_of_band": 0.6,
+   "heights_m": [
+    -0.75,
+    -0.2,
+    0.75
+   ],
+   "boards": 12,
+   "inputs_per_board": 8,
+   "reference_channels": [
+    0,
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88
+   ],
+   "band_hz": [
+    4000.0,
+    6000.0
+   ],
+   "pulse_s": 4.0,
+   "source_level_db_rms": 200.0,
+   "sample_rate_hz": 102400.0,
+   "adc_bits": 24,
+   "adc_full_scale_v": 2.61,
+   "gain_db": 43.0,
+   "sensitivity_db": -208.0,
+   "input_full_scale_pressure_db": 173.3,
+   "projector_m": [
+    4.0,
+    0.0,
+    0.0
+   ],
+   "direct_sound": {
+    "nearest_m": 1.6869,
+    "farthest_m": 6.3693,
+    "level_db": 195.4582,
+    "volts": 47.144,
+    "over_full_scale_db": 25.1357,
+    "over_full_scale_farthest_db": 13.5956,
+    "ends_s": 4.0042,
+    "min_range_memoryless_m": 3003.1847,
+    "source_level_for_full_scale_db": 174.8643,
+    "distance_for_full_scale_m": 30.4701
+   },
+   "blind_range_m": 3000.0,
+   "window_m": [
+    3000.0,
+    12700.0
+   ],
+   "ping_interval_s": 20.933,
+   "samples_per_ping": 1733974,
+   "reference_times_s": [
+    4.005,
+    20.91933333333333
+   ],
+   "rate_board_bit_s": 19660800.0,
+   "rate_total_bit_s": 235929600.0,
+   "stream": {
+    "sample_bytes": 3,
+    "payload_bytes_per_s": 29491200,
+    "block_samples": 42,
+    "block_bytes": 12224,
+    "blocks_per_s": 2438.1,
+    "bytes_per_s_with_headers": 29803276,
+    "socket_buffer_asked_bytes": 14745600
+   },
+   "record_bytes_per_ping": 665846016,
+   "record_bytes_per_hour_raw": 114508550522.293,
+   "record_bytes_per_hour_decimated": 13471664101.910828,
+   "recording_mode": "raw",
+   "clock_tolerance_within_row_us": 8.33,
+   "clock_tolerance_between_rows_us": 0.87,
+   "beamwidth_deg": 3.17,
+   "range_resolution_m": 0.375,
+   "grating_lobe_free_steering_deg": 41.8,
+   "bearings_deg": [
+    -60.0,
+    60.0,
+    0.5
+   ],
+   "row_gain_sea_noise_db": 15.1,
+   "elevation": {
+    "baseline_m": 1.5,
+    "repeat_spacing_deg": 11.5,
+    "highest_repeat_db": -4.2,
+    "sigma_deg_at_20_db": 0.18,
+    "deg_per_us": 0.057,
+    "deg_per_mm_out": 0.038
+   },
+   "detector": {
+    "needs_one_row_snr_db": 11.7,
+    "at_probability": 0.5,
+    "needs_for_0p9_db": 13.3,
+    "false_alarms_per_ping": 0.001
+   },
+   "reach_ship_m": 18612,
+   "reach_small_m": 8567,
+   "noise_spectrum_db": 51.5,
+   "assumptions": "spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.7 dB of one row's SNR with 3 rows added (13.3 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small)",
+   "at_range": {
+    "1000": {
+     "row_snr_ship_db": 74.0,
+     "margin_ship_db": 62.2,
+     "pd_ship": 1.0,
+     "margin_small_db": 42.2,
+     "pd_small": 1.0
+    },
+    "12000": {
+     "row_snr_ship_db": 23.7,
+     "margin_ship_db": 11.9,
+     "pd_ship": 1.0,
+     "margin_small_db": -8.1,
+     "pd_small": 0.0
+    },
+    "12700": {
+     "row_snr_ship_db": 22.2,
+     "margin_ship_db": 10.5,
+     "pd_ship": 1.0,
+     "margin_small_db": -9.5,
+     "pd_small": 0.0
+    }
+   },
+   "design_range_m": 12700.0,
+   "unconfirmed": [
+    "receive.sample_rate",
+    "receive.adc_bits",
+    "receive.sensitivity_db",
+    "receive.simultaneous_sampling",
+    "transmit.waveform.duration",
+    "transmit",
+    "array.pitch",
+    "platform.usable_span_m",
+    "array.layouts.three_rows.rows",
+    "platform.row_baseline_m",
+    "receive.window",
+    "hardware.hydrophone.model",
+    "hardware.hydrophone.noise_db",
+    "hardware.hydrophone.band_hz",
+    "hardware.boards.overload_damage_vpp",
+    "hardware.boards.gain_switchable",
+    "hardware.boards.highpass_hz",
+    "hardware.projector.model",
+    "hardware.projector.amplifier",
+    "hardware.projector.blanking_after_s",
+    "hardware.navigation.rate_hz",
+    "hardware.navigation.timestamp_sigma_s",
+    "hardware.compute.unit",
+    "receive.sample_rate",
+    "receive.adc_bits",
+    "receive.sensitivity_db",
+    "receive.simultaneous_sampling",
+    "transmit.waveform.duration",
+    "transmit",
+    "array.pitch",
+    "platform.usable_span_m",
+    "array.layouts.three_rows.rows",
+    "platform.row_baseline_m",
+    "receive.window",
+    "hardware.hydrophone.model",
+    "hardware.hydrophone.noise_db",
+    "hardware.hydrophone.band_hz",
+    "hardware.boards.overload_damage_vpp",
+    "hardware.boards.gain_switchable",
+    "hardware.boards.highpass_hz",
+    "hardware.projector.model",
+    "hardware.projector.amplifier",
+    "hardware.projector.blanking_after_s",
+    "hardware.navigation.rate_hz",
+    "hardware.navigation.timestamp_sigma_s",
+    "hardware.compute.unit",
+    "receive.boards",
+    "receive.reference"
+   ]
   }
  ]
 }

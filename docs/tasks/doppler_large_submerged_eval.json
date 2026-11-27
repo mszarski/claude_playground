@@ -62,44 +62,44 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 20.75785220366932,
+         "snr_db": 20.841574633471502,
          "threshold_db": 13.0648,
-         "margin_db": 7.693052203669319,
+         "margin_db": 7.776774633471502,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.610369041141093
         },
         {
-         "snr_db": 20.801291087327918,
+         "snr_db": 20.771677741933576,
          "threshold_db": 13.0648,
-         "margin_db": 7.736491087327918,
+         "margin_db": 7.706877741933576,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148
+         "true_range_rate_m_s": -5.606870358016147
         },
         {
-         "snr_db": 20.164142225819532,
+         "snr_db": 20.137529723497053,
          "threshold_db": 13.0648,
-         "margin_db": 7.099342225819532,
+         "margin_db": 7.072729723497053,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.60327343046251
         },
         {
-         "snr_db": 21.63529118314038,
+         "snr_db": 21.512153987033393,
          "threshold_db": 13.0648,
-         "margin_db": 8.570491183140382,
+         "margin_db": 8.447353987033393,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383
         },
         {
-         "snr_db": 21.87230495438147,
+         "snr_db": 21.918602478920416,
          "threshold_db": 13.0648,
-         "margin_db": 8.80750495438147,
+         "margin_db": 8.853802478920416,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.5957700876048
+         "true_range_rate_m_s": -5.595770087604801
         },
         {
-         "snr_db": 21.038450591917478,
+         "snr_db": 21.165231183838845,
          "threshold_db": 13.0648,
-         "margin_db": 7.973650591917478,
+         "margin_db": 8.100431183838845,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396
         }
@@ -111,44 +111,44 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 21.649328103098146,
+         "snr_db": 21.64364162872169,
          "threshold_db": 13.0648,
-         "margin_db": 8.584528103098146,
+         "margin_db": 8.578841628721689,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49986986560773805
         },
         {
-         "snr_db": 21.19366351208474,
+         "snr_db": 21.216237263123936,
          "threshold_db": 13.0648,
-         "margin_db": 8.12886351208474,
+         "margin_db": 8.151437263123936,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233
         },
         {
-         "snr_db": 23.248618306605657,
+         "snr_db": 23.22759190122186,
          "threshold_db": 13.0648,
-         "margin_db": 10.183818306605657,
+         "margin_db": 10.16279190122186,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49923593010118095
         },
         {
-         "snr_db": 22.424507595099065,
+         "snr_db": 22.44077728959183,
          "threshold_db": 13.0648,
-         "margin_db": 9.359707595099065,
+         "margin_db": 9.375977289591829,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375
         },
         {
-         "snr_db": 23.563269502324626,
+         "snr_db": 23.5573444503307,
          "threshold_db": 13.0648,
-         "margin_db": 10.498469502324626,
+         "margin_db": 10.4925444503307,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4985988322460772
         },
         {
-         "snr_db": 21.603913066239567,
+         "snr_db": 21.60606132047512,
          "threshold_db": 13.0648,
-         "margin_db": 8.539113066239567,
+         "margin_db": 8.54126132047512,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506
         }
@@ -160,46 +160,46 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 25.8389805763288,
+         "snr_db": 25.688841294906638,
          "threshold_db": 13.0648,
-         "margin_db": 12.774180576328801,
+         "margin_db": 12.624041294906638,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175
+         "true_range_rate_m_s": -0.3879745854438117
         },
         {
-         "snr_db": 24.144338257191382,
+         "snr_db": 24.05489397746701,
          "threshold_db": 13.0648,
-         "margin_db": 11.079538257191382,
+         "margin_db": 10.99009397746701,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556
         },
         {
-         "snr_db": 22.149552749468164,
+         "snr_db": 22.24800736383208,
          "threshold_db": 13.0648,
-         "margin_db": 9.084752749468164,
+         "margin_db": 9.18320736383208,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.38696463255502883
         },
         {
-         "snr_db": 25.276511663322445,
+         "snr_db": 25.33566353529065,
          "threshold_db": 13.0648,
-         "margin_db": 12.211711663322445,
+         "margin_db": 12.27086353529065,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584
+         "true_range_rate_m_s": -0.3864581935534559
         },
         {
-         "snr_db": 26.63317733739379,
+         "snr_db": 26.596554855290826,
          "threshold_db": 13.0648,
-         "margin_db": 13.56837733739379,
+         "margin_db": 13.531754855290826,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38595077787149284
+         "true_range_rate_m_s": -0.3859507778714929
         },
         {
-         "snr_db": 22.799422522723106,
+         "snr_db": 22.72686518136721,
          "threshold_db": 13.0648,
-         "margin_db": 9.734622522723106,
+         "margin_db": 9.66206518136721,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756
+         "true_range_rate_m_s": -0.38544238428277555
         }
        ],
        "detected": 6,
@@ -208,19 +208,19 @@
       }
      },
      "seconds": [
-      1.9568310559989186,
-      1.2685957700014114,
-      1.400737731004483,
-      1.4011091910069808,
-      1.317235291004181,
-      1.2602703309967183
+      0.5141222890000563,
+      0.13606659300000956,
+      0.12502093600005537,
+      0.1427401490000193,
+      0.14438868000002003,
+      0.13096647500003655
      ],
-     "seconds_median_after_first": 1.317235291004181,
+     "seconds_median_after_first": 0.13606659300000956,
      "detections_per_ping": [
       5,
       3,
       3,
-      4,
+      5,
       3,
       3
      ],
@@ -232,45 +232,45 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 22.61288355490307,
+         "snr_db": 22.643234479733607,
          "threshold_db": 13.8452,
-         "margin_db": 8.767683554903071,
+         "margin_db": 8.798034479733607,
          "range_rate_m_s": -4.1162672848,
          "true_range_rate_m_s": -5.610369041141093
         },
         {
-         "snr_db": 22.59576937966675,
+         "snr_db": 22.580183514365373,
          "threshold_db": 13.8452,
-         "margin_db": 8.750569379666748,
-         "range_rate_m_s": -7.1099162192000005,
-         "true_range_rate_m_s": -5.606870358016148
+         "margin_db": 8.734983514365373,
+         "range_rate_m_s": 4.864679518400001,
+         "true_range_rate_m_s": -5.606870358016147
         },
         {
-         "snr_db": 22.83668632722691,
+         "snr_db": 22.893091067054314,
          "threshold_db": 13.8452,
-         "margin_db": 8.99148632722691,
+         "margin_db": 9.047891067054314,
          "range_rate_m_s": -5.238885635200001,
          "true_range_rate_m_s": -5.60327343046251
         },
         {
-         "snr_db": 21.858699914915498,
+         "snr_db": 21.796934904421136,
          "threshold_db": 13.8452,
-         "margin_db": 8.013499914915498,
+         "margin_db": 7.951734904421135,
          "range_rate_m_s": -5.987297868800001,
          "true_range_rate_m_s": -5.599574611742383
         },
         {
-         "snr_db": 22.86414285693811,
+         "snr_db": 22.929559568117163,
          "threshold_db": 13.8452,
-         "margin_db": 9.018942856938109,
+         "margin_db": 9.084359568117163,
          "range_rate_m_s": 2.2452367008000005,
-         "true_range_rate_m_s": -5.5957700876048
+         "true_range_rate_m_s": -5.595770087604801
         },
         {
-         "snr_db": 23.0129365194693,
+         "snr_db": 23.061907474157792,
          "threshold_db": 13.8452,
-         "margin_db": 9.1677365194693,
-         "range_rate_m_s": -5.238885635200001,
+         "margin_db": 9.216707474157792,
+         "range_rate_m_s": -7.858328452800001,
          "true_range_rate_m_s": -5.591855867162396
         }
        ],
@@ -281,44 +281,44 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 23.76310588257336,
+         "snr_db": 23.785176243548413,
          "threshold_db": 13.8452,
-         "margin_db": 9.91790588257336,
+         "margin_db": 9.939976243548413,
          "range_rate_m_s": -1.4968244672000002,
          "true_range_rate_m_s": -0.49986986560773805
         },
         {
-         "snr_db": 23.76937852830781,
+         "snr_db": 23.767075611390595,
          "threshold_db": 13.8452,
-         "margin_db": 9.924178528307811,
+         "margin_db": 9.921875611390595,
          "range_rate_m_s": 4.490473401600001,
          "true_range_rate_m_s": -0.49955329208874233
         },
         {
-         "snr_db": 25.060596316379584,
+         "snr_db": 25.06747692376401,
          "threshold_db": 13.8452,
-         "margin_db": 11.215396316379584,
+         "margin_db": 11.222276923764008,
          "range_rate_m_s": -3.3678550512000003,
          "true_range_rate_m_s": -0.49923593010118095
         },
         {
-         "snr_db": 24.273324013605986,
+         "snr_db": 24.26957610367208,
          "threshold_db": 13.8452,
-         "margin_db": 10.428124013605986,
+         "margin_db": 10.42437610367208,
          "range_rate_m_s": 4.1162672848,
          "true_range_rate_m_s": -0.4989177775276375
         },
         {
-         "snr_db": 23.966357686034456,
+         "snr_db": 23.97806721877818,
          "threshold_db": 13.8452,
-         "margin_db": 10.121157686034456,
+         "margin_db": 10.132867218778179,
          "range_rate_m_s": 7.858328452800001,
          "true_range_rate_m_s": -0.4985988322460772
         },
         {
-         "snr_db": 22.733989361351902,
+         "snr_db": 22.729566550883405,
          "threshold_db": 13.8452,
-         "margin_db": 8.888789361351902,
+         "margin_db": 8.884366550883405,
          "range_rate_m_s": -3.3678550512000003,
          "true_range_rate_m_s": -0.4982790921298506
         }
@@ -330,46 +330,46 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 27.767828076175643,
+         "snr_db": 27.751326847813438,
          "threshold_db": 13.8452,
-         "margin_db": 13.922628076175643,
+         "margin_db": 13.906126847813438,
          "range_rate_m_s": -1.1226183504000002,
-         "true_range_rate_m_s": -0.38797458544381175
+         "true_range_rate_m_s": -0.3879745854438117
         },
         {
-         "snr_db": 25.383170623164336,
+         "snr_db": 25.36624837842378,
          "threshold_db": 13.8452,
-         "margin_db": 11.537970623164336,
+         "margin_db": 11.52104837842378,
          "range_rate_m_s": -0.7484122336000001,
          "true_range_rate_m_s": -0.3874700961068556
         },
         {
-         "snr_db": 23.5297341649955,
+         "snr_db": 23.56078908974287,
          "threshold_db": 13.8452,
-         "margin_db": 9.6845341649955,
+         "margin_db": 9.715589089742869,
          "range_rate_m_s": -1.4968244672000002,
          "true_range_rate_m_s": -0.38696463255502883
         },
         {
-         "snr_db": 26.839768627366162,
+         "snr_db": 26.76603874739481,
          "threshold_db": 13.8452,
-         "margin_db": 12.994568627366162,
+         "margin_db": 12.920838747394809,
          "range_rate_m_s": -1.1226183504000002,
-         "true_range_rate_m_s": -0.38645819355345584
+         "true_range_rate_m_s": -0.3864581935534559
         },
         {
-         "snr_db": 27.910669533919354,
+         "snr_db": 27.880134842364875,
          "threshold_db": 13.8452,
-         "margin_db": 14.065469533919353,
+         "margin_db": 14.034934842364875,
          "range_rate_m_s": -1.1226183504000002,
-         "true_range_rate_m_s": -0.38595077787149284
+         "true_range_rate_m_s": -0.3859507778714929
         },
         {
-         "snr_db": 23.64243609098347,
+         "snr_db": 23.688490233376438,
          "threshold_db": 13.8452,
-         "margin_db": 9.79723609098347,
+         "margin_db": 9.843290233376438,
          "range_rate_m_s": -0.7484122336000001,
-         "true_range_rate_m_s": -0.3854423842827756
+         "true_range_rate_m_s": -0.38544238428277555
         }
        ],
        "detected": 6,
@@ -378,14 +378,14 @@
       }
      },
      "seconds": [
-      61.36949093399744,
-      61.13404061899928,
-      61.19551288700313,
-      63.427717116996064,
-      60.73931628900755,
-      62.09736247699766
+      0.3296444989999827,
+      0.2769603950000601,
+      0.2680498920000218,
+      0.2760679740000569,
+      0.27404886200008605,
+      0.26746768800001064
      ],
-     "seconds_median_after_first": 61.19551288700313,
+     "seconds_median_after_first": 0.27404886200008605,
      "detections_per_ping": [
       4,
       3,
@@ -413,10 +413,10 @@
     "summary": {
      "closing": {
       "pings_both": 6,
-      "margin_off_db": 7.98008870770935,
-      "margin_on_db": 8.784986425519941,
-      "gross_db": 1.5852977178105896,
-      "net_db": 0.8048977178105895,
+      "margin_off_db": 7.992994958115798,
+      "margin_on_db": 8.805618501308231,
+      "gross_db": 1.5930235431924331,
+      "net_db": 0.812623543192433,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -425,27 +425,27 @@
       "kind_on": "mover",
       "range_rate_on": [
        -4.1162672848,
-       -7.1099162192000005,
+       4.864679518400001,
        -5.238885635200001,
        -5.987297868800001,
        2.2452367008000005,
-       -5.238885635200001
+       -7.858328452800001
       ],
       "true_range_rate": [
        -5.610369041141093,
-       -5.606870358016148,
+       -5.606870358016147,
        -5.60327343046251,
        -5.599574611742383,
-       -5.5957700876048,
+       -5.595770087604801,
        -5.591855867162396
       ]
      },
      "oblique": {
       "pings_both": 6,
-      "margin_off_db": 9.215750014241967,
-      "margin_on_db": 10.08259196470885,
-      "gross_db": 1.6472419504668832,
-      "net_db": 0.866841950466883,
+      "margin_off_db": 9.217142308910857,
+      "margin_on_db": 10.087623108672782,
+      "gross_db": 1.6508807997619244,
+      "net_db": 0.8704807997619243,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -471,10 +471,10 @@
      },
      "crossing": {
       "pings_both": 6,
-      "margin_off_db": 11.408863851071281,
-      "margin_on_db": 12.000401186100746,
-      "gross_db": 1.3719373350294628,
-      "net_db": 0.5915373350294626,
+      "margin_off_db": 11.377004368025736,
+      "margin_on_db": 11.990304689852701,
+      "gross_db": 1.393700321826966,
+      "net_db": 0.6133003218269657,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -490,12 +490,12 @@
        -0.7484122336000001
       ],
       "true_range_rate": [
-       -0.38797458544381175,
+       -0.3879745854438117,
        -0.3874700961068556,
        -0.38696463255502883,
-       -0.38645819355345584,
-       -0.38595077787149284,
-       -0.3854423842827756
+       -0.3864581935534559,
+       -0.3859507778714929,
+       -0.38544238428277555
       ]
      }
     }
@@ -506,44 +506,44 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 20.75785249,
+         "snr_db": 20.84157463,
          "threshold_db": 13.0648,
-         "margin_db": 7.693052490000001,
+         "margin_db": 7.77677463,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.610369041141093
         },
         {
-         "snr_db": 20.80129162,
+         "snr_db": 20.77167774,
          "threshold_db": 13.0648,
-         "margin_db": 7.736491620000001,
+         "margin_db": 7.706877740000001,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148
+         "true_range_rate_m_s": -5.606870358016147
         },
         {
-         "snr_db": 20.16414223,
+         "snr_db": 20.13752972,
          "threshold_db": 13.0648,
-         "margin_db": 7.0993422299999995,
+         "margin_db": 7.07272972,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.60327343046251
         },
         {
-         "snr_db": 21.63529169,
+         "snr_db": 21.5121545,
          "threshold_db": 13.0648,
-         "margin_db": 8.570491689999999,
+         "margin_db": 8.447354500000001,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383
         },
         {
-         "snr_db": 21.87230495,
+         "snr_db": 21.91860209,
          "threshold_db": 13.0648,
-         "margin_db": 8.80750495,
+         "margin_db": 8.85380209,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.5957700876048
+         "true_range_rate_m_s": -5.595770087604801
         },
         {
-         "snr_db": 21.03845059,
+         "snr_db": 21.16523051,
          "threshold_db": 13.0648,
-         "margin_db": 7.97365059,
+         "margin_db": 8.10043051,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396
         }
@@ -555,44 +555,44 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 21.64932783,
+         "snr_db": 21.64364115,
          "threshold_db": 13.0648,
-         "margin_db": 8.58452783,
+         "margin_db": 8.57884115,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49986986560773805
         },
         {
-         "snr_db": 21.19366384,
+         "snr_db": 21.21623693,
          "threshold_db": 13.0648,
-         "margin_db": 8.12886384,
+         "margin_db": 8.151436930000001,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233
         },
         {
-         "snr_db": 23.2486186,
+         "snr_db": 23.2275919,
          "threshold_db": 13.0648,
-         "margin_db": 10.1838186,
+         "margin_db": 10.1627919,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49923593010118095
         },
         {
-         "snr_db": 22.4245081,
+         "snr_db": 22.44077729,
          "threshold_db": 13.0648,
-         "margin_db": 9.3597081,
+         "margin_db": 9.37597729,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375
         },
         {
-         "snr_db": 23.56326892,
+         "snr_db": 23.55734387,
          "threshold_db": 13.0648,
-         "margin_db": 10.498468919999999,
+         "margin_db": 10.49254387,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4985988322460772
         },
         {
-         "snr_db": 21.60391264,
+         "snr_db": 21.60606174,
          "threshold_db": 13.0648,
-         "margin_db": 8.53911264,
+         "margin_db": 8.541261740000001,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506
         }
@@ -604,46 +604,46 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 25.83898058,
+         "snr_db": 25.68884182,
          "threshold_db": 13.0648,
-         "margin_db": 12.774180580000001,
+         "margin_db": 12.62404182,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175
+         "true_range_rate_m_s": -0.3879745854438117
         },
         {
-         "snr_db": 24.14433927,
+         "snr_db": 24.05489449,
          "threshold_db": 13.0648,
-         "margin_db": 11.07953927,
+         "margin_db": 10.990094489999999,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556
         },
         {
-         "snr_db": 22.14955227,
+         "snr_db": 22.24800736,
          "threshold_db": 13.0648,
-         "margin_db": 9.084752270000001,
+         "margin_db": 9.183207359999999,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.38696463255502883
         },
         {
-         "snr_db": 25.27651134,
+         "snr_db": 25.33566354,
          "threshold_db": 13.0648,
-         "margin_db": 12.211711339999999,
+         "margin_db": 12.270863539999999,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584
+         "true_range_rate_m_s": -0.3864581935534559
         },
         {
-         "snr_db": 26.63317694,
+         "snr_db": 26.59655525,
          "threshold_db": 13.0648,
-         "margin_db": 13.568376939999998,
+         "margin_db": 13.531755250000002,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38595077787149284
+         "true_range_rate_m_s": -0.3859507778714929
         },
         {
-         "snr_db": 22.79942252,
+         "snr_db": 22.72686518,
          "threshold_db": 13.0648,
-         "margin_db": 9.73462252,
+         "margin_db": 9.66206518,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756
+         "true_range_rate_m_s": -0.38544238428277555
         }
        ],
        "detected": 6,
@@ -652,19 +652,19 @@
       }
      },
      "seconds": [
-      1.0281402810069267,
-      0.9993261350027751,
-      0.996719281989499,
-      1.28897014199174,
-      1.0256089659960708,
-      0.9963684750109678
+      0.05580606099999841,
+      0.042290595000054054,
+      0.03915414599998712,
+      0.043870824000009634,
+      0.04449656999997842,
+      0.041651608000051965
      ],
-     "seconds_median_after_first": 0.9993261350027751,
+     "seconds_median_after_first": 0.042290595000054054,
      "detections_per_ping": [
       5,
       3,
       3,
-      4,
+      5,
       3,
       3
      ],
@@ -676,45 +676,45 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 22.61288355,
+         "snr_db": 22.64323448,
          "threshold_db": 13.8452,
-         "margin_db": 8.76768355,
+         "margin_db": 8.79803448,
          "range_rate_m_s": -4.116267285,
          "true_range_rate_m_s": -5.610369041141093
         },
         {
-         "snr_db": 22.59576938,
+         "snr_db": 22.58018351,
          "threshold_db": 13.8452,
-         "margin_db": 8.75056938,
-         "range_rate_m_s": -7.109916219,
-         "true_range_rate_m_s": -5.606870358016148
+         "margin_db": 8.734983510000001,
+         "range_rate_m_s": 4.864679518,
+         "true_range_rate_m_s": -5.606870358016147
         },
         {
-         "snr_db": 22.83668633,
+         "snr_db": 22.89309107,
          "threshold_db": 13.8452,
-         "margin_db": 8.991486329999999,
+         "margin_db": 9.04789107,
          "range_rate_m_s": -5.238885635,
          "true_range_rate_m_s": -5.60327343046251
         },
         {
-         "snr_db": 21.85870058,
+         "snr_db": 21.7969349,
          "threshold_db": 13.8452,
-         "margin_db": 8.01350058,
+         "margin_db": 7.9517349,
          "range_rate_m_s": -5.987297869,
          "true_range_rate_m_s": -5.599574611742383
         },
         {
-         "snr_db": 22.8641422,
+         "snr_db": 22.92955957,
          "threshold_db": 13.8452,
-         "margin_db": 9.0189422,
+         "margin_db": 9.084359569999998,
          "range_rate_m_s": 2.245236701,
-         "true_range_rate_m_s": -5.5957700876048
+         "true_range_rate_m_s": -5.595770087604801
         },
         {
-         "snr_db": 23.01293725,
+         "snr_db": 23.06190747,
          "threshold_db": 13.8452,
-         "margin_db": 9.16773725,
-         "range_rate_m_s": -5.238885635,
+         "margin_db": 9.216707470000001,
+         "range_rate_m_s": -7.858328453,
          "true_range_rate_m_s": -5.591855867162396
         }
        ],
@@ -725,44 +725,44 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 23.76310561,
+         "snr_db": 23.78517624,
          "threshold_db": 13.8452,
-         "margin_db": 9.91790561,
+         "margin_db": 9.939976239999998,
          "range_rate_m_s": -1.496824467,
          "true_range_rate_m_s": -0.49986986560773805
         },
         {
-         "snr_db": 23.76937853,
+         "snr_db": 23.76707561,
          "threshold_db": 13.8452,
-         "margin_db": 9.92417853,
+         "margin_db": 9.921875609999999,
          "range_rate_m_s": 4.490473402,
          "true_range_rate_m_s": -0.49955329208874233
         },
         {
-         "snr_db": 25.06059593,
+         "snr_db": 25.06747692,
          "threshold_db": 13.8452,
-         "margin_db": 11.215395930000001,
+         "margin_db": 11.22227692,
          "range_rate_m_s": -3.367855051,
          "true_range_rate_m_s": -0.49923593010118095
         },
         {
-         "snr_db": 24.27332303,
+         "snr_db": 24.2695761,
          "threshold_db": 13.8452,
-         "margin_db": 10.42812303,
+         "margin_db": 10.424376099999998,
          "range_rate_m_s": 4.116267285,
          "true_range_rate_m_s": -0.4989177775276375
         },
         {
-         "snr_db": 23.96635769,
+         "snr_db": 23.97806722,
          "threshold_db": 13.8452,
-         "margin_db": 10.121157689999999,
+         "margin_db": 10.13286722,
          "range_rate_m_s": 7.858328453,
          "true_range_rate_m_s": -0.4985988322460772
         },
         {
-         "snr_db": 22.73398955,
+         "snr_db": 22.72956655,
          "threshold_db": 13.8452,
-         "margin_db": 8.88878955,
+         "margin_db": 8.884366550000001,
          "range_rate_m_s": -3.367855051,
          "true_range_rate_m_s": -0.4982790921298506
         }
@@ -774,46 +774,46 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 27.76782808,
+         "snr_db": 27.75132685,
          "threshold_db": 13.8452,
-         "margin_db": 13.92262808,
+         "margin_db": 13.906126850000001,
          "range_rate_m_s": -1.12261835,
-         "true_range_rate_m_s": -0.38797458544381175
+         "true_range_rate_m_s": -0.3879745854438117
         },
         {
-         "snr_db": 25.383171,
+         "snr_db": 25.36624838,
          "threshold_db": 13.8452,
-         "margin_db": 11.537971,
+         "margin_db": 11.521048379999998,
          "range_rate_m_s": -0.7484122336,
          "true_range_rate_m_s": -0.3874700961068556
         },
         {
-         "snr_db": 23.52973452,
+         "snr_db": 23.56078909,
          "threshold_db": 13.8452,
-         "margin_db": 9.684534520000001,
+         "margin_db": 9.71558909,
          "range_rate_m_s": -1.496824467,
          "true_range_rate_m_s": -0.38696463255502883
         },
         {
-         "snr_db": 26.83976863,
+         "snr_db": 26.76603875,
          "threshold_db": 13.8452,
-         "margin_db": 12.994568629999998,
+         "margin_db": 12.92083875,
          "range_rate_m_s": -1.12261835,
-         "true_range_rate_m_s": -0.38645819355345584
+         "true_range_rate_m_s": -0.3864581935534559
         },
         {
-         "snr_db": 27.91066983,
+         "snr_db": 27.88013484,
          "threshold_db": 13.8452,
-         "margin_db": 14.06546983,
+         "margin_db": 14.03493484,
          "range_rate_m_s": -1.12261835,
-         "true_range_rate_m_s": -0.38595077787149284
+         "true_range_rate_m_s": -0.3859507778714929
         },
         {
-         "snr_db": 23.64243569,
+         "snr_db": 23.68849023,
          "threshold_db": 13.8452,
-         "margin_db": 9.797235689999999,
+         "margin_db": 9.84329023,
          "range_rate_m_s": -0.7484122336,
-         "true_range_rate_m_s": -0.3854423842827756
+         "true_range_rate_m_s": -0.38544238428277555
         }
        ],
        "detected": 6,
@@ -822,14 +822,14 @@
       }
      },
      "seconds": [
-      53.57201367401285,
-      52.08269411198853,
-      53.50771912900382,
-      54.1863831429946,
-      55.0291740429966,
-      53.46909659000812
+      0.26263670900004854,
+      0.21242974599999798,
+      0.21301691099995423,
+      0.21636959499994646,
+      0.214184390000014,
+      0.21352340400005687
      ],
-     "seconds_median_after_first": 53.50771912900382,
+     "seconds_median_after_first": 0.21352340400005687,
      "detections_per_ping": [
       4,
       3,
@@ -857,10 +857,10 @@
     "summary": {
      "closing": {
       "pings_both": 6,
-      "margin_off_db": 7.980088928333333,
-      "margin_on_db": 8.784986548333332,
-      "gross_db": 1.5852976199999997,
-      "net_db": 0.8048976199999996,
+      "margin_off_db": 7.992994865000001,
+      "margin_on_db": 8.8056185,
+      "gross_db": 1.5930236349999998,
+      "net_db": 0.8126236349999996,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -869,27 +869,27 @@
       "kind_on": "mover",
       "range_rate_on": [
        -4.116267285,
-       -7.109916219,
+       4.864679518,
        -5.238885635,
        -5.987297869,
        2.245236701,
-       -5.238885635
+       -7.858328453
       ],
       "true_range_rate": [
        -5.610369041141093,
-       -5.606870358016148,
+       -5.606870358016147,
        -5.60327343046251,
        -5.599574611742383,
-       -5.5957700876048,
+       -5.595770087604801,
        -5.591855867162396
       ]
      },
      "oblique": {
       "pings_both": 6,
-      "margin_off_db": 9.215749988333334,
-      "margin_on_db": 10.082591723333334,
-      "gross_db": 1.6472417350000004,
-      "net_db": 0.8668417350000001,
+      "margin_off_db": 9.217142146666667,
+      "margin_on_db": 10.087623106666667,
+      "gross_db": 1.6508809599999992,
+      "net_db": 0.8704809599999989,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -915,10 +915,10 @@
      },
      "crossing": {
       "pings_both": 6,
-      "margin_off_db": 11.40886382,
-      "margin_on_db": 12.000401291666664,
-      "gross_db": 1.3719374716666668,
-      "net_db": 0.5915374716666667,
+      "margin_off_db": 11.377004606666667,
+      "margin_on_db": 11.99030469,
+      "gross_db": 1.3937000833333333,
+      "net_db": 0.6133000833333332,
       "detected_off": 6,
       "detected_on": 6,
       "tracked_off": true,
@@ -934,12 +934,12 @@
        -0.7484122336
       ],
       "true_range_rate": [
-       -0.38797458544381175,
+       -0.3879745854438117,
        -0.3874700961068556,
        -0.38696463255502883,
-       -0.38645819355345584,
-       -0.38595077787149284,
-       -0.3854423842827756
+       -0.3864581935534559,
+       -0.3859507778714929,
+       -0.38544238428277555
       ]
      }
     }
@@ -952,10 +952,21 @@
     "pings": 4
    },
    "3.0": {
-    "off": 20,
-    "on": 7,
+    "off": 16,
+    "on": 8,
     "pings": 4
    }
+  },
+  "backend": "cuda",
+  "sim_backend": "cuda",
+  "set": [],
+  "off_only": false,
+  "transmit": {
+   "type": "Lfm",
+   "f_start": 4000.0,
+   "f_stop": 6000.0,
+   "duration": 1.0,
+   "source_level_db_peak": 200.0102999566398
   }
  },
  "bank_first_run_ping_truth_summary": {
@@ -1098,6 +1109,13 @@
   "max_range_rate_m_s": 8.0,
   "truth_at": "reflection",
   "gate_range_m": 100.0,
+  "background": {},
+  "backend": "cuda",
+  "sim_backend": "cuda",
+  "simulated_s": 158.5,
+  "set": [],
+  "tone_lobe_notch": "auto (the chain's default)",
+  "engines_equal_on": true,
   "engines": {
    "python": {
     "off": {
@@ -1105,15 +1123,15 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 20.801291087327918,
+         "snr_db": 20.771677741933576,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148,
+         "true_range_rate_m_s": -5.606870358016147,
          "range_error_m": -45.87584510549459,
          "tone": null
         },
         {
-         "snr_db": 21.63529118314038,
+         "snr_db": 21.51215370178976,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383,
@@ -1121,24 +1139,24 @@
          "tone": null
         },
         {
-         "snr_db": 21.038450591917478,
+         "snr_db": 21.165231183838845,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396,
-         "range_error_m": -65.57316768128112,
+         "range_error_m": -65.82316768128112,
          "tone": null
         }
        ],
        "detected": 3,
        "paths": [],
-       "tracked": true,
-       "kind": "uncertain",
-       "track_error_m": 17.53027479599924
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
       },
       "oblique": {
        "pings": [
         {
-         "snr_db": 21.19366351208474,
+         "snr_db": 21.216238249223828,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233,
@@ -1146,7 +1164,7 @@
          "tone": null
         },
         {
-         "snr_db": 22.424507595099065,
+         "snr_db": 22.44077829390614,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375,
@@ -1154,7 +1172,7 @@
          "tone": null
         },
         {
-         "snr_db": 21.603913066239567,
+         "snr_db": 21.6060616867522,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506,
@@ -1166,12 +1184,12 @@
        "paths": [],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 20.825401510986495
+       "track_error_m": 19.81713698548647
       },
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.144338257191382,
+         "snr_db": 24.05489397746701,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556,
@@ -1179,19 +1197,19 @@
          "tone": null
         },
         {
-         "snr_db": 25.276511663322445,
+         "snr_db": 25.33566261386802,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584,
+         "true_range_rate_m_s": -0.3864581935534559,
          "range_error_m": 1.3978966446320555,
          "tone": null
         },
         {
-         "snr_db": 22.799422522723106,
+         "snr_db": 22.726863705368192,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756,
-         "range_error_m": 1.7547682867061667,
+         "true_range_rate_m_s": -0.38544238428277555,
+         "range_error_m": 1.7547682867043477,
          "tone": null
         }
        ],
@@ -1199,18 +1217,18 @@
        "paths": [],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 26.390460631038568
+       "track_error_m": 27.032873297938206
       }
      },
      "seconds": [
-      2.3073437199927866,
-      1.672191372999805,
-      1.58813993500371
+      0.5223939249999603,
+      0.1487316389998341,
+      0.13098159800006215
      ],
-     "seconds_median_after_first": 1.6301656540017575,
+     "seconds_median_after_first": 0.13985661849994813,
      "detections_per_ping": [
       3,
-      4,
+      5,
       3
      ]
     },
@@ -1219,43 +1237,43 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 40.8468894196112,
+         "snr_db": 40.84689360731977,
          "path": "tone",
-         "range_rate_m_s": -5.601793422506825,
+         "range_rate_m_s": -5.601793428953899,
          "true_range_rate_m_s": -5.610369041141093,
-         "range_error_m": 68.02524640910997,
+         "range_error_m": 68.02524083384196,
          "tone": {
-          "snr_db": 40.8468894196112,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 25.760112483290797,
-          "range_rate": -5.601793422506825,
-          "range_error_m": 68.02524640910997
+          "snr_db": 40.84689360731977,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 25.766837056303988,
+          "range_rate": -5.601793428953899,
+          "range_error_m": 68.02524083384196
          }
         },
         {
-         "snr_db": 20.801291087327918,
+         "snr_db": 20.771677741933576,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148,
+         "true_range_rate_m_s": -5.606870358016147,
          "range_error_m": -45.87584510549459,
          "tone": null
         },
         {
-         "snr_db": 39.11316089812624,
+         "snr_db": 39.11315855723683,
          "path": "tone",
-         "range_rate_m_s": -5.5821774902250905,
+         "range_rate_m_s": -5.582177481511323,
          "true_range_rate_m_s": -5.60327343046251,
          "range_error_m": 28.097051330285467,
          "tone": {
-          "snr_db": 39.11316089812624,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 24.026383961805834,
-          "range_rate": -5.5821774902250905,
+          "snr_db": 39.11315855723683,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 24.033102006221046,
+          "range_rate": -5.582177481511323,
           "range_error_m": 28.097051330285467
          }
         },
         {
-         "snr_db": 21.63529118314038,
+         "snr_db": 21.51215370178976,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383,
@@ -1263,25 +1281,25 @@
          "tone": null
         },
         {
-         "snr_db": 32.576506901237885,
+         "snr_db": 32.57650572957216,
          "path": "tone",
-         "range_rate_m_s": -5.594561954842749,
-         "true_range_rate_m_s": -5.5957700876048,
-         "range_error_m": 39.29806839505363,
+         "range_rate_m_s": -5.594561954817824,
+         "true_range_rate_m_s": -5.595770087604801,
+         "range_error_m": 39.298049396104034,
          "tone": {
-          "snr_db": 32.576506901237885,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 17.48972996491748,
-          "range_rate": -5.594561954842749,
-          "range_error_m": 39.29806839505363
+          "snr_db": 32.57650572957216,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 17.49644917855638,
+          "range_rate": -5.594561954817824,
+          "range_error_m": 39.298049396104034
          }
         },
         {
-         "snr_db": 21.038450591917478,
+         "snr_db": 21.165231183838845,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396,
-         "range_error_m": -65.57316768128112,
+         "range_error_m": -65.82316768128112,
          "tone": null
         }
        ],
@@ -1290,28 +1308,28 @@
         "sweep",
         "tone"
        ],
-       "tracked": true,
-       "kind": "uncertain",
-       "track_error_m": 33.646576282163394
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
       },
       "oblique": {
        "pings": [
         {
-         "snr_db": 29.331121628688717,
+         "snr_db": 29.33113987198488,
          "path": "tone",
-         "range_rate_m_s": -0.5371543935900742,
+         "range_rate_m_s": -0.5371543736401413,
          "true_range_rate_m_s": -0.49986986560773805,
-         "range_error_m": 214.13557739944008,
+         "range_error_m": 214.13547488621953,
          "tone": {
-          "snr_db": 29.331121628688717,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 14.244344692368312,
-          "range_rate": -0.5371543935900742,
-          "range_error_m": 214.13557739944008
+          "snr_db": 29.33113987198488,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 14.251083320969098,
+          "range_rate": -0.5371543736401413,
+          "range_error_m": 214.13547488621953
          }
         },
         {
-         "snr_db": 21.19366351208474,
+         "snr_db": 21.216238249223828,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233,
@@ -1319,21 +1337,21 @@
          "tone": null
         },
         {
-         "snr_db": 38.32807468598793,
+         "snr_db": 38.32806845327394,
          "path": "tone",
-         "range_rate_m_s": -0.47698142997537496,
+         "range_rate_m_s": -0.4769814027932068,
          "true_range_rate_m_s": -0.49923593010118095,
-         "range_error_m": 75.6698436405477,
+         "range_error_m": 75.66994271232397,
          "tone": {
-          "snr_db": 38.32807468598793,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 23.241297749667524,
-          "range_rate": -0.47698142997537496,
-          "range_error_m": 75.6698436405477
+          "snr_db": 38.32806845327394,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 23.24801190225816,
+          "range_rate": -0.4769814027932068,
+          "range_error_m": 75.66994271232397
          }
         },
         {
-         "snr_db": 22.424507595099065,
+         "snr_db": 22.44077829390614,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375,
@@ -1341,21 +1359,21 @@
          "tone": null
         },
         {
-         "snr_db": 44.403439337632086,
+         "snr_db": 44.40345564731323,
          "path": "tone",
-         "range_rate_m_s": -0.505448782973224,
+         "range_rate_m_s": -0.5054487632635073,
          "true_range_rate_m_s": -0.4985988322460772,
-         "range_error_m": 38.92991344557777,
+         "range_error_m": 38.92991222830642,
          "tone": {
-          "snr_db": 44.403439337632086,
-          "threshold_db": 15.086776936320405,
-          "margin_db": 29.31666240131168,
-          "range_rate": -0.505448782973224,
-          "range_error_m": 38.92991344557777
+          "snr_db": 44.40345564731323,
+          "threshold_db": 15.080056551015783,
+          "margin_db": 29.323399096297447,
+          "range_rate": -0.5054487632635073,
+          "range_error_m": 38.92991222830642
          }
         },
         {
-         "snr_db": 21.603913066239567,
+         "snr_db": 21.6060616867522,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506,
@@ -1370,7 +1388,7 @@
        ],
        "tracked": true,
        "kind": "static",
-       "track_error_m": 20.260001174081616
+       "track_error_m": 19.59775512263905
       },
       "crossing": {
        "pings": [
@@ -1378,15 +1396,15 @@
          "snr_db": null,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
+         "true_range_rate_m_s": -0.3879745854438117,
          "range_error_m": null,
          "tone": {
           "snr_db": null,
-          "threshold_db": 15.086776936320405
+          "threshold_db": 15.080056551015783
          }
         },
         {
-         "snr_db": 24.144338257191382,
+         "snr_db": 24.05489397746701,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556,
@@ -1401,14 +1419,14 @@
          "range_error_m": null,
          "tone": {
           "snr_db": null,
-          "threshold_db": 15.086776936320405
+          "threshold_db": 15.080056551015783
          }
         },
         {
-         "snr_db": 25.276511663322445,
+         "snr_db": 25.33566261386802,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584,
+         "true_range_rate_m_s": -0.3864581935534559,
          "range_error_m": 1.3978966446320555,
          "tone": null
         },
@@ -1416,19 +1434,19 @@
          "snr_db": null,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38595077787149284,
+         "true_range_rate_m_s": -0.3859507778714929,
          "range_error_m": null,
          "tone": {
           "snr_db": null,
-          "threshold_db": 15.086776936320405
+          "threshold_db": 15.080056551015783
          }
         },
         {
-         "snr_db": 22.799422522723106,
+         "snr_db": 22.726863705368192,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756,
-         "range_error_m": 1.7547682867061667,
+         "true_range_rate_m_s": -0.38544238428277555,
+         "range_error_m": 1.7547682867043477,
          "tone": null
         }
        ],
@@ -1438,26 +1456,46 @@
        ],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 26.390460631038497
+       "track_error_m": 27.032873297939403
       }
      },
      "seconds": [
-      1.631246631994145,
-      1.7195215539977653,
-      1.380050122999819,
-      1.5875318020116538,
-      1.5611030080035562,
-      1.7575287490035407
+      0.027823946999887994,
+      0.146183284000017,
+      0.022132488999886846,
+      0.14373378200002662,
+      0.02300867000008111,
+      0.13082730499991158
      ],
-     "seconds_median_after_first": 1.5875318020116538,
+     "seconds_median_after_first": 0.13082730499991158,
      "detections_per_ping": [
-      7,
+      2,
       3,
-      6,
-      4,
+      2,
       5,
+      2,
       3
-     ]
+     ],
+     "unmatched": [
+      {
+       "bearing_deg": -15.09407967674637,
+       "range_m": 11303.25,
+       "range_rate_m_s": null,
+       "snr_db": 15.979475955351635,
+       "path": "sweep",
+       "beam_bearing_deg": null,
+       "visible_lobe": null,
+       "endfire_notch": null,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 3
+      }
+     ],
+     "unmatched_summary": "popoto_12km_large_submerged python tone on, detections matching no target: 0 of 1 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 1 without a rate (sweep); the rest 0"
     }
    },
    "cpp": {
@@ -1466,15 +1504,15 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 20.80129162,
+         "snr_db": 20.77167774,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148,
+         "true_range_rate_m_s": -5.606870358016147,
          "range_error_m": -45.87584510549459,
          "tone": null
         },
         {
-         "snr_db": 21.63529169,
+         "snr_db": 21.51215422,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383,
@@ -1482,24 +1520,24 @@
          "tone": null
         },
         {
-         "snr_db": 21.03845059,
+         "snr_db": 21.16523051,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396,
-         "range_error_m": -65.57316768128112,
+         "range_error_m": -65.82316768128112,
          "tone": null
         }
        ],
        "detected": 3,
        "paths": [],
-       "tracked": true,
-       "kind": "uncertain",
-       "track_error_m": 17.53027584243648
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
       },
       "oblique": {
        "pings": [
         {
-         "snr_db": 21.19366384,
+         "snr_db": 21.21623759,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233,
@@ -1507,7 +1545,7 @@
          "tone": null
         },
         {
-         "snr_db": 22.4245081,
+         "snr_db": 22.44077779,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375,
@@ -1515,7 +1553,7 @@
          "tone": null
         },
         {
-         "snr_db": 21.60391264,
+         "snr_db": 21.60606169,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506,
@@ -1527,12 +1565,12 @@
        "paths": [],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 20.825400245288996
+       "track_error_m": 19.81713881707132
       },
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.14433927,
+         "snr_db": 24.05489449,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556,
@@ -1540,19 +1578,19 @@
          "tone": null
         },
         {
-         "snr_db": 25.27651134,
+         "snr_db": 25.33566323,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584,
+         "true_range_rate_m_s": -0.3864581935534559,
          "range_error_m": 1.3978966446320555,
          "tone": null
         },
         {
-         "snr_db": 22.79942252,
+         "snr_db": 22.72686469,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756,
-         "range_error_m": 1.7547682867061667,
+         "true_range_rate_m_s": -0.38544238428277555,
+         "range_error_m": 1.7547682867043477,
          "tone": null
         }
        ],
@@ -1560,18 +1598,18 @@
        "paths": [],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 26.390461643584132
+       "track_error_m": 27.03286866127074
       }
      },
      "seconds": [
-      1.4759285670006648,
-      1.4323088060045848,
-      1.2884448190015974
+      0.05514703299991197,
+      0.04400054799998543,
+      0.04063506500006042
      ],
-     "seconds_median_after_first": 1.360376812503091,
+     "seconds_median_after_first": 0.042317806500022925,
      "detections_per_ping": [
       3,
-      4,
+      5,
       3
      ]
     },
@@ -1580,31 +1618,31 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 40.84688942,
+         "snr_db": 40.84689361,
          "path": "tone",
-         "range_rate_m_s": -5.601793423,
+         "range_rate_m_s": -5.601793429,
          "true_range_rate_m_s": -5.610369041141093,
-         "range_error_m": 68.02525004758718,
+         "range_error_m": 68.02524004758743,
          "tone": null
         },
         {
-         "snr_db": 20.80129162,
+         "snr_db": 20.77167774,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -5.606870358016148,
+         "true_range_rate_m_s": -5.606870358016147,
          "range_error_m": -45.87584510549459,
          "tone": null
         },
         {
-         "snr_db": 39.1131609,
+         "snr_db": 39.11315856,
          "path": "tone",
-         "range_rate_m_s": -5.58217749,
+         "range_rate_m_s": -5.582177482,
          "true_range_rate_m_s": -5.60327343046251,
          "range_error_m": 28.097051295086203,
          "tone": null
         },
         {
-         "snr_db": 21.63529169,
+         "snr_db": 21.51215422,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.599574611742383,
@@ -1612,19 +1650,19 @@
          "tone": null
         },
         {
-         "snr_db": 32.5765069,
+         "snr_db": 32.57650573,
          "path": "tone",
          "range_rate_m_s": -5.594561955,
-         "true_range_rate_m_s": -5.5957700876048,
-         "range_error_m": 39.29806881508921,
+         "true_range_rate_m_s": -5.595770087604801,
+         "range_error_m": 39.298048815089714,
          "tone": null
         },
         {
-         "snr_db": 21.03845059,
+         "snr_db": 21.16523051,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.591855867162396,
-         "range_error_m": -65.57316768128112,
+         "range_error_m": -65.82316768128112,
          "tone": null
         }
        ],
@@ -1633,22 +1671,22 @@
         "sweep",
         "tone"
        ],
-       "tracked": true,
-       "kind": "uncertain",
-       "track_error_m": 33.6465788642342
+       "tracked": false,
+       "kind": null,
+       "track_error_m": null
       },
       "oblique": {
        "pings": [
         {
-         "snr_db": 29.33112163,
+         "snr_db": 29.33113987,
          "path": "tone",
-         "range_rate_m_s": -0.5371543936,
+         "range_rate_m_s": -0.5371543736,
          "true_range_rate_m_s": -0.49986986560773805,
-         "range_error_m": 214.13557914627017,
+         "range_error_m": 214.13547914627088,
          "tone": null
         },
         {
-         "snr_db": 21.19366384,
+         "snr_db": 21.21623759,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.49955329208874233,
@@ -1656,15 +1694,15 @@
          "tone": null
         },
         {
-         "snr_db": 38.32807469,
+         "snr_db": 38.32806845,
          "path": "tone",
-         "range_rate_m_s": -0.47698143,
+         "range_rate_m_s": -0.4769814028,
          "true_range_rate_m_s": -0.49923593010118095,
-         "range_error_m": 75.66984771580428,
+         "range_error_m": 75.66993771580383,
          "tone": null
         },
         {
-         "snr_db": 22.4245081,
+         "snr_db": 22.44077779,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4989177775276375,
@@ -1672,15 +1710,15 @@
          "tone": null
         },
         {
-         "snr_db": 44.40343934,
+         "snr_db": 44.40345565,
          "path": "tone",
-         "range_rate_m_s": -0.505448783,
+         "range_rate_m_s": -0.5054487633,
          "true_range_rate_m_s": -0.4985988322460772,
          "range_error_m": 38.929909646480155,
          "tone": null
         },
         {
-         "snr_db": 21.60391264,
+         "snr_db": 21.60606169,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4982790921298506,
@@ -1695,7 +1733,7 @@
        ],
        "tracked": true,
        "kind": "static",
-       "track_error_m": 20.26000304655674
+       "track_error_m": 19.597752880140515
       },
       "crossing": {
        "pings": [
@@ -1703,12 +1741,12 @@
          "snr_db": null,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
+         "true_range_rate_m_s": -0.3879745854438117,
          "range_error_m": null,
          "tone": null
         },
         {
-         "snr_db": 24.14433927,
+         "snr_db": 24.05489449,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3874700961068556,
@@ -1724,10 +1762,10 @@
          "tone": null
         },
         {
-         "snr_db": 25.27651134,
+         "snr_db": 25.33566323,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38645819355345584,
+         "true_range_rate_m_s": -0.3864581935534559,
          "range_error_m": 1.3978966446320555,
          "tone": null
         },
@@ -1735,16 +1773,16 @@
          "snr_db": null,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38595077787149284,
+         "true_range_rate_m_s": -0.3859507778714929,
          "range_error_m": null,
          "tone": null
         },
         {
-         "snr_db": 22.79942252,
+         "snr_db": 22.72686469,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.3854423842827756,
-         "range_error_m": 1.7547682867061667,
+         "true_range_rate_m_s": -0.38544238428277555,
+         "range_error_m": 1.7547682867043477,
          "tone": null
         }
        ],
@@ -1754,31 +1792,49 @@
        ],
        "tracked": true,
        "kind": "uncertain",
-       "track_error_m": 26.390461643584132
+       "track_error_m": 27.03286866127074
       }
      },
      "seconds": [
-      1.4801731879997533,
-      1.2319325270073023,
-      1.4236576889961725,
-      1.4606959150114562,
-      1.3676470009959303,
-      1.23906071500096
+      0.02069749099996443,
+      0.056175788000018656,
+      0.021028741000009177,
+      0.043722039999920526,
+      0.020854955999993763,
+      0.039929157999949894
      ],
-     "seconds_median_after_first": 1.3676470009959303,
+     "seconds_median_after_first": 0.039929157999949894,
      "detections_per_ping": [
-      7,
+      2,
       3,
-      6,
-      4,
+      2,
       5,
+      2,
       3
-     ]
+     ],
+     "unmatched": [
+      {
+       "bearing_deg": -15.09407967,
+       "range_m": 11303.25,
+       "range_rate_m_s": null,
+       "snr_db": 15.97947596,
+       "path": "sweep",
+       "beam_bearing_deg": null,
+       "visible_lobe": null,
+       "endfire_notch": null,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 3
+      }
+     ],
+     "unmatched_summary": "popoto_12km_large_submerged cpp tone on, detections matching no target: 0 of 1 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 1 without a rate (sweep); the rest 0"
     }
    }
-  },
-  "background": {},
-  "engines_equal_on": true
+  }
  },
  "train_one_ping": {
   "scene": "popoto_12km_large_submerged_tone",
@@ -1796,6 +1852,13 @@
   "max_range_rate_m_s": 8.0,
   "truth_at": "reflection",
   "gate_range_m": 100.0,
+  "background": {},
+  "backend": "cuda",
+  "sim_backend": "cuda",
+  "simulated_s": 44.4,
+  "set": [],
+  "tone_lobe_notch": "auto (the chain's default)",
+  "engines_equal_on": true,
   "engines": {
    "python": {
     "off": {
@@ -1803,7 +1866,7 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 17.847505885712934,
+         "snr_db": 17.930100417769033,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.610369041141093,
@@ -1837,11 +1900,11 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.494287327307802,
+         "snr_db": 24.324466562692155,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
-         "range_error_m": 1.2370178492001287,
+         "true_range_rate_m_s": -0.3879745854438117,
+         "range_error_m": 1.037017849197582,
          "tone": null
         }
        ],
@@ -1853,11 +1916,11 @@
       }
      },
      "seconds": [
-      2.004175316003966
+      0.4810146250001708
      ],
-     "seconds_median_after_first": 2.004175316003966,
+     "seconds_median_after_first": 0.4810146250001708,
      "detections_per_ping": [
-      3
+      4
      ]
     },
     "on": {
@@ -1865,17 +1928,17 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 18.45812258759308,
+         "snr_db": 18.27822646157283,
          "path": "both",
-         "range_rate_m_s": -5.59758967673077,
+         "range_rate_m_s": -5.597589629884082,
          "true_range_rate_m_s": -5.610369041141093,
          "range_error_m": -46.91921995241319,
          "tone": {
-          "snr_db": 39.71081690848225,
-          "threshold_db": 15.223053819971245,
-          "margin_db": 24.487763088511006,
-          "range_rate": -5.59758967673077,
-          "range_error_m": 71.22218970494578
+          "snr_db": 39.710772029799394,
+          "threshold_db": 15.216416135118402,
+          "margin_db": 24.494355894680993,
+          "range_rate": -5.597589629884082,
+          "range_error_m": 71.2221957742222
          }
         }
        ],
@@ -1890,17 +1953,17 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 20.10197193731898,
+         "snr_db": 20.148167904830387,
          "path": "both",
-         "range_rate_m_s": -0.5506950553526485,
+         "range_rate_m_s": -0.5506440264137676,
          "true_range_rate_m_s": -0.49986986560773805,
          "range_error_m": -13.458690853729422,
          "tone": {
-          "snr_db": 23.753721319361784,
-          "threshold_db": 15.223053819971245,
-          "margin_db": 8.530667499390539,
-          "range_rate": -0.5506950553526485,
-          "range_error_m": 184.32970915820806
+          "snr_db": 23.768247790693806,
+          "threshold_db": 15.216416135118402,
+          "margin_db": 8.551831655575404,
+          "range_rate": -0.5506440264137676,
+          "range_error_m": 184.40502181361444
          }
         }
        ],
@@ -1915,14 +1978,14 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.961520563468994,
+         "snr_db": 24.95089485581414,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
-         "range_error_m": 1.037017849199401,
+         "true_range_rate_m_s": -0.3879745854438117,
+         "range_error_m": 1.037017849197582,
          "tone": {
           "snr_db": null,
-          "threshold_db": 15.223053819971245
+          "threshold_db": 15.216416135118402
          }
         }
        ],
@@ -1936,12 +1999,49 @@
       }
      },
      "seconds": [
-      3.219702852991759
+      0.24691464700003962
      ],
-     "seconds_median_after_first": 3.219702852991759,
+     "seconds_median_after_first": 0.24691464700003962,
      "detections_per_ping": [
-      9
+      6
      ],
+     "unmatched": [
+      {
+       "bearing_deg": -17.234006065794283,
+       "range_m": 12260.9,
+       "range_rate_m_s": null,
+       "snr_db": 11.11032910012506,
+       "path": "sweep",
+       "beam_bearing_deg": -17.0,
+       "visible_lobe": false,
+       "endfire_notch": false,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 0
+      },
+      {
+       "bearing_deg": -13.5,
+       "range_m": 12684.9,
+       "range_rate_m_s": null,
+       "snr_db": 11.583070984059775,
+       "path": "sweep",
+       "beam_bearing_deg": -13.5,
+       "visible_lobe": false,
+       "endfire_notch": false,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 0
+      }
+     ],
+     "unmatched_summary": "popoto_12km_large_submerged_tone python tone on, detections matching no target: 0 of 2 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 2 without a rate (sweep); the rest 0",
      "tone_plan": {
       "tone": true,
       "frequency_hz": 6500,
@@ -1960,9 +2060,15 @@
       "baseband_max_range_rate_m_s": 0,
       "gate_range_m": 374.2061168,
       "gate_bearing_rad": 0.03490658504,
-      "range_sigma_m": 187.1030584
+      "range_sigma_m": 187.1030584,
+      "lobe_notch": "auto",
+      "pitch_m": 0.15,
+      "lobes": 94,
+      "lobe_beams": 64,
+      "lobe_hidden_max_m_s": 0.921122749,
+      "lobe_hidden_mean_m_s": 0.3010812712
      },
-     "tone_factor_db": 15.223053819971245
+     "tone_factor_db": 15.216416135118402
     }
    },
    "cpp": {
@@ -1971,7 +2077,7 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 17.84750589,
+         "snr_db": 17.93010123,
          "path": null,
          "range_rate_m_s": null,
          "true_range_rate_m_s": -5.610369041141093,
@@ -2005,11 +2111,11 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.49428697,
+         "snr_db": 24.32446656,
          "path": null,
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
-         "range_error_m": 1.2370178492001287,
+         "true_range_rate_m_s": -0.3879745854438117,
+         "range_error_m": 1.037017849197582,
          "tone": null
         }
        ],
@@ -2021,11 +2127,11 @@
       }
      },
      "seconds": [
-      1.3332825749967014
+      0.0849969930000043
      ],
-     "seconds_median_after_first": 1.3332825749967014,
+     "seconds_median_after_first": 0.0849969930000043,
      "detections_per_ping": [
-      3
+      4
      ]
     },
     "on": {
@@ -2033,9 +2139,9 @@
       "closing": {
        "pings": [
         {
-         "snr_db": 18.45812259,
+         "snr_db": 18.27822619,
          "path": "both",
-         "range_rate_m_s": -5.597589677,
+         "range_rate_m_s": -5.59758963,
          "true_range_rate_m_s": -5.610369041141093,
          "range_error_m": -46.91921995241319,
          "tone": null
@@ -2052,9 +2158,9 @@
       "oblique": {
        "pings": [
         {
-         "snr_db": 20.10197194,
+         "snr_db": 20.14816891,
          "path": "both",
-         "range_rate_m_s": -0.5506950554,
+         "range_rate_m_s": -0.5506440264,
          "true_range_rate_m_s": -0.49986986560773805,
          "range_error_m": -13.458690853729422,
          "tone": null
@@ -2071,11 +2177,11 @@
       "crossing": {
        "pings": [
         {
-         "snr_db": 24.96152095,
+         "snr_db": 24.95089524,
          "path": "sweep",
          "range_rate_m_s": null,
-         "true_range_rate_m_s": -0.38797458544381175,
-         "range_error_m": 1.037017849199401,
+         "true_range_rate_m_s": -0.3879745854438117,
+         "range_error_m": 1.037017849197582,
          "tone": null
         }
        ],
@@ -2089,17 +2195,52 @@
       }
      },
      "seconds": [
-      2.970732683010283
+      0.11155382800006919
      ],
-     "seconds_median_after_first": 2.970732683010283,
+     "seconds_median_after_first": 0.11155382800006919,
      "detections_per_ping": [
-      9
-     ]
+      6
+     ],
+     "unmatched": [
+      {
+       "bearing_deg": -17.23400606,
+       "range_m": 12260.9,
+       "range_rate_m_s": null,
+       "snr_db": 11.11032863,
+       "path": "sweep",
+       "beam_bearing_deg": -17.0,
+       "visible_lobe": false,
+       "endfire_notch": false,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 0
+      },
+      {
+       "bearing_deg": -13.5,
+       "range_m": 12684.9,
+       "range_rate_m_s": null,
+       "snr_db": 11.5830707,
+       "path": "sweep",
+       "beam_bearing_deg": -13.5,
+       "visible_lobe": false,
+       "endfire_notch": false,
+       "on_lobe_ridge": null,
+       "own_ridge_widths": null,
+       "lobe_ridge_widths": null,
+       "sim_scaled_lobe_widths": null,
+       "defect": false,
+       "kind": "no_rate",
+       "ping": 0
+      }
+     ],
+     "unmatched_summary": "popoto_12km_large_submerged_tone cpp tone on, detections matching no target: 0 of 2 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 2 without a rate (sweep); the rest 0"
     }
    }
-  },
-  "background": {},
-  "engines_equal_on": true
+  }
  },
  "tone_false_detections_beyond_32_deg": {
   "alternate_tone_pings_0_2_4": [
@@ -2121,5 +2262,28 @@
    1.6
   ],
   "cause": "grating lobe near endfire at 6.5 kHz on the 0.15 m pitch (LS.1 item 0)"
+ },
+ "regenerated": {
+  "date": "2026-11-27",
+  "why": "D-251: the boundary reverberation's Doppler is per frequency by default (issue sonar-rar0)",
+  "tree": "1166ca6",
+  "backend": "cuda",
+  "replaced": [
+   "bank",
+   "alternate",
+   "train_one_ping"
+  ],
+  "not_regenerated": [],
+  "commands": {
+   "bank": "tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100",
+   "alternate": "tools/doppler_tone_eval.py popoto_12km_large_submerged --alternate 6.5e+3 --max-rate 8 --truth-at reflection --gate-range-m 100",
+   "train_one_ping": "tools/doppler_tone_eval.py popoto_12km_large_submerged_tone --pings 1 --background 0 --max-rate 8 --truth-at reflection --gate-range-m 100"
+  },
+  "kept": {
+   "bank_first_run_ping_truth_summary": "the tool's old truth (LS.1 item 7): historical, kept",
+   "tone_false_detections_beyond_32_deg": "read from the CPU runs' alternate and train JSON: superseded by GL.8, GL.9 and D-252 (the device runs), kept as it was",
+   "planner": "the depth planner, no simulation: not stale",
+   "tone_notch": "the chain's plan, no simulation: not stale"
+  }
  }
 }

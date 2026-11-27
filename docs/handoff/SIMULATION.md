@@ -184,12 +184,13 @@ checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in f
 
 ## 4. The scenario catalogue
 
-`configs/scenarios/` holds **98 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
+`configs/scenarios/` holds **100 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
 (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`), `flank_seamount_3d` (added 2026-11-26 with the `eigenray3d` tier)
 the nine 3-D scenes and twins of `sonar-d7sw` (2026-11-26; flank table below), `asiaex_dahl_2004` (D-217) and the four Doppler
 scenes of D-231 (`flank_patrol_doppler`, `flank_patrol_doppler_underway`, `popoto_far_mover_doppler`, `popoto_12km_doppler`)
 and `flank_patrol_doppler_tone` (D-237), and the two 12 km large-submerged scenes of D-243
-(`popoto_12km_large_submerged`, `popoto_12km_large_submerged_tone`). `docs/SCENARIOS.md` lists all 98.
+(`popoto_12km_large_submerged`, `popoto_12km_large_submerged_tone`), and the two deep-site scenes of issue `sonar-rctz`
+(`popoto_12km_deep`, `popoto_12km_deep_sea_state_5`). `docs/SCENARIOS.md` lists all 100.
 `tools/scenario_view.py` makes a scene page for any scenario (rays, bounces, beams, the models in force, the
 signal's parts) and a 3-D page with sound (D-248; `docs/tasks/VISUALIZATION.md` sections 12 to 14); it reads
 the simulator and changes nothing in it (the opt-in taps leave records bit-identical). Four scenes have no rays
@@ -293,7 +294,7 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_far_mover` | `popoto_array` | eigenray | a ship-sized mover at 6 km, ownship at 1.5 m/s, six pings | gallery; `realistic_scenes` | CPU 4 min; L4 25.5 s |
 | `popoto_far_mover_doppler` | `popoto_array` | eigenray | `popoto_far_mover` with the train of `flank_patrol_doppler`; noise-limited, so the tone keeps its margin (47.9 dB with the bank; D-231) | `doppler_scenes`; `doppler_study.py` | as above |
 
-### The 12 km design (11)
+### The 12 km design (13)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -302,6 +303,8 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_12km_doppler` | `popoto_long_range` | eigenray | `popoto_12km` with a 1 s Hann tone at 5 kHz, then the 4-6 kHz sweep (a 2 s ping); the ship's radial speed is small, so the Doppler path is not expected to help (tone with the bank 33.2 dB; D-231) | `doppler_scenes`; `doppler_study.py` | as above |
 | `popoto_12km_large_submerged` | `popoto_long_range` | eigenray | `popoto_12km`'s water, array, platform and seed with three `large_submerged` targets (assumed class values) 50 m deep: closing at 6 m/s bow-on, oblique and crossing at 2 m/s; the shipped sweep only (D-243). The sweep alone holds all three on 6 of 6 pings, 7.98 to 11.41 dB, 2.5 to 5.9 dB under the planner's point target (the hull's highlights resolve in range) | `large_submerged_scenes`; `doppler_tone_eval.py --alternate`, `doppler_bank_eval.py`; the `doppler` job's opt-in `ls12` sub-run | CPU 27 min for 6 pings (`docs/tasks/DOPPLER.md` LS.1) |
 | `popoto_12km_large_submerged_tone` | `popoto_long_range` | eigenray | the same with a 1 s Hann tone at 6.5 kHz above the 4-6 kHz sweep in one 2 s ping (D-243). With the tone path on, 22 false detections on 4 target-free pings at the default budget, all the tone's (device run); **D-246: mostly an artefact of this simulator's reverberation Doppler at the train's 5.3 kHz centre (section 1, D-249; fixed by D-251), not a property of the tone path**; with the grating-lobe notch 25, at the notch's edge, under the old law. **With the corrected simulator (D-252, job 6b0947c354072e8b71697a5a): 0 false detections on 4 target-free pings at the default budget with the notch, 17 without it, 1 with the tone path off** | `large_submerged_scenes`; `doppler_tone_eval.py`; the `ls12` sub-run | CPU 58 min a ping (LS.1); the device run in job 6b08f68754072e8b7168e9c6 |
+| `popoto_12km_deep` | `popoto_long_range_3row` | image_source | the trade study's noise-limited planning site `deep_no_bottom_return` by name (no bottom, isovelocity, 5 m/s, no bubble law; the planner's water: Ainslie-McColm at 12 C and 50 m), direct path and rough surface image only, the three-row face at the planner's 225 m; `popoto_12km_large_submerged`'s three hulls, a ship at +29 degrees (-3.65 m/s) and a +25 dB point moving with the platform (range rate 0) | `deep12_scenes`; `doppler_bank_eval.py --chain-set elevation={}` | CPU 17 s a ping (1 s LFM, 96 channels) |
+| `popoto_12km_deep_sea_state_5` | `popoto_long_range_3row` | image_source | the same at `deep_no_bottom_return_sea_state_5` (12.6 m/s, the apl_1994 bubble law through `time_spread.surface.bubble_loss_db`); sea states 3 and 4 by `--set environment.sea_state=N`: the check of the transmit table's noise-limited claims, the baseline (1 s, 197 dB, sea state 3) and the sea-state-5 alternate (4 s, 200 dB; D-255) | `deep12_scenes`; the `doppler` job's opt-in `deep12` sub-run | CPU 17 s a ping (1 s LFM), 567 s a ping (4 s HFM, sampled) |
 | `popoto_12km_two_ships` | `popoto_long_range` | eigenray | two ships 852 m apart at one bearing and velocity: echo grouping's chain-merge case (D-172, issue `sonar-a5x`) | `classify_rules_eval.py --scenes` (a study scene; no test loads it by name) | not recorded |
 | `popoto_env_winter_sand_200m` | `popoto_long_range` | eigenray | 8 km in a surface duct | gallery; `realistic_scenes` | CPU 2 min; L4 26.3 s |
 | `popoto_env_summer_mud_60m` | `popoto_long_range` | eigenray | 4 km under a thermocline over mud: not detected | gallery; `realistic_scenes` | CPU 52 s; L4 7.3 s |

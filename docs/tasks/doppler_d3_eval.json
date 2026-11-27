@@ -311,13 +311,170 @@
   "popoto_far_mover": {
    "engines": {
     "python": {
+     "off": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 26.93089129051087,
+          "threshold_db": 13.2478,
+          "margin_db": 13.683091290510871,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.9912274137260555
+         },
+         {
+          "snr_db": 25.352135676074976,
+          "threshold_db": 13.2478,
+          "margin_db": 12.104335676074976,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.8813503376391045
+         },
+         {
+          "snr_db": 25.97712215693,
+          "threshold_db": 13.2478,
+          "margin_db": 12.729322156930001,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.7708948232106071
+         },
+         {
+          "snr_db": 24.915170004264052,
+          "threshold_db": 13.2478,
+          "margin_db": 11.667370004264052,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.6599300304706429
+         },
+         {
+          "snr_db": 25.125921237493543,
+          "threshold_db": 13.2478,
+          "margin_db": 11.878121237493543,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.5485267765604876
+         },
+         {
+          "snr_db": 25.318905688000008,
+          "threshold_db": 13.2478,
+          "margin_db": 12.071105688000008,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4367573190150188
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.5878745979999849,
+       0.12634583200008365,
+       0.11241623599994455,
+       0.1130052200001046,
+       0.11218125199991391,
+       0.11125655899991216
+      ],
+      "seconds_median_after_first": 0.11241623599994455,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.2478,
+      "bank": null
+     },
+     "on": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 27.249108755807057,
+          "threshold_db": 13.9518,
+          "margin_db": 13.297308755807057,
+          "range_rate_m_s": 1.3097214088000002,
+          "true_range_rate_m_s": -0.9912274137260555
+         },
+         {
+          "snr_db": 27.340545603536114,
+          "threshold_db": 13.9518,
+          "margin_db": 13.388745603536114,
+          "range_rate_m_s": 1.3097214088000002,
+          "true_range_rate_m_s": -0.8813503376391045
+         },
+         {
+          "snr_db": 25.977122404465007,
+          "threshold_db": 13.9518,
+          "margin_db": 12.025322404465006,
+          "range_rate_m_s": -2.8065458760000004,
+          "true_range_rate_m_s": -0.7708948232106071
+         },
+         {
+          "snr_db": 28.248362545208398,
+          "threshold_db": 13.9518,
+          "margin_db": 14.296562545208397,
+          "range_rate_m_s": 2.6194428176000004,
+          "true_range_rate_m_s": -0.6599300304706429
+         },
+         {
+          "snr_db": 28.058361688470864,
+          "threshold_db": 13.9518,
+          "margin_db": 14.106561688470864,
+          "range_rate_m_s": 1.6839275256000001,
+          "true_range_rate_m_s": -0.5485267765604876
+         },
+         {
+          "snr_db": 28.645836486797705,
+          "threshold_db": 13.9518,
+          "margin_db": 14.694036486797705,
+          "range_rate_m_s": -1.1226183504000002,
+          "true_range_rate_m_s": -0.4367573190150188
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.444019615000002,
+       0.40175473199997214,
+       0.39981561399997645,
+       0.39755508700000064,
+       0.3972311109999964,
+       0.3963340469999821
+      ],
+      "seconds_median_after_first": 0.39755508700000064,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.9518,
+      "bank": {
+       "mode": "sweep_bank",
+       "step_m_s": 0.1871030584,
+       "hypotheses": 45,
+       "per_beam": 35,
+       "first_m_s": -4.116267285,
+       "last_m_s": 4.116267285,
+       "velocity_known": true,
+       "baseband_max_range_rate_m_s": 0,
+       "threshold_db": 0,
+       "pedestal_m": 6.548607044,
+       "combine": "cfar",
+       "budget_divisor": 35
+      }
+     },
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 12.348479343108218,
-       "margin_on_db": 13.64922533552698,
-       "gross_db": 2.0047459924187603,
-       "net_db": 1.3007459924187597,
+       "margin_off_db": 12.355557675545576,
+       "margin_on_db": 13.634756247380857,
+       "gross_db": 1.9831985718352823,
+       "net_db": 1.2791985718352816,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -341,34 +498,173 @@
         -0.4367573190150188
        ]
       }
-     },
-     "threshold_db_off": 13.2478,
-     "threshold_db_cfar": 13.9518,
-     "seconds_off": 2.6073468980030157,
-     "seconds_cfar": 119.14527915400686,
-     "plan": {
-      "mode": "sweep_bank",
-      "step_m_s": 0.1871030584,
-      "hypotheses": 45,
-      "per_beam": 35,
-      "first_m_s": -4.116267285,
-      "last_m_s": 4.116267285,
-      "velocity_known": true,
-      "baseband_max_range_rate_m_s": 0,
-      "threshold_db": 0,
-      "pedestal_m": 6.548607044,
-      "combine": "cfar",
-      "budget_divisor": 35
      }
     },
     "cpp": {
+     "off": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 26.93089077,
+          "threshold_db": 13.2478,
+          "margin_db": 13.683090770000002,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.9912274137260555
+         },
+         {
+          "snr_db": 25.35213673,
+          "threshold_db": 13.2478,
+          "margin_db": 12.104336730000002,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.8813503376391045
+         },
+         {
+          "snr_db": 25.97712246,
+          "threshold_db": 13.2478,
+          "margin_db": 12.72932246,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.7708948232106071
+         },
+         {
+          "snr_db": 24.91517,
+          "threshold_db": 13.2478,
+          "margin_db": 11.66737,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.6599300304706429
+         },
+         {
+          "snr_db": 25.12592124,
+          "threshold_db": 13.2478,
+          "margin_db": 11.87812124,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.5485267765604876
+         },
+         {
+          "snr_db": 25.31890569,
+          "threshold_db": 13.2478,
+          "margin_db": 12.071105690000001,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4367573190150188
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.07308171900001526,
+       0.059792689999994764,
+       0.06219678799993744,
+       0.0657378759999574,
+       0.05865612800005238,
+       0.05966393500000322
+      ],
+      "seconds_median_after_first": 0.059792689999994764,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.2478,
+      "bank": null
+     },
+     "on": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 27.24910876,
+          "threshold_db": 13.9518,
+          "margin_db": 13.297308759999998,
+          "range_rate_m_s": 1.309721409,
+          "true_range_rate_m_s": -0.9912274137260555
+         },
+         {
+          "snr_db": 27.3405456,
+          "threshold_db": 13.9518,
+          "margin_db": 13.388745599999998,
+          "range_rate_m_s": 1.309721409,
+          "true_range_rate_m_s": -0.8813503376391045
+         },
+         {
+          "snr_db": 25.9771224,
+          "threshold_db": 13.9518,
+          "margin_db": 12.025322399999999,
+          "range_rate_m_s": -2.806545876,
+          "true_range_rate_m_s": -0.7708948232106071
+         },
+         {
+          "snr_db": 28.24836255,
+          "threshold_db": 13.9518,
+          "margin_db": 14.296562549999999,
+          "range_rate_m_s": 2.619442818,
+          "true_range_rate_m_s": -0.6599300304706429
+         },
+         {
+          "snr_db": 28.05836169,
+          "threshold_db": 13.9518,
+          "margin_db": 14.106561690000001,
+          "range_rate_m_s": 1.683927526,
+          "true_range_rate_m_s": -0.5485267765604876
+         },
+         {
+          "snr_db": 28.64583649,
+          "threshold_db": 13.9518,
+          "margin_db": 14.69403649,
+          "range_rate_m_s": -1.12261835,
+          "true_range_rate_m_s": -0.4367573190150188
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.3932170489999862,
+       0.37185662899992167,
+       0.3802100269999755,
+       0.37549986599992735,
+       0.3794537080000282,
+       0.3761954760000208
+      ],
+      "seconds_median_after_first": 0.3761954760000208,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.9518,
+      "bank": {
+       "mode": "sweep_bank",
+       "step_m_s": 0.1871030584,
+       "hypotheses": 45,
+       "per_beam": 35,
+       "first_m_s": -4.116267285,
+       "last_m_s": 4.116267285,
+       "velocity_known": true,
+       "baseband_max_range_rate_m_s": 0,
+       "threshold_db": 0,
+       "pedestal_m": 6.548607044,
+       "combine": "cfar",
+       "budget_divisor": 35
+      }
+     },
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 12.348479276666666,
-       "margin_on_db": 13.649225743333332,
-       "gross_db": 2.004746466666667,
-       "net_db": 1.3007464666666664,
+       "margin_off_db": 12.355557815,
+       "margin_on_db": 13.634756248333332,
+       "gross_db": 1.9831984333333323,
+       "net_db": 1.2791984333333317,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -392,24 +688,6 @@
         -0.4367573190150188
        ]
       }
-     },
-     "threshold_db_off": 13.2478,
-     "threshold_db_cfar": 13.9518,
-     "seconds_off": 2.2350527710004826,
-     "seconds_cfar": 110.96835022699815,
-     "plan": {
-      "mode": "sweep_bank",
-      "step_m_s": 0.1871030584,
-      "hypotheses": 45,
-      "per_beam": 35,
-      "first_m_s": -4.116267285,
-      "last_m_s": 4.116267285,
-      "velocity_known": true,
-      "baseband_max_range_rate_m_s": 0,
-      "threshold_db": 0,
-      "pedestal_m": 6.548607044,
-      "combine": "cfar",
-      "budget_divisor": 35
      }
     }
    },
@@ -420,8 +698,8 @@
      "pings": 4
     },
     "3.0": {
-     "off": 18,
-     "on": 17,
+     "off": 16,
+     "on": 11,
      "pings": 4
     }
    },
@@ -430,13 +708,170 @@
   "popoto_12km": {
    "engines": {
     "python": {
+     "off": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 22.591449185698103,
+          "threshold_db": 13.0648,
+          "margin_db": 9.526649185698103,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4988925168426798
+         },
+         {
+          "snr_db": 22.92541448179172,
+          "threshold_db": 13.0648,
+          "margin_db": 9.86061448179172,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4061219754350797
+         },
+         {
+          "snr_db": 20.03116540716631,
+          "threshold_db": 13.0648,
+          "margin_db": 6.966365407166309,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.3131641028455749
+         },
+         {
+          "snr_db": 24.428211438751916,
+          "threshold_db": 13.0648,
+          "margin_db": 11.363411438751916,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.22006143307049927
+         },
+         {
+          "snr_db": 22.159066398681833,
+          "threshold_db": 13.0648,
+          "margin_db": 9.094266398681834,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.12685683390447605
+         },
+         {
+          "snr_db": 20.925324008459704,
+          "threshold_db": 13.0648,
+          "margin_db": 7.860524008459704,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.03359340881138415
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.5161755100000391,
+       0.05900491800002783,
+       0.05798306499991668,
+       0.05453709699997944,
+       0.053910451999968245,
+       0.04910405299995091
+      ],
+      "seconds_median_after_first": 0.05453709699997944,
+      "detections_per_ping": [
+       1,
+       1,
+       2,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.0648,
+      "bank": null
+     },
+     "on": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 24.512842445529053,
+          "threshold_db": 13.6808,
+          "margin_db": 10.832042445529053,
+          "range_rate_m_s": 1.4968244672000002,
+          "true_range_rate_m_s": -0.4988925168426798
+         },
+         {
+          "snr_db": 22.92541412971262,
+          "threshold_db": 13.6808,
+          "margin_db": 9.244614129712621,
+          "range_rate_m_s": 0.37420611680000004,
+          "true_range_rate_m_s": -0.4061219754350797
+         },
+         {
+          "snr_db": 22.617844624228873,
+          "threshold_db": 13.6808,
+          "margin_db": 8.937044624228873,
+          "range_rate_m_s": 3.3678550512000003,
+          "true_range_rate_m_s": -0.3131641028455749
+         },
+         {
+          "snr_db": 24.428211438751916,
+          "threshold_db": 13.6808,
+          "margin_db": 10.747411438751916,
+          "range_rate_m_s": 1.4968244672000002,
+          "true_range_rate_m_s": -0.22006143307049927
+         },
+         {
+          "snr_db": 23.571374024052794,
+          "threshold_db": 13.6808,
+          "margin_db": 9.890574024052794,
+          "range_rate_m_s": 1.1226183504000002,
+          "true_range_rate_m_s": -0.12685683390447605
+         },
+         {
+          "snr_db": 21.81945286975797,
+          "threshold_db": 13.6808,
+          "margin_db": 8.138652869757971,
+          "range_rate_m_s": -0.37420611680000004,
+          "true_range_rate_m_s": -0.03359340881138415
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.15554937100000643,
+       0.13003639900000508,
+       0.12863684100000228,
+       0.12914982600000258,
+       0.12887542800001484,
+       0.12718945699998585
+      ],
+      "seconds_median_after_first": 0.12887542800001484,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.6808,
+      "bank": {
+       "mode": "sweep_bank",
+       "step_m_s": 0.3742061168,
+       "hypotheses": 25,
+       "per_beam": 19,
+       "first_m_s": -4.490473402,
+       "last_m_s": 4.490473402,
+       "velocity_known": true,
+       "baseband_max_range_rate_m_s": 0,
+       "threshold_db": 0,
+       "pedestal_m": 7.109916219,
+       "combine": "cfar",
+       "budget_divisor": 19
+      }
+     },
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 9.110671872665721,
-       "margin_on_db": 9.625993197661112,
-       "gross_db": 1.131321324995391,
-       "net_db": 0.5153213249953913,
+       "margin_off_db": 9.111971820091599,
+       "margin_on_db": 9.631723255338871,
+       "gross_db": 1.1357514352472737,
+       "net_db": 0.5197514352472741,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -460,34 +895,173 @@
         -0.03359340881138415
        ]
       }
-     },
-     "threshold_db_off": 13.0648,
-     "threshold_db_cfar": 13.6808,
-     "seconds_off": 1.1957313120001345,
-     "seconds_cfar": 30.006314917001873,
-     "plan": {
-      "mode": "sweep_bank",
-      "step_m_s": 0.3742061168,
-      "hypotheses": 25,
-      "per_beam": 19,
-      "first_m_s": -4.490473402,
-      "last_m_s": 4.490473402,
-      "velocity_known": true,
-      "baseband_max_range_rate_m_s": 0,
-      "threshold_db": 0,
-      "pedestal_m": 7.109916219,
-      "combine": "cfar",
-      "budget_divisor": 19
      }
     },
     "cpp": {
+     "off": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 22.59144919,
+          "threshold_db": 13.0648,
+          "margin_db": 9.526649189999999,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4988925168426798
+         },
+         {
+          "snr_db": 22.92541448,
+          "threshold_db": 13.0648,
+          "margin_db": 9.86061448,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.4061219754350797
+         },
+         {
+          "snr_db": 20.03116583,
+          "threshold_db": 13.0648,
+          "margin_db": 6.966365829999999,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.3131641028455749
+         },
+         {
+          "snr_db": 24.42821144,
+          "threshold_db": 13.0648,
+          "margin_db": 11.363411439999998,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.22006143307049927
+         },
+         {
+          "snr_db": 22.15906701,
+          "threshold_db": 13.0648,
+          "margin_db": 9.094267010000001,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.12685683390447605
+         },
+         {
+          "snr_db": 20.92532355,
+          "threshold_db": 13.0648,
+          "margin_db": 7.860523550000002,
+          "range_rate_m_s": null,
+          "true_range_rate_m_s": -0.03359340881138415
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.03459643100006815,
+       0.022418797000000268,
+       0.019160027999987506,
+       0.01858713199999329,
+       0.018710397000063494,
+       0.018009278000022277
+      ],
+      "seconds_median_after_first": 0.018710397000063494,
+      "detections_per_ping": [
+       1,
+       1,
+       2,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.0648,
+      "bank": null
+     },
+     "on": {
+      "targets": {
+       "ship": {
+        "pings": [
+         {
+          "snr_db": 24.51284245,
+          "threshold_db": 13.6808,
+          "margin_db": 10.832042450000001,
+          "range_rate_m_s": 1.496824467,
+          "true_range_rate_m_s": -0.4988925168426798
+         },
+         {
+          "snr_db": 22.92541413,
+          "threshold_db": 13.6808,
+          "margin_db": 9.24461413,
+          "range_rate_m_s": 0.3742061168,
+          "true_range_rate_m_s": -0.4061219754350797
+         },
+         {
+          "snr_db": 22.61784462,
+          "threshold_db": 13.6808,
+          "margin_db": 8.93704462,
+          "range_rate_m_s": 3.367855051,
+          "true_range_rate_m_s": -0.3131641028455749
+         },
+         {
+          "snr_db": 24.42821144,
+          "threshold_db": 13.6808,
+          "margin_db": 10.747411439999999,
+          "range_rate_m_s": 1.496824467,
+          "true_range_rate_m_s": -0.22006143307049927
+         },
+         {
+          "snr_db": 23.57137402,
+          "threshold_db": 13.6808,
+          "margin_db": 9.89057402,
+          "range_rate_m_s": 1.12261835,
+          "true_range_rate_m_s": -0.12685683390447605
+         },
+         {
+          "snr_db": 21.81945287,
+          "threshold_db": 13.6808,
+          "margin_db": 8.13865287,
+          "range_rate_m_s": -0.3742061168,
+          "true_range_rate_m_s": -0.03359340881138415
+         }
+        ],
+        "detected": 6,
+        "tracked": true,
+        "kind": "mover"
+       }
+      },
+      "seconds": [
+       0.12728619799997887,
+       0.10884065899995221,
+       0.1084661889999552,
+       0.10832620799999404,
+       0.10846706899997116,
+       0.1082709759999716
+      ],
+      "seconds_median_after_first": 0.1084661889999552,
+      "detections_per_ping": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "threshold_db": 13.6808,
+      "bank": {
+       "mode": "sweep_bank",
+       "step_m_s": 0.3742061168,
+       "hypotheses": 25,
+       "per_beam": 19,
+       "first_m_s": -4.490473402,
+       "last_m_s": 4.490473402,
+       "velocity_known": true,
+       "baseband_max_range_rate_m_s": 0,
+       "threshold_db": 0,
+       "pedestal_m": 7.109916219,
+       "combine": "cfar",
+       "budget_divisor": 19
+      }
+     },
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 9.110671608333334,
-       "margin_on_db": 9.625993306666667,
-       "gross_db": 1.1313216983333334,
-       "net_db": 0.5153216983333339,
+       "margin_off_db": 9.111971916666667,
+       "margin_on_db": 9.631723255,
+       "gross_db": 1.135751338333333,
+       "net_db": 0.5197513383333335,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -511,24 +1085,6 @@
         -0.03359340881138415
        ]
       }
-     },
-     "threshold_db_off": 13.0648,
-     "threshold_db_cfar": 13.6808,
-     "seconds_off": 1.073437794999336,
-     "seconds_cfar": 25.961257864997606,
-     "plan": {
-      "mode": "sweep_bank",
-      "step_m_s": 0.3742061168,
-      "hypotheses": 25,
-      "per_beam": 19,
-      "first_m_s": -4.490473402,
-      "last_m_s": 4.490473402,
-      "velocity_known": true,
-      "baseband_max_range_rate_m_s": 0,
-      "threshold_db": 0,
-      "pedestal_m": 7.109916219,
-      "combine": "cfar",
-      "budget_divisor": 19
      }
     }
    },
@@ -539,8 +1095,8 @@
      "pings": 4
     },
     "3.0": {
-     "off": 20,
-     "on": 7,
+     "off": 16,
+     "on": 12,
      "pings": 4
     }
    },
@@ -561,6 +1117,441 @@
    "tone_window_alpha": 1.0
   },
   "max_range_rate_m_s": 3.0,
+  "truth_at": "ping",
+  "gate_range_m": 60.0,
+  "background": {
+   "default": {
+    "off": 4,
+    "on": 0,
+    "on_tone_only": 0,
+    "attribution": [],
+    "attribution_summary": "popoto_12km_doppler background, budget default, tone path on (lobe notch auto): 0 of 0 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 0 without a rate (sweep); the rest 0",
+    "pings": 4
+   },
+   "3.0": {
+    "off": 30,
+    "on": 24,
+    "on_tone_only": 3,
+    "attribution": [
+     {
+      "bearing_deg": -33.27353951,
+      "range_m": 11708.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.901963393,
+      "path": "sweep",
+      "beam_bearing_deg": -33.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 0
+     },
+     {
+      "bearing_deg": -17.04972296,
+      "range_m": 11781.25,
+      "range_rate_m_s": null,
+      "snr_db": 12.3275054,
+      "path": "sweep",
+      "beam_bearing_deg": -17.0,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 0
+     },
+     {
+      "bearing_deg": 21.57038265,
+      "range_m": 11918.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.422439395,
+      "path": "sweep",
+      "beam_bearing_deg": 21.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 0
+     },
+     {
+      "bearing_deg": 26.25104454,
+      "range_m": 12066.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.112779068,
+      "path": "sweep",
+      "beam_bearing_deg": 26.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 0
+     },
+     {
+      "bearing_deg": -36.31711053,
+      "range_m": 11300,
+      "range_rate_m_s": -0.6078616087,
+      "snr_db": 12.74571414,
+      "path": "tone",
+      "beam_bearing_deg": -36.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": false,
+      "own_ridge_widths": 3.050044251269412,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "other",
+      "ping": 0
+     },
+     {
+      "bearing_deg": -36.74683892,
+      "range_m": 11545.25,
+      "range_rate_m_s": null,
+      "snr_db": 11.20957185,
+      "path": "sweep",
+      "beam_bearing_deg": -36.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": -26.27428407,
+      "range_m": 11318.875,
+      "range_rate_m_s": null,
+      "snr_db": 10.35324702,
+      "path": "sweep",
+      "beam_bearing_deg": -26.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 17,
+      "range_m": 12050.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.926240973,
+      "path": "sweep",
+      "beam_bearing_deg": 17.0,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 27.49837365,
+      "range_m": 11967,
+      "range_rate_m_s": null,
+      "snr_db": 11.05472827,
+      "path": "sweep",
+      "beam_bearing_deg": 27.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 31,
+      "range_m": 11505,
+      "range_rate_m_s": null,
+      "snr_db": 11.03473854,
+      "path": "sweep",
+      "beam_bearing_deg": 31.0,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 36.46704307,
+      "range_m": 12042.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.832665555,
+      "path": "sweep",
+      "beam_bearing_deg": 36.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 37.5,
+      "range_m": 11871.75,
+      "range_rate_m_s": null,
+      "snr_db": 10.75744158,
+      "path": "sweep",
+      "beam_bearing_deg": 37.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 1
+     },
+     {
+      "bearing_deg": 4.25,
+      "range_m": 12706.80931,
+      "range_rate_m_s": -2.043532159,
+      "snr_db": 13.1995524,
+      "path": "tone",
+      "beam_bearing_deg": 4.0,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": false,
+      "own_ridge_widths": 3.9422302630875112,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "other",
+      "ping": 1
+     },
+     {
+      "bearing_deg": -33.25016719,
+      "range_m": 11986.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.374422472,
+      "path": "sweep",
+      "beam_bearing_deg": -33.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 2
+     },
+     {
+      "bearing_deg": -22.5,
+      "range_m": 11389,
+      "range_rate_m_s": null,
+      "snr_db": 11.01463984,
+      "path": "sweep",
+      "beam_bearing_deg": -22.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": -15.28394221,
+      "range_m": 11860.5,
+      "range_rate_m_s": null,
+      "snr_db": 10.80728798,
+      "path": "sweep",
+      "beam_bearing_deg": -15.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": -16.36552288,
+      "range_m": 12551.25,
+      "range_rate_m_s": null,
+      "snr_db": 11.44811438,
+      "path": "sweep",
+      "beam_bearing_deg": -16.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": -16.5,
+      "range_m": 11390,
+      "range_rate_m_s": null,
+      "snr_db": 10.85083298,
+      "path": "sweep",
+      "beam_bearing_deg": -16.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": -16.5,
+      "range_m": 12066.25,
+      "range_rate_m_s": null,
+      "snr_db": 11.00038067,
+      "path": "sweep",
+      "beam_bearing_deg": -16.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": -12.52170179,
+      "range_m": 11835.25,
+      "range_rate_m_s": null,
+      "snr_db": 10.92860792,
+      "path": "sweep",
+      "beam_bearing_deg": -12.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": 3.250995751,
+      "range_m": 12435.5,
+      "range_rate_m_s": null,
+      "snr_db": 10.84416477,
+      "path": "sweep",
+      "beam_bearing_deg": 3.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": 6.259999892,
+      "range_m": 11888.875,
+      "range_rate_m_s": null,
+      "snr_db": 9.907648761,
+      "path": "sweep",
+      "beam_bearing_deg": 6.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": 36.27067884,
+      "range_m": 11534.25,
+      "range_rate_m_s": null,
+      "snr_db": 10.93593174,
+      "path": "sweep",
+      "beam_bearing_deg": 36.5,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": null,
+      "own_ridge_widths": null,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "no_rate",
+      "ping": 3
+     },
+     {
+      "bearing_deg": 20.25,
+      "range_m": 11300,
+      "range_rate_m_s": 2.285895759,
+      "snr_db": 13.31744441,
+      "path": "tone",
+      "beam_bearing_deg": 20.0,
+      "visible_lobe": false,
+      "endfire_notch": false,
+      "on_lobe_ridge": false,
+      "own_ridge_widths": 5.6908686367072585,
+      "lobe_ridge_widths": null,
+      "sim_scaled_lobe_widths": null,
+      "defect": false,
+      "kind": "other",
+      "ping": 3
+     }
+    ],
+    "attribution_summary": "popoto_12km_doppler background, budget 3.0, tone path on (lobe notch auto): 0 of 24 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 21 without a rate (sweep); the rest 3: -36.3 deg -0.61 m/s 12.7 dB, 4.2 deg -2.04 m/s 13.2 dB, 20.2 deg +2.29 m/s 13.3 dB",
+    "pings": 4
+   }
+  },
+  "backend": "cuda",
+  "sim_backend": "cuda",
+  "simulated_s": 97.4,
+  "set": [],
+  "tone_lobe_notch": "auto (the chain's default)",
+  "engines_equal_on": true,
   "engines": {
    "python": {
     "off": {
@@ -623,7 +1614,15 @@
        "track_error_m": null
       }
      },
-     "seconds_median_after_first": 1.2441357749921735,
+     "seconds": [
+      0.4303158779999876,
+      0.04828881099990667,
+      0.049180961999923056,
+      0.048158478000004834,
+      0.04811157500000718,
+      0.04862735999995493
+     ],
+     "seconds_median_after_first": 0.04828881099990667,
      "detections_per_ping": [
       0,
       0,
@@ -638,21 +1637,21 @@
       "ship": {
        "pings": [
         {
-         "snr_db": 19.47523598229208,
+         "snr_db": 19.475779311256627,
          "path": "both",
-         "range_rate_m_s": -0.5734752466719901,
+         "range_rate_m_s": -0.5734775222313259,
          "true_range_rate_m_s": -0.4988925168426798,
          "range_error_m": -7.138599375970443,
          "tone": {
-          "snr_db": 30.67341023101182,
+          "snr_db": 30.664926727520523,
           "threshold_db": 14.767129192564283,
-          "margin_db": 15.906281038447538,
-          "range_rate": -0.5734752466719901,
-          "range_error_m": 45.17518834004295
+          "margin_db": 15.89779753495624,
+          "range_rate": -0.5734775222313259,
+          "range_error_m": 45.166874936474414
          }
         },
         {
-         "snr_db": 18.508223005273877,
+         "snr_db": 18.44489369441456,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4061219754350797,
@@ -663,7 +1662,7 @@
          }
         },
         {
-         "snr_db": 18.743516504907337,
+         "snr_db": 18.791891279494774,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3131641028455749,
@@ -674,7 +1673,7 @@
          }
         },
         {
-         "snr_db": 19.557718990671955,
+         "snr_db": 19.616546926836445,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.22006143307049927,
@@ -685,7 +1684,7 @@
          }
         },
         {
-         "snr_db": 21.638448651697328,
+         "snr_db": 21.67110607993782,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.12685683390447605,
@@ -696,7 +1695,7 @@
          }
         },
         {
-         "snr_db": 21.761997742954442,
+         "snr_db": 21.748430172049183,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.03359340881138415,
@@ -714,10 +1713,18 @@
        ],
        "tracked": true,
        "kind": "mover",
-       "track_error_m": 32.72200135756422
+       "track_error_m": 33.73461455069753
       }
      },
-     "seconds_median_after_first": 2.945595212993794,
+     "seconds": [
+      0.41457631700006914,
+      0.07903913399991325,
+      0.08014334300003156,
+      0.08126337000010153,
+      0.07498706499995933,
+      0.07213057199999184
+     ],
+     "seconds_median_after_first": 0.07903913399991325,
      "detections_per_ping": [
       1,
       1,
@@ -726,6 +1733,8 @@
       1,
       1
      ],
+     "unmatched": [],
+     "unmatched_summary": "popoto_12km_doppler python tone on, detections matching no target: 0 of 0 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 0 without a rate (sweep); the rest 0",
      "tone_plan": {
       "tone": true,
       "frequency_hz": 5000,
@@ -810,7 +1819,15 @@
        "track_error_m": null
       }
      },
-     "seconds_median_after_first": 1.1219825279986253,
+     "seconds": [
+      0.0724034090000032,
+      0.03252124899995579,
+      0.03325411800005895,
+      0.0320233749999943,
+      0.03171958899997662,
+      0.03190109499996652
+     ],
+     "seconds_median_after_first": 0.0320233749999943,
      "detections_per_ping": [
       0,
       0,
@@ -825,15 +1842,15 @@
       "ship": {
        "pings": [
         {
-         "snr_db": 19.47523563,
+         "snr_db": 19.47577967,
          "path": "both",
-         "range_rate_m_s": -0.5734752467,
+         "range_rate_m_s": -0.5734775222,
          "true_range_rate_m_s": -0.4988925168426798,
          "range_error_m": -7.138599375970443,
          "tone": null
         },
         {
-         "snr_db": 18.50822357,
+         "snr_db": 18.44489398,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.4061219754350797,
@@ -841,7 +1858,7 @@
          "tone": null
         },
         {
-         "snr_db": 18.7435165,
+         "snr_db": 18.79189128,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.3131641028455749,
@@ -849,7 +1866,7 @@
          "tone": null
         },
         {
-         "snr_db": 19.55771855,
+         "snr_db": 19.61654649,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.22006143307049927,
@@ -857,7 +1874,7 @@
          "tone": null
         },
         {
-         "snr_db": 21.63844895,
+         "snr_db": 21.67110579,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.12685683390447605,
@@ -865,7 +1882,7 @@
          "tone": null
         },
         {
-         "snr_db": 21.76199839,
+         "snr_db": 21.74843017,
          "path": "sweep",
          "range_rate_m_s": null,
          "true_range_rate_m_s": -0.03359340881138415,
@@ -880,10 +1897,18 @@
        ],
        "tracked": true,
        "kind": "mover",
-       "track_error_m": 32.72200194497693
+       "track_error_m": 33.73461581116418
       }
      },
-     "seconds_median_after_first": 2.654738194993115,
+     "seconds": [
+      0.07681203799995728,
+      0.04826350099995125,
+      0.048314229999959935,
+      0.0485574980000365,
+      0.047711134999985916,
+      0.04726815499998338
+     ],
+     "seconds_median_after_first": 0.04826350099995125,
      "detections_per_ping": [
       1,
       1,
@@ -891,25 +1916,12 @@
       1,
       1,
       1
-     ]
+     ],
+     "unmatched": [],
+     "unmatched_summary": "popoto_12km_doppler cpp tone on, detections matching no target: 0 of 0 beyond the lobe onset; 0 on a lobe's ridge; 0 at a lobe notch's edge; 0 at the own notch's edge (<= 2 widths); 0 on the lobe ridge scaled by the record's centre frequency (the simulator's reverberation Doppler); 0 without a rate (sweep); the rest 0"
     }
    }
-  },
-  "background": {
-   "default": {
-    "off": 1,
-    "on": 0,
-    "on_tone_only": 0,
-    "pings": 2
-   },
-   "3.0": {
-    "off": 11,
-    "on": 8,
-    "on_tone_only": 2,
-    "pings": 2
-   }
-  },
-  "engines_equal_on": true
+  }
  },
  "tone_p12_wholetrain": {
   "scene": "popoto_12km_doppler",
@@ -2120,5 +3132,29 @@
   "flank_patrol_doppler_tone end to end: its 6-ping simulation ran 4 h 40 min on the shared CPU and was stopped (GPU-job item)",
   "the cfar combiner's false-alarm rate at the default budget (1e-3 a ping)",
   "the flank array's noise count with cfar"
- ]
+ ],
+ "regenerated": {
+  "date": "2026-11-27",
+  "why": "D-251: the boundary reverberation's Doppler is per frequency by default (issue sonar-rar0)",
+  "tree": "1166ca6",
+  "backend": "cuda",
+  "replaced": [
+   "cfar_scenes.popoto_far_mover",
+   "cfar_scenes.popoto_12km",
+   "tone_p12"
+  ],
+  "not_regenerated": [],
+  "commands": {
+   "cfar_scenes.popoto_far_mover": "tools/doppler_bank_eval.py popoto_far_mover --combine cfar --background 4",
+   "cfar_scenes.popoto_12km": "tools/doppler_bank_eval.py popoto_12km --combine cfar --background 4",
+   "tone_p12": "tools/doppler_tone_eval.py popoto_12km_doppler --background 4"
+  },
+  "kept": {
+   "threshold_noise": "noise only: no reverberation, not stale",
+   "cfar_scenes.flank_patrol": "platform still: not stale",
+   "tone_alt": "flank_patrol, platform still: not stale",
+   "tone_p12_wholetrain": "made before 51d2b12 and 80df69d (the chain as it was then): not reproducible at this tree; historical, kept as it was",
+   "default_off": "hashes between two trees, not a simulation result"
+  }
+ }
 }

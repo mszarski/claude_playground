@@ -858,6 +858,9 @@
    "pings": 6,
    "channels": 32,
    "max_range_rate_m_s": 3.0,
+   "combine": "max",
+   "truth_at": "ping",
+   "gate_range_m": 60.0,
    "engines": {
     "python": {
      "off": {
@@ -865,44 +868,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 26.918134321562146,
+          "snr_db": 26.93089129051087,
           "threshold_db": 13.2478,
-          "margin_db": 13.670334321562146,
+          "margin_db": 13.683091290510871,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.9912274137260555
          },
          {
-          "snr_db": 25.246820277065304,
+          "snr_db": 25.352135676074976,
           "threshold_db": 13.2478,
-          "margin_db": 11.999020277065304,
+          "margin_db": 12.104335676074976,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.8813503376391045
          },
          {
-          "snr_db": 26.042318217532138,
+          "snr_db": 25.97712215693,
           "threshold_db": 13.2478,
-          "margin_db": 12.794518217532138,
+          "margin_db": 12.729322156930001,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.7708948232106071
          },
          {
-          "snr_db": 24.868573855326837,
+          "snr_db": 24.915170004264052,
           "threshold_db": 13.2478,
-          "margin_db": 11.620773855326837,
+          "margin_db": 11.667370004264052,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.6599300304706429
          },
          {
-          "snr_db": 25.15531607909585,
+          "snr_db": 25.125921237493543,
           "threshold_db": 13.2478,
-          "margin_db": 11.907516079095851,
+          "margin_db": 11.878121237493543,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.5485267765604876
          },
          {
-          "snr_db": 25.346513308067046,
+          "snr_db": 25.318905688000008,
           "threshold_db": 13.2478,
-          "margin_db": 12.098713308067046,
+          "margin_db": 12.071105688000008,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4367573190150188
          }
@@ -913,14 +916,14 @@
        }
       },
       "seconds": [
-       3.216839225999138,
-       3.1054364499941585,
-       2.8521893180004554,
-       2.715178697995725,
-       2.7096557680051774,
-       2.6612243019990274
+       1.1701226210000186,
+       0.11414308999997047,
+       0.11648052300006384,
+       0.11803407000002153,
+       0.11033838399998785,
+       0.10779603700007101
       ],
-      "seconds_median_after_first": 2.715178697995725,
+      "seconds_median_after_first": 0.11414308999997047,
       "detections_per_ping": [
        1,
        1,
@@ -937,44 +940,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 21.665688041731123,
+          "snr_db": 21.647548251973813,
           "threshold_db": 13.2478,
-          "margin_db": 8.417888041731123,
-          "range_rate_m_s": 1.3097214088000002,
+          "margin_db": 8.399748251973813,
+          "range_rate_m_s": -0.7484122336000001,
           "true_range_rate_m_s": -0.9912274137260555
          },
          {
-          "snr_db": 21.892430680188202,
+          "snr_db": 21.87101580638158,
           "threshold_db": 13.2478,
-          "margin_db": 8.644630680188202,
+          "margin_db": 8.623215806381578,
           "range_rate_m_s": 1.3097214088000002,
           "true_range_rate_m_s": -0.8813503376391045
          },
          {
-          "snr_db": 20.524744144092253,
+          "snr_db": 20.455436228199307,
           "threshold_db": 13.2478,
-          "margin_db": 7.276944144092253,
+          "margin_db": 7.207636228199307,
           "range_rate_m_s": -2.8065458760000004,
           "true_range_rate_m_s": -0.7708948232106071
          },
          {
-          "snr_db": 22.687972641546786,
+          "snr_db": 22.77031853034213,
           "threshold_db": 13.2478,
-          "margin_db": 9.440172641546786,
+          "margin_db": 9.522518530342131,
           "range_rate_m_s": 2.6194428176000004,
           "true_range_rate_m_s": -0.6599300304706429
          },
          {
-          "snr_db": 22.63983664935474,
+          "snr_db": 22.5739811845471,
           "threshold_db": 13.2478,
-          "margin_db": 9.392036649354742,
+          "margin_db": 9.326181184547101,
           "range_rate_m_s": 1.6839275256000001,
           "true_range_rate_m_s": -0.5485267765604876
          },
          {
-          "snr_db": 23.14035086249008,
+          "snr_db": 23.128637635286488,
           "threshold_db": 13.2478,
-          "margin_db": 9.892550862490081,
+          "margin_db": 9.880837635286488,
           "range_rate_m_s": -1.1226183504000002,
           "true_range_rate_m_s": -0.4367573190150188
          }
@@ -985,14 +988,14 @@
        }
       },
       "seconds": [
-       116.10119063599996,
-       117.70392560300388,
-       119.13501493399963,
-       122.74977319699974,
-       118.93857109599776,
-       125.52292446300271
+       0.6220282680000082,
+       0.37227878500004863,
+       0.3727763279999863,
+       0.367526268000006,
+       0.3684711509999943,
+       0.3662574049999421
       ],
-      "seconds_median_after_first": 119.13501493399963,
+      "seconds_median_after_first": 0.3684711509999943,
       "detections_per_ping": [
        1,
        1,
@@ -1018,10 +1021,10 @@
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 12.348479343108218,
-       "margin_on_db": 8.844037169900533,
-       "gross_db": -3.504442173207689,
-       "net_db": -3.504442173207689,
+       "margin_off_db": 12.355557675545576,
+       "margin_on_db": 8.826689606121738,
+       "gross_db": -3.528868069423839,
+       "net_db": -3.528868069423839,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -1029,7 +1032,7 @@
        "kind_off": "mover",
        "kind_on": "mover",
        "range_rate_on": [
-        1.3097214088000002,
+        -0.7484122336000001,
         1.3097214088000002,
         -2.8065458760000004,
         2.6194428176000004,
@@ -1053,44 +1056,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 26.91813483,
+          "snr_db": 26.93089077,
           "threshold_db": 13.2478,
-          "margin_db": 13.67033483,
+          "margin_db": 13.683090770000002,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.9912274137260555
          },
          {
-          "snr_db": 25.24682028,
+          "snr_db": 25.35213673,
           "threshold_db": 13.2478,
-          "margin_db": 11.999020280000002,
+          "margin_db": 12.104336730000002,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.8813503376391045
          },
          {
-          "snr_db": 26.04231852,
+          "snr_db": 25.97712246,
           "threshold_db": 13.2478,
-          "margin_db": 12.794518519999999,
+          "margin_db": 12.72932246,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.7708948232106071
          },
          {
-          "snr_db": 24.86857386,
+          "snr_db": 24.91517,
           "threshold_db": 13.2478,
-          "margin_db": 11.620773860000002,
+          "margin_db": 11.66737,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.6599300304706429
          },
          {
-          "snr_db": 25.15531535,
+          "snr_db": 25.12592124,
           "threshold_db": 13.2478,
-          "margin_db": 11.907515349999999,
+          "margin_db": 11.87812124,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.5485267765604876
          },
          {
-          "snr_db": 25.34651282,
+          "snr_db": 25.31890569,
           "threshold_db": 13.2478,
-          "margin_db": 12.098712820000001,
+          "margin_db": 12.071105690000001,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4367573190150188
          }
@@ -1101,14 +1104,14 @@
        }
       },
       "seconds": [
-       2.2249441029998707,
-       2.670709029000136,
-       3.0228508680011146,
-       2.3210910849957145,
-       2.1883976870012702,
-       2.454822879997664
+       0.14055298900007074,
+       0.0656672149999622,
+       0.06062991900000725,
+       0.060024804000022414,
+       0.05998052299992196,
+       0.06034553999995751
       ],
-      "seconds_median_after_first": 2.454822879997664,
+      "seconds_median_after_first": 0.06034553999995751,
       "detections_per_ping": [
        1,
        1,
@@ -1125,44 +1128,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 21.66568853,
+          "snr_db": 21.64754825,
           "threshold_db": 13.2478,
-          "margin_db": 8.41788853,
-          "range_rate_m_s": 1.309721409,
+          "margin_db": 8.39974825,
+          "range_rate_m_s": -0.7484122336,
           "true_range_rate_m_s": -0.9912274137260555
          },
          {
-          "snr_db": 21.8924311,
+          "snr_db": 21.87101581,
           "threshold_db": 13.2478,
-          "margin_db": 8.6446311,
+          "margin_db": 8.62321581,
           "range_rate_m_s": 1.309721409,
           "true_range_rate_m_s": -0.8813503376391045
          },
          {
-          "snr_db": 20.52474444,
+          "snr_db": 20.45543623,
           "threshold_db": 13.2478,
-          "margin_db": 7.276944439999999,
+          "margin_db": 7.20763623,
           "range_rate_m_s": -2.806545876,
           "true_range_rate_m_s": -0.7708948232106071
          },
          {
-          "snr_db": 22.68797229,
+          "snr_db": 22.77031853,
           "threshold_db": 13.2478,
-          "margin_db": 9.440172290000001,
+          "margin_db": 9.522518530000001,
           "range_rate_m_s": 2.619442818,
           "true_range_rate_m_s": -0.6599300304706429
          },
          {
-          "snr_db": 22.63983701,
+          "snr_db": 22.57398118,
           "threshold_db": 13.2478,
-          "margin_db": 9.392037010000001,
+          "margin_db": 9.32618118,
           "range_rate_m_s": 1.683927526,
           "true_range_rate_m_s": -0.5485267765604876
          },
          {
-          "snr_db": 23.14035118,
+          "snr_db": 23.12863764,
           "threshold_db": 13.2478,
-          "margin_db": 9.89255118,
+          "margin_db": 9.880837640000001,
           "range_rate_m_s": -1.12261835,
           "true_range_rate_m_s": -0.4367573190150188
          }
@@ -1173,14 +1176,14 @@
        }
       },
       "seconds": [
-       125.6150730119989,
-       121.2746614639982,
-       127.71311380800034,
-       124.85655429499457,
-       120.86955118899641,
-       131.63544379700033
+       0.3679291490000196,
+       0.349855517999913,
+       0.3476080909999837,
+       0.34708274899992375,
+       0.3475905220000186,
+       0.3455365309999934
       ],
-      "seconds_median_after_first": 124.85655429499457,
+      "seconds_median_after_first": 0.3475905220000186,
       "detections_per_ping": [
        1,
        1,
@@ -1206,10 +1209,10 @@
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 12.348479276666666,
-       "margin_on_db": 8.844037425,
-       "gross_db": -3.5044418516666664,
-       "net_db": -3.5044418516666664,
+       "margin_off_db": 12.355557815,
+       "margin_on_db": 8.826689606666667,
+       "gross_db": -3.528868208333334,
+       "net_db": -3.528868208333334,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -1217,7 +1220,7 @@
        "kind_off": "mover",
        "kind_on": "mover",
        "range_rate_on": [
-        1.309721409,
+        -0.7484122336,
         1.309721409,
         -2.806545876,
         2.619442818,
@@ -1243,10 +1246,21 @@
      "pings": 4
     },
     "3.0": {
-     "off": 18,
+     "off": 16,
      "on": 0,
      "pings": 4
     }
+   },
+   "backend": "cuda",
+   "sim_backend": "cuda",
+   "set": [],
+   "off_only": false,
+   "transmit": {
+    "type": "Lfm",
+    "f_start": 6000.0,
+    "f_stop": 10000.0,
+    "duration": 1.0,
+    "source_level_db_peak": 188.0102999566398
    }
   },
   "popoto_12km": {
@@ -1254,6 +1268,9 @@
    "pings": 6,
    "channels": 32,
    "max_range_rate_m_s": 3.0,
+   "combine": "max",
+   "truth_at": "ping",
+   "gate_range_m": 60.0,
    "engines": {
     "python": {
      "off": {
@@ -1261,44 +1278,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 22.59975856657324,
+          "snr_db": 22.591449185698103,
           "threshold_db": 13.0648,
-          "margin_db": 9.53495856657324,
+          "margin_db": 9.526649185698103,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4988925168426798
          },
          {
-          "snr_db": 22.909896341812797,
+          "snr_db": 22.92541448179172,
           "threshold_db": 13.0648,
-          "margin_db": 9.845096341812797,
+          "margin_db": 9.86061448179172,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4061219754350797
          },
          {
-          "snr_db": 20.013943302853413,
+          "snr_db": 20.03116540716631,
           "threshold_db": 13.0648,
-          "margin_db": 6.949143302853413,
+          "margin_db": 6.966365407166309,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.3131641028455749
          },
          {
-          "snr_db": 24.42318707624144,
+          "snr_db": 24.428211438751916,
           "threshold_db": 13.0648,
-          "margin_db": 11.35838707624144,
+          "margin_db": 11.363411438751916,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.22006143307049927
          },
          {
-          "snr_db": 22.16752159955866,
+          "snr_db": 22.159066398681833,
           "threshold_db": 13.0648,
-          "margin_db": 9.102721599558661,
+          "margin_db": 9.094266398681834,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.12685683390447605
          },
          {
-          "snr_db": 20.938524348954775,
+          "snr_db": 20.925324008459704,
           "threshold_db": 13.0648,
-          "margin_db": 7.8737243489547755,
+          "margin_db": 7.860524008459704,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.03359340881138415
          }
@@ -1309,14 +1326,14 @@
        }
       },
       "seconds": [
-       1.9269866620015819,
-       1.4482221950020175,
-       1.2875057210039813,
-       1.3661784889991395,
-       1.442650290999154,
-       1.15093651299685
+       0.4161585479999985,
+       0.0529446470000039,
+       0.05208686499997839,
+       0.049851078999950005,
+       0.047858008999924095,
+       0.04326233699998738
       ],
-      "seconds_median_after_first": 1.3661784889991395,
+      "seconds_median_after_first": 0.049851078999950005,
       "detections_per_ping": [
        1,
        1,
@@ -1333,44 +1350,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 19.84325006271093,
+          "snr_db": 19.849075253726497,
           "threshold_db": 13.0648,
-          "margin_db": 6.778450062710929,
+          "margin_db": 6.784275253726497,
           "range_rate_m_s": 1.4968244672000002,
           "true_range_rate_m_s": -0.4988925168426798
          },
          {
-          "snr_db": 18.24148855418851,
+          "snr_db": 18.256172029331957,
           "threshold_db": 13.0648,
-          "margin_db": 5.176688554188511,
+          "margin_db": 5.191372029331957,
           "range_rate_m_s": 0.37420611680000004,
           "true_range_rate_m_s": -0.4061219754350797
          },
          {
-          "snr_db": 17.951761676957386,
+          "snr_db": 17.9452038263791,
           "threshold_db": 13.0648,
-          "margin_db": 4.886961676957386,
+          "margin_db": 4.8804038263791,
           "range_rate_m_s": 3.3678550512000003,
           "true_range_rate_m_s": -0.3131641028455749
          },
          {
-          "snr_db": 19.8315692726082,
+          "snr_db": 19.842660501121824,
           "threshold_db": 13.0648,
-          "margin_db": 6.766769272608199,
+          "margin_db": 6.777860501121824,
           "range_rate_m_s": 1.4968244672000002,
           "true_range_rate_m_s": -0.22006143307049927
          },
          {
-          "snr_db": 18.775983678768263,
+          "snr_db": 18.789156081303812,
           "threshold_db": 13.0648,
-          "margin_db": 5.711183678768263,
+          "margin_db": 5.724356081303812,
           "range_rate_m_s": 1.1226183504000002,
           "true_range_rate_m_s": -0.12685683390447605
          },
          {
-          "snr_db": 17.135251610562726,
+          "snr_db": 17.1397815429876,
           "threshold_db": 13.0648,
-          "margin_db": 4.070451610562726,
+          "margin_db": 4.074981542987599,
           "range_rate_m_s": -0.37420611680000004,
           "true_range_rate_m_s": -0.03359340881138415
          }
@@ -1381,14 +1398,14 @@
        }
       },
       "seconds": [
-       31.234407140000258,
-       31.316210814999067,
-       31.684248158999253,
-       30.83356354499847,
-       30.291965663003793,
-       30.6835152700005
+       0.134982515000047,
+       0.11305819200003953,
+       0.11408920700000635,
+       0.1142755109999598,
+       0.11389643300003627,
+       0.11313410200000362
       ],
-      "seconds_median_after_first": 30.83356354499847,
+      "seconds_median_after_first": 0.11389643300003627,
       "detections_per_ping": [
        1,
        1,
@@ -1414,10 +1431,10 @@
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 9.110671872665721,
-       "margin_on_db": 5.56508414263267,
-       "gross_db": -3.545587730033052,
-       "net_db": -3.545587730033052,
+       "margin_off_db": 9.111971820091599,
+       "margin_on_db": 5.572208205808464,
+       "gross_db": -3.539763614283133,
+       "net_db": -3.539763614283133,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -1449,44 +1466,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 22.59975808,
+          "snr_db": 22.59144919,
           "threshold_db": 13.0648,
-          "margin_db": 9.534958080000001,
+          "margin_db": 9.526649189999999,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4988925168426798
          },
          {
-          "snr_db": 22.90989705,
+          "snr_db": 22.92541448,
           "threshold_db": 13.0648,
-          "margin_db": 9.845097050000001,
+          "margin_db": 9.86061448,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.4061219754350797
          },
          {
-          "snr_db": 20.01394246,
+          "snr_db": 20.03116583,
           "threshold_db": 13.0648,
-          "margin_db": 6.949142459999999,
+          "margin_db": 6.966365829999999,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.3131641028455749
          },
          {
-          "snr_db": 24.42318672,
+          "snr_db": 24.42821144,
           "threshold_db": 13.0648,
-          "margin_db": 11.35838672,
+          "margin_db": 11.363411439999998,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.22006143307049927
          },
          {
-          "snr_db": 22.16752099,
+          "snr_db": 22.15906701,
           "threshold_db": 13.0648,
-          "margin_db": 9.10272099,
+          "margin_db": 9.094267010000001,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.12685683390447605
          },
          {
-          "snr_db": 20.93852435,
+          "snr_db": 20.92532355,
           "threshold_db": 13.0648,
-          "margin_db": 7.873724350000002,
+          "margin_db": 7.860523550000002,
           "range_rate_m_s": null,
           "true_range_rate_m_s": -0.03359340881138415
          }
@@ -1497,14 +1514,14 @@
        }
       },
       "seconds": [
-       0.9835181300004479,
-       0.9703224530021544,
-       0.991359088999161,
-       1.1069542989935144,
-       1.0794666489964584,
-       1.3440002710049157
+       0.031222625000054904,
+       0.019667207999987113,
+       0.019932216999904995,
+       0.01970984900003714,
+       0.019040703999962716,
+       0.01815154399992025
       ],
-      "seconds_median_after_first": 1.0794666489964584,
+      "seconds_median_after_first": 0.019667207999987113,
       "detections_per_ping": [
        1,
        1,
@@ -1521,44 +1538,44 @@
        "ship": {
         "pings": [
          {
-          "snr_db": 19.84325006,
+          "snr_db": 19.84907525,
           "threshold_db": 13.0648,
-          "margin_db": 6.778450059999999,
+          "margin_db": 6.7842752499999985,
           "range_rate_m_s": 1.496824467,
           "true_range_rate_m_s": -0.4988925168426798
          },
          {
-          "snr_db": 18.24148926,
+          "snr_db": 18.25617203,
           "threshold_db": 13.0648,
-          "margin_db": 5.176689260000002,
+          "margin_db": 5.191372029999998,
           "range_rate_m_s": 0.3742061168,
           "true_range_rate_m_s": -0.4061219754350797
          },
          {
-          "snr_db": 17.95176123,
+          "snr_db": 17.94520383,
           "threshold_db": 13.0648,
-          "margin_db": 4.886961229999999,
+          "margin_db": 4.8804038300000006,
           "range_rate_m_s": 3.367855051,
           "true_range_rate_m_s": -0.3131641028455749
          },
          {
-          "snr_db": 19.83156892,
+          "snr_db": 19.8426605,
           "threshold_db": 13.0648,
-          "margin_db": 6.766768919999999,
+          "margin_db": 6.777860500000001,
           "range_rate_m_s": 1.496824467,
           "true_range_rate_m_s": -0.22006143307049927
          },
          {
-          "snr_db": 18.77598368,
+          "snr_db": 18.78915608,
           "threshold_db": 13.0648,
-          "margin_db": 5.7111836799999995,
+          "margin_db": 5.7243560800000015,
           "range_rate_m_s": 1.12261835,
           "true_range_rate_m_s": -0.12685683390447605
          },
          {
-          "snr_db": 17.13525201,
+          "snr_db": 17.13978154,
           "threshold_db": 13.0648,
-          "margin_db": 4.070452009999999,
+          "margin_db": 4.074981540000001,
           "range_rate_m_s": -0.3742061168,
           "true_range_rate_m_s": -0.03359340881138415
          }
@@ -1569,14 +1586,14 @@
        }
       },
       "seconds": [
-       27.386841681000078,
-       26.382012236994342,
-       28.37207961900276,
-       27.05320829500124,
-       27.09802968599979,
-       26.90938671099866
+       0.11347886099997595,
+       0.0982058509999888,
+       0.09771945100010271,
+       0.09960385600004429,
+       0.09805794800001877,
+       0.09811638999997285
       ],
-      "seconds_median_after_first": 27.05320829500124,
+      "seconds_median_after_first": 0.09811638999997285,
       "detections_per_ping": [
        1,
        1,
@@ -1602,10 +1619,10 @@
      "summary": {
       "ship": {
        "pings_both": 6,
-       "margin_off_db": 9.110671608333334,
-       "margin_on_db": 5.565084193333331,
-       "gross_db": -3.5455874150000013,
-       "net_db": -3.5455874150000013,
+       "margin_off_db": 9.111971916666667,
+       "margin_on_db": 5.572208205,
+       "gross_db": -3.5397637116666663,
+       "net_db": -3.5397637116666663,
        "detected_off": 6,
        "detected_on": 6,
        "tracked_off": true,
@@ -1639,11 +1656,40 @@
      "pings": 4
     },
     "3.0": {
-     "off": 20,
+     "off": 16,
      "on": 0,
      "pings": 4
     }
+   },
+   "backend": "cuda",
+   "sim_backend": "cuda",
+   "set": [],
+   "off_only": false,
+   "transmit": {
+    "type": "Lfm",
+    "f_start": 4000.0,
+    "f_stop": 6000.0,
+    "duration": 1.0,
+    "source_level_db_peak": 200.0102999566398
    }
+  }
+ },
+ "regenerated": {
+  "date": "2026-11-27",
+  "why": "D-251: the boundary reverberation's Doppler is per frequency by default (issue sonar-rar0)",
+  "tree": "1166ca6",
+  "backend": "cuda",
+  "replaced": [
+   "scenes.popoto_far_mover",
+   "scenes.popoto_12km"
+  ],
+  "not_regenerated": [],
+  "commands": {
+   "scenes.popoto_far_mover": "tools/doppler_bank_eval.py popoto_far_mover --background 4",
+   "scenes.popoto_12km": "tools/doppler_bank_eval.py popoto_12km --background 4"
+  },
+  "kept": {
+   "scenes.flank_patrol": "platform still: not stale (D-251: bit-identical)"
   }
  }
 }
