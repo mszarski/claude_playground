@@ -102,6 +102,33 @@ def view(name: str, out: str, wav: int | None, html_page: bool, three: str | Non
     return facts
 
 
+def _child(conn, call):
+    try:
+        conn.send(("ok", view(*call)))
+    except Exception as exc:                          # sent back to the parent, which reports it
+        conn.send(("error", f"{type(exc).__name__}: {exc}\n" + traceback.format_exc(limit=3)))
+    conn.close()
+
+
+def _with_timeout(call, seconds: float) -> dict:
+    """view(*call) in a child process, stopped after `seconds` (TimeoutError): a scene too slow for this CPU."""
+    import multiprocessing as mp
+    ctx = mp.get_context("fork")
+    parent, child = ctx.Pipe(duplex=False)
+    proc = ctx.Process(target=_child, args=(child, call))
+    proc.start()
+    child.close()
+    if not parent.poll(seconds):
+        proc.kill()
+        proc.join()
+        raise TimeoutError(f"no page after {seconds:g} s on this CPU (simulation, trace and page of one ping)")
+    status, value = parent.recv()
+    proc.join()
+    if status == "error":
+        raise RuntimeError(value)
+    return value
+
+
 def failure_page(name: str, out: str, error: str) -> None:
     """A page that says exactly what failed, in place of a silent omission."""
     import matplotlib
@@ -128,6 +155,8 @@ def main(argv=None) -> int:
     ap.add_argument("--quick", action="store_true", help="thin the densest scenes as tools/gallery.py --quick does")
     ap.add_argument("--all-rays", action="store_true", help="colour every eigenray, not only the strongest of each leg")
     ap.add_argument("--truecolour", action="store_true", help="true-colour PNG (about 3 times larger) instead of the fixed palette")
+    ap.add_argument("--timeout", type=float, default=None, help="give up on a scenario after this many seconds (its page says so)")
+    ap.add_argument("--skip-existing", action="store_true", help="reuse DIR/<name>.facts.json of scenarios already done")
     ap.add_argument("--index", action="store_true", help="write DIR/index.html for the pages named (always with --all)")
     args = ap.parse_args(argv)
     names = list(args.scenarios)
@@ -141,16 +170,27 @@ def main(argv=None) -> int:
     t_all = time.perf_counter()
     for name in names:
         t0 = time.perf_counter()
+        facts_path = os.path.join(args.out, f"{name}.facts.json")
+        if args.skip_existing and os.path.exists(facts_path):
+            with open(facts_path, encoding="utf-8") as f:
+                facts = json.load(f)
+            rows.append(facts)
+            continue
         try:
-            facts = view(name, args.out, args.wav, args.html, args.three, args.engine, args.quick, args.all_rays,
-                         args.truecolour)
+            call = (name, args.out, args.wav, args.html, args.three, args.engine, args.quick, args.all_rays, args.truecolour)
+            facts = _with_timeout(call, args.timeout) if args.timeout else view(*call)
         except Exception as exc:                      # one scenario failing does not stop --all; it is reported
             from gpusonar.viz import catalogue
             err = f"{type(exc).__name__}: {exc}"
-            failure_page(name, args.out, err + "\n" + traceback.format_exc(limit=3))
+            if isinstance(exc, TimeoutError):
+                err += (f". Listed for the GPU job: GPUSONAR_JOB=... is not needed; run there "
+                        f"`PYTHONPATH=python python3 tools/scenario_view.py {name} --out DIR` (CUDA synthesis), or here with more time")
+            failure_page(name, args.out, err + ("" if isinstance(exc, TimeoutError) else "\n" + traceback.format_exc(limit=3)))
             fam, short = catalogue.scenario_family(name)
             facts = {"scenario": name, "family": fam, "family_short": short, "error": err,
                      "seconds": round(time.perf_counter() - t0, 2)}
+        with open(facts_path, "w", encoding="utf-8") as f:
+            json.dump(facts, f)
         rows.append(facts)
         print(json.dumps(facts), flush=True)
     if args.all or args.index:
