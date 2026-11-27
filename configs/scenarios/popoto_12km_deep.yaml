@@ -1,0 +1,72 @@
+# The trade study's noise-limited site through the simulator (issue sonar-rctz; docs/tasks/DOPPLER.md "Deep site at
+# 12 km"): the planning site `deep_no_bottom_return` of configs/builds/environments/illustrative.yaml (no bottom
+# return, isovelocity, 5 m/s wind, no bubble law) by name, with the water the planner's budget assumes
+# (gpusonar.buildspec.budget: Ainslie-McColm absorption at 12 C and 50 m; shipping 0.5, the planner's and the
+# simulator's default). The bubble law and sea states 3 to 5: popoto_12km_deep_sea_state_5, or this file with
+# --set environment.sea_state=N (tools/doppler_bank_eval.py).
+#
+# What the planner assumes and how this file holds it (tests/python/test_deep12_scenes.py compares the values):
+#   - the paths: direct and surface image only (fidelity image_source, no bottom, max_order 1: the planner's
+#     "direct path and surface image (no bottom return), isovelocity"). No Bellhop: the water has no profile.
+#   - the surface: the coherent loss of the rough surface at the site's wind (time_spread.surface, the
+#     Pierson-Moskowitz height of the wind as the planner's lloyd.Surface takes it; the simulator adds the scattered
+#     rest as later taps, which the planner's peak leaves out).
+#   - ambient noise: Wenz at the site's wind (receiver.ambient_noise from the environment), isotropic coherence, as
+#     the planner's buildspec.budget (Wenz at the band centre, the row's gain against isotropic noise).
+#   - reverberation: the site's boundaries by the one rule (`reverberation: site`): Chapman-Harris at the site's
+#     wind on the surface; the site states no bottom.
+# The array: the three-row face (popoto_long_range_3row, configs/builds/popoto_face_3x32.yaml), at 225 m: the own
+# depth docs/design/popoto_depth_planner.json recommends for `ship` on this face at both deep sites, and the depth
+# that holds `ship` and `large_submerged` together best at this one (large_submerged alone: 245 m). Under way at
+# 1.5 m/s like popoto_12km. Window 11.3 to 12.7 km at baseband, as popoto_12km.
+# Targets (the classes of configs/builds/targets/reference_classes.yaml at the LOW end of their target strength,
+# status ASSUMED), bearing from broadside positive toward +x, range rate positive opening:
+#   - closing, oblique, crossing: popoto_12km_large_submerged's three `large_submerged` hulls (five highlights of
+#     +18.01 dB, 25 m apart: +25.00 dB in all; 50 m deep; range rates -5.61, -0.50, -0.39 m/s), unchanged, so the
+#     results compare with the shelf's (DOPPLER.md LS.3, HFM.8).
+#   - ship: popoto_12km's ship (five highlights of +18.0 dB, 30 m apart, 4 m deep, 6 m/s along -x) at +29.2 degrees,
+#     11.9 km: range rate -3.65 m/s (-2.92 m/s of its own along the line of sight and -0.73 of the platform's).
+#   - point: one +25 dB point (the planner's own target), 50 m deep at -30 degrees, 12 km, moving with the platform
+#     (range rate 0): the planner's zero-speed prediction without a hull's structure, for every waveform.
+name: popoto_12km_deep
+sonar: popoto_long_range_3row
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
+environment: {base: deep_no_bottom_return, temperature_c: 12.0, salinity_psu: 35.0, reference_depth_m: 50.0, shipping: 0.5, absorption: ainslie_mccolm}
+propagation: {surface_z: 0.0, max_order: 1}
+time_spread:
+  surface: true                       # the site's wind: the rough surface's coherent loss and its scattered rest
+platform: {position: [0, 0, 225.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 19.9}
+scene:
+  - type: points
+    label: closing
+    positions: [[-3170.5, 11832.6, 50.0], [-3164.1, 11808.4, 50.0], [-3157.6, 11784.3, 50.0], [-3151.1, 11760.1, 50.0], [-3144.7, 11736.0, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.5529, -5.7956, 0.0]
+  - type: points
+    label: oblique
+    positions: [[-48.4, 12012.5, 50.0], [-24.2, 12006.2, 50.0], [0.0, 12000.0, 50.0], [24.2, 11993.8, 50.0], [48.4, 11987.5, 50.0]]
+    target_strength_db: 18.01
+    velocity: [1.9365, -0.5, 0.0]
+  - type: points
+    label: crossing
+    positions: [[3057.5, 11604.1, 50.0], [3081.7, 11597.6, 50.0], [3105.8, 11591.1, 50.0], [3130.0, 11584.6, 50.0], [3154.1, 11578.2, 50.0]]
+    target_strength_db: 18.01
+    velocity: [1.9319, -0.5176, 0.0]
+  - type: points
+    label: ship
+    positions: [[5740.0, 10392.3, 4.0], [5770.0, 10392.3, 4.0], [5800.0, 10392.3, 4.0], [5830.0, 10392.3, 4.0], [5860.0, 10392.3, 4.0]]
+    target_strength_db: 18.0        # as popoto_12km's ship: 24.99 dB in all, the class's low end
+    velocity: [-6.0, 0.0, 0.0]
+  - type: points
+    label: point
+    positions: [[-6000.0, 10392.3, 50.0]]
+    target_strength_db: 25.0
+    velocity: [1.5, 0.0, 0.0]
+reverberation: site
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 61

@@ -144,7 +144,7 @@ def test_every_scenario_has_a_models_list():
     from gpusonar.sonar import SonarModel
     root = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "scenarios")
     names = sorted(f[:-5] for f in os.listdir(root) if f.endswith(".yaml"))
-    assert len(names) == 98
+    assert len(names) == 100
     for name in names:
         cfg = acoustics.resolve_sea_state(load_scenario_config(name, None, expand=False))
         sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))

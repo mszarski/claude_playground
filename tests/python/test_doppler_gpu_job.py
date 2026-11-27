@@ -293,3 +293,47 @@ def test_the_hfm12_sub_run_in_its_quick_host_form(tmp_path):
     # The energy bookkeeping: the eq runs 10 log10 4 under the shipped level (same energy as 1 s), the others at it.
     assert peak["hfm4eq_plain"] == pytest.approx(peak["hfm1_plain"] - 10 * np.log10(4.0), abs=0.01)
     assert peak["lfm4eq_plain"] == pytest.approx(peak["lfm4_cfar"] - 10 * np.log10(4.0), abs=0.01) and peak["hfm4_plain"] == peak["lfm1_cfar"]
+
+
+# --- doppler_bank_eval's --chain-set and the deep12 sub-run (DOPPLER.md "Deep site at 12 km"; issue sonar-rctz) -------------
+
+def test_bank_eval_chain_set_changes_every_chain_and_nothing_without_it():
+    old = list(doppler_bank_eval.CHAIN_SETS)
+    try:
+        assert "elevation" not in doppler_bank_eval.chain_config("cpp", False, 3.0)               # the default, as before
+        doppler_bank_eval.CHAIN_SETS = ["elevation={}", "cfar.guard_m=5.0"]
+        for cfg in (doppler_bank_eval.chain_config("cpp", False, 3.0), doppler_bank_eval.chain_config("python", True, 3.0, 3.0, "cfar")):
+            assert cfg["elevation"] == {} and cfg["cfar"]["guard_m"] == 5.0
+        assert doppler_bank_eval.chain_config("cpp", False, 3.0, 3.0)["cfar"] == {"false_alarms_per_ping": 3.0, "guard_m": 5.0}
+    finally:
+        doppler_bank_eval.CHAIN_SETS = old
+
+
+def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
+    """GPUSONAR_DOPPLER_RUNS=deep12, GPUSONAR_DOPPLER_QUICK=1 on the host, four of its cases (one free-field ping and one
+    target-free ping each, the bank to 0.3 m/s): each case's JSON with its sea state, transmit, filter and the rows added in
+    power; the bank case reads the plain case's records from the cache (no new record file); an unknown case fails the
+    sub-run without stopping the others. It measures nothing."""
+    out = tmp_path / "doppler"
+    env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="deep12", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1")
+    env.pop("GPUSONAR_UPLOAD_REPO", None)
+    got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True,
+                         timeout=1500)
+    assert got.returncode == 2, got.stdout[-4000:] + got.stderr[-2000:]           # the unknown case, and only it
+    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 4
+    want = {"ss3_lfm1": (3, "Lfm", 1.0, 197.0, True), "ss5_hfm1": (5, "Arbitrary", 1.0, 197.0, True),
+            "ss5_lfm4p200": (5, "Lfm", 4.0, 200.0, True), "ss5_lfm4p200_cfar": (5, "Lfm", 4.0, 200.0, False)}
+    for name, (ss, kind, dur, level, off_only) in want.items():
+        res = json.loads((out / f"deep12_{name}.json").read_text())
+        assert res["scene"] == "popoto_12km_deep_sea_state_5" and f"environment.sea_state={ss}" in res["set"], name
+        assert res["transmit"]["type"] == kind and res["transmit"]["duration"] == dur and res["off_only"] == off_only, name
+        assert res["chain_set"] == ["elevation={}"] and res["channels"] == 96 and res["truth_at"] == "reflection", name
+        assert set(res["engines"]) == ({"python", "cpp"} if name == "ss3_lfm1" else {"cpp"}), name
+        assert set(res["engines"]["cpp"]["summary"]) == {"closing", "oblique", "crossing", "ship", "point"}, name
+        assert res["background"]["default"]["pings"] == 1, name
+        if kind == "Lfm":
+            assert res["transmit"]["source_level_db_peak"] == pytest.approx(level + 10 * np.log10(2.0), abs=0.01), name    # rms + 3 dB
+    a, b = (json.loads((out / f"deep12_{n}.json").read_text()) for n in ("ss5_lfm4p200", "ss5_lfm4p200_cfar"))
+    assert a["engines"]["cpp"]["off"]["detections_per_ping"] == b["engines"]["cpp"]["off"]["detections_per_ping"]
+    assert len(list((out / "cache").glob("*.h5"))) == 2 * 3                     # three plain cases, scene and background each: the bank made none

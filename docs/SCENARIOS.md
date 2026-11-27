@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 98 scenario files; the forty-three named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 100 scenario files; the forty-five named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 | Scene pages (D-248): rays and bounces per tier, beams, the boundary and water models in force with their sources, the parts of the signal, and a 3-D page with sound at each hydrophone | 13 scenarios committed under `docs/figures/scenes/` (one a family and `flank_seamount_3d`; `index.html` lists them); the others are regenerated, not committed; four scenes have no rays or sound and six no sound on a CPU (`docs/tasks/VISUALIZATION.md` sections 12 to 14). Since D-253 the live chain drawn on the same page (`--chain`: detections, tracks, truth; section 15), two such pages under `docs/figures/scenes/chain/`; the two pool scenes have no chain view | `tools/scenario_view.py` |
@@ -1009,12 +1009,12 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 98 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 100 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Forty-three files have no geometry diagram in `docs/scenarios/` yet: the four Doppler scenes of `sonar-u1fu` and
+set. Forty-five files have no geometry diagram in `docs/scenarios/` yet: the four Doppler scenes of `sonar-u1fu` and
 `flank_patrol_doppler_tone` (the geometry of `flank_patrol`, `popoto_far_mover` and `popoto_12km`, whose diagrams apply),
-the two `popoto_12km_large_submerged*` scenes (`popoto_12km`'s water and array, their own targets), `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
+the two `popoto_12km_large_submerged*` scenes (`popoto_12km`'s water and array, their own targets), the two `popoto_12km_deep*` scenes, `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
 scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
 SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, `popoto_12km_two_ships`, the three
 `popoto_testauv_direct_overload*`, the three `fjord_*`, the three `ssp_*` and the four multipath
@@ -1134,7 +1134,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_far_mover` | Gallery. 32 hydrophones in the 6 to 10 kHz band against a ship-sized mover at 6 km, ownship at 1.5 m/s. Needs Bellhop. |
 | `popoto_far_mover_doppler` | `popoto_far_mover` with the train of `flank_patrol_doppler` (8 kHz Hann tone, then the 6-10 kHz sweep; half the energy each; peak 1.0 dB higher). The baseline found noise, not reverberation, behind the ship here. Measured: tone with the bank 47.9 / 51.7 dB, sweep 24.1 / 24.2 dB (`popoto_far_mover`'s 27.2 / 27.8: half the energy). Not in the gallery. Needs Bellhop. |
 
-### The 12 km design (`popoto_long_range`: 4 to 6 kHz, 197 dB, 32 hydrophones a row)
+### The 12 km design (`popoto_long_range`: 4 to 6 kHz, 197 dB, 32 hydrophones a row; the deep-site scenes three rows)
 
 | Scenario | What it is |
 | --- | --- |
@@ -1142,6 +1142,8 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_12km_2row` | The same with two stacked rows on the face (outer rows 1.5 m apart); the ship 4 m deep. Needs Bellhop. |
 | `popoto_12km_3row` | The same with three rows. Needs Bellhop. |
 | `popoto_12km_doppler` | `popoto_12km` with a 1 s Hann tone at 5 kHz, then the 4-6 kHz sweep (half the energy each; peak 1.0 dB higher; the ping 2 s: twice the duty the projector is sized for, an owner question). The ship's radial speed is small (−0.50 m/s): the Doppler path is not expected to help, and the scene is there to show it. Measured: tone with the bank 33.2 / 28.8 dB, sweep 21.2 / 21.3 dB (`popoto_12km`'s 24.0 / 24.6). Not in the gallery. Needs Bellhop. |
+| `popoto_12km_deep` | The trade study's noise-limited planning site `deep_no_bottom_return` (configs/builds/environments/illustrative.yaml) by name: no bottom, isovelocity, 5 m/s, no bubble law, with the planner's water (Ainslie-McColm at 12 C and 50 m). Image-source paths: direct and rough surface image only (no Bellhop). The three-row face (`popoto_long_range_3row`) at 225 m, the own depth the depth plan recommends; `popoto_12km_large_submerged`'s three hulls, a ship at +29 degrees (range rate -3.65 m/s) and a +25 dB point moving with the platform (range rate 0). Issue `sonar-rctz`; not in the gallery. |
+| `popoto_12km_deep_sea_state_5` | The same at the planning site `deep_no_bottom_return_sea_state_5` (12.6 m/s, the apl_1994 bubble law at each surface bounce); sea states 3 and 4 by `--set environment.sea_state=N`. The check of the transmit table's noise-limited claims through the simulator and both chain engines: the baseline design (1 s, 197 dB, sea state 3) and the sea-state-5 alternate (4 s, 200 dB; D-255); the `doppler` job's opt-in `deep12` sub-run (`docs/tasks/DOPPLER.md` "Deep site at 12 km"). Not in the gallery. |
 | `popoto_12km_large_submerged` | `popoto_12km`'s water, array, platform and seed with three `large_submerged` targets (the class the owner set the 12 km requirement for first, D-235) at its low +25 dB (five +18.01 dB highlights along a 100 m hull), 50 m deep: closing at 6 m/s bow-on (range rate −5.61 m/s), oblique at 2 m/s (−0.50, 0.50 m/s from its beam's own-motion ridge) and crossing at 2 m/s (on the ridge). The shipped sweep only. Measured (`docs/tasks/DOPPLER.md` "Large submerged at 12 km", both engines, 6 pings; ours): all three detected on 6 of 6 and tracked, margins 8.0 to 11.4 dB (3 to 6 dB under the planner's point target: the hull's highlights resolved in range); `combine: cfar` +0.6 to +0.9 dB. Not in the gallery. Needs Bellhop. |
 | `popoto_12km_large_submerged_tone` | The same with a 1 s Hann tone at 6.5 kHz (0.5 kHz above the 4-6 kHz sweep, the rule of `flank_patrol_doppler_tone`), then the sweep, in one 2 s ping; half the energy each. Measured on one ping only (58 min a ping to simulate on the CPU): the tone gives the closing and oblique targets' range rates within 0.06 m/s, not the crossing one's (in the notch); 4 false tone detections beyond ±32° through the array's grating lobes at 6.5 kHz. On an L4 (D-243, job 6b08f68754072e8b7168e9c6, 6 pings): closing and oblique 6 of 6 with their rates, crossing 6 of 6 by the sweep only; 22 false detections on 4 target-free pings at the default budget with the tone path on, all the tone's, against 0 with it off; **D-246 corrects that reading: they are mostly an artefact of the simulator** (its boundary reverberation's Doppler was one shift at the record's centre frequency, 5.3 kHz on this train, so the 6.5 kHz tone saw still water at 0.815 of its physical ridge; D-249, fixed by D-251), not a property of the tone path. With the grating-lobe notch (merged, D-246) the same pings gave 25 at the notch's edge under the old simulator (job 6b0911926c5d61fff1888f01). **With the corrected simulator (D-252, job 6b0947c354072e8b71697a5a, 4 target-free pings): 0 false detections at the default budget with the notch, 17 without it (all on a lobe's ridge), 1 with the tone path off.** The tone path is off by default (D-244, D-252). Not in the gallery. Needs Bellhop. |
 | `popoto_12km_two_ships` | `popoto_12km` with a second ship beyond the first, at one bearing and one velocity, 850 m apart in range: the test scene of echo grouping's reach (a group reaches no farther than one gate from its object, D-172). Needs Bellhop. |
