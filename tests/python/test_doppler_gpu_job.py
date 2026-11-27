@@ -11,6 +11,7 @@ import pathlib
 import subprocess
 import sys
 
+import numpy as np
 import pytest
 
 from gpusonar import core
@@ -133,3 +134,57 @@ def test_the_mode_in_its_quick_host_form(tmp_path):
     assert [r["variant"] for r in tone_t] == ["off", "tone"]
     for name in ("tone", "falsealarm", "timing"):
         assert "exit 0" in (out / f"{name}.log").read_text()
+
+
+# --- the tone path's false detections attributed to the grating lobes (tools/doppler_tone_eval.py) ----------------------
+
+def test_tone_eval_passes_the_lobe_notch_switch_and_the_ls12_run_has_both_passes():
+    old = doppler_tone_eval.LOBE_NOTCH
+    try:
+        assert "tone_lobe_notch" not in doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)["doppler"]     # as before
+        doppler_tone_eval.LOBE_NOTCH = "off"
+        assert doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)["doppler"]["tone_lobe_notch"] == "off"
+        assert "doppler" not in doppler_tone_eval.chain_config("cpp", None, 3.0)
+    finally:
+        doppler_tone_eval.LOBE_NOTCH = old
+    runs = (ROOT / "tools" / "doppler_gpu_runs.sh").read_text()
+    assert "--tone-lobe-notch off" in runs and "ls12_tone_train_lobe_off.json" in runs and "ls12_tone_train.json" in runs
+
+
+def test_the_attribution_kinds_on_a_made_geometry():
+    """A beam at -36 degrees with its own ridge +0.88 (notch 0.38) and a lobe's ridge -1.43 (notch 0.38), one at 0 with none."""
+    geo = {"bearings_deg": np.array([-36.0, 0.0]), "ownship": [0.88, 0.0], "notch": [0.38, 0.38],
+           "lobes": {0: [{"beam": 0, "direction": 1.25, "ownship": -1.43, "notch": 0.38, "endfire": False, "response_db": 0.0}]}}
+    det = lambda b, r: {"bearing_deg": b, "range_m": 900.0, "range_rate_m_s": r, "snr_db": 20.0, "doppler_path": "tone"}  # noqa: E731
+    on = doppler_tone_eval.attribute(det(-35.8, -1.40), geo)
+    assert on["kind"] == "lobe_ridge" and on["visible_lobe"] and not on["endfire_notch"] and on["lobe_ridge_widths"] < 0.1
+    edge = doppler_tone_eval.attribute(det(0.2, 0.55), geo)
+    assert edge["kind"] == "notch_edge" and edge["visible_lobe"] is False and edge["own_ridge_widths"] == pytest.approx(0.55 / 0.38)
+    other = doppler_tone_eval.attribute(det(0.0, 1.5), geo)
+    assert other["kind"] == "other" and other["lobe_ridge_widths"] is None
+    sweep = doppler_tone_eval.attribute(dict(det(-36.0, None), doppler_path="sweep"), geo)
+    assert sweep["kind"] == "no_rate" and sweep["visible_lobe"] is True
+    line = doppler_tone_eval.attribution_summary([on, edge, other, sweep], "x")
+    assert line.startswith("x: 2 of 4 beyond the lobe onset; 1 on a lobe's ridge; 1 at the own notch's edge") and "the rest 1: 0.0 deg +1.50 m/s" in line
+
+
+def test_the_attribution_on_the_lobe_record_explains_every_false_detection_with_the_notch_off():
+    """test_doppler_tone_lobes.py's still field (6.5 kHz, under way): with the lobe notch off every false tone detection is
+    on a lobe's ridge, on a beam beyond the onset; with it there is none to attribute. The geometry is the auto plan's
+    either way."""
+    import test_doppler_tone_lobes as lobes
+    rec = lobes.ping(field=2000)
+    rows = {}
+    for notch in ("off", "auto"):
+        with LiveChainFor(notch) as chain:
+            rep = chain.process(rec.copy())
+        geo = doppler_tone_eval.lobe_geometry(rec, {"tone": "bank"}, 3.0)
+        rows[notch] = [doppler_tone_eval.attribute(d, geo) for d in rep["detections"]]
+    assert len(rows["off"]) >= 1 and all(r["kind"] == "lobe_ridge" and (r["visible_lobe"] or r["endfire_notch"]) for r in rows["off"]), rows["off"]
+    assert rows["auto"] == []
+    assert doppler_tone_eval.lobe_geometry(rec, None, 3.0) is None
+
+
+def LiveChainFor(notch):
+    from gpusonar.live import LiveChain
+    return LiveChain({"engine": "cpp", "backend": "host", "doppler": {"tone": "bank", "report": True, "tone_lobe_notch": notch}})

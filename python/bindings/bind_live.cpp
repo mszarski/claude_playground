@@ -797,6 +797,11 @@ void bind_live(py::module_& m) {
         out["baseband_max_range_rate"] = p.baseband_max_range_rate;
         out["json"] = p.json();
         lobe_fields(out, p);
+        // Each beam's own ridge and notch (step 4), for a tool that attributes detections (tools/doppler_tone_eval.py).
+        out["ownship"] = p.ownship;
+        out["notch"] = p.notch;
+        out["resolution"] = p.resolution;
+        out["step"] = p.step;
         return out;
       },
       py::arg("record"), py::arg("bearings"), py::arg("options"), py::arg("default_budget") = 1e-3, py::arg("hann") = true,

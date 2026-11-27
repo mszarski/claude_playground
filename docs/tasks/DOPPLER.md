@@ -1373,3 +1373,15 @@ train's bank is refused, LS.1 item 6; an alternating pair with both on) has no e
 for a velocity across the line (GL.1 item 6) is untested; a multi-row array's plan is tested only through
 `uniform_pitch`; the Python engine's CW nonsense (D3.1 item 7) is stated by a test, not fixed; the tracker does not use
 the tone's rate (D5).
+
+### GL.7 The attribution of false detections (`tools/doppler_tone_eval.py`, added after GL.1 to GL.6)
+
+Every false detection on the background pings and every detection on the target pings that matches no target is saved
+in the JSON with its bearing, range, rate, snr and path, whether its beam has a visible lobe or an endfire notch, whether
+its rate lies within a lobe's notch, and its distance from its beam's own ridge and from the nearest lobe's ridge in notch
+widths; kinds `lobe_ridge`, `notch_edge` (within 2 own-notch widths), `other`, `no_rate`. The geometry is the plan's
+with the lobe notch auto whatever the run uses, so `--tone-lobe-notch off` says how many the lobes would explain. The
+`ls12` sub-run of `tools/doppler_gpu_runs.sh` now runs the train scene twice on the same cached pings, the notch off
+(`ls12_tone_train_lobe_off.json`) and on (`ls12_tone_train.json`): before and after in one job. Tests:
+`tests/python/test_doppler_gpu_job.py` (the switch and the two passes; the kinds on a made geometry; on the lobe record
+every false detection with the notch off is `lobe_ridge`, none with it).
