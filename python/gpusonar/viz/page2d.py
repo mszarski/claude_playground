@@ -178,9 +178,8 @@ def _draw_section(ax, trace, max_rays: int, all_rays: bool, drawn: dict):
     surface_z = env.get("surface_z") or 0.0
     sfc = env.get("surface")
     tier = trace["tier"]
-    if tier == "free_field":
-        ax.axhline(surface_z, color="#5dade2", lw=1, ls=":")
-    else:
+    has_surface = tier not in ("free_field", "sediment") and env.get("surface_z", 0.0) is not None
+    if has_surface:                                          # free field: no surface (z = 0 may be the seabed's frame)
         ax.axhline(surface_z, color="#5dade2", lw=2)
     if sfc and sfc.get("rms_height"):
         h = max(sfc["rms_height"], 0.004 * span)
@@ -249,6 +248,8 @@ def _draw_section(ax, trace, max_rays: int, all_rays: bool, drawn: dict):
         stxt = "free field: no surface or bottom in the propagation"
     elif tier == "sediment":
         stxt = "sediment tier: no surface in the propagation; one refracted ray into the sediment"
+    elif not has_surface:
+        stxt = "no surface in the propagation (the scenario's planes are walls only)"
     else:
         stxt = "surface: flat, pressure release (-1)"
         if sfc:
@@ -289,7 +290,8 @@ def _draw_section(ax, trace, max_rays: int, all_rays: bool, drawn: dict):
     ax.set_xlabel("horizontal range from the projector, on each ray's own bearing (m)")
     what = (f"the {max_rays} strongest eigenrays of each leg in colour, the rest thin grey" if not all_rays
             else "every eigenray in colour")
-    mono_txt = (f"; monostatic (projector {mono:.2g} m from the array centre): the dashed back legs are drawn "
+    where = "at the array centre" if mono is not None and mono < 1e-3 else f"{mono:.2g} m from the array centre" if mono is not None else ""
+    mono_txt = (f"; monostatic (projector {where}): the dashed back legs are drawn "
                 f"{offset:.2g} m deeper so as not to hide under the out legs" if mono is not None else "; dashed: target to array")
     ax.set_title(f"{trace['scenario']}: tier {tier}; {what}\nsolid: projector to target{mono_txt}", fontsize=9)
     return to_rz
@@ -334,7 +336,7 @@ def _draw_losses(ax, trace):
     if crit:
         ax.axvline(crit, color="#eb6834", lw=0.8, ls="--")
         ax.text(crit, 0.97, f" critical {crit:.1f}°", transform=ax.get_xaxis_transform(), fontsize=7.5, va="top")
-    if trace["tier"] not in ("free_field", "sediment"):
+    if trace["tier"] not in ("free_field", "sediment") and env.get("surface_z", 0.0) is not None:
         sfc = env.get("surface")
         wprop = env.get("wind_speed_propagation") or 0.0
         if sfc and sfc.get("rms_height"):
@@ -541,7 +543,7 @@ def draw_page(trace: dict, record, path: str, stages: dict | None = None, n_mark
     view = trace.get("view") or {}
     head = (f"{trace['scenario']}   tier {trace['tier']}   sonar {s['name']} ({s['mode']}), "
             f"{s['band_hz'][0] / 1e3:.4g}-{s['band_hz'][1] / 1e3:.4g} kHz, {s['n_channels']} channels "
-            f"({s['sample_kind']}, {s['sample_rate'] / 1e3:.4g} kHz)\n"
+            f"({s['sample_kind']}, {s['sample_rate'] / 1e3:.6g} kHz)\n"
             f"shown: {view.get('note') or 'ping ' + str(trace['ping'])}.  Everything drawn is the simulator's own model, "
             "not a measurement (docs/tasks/VISUALIZATION.md section 0).")
     miss = trace.get("missing") or []

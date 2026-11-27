@@ -413,3 +413,61 @@ What looks wrong or is weak:
   screenshots are of the embedded pages; the CDN pages differ only in where three.js comes from).
 - Targets: one point per patch object (the strongest patch this ping), up to 6 a scenario; a hull's other echoes
   are not drawn as rays.
+
+## 12. Packages V1 and V2 as done (2026-11-27)
+
+What failed or is missing first:
+
+- **Four scenarios have no picture on this CPU**: `flank_patrol_doppler`, `flank_patrol_doppler_tone`,
+  `flank_patrol_doppler_underway`, `popoto_12km_doppler` (a 1 s tone and a sweep as one sampled pulse train,
+  synthesised with its reverberation in NumPy) gave no page within 11 min (15 min for the first; ours). Their pages
+  say so and name the command for the GPU job (`tools/scenario_view.py NAME --out DIR`, CUDA synthesis). Not thinned:
+  the cost is the pulse and the reverberation, not a scene density. `popoto_far_mover_doppler` (538 s) made it.
+- **`eigenray3d` is a projection.** Its section draws 2-D Bellhop rays on the 3-D bed's vertical section along each
+  target's bearing, matched to Bellhop3D's eigenrays by bounce counts and labelled "PROJECTION" on the page; an
+  eigenray with no 2-D ray of its bounce counts is not drawn and counted on the page (`flank_ridge_3d` 4 of 34,
+  `flank_seamount_3d` 4 of 9; ours). Bellhop3D's own 3-D rays are V4.
+- **The palette.** Pages are PNG with a FIXED 256-colour palette (128 greys and 13 tints of each hue the page uses,
+  no dithering), not true colour: a thin coloured line keeps its hue (the prototype's adaptive palette turned it grey)
+  at a third of the size (`flank_target_1km` 144 kB against 486 kB true colour; ours). `--truecolour` writes true
+  colour. SVG was not smaller (the record pictures are rasters).
+- **Not drawn yet**: the time-spread taps' own spread (V3); reverberation split by item (V3); the roughness-scattered
+  field of `penetration: rough` (a sum over interface cells, not a ray; no scenario uses it); `{axis, position}`
+  walls (no scenario uses them); a page's waterfall does not mark one-way arrivals (their emission times are the
+  source's); the plan view's steered beams are 5 of the configured bearings.
+- **Models no scenario uses** (counted 2026-11-27 by grep over `configs/scenarios` and `configs/environments`):
+  `reverberation: site` (`boundary_scattering`), the Williams-Jackson and Mourad-Jackson opt-ins, `bubble_model` and
+  the `bubble_layer_surface`/`kraus_surface` items, `penetration: rough`, layered and elastic beds. The models list
+  names them when a configuration uses them (`test_models_no_scenario_uses_are_listed_when_configured`); no scenario
+  was invented for them.
+
+What a page shows now (`viz/page2d.py`, `viz/trace.py`, `viz/beams.py`, `viz/catalogue.py`):
+
+- the ping it shows and why (`catalogue.view_plan`): the first; for a synthetic-aperture run with more than one ping
+  the middle of the track (or of leg 0, or of the raster), simulated alone at its position; with platform `motion`
+  the sway is a one-ping draw; a multiplexed array's ping holds one half. The plan view draws the whole track.
+- rays per tier: straight (free field), folded images (flat), specular points among general planes with wall
+  bounces (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`), the refracted ray with its interface crossing and the
+  evanescent region hatched below the critical angle (sediment), Bellhop's rays over a range-dependent bed (fjord,
+  `_nx2d`), the 2-D projection of `eigenray3d`; one-way legs from each source (`sst_asiaex`, `asiaex_dahl_2004`); the
+  projector's direct sound (`popoto_testauv_direct_overload*`).
+- monostatic sonars: the back legs are drawn dashed and offset by 0.6 % of the depth span, said in the title.
+  The 6 strongest eigenrays of each leg in colour, the rest thin and grey (`--all-rays`: all).
+- boundaries and medium: the bed flat, tilted, by range or as a 3-D section; the surface's rms-height band, wind and
+  bubble loss where `time_spread.surface` sets them; profiles by range (small multiples); losses per bounce against
+  grazing for every model in force (fluid or elastic Rayleigh, constant, wall coefficients, the coherent surface
+  loss exp(-Γ²/2) (J&R (13.14), confirmed, `acoustics.rough_coherent_reflection`), bubble loss, transmission into
+  the sediment V_wp/sqrt(a_rho)) with the critical angle and the drawn bounces' angles; absorption in dB/km at the
+  band centre; noise; the parts of the signal against time (echoes, direct sound, reverberation or basin tail or
+  one-way sources, noise).
+- beams: the processing's bearings (a deployment file naming the sonar, else the live chain's defaults; the gallery's
+  fan for FLS, else the sonar's field of view; none for SAS) with 5 steered beams' -3 dB edges measured on the array
+  factor of the real element positions with the chain's window times the element pattern at the band centre; the
+  projector's pattern, or "kind point, omnidirectional".
+- the list of models in force: area, model, key, value, source, status; and "not shown:" in the header.
+
+`--all` on this CPU (4 cores shared with other agents; NumPy engine; Bellhop and Bellhop3D as separate processes;
+ours, 2026-11-27): 92 of 96 pages; simulate + trace + page summed over the scenarios 10,758 s (3.0 h, of which the
+four time-outs 2,880 s and the six `eigenray3d` scenes about 3,200 s). Pages 61 to 172 kB (mean about 110 kB); traces
+12 kB to 48 MB (the 12 km scenes: 640 pairs x up to 96 channel delays); the directory 271 MB. Committed: one page a
+family under `docs/figures/scenes/` with its index (section 6.3); the rest stay in the scratch directory.
