@@ -248,12 +248,14 @@ def requirements(D: dict) -> list:
         bad = [s for s in missed if s not in covered]
         Dz = X["designs"]
         met_text = ((f"free field: yes, both classes (three rows; one row: {'yes' if one_row >= 0.0 else 'no'}); " if design_ok else "free field: **NO**; ")
-                    + f"baseline (`{Dz['baseline']['build']}`, {Dz['baseline']['option']}) up to sea state {Dz['baseline']['sea_state']} at the deep site: "
+                    + f"baseline (`{Dz['baseline']['build']}`, {Dz['baseline']['option']}) up to sea state {Dz['baseline']['sea_state']} at the deep site: planner "
                     + ("yes" if all(v >= 0.0 for v in Dz["baseline"]["margins_db"].values()) else "**no**")
+                    + (f", measured {rp.measured_words(Dz['baseline']['measured'])}" if Dz["baseline"].get("measured") else "")
                     + (("; illustrative sites: the baseline **not** at " + ", ".join(f"`{s}`" for s in missed) + f" ({n - len(missed)} of {n} held by both classes)") if missed else f"; illustrative sites: the baseline at {n} of {n}")
-                    + (f"; alternate (`{Dz['alternate']['build']}`, {Dz['alternate']['option']}) at sea state {Dz['alternate']['sea_state']}: "
+                    + (f"; alternate (`{Dz['alternate']['build']}`, {Dz['alternate']['option']}) at sea state {Dz['alternate']['sea_state']}: planner "
                        + ("yes" if all(v >= 0.0 for v in Dz["alternate"]["margins_db"].values()) else "**no**")
-                       + (", holding " + ", ".join(f"`{s}`" for s in covered) if covered else ""))
+                       + (", holding " + ", ".join(f"`{s}`" for s in covered) if covered else "")
+                       + (f"; measured (linear, plain filter) {rp.measured_words(Dz['alternate']['measured'])}" if Dz["alternate"].get("measured") else ""))
                     + (("; held by neither design: " + ", ".join(f"`{s}`" for s in bad)) if bad else "")
                     + "; per site: *The 12 km design point*")
         status = ("partly met" if bad else "met") if design_ok else "not met"

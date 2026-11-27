@@ -361,9 +361,27 @@ def requirement_designs(T: dict) -> tuple:
         rec = plan["classes"][c]["recommended"]
         alternate_rows[(SEA_STATE_SITE, c)] = {"margin_db": rec["margin_db"], "held": rec["margin_db"] >= 0.0, "own_depth_m": rec["own_depth_m"]}
     designs["alternate"]["margins_db"] = {c: alternate_rows[(SEA_STATE_SITE, c)]["margin_db"] for c in REQUIREMENT_CLASSES}
+    M = _deep12()
+    if M:
+        for name in REQUIREMENT_DESIGNS:
+            designs[name]["measured"] = M["acceptance"].get(name)
+        designs["alternate"]["measured_other_filters"] = {k: M["acceptance"].get(k) for k in ("alternate_bank", "alternate_hfm") if M["acceptance"].get(k)}
     designs["alternate"]["grid_margins_db"] = {c: ((grid.get(f"deep_no_bottom_return__ss5__{law}") or {}).get(REQUIREMENT_DESIGNS["alternate"]["option"]) or {}).get(c, {}).get("margin_db")
                                                for c in REQUIREMENT_CLASSES}
     return designs, alternate_rows
+
+
+def _deep12():
+    """docs/tasks/doppler_deep12_eval.json (tools/deep12_eval.py: the deep site through the simulator and both chain engines), or None."""
+    path = ROOT / "docs" / "tasks" / "doppler_deep12_eval.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def measured_words(a: dict) -> str:
+    """'**fails** for `closing` 0 of 6, ...; passes `crossing` 6 of 6, ...' of one design's measured acceptance."""
+    bad = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "FAIL"]
+    good = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "PASS"]
+    return ("**fails** for " + ", ".join(bad) + "; " if bad else "") + "passes " + (", ".join(good) or "nothing")
 
 
 def designs_text(X: dict) -> str:
@@ -378,7 +396,13 @@ def designs_text(X: dict) -> str:
             f"(`{b['build']}`, the shipped transmitter, {b['option']}) holds both classes at 12 km at the deep site with the {b['bubble_law']} bubble law up to sea state {b['sea_state']} "
             f"({m(b)} at sea state {b['sea_state']}; at sea state {b['sea_state'] + 1}: {m(b, 'next_sea_state_margins_db')}); the **alternate** for sea state {a['sea_state']} "
             f"(`{a['build']}`, the same face with {a['option']}) holds both at sea state {a['sea_state']} ({m(a)}, its own plan at `{SEA_STATE_SITE}`), "
-            "each for an echo with no radial speed (`docs/design/popoto_trade_study.md` sections 0 and 0a; ours, illustrative sites, assumed target strengths).")
+            "each for an echo with no radial speed (`docs/design/popoto_trade_study.md` sections 0 and 0a; ours, illustrative sites, assumed target strengths)."
+            + (" **Measured** through the simulator and both chain engines at that site (`docs/tasks/doppler_deep12_eval.json`, `docs/tasks/DOPPLER.md` \"Deep site at 12 km\"; "
+               "ours, one seed, 6 pings; held: detected on half the pings or more): the planner's margins hold for an unresolved, non-moving target (the +25 dB point), not for the "
+               f"class's hull whose five highlights resolve in range; the baseline at sea state {b['sea_state']} {measured_words(b['measured'])}; the alternate as configured (linear, plain filter) "
+               f"at sea state {a['sea_state']} {measured_words(a['measured'])}"
+               + "".join(f"; {o['what'].replace('the alternate' + chr(39) + 's energy, ', '')}: {measured_words(o)}" for o in a.get("measured_other_filters", {}).values()) + "."
+               if b.get("measured") and a.get("measured") else ""))
 
 
 def _db(v: float) -> str:

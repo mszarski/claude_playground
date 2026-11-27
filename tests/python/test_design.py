@@ -293,3 +293,32 @@ def test_the_design_point_table_has_the_alternates_column_at_the_sea_state_5_sit
         assert cells[5] == f"{want['margin_db']:+.1f} dB, held, at {want['own_depth_m']:.0f} m", line
     other = next(line for line in sec.splitlines() if line.startswith("| `shelf_100m_sand`"))
     assert [x.strip() for x in other.split("|")][5] == "not planned"
+
+
+# --- POP-3 against the measurement at the deep site (docs/tasks/doppler_deep12_eval.json; sonar-rctz) ---------------------
+# The planner holds both designs; the simulator and chain do not for the class's resolved hull. The status may not print a
+# bare "yes" for a design the measurement fails; `met` and --check stay what they were (the free-field design point).
+
+def _deep12():
+    return _json.loads((ROOT / "docs" / "tasks" / "doppler_deep12_eval.json").read_text())
+
+
+def test_pop3_status_says_what_was_measured_for_each_design(built):
+    _, reqs, text = built
+    r = _pop3(reqs)
+    assert r["met"] is True and r["status"] == "partly met"
+    m = r["met_text"]
+    A = _deep12()["acceptance"]
+    for name in ("baseline", "alternate"):
+        bad = [lb for lb, v in A[name]["targets"].items() if v["verdict"] == "FAIL"]
+        good = [lb for lb, v in A[name]["targets"].items() if v["verdict"] == "PASS"]
+        assert bad and good
+        part = m.split(f"{name} (`", 1)[1].split("; alternate (`" if name == "baseline" else "; held by neither", 1)[0]
+        assert "measured" in part and "**fails**" in part, part
+        for lb in bad:
+            assert f"`{lb}`" in part.split("**fails**", 1)[1].split("passes", 1)[0], (name, lb)
+    assert "at the deep site: yes;" not in m and "at sea state 5: yes," not in m          # no bare pass for what the measurement fails
+    v = r["value"]
+    assert "**Measured**" in v and "unresolved" in v and "doppler_deep12_eval.json" in v
+    sec = _section(text, "The 12 km design point")
+    assert "**Measured**" in sec.strip().split("\n\n", 1)[0]
