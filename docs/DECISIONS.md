@@ -5401,3 +5401,5 @@ at 12 km".
   cases (212 `TEST` and 1 `TEST_P`).
 - Not in this merge: the grating-lobe notch (branch `notch`), the transmit study and the hyperbolic
   sweep (branch `txstudy`), the visualization (branch `viz`).
+- Correction (same day): D-242's "3.4 to 5.6 times the chain" is 3.4 to 6.0 times by its own table
+  (`flank_patrol` max 0.393 / 0.115; `popoto_far_mover` cfar 0.374 / 0.062).
