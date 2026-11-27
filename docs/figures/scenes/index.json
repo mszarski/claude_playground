@@ -20,7 +20,24 @@
   "rays": 12,
   "bounces": 0,
   "pairs": 6,
-  "marked": 6
+  "marked": 6,
+  "html": {
+   "bytes": 49997,
+   "embedded": false,
+   "rays": 12,
+   "pairs": 6,
+   "data_bytes": 8879,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.05,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (point_grid_flank_32.trace.json)"
+  }
  },
  {
   "scenario": "fls_120k_quay_multipath",
@@ -44,7 +61,24 @@
   "bounces": 42,
   "pairs": 121,
   "marked": 12,
-  "faint": 2
+  "faint": 2,
+  "html": {
+   "bytes": 118994,
+   "embedded": false,
+   "rays": 38,
+   "pairs": 40,
+   "data_bytes": 77872,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.03,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (fls_120k_quay_multipath.trace.json)"
+  }
  },
  {
   "scenario": "buried_cylinder",
@@ -67,7 +101,24 @@
   "rays": 12,
   "bounces": 12,
   "pairs": 6,
-  "marked": 6
+  "marked": 6,
+  "html": {
+   "bytes": 61954,
+   "embedded": false,
+   "rays": 12,
+   "pairs": 6,
+   "data_bytes": 20840,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.31,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (buried_cylinder.trace.json)"
+  }
  },
  {
   "scenario": "flank_target_1km",
@@ -91,7 +142,24 @@
   "bounces": 18,
   "pairs": 484,
   "marked": 12,
-  "faint": 32
+  "faint": 32,
+  "html": {
+   "bytes": 68715,
+   "embedded": false,
+   "rays": 16,
+   "pairs": 40,
+   "data_bytes": 27600,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.02,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (flank_target_1km.trace.json)"
+  }
  },
  {
   "scenario": "sst_asiaex",
@@ -117,7 +185,24 @@
   "bounces": 0,
   "pairs": 0,
   "marked": 0,
-  "oneway_rays": 5
+  "oneway_rays": 5,
+  "html": {
+   "bytes": 49483,
+   "embedded": false,
+   "rays": 0,
+   "pairs": 0,
+   "data_bytes": 8374,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.01,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (sst_asiaex.trace.json)"
+  }
  },
  {
   "scenario": "popoto_trial_100m",
@@ -141,7 +226,24 @@
   "bounces": 18,
   "pairs": 256,
   "marked": 12,
-  "faint": 20
+  "faint": 20,
+  "html": {
+   "bytes": 57665,
+   "embedded": false,
+   "rays": 16,
+   "pairs": 40,
+   "data_bytes": 16549,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.02,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (popoto_trial_100m.trace.json)"
+  }
  },
  {
   "scenario": "popoto_env_winter_sand_200m",
@@ -165,7 +267,24 @@
   "bounces": 135,
   "pairs": 12500,
   "marked": 12,
-  "faint": 440
+  "faint": 440,
+  "html": {
+   "bytes": 123926,
+   "embedded": false,
+   "rays": 80,
+   "pairs": 40,
+   "data_bytes": 82800,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.16,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (popoto_env_winter_sand_200m.trace.json)"
+  }
  },
  {
   "scenario": "popoto_elevation_shallow",
@@ -188,7 +307,24 @@
   "rays": 10,
   "bounces": 12,
   "pairs": 25,
-  "marked": 12
+  "marked": 12,
+  "html": {
+   "bytes": 77443,
+   "embedded": false,
+   "rays": 10,
+   "pairs": 25,
+   "data_bytes": 36320,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.03,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (popoto_elevation_shallow.trace.json)"
+  }
  },
  {
   "scenario": "popoto_static_passing",
@@ -211,7 +347,24 @@
   "rays": 6,
   "bounces": 4,
   "pairs": 9,
-  "marked": 9
+  "marked": 9,
+  "html": {
+   "bytes": 58245,
+   "embedded": false,
+   "rays": 6,
+   "pairs": 9,
+   "data_bytes": 17125,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.03,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (popoto_static_passing.trace.json)"
+  }
  },
  {
   "scenario": "popoto_testauv_direct_overload",
@@ -235,7 +388,24 @@
   "bounces": 8,
   "pairs": 18,
   "marked": 12,
-  "oneway_rays": 3
+  "oneway_rays": 3,
+  "html": {
+   "bytes": 58325,
+   "embedded": false,
+   "rays": 12,
+   "pairs": 18,
+   "data_bytes": 17196,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.03,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (popoto_testauv_direct_overload.trace.json)"
+  }
  },
  {
   "scenario": "fjord_testauv_trial_1row",
@@ -259,7 +429,24 @@
   "bounces": 20,
   "pairs": 144,
   "marked": 12,
-  "faint": 12
+  "faint": 12,
+  "html": {
+   "bytes": 70933,
+   "embedded": false,
+   "rays": 16,
+   "pairs": 40,
+   "data_bytes": 29810,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.04,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (fjord_testauv_trial_1row.trace.json)"
+  }
  },
  {
   "scenario": "ssp_front_testauv_trial_1row",
@@ -283,6 +470,70 @@
   "bounces": 36,
   "pairs": 144,
   "marked": 12,
-  "faint": 12
+  "faint": 12,
+  "html": {
+   "bytes": 72098,
+   "embedded": false,
+   "rays": 16,
+   "pairs": 40,
+   "data_bytes": 30971,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 0,
+   "seconds": 0.05,
+   "bellhop3d": null,
+   "notes": [],
+   "from": "the trace of a previous run (ssp_front_testauv_trial_1row.trace.json)"
+  }
+ },
+ {
+  "scenario": "flank_seamount_3d",
+  "family": "Flank array, 32 hydrophones",
+  "family_short": "flank",
+  "tier": "eigenray3d",
+  "mode": "flank",
+  "note": "ping 0 of 1 (the only ping)",
+  "targets": 1,
+  "eigenrays": 9,
+  "eigenrays_drawn": 5,
+  "oneway_sources": 0,
+  "direct": false,
+  "missing": [
+   "4 eigenray(s) not drawn: no 2-D ray on this bearing's section has these bounce counts (the 3-D ray may leave the vertical plane; V4 draws Bellhop3D's own rays)",
+   "eigenray3d: the section shows a 2-D projection on each target's bearing; Bellhop3D's own 3-D rays are V4"
+  ],
+  "simulate_s": 237.99,
+  "trace_s": 6.07,
+  "page_s": 2.77,
+  "png_bytes": 104006,
+  "trace_bytes": 100483,
+  "rays": 5,
+  "bounces": 6,
+  "pairs": 20,
+  "marked": 12,
+  "html": {
+   "bytes": 77282,
+   "embedded": false,
+   "rays": 9,
+   "pairs": 20,
+   "data_bytes": 36166,
+   "limits": {
+    "max_rays": 8,
+    "max_pairs": 40,
+    "tolerance": 1.0
+   },
+   "three_d_rays": 9,
+   "seconds": 10.53,
+   "bellhop3d": {
+    "rays": 9,
+    "matched": 9,
+    "runs": 20
+   },
+   "notes": [],
+   "from": "the trace of a previous run (flank_seamount_3d.trace.json)"
+  }
  }
 ]

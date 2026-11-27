@@ -471,3 +471,79 @@ ours, 2026-11-27): 92 of 96 pages; simulate + trace + page summed over the scena
 four time-outs 2,880 s and the six `eigenray3d` scenes about 3,200 s). Pages 61 to 172 kB (mean about 110 kB); traces
 12 kB to 48 MB (the 12 km scenes: 640 pairs x up to 96 channel delays); the directory 271 MB. Committed: one page a
 family under `docs/figures/scenes/` with its index (section 6.3); the rest stay in the scratch directory.
+
+## 13. Package V4 as done (2026-11-27): the 3-D page for every scenario
+
+What failed, is missing or is uncertain first:
+
+- **Four scenarios have 3-D pages without eigenrays**: `flank_patrol_doppler`, `flank_patrol_doppler_tone`,
+  `flank_patrol_doppler_underway`, `popoto_12km_doppler` (no trace: their one-ping run timed out on this CPU, section
+  12). Their pages are built from `trace.static_trace` (geometry, boundaries, beams, models; no simulation) and say
+  "NO EIGENRAYS" with the GPU-job command: `PYTHONPATH=python python3 tools/scenario_view.py NAME --out DIR --3d`.
+- **Bellhop3D's rays are found by shooting, not read from the provider's run.** Bellhop3D writes a ray file only for
+  run type 'R' (`bellhop3D.f90` calls `WriteRay3D` for 'R' only; 'E' writes nothing in 3-D), and the provider runs
+  'a' and 'I'. `viz/scene3d.py` runs Bellhop3D again ('R', a separate process, the provider's water, half-space, bed
+  grid step and source key; nothing in `sim/bellhop3d.py` changed) on a small fan about each eigenray's launch angles,
+  refined twice, and keeps the ray whose bounce counts before its closest approach to the target equal the eigenray's.
+  The drawn ray is therefore Bellhop3D's own ray with the eigenray's bounces, passing near (not through) the target:
+  over the six scenes 153 of 153 drawn eigenrays matched, misses 0.0 to 13.7 m at 1 to 10 km (ours). The launch
+  azimuth was not in the cached traces (now added to the trace, `launch_azimuth_deg`): for them the fan is a band of
+  +-6 deg about the target's bearing. Time: 9 to 80 s a scene (ours).
+- **Bounces in the ray file**: a reflection is the same point written twice (`WriteRay3D`); counting those equals
+  Bellhop3D's own counts on 697 of 697 rays over the seamount (ours). The loss per bounce is the same Rayleigh law
+  evaluated again at the drawn grazing angle (section 0), not Bellhop3D's number.
+- **The `eigenray` tier stays planar**: its pages say so (Bellhop 2-D rays placed on each target's bearing).
+- **Not done**: sound (V5), the live chain's taps (V6; `chain` stays null in the page data), a link back from the 2-D
+  PNG to the 3-D page (a PNG cannot link; the index links both), per-item reverberation and the time-spread taps'
+  own spread (V3). Targets move by first-order motion (the label's mean velocity) over the pings; rays exist only for
+  the traced ping, and the page says so when another ping is chosen.
+- **The vendored three.js came from the npm registry, not a CDN**: jsdelivr and cdnjs refused this machine's request
+  (HTTP 403 from the proxy); the registry's tarball was used, its SHA-512 equal to the registry's published integrity
+  (third_party/three/README.md). If that route is not acceptable, delete `third_party/three/`: pages then load
+  three.js from the CDN (`page3d.three_source`).
+
+What a page shows (`viz/page3d.py`, its template `viz/page3d_template.html`, `viz/scene3d.py`):
+
+- the sea surface (blue, labelled with its model; an rms-height band where time spreading sets one; faint and
+  labelled "not in the propagation" for free field and sediment) and the bed (sand, shaded by depth, labelled with
+  its half-space or constant coefficient and critical angle): flat; tilted and walls as planes (general planes);
+  by range from the sonar (range-dependent `eigenray` beds); Bellhop3D's 3-D bed on a grid (`eigenray3d`); the
+  sediment interface with a slab below; the site's depth dashed where the tier has no bottom;
+- the projector, the hydrophones as screen-sized dots coloured by row, the array's axis and look as arrows, "zoom to
+  array" (from behind the array along its look), the vertical exaggeration (auto, 1 to 60) with "true scale" one
+  click away;
+- the processing's receive bearings (shaded sector) and 5 steered beams with their -3 dB edges (`viz/beams.py`), the
+  projector's -3 dB cone where it has a pattern;
+- targets, their tracks and position at a chosen ping (ping slider), the platform's track;
+- eigenrays (the 8 strongest drawable a leg), coloured by bounce class, out solid and back dashed, bounce dots;
+  one-way sources and the projector's direct sound; per class, per leg, per target and per layer toggles;
+- a click on a ray: delay, level, launch angle, bounce list (boundary, grazing, loss, position), the drawn ray's travel
+  time and miss, the pairs that use it; a hydrophone selector (or a click on a hydrophone): its arrivals in time
+  order, a click on one shows its two rays; a time slider and play that move a dot along every ray and light the
+  hydrophones as the strongest pairs arrive (the hook for V5's sound);
+- the sound-speed profile (profiles by range where the water changes with range), absorption, the models in force with
+  their status words, and "not shown" (the trace's own list, the page's thinning, V5 and V6).
+
+### 13.1 Sizes, checks, how to run
+
+- `tools/scenario_view.py --all --3d --traces DIR --out DIR3` builds every 3-D page from a previous run's traces (no
+  simulation): 96 pages in 3.0 min on this CPU (ours, 2026-11-27; the six Bellhop3D shootings 8 to 78 s each). Pages
+  with three.js embedded (the default when `third_party/three/` holds it): 0.74 to 0.89 MB; loading it from the CDN
+  (`--three cdn`): 44 to 200 kB (the same pages less the 691,648-byte library; ours). No page needed thinning beyond
+  the 8 strongest rays a leg and 40 pairs (page data 3 to 159 kB against the 330 kB budget). Limits held by
+  `test_page_sizes_stay_under_their_limits`: 400 kB (CDN) and 1.2 MB (embedded), on a trace far larger than any
+  scenario's. The directory with traces' pages, screenshots and index: about 100 MB.
+- `tools/page3d_check.js` (Node, Playwright's Chromium with SwiftShader WebGL) loaded all 96 embedded pages with no
+  console error, page error or failed request, and screenshotted them (deviceScaleFactor 1). The CDN pages were not
+  loaded here (the CDN refuses this machine); they differ from the embedded ones only in the loader line.
+- Tests (`tests/python/test_scene_3d.py`, 108): the page data equal the trace at each tier (ray identity and order,
+  delays, bounce counts and points, end points; the `eigenray` tier's rays planar on their bearing; general planes
+  carried with their wall bounces); the Bellhop3D ray reader on a hand-made file in the documented format; Bellhop3D's
+  rays shot about the image tier's eigenrays on a level bed bounce on the surface and the bed at the image's points
+  (within 4 m), with the image's grazing angles (0.5 deg) and travel times (1 ms); an `eigenray3d` page draws the 3-D
+  ray and says so; the vendored file is the stated one and only `viz/page3d.py` names it; every scenario yields a
+  3-D page in quick form (static trace, no Bellhop3D); target motion over the pings; the pages load in Chromium
+  (skipped when Node or Playwright is absent, as in the GPU job's image).
+- Committed: `third_party/three/` (0.69 MB), and under `docs/figures/scenes/` one CDN page per family plus
+  `flank_seamount_3d` (Bellhop3D's rays), each with a 128-colour screenshot `NAME_3d.png`, and the index with a 3-D
+  column (1.9 MB in all). Everything else stays in the session scratch directory.
