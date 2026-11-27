@@ -4,7 +4,7 @@ its path (sweep, tone, both), range rate and range error, its track, the tone's 
 scene's background, and the cost a ping.
 
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
-                               [--alternate HZ] [--cache DIR] [--json FILE]
+                               [--alternate HZ] [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -29,6 +29,9 @@ The background: the scene with its targets removed (new draws, seed + 1000), --b
 budget and at 3 false detections a ping (both paths' budgets), tone path off and on, by path.
 
 Cost: the chain's processing_seconds a ping (the first ping left out), per engine, off and on.
+
+`--truth-at` and `--gate-range-m`: as tools/doppler_bank_eval.py's (the truth at the pulse's reflection time; the sweep
+detection's range gate).
 """
 from __future__ import annotations
 
@@ -186,9 +189,12 @@ def main(argv=None) -> int:
     ap.add_argument("--alternate", type=float, help="Hz: alternate tone-only (at this frequency) and sweep-only pings of SCENE")
     ap.add_argument("--json")
     ap.add_argument("--cache", help="a directory: keep the simulated records there and read them back on the next run")
+    ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
+    ap.add_argument("--gate-range-m", type=float, default=60.0)
     a = ap.parse_args(argv)
-    global CACHE
+    global CACHE, GATE_RANGE_M
     CACHE = a.cache
+    GATE_RANGE_M = a.gate_range_m
     cfg = load_scenario_config(a.scene, expand=False)
     t0 = time.time()
     energy = None
@@ -200,11 +206,12 @@ def main(argv=None) -> int:
             cfg["pings"] = dict(cfg.get("pings", {}), count=int(a.pings))
         records, tone, eval_cfg = simulate(cfg), tone_keys(cfg), cfg
     say(f"{a.scene}: {len(records)} pings simulated in {time.time() - t0:.0f} s, {records[0].samples.n_channels} channels; tone {tone}")
-    truths = truth(eval_cfg, len(records))
     c = float(records[0].environment.sound_speed)
+    truths = truth(eval_cfg, len(records), c if a.truth_at == "reflection" else None)
     tone_gate = 0.25 * c * float(tone.get("tone_duration_s") or records[0].transmit.waveform.duration)
     result = {"scene": a.scene, "alternate_hz": a.alternate, "tone_energy_db": energy, "pings": len(records),
-              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "engines": {}, "background": {}}
+              "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "truth_at": a.truth_at,
+              "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {}}
     for engine in a.engines:
         res = {}
         for name, t in (("off", None), ("on", tone)):

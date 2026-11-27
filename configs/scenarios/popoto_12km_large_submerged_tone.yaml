@@ -1,0 +1,70 @@
+# popoto_12km_large_submerged with the waveform route the owner chose (2026-11-26: the transmitter is free to choose;
+# a tone OUTSIDE the sweep's band in the same ping): a 1 s Hann-tapered tone at 6.5 kHz, then the sonar's own 4-6 kHz
+# sweep (1 s, Tukey 0.1), back to back in one 2 s ping. Everything else is popoto_12km_large_submerged's (and so
+# popoto_12km's water, array, platform and seed): the same three large_submerged targets (closing, oblique, crossing).
+#
+# The tone's frequency, by the rule flank_patrol_doppler_tone used (10.5 kHz over a 6-10 kHz sweep, D2's control and
+# D3's scene): 0.5 kHz above the top of the sweep's band, here 6.0 + 0.5 = 6.5 kHz. The guard is wide against what the
+# tone needs: its largest shift at the class's top speed and the ownship's (2 x 9.5 m/s x 6.5 kHz / c = 82 Hz) plus the
+# Hann tone's main lobe (+-2 Hz). At 6.5 kHz the array's 0.15 m pitch is 0.65 of a wavelength: no grating lobe for
+# beams within +-32 degrees of broadside (the targets are within +-16).
+#
+# UNCONFIRMED, waiting on the owner (docs/tasks/DOPPLER.md section 5; no projector is chosen, popoto_long_range.yaml):
+#   - that the projector sends 6.5 kHz as well as 4-6 kHz in one ping (its response there; no number for it is used:
+#     the simulator has no projector response), at what peak power and duty (assumed: yes, no gap, a 2 s ping: twice
+#     popoto_long_range's 1 s, 10 % duty at the 19.9 s interval against the 5.6 % (1 s every 17.9 s)
+#     docs/design/projector_selection.md sizes the source for).
+#   - the split of energy. The total is popoto_long_range's sweep (197 dB rms, Tukey 0.1, 1 s = 196.72 dB re 1 uPa^2 s
+#     at 1 m), half to each segment: the sweep has 3 dB LESS energy than in popoto_12km_large_submerged. The Hann tone
+#     sets the peak (derived source_level_db_rms, 1.0 dB above 197).
+# Like popoto_12km: needs GPUSONAR_BELLHOP; no Doppler spread of the sea surface (DOPPLER.md section 0 item 1).
+name: popoto_12km_large_submerged_tone
+sonar: popoto_long_range
+fidelity: eigenray
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
+  transmit:
+    waveform:
+      type: sampled
+      source: train
+      f_start: 4.0e+3                     # the band the train occupies: the sweep's and the tone above it
+      f_stop: 6.6e+3
+      source_level_db_rms: null           # derived from source_energy_db (sonar.py)
+      source_energy_db: 196.72            # dB re 1 uPa^2 s at 1 m: popoto_long_range's sweep, all of it
+      segments:
+        - {kind: cw, frequency: 6.5e+3, duration: 1.0, window_alpha: 1.0, energy_share: 0.5}
+        - {kind: gap, duration: 0.0}
+        - {kind: lfm, f_start: 4.0e+3, f_stop: 6.0e+3, duration: 1.0, window_alpha: 0.1, energy_share: 0.5}
+environment: {base: shelf_100m_sand_12c, absorption: ainslie_mccolm, water_depth_known: false}
+propagation:
+  max_range: 13200.0
+  range_step: 40.0
+  depth_step: 2.0
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 19.9}
+scene:
+  - type: points
+    label: closing
+    positions: [[-3170.5, 11832.6, 50.0], [-3164.1, 11808.4, 50.0], [-3157.6, 11784.3, 50.0], [-3151.1, 11760.1, 50.0], [-3144.7, 11736.0, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.5529, -5.7956, 0.0]
+  - type: points
+    label: oblique
+    positions: [[-48.4, 12012.5, 50.0], [-24.2, 12006.2, 50.0], [0.0, 12000.0, 50.0], [24.2, 11993.8, 50.0], [48.4, 11987.5, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.9365, -0.5, 0.0]
+  - type: points
+    label: crossing
+    positions: [[3057.5, 11604.1, 50.0], [3081.7, 11597.6, 50.0], [3105.8, 11591.1, 50.0], [3130.0, 11584.6, 50.0], [3154.1, 11578.2, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.9319, -0.5176, 0.0]
+reverberation:
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 51
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as in popoto_12km"
