@@ -6,6 +6,10 @@
 // CudaExec in doppler_cuda.cu, HostExec in doppler_batched.cpp, so that this formulation is tested on a machine without a
 // device (`doppler.batched: on` on the host backend; tests/python/test_doppler_device.py).
 //
+// The kernels this file shares with the default chain (recon::BpKernel, the detector's three, the far-field beamformer's
+// sum) are NOT instantiated for CUDA here: on the device they are launched through launch_on_device in their own .cu
+// files (run_shared below; backproject_kernel.hpp says why), so the default chain's device code is the one it was.
+//
 //   sweep bank   the baseband record uploaded once a ping, its channels' spectra once per transform length (one length
 //                for every hypothesis of the shipped sweeps); then, for as many hypotheses at a time as memory allows
 //                (`batch`): each hypothesis' filter (dsp::compression_filter, built on the host) times every channel's
@@ -61,6 +65,17 @@ struct DopplerProfile {
 DopplerProfile doppler_profile();
 void doppler_profile_reset();
 DopplerProfile& doppler_profile_accumulator();   ///< where the stages add their seconds (not thread-safe, as BeamformProfile)
+
+/// Runs a kernel the default chain also runs: on the host as any other, on the device through its own translation unit's
+/// launch_on_device (found by argument-dependent lookup: recon::BpKernel, the detector's kernels).
+template <class Exec, class K>
+void run_shared(Exec& ex, std::int64_t n, const K& kernel) {
+  if constexpr (Exec::on_device) {
+    launch_on_device(kernel, n);
+  } else {
+    ex.run(n, kernel);
+  }
+}
 
 // ------------------------------------------------------------------------------------------------------------------------
 // Memory and the batch (host code; tests/python/test_doppler_device.py holds the arithmetic).
@@ -376,7 +391,7 @@ void sweep_bank_batched(Exec& ex, const SweepBankBatchedInput& in, const SweepBa
       // THE backprojection kernel, as range_bearing_image calls it on the host, on this hypothesis' compressed samples.
       const recon::BpKernel bk{d_groups.data() + h0 + t, d_records.data(), d_c.data() + 2 * t * n_ch * n, d_points.data(), nullptr,
                                d_img.data() + 2 * t * n_pts, nullptr, 1, in.bp, nullptr, recon::TrajectoryAccess{}, 0, 0};
-      ex.run(n_pts, bk);
+      run_shared(ex, n_pts, bk);
     }
     watch.lap(prof.map);
     if (!in.cfar) {
@@ -384,9 +399,9 @@ void sweep_bank_batched(Exec& ex, const SweepBankBatchedInput& in, const SweepBa
     } else if (kc > 0) {
       const std::int64_t nr = hc * in.n_b;
       ex.run(nr * kc, BankCellMeanKernel{d_img.data(), in.n_b, stride, in.k, in.skip, kc, d_cellmean.data()});
-      if (in.sloped) ex.run(4 * nr, DetectorMedianKernel{d_cellmean.data(), d_scratch.data(), d_median.data(), kc, in.train});
-      ex.run(nr, DetectorRowKernel{d_cellmean.data(), d_median.data(), d_csum.data(), d_slope.data(), kc, in.train, in.sloped});
-      ex.run(nr * kc, DetectorCellKernel{d_cellmean.data(), kc, 0, d_csum.data(), d_slope.data(), d_offset.data(), d_threshold.data(),
+      if (in.sloped) run_shared(ex, 4 * nr, DetectorMedianKernel{d_cellmean.data(), d_scratch.data(), d_median.data(), kc, in.train});
+      run_shared(ex, nr, DetectorRowKernel{d_cellmean.data(), d_median.data(), d_csum.data(), d_slope.data(), kc, in.train, in.sloped});
+      run_shared(ex, nr * kc, DetectorCellKernel{d_cellmean.data(), kc, 0, d_csum.data(), d_slope.data(), d_offset.data(), d_threshold.data(),
                                          d_scales.data(), 1, kc, 1, in.guard, in.train, d_level.data(), d_bg.data(), d_peak.data(),
                                          d_flag.data()});
       ex.run(in.n_b * kc, BankNormFoldKernel{d_img.data(), d_level.data(), d_cellmean.data(), d_first.data(), in.per_beam, h0, hc, in.n_b,
@@ -539,9 +554,11 @@ struct ToneLeakKernel {
 };
 
 struct ToneBankBatchedInput {
-  /// The beams: either `beams` [n_b][n] complex on the host (uploaded), or, when null, made here by the far-field
-  /// beamformer's batched form from `samples` [n_el][n], `w` [n_el], `tau` [n_b][n_el], `df`, `fc` (they stay on the device).
+  /// The beams [n_b][n] complex: `beams` on the host (uploaded), or `device_beams` already in the executor's memory (the
+  /// cuda wrapper makes them there from `samples` [n_el][n], `w` [n_el], `tau` [n_b][n_el], `df`, `fc` by the far-field
+  /// beamformer in beamform_cuda.cu, farfield_cuda_device).
   const float* beams = nullptr;
+  const float* device_beams = nullptr;
   const float* samples = nullptr;
   const float* w = nullptr;
   const double* tau = nullptr;
@@ -561,19 +578,16 @@ struct ToneBankBatchedInput {
 
 /// power, ratio, flag: host arrays of n_b x J x NL.
 template <class Exec>
-void tone_bank_batched(Exec& ex, const ToneBankBatchedInput& in, float* power, float* ratio, unsigned char* flag, DopplerProfile& prof,
-                       BeamformProfile& beam_profile) {
+void tone_bank_batched(Exec& ex, const ToneBankBatchedInput& in, float* power, float* ratio, unsigned char* flag, DopplerProfile& prof) {
   BeamformStopwatch watch;
   const auto sz = [](std::int64_t v) { return static_cast<std::size_t>(v > 0 ? v : 0); };
   const std::int64_t cells = in.n_b * in.J * in.NL;
   auto d_buf = ex.template alloc<float>(sz(2 * in.n_b * in.N));
-  if (in.beams != nullptr) {
+  if (in.device_beams != nullptr) {
+    ex.run(in.n_b * in.N, BankPadKernel{in.device_beams, d_buf.data(), in.n, in.N});
+  } else {
     auto d_beams = ex.upload(in.beams, sz(2 * in.n_b * in.n));
     watch.lap(prof.transfer);
-    ex.run(in.n_b * in.N, BankPadKernel{d_beams.data(), d_buf.data(), in.n, in.N});
-  } else {
-    auto d_beams = farfield_batched_device(ex, in.samples, in.w, in.tau, in.n, in.n_el, in.n_b, in.df, in.fc, beam_profile);
-    watch.lap(prof.tone_beams);
     ex.run(in.n_b * in.N, BankPadKernel{d_beams.data(), d_buf.data(), in.n, in.N});
   }
   auto d_dec = ex.template alloc<float>(sz(2 * in.n_b * in.M));

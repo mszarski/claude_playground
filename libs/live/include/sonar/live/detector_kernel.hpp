@@ -122,4 +122,10 @@ struct DetectorCellKernel {
   }
 };
 
+/// The three kernels above on the device, launched from detector_cuda.cu, the one translation unit that instantiates them
+/// for CUDA (backproject_kernel.hpp launch_on_device says why: one instantiation of a kernel template in one .cu file).
+void launch_on_device(const DetectorMedianKernel& kernel, std::int64_t n);
+void launch_on_device(const DetectorRowKernel& kernel, std::int64_t n);
+void launch_on_device(const DetectorCellKernel& kernel, std::int64_t n);
+
 }  // namespace sonar::live

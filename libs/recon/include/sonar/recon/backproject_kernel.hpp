@@ -480,4 +480,11 @@ struct BpKernel {
   }
 };
 
+/// The kernel above on the device, launched from backproject_cuda.cu: the one translation unit that instantiates it for
+/// CUDA. A kernel template instantiated in two .cu files (non-relocatable device code) registers one host stub twice
+/// with two device bodies, and which body runs then depends on the program's link and load order; with different
+/// compile options per file (backproject_cuda.cu is not built with --fmad=false) two programs gave different numbers
+/// (the batched Doppler bank, docs/tasks/DOPPLER.md D8). Other device code launches BpKernel through this only.
+void launch_on_device(const BpKernel& kernel, std::int64_t n_points);
+
 }  // namespace sonar::recon

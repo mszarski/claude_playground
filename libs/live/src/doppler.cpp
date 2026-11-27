@@ -588,8 +588,7 @@ ToneStage tone_stage(const PingRecord& record, const std::vector<double>& bearin
 #endif
     } else {
       dsp::HostExec ex;
-      BeamformProfile unused;
-      tone_bank_batched(ex, in, power.data(), ratio.data(), flag.data(), prof, unused);
+      tone_bank_batched(ex, in, power.data(), ratio.data(), flag.data(), prof);
     }
     // The flagged cells in the loop's order (beam, lag, hypothesis), after its leakage rule.
     for (std::int64_t b = 0; b < n_b; ++b) {

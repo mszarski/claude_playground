@@ -20,4 +20,12 @@ MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, BeamformProf
   return mvdr_batched(ex, in, out, profile);
 }
 
+/// The beams left on the device (doppler_cuda.cu: the tone's filter bank takes them there). FarfieldSumKernel is
+/// instantiated for CUDA in this file only (backproject_kernel.hpp launch_on_device says why).
+DeviceBuffer<float> farfield_cuda_device(const float* samples, const float* w, const double* tau, std::int64_t n, std::int64_t n_el,
+                                         std::int64_t n_b, double df, double fc, BeamformProfile& profile, int device) {
+  dsp::CudaExec ex(device);
+  return farfield_batched_device(ex, samples, w, tau, n, n_el, n_b, df, fc, profile);
+}
+
 }  // namespace sonar::live

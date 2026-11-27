@@ -268,3 +268,56 @@ def test_the_device_tone_bank_gives_the_hosts_power_and_detections(engine):
     (h,) = reports(dict(CHAIN, engine=engine, doppler=tone), [rec])
     (d,) = reports(dict(CHAIN, engine=engine, backend="cuda", doppler=tone), [rec])
     same_detections(h, d)
+
+
+# --- one device body per kernel (batch5: the default chain differed between programs on cuda) --------------------------
+
+ROOT = __import__("pathlib").Path(__file__).resolve().parents[2]
+
+
+def test_no_kernel_template_is_instantiated_for_the_device_in_two_cuda_files():
+    """A kernel template instantiated in two .cu files registers one host stub with two device bodies; which runs depends
+    on the program's link and load order. The batched Doppler bank once instantiated the backprojection and far-field
+    kernels again in doppler_cuda.cu (compiled with --fmad=false), and with the Doppler options OFF the Python module,
+    sonar_live and the Holoscan program gave reports differing in late digits on an L4. Each built CUDA object's weak
+    `parallel_for_kernel` stubs must be its own. Runs where a CUDA build exists (the GPU job's build/), skips elsewhere."""
+    import shutil
+    import subprocess
+    objects = sorted((ROOT / "build").glob("**/*.cu.o")) if (ROOT / "build").exists() else []
+    if not objects or shutil.which("nm") is None:
+        pytest.skip("no CUDA objects built (build/**/*.cu.o) or no nm")
+    owner = {}
+    for o in objects:
+        out = subprocess.run(["nm", str(o)], capture_output=True, text=True, check=True).stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1] == "W" and "parallel_for_kernel" in parts[2]:
+                owner.setdefault(parts[2], set()).add(o.name)
+    twice = {k: sorted(v) for k, v in owner.items() if len(v) > 1}
+    assert owner and not twice, twice
+
+
+_DEFAULT_RUN = r"""
+import json, sys, numpy as np
+sys.path.insert(0, sys.argv[1])
+import test_doppler_device as t
+from gpusonar.live import LiveChain
+recs = [t.ping("flank", seed=s, sequence=s) for s in range(2)]
+if sys.argv[2] == "bank_first":     # the batched Doppler bank's kernels loaded and run first in this process
+    t.reports(dict(t.CHAIN, engine="cpp", backend="cuda", doppler=t.MAX), recs)
+print(json.dumps(t.reports(dict(t.CHAIN, engine="cpp", backend="cuda"), recs), sort_keys=True))
+"""
+
+
+@needs_cuda
+def test_the_default_chain_on_the_device_gives_the_same_lines_in_fresh_processes():
+    """The default chain (Doppler options off) on the device in two fresh processes, one of which runs the batched bank
+    first: bit-identical report lines (no default-path number may depend on what else a process has run)."""
+    import os
+    import subprocess
+    import sys
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "python") + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    here = str(ROOT / "tests" / "python")
+    lines = [subprocess.run([sys.executable, "-c", _DEFAULT_RUN, here, mode], capture_output=True, text=True, check=True, env=env).stdout
+             for mode in ("plain", "plain", "bank_first")]
+    assert lines[0] and lines[0] == lines[1] == lines[2]

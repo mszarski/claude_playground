@@ -1223,3 +1223,22 @@ the tracker and classifier); the sweep bank on a train record (both engines); a
 background count for `--alternate`; several seeds and the class's high target strength near broadside (+41.5 dB);
 `docs/handoff/README.md`, `handoff/SIMULATION.md` and `STATUS.md` still say 95 scenario files (96 since
 `flank_patrol_doppler_tone`, 98 now).
+
+### D8.5 What the first GPU suite found, and the repair (2026-11-27, branch `cuda-fix`)
+
+**With the Doppler options off, programs on cuda stopped agreeing.** Four report-line comparisons that had been exact
+failed on the L4 (batch5; late digits of `snr_db` and of a track's `speed_m_s`): `sonar_live --replay` against the
+Holoscan program, the merged per-board streams against the whole-array stream (twice), and the program's ping count.
+Cause, found by reading and confirmed with `nm` on objects compiled here: `doppler_cuda.cu` instantiated the kernel
+templates `parallel_for_kernel<recon::BpKernel>` and `<FarfieldSumKernel>` (and the detector's three) for the device a
+second time. Without relocatable device code, each `.cu` file registers its own device body for the same weak host stub,
+and the program's link and load order picks one. `doppler_cuda.cu` is compiled with `--fmad=false`,
+`backproject_cuda.cu` and `beamform_cuda.cu` are not, so the default chain's backprojection ran one body in one program
+and the other in another. The repair: the shared kernels run on the device only through `launch_on_device` in their own
+files (`backproject_cuda.cu`, `detector_cuda.cu`; the tone's beams through `farfield_cuda_device` in `beamform_cuda.cu`),
+so each kernel template has one device instantiation in the whole build and the default chain's device code is the
+code before D8. Guard: `test_doppler_device.py::test_no_kernel_template_is_instantiated_for_the_device_in_two_cuda_files`
+(`nm` on every built `*.cu.o`; it fails on batch5's objects and passes now) and a CUDA-gated test of the default chain in
+fresh processes. The device timing of D8 above (the coordinator's L4 run: flank_patrol C++ off / max / cfar 0.116 /
+0.424 / 0.453 s) was measured with the bank's backprojection compiled with `--fmad=false`. It now runs as
+`backproject_cuda.cu` compiles it, and has not been measured again.
