@@ -260,7 +260,7 @@ def decompose(stages: dict, meta: list | None = None, record=None) -> dict:
     prev = f64(stages["echoes"])
     items = [s for s in order if s.startswith("reverberation_item_")]
     direct = f64(stages["direct_arrival"]) if "direct_arrival" in stages else None
-    if items and "reverberation_start" in stages:
+    if "reverberation_start" in stages:
         start = f64(stages["reverberation_start"])
         if np.any(start != prev):
             parts["basin_tail"] = (start - prev, "the basin's late tail (sim/basin.py)")
@@ -274,7 +274,7 @@ def decompose(stages: dict, meta: list | None = None, record=None) -> dict:
     if "reverberation" in stages:
         x = f64(stages["reverberation"])
         rest = x - prev - (direct if direct is not None else 0.0)
-        if not items:
+        if "reverberation_start" not in stages:
             parts["reverberation"] = (rest, "reverberation, all items together (and one-way sources, a basin tail, "
                                             "if any)")
         elif np.any(np.abs(rest) > 0):

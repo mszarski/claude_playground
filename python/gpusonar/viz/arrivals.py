@@ -22,6 +22,19 @@ import tempfile
 import numpy as np
 
 
+class _NoBasin:
+    """The run's provider without a basin's late tail (sim/basin.py), for the single-arrival runs: the tail is added
+    after the echoes stage, so leaving it out changes nothing in the echoes and saves its synthesis."""
+
+    def __init__(self, provider):
+        self._p = provider
+
+    basin = None
+
+    def __getattr__(self, name):
+        return getattr(self._p, name)
+
+
 class _Fixed:
     """A provider stand-in that returns the given eigenray sets in order (outbound, then return)."""
 
@@ -117,6 +130,8 @@ def echoes_with(box, out_keep, back_keep, engine=None) -> np.ndarray:
         kwargs["rng"] = g
     if engine is not None:
         kwargs["engine"] = engine
+    if getattr(kwargs.get("provider"), "basin", None) is not None:
+        kwargs["provider"] = _NoBasin(kwargs["provider"])
     simulator.two_way_paths = fixed
     try:
         with tempfile.TemporaryDirectory(prefix="gpusonar_pair_") as tmp:

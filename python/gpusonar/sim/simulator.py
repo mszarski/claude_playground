@@ -270,8 +270,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     if transmit and getattr(provider, "basin", None) is not None:      # `basin_reverberation` (sim/basin.py): the echoes' late tail
         provider.basin.after_echoes(record, sonar, provider, scenario_time, environment=env, absorption_model=absorption_model, backend=backend, engine=engine)
     items = list(reverberation or []) if transmit else []
-    if items:
-        taps.sim_item_tap(record, "reverberation_start")       # opt-in per-item taps (taps.sim_capture per_item); read only
+    taps.sim_item_tap(record, "reverberation_start")           # opt-in per-item taps (taps.sim_capture per_item); read only
     for item_index, item in enumerate(items):
         # Boundary reverberation by the scattering-function method (sim/reverb.py).
         from . import reverb
