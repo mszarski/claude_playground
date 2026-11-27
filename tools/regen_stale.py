@@ -170,7 +170,8 @@ def cmd_merge(a) -> int:
         committed["regenerated"] = {"date": datetime.date.today().isoformat(), "why": "D-251: the boundary reverberation's Doppler is per frequency by default (issue sonar-rar0)",
                                     "tree": a.tree, "backend": a.backend, "replaced": replaced, "not_regenerated": missing,
                                     "commands": {k: c for k, _, c, _ in items}, "kept": KEPT.get(path, {})}
-        (out / Path(path).name).write_text(json.dumps(committed, indent=1, default=float) + "\n")
+        indent = len((ROOT / path).read_text().splitlines()[1]) - len((ROOT / path).read_text().splitlines()[1].lstrip())      # the committed file's
+        (out / Path(path).name).write_text(json.dumps(committed, indent=indent or 1, default=float) + "\n")
         print(f"{out / Path(path).name}: replaced {replaced}" + (f"; not regenerated {missing}" if missing else ""))
     return 0
 

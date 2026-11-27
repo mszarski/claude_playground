@@ -346,6 +346,7 @@ import regen_stale  # noqa: E402
 # Keys of each file that are not results (metadata), for the inventory below.
 _META = {"docs/tasks/doppler_bank_eval.json": {"tool"}, "docs/tasks/doppler_d3_eval.json": {"status", "commands", "not_measured"},
          "docs/tasks/doppler_large_submerged_eval.json": {"what", "commands"}, "docs/tasks/doppler_baseline.json": {"what", "status", "tree", "environment", "notes"}}
+_META = {k: v | {"regenerated"} for k, v in _META.items()}       # the block regen_stale.py's merge adds (the files regenerated, sonar-rar0)
 
 
 def test_the_stale_inventory_names_every_part_of_each_file_once():

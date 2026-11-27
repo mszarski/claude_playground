@@ -717,17 +717,17 @@ No measured target strength of a ship, an unmanned vehicle or a submarine is cit
 | ship at 12 km, non-ducting water, array at 10 m | 1 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 2 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 3 | 0 of 6 | — | — | no track | | | |  | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 1 | 6 of 6 | 17.9 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 2 | 6 of 6 | 18.0 dB | 3 | mover | -0.4 m/s | -0.3° | 237 ± 2508 m (4 m) | yes | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 3 | 6 of 6 | 18.6 dB | 3 | mover | -0.0 m/s | -0.6° | 239 ± 2508 m (4 m) | yes | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 22.1 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 22.2 dB | 3 | mover | -0.4 m/s | -0.3° | 226 ± 2508 m (150 m) | yes | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 22.4 dB | 3 | mover | -0.3 m/s | -0.4° | 228 ± 2508 m (150 m) | yes | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 32.7 dB | 3 | mover | +0.0 m/s | -0.4° | none | — | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 33.2 dB | 3 | mover | -0.1 m/s | -0.2° | 63 ± 630 m (150 m) | yes | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 33.3 dB | 3 | mover | -0.2 m/s | -0.0° | 79 ± 630 m (150 m) | yes | 0 |
-| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 6 of 6 | 22.7 dB | 3 | mover | -2.0 m/s | -0.2° | 69 ± 629 m (150 m) | yes | 0 |
-| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 6 of 6 | 24.5 dB | 3 | mover | -0.2 m/s | +1.3° | 27 ± 2531 m (60 m) | yes | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 1 | 6 of 6 | 17.9 dB | 3 | mover | +0.1 m/s | -0.5° | none | — | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 2 | 6 of 6 | 18.0 dB | 3 | mover | -0.0 m/s | -0.3° | 237 ± 2508 m (4 m) | yes | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 3 | 6 of 6 | 18.6 dB | 3 | mover | +0.1 m/s | -0.6° | 239 ± 2508 m (4 m) | yes | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 22.1 dB | 3 | mover | +0.2 m/s | -0.2° | none | — | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 22.2 dB | 3 | mover | +0.1 m/s | -0.2° | 226 ± 2508 m (150 m) | yes | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 22.4 dB | 3 | mover | -0.0 m/s | -0.3° | 228 ± 2508 m (150 m) | yes | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 32.7 dB | 3 | mover | +0.2 m/s | -0.8° | none | — | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 33.2 dB | 3 | mover | +0.1 m/s | -0.4° | 63 ± 630 m (150 m) | yes | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 33.3 dB | 3 | mover | +0.1 m/s | -0.2° | 79 ± 630 m (150 m) | yes | 0 |
+| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 6 of 6 | 22.7 dB | 3 | mover | -1.2 m/s | +0.1° | 69 ± 629 m (150 m) | yes | 0 |
+| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 6 of 6 | 24.5 dB | 3 | mover | -0.1 m/s | -1.6° | 9 ± 2535 m (60 m) | yes | 0 |
 
 Not run: the submerged mover in 100 m over sand with Bellhop, rows 1 and 2 (minutes each); the cylinder, rows 1 and 2.
 
@@ -807,27 +807,27 @@ In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sa
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 6 of 6 pings | 17.7 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
 | popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.5 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.9 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 1 | 6 of 6 pings | 17.2 dB | 3 | mover at 6.5 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.9 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 1 | 6 of 6 pings | 17.2 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
 | the same without reverberation (noise only) | 2 | 6 of 6 pings | 15.0 dB | 3 | mover at 6.6 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 3 | 6 of 6 pings | 15.2 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 20.1 dB | 3 | mover at 5.7 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 20.9 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 3 | 6 of 6 pings | 15.2 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.3 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 20.1 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 20.9 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
-| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.8 dB | 3 | mover at 6.3 m/s | 0 / 0 | 1 mover |
-| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 34.3 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover, 1 uncertain |
-| popoto_env_gravel_30m at 12 km, Bellhop | 3 | 6 of 6 pings | 34.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover, 2 uncertain |
+| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.8 dB | 3 | mover at 6.4 m/s | 0 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 34.3 dB | 3 | mover at 6.4 m/s | 0 / 0 | 1 mover, 2 uncertain |
+| popoto_env_gravel_30m at 12 km, Bellhop | 3 | 6 of 6 pings | 34.4 dB | 3 | mover at 6.4 m/s | 0 / 0 | 1 mover, 1 uncertain |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 23.6 dB | 3 | mover at 5.9 m/s, multipath at 6.2 m/s | 3 / 2 | 2 mover, 3 multipath |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 31.4 dB | 3 | mover at 5.9 m/s, multipath at 6.1 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 3 | 6 of 6 pings | 32.6 dB | 3 | mover at 5.9 m/s, multipath at 6.3 m/s | 1 / 1 | 1 mover, 2 multipath |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 23.6 dB | 3 | mover at 6.3 m/s, multipath at 7.8 m/s | 3 / 3 | 1 mover, 4 multipath |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 31.5 dB | 3 | mover at 6.3 m/s, multipath at 6.4 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 3 | 6 of 6 pings | 32.6 dB | 3 | mover at 6.2 m/s, multipath at 6.5 m/s | 1 / 1 | 1 mover, 2 multipath |
 
-A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 30 to 156 m, its first arrival is within 5 m of the ship and its range reads 10 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
+A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 30 to 156 m, its first arrival is within 5 m of the ship and its range reads -3 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
 
 
 Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 17.7 dB against 17.2 dB; 2 rows: 14.5 dB against 15.0 dB; 3 rows: 14.9 dB against 15.2 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
