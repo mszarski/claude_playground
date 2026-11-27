@@ -19,11 +19,12 @@ on the chain's own detector (free field, the ship-sized target); the 12 km requi
 `large_submerged` first and `ship` second (the owner, 2026-11-26), and three rows hold it for
 both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the tree of the fourth 2026-11-26
-batch, decisions D-236 to D-239 (2933 passed, 113 skipped, 4 xfailed, none failed, on an NVIDIA L4;
-Hugging Face job 6b08b9f554072e8b71681cd2; D-240), the opt-in 3-D propagation tier and the slow
-Bellhop3D checks included, and with the sharding added on top as three jobs (2941 passed, 114 skipped,
-4 xfailed; D-239); the
+(the depth sigma now says so). The full GPU suite last ran on the fifth batch's tree, decisions D-241
+to D-243 with the repair of D-242, as three jobs on an NVIDIA L4 (3002 passed, 117 skipped, 4 xfailed,
+none failed; Hugging Face jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9,
+6b090cd46c5d61fff1888214; D-245), the opt-in 3-D propagation tier and the slow Bellhop3D checks
+included; the first suite on that batch failed 4 tests, because new device code had made two programs
+built from one library disagree in the last digits on the GPU (fixed, with a test that guards it); the
 whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
 entries). Since D-227 the shipped sites state their boundary scattering (illustrative values) and the
@@ -37,8 +38,13 @@ mud; the owner has since said 12 km is for `large_submerged` first and `ship` se
 worst sea state, the detection probabilities and the waters are still open. The sweep's Doppler
 bank exists in the live chain as an option (D-232) and with its default combiner lowers every target's
 margin by 3.4 to 5.3 dB on the scenes measured, so it stays off; an opt-in CFAR combiner and a tone path
-(D-237) give the movers their margin back, but the chosen route, a tone above the sweep's band in one
-ping, is not yet measured end to end (its simulation did not finish in 4 h 40 min on a CPU). On 2026-11-26 the boundary models, the sediment tier and time
+(D-237) give the movers their margin back. Measured on a GPU since (D-241 to D-243): the tone path makes
+22 false detections on 4 target-free pings at 12 km at the default budget (the array's grating lobes at
+the tone's frequency), so by the owner's decision it stays off by default and a notch is to be added
+(D-244); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
+0 of 6 pings for all three targets); with the bank on the chain still costs 3.4 to 6.0 times its cost a
+ping on the device. The owner's baseline is the plain sweep on the three-row face with every Doppler
+option off (D-244). On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
 got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
 scenes, D-216). Every shipped SAS scene
@@ -216,7 +222,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 96 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 98 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |

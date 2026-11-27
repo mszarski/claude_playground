@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the gallery is unchanged since except `buried_objects`, regenerated after D-240; the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day and to D-240 on 2026-11-27): the gallery pictures, the headline numbers with their sources, what a
+decision D-181 (the gallery is unchanged since except `buried_objects`, regenerated after D-240; the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245 the same day): the gallery pictures, the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -473,7 +473,11 @@ ship at 12 km 4.8 dB low. Since D-235 the owner has said 12 km is for `large_sub
 second; since D-238 `DESIGN.md`'s POP-3 reads "partly met" (free field yes with three rows, +2.9 dB; not at
 `deep_no_bottom_return_sea_state_5` or `summer_60m_mud_profile`) and "The 12 km design point" has the
 per-site table. The detection probability, the false-alarm rate, the worst sea state and the waters are
-still the owner's (`STATUS.md` questions 51, 52 and 55).
+still the owner's (`STATUS.md` questions 51, 52, 55 and 56). Since D-244 the baseline is the plain sweep
+on the three-row face with every Doppler option off. Through the chain at 12 km (D-243; two opt-in
+scenes, one seed, assumed class values): the sweep alone holds three `large_submerged` geometries on 6 of
+6 pings at 7.98 to 11.41 dB, 2.5 to 5.9 dB under the planner's point target; **with the tone path on, 22
+false detections on 4 target-free pings at the default budget** (the tone path stays off by default).
 
 Link budget, free field, spherical spreading, steady point echo in noise. Source:
 `docs/design/derived.json`, `requirements` entry `POP-3` (written by
@@ -657,7 +661,11 @@ benchmark leaves the board synchronisation stage out. Source: `RESULTS.md`,
 "Performance"; `docs/benchmarks/live_chain_ablation_l4_b2a918e.json`
 (L4, D-150). With board synchronisation, on the Popoto trials' pings (L4, after the first, median;
 D-192, D-195): C++ 0.048 / 0.054 / 0.065 s and Python 0.084 / 0.18 / 0.25 s at 32 / 64 / 96
-channels.
+channels. With the Doppler options, on the scenes' pings (L4, C++ chain, bank off -> `max` -> `cfar`, s a
+ping, `tools/live_chain_timing.py`): `flank_patrol` 0.115 -> 0.393 -> 0.418, `popoto_far_mover` 0.062 ->
+0.349 -> 0.374, `popoto_12km` 0.019 -> 0.097 -> 0.108 after D-242 (job 6b090cd56c5d61fff1888217), from
+3.558 and 3.935, 2.410 and 2.766, 0.372 and 0.532 with the bank before it (job 6b08c9d954072e8b71685cd6,
+D-241); `RESULTS.md`, "Performance".
 
 | Rows | ms a ping | With `cell_statistic: mean` |
 | --- | --- | --- |
@@ -855,7 +863,9 @@ Runtimes are given only where a document records one.
 | `docs/design/popoto_range_study.json`, `.png` | yes | `tools/popoto_range_study.py` | CPU | not recorded |
 | `docs/design/popoto_trade_study.json`, `.md` (D-233) | yes | `tools/popoto_trade_study.py --grid`, then `--sensitivity`, `--coverage`, `--measure-rows`, `--crosscheck` (each merged into the JSON), then `--report` for the `.md`; the profile sites need `GPUSONAR_BELLHOP`; `OMP_NUM_THREADS=1` advised | CPU | not recorded; `--measure-rows` takes minutes (its docstring) |
 | `docs/tasks/doppler_bank_eval.json`, `doppler_bank_threshold.json` (D-232) | yes | `tools/doppler_bank_eval.py SCENE --background 4` per scene, the scenes gathered under `scenes` (the file's `tool` line; Bellhop for the eigenray scenes); `tools/doppler_bank_threshold.py [--reverb SCENE] --json FILE` | CPU | not recorded; the bank costs 22 to 51 times the chain a ping on the scenes (`docs/tasks/DOPPLER.md` table 9.5) |
-| `docs/tasks/doppler_d3_eval.json` (D-237) | yes | the commands in its `commands` block: `tools/doppler_bank_threshold.py --chain cfar ...`, `tools/doppler_bank_eval.py SCENE --combine cfar --background 4`, `tools/doppler_tone_eval.py` (`--alternate 10.5e+3` on `flank_patrol`; `popoto_12km_doppler`); Bellhop for the eigenray scenes | CPU | `flank_patrol_doppler_tone` did not finish in 4 h 40 min (its block `not_measured`); a GPU-job item (`sonar-iu67`) |
+| `docs/tasks/doppler_d3_eval.json` (D-237) | yes | the commands in its `commands` block: `tools/doppler_bank_threshold.py --chain cfar ...`, `tools/doppler_bank_eval.py SCENE --combine cfar --background 4`, `tools/doppler_tone_eval.py` (`--alternate 10.5e+3` on `flank_patrol`; `popoto_12km_doppler`); Bellhop for the eigenray scenes | CPU | `flank_patrol_doppler_tone` did not finish in 4 h 40 min (its block `not_measured`); measured since in the `doppler` GPU job (D-241), its JSON in the approved dataset, not committed |
+| `docs/tasks/doppler_large_submerged_eval.json` (D-243) | yes | its commands: `tools/doppler_bank_eval.py popoto_12km_large_submerged` and `tools/doppler_tone_eval.py` with `--max-rate 8 --truth-at reflection --gate-range-m 100` (`docs/tasks/DOPPLER.md` LS.5); Bellhop | CPU | the sweep scene 6 pings in 27 min to simulate, the tone scene 58 min a ping (LS.1) |
+| The `doppler` job's outputs: `doppler_tone_eval.json`, `doppler_bank_at_default.json`, `timing_*.json`, `ls12_*.json` (D-241, D-243) | no; the approved dataset's folders `doppler_tone`, `doppler_fa`, `doppler_timing`, `doppler_ls12`; the numbers in `DECISIONS.md` D-241 to D-243 and `RESULTS.md` | job mode `doppler` with `GPUSONAR_ORACLES=1` (`GPUSONAR_DOPPLER_RUNS`, `bash tools/doppler_gpu_runs.sh --help`) | GPU | sub-run limits 80, 30, 40 and 80 min; the bank's false-alarm rows stopped at their one-hour limit (D-241) |
 | Ten-seed evaluation: `classify_rules_eval.json`, `.md`, `captures/` | only the JSON of some runs, as `docs/benchmarks/classify_rules_eval_<commit>.json`; captures stay in the dataset | job mode `clseval` with `GPUSONAR_ORACLES=1`, `GPUSONAR_CLSEVAL_ARGS="--seeds 10 --commit <hash>"` | GPU | about 50 min for 12 scenes x 10 seeds on an L4 |
 | False-alarm count `at_default.json` | no; the table is in `RESULTS.md` | job mode `falsealarm` (`GPUSONAR_FA_ARGS`, e.g. `--maps long_range --pings 100000`) | GPU | long: the three-row static map timed out at about 43 000 pings |
 | `docs/benchmarks/bench_*`, `session_*`, `conditioning_*` | yes | job mode `benchmark` (`docs/benchmarks/README.md` has each file's exact settings); the job prints one `BENCHMARK_JSON {...}` line to save | GPU | not recorded; a rerun is a new measurement, not a regeneration |

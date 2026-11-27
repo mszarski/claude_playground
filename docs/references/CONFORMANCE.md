@@ -22,6 +22,12 @@ D-240 name no matrix row and the batch did not edit this file. The `penetration:
 cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
 the sharding) touch no conformance item.
 
+**State 2026-11-27, after the merge `f40d4c3` of the fifth batch (D-241 to D-245; full GPU suite as three shards
+3002 passed, 117 skipped, 4 xfailed; jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9,
+6b090cd46c5d61fff1888214):** D-241 to D-245 name no matrix row and the batch did not edit this file or the
+simulator's physics. The Doppler GPU job mode (D-241), the Doppler stages batched on the device (D-242), the two
+12 km large-submerged scenes (D-243, opt-in) and the owner's decisions (D-244) touch no conformance item.
+
 **State 2026-11-26, after the merge `4057d65` of the third batch (D-230 to D-234; full GPU suite 2886 passed, 111
 skipped, 4 xfailed; job 6b084a4cd91f621b930b6331):** D-230 to D-233 name no matrix row and the batch did not edit this file. The library sediment fit takes a
 row as the tool does (D-230, opt-in; A10 carries a note); the rest of the batch (pulse trains, the sweep's Doppler bank,

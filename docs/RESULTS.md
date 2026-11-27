@@ -23,6 +23,26 @@ same to the bit through these changes. The device figures below, and every bench
 changed only that stage, the decimate-first correction and the receive path, so those files were not
 re-measured and still stand for the work they measure.
 
+**The live chain with the Doppler options, on the scenes (D-241, D-242).** L4, `tools/live_chain_timing.py`
+in the `doppler` GPU job, median s a ping after the first, backend cuda, C++ chain, bank off -> `combine:
+max` -> `combine: cfar` (`max_range_rate_m_s: 3`). These are other pings than the trials' above (the scenes'
+sonars and windows), so the two sets are not to be compared ping for ping.
+
+| Scene | Before D-242: the per-hypothesis loop (job 6b08c9d954072e8b71685cd6, D-241) | After D-242 and its fix: `doppler.batched: auto` (job 6b090cd56c5d61fff1888217, D-242) |
+| --- | --- | --- |
+| `flank_patrol` | 0.112 -> 3.558 -> 3.935 | 0.115 -> 0.393 -> 0.418 |
+| `popoto_far_mover` | 0.062 -> 2.410 -> 2.766 | 0.062 -> 0.349 -> 0.374 |
+| `popoto_12km` | 0.019 -> 0.372 -> 0.532 | 0.019 -> 0.097 -> 0.108 |
+
+**Worse first:** with the bank on the chain still costs 3.4 to 6.0 times its cost without it (D-242, as
+corrected in D-245: `flank_patrol` max 0.393 / 0.115, `popoto_far_mover` cfar 0.374 / 0.062); the
+backprojection kernel is launched once per hypothesis (0.25 to 0.29 s of the 0.4 s; `sonar-j1f9`). Against
+the loop, 4 to 9 times less with the bank on. In the loop's run the Python engine took `flank_patrol` 0.196
+-> 4.684 -> 5.370, `popoto_far_mover` 0.114 -> 4.232 -> 4.824, `popoto_12km` 0.061 -> 1.063 -> 1.198, and
+the tone path on `popoto_12km_doppler` C++ 0.033 -> 0.207, Python 0.048 -> 0.241 (`docs/tasks/DOPPLER.md`
+D8.2); after the fix only the C++ rows above are in D-242. The JSON is in the approved dataset under
+`doppler_timing`, not committed (D-241).
+
 **Multiscale statistic on the device (D-150).** L4, `tools/live_chain_ablation.py --backend cuda`,
 median of three repeats, ms a ping, as deployed, 1 / 2 / 3 rows: 16.01 / 29.53 / 40.64 before
 (tree `1368f3d`, job 6b01109defaf5e14f4b45051), 12.73 / 25.92 / 37.52 after (tree `b2a918e`,
@@ -3494,19 +3514,37 @@ from real water and none from a GPU, except the suite and gallery jobs named.
 | The GPU suite in shards | three L4 jobs done about 60 minutes after launch, against 85 minutes of tests alone unsharded; shards of 22, 28 and 36 minutes of tests by count, planned 28 each by weight (not yet run) | D-239 |
 | The gallery's `buried_objects` on an L4 at the fourth batch's tree | cylinder over clutter 21.12 -> 20.32 dB (D-212's prediction); depths unchanged; the job's other scenes not committed (three differ by one detection a ping, `sonar-pli3`) | job 6b08c12b54072e8b71683be9; commit `8391941` |
 
+## Measured in D-241 to D-245 (the fifth batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records; the device runs are NVIDIA L4 jobs through Hugging Face
+(their JSON in the approved dataset, not committed), the CPU runs `docs/tasks/doppler_large_submerged_eval.json`.
+
+| What | Result | Source |
+| --- | --- | --- |
+| The tone path on `popoto_12km_large_submerged_tone` (tone at 6.5 kHz above the 4-6 kHz sweep, one ping), device run | **22 false detections on 4 target-free pings at the default budget, all the tone's, against 0 with the tone path off**; grating lobes of the 0.15 m pitch (0.65 wavelengths at 6.5 kHz) beyond ±32.4 degrees. On the CPU: 3 to 5 false tone detections on every tone ping, at \|bearing\| 31.95 to 40.0 degrees | D-243 (job 6b08f68754072e8b7168e9c6); `docs/tasks/DOPPLER.md` LS.1 item 0 |
+| `flank_patrol_doppler_tone` through the chain, 6 pings | **tone path off: 0 of 6 pings for all three targets, 26 false detections on 4 target-free pings**; on: small vehicle 6 of 6 (rate 1.964 to 1.997 against 1.996 m/s), submarine 6 of 6 (rate on 2 pings: -0.568, -0.422 against -0.608), wreck 6 of 6 by the sweep; 1 false detection at the default budget, 16 at 3 a ping (12 the tone's; 12 allowed); engines within 0.05 m, 0.05 deg, 0.05 dB; simulated in 189 s (the CPU did not finish in 4 h 40 min) | D-241 (job 6b08c9d86c5d61fff187b793) |
+| The first suite on the fifth batch | **4 failed**, 2996 passed: bit-identity comparisons between two programs on cuda, a kernel instantiated in two `.cu` files; after the fix 3002 passed, 117 skipped, 4 xfailed | D-242, D-245 |
+| False detections at the default budget (1e-3 a ping) on noise, long-range array | bank off 39 in 40 000 pings (0.97 of the budget; 95 %: 0.69 to 1.33); `combine: cfar` 8 in 10 296 (0.78; 0.34 to 1.53); `combine: max` 0 in 16 557 (0; 0 to 0.22). The rows with the bank stopped at their one-hour limit | D-241 (job 6b08c9d854072e8b71685cd4) |
+| The bank's cost a ping on the device | 3.4 to 6.0 times the chain (the table in "Performance"); 4 to 9 times less than the loop | D-242, D-245 |
+| Large submerged at 12 km, the sweep alone (bank off), 6 pings, CPU | all three geometries 6 of 6: closing (-5.61 m/s) 7.98 dB, oblique (-0.50) 9.22 dB, crossing (-0.39) 11.41 dB; 2.5 to 5.9 dB under the planner's point target; `combine: cfar` +0.59 to +0.87 dB | D-243; `docs/tasks/doppler_large_submerged_eval.json` |
+| The same, tone and sweep in one ping, device run | closing 6 of 6 (rate -5.536 to -5.598), oblique 6 of 6 (-0.454 to -0.551), crossing 6 of 6 by the sweep only; tone path off 6, 5 and 6 of 6 | D-243 (job 6b08f68754072e8b7168e9c6) |
+| The eval tools' truth for a fast mover at 12 km | 45 m off after 8 s when taken at ping time; opt-in `--truth-at reflection`, `--gate-range-m` (defaults unchanged) | D-243 |
+| The batched bank on the host against the loop | bit for bit (C++); defaults: 12 of 12 report hashes equal a build of `02bce49`; the Python engine with `batched: on` within the engines' tolerances only; on the device the tone's interpolated rate within 1e-5 m/s of the host's (seen 2.1e-8 m/s apart on 1 m/s) | D-242 |
+| A 4 s pulse at the same level against 1 s | 6 dB only for an echo with no radial speed; the linear sweep's closed-form peak loss with the plain filter on a mover 8.8 / 14.8 dB at 2 / 8 m/s for 1 s, 14.8 / 20.9 dB for 4 s (from the transmit study on branch `txstudy`, not merged) | D-244 |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-240) ran its affected test files.
-The full GPU suite last ran on the fourth 2026-11-26 batch's tree (`da015ba`, D-240): 2933 passed, 113
-skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face job 6b08b9f554072e8b71681cd2); with the
-sharding on top, as three shards, 2941 passed, 114 skipped, 4 xfailed (D-239). Also not
-measured: the tone above the band in one ping through the chain, and the CFAR combiner's false-alarm
-rate at the default budget (`sonar-iu67`); Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
-(D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the
-sweep's Doppler bank on a GPU and its false-alarm rate at the default budget (`sonar-094p`); the link
+rerun since, and each later package (D-158 to D-245) ran its affected test files.
+The full GPU suite last ran on the fifth batch's fixed tree (`a37e0be`, D-245) as three shards: 3002
+passed, 117 skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b090cd36c5d61fff188820e,
+6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214); the first suite on the batch failed 4 (D-245). Also
+not measured: the tone path's false-alarm rate beyond the 4 target-free pings of each scene run (the
+grating-lobe notch, branch `notch`, is not merged), several seeds of the 12 km scenes, the bank with the
+elevation rows on the device; Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
+(D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the link
 budget and coverage against measured reverberation (every site value is illustrative). Anything on real
 hardware or in real water: every number in this file is from simulation, from analysis,
 or from other people's published channel soundings.
