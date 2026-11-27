@@ -1706,3 +1706,258 @@ this tree: `tone_p12_wholetrain` (before 51d2b12 and 80df69d) and the first run'
 Regenerated here: `docs/handoff/examples/gallery_quick_fls_120k_transit.json` (confirmed tracks 7 -> 10, the three more
 `uncertain` and `static` clutter; detections a ping [10, 11, 10, 13] -> [11, 9, 9, 15]; with `doppler: centre` the old
 numbers come back exactly); `examples/classify_rules_eval_quick.md` rerun: unchanged.
+
+## Deep site at 12 km: measured (appended 2026-11-27; jobs 6b0a02346c5d61fff18a11a1, 6b0a02356c5d61fff18a11a4; nothing above rewritten)
+
+NVIDIA L4, tree `deepsea` at `1166ca6`, simulator and chain on cuda, `popoto_12km_deep_sea_state_5` at sea states 3, 4,
+5 (`--set environment.sea_state`), 6 pings and 4 target-free pings a case, the C++ chain (the Python chain on `ss3_lfm1`:
+equal to 6e-7 dB and the same detections). Ours; one seed; site illustrative; class values assumed. Every figure:
+`docs/tasks/doppler_deep12_eval.json` (`tools/deep12_eval.py`). Held: detected on half the pings or more (the design's
+detection probability, 0.5 on one ping).
+
+### DM.1 What failed (read first)
+
+1. **The baseline fails its acceptance at sea state 3.** The shipped 1 s, 197 dB linear sweep with the plain filter:
+   the closing hull 0 of 6, the oblique hull 0 of 6, the ship 0 of 6. It holds the crossing hull (6 of 6, +2.95 dB) and
+   the planner's own +25 dB point (6 of 6, +3.41 dB against +2.79 predicted). With the bank (`combine: cfar`, not the
+   baseline: every Doppler option is off in it) the ship comes back (6 of 6, +2.62 dB); the closing and oblique hulls
+   stay at 0 of 6.
+2. **The alternate fails its acceptance at sea state 5**, with every waveform tried at its energy (4 s, 200 dB):
+   linear plain: closing 0, oblique 0, ship 0 of 6 (crossing 4, point 5 of 6); linear with the bank: closing 0, oblique 0
+   (ship 5, crossing 5, point 6); hyperbolic plain: closing 2, oblique 0 (ship 6, crossing 5, point 6 of 6).
+3. So **the transmit table's margins hold for an unresolved, non-moving target of the stated strength, and only for
+   that**: the point is reproduced within 0.62 dB wherever it is detected on every ping (11 cases); a hull of the class's
+   +25 dB whose five highlights resolve in range falls 2.4 to 6.3 dB under its own prediction with a filter that takes
+   no Doppler loss, and the linear sweep with the plain filter loses more on a mover.
+4. No false detection on any of the 72 target-free pings at the default budget (18 cases); at 3 a ping 0 to 9.
+5. Not shown: more than one seed; the hull's high target strength near broadside (+41.5 dB); targets at other depths
+   (the scene's hulls at 50 m, the ship at 4 m, the array at 225 m); sea state 4 and 5 without the bubble law.
+
+### DM.2 Why, separated (evidence)
+
+**(a) The hull's highlights resolve, and the detector tests no scale long enough to add them.** In this window the
+multiscale detector tests two scales only: the single sample (0.375 m, threshold 9.45 dB) and a 2 m cell (5.5 looks,
+4.88 dB on its mean) (`detector_scales`; `live.detector_plan`). The hulls' extent along the line of sight: crossing
+0.1 m, oblique 25 m (highlights 6.3 m apart), ship 58.5 m (14.6 m), closing 100 m (25 m): every hull but the crossing
+one puts each of its five +18.0 dB highlights in its own cell, 6.99 dB under the whole. Measured, hull less the point
+in the SAME case, with a filter that takes no Doppler loss (bank or hyperbolic): crossing -0.2 to +1.0 dB; oblique
+-6.0 / -5.9 / -4.8 / -4.2 dB (sea state 3 hyperbolic, 3 bank, 4 hyperbolic, 4 bank); closing -5.4 / -5.1 / -3.9 / -3.8.
+The ship's own prediction is 6 dB over the point's (a near-surface target in a constructive surface-image lobe at this
+geometry: factor +8.9 against +2.8 dB at 50 m); measured it is level with the point (-0.5 to +1.2 dB), i.e. 4.9 to 6.3 dB
+under its own prediction, the same loss. Against the one-highlight prediction (the prediction less 6.99 dB) the resolved
+hulls come out +0.6 to +4.6 dB above it (+0.6 to +2.9 where the margin is high; the larger figures at sea state 4, where
+the mean is over the stronger pings only): the chain sees about one highlight and some of the rest (not separated: the
+2 m cell, the highlights' surface images, the strongest-of-five draw). At sea state 3 with the baseline the oblique
+hull's one-highlight prediction is -4.2 dB and the closing hull's -5.6: below the threshold, as measured (0 of 6).
+
+**(b) Doppler mismatch, the linear sweep with the plain filter** (same case, linear plain / hyperbolic plain / bank):
+
+| Sea state, pulse | `ship` (-3.44 m/s) | `closing` (-5.60) | `oblique` (-0.50) | `crossing` (-0.39) | `point` (0) |
+| --- | --- | --- | --- | --- | --- |
+| 3, 1 s 197 dB | 0 of 6 / +4.05 / +2.62 | 0 / 0 / 0 of 6 | 0 / 0 / 0 of 6 | +2.95 / +3.82 / +2.75 | +3.41 / +2.84 / +2.77 |
+| 3, 4 s 200 dB | +2.38 / +11.67 / +10.89 | +0.25 (2 of 6) / +6.26 / +5.71 | +2.29 / +5.62 / +4.91 | +9.24 / +11.42 / +10.65 | +11.69 / +11.63 / +10.84 |
+| 4, 4 s 200 dB | 0 of 6 / +6.21 / +5.28 | 0 of 6 / +1.54 (5) / +0.88 | +0.33 (1) / +0.58 (5) / +0.56 | +4.04 / +5.64 / +4.97 | +5.39 / +5.41 / +4.72 |
+| 5, 4 s 200 dB | 0 / +1.64 / +0.85 (5) | 0 / +0.17 (2) / 0 | 0 / 0 / 0 | +0.76 (4) / +2.38 (5) / +2.26 (5) | +2.12 (5) / +2.17 / +1.29 |
+
+At 4 s the linear sweep's plain filter loses 9.3 dB on the ship (closed form 17.2), 6.0 on the closing hull (19.3),
+3.3 on the oblique (8.8), 2.2 on the crossing (7.6): less than the closed form (the detector's cells), growing with the
+speed. At 1 s the ship is lost (0 of 6) where the hyperbolic sweep and the bank hold it. The bank costs its threshold
+shift (9.45 -> 10.10 dB at 1 s, 10.31 at 4 s: the point 0.6 to 0.9 dB under the plain filter) and, with three rows (the
+per-hypothesis path, not D8's batched one), 3.4 s a ping at 1 s and 25.6 to 25.8 s at 4 s on the L4 against 0.05 to
+0.14 s plain. The hyperbolic sweep equals the plain filter on the point at 4 s (+11.63 against +11.69; -0.57 dB at 1 s)
+and leads the bank by 0.1 to 0.8 dB on every mover.
+
+**(c) Anything else.** The chain's threshold in the 1.4 km window (9.45 dB, against the planner's 9.89 for its 0.75-12.7 km
+window) is in the prediction, and the point agrees: not a cause. Own depth: the scene's 225 m is the planner's for the
+ship; for this class it recommends 245 to 445 m, but the planner's margin at the scene's geometry is no worse than the
+table's (sea state 3: +2.74 against +2.36 dB): not a cause. The surface image at 50 m: in the prediction (+2.8 dB at sea
+state 3), and the point agrees: not a cause. The scene's noise 0.13 dB over the planner's flat figure (DS.1): within the
+point's agreement.
+
+### DM.3 What it means for the two designs, and what would accept the resolved hull
+
+- Accepted, measured: the baseline at sea state 3 for a point (unresolved) of +25 dB with +3.4 dB to spare, so down to
+  about +21.6 dB; the hull of the class's +25 dB is accepted only across the line of sight. The alternate at sea state 5:
+  the point with +2.2 dB (so about +22.8 dB); the hull across the line of sight; the ship with the hyperbolic sweep or the
+  bank.
+- **What the resolved hull needs (measured bracket):** with a filter that takes no Doppler loss the closing and oblique
+  hulls are held (5 or 6 of 6) where the point's margin is +5.4 dB (sea state 4, 4 s at 200 dB) and not held where it is
+  +2.2 to +3.4 dB. So the hull needs about **+2 to +3 dB more than the table gives at sea state 3 with the baseline**, and
+  **about +3 dB more than the alternate at sea state 5**:
+  - baseline, sea state 3: about 200 dB re 1 uPa^2 s at 1 m a ping (1 s at 200 dB, or 2 s at 197 dB; the table's cells
+    +5.4 / +6.3 dB), with the hyperbolic sweep or the bank for the ship (model and the bracket; not run at that energy);
+  - alternate, sea state 5: about 209 dB (4 s at 203 dB or 8 s at 200 dB; no single listed projector gives either,
+    the table's projector column); the closest measured stand-in is sea state 4 at 206 dB, whose noise is 3.15 dB
+    lower (point +5.4 dB): there the hulls are held with the hyperbolic sweep or the bank.
+  - In target strength: the resolved hull behaves as a point 5 to 6 dB weaker; the class's low end would have to be about
+    +27 dB (baseline, sea state 3) or +28 dB (alternate, sea state 5) for these designs as they are.
+- Processing instead of energy (proposals; nothing changed): (i) the hyperbolic sweep or the bank removes the ship's
+  loss (measured, above); (ii) a detector scale over the hull: a plain cell as long as the hull gains little (model: a
+  25 m cell's mean of about 67 looks needs about as much total energy as the strongest highlight alone), a test that sums
+  only five highlight cells would gain about 4.5 dB (model; needs the spacing, i.e. the aspect: not general); (iii)
+  several pings combined: 1.2 / 2.6 / 4.4 dB for 2 / 4 / 8 pings by the trade study's own figure (not implemented).
+- **The alternate's sweep: hyperbolic** (`source: hfm`), from the sea-state-5 cases: the ship 6 of 6 (bank 5, linear 0),
+  the crossing hull 5 of 6 (bank 5, linear 4), the point +2.17 dB (bank +1.29); at the plain chain's cost. What it costs:
+  no bank; a range bias of 3 T = 12 m per m/s at 4 s (-67 m at 5.6 m/s closing); its 1 / f^2 spectrum on a projector
+  whose response across 4-6 kHz is not known. It does not accept the resolved hull at sea state 5 either. The config
+  (`configs/builds/popoto_face_3x32_ss5.yaml`) still carries the linear sweep: the owner's choice.
+
+### DM.4 Every case and target, worst first (measured less predicted)
+
+Predicted: `predict_point` at the target's geometry less the plain filter's closed-form loss (zero for the bank); the
+planner's own figure at the scene / the table's (worst over the class's depths at its recommended own depth).
+
+| Case | Design | Filter | Target (range rate m/s) | Verdict | Detected | Measured margin dB | Predicted, zero speed | Closed-form loss | Predicted | Measured - predicted | One highlight, predicted | Planner at the scene / table's worst depth | Tracked (class) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.63 | 0.20 | +1.44 | - | -5.55 | +1.58 / +2.36 | no (-) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.79 | 0.02 | +2.77 | - | -4.22 | +2.74 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.63 | 13.16 | -11.53 | - | -18.52 | +1.58 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.79 | 1.73 | +1.05 | - | -5.94 | +2.74 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | +9.06 | 11.18 | -2.12 | - | -9.11 | +9.01 / +3.32 | no (-) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | +0.99 | 0.00 | +0.99 | - | -6.00 | +1.58 / +2.36 | no (-) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | +2.14 | 0.00 | +2.14 | - | -4.85 | +2.74 / +2.36 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | -4.85 | 0.20 | -5.05 | - | -12.04 | -4.90 / -3.95 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -3.74 | 0.02 | -3.75 | - | -10.74 | -3.79 / -3.95 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | FAIL | 0 of 6 | - | -3.74 | -0.00 | -3.74 | - | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | -4.85 | 13.16 | -18.02 | - | -25.01 | -4.90 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -3.74 | 1.73 | -5.47 | - | -12.46 | -3.79 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | +3.29 | 11.18 | -7.90 | - | -14.89 | +3.24 / -1.90 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | -5.50 | 0.00 | -5.50 | - | -12.49 | -4.90 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | -4.38 | 0.00 | -4.38 | - | -11.37 | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | FAIL | 0 of 6 | - | +2.64 | 0.00 | +2.64 | - | -4.35 | +3.24 / -1.90 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 0 of 6 | - | +4.17 | 19.30 | -15.14 | - | -22.13 | +4.15 / +5.10 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | FAIL | 0 of 6 | - | +12.31 | 17.25 | -4.94 | - | -11.93 | +12.29 / +7.16 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | -7.75 | 0.20 | -7.95 | - | -14.94 | -7.80 / -7.05 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -6.93 | 0.02 | -6.95 | - | -13.94 | -6.98 / -7.05 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | FAIL | 0 of 6 | - | -2.01 | 0.12 | -2.13 | - | -9.12 | -2.06 / -6.15 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | FAIL | 0 of 6 | - | -6.93 | -0.00 | -6.93 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.08 | 0.02 | +2.07 | - | -4.92 | +2.07 / +1.99 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | -7.75 | 13.16 | -20.92 | - | -27.90 | -7.80 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -6.93 | 1.73 | -8.67 | - | -15.66 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | FAIL | 0 of 6 | - | -6.93 | 1.03 | -7.96 | - | -14.95 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | -2.01 | 11.18 | -13.20 | - | -20.19 | -2.06 / -6.15 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | FAIL | 0 of 6 | - | -6.93 | -0.00 | -6.93 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | -8.40 | 0.00 | -8.40 | - | -15.39 | -7.80 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | -14.57 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | -14.57 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | FAIL | 0 of 6 | - | -2.66 | 0.00 | -2.66 | - | -9.65 | -2.06 / -6.15 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.26 | 19.30 | -18.04 | - | -25.03 | +1.25 / +1.99 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.08 | 8.80 | -6.72 | - | -13.71 | +2.07 / +1.99 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | FAIL | 0 of 6 | - | +7.00 | 17.25 | -10.24 | - | -17.23 | +6.99 / +2.91 | no (-) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | +0.41 | 0.00 | +0.41 | - | -6.58 | +1.25 / +1.99 | no (-) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | +1.23 | 0.00 | +1.23 | - | -5.76 | +2.07 / +1.99 | no (-) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 6 of 6 | +10.89 | +17.23 | 0.00 | +17.23 | -6.33 | +10.24 | +18.07 / +12.38 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +11.67 | +18.08 | 0.12 | +17.96 | -6.29 | +10.97 | +18.07 / +12.38 | yes (mover) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 6 of 6 | +5.28 | +11.45 | 0.00 | +11.45 | -6.17 | +4.47 | +12.29 / +7.16 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | PASS | 6 of 6 | +5.62 | +11.81 | 0.02 | +11.79 | -6.17 | +4.80 | +11.79 / +11.42 | yes (mover) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | PASS | 6 of 6 | +4.91 | +10.96 | 0.00 | +10.96 | -6.04 | +3.97 | +11.79 / +11.42 | yes (static) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +6.21 | +12.31 | 0.12 | +12.19 | -5.98 | +5.20 | +12.29 / +7.16 | yes (mover) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | PASS | 6 of 6 | +2.62 | +8.41 | 0.00 | +8.41 | -5.80 | +1.43 | +9.01 / +3.32 | yes (mover) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 5 of 6 | +0.85 | +6.15 | 0.00 | +6.15 | -5.31 | -0.84 | +6.99 / +2.91 | yes (uncertain) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +1.64 | +7.00 | 0.12 | +6.88 | -5.24 | -0.11 | +6.99 / +2.91 | yes (mover) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | PASS | 6 of 6 | +4.05 | +9.06 | 0.12 | +8.94 | -4.89 | +1.95 | +9.01 / +3.32 | yes (mover) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | PASS | 5 of 6 | +0.58 | +5.28 | 0.02 | +5.26 | -4.68 | -1.72 | +5.27 / +5.10 | yes (static) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | PASS | 6 of 6 | +6.26 | +10.65 | 0.20 | +10.46 | -4.19 | +3.47 | +10.64 / +11.42 | yes (multipath) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | PASS | 6 of 6 | +5.71 | +9.80 | 0.00 | +9.80 | -4.09 | +2.81 | +10.64 / +11.42 | yes (multipath) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | PASS | 6 of 6 | +0.56 | +4.43 | 0.00 | +4.43 | -3.87 | -2.56 | +5.27 / +5.10 | yes (uncertain) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | FAIL | 1 of 6 | +0.23 | +3.29 | 0.12 | +3.17 | -2.94 | -3.82 | +3.24 / -1.90 | no (-) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | PASS | 6 of 6 | +0.88 | +3.31 | 0.00 | +3.31 | -2.43 | -3.68 | +4.15 / +5.10 | yes (uncertain) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | PASS | 5 of 6 | +1.54 | +4.17 | 0.20 | +3.97 | -2.42 | -3.02 | +4.15 / +5.10 | yes (uncertain) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | FAIL | 2 of 6 | +0.17 | +1.26 | 0.20 | +1.07 | -0.89 | -5.92 | +1.25 / +1.99 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | PASS | 6 of 6 | +2.29 | +11.81 | 8.80 | +3.01 | -0.71 | -3.98 | +11.79 / +11.42 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 6 of 6 | +11.42 | +11.81 | 0.01 | +11.79 | -0.37 | +4.80 | +11.79 / +11.42 | yes (static) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +10.65 | +10.96 | 0.00 | +10.96 | -0.31 | +3.97 | +11.79 / +11.42 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +11.63 | +11.81 | -0.00 | +11.81 | -0.18 | - | +11.79 / +11.42 | yes (static) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +10.84 | +10.96 | 0.00 | +10.96 | -0.12 | - | +11.79 / +11.42 | yes (mover) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 6 of 6 | +11.69 | +11.81 | -0.00 | +11.81 | -0.12 | - | +11.79 / +11.42 | yes (mover) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 5 of 6 | +2.12 | +2.08 | -0.00 | +2.08 | +0.04 | - | +2.07 / +1.99 | no (-) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | PASS | 6 of 6 | +2.84 | +2.79 | -0.00 | +2.79 | +0.05 | - | +2.74 / +2.36 | yes (static) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +1.29 | +1.23 | 0.00 | +1.23 | +0.05 | - | +2.07 / +1.99 | yes (static) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +2.17 | +2.08 | -0.00 | +2.08 | +0.09 | - | +2.07 / +1.99 | yes (static) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 6 of 6 | +5.39 | +5.28 | -0.00 | +5.28 | +0.11 | - | +5.27 / +5.10 | yes (mover) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +5.41 | +5.28 | -0.00 | +5.28 | +0.13 | - | +5.27 / +5.10 | yes (static) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +4.72 | +4.43 | 0.00 | +4.43 | +0.29 | - | +5.27 / +5.10 | yes (mover) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 5 of 6 | +2.38 | +2.08 | 0.01 | +2.07 | +0.31 | -4.92 | +2.07 / +1.99 | no (-) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 6 of 6 | +5.64 | +5.28 | 0.01 | +5.27 | +0.37 | -1.72 | +5.27 / +5.10 | yes (static) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +4.97 | +4.43 | 0.00 | +4.43 | +0.54 | -2.56 | +5.27 / +5.10 | yes (mover) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +2.75 | +2.14 | 0.00 | +2.14 | +0.61 | -4.85 | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | PASS | 6 of 6 | +3.41 | +2.79 | -0.00 | +2.79 | +0.62 | - | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | PASS | 6 of 6 | +2.77 | +2.14 | 0.00 | +2.14 | +0.62 | - | +2.74 / +2.36 | yes (static) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 5 of 6 | +2.26 | +1.23 | 0.00 | +1.23 | +1.02 | -5.76 | +2.07 / +1.99 | yes (uncertain) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | PASS | 5 of 6 | +3.82 | +2.79 | 0.01 | +2.77 | +1.05 | -4.22 | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | PASS | 6 of 6 | +2.95 | +2.79 | 1.03 | +1.76 | +1.19 | -5.23 | +2.74 / +2.36 | yes (uncertain) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | PASS | 6 of 6 | +2.38 | +18.08 | 17.25 | +0.83 | +1.55 | -6.16 | +18.07 / +12.38 | yes (mover) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | PASS | 3 of 6 | +0.05 | -3.74 | 0.01 | -3.75 | +3.80 | -10.74 | -3.79 / -3.95 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | FAIL | 1 of 6 | +0.33 | +5.28 | 8.80 | -3.52 | +3.85 | -10.51 | +5.27 / +5.10 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | FAIL | 1 of 6 | +0.94 | -3.74 | -0.00 | -3.74 | +4.67 | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | FAIL | 1 of 6 | +0.29 | -4.38 | 0.00 | -4.38 | +4.67 | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | FAIL | 2 of 6 | +0.47 | -4.38 | 0.00 | -4.38 | +4.86 | -11.37 | -3.79 / -3.95 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 6 of 6 | +9.24 | +11.81 | 7.55 | +4.26 | +4.99 | -2.73 | +11.79 / +11.42 | yes (mover) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | FAIL | 2 of 6 | +0.87 | -3.74 | 1.03 | -4.77 | +5.63 | -11.76 | -3.79 / -3.95 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 4 of 6 | +0.76 | +2.08 | 7.55 | -5.47 | +6.23 | -12.46 | +2.07 / +1.99 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 6 of 6 | +4.04 | +5.28 | 7.55 | -2.27 | +6.31 | -9.26 | +5.27 / +5.10 | yes (static) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | FAIL | 1 of 6 | -0.41 | -6.93 | 0.01 | -6.95 | +6.54 | -13.94 | -6.98 / -7.05 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 2 of 6 | +0.25 | +10.65 | 19.30 | -8.65 | +8.90 | -15.64 | +10.64 / +11.42 | no (-) |
+
+| Case | Target-free pings | False detections, default budget | At 3 a ping |
+| --- | --- | --- | --- |
+| ss3_hfm1 | 4 | 0 | 0 |
+| ss3_hfm4p200 | 4 | 0 | 0 |
+| ss3_lfm1 | 4 | 0 | 0 |
+| ss3_lfm1_cfar | 4 | 0 | 2 |
+| ss3_lfm4p200 | 4 | 0 | 0 |
+| ss3_lfm4p200_cfar | 4 | 0 | 9 |
+| ss4_hfm1 | 4 | 0 | 0 |
+| ss4_hfm4p200 | 4 | 0 | 0 |
+| ss4_lfm1 | 4 | 0 | 0 |
+| ss4_lfm1_cfar | 4 | 0 | 2 |
+| ss4_lfm4p200 | 4 | 0 | 0 |
+| ss4_lfm4p200_cfar | 4 | 0 | 9 |
+| ss5_hfm1 | 4 | 0 | 0 |
+| ss5_hfm4p200 | 4 | 0 | 0 |
+| ss5_lfm1 | 4 | 0 | 0 |
+| ss5_lfm1_cfar | 4 | 0 | 2 |
+| ss5_lfm4p200 | 4 | 0 | 0 |
+| ss5_lfm4p200_cfar | 4 | 0 | 8 |
+
+
+## The outputs D-251 made stale, regenerated (appended 2026-11-27; issue `sonar-rar0`; jobs 6b0a02356c5d61fff18a11a6, 6b0a02366c5d61fff18a11aa; nothing above rewritten)
+
+`tools/doppler_gpu_runs.sh` sub-run `regen` on an NVIDIA L4, tree `deepsea` at `1166ca6`, simulator and chain on cuda
+(the old runs: this CPU, host backend). Only the stale parts replaced (`tools/regen_stale.py --list`); each file carries
+a `regenerated` block (what was replaced, what was kept and why). Old -> new of every number the sections above and
+`docs/RESULTS.md` quote, worst first. The change mixes D-251 with the device (cuda against host) and the decisions since
+the old runs; they are not separated.
+
+1. **Worse.** `doppler_large_submerged_eval.json` `alternate` (alternating tone and sweep pings, LS.3): the closing hull is
+   **no longer tracked at the last ping** (was `uncertain`, 17.5 m from the truth; both engines), with the tone path off
+   and on; its detections are as before (3 of 3 sweep pings, 3 of 3 tone pings, rates -5.602 / -5.582 / -5.595 m/s). Not
+   investigated.
+2. `doppler_d3_eval.json` `tone_p12` (`popoto_12km_doppler`, D3): the background is now 4 pings (the committed one had 2,
+   the recorded command says 4): tone path off 1 -> 4 false detections at the default budget (0.5 -> 1.0 a ping), 11 -> 30
+   at 3 a ping (5.5 -> 7.5 a ping); tone path on 0 -> 0 at the default budget, 8 -> 24 at 3 a ping (24 attributed: 21 the
+   sweep's, 3 the tone's, none on a lobe's ridge). The ship as before: 0 of 6 with the default chain, 6 of 6 with the
+   tone path, the rate on 1 ping (-0.573 m/s), snr within 0.1 dB.
+3. `combine: cfar` background at 3 a ping (D3.2): `popoto_12km` off 20 -> 16, cfar 7 -> 12; `popoto_far_mover` off 18 -> 16,
+   cfar 17 -> 11; `popoto_12km_large_submerged` off 20 -> 16, cfar 7 -> 8. At the default budget 0 -> 0 everywhere.
+4. Margins (9.4, D3.2, LS.3), both engines equal as before: `popoto_12km` ship off 9.11 -> 9.11, max 5.57 -> 5.57, cfar
+   9.63 -> 9.63 dB; `popoto_far_mover` ship 12.35 -> 12.36, max 8.84 -> 8.83, cfar 13.65 -> 13.63; large submerged off
+   7.98 -> 7.99 (closing), 9.22 -> 9.22 (oblique), 11.41 -> 11.38 (crossing), cfar 8.78 -> 8.81, 10.08 -> 10.09,
+   12.00 -> 11.99; classes as before (the crossing hull `static` with cfar). The train ping (LS.3): closing snr 17.8 -> 17.9
+   (bank off), 18.5 -> 18.3 (tone path); crossing 24.5 -> 24.3; tone margins and rates as before.
+5. The bank's cost (9.5): the regenerated scenes' times are now the L4's, not this CPU's: `popoto_12km` C++ 0.020 s plain,
+   0.098 s with the bank (5.0 times; the CPU's 25 times, table 9.5, is no longer in the file), cfar 0.108 s (5.8 times);
+   `popoto_far_mover` 0.060 / 0.348 s (5.8 times; CPU 51), cfar 0.376 s (6.3 times).
+6. `doppler_baseline.json` (section 3.2): within 0.1 dB everywhere but `sst_pursuit`'s bank 12.7 -> 12.5 dB (gain over its
+   zero hypothesis 28.3 -> 28.1); `popoto_12km` 24.0 / 25.9 (the trade study's +1.9 dB bank credit, unchanged),
+   `popoto_far_mover` 27.2 / 27.8, the flank under way (`fp_v15*`) as before; the reverberation spectra (2.1) the same
+   peaks, two -10 dB edges moved by 0.4 and 0.06 Hz.
+7. `docs/design/popoto_12km.json` (RESULTS "The 12 km study, rerun"): every case's pings detected, median SNR and track
+   ping as before (winter sand two rows 31.4 -> 31.5 dB; Bellhop two rows "several possible elevations" on 5 -> 4 pings);
+   class cases: the same detections and classes; speed errors moved by up to 0.5 m/s (the cylinder -1.95 -> -1.17 m/s);
+   the Bellhop submerged mover's reported depth 27 -> 9 m (sigma 2.5 km, truth 60 m inside two sigma, as before).
+   `docs/DESIGN.md` regenerated from it (the class table's speed and heading errors).
+8. Not stale and kept (`regenerated.kept` in each file): every `flank_patrol` part (platform still: one ping's record
+   SHA-256 equal under both laws), the noise-only and planner parts; not reproducible, kept as they were:
+   `tone_p12_wholetrain`, the first run's truth summary.
