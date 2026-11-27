@@ -2,7 +2,7 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-245); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 33); keys in
+(now to D-250); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 33); keys in
 `CONFIGURATION.md`.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
@@ -32,13 +32,15 @@ Results after the shallow trials keep their whole bounce series and the self-tes
 
 The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for one, two and three rows (`e10b17f`), against 0.0097, 0.0212 and 0.0310 s at `15f1121`. Measured (`tools/live_chain_ablation.py` on an L4, `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`): the 6 to 7 ms are the multiscale detector of the detector rework (D-93). It runs on the CPU (`libs/live` `multiscale_detect`, no backend) and needs the fine power map back from the device every ping, where the earlier `cell_statistic: mean` ran CFAR on the device: `mean` saves 6.0, 6.3 and 7.2 ms, and the 15f1121 chain section with `mean` gives 9.8, 21.2 and 30.3 ms, the first run's times. Coverage, the ray-limited elevation search, the finer elevation step and the gradient terms each move it by under 0.6 ms. Not a fault: the cost of the detector chosen, 0.04 % of the 17.9 s ping interval; moving it to the device is a possible optimisation (issue `sonar-01u`). `gpu_benchmark_all_l4.json`, which the design report reads, is now that run; the first run is kept as `gpu_benchmark_all_l4_15f1121.*`. Since D-150 the multiscale statistic runs on the device: 12.73, 25.92 and 37.52 ms a ping as deployed (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`). These benchmark pings have ideal clocks and the benchmark leaves the board synchronisation stage out (`tools/gpu_benchmark_all.py`, `group_live`), so D-190 to D-195, which made that stage and the decimate-first correction faster, do not apply to them and the files were not re-measured. **With board synchronisation, on the Popoto trials' pings** (L4, chain time a ping after the first, median): C++ 0.048 / 0.054 / 0.065 s at 32 / 64 / 96 channels, Python 0.084 / 0.18 / 0.25 s (the one-row build decimates first: D-195; 64 and 96 channels: D-192; `tools/live_chain_timing.py`). Before D-191 the C++ engine took 1.05 to 1.83 s a ping at 64 and 96 channels there. **With the Doppler bank on, on the scenes' pings** (L4, C++ chain, `tools/live_chain_timing.py`, bank off -> `max` -> `cfar`): `flank_patrol` 0.115 -> 0.393 -> 0.418 s, `popoto_far_mover` 0.062 -> 0.349 -> 0.374 s, `popoto_12km` 0.019 -> 0.097 -> 0.108 s with the batched form of D-242 (job 6b090cd56c5d61fff1888217), still 3.4 to 6.0 times the chain (D-245's correction); before it 3.558 -> 3.935, 2.410 -> 2.766 and 0.372 -> 0.532 s with `max` and `cfar` (job 6b08c9d954072e8b71685cd6, D-241).
 
-**Last full suite: 3002 passed, 117 skipped, 4 xfailed, none failed**, as three shards on the fifth batch's fixed tree (D-241 to D-243 with the repair of D-242; branch `cuda-fix` at `a37e0be`, merged as `f40d4c3`; NVIDIA L4, Hugging Face jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214; the same switches as D-240; D-245). **The first suite on that batch (branch `batch5` at `d54deb9`, three shards) failed 4 tests, 2996 passed**: four comparisons that require bit-identical reports from two programs built from one library (`test_holoscan_cpp.py` two, `test_live_cpp.py` one, `test_board_streams.py` one), with every Doppler option off; the cause was a device kernel instantiated in two `.cu` files (D-242, open item 75); it was fixed without changing any of the four tests, and the batch was merged only after the suite on the fix passed. Before: 2941 passed, 114 skipped as three shards (D-239).
+**Last full suite: 3321 passed, 121 skipped, 5 xfailed, none failed**, as three shards on the sixth batch's tree (D-246 to D-248; branch `batch6` at `67d962b`, merged as `bda7c7d`; NVIDIA L4, Hugging Face jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05; the same switches as D-245; D-250). The fifth expected failure is `test_hsb.py`'s measured frame-loss limit at 102.4 kHz (D-186), which reports as an expected failure when the job's machine loses frames; two of the four more skips are the browser checks of the visualization ("Node is not installed"). The first launch on that tree was cancelled early: two visualization tests still expected 96 scenario files where the batch has 98 (corrected in `67d962b`, D-250). The merge `bda7c7d` differs from the tested tree only in `docs/DECISIONS.md` and the issue export (`git diff --stat 67d962b bda7c7d`).
+
+The suite before it: **3002 passed, 117 skipped, 4 xfailed, none failed**, as three shards on the fifth batch's fixed tree (D-241 to D-243 with the repair of D-242; branch `cuda-fix` at `a37e0be`, merged as `f40d4c3`; NVIDIA L4, Hugging Face jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214; the same switches as D-240; D-245). **The first suite on that batch (branch `batch5` at `d54deb9`, three shards) failed 4 tests, 2996 passed**: four comparisons that require bit-identical reports from two programs built from one library (`test_holoscan_cpp.py` two, `test_live_cpp.py` one, `test_board_streams.py` one), with every Doppler option off; the cause was a device kernel instantiated in two `.cu` files (D-242, open item 75); it was fixed without changing any of the four tests, and the batch was merged only after the suite on the fix passed. Before: 2941 passed, 114 skipped as three shards (D-239).
 
 The suite before it: **2933 passed, 113 skipped, 4 xfailed, none failed** on the fourth 2026-11-26 batch's tree (D-236 to D-239; branch `batch4` at `da015ba`, merged as `8581533`; NVIDIA L4, Hugging Face job 6b08b9f554072e8b71681cd2; the same switches as D-234; job exit 0; D-240). The two more skips: the chain acceptance on `flank_patrol_doppler_tone` (it needs `GPUSONAR_DOPPLER_CHAIN=1`) and one `test_tools_help.py` "not a git checkout". The sharding (D-239) was added on top and passed as three shards on one tree: **2941 passed, 114 skipped, 4 xfailed, none failed** (jobs 6b08c1c16c5d61fff1879ac2, 6b08c1c254072e8b71683e13, 6b08c1c36c5d61fff1879ac7); the difference is the eight tests of `test_shards.py` and one more `--help` skip for the new tool; no test failed from being run apart. The suite has passed when every shard has. One merge conflict, in `CONFIGURATION.md`, resolved before the suite ran (D-240). Before it: 2886 passed, 111 skipped, 4 xfailed on the third batch's tree (`batch3` at `0a8b477`, merged as `4057d65`, job 6b084a4cd91f621b930b6331; D-234); 2823 passed, 103 skipped, 4 xfailed on the second batch's tree (`batch2` at `de3717b`, merged as `61cfb66`, job 6b080457d91f621b930a652a; D-229); 2763 passed, 102 skipped, 4 xfailed on the merged tree of D-204 to D-224 (merge commit `b88c458`, job 6b07ea74d91f621b930a343d; D-225, which also lists the six failures of that batch's earlier suites and their fixes); 2301 passed, 102 skipped on the tree of D-202 (job 6b079ab0d91f621b93098915).
 
 Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, CPU and GPU) are the paragraphs at the end of "Open and known wrong", just before "Open questions for the project owner". From D-158 on, each package's merged tree ran the full GPU suite on an NVIDIA L4 through Hugging Face Jobs before it was merged, and each decision's entry in `DECISIONS.md` names its job and count. The last: **2278 passed, 102 skipped, 1 xfailed, none failed** on the tree of D-201 (job 6b078a26d91f621b93096bc7; the expected failure is one of the six Popoto-rate Sensor Bridge loopback cases, its reason not in the log); the 3-D work after D-201 (the `eigenray3d` tier, `flank_seamount_3d`) is covered by a later job. Each decision from D-183 to D-201 names its own job and count; for example 2232 passed, 101 skipped (D-200 over the tree of D-196, job 6b077ea0d91f621b930950a5), 2183 passed, 101 skipped (D-195, job 6b076d06d91f621b93092f13), 2150 passed, 97 skipped, 4 xfailed (D-186, job 6b06553a1460ffe1d5e9aa10), 2102 passed, 95 skipped (D-183, job 6b060a4b1460ffe1d5e93111) and 2078 passed, 93 skipped, none failed on the tree of D-181 (commit `90f7d29`, job 6b055ee4c97b8ed4fcd799db; CUDA build with Bellhop, Bellhop3D, KRAKEN, PyRAM, Ceres, the Holoscan C++ operators and Sensor Bridge 2.7.0, `GPUSONAR_REQUIRE_ORACLES=1`). Before it: 2065 passed, 93 skipped (D-180, job 6b054bd0c97b8ed4fcd78494); 1925 passed, 93 skipped (D-176 to D-178, job 6b0536c7ca8b51043c3b3ed9); 1875 passed, 92 skipped (D-172, D-173, job 6b04f660c97b8ed4fcd7093a). The Sensor Bridge loopback tests are part of these runs and pass at real time (D-153, D-162, D-173); the Popoto-rate cases (D-186 to D-188) pass when frames are lost only in the first 0.25 s of stream and end as an expected failure otherwise.
 
-**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-245) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
+**The whole CPU suite has not been rerun at the present tree.** The last whole CPU run on record is on the tree of D-157 (commit `605a4e1`, 2026-11-22): 157 of 157 ctest entries, the whole pytest run among them. Since then (D-158 to D-250) each package ran its affected test files on the CPU, and the whole suite ran only on the GPU build.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
   wrong"; this list was brought up to date on 2026-11-24, and the first three entries were not
@@ -52,7 +54,7 @@ Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, C
     at `bf55a7b` with the sites' boundary scattering (D-227: 83 of 117 plans moved; item 50), so
     they are no longer in this list.
   - `docs/handoff/examples/live_popoto_12km_report.jsonl` was not regenerated after D-227 changed
-    the face deployment files' coverage block (issue `sonar-tmvu`, D-227, D-229; still stale at D-245).
+    the face deployment files' coverage block (issue `sonar-tmvu`, D-227, D-229; still stale at D-250).
   - `docs/design/popoto_12km.json` (last regenerated 2026-11-20, commits `0dce56b` and
     `fa57b04`) predates D-156 to D-201: it was made by the live chain when a detection's
     range was the centroid (the leading edge is the default since D-160) and before the
@@ -81,7 +83,7 @@ Since 2026-11-19 (D-145 to D-201): the results up to D-157 (2026-11-21 and 22, C
     with the named targets tracked the same, and wait to be explained (issue `sonar-pli3`). The Popoto and flank gallery
     scenes' surface reverberation fell about 1 dB with D-216 (A3); their gallery numbers were not
     re-measured (item 46).
-  - Stale since D-216 (2026-11-26; issue `sonar-tmvu`, still stale at D-245): `docs/figures/sst_validation.{md,json}` carry D-217's (A4)
+  - Stale since D-216 (2026-11-26; issue `sonar-tmvu`, still stale at D-250): `docs/figures/sst_validation.{md,json}` carry D-217's (A4)
     numbers but the pursuit rows from before A3 (streak 16.7 dB on its track; 15.6 dB now), and the
     matrix row "Sec. 6.4.2" still says "Chapman-Harris at the MEAN grazing angle" (CONFORMANCE A11 not
     applied); `docs/figures/sst_pursuit.png` dates from 2026-11-20. `channel_validation_*` were not
@@ -239,6 +241,29 @@ sections further down.
   never truncating; under the cap nothing moved (SHA-256, both engines).
   `test_sediment_roughness.py::test_cost_cap_raises_never_truncates`, GoogleTest
   `Paths.SedimentRoughCostCapRaisesNeverTruncates`.
+- **Pictures and sound of every scenario** (D-248, merged with the sixth batch, D-250; issue `sonar-6k79`;
+  `docs/tasks/VISUALIZATION.md` sections 12 to 14; ours). **Missing or wrong, first:** four tone-and-sweep
+  scenes have no rays and no sound (`flank_patrol_doppler`, `flank_patrol_doppler_tone`,
+  `flank_patrol_doppler_underway`, `popoto_12km_doppler`: over 11 minutes a ping on this CPU; a GPU-job item);
+  six scenes have no sound (those four, `flank_bank_3d`, `popoto_far_mover_doppler`); **nobody has listened
+  to any of the audio**: it is checked by spectrum, envelope, peak time and level only; heterodyned FLS and
+  SAS records are a millisecond click (silent for the four `rail_*` scenes), and the owner agreed on
+  2026-11-27 that time stretch becomes the default for short records (branch `viz6`, not merged, open item
+  84); 72 "strongest" single arrivals are silent (ranked without the synthesis's amplitude); `eigenray3d`
+  rays are Bellhop3D's own re-shot in its ray mode and matched by bounce counts (0 to 13.7 m from the
+  target); per-bounce losses at the Bellhop tier are recomputed with the same law, not read from Bellhop;
+  boundary models no scenario uses appear on no page. What exists: `tools/scenario_view.py` (`--all`,
+  `--3d`, `--audio ...`) and the package `python/gpusonar/viz/` (scene trace, 2-D page, 3-D page, audio,
+  beams, catalogue, index); each page lists every model in force with key, value, source and status word.
+  The 3-D pages are HTML drawn by three.js 0.170.0 (MIT; embedded by default, self-contained; the committed
+  ones load it from the pinned CDN), vendored under
+  `third_party/three/` with the owner's approval (D-248; `docs/OPEN_SOURCE.md` 2g, 3.14), used by generated
+  pages only, never imported by the suite. Opt-in simulator taps (`taps.sim_capture(per_item=True)`): records
+  bit-identical with capture off and on (SHA-256, both engines); nothing else in the simulator, the chain or
+  the record changed. Committed: one page a family and `flank_seamount_3d` under `docs/figures/scenes/` with
+  `index.html` (`docs/handoff/OUTPUTS.md`). Tests: `test_scene_trace.py`, `test_scene_views.py`,
+  `test_scene_3d.py`, `test_scene_audio.py` (the browser checks skip without Node and Playwright, as in the
+  GPU job).
 
 ### On a GPU
 
@@ -329,13 +354,16 @@ sections further down.
 - **Doppler measured on the GPU, the stages batched on the device, large submerged at 12 km** (D-241 to
   D-243, merged with the fifth batch, D-245; every number ours: simulation, NVIDIA L4 or the shared CPU,
   one seed). **Worse or not known, first:**
-  - **The tone path makes false detections at 12 km**: on `popoto_12km_large_submerged_tone` (tone at
-    6.5 kHz above the 4-6 kHz sweep, one ping) the chain makes 22 false detections on 4 target-free pings at
-    the default budget, all the tone's, against 0 with it off (D-243, device run, job
-    6b08f68754072e8b7168e9c6). Diagnosed: grating lobes of the 0.15 m pitch (0.65 wavelengths at 6.5 kHz)
-    beyond ±32.4 degrees. **By the owner's decision the tone path stays off by default** (D-244); the
-    notch is on branch `notch`, not merged (`sonar-bc5r`). Whether to build the far-sidelobe remedy is
-    open (`sonar-wntj`; open question 57).
+  - **The tone path's false detections at 12 km** (corrected by D-246): on `popoto_12km_large_submerged_tone`
+    (tone at 6.5 kHz above the 4-6 kHz sweep, one ping) the device run gave 22 false detections on 4
+    target-free pings at the default budget, all the tone's, against 0 with the tone path off (D-243, job
+    6b08f68754072e8b7168e9c6). D-243 put them on the grating lobes of the 0.15 m pitch beyond ±32.4
+    degrees. **D-246 found them mostly an artefact of the simulator, not a property of the tone path**: the
+    boundary reverberation's Doppler is one shift at the record's centre frequency (D-249, open item 80), so
+    on the train (centre 5.3 kHz) the 6.5 kHz tone sees still water at 0.815 of its physical ridge; the
+    tone path's false-alarm count on that scene with a correct simulation is not known (open item 81).
+    **By the owner's decision the tone path stays off by default** (D-244); the notch is merged since D-250
+    (next bullet). Whether to build the far-sidelobe remedy is open (`sonar-wntj`; open question 57).
   - **The default chain is blind on `flank_patrol_doppler_tone`**: with the tone path off, 0 of 6 pings
     for all three targets and 26 false detections on 4 target-free pings (it compresses the whole train,
     D-237). With it on: 1 false detection on those pings at the default budget (D-241, job
@@ -385,6 +413,45 @@ sections further down.
     `test_no_kernel_template_is_instantiated_for_the_device_in_two_cuda_files`),
     `test_large_submerged_scenes.py`, GoogleTest `DopplerBatched` and
     `Options.DopplerBatchedKeysAreReadAndEchoedOnlyWhenSet`.
+- **The tone path's grating-lobe and endfire notch, both paths documented** (D-246, merged with the sixth
+  batch, D-250; `docs/tasks/DOPPLER.md` "Grating-lobe notch" GL.1 to GL.8; the trade-offs page
+  `docs/design/doppler_tradeoffs.md`; every number ours). **Worse or not known, first:** the train scene's
+  false detections did not go away on the GPU (22 with the notch off, 25 with it on, at the notch's edge;
+  job 6b0911926c5d61fff1888f01): they measure the simulator's reverberation Doppler (D-249, open item 80),
+  so the tone path's false-alarm count on that scene is not known; far-sidelobe false detections under a
+  strong still field remain (synthetic: 15 -> 2 at -30 dB a scatterer, 11 -> 5 at -25 dB; no remedy,
+  `sonar-wntj`); a velocity across the line leaves the mirror half's ridge unnotched; only a uniform line
+  gets the notch. Cost under way at 1.5 m/s on the long-range array at 6.5 kHz: a band 0.69 to 0.87 m/s
+  wide about 2.3 m/s from each beam's own ridge on beams from 24 degrees, 7 to 16 % of headings at 2 m/s
+  and 3 to 4 % at 8 m/s; nothing inside ±22 degrees (GL.3). On alternating pings (a CW record, whose
+  simulated Doppler is right) **0 false tone detections in 6 tone pings** with the notch on, on the device,
+  where the CPU run without it had 3 to 5 a ping.
+  - `doppler.tone_lobe_notch: auto | off` (default `auto` whenever the tone path is on) and
+    `doppler.tone_lobe_floor_db` (-40; `CONFIGURATION.md`). The tone path stays off by default (D-244); the
+    default chain is byte for byte as before (24 of 24 hashes against `d54deb9`, GL.5).
+  - `tools/doppler_tone_eval.py` attributes every false detection (`lobe_ridge`, `lobe_edge`,
+    `notch_edge`, `other`, and `DEFECT` for a rate inside an applied notch: none on any record here); the
+    `ls12` sub-run runs the train scene twice on the same cached pings, the notch off and on.
+  - Tests: `test_doppler_tone_lobes.py` (with the invariant that no reported tone detection lies inside a
+    notch applied to its beam, both engines, loop and batched; the device form CUDA-gated),
+    `test_doppler_paths.py` (the coverage of both paths, GL.6), additions to `test_live_cpp.py`,
+    `test_doppler_device.py`, `test_doppler_gpu_job.py`; GoogleTest `DopplerToneLobes` and
+    `Options.ToneLobeNotchKeysAreReadAndEchoedOnlyWhenSet`.
+- **The hyperbolic sweep with the plain matched filter** (D-247, merged with the sixth batch; opt-in
+  `transmit.waveform: {type: sampled, source: hfm}`, no default moved; `docs/tasks/DOPPLER.md` "HFM";
+  ours). **Worse first: on the real 12 km shelf scene its gain is small** (job 6b091ba66c5d61fff188a75c, C++
+  chain, 6 pings, plain filter; closing / oblique / crossing margins): linear 1 s 7.98 / 9.22 / 11.41 dB;
+  hyperbolic 1 s 8.83 / 8.79 / 11.63; linear 4 s at the same level 9.17 / 11.37 / 12.48; hyperbolic 4 s
+  10.40 / 11.20 / 13.35; linear 4 s with `combine: cfar` 10.83 / 12.33 / 13.60. Four times the energy buys
+  1 to 2.4 dB there: the site is reverberation-limited. **A noise-limited real scene (the deep site at sea
+  state 4 or 5) has not been run** (issue `sonar-rctz`). In free field at 12 km (still platform, targets
+  20 dB over the class's low end) the hyperbolic sweep holds its zero-speed margin within -0.8 to +0.8 dB at
+  2 to 8 m/s for 1 to 8 s through both engines, where the linear sweep loses 6.5 to 12.3 dB at 1 s and 11.7
+  to 18.1 dB at 4 s. Its costs: a range bias of 3 T m per m/s at 4-6 kHz that the plain filter cannot
+  correct, 2.6 dB more energy at the band's low end than its high end (the projector's response across
+  4-6 kHz is not known), and the sweep bank refuses it. No chain change was needed (an Arbitrary record is
+  compressed with its own replica). `tools/hfm_doppler_eval.py`; the job's opt-in sub-run `hfm12`; tests
+  `test_hfm_doppler.py`. The orchestrator recommends no waveform change now (D-247).
 
 ### The Popoto design, its budget and its plan
 
@@ -438,6 +505,30 @@ sections further down.
   `deep_no_bottom_return_sea_state_5` is titled "sea state 5 (12.6 m/s wind)", the wind every result for it
   used; the depth planner's physics table column computed at 9.8 m/s is headed "sea state 4". No computed
   number moved. `test_sea_state_labels.py` (fails on the old text).
+- **Transmit options by sea state** (D-247, the owner's request of D-244; `tools/popoto_trade_study.py
+  --transmit`, `docs/design/popoto_trade_study.md` sections 0 and 0a; the shipped 3 x 32 face, bound A; sites
+  illustrative, target strengths assumed; ours; no default moved). **Worse first: the shipped 1 s, 197 dB
+  holds 12 km for `large_submerged` and `ship` at the deep site only up to sea state 3**; at sea state 4
+  -4.0 / -1.9 dB with the apl_1994 bubble law (-0.2 / +1.4 dB without). The least energy a ping that holds
+  both classes there, sea states 2 to 6 with the bubble law: 197, 197, 203, 206, 212 dB re 1 uPa^2 s at 1 m
+  (without the law 200 at sea state 4 and 203 at 5); sea state 6 needs 8 s at 203 dB, which no single listed
+  projector gives (6 km blind range). Energy does not help where reverberation limits (shelf, winter sand)
+  or in the summer mud's ship shadow. With the plain filter the linear sweep's closed-form peak loss on a
+  mover grows with the pulse as the energy does (8.8 / 14.8 dB at 2 / 8 m/s for 1 s; 17.8 / 23.9 dB for
+  8 s), so a longer linear sweep buys nothing on a mover without the bank; section 0a gives the same table
+  for the hyperbolic sweep (the energy a still target needs, at every sea state but one marginal cell). Not
+  in the model: several pings combined, reception during transmission. Old study sections byte-identical;
+  `test_popoto_trade_study.py`.
+- **The POP-3 wording the study supports (proposed, not adopted):** section 0 of the trade study derives
+  (`tx_requirement`) "With 1 s 197 dB (4-6 kHz sweep; 197.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32
+  face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength,
+  detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a
+  mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3
+  with the apl_1994 bubble law (up to sea state 3 without it); at the illustrative sites' own conditions at
+  deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at
+  deep_no_bottom_return_sea_state_5, summer_60m_mud_profile." **It is not in `tools/design_report.py` or
+  `DESIGN.md`**: POP-3 there still reads "Frequency and source level that take the Popoto array to 12 km,
+  for `large_submerged` first and `ship` second", with no sea state, and is "partly met" (D-238). Adopting it is the owner's (open question 56; issue `sonar-bh5c`).
 
 ## Open and known wrong
 
@@ -1035,7 +1126,7 @@ Grouped; within a group the most consequential first.
 63. **Not merged, each on its own branch** (D-229): the library fit's row argument, the sweep replica
     bank (D4), the tone-plus-sweep waveform (D2) and the Popoto trade study (issue `sonar-3983`); all four
     merged since (D-230 to D-234; item 67 lists what is still not merged).
-    **Stale after the merge** (D-229, issue `sonar-tmvu`; still stale at D-245): `docs/handoff/examples/live_popoto_12km_report.jsonl`,
+    **Stale after the merge** (D-229, issue `sonar-tmvu`; still stale at D-250): `docs/handoff/examples/live_popoto_12km_report.jsonl`,
     `docs/figures/sst_validation.{md,json}` and `sst_pursuit.png`. The `buried_objects` gallery figure was
     regenerated after the fourth merge (commit `8391941`, cylinder over clutter 21.12 -> 20.32 dB).
 
@@ -1147,16 +1238,18 @@ Grouped; within a group the most consequential first.
 
 ### After the fifth merge (D-241 to D-245)
 
-73. **The tone path makes false detections at 12 km and stays off by default** (D-243, D-244; ours,
-    simulation, one seed). On `popoto_12km_large_submerged_tone` the chain with the tone path on makes 22
-    false detections on 4 target-free pings at the default budget, all the tone's, against 0 with it off
-    (device run, job 6b08f68754072e8b7168e9c6); the grating lobes of the 0.15 m pitch at 6.5 kHz (0.65
-    wavelengths) beyond ±32.4 degrees. On the CPU runs: 3 to 5 false tone detections on every tone ping, at
+73. **The tone path's false detections at 12 km, and the tone path off by default** (D-243, D-244; ours,
+    simulation, one seed; **corrected by D-246**). On `popoto_12km_large_submerged_tone` the device run with
+    the tone path on gave 22 false detections on 4 target-free pings at the default budget, all the tone's,
+    against 0 with it off (job 6b08f68754072e8b7168e9c6). D-243 put them on the grating lobes of the 0.15 m
+    pitch at 6.5 kHz (0.65 wavelengths) beyond ±32.4 degrees; D-246 found them mostly an artefact of the
+    simulator (the reverberation's Doppler at the train's centre frequency, item 80): they lie on the lobe
+    ridge scaled by 0.815, not on the physical one, and are not a measured property of the tone path. On the CPU runs: 3 to 5 false tone detections on every tone ping, at
     |bearing| 31.95 to 40.0 degrees (`docs/tasks/DOPPLER.md` LS.1 item 0). The owner: "Because of the false
     detections, we default tone path off", the notch to be added with test coverage and documents for both
-    (D-244). The notch is branch `notch` (not merged, `sonar-bc5r`); the far-sidelobe remedy is not built
-    (`sonar-wntj`, question 57). The same may apply to `flank_patrol_doppler_tone` (10.5 kHz on flank_32's
-    pitch, not checked; LS.1 item 0).
+    (D-244). The notch merged with the sixth batch (D-246, D-250); the far-sidelobe remedy is not built
+    (`sonar-wntj`, question 57). `flank_patrol_doppler_tone` is not affected: its platform is still, so every
+    lobe's ridge is the beam's own (GL.1 item 4).
 74. **The default chain is blind on `flank_patrol_doppler_tone`** (D-241, job 6b08c9d86c5d61fff187b793):
     with the tone path off, 0 of 6 pings for all three targets and 26 false detections on 4 target-free
     pings, because it compresses the whole train (D-237). With the tone path on, 6 of 6 for each and 1
@@ -1190,7 +1283,58 @@ Grouped; within a group the most consequential first.
     and the hyperbolic sweep study (branch `txstudy`, `sonar-vjq7`; it corrects the orchestrator's 6 dB
     for a 4 s pulse, D-244), the visualization (branch `viz`: 2-D pages, the 3-D viewer with three.js
     vendored, audio in progress; `sonar-6k79`). Still open: the gallery differences (`sonar-pli3`) and the
-    stale outputs (`sonar-tmvu`, item 63).
+    stale outputs (`sonar-tmvu`, item 63). The three branches merged with the sixth batch (D-250; item 86
+    lists what is still not merged).
+
+### After the sixth merge (D-246 to D-250)
+
+80. **The simulator's boundary reverberation applies Doppler as one shift at the record's centre
+    frequency** (D-249; issue `sonar-l8yp`, open, P1; found, **not yet fixed**). `python/gpusonar/sim/reverb.py`
+    `_series_numpy` and `libs/sim/src/reverb.cpp` give each azimuth sector a Doppler of 2 (v.u) fc / c at
+    the centre frequency; physically it is a time scaling, each frequency f shifted by 2 (v.u) f / c. On a
+    narrow sweep the error is up to about 20 to 25 % of the shift at a 4-6 kHz band's edges; on a wide train
+    it moved the still water's ridge to 0.815 of its place for a 6.5 kHz tone (D-246, `docs/tasks/DOPPLER.md`
+    GL.8). **The owner, shown this on 2026-11-27: "FIx it"** (open question 60). The per-frequency law is to
+    become the default with the old law kept as an option, with a before -> after table on every shipped scene
+    with a moving platform and boundary reverberation (branch `revdop`, not merged). **What it puts in
+    doubt until then:** the reverberation Doppler of every moving-platform scene with boundary reverberation;
+    the tone path's false-alarm counts on train scenes (item 81); every number measured on such a scene's
+    reverberation near its Doppler ridges.
+81. **The tone path's false-alarm count on the train scene is not known** (D-246; ours). D-243's "22 in 4"
+    is corrected by D-246 (item 73): with the notch off 22, their rates on the lobe ridge scaled by 0.815
+    (mean -0.010 m/s, sd 0.061); with it on 25, at the notch's edge (job 6b0911926c5d61fff1888f01, same
+    pings). On alternating pings (a CW record, whose centre is the tone) 0 false tone detections in 6 tone
+    pings with the notch on. Still there: far-sidelobe false detections under strong still fields
+    (synthetic: 15 -> 2 at -30 dB a scatterer, 11 -> 5 at -25 dB; no remedy, `sonar-wntj`, question 57); a
+    velocity across the line; only a uniform line gets the notch. The tone path stays off by default (D-244).
+82. **The hyperbolic sweep's gain on the real 12 km scene is small, and the noise-limited case is not run**
+    (D-247; job 6b091ba66c5d61fff188a75c; ours). On `popoto_12km_large_submerged` (shelf, reverberation-limited,
+    plain filter, 6 pings) four times the energy buys 1 to 2.4 dB with either sweep (linear 1 s 7.98 / 9.22 /
+    11.41 dB, hyperbolic 4 s 10.40 / 11.20 / 13.35 dB); the large free-field gains of the hyperbolic sweep on
+    movers ("What works", the long-range live chain, "The hyperbolic sweep") apply where noise limits, and no such real scene (the
+    deep site at sea state 4 or 5) has been run through the chain (issue `sonar-rctz`). The hyperbolic sweep's
+    range bias (3 T m per m/s) and its 1 / f^2 spectrum on an unknown projector are open (question 61).
+    `docs/tasks/DOPPLER.md` HFM.6 and the trade study's last line of section 0a still say the scene was not
+    run; D-247 reports the job.
+83. **The shipped transmitter holds 12 km only to sea state 3 at the deep site** (D-247; the trade study's
+    section 0; illustrative site, assumed target strengths). At sea state 4: -4.0 / -1.9 dB (`large_submerged` /
+    `ship`) with the bubble law. Holding sea state 4 needs 203 dB of energy a ping with the law (1 s 203 dB has
+    no single listed projector; 2 s 200 dB or 4 s 197 dB do, at 1.5 or 3 km blind range); sea state 6 needs
+    8 s at 203 dB with no single source identified. The answer to the worst sea state (question 56) picks the
+    transmitter. On a mover with the plain filter the linear sweep needs the bank at every pulse length.
+84. **The visualization's gaps** (D-248; `sonar-6k79`): four scenes without rays or sound, six without sound
+    (a GPU-job item: `tools/scenario_view.py NAME --out DIR --3d` with CUDA synthesis); nobody has listened;
+    the heterodyned FLS and SAS sound is a millisecond click and silent for the four `rail_*` scenes; the owner
+    agreed to time stretch by default for short records (question 59; branch `viz6`, not merged); 72 single
+    arrivals silent; the `eigenray3d` rays matched by bounce counts, not read from the provider's run; the
+    tests of the branch ran on an older copied module and the suite of D-250 is their check.
+85. **Software diagrams still miss `libs/live/src/doppler_cuda.cu`** (D-245, issue `sonar-bbqr`, open): the
+    tool's own check fails and `docs/handoff/img/backends_head.png` shows nine CUDA units of ten. Unchanged
+    by the sixth batch.
+86. **Not in the sixth merge** (D-250): the reverberation Doppler fix (branch `revdop`, `sonar-l8yp`) and the
+    visualization's tracker view and audio fixes (branch `viz6`, `sonar-6k79`). Still open: the gallery
+    differences (`sonar-pli3`), the stale outputs (`sonar-tmvu`, item 63), the tracker using the rate
+    (`sonar-evd4`, item 77), the backprojection batched across hypotheses (`sonar-j1f9`, item 76).
 
 API audit (2026-11-20/21, `API_AUDIT.md`): every approved group is merged (D-145, D-146);
 what is left undone is listed at the top of that file. One result moved, none committed:
@@ -1425,7 +1569,7 @@ be asked before its packages D2, D6 and any default, and listed here briefly.
     illustrative. Making `--check` fail on "partly met" is a one-line change, left to the owner. Still open
     with it, from questions 51 and 52: the worst sea state in which 12 km must hold, the detection
     probability and false-alarm rate, the operating area (its wind, noise and bottom backscatter) and the
-    slowest radial speed to be seen. **Still open at D-245.**
+    slowest radial speed to be seen. **Still open at D-250.**
 
 **Raised by the fifth merge** (D-241 to D-245; issue `sonar-bh5c` for the 12 km requirement)
 
@@ -1442,46 +1586,68 @@ be asked before its packages D2, D6 and any default, and listed here briefly.
     loss grows with the pulse (D-244; the study is on branch `txstudy`).
     **Still open** (with questions 51, 52 and 55; `sonar-bh5c`): the worst sea state in which 12 km must
     hold; the detection and false-alarm probabilities; the operating area; the slowest radial speed to be
-    seen; whether `--check` fails on "partly met".
-57. **Build the far-sidelobe remedy for the tone path?** (issue `sonar-wntj`; follows D-243): the notch
-    on branch `notch` (not merged) takes the grating lobes and endfire; by that package's finding, recorded
-    in the issue, false tone detections remain through far sidelobes on strong fields (synthetic records),
-    and the remedy proposed there, a leakage rule across beams, would hide a weak mover sharing its rate
-    with still water at another bearing. The issue leaves the choice to the owner after the `ls12` run
-    before and after the notch on the GPU.
-58. **Vendoring three.js from the npm registry** (branch `viz`, `sonar-6k79`, not merged): the 3-D
-    viewer vendors three.js taken from the npm registry, because the network policy refused the two CDNs.
-    Is that accepted (`docs/OPEN_SOURCE.md` records open-source decisions)?
+    seen; whether `--check` fails on "partly met". The table of transmit options and the hyperbolic sweep
+    study merged with the sixth batch (D-247, D-250): **with it the answer on the worst sea state picks the
+    transmitter** (the shipped 1 s 197 dB to sea state 3 at the deep site; 203 dB of energy a ping for sea
+    state 4, 206 for 5, 212 for 6, with the bubble law; open item 83). Still open at D-250.
+57. **Build the far-sidelobe remedy for the tone path?** (issue `sonar-wntj`; follows D-243): the notch,
+    merged since D-250 (D-246), takes the grating lobes and endfire; false tone detections remain through far
+    sidelobes on strong still fields (synthetic: 15 -> 2 at -30 dB a scatterer, 11 -> 5 at -25 dB), and the
+    remedy proposed in the issue, a leakage rule across beams, would hide a weak mover sharing its rate with
+    still water at another bearing. The `ls12` run before and after the notch (job 6b0911926c5d61fff1888f01)
+    measured the simulator's reverberation Doppler, not the tone path (D-246, open items 80 and 81), so the
+    evidence the issue waited for needs the `revdop` fix first. **Still open at D-250.**
+58. **Vendoring three.js from the npm registry.** **Answered by the owner, 2026-11-27 (D-248): "Yes its
+    acceptable".** three.js 0.170.0 (MIT), one file of 691 648 bytes under `third_party/three/`, used by
+    generated pages only (`docs/OPEN_SOURCE.md` 2g, 3.14); merged with the sixth batch (D-250).
+
+**Raised by the sixth merge** (D-246 to D-250)
+
+59. **Time stretch as the default sound for short records** (D-248, `docs/tasks/VISUALIZATION.md` section
+    14). **Answered by the owner, 2026-11-27: agreed** (time stretch becomes the default for short records;
+    the recommendation was records under about 0.5 s). Not done yet: branch `viz6` (`sonar-6k79`), not merged.
+60. **The simulator's boundary reverberation Doppler** (D-249, `sonar-l8yp`; open item 80). **Answered by
+    the owner, 2026-11-27: "FIx it".** The per-frequency law becomes the default with the old law as an
+    option, and a before -> after table on every shipped moving-platform scene with boundary reverberation is
+    the record of what moves (branch `revdop`, not merged).
+61. **The projector's response across 4-6 kHz** (D-247, `docs/tasks/DOPPLER.md` HFM.1 item 6 and HFM.7): a
+    hyperbolic sweep puts its energy density as 1 / f^2 across the band (2.6 dB more at 4.25 kHz than at
+    5.75 kHz); whether a projector sends that at the same peak level is not known, and no projector is
+    chosen. Needed before a hyperbolic sweep is considered (not a default; the orchestrator recommends no
+    waveform change now).
+62. **The POP-3 wording** (D-247; `sonar-bh5c`): the trade study's section 0 derives the sentence quoted in
+    "The Popoto design, its budget and its plan" above (the shipped transmitter holds both classes at the
+    deep site up to sea state 3, and at four of the six illustrative sites at their own conditions). Accept
+    it, or name the sea state and probabilities it should hold for (question 56)? It is not in
+    `tools/design_report.py` or `DESIGN.md` yet. Still open at D-250.
 
 ## What is next
 
-1. Not merged yet (D-245): the grating-lobe and endfire notch, its coverage tests and
-   `docs/design/doppler_tradeoffs.md` (branch `notch`, `sonar-bc5r`), the transmit options by sea state
-   and the hyperbolic sweep study (branch `txstudy`, `sonar-vjq7`), the visualization (branch `viz`,
-   `sonar-6k79`: 2-D pages, the 3-D viewer with vendored three.js, audio in progress). Follow-ups filed:
-   `sonar-j1f9` (batch the backprojection across hypotheses), `sonar-evd4` (the tracker uses the rate),
-   `sonar-wntj` (the tone's far-sidelobe false detections), `sonar-8fzu` (regenerate
-   `docs/REFERENCE_DESIGN.md` and the planner JSON for `reverberation_rows_gain` and `reach_limited_by`,
-   item 70), `sonar-r8nr` (the Python chain's nonsense on a short CW record, item 68). Still open from
-   before: `sonar-ef64` (the bank's sidelobe detections), `sonar-itzy` (the winning hypothesis for
-   elevation and SBL), `sonar-3in1` (the tone margins' scatter), `sonar-b1p0` (the trade study's
-   follow-ups). Merged with the fifth
-   batch (D-245): the Doppler GPU job mode (`sonar-iu67`), the device port of the bank and the tone path
-   (`sonar-ca0o`), the 12 km large-submerged scenes (`sonar-qbrg`).
+1. Not merged yet (D-250): the reverberation Doppler fix (branch `revdop`, `sonar-l8yp`, P1; the owner:
+   "FIx it", D-249; open item 80) and the visualization's tracker view and audio fixes with time stretch for
+   short records (branch `viz6`, `sonar-6k79`). Follow-ups open: `sonar-rctz` (the noise-limited chain run
+   of both sweeps at the deep site, sea state 4 to 5), `sonar-wntj` (the tone's far-sidelobe false
+   detections), `sonar-evd4` (the tracker uses the rate), `sonar-j1f9` (batch the backprojection across
+   hypotheses), `sonar-bbqr` (the software diagrams miss `doppler_cuda.cu`), `sonar-8fzu` (regenerate
+   `docs/REFERENCE_DESIGN.md` and the planner JSON, item 70), `sonar-r8nr` (the Python chain's nonsense on a
+   short CW record, item 68), `sonar-ef64`, `sonar-itzy`, `sonar-3in1`, `sonar-b1p0`. Merged with the sixth
+   batch (D-250): the grating-lobe and endfire notch and `docs/design/doppler_tradeoffs.md` (`sonar-bc5r`,
+   closed), the transmit options by sea state and the hyperbolic sweep (`sonar-vjq7`, closed), the
+   visualization's 2-D pages, 3-D viewer and sound (`sonar-6k79`, open for `viz6`).
 2. The GPU regeneration (issues `sonar-pli3`, `sonar-tmvu`): `buried_objects` was regenerated after the
    fourth merge (commit `8391941`); the rest of the gallery waits on the explanation of three scenes'
    one-detection differences (`sonar-pli3`); `docs/figures/sst_validation.{md,json}`, `sst_pursuit.png` and
    `docs/handoff/examples/live_popoto_12km_report.jsonl` are still stale (`sonar-tmvu`, D-229, still stale
-   at D-245; the list of stale files at the top).
+   at D-250; the list of stale files at the top).
    `docs/figures/fjord_depth_plan.md` was regenerated for D-134 (open item 37) and not since; the
    depth planner file and `DESIGN.md` were regenerated with D-227. The gallery is otherwise D-179's;
    what got worse in it is open item 16.
 3. The whole CPU suite (`tools/test.sh`) on the present tree: last run whole on the tree of D-157
-   (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the fifth batch's fixed
-   tree `a37e0be` as three shards (3002 passed, 117 skipped, 4 xfailed, HF jobs 6b090cd36c5d61fff188820e,
-   6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214; D-245); the first suite on that batch failed 4
-   tests (D-242, D-245).
-4. The owner's answers on rows, band, converter, projector and site (questions 1 to 12), on Doppler (44 to 49; 43 answered), on the 12 km requirement (51 answered in part, D-235: `large_submerged` first, `ship` second; still open: the worst sea state, the detection and false-alarm probabilities, the slowest radial speed), the operating area (52), 32 a row (53), whether `--check` fails on "partly met" (55; `sonar-bh5c`), the tone path's far-sidelobe remedy (57, `sonar-wntj`), three.js from the npm registry (58) and the real values still wanted under 38 and 40; D-244 answered the baseline, the wording of the requirement, the transmitter by energy and the tone path's default (56).
+   (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the sixth batch's tree
+   `67d962b` as three shards (3321 passed, 121 skipped, 5 xfailed, HF jobs 6b0935f554072e8b71696d01,
+   6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05; D-250); before it on the fifth batch's fixed tree
+   `a37e0be` (3002 passed, 117 skipped, 4 xfailed; D-245).
+4. The owner's answers on rows, band, converter, projector and site (questions 1 to 12), on Doppler (44 to 49; 43 answered), on the 12 km requirement (51 answered in part, D-235: `large_submerged` first, `ship` second; still open: the worst sea state, the detection and false-alarm probabilities, the slowest radial speed), the operating area (52), 32 a row (53), whether `--check` fails on "partly met" (55; `sonar-bh5c`), the tone path's far-sidelobe remedy (57, `sonar-wntj`), the projector's response across 4-6 kHz for a hyperbolic sweep (61), the POP-3 wording the trade study supports (62) and the real values still wanted under 38 and 40; the worst sea state now picks the transmitter (56, open item 83). D-244 answered the baseline, the wording of the requirement, the transmitter by energy and the tone path's default (56); D-248 three.js from the npm registry (58) and time stretch for short records (59); D-249 the reverberation Doppler (60: fix it).
 5. Real data: a first Popoto recording through `tools/sonar_live.py`, a cast and one
    sounding of a pinger at the trial site, a first FLS log or SAS image through
    `tools/calibrate_sim.py`. Everything in those paths has only seen simulated input or
@@ -1793,6 +1959,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 ## Simulator limits so far
 
+- **The boundary reverberation's Doppler is one shift at the record's centre frequency**, not a shift per
+  frequency (D-249, found 2026-11-27, not fixed; open item 80; `sonar-l8yp`, branch `revdop`).
 - Everything is synthesised from point scatterers (see "Scenes and scenarios" for what
   that leaves out).
 - Tiers: `free_field`, `image_source` (opt-in a tilted bed and walls as any plane, D-201; in C++

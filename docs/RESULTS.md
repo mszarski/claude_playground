@@ -3521,7 +3521,7 @@ Every number here is ours, on simulated records; the device runs are NVIDIA L4 j
 
 | What | Result | Source |
 | --- | --- | --- |
-| The tone path on `popoto_12km_large_submerged_tone` (tone at 6.5 kHz above the 4-6 kHz sweep, one ping), device run | **22 false detections on 4 target-free pings at the default budget, all the tone's, against 0 with the tone path off**; grating lobes of the 0.15 m pitch (0.65 wavelengths at 6.5 kHz) beyond ±32.4 degrees. On the CPU: 3 to 5 false tone detections on every tone ping, at \|bearing\| 31.95 to 40.0 degrees | D-243 (job 6b08f68754072e8b7168e9c6); `docs/tasks/DOPPLER.md` LS.1 item 0 |
+| The tone path on `popoto_12km_large_submerged_tone` (tone at 6.5 kHz above the 4-6 kHz sweep, one ping), device run | **22 false detections on 4 target-free pings at the default budget, all the tone's, against 0 with the tone path off**; attributed by D-243 to the grating lobes of the 0.15 m pitch (0.65 wavelengths at 6.5 kHz) beyond ±32.4 degrees. **Corrected by D-246: mostly an artefact of the simulator** (the reverberation's Doppler at the train's 5.3 kHz centre, D-249), not a property of the tone path; the count with a correct simulation is not known (next section). On the CPU: 3 to 5 false tone detections on every tone ping, at \|bearing\| 31.95 to 40.0 degrees | D-243 (job 6b08f68754072e8b7168e9c6); `docs/tasks/DOPPLER.md` LS.1 item 0 |
 | `flank_patrol_doppler_tone` through the chain, 6 pings | **tone path off: 0 of 6 pings for all three targets, 26 false detections on 4 target-free pings**; on: small vehicle 6 of 6 (rate 1.964 to 1.997 against 1.996 m/s), submarine 6 of 6 (rate on 2 pings: -0.568, -0.422 against -0.608), wreck 6 of 6 by the sweep; 1 false detection at the default budget, 16 at 3 a ping (12 the tone's; 12 allowed); engines within 0.05 m, 0.05 deg, 0.05 dB; simulated in 189 s (the CPU did not finish in 4 h 40 min) | D-241 (job 6b08c9d86c5d61fff187b793) |
 | The first suite on the fifth batch | **4 failed**, 2996 passed: bit-identity comparisons between two programs on cuda, a kernel instantiated in two `.cu` files; after the fix 3002 passed, 117 skipped, 4 xfailed | D-242, D-245 |
 | False detections at the default budget (1e-3 a ping) on noise, long-range array | bank off 39 in 40 000 pings (0.97 of the budget; 95 %: 0.69 to 1.33); `combine: cfar` 8 in 10 296 (0.78; 0.34 to 1.53); `combine: max` 0 in 16 557 (0; 0 to 0.22). The rows with the bank stopped at their one-hour limit | D-241 (job 6b08c9d854072e8b71685cd4) |
@@ -3530,19 +3530,44 @@ Every number here is ours, on simulated records; the device runs are NVIDIA L4 j
 | The same, tone and sweep in one ping, device run | closing 6 of 6 (rate -5.536 to -5.598), oblique 6 of 6 (-0.454 to -0.551), crossing 6 of 6 by the sweep only; tone path off 6, 5 and 6 of 6 | D-243 (job 6b08f68754072e8b7168e9c6) |
 | The eval tools' truth for a fast mover at 12 km | 45 m off after 8 s when taken at ping time; opt-in `--truth-at reflection`, `--gate-range-m` (defaults unchanged) | D-243 |
 | The batched bank on the host against the loop | bit for bit (C++); defaults: 12 of 12 report hashes equal a build of `02bce49`; the Python engine with `batched: on` within the engines' tolerances only; on the device the tone's interpolated rate within 1e-5 m/s of the host's (seen 2.1e-8 m/s apart on 1 m/s) | D-242 |
-| A 4 s pulse at the same level against 1 s | 6 dB only for an echo with no radial speed; the linear sweep's closed-form peak loss with the plain filter on a mover 8.8 / 14.8 dB at 2 / 8 m/s for 1 s, 14.8 / 20.9 dB for 4 s (from the transmit study on branch `txstudy`, not merged) | D-244 |
+| A 4 s pulse at the same level against 1 s | 6 dB only for an echo with no radial speed; the linear sweep's closed-form peak loss with the plain filter on a mover 8.8 / 14.8 dB at 2 / 8 m/s for 1 s, 14.8 / 20.9 dB for 4 s (from the transmit study, merged since: D-247 and the next section) | D-244 |
+
+## Measured in D-246 to D-250 (the sixth batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records or the repository's own model (sites illustrative, target
+strengths assumed); the device runs are NVIDIA L4 jobs through Hugging Face (their JSON in the approved dataset,
+not committed); the CPU measurements are in `docs/tasks/hfm_doppler_eval.json`, `docs/design/popoto_trade_study.json`
+and `docs/tasks/VISUALIZATION.md`.
+
+| What | Result | Source |
+| --- | --- | --- |
+| The simulator's boundary reverberation Doppler (found, **not fixed**) | one shift 2 (v.u) fc / c at the record's centre frequency where each frequency should shift by 2 (v.u) f / c: up to about 20 to 25 % of the shift at a 4-6 kHz band's edges; on the 4.0-6.6 kHz train the 6.5 kHz tone's still water at 0.815 of its physical ridge. The owner: "FIx it" (branch `revdop`) | D-249; `docs/tasks/DOPPLER.md` GL.8 |
+| The tone path on `popoto_12km_large_submerged_tone`, 4 target-free pings, default budget, device | lobe notch off 22 (rates on the lobe ridge scaled by 0.815: mean -0.010 m/s, sd 0.061), on 25 (at the notch's edge): the simulator, not the chain; alternating pings (CW, simulated Doppler right) **0 false tone detections in 6 tone pings** with the notch on, where the CPU run without it had 3 to 5 a ping | D-246 (job 6b0911926c5d61fff1888f01) |
+| Far-sidelobe false tone detections on a field of 2000 still scatterers (synthetic), lobe notch off -> on | 15 -> 0 in 6 pings at -35 dB a scatterer; 15 -> 2 at -30 dB; 11 -> 5 in 4 pings at -25 dB; no remedy (`sonar-wntj`) | D-246; `docs/tasks/DOPPLER.md` GL.1 item 2 |
+| The lobe notch's cost under way, long-range array, 6.5 kHz, 1.5 m/s | a band 0.69 to 0.87 m/s wide about 2.3 m/s from each beam's own ridge on beams from 24 degrees: 7 to 16 % of headings at 2 m/s, 3 to 4 % at 8 m/s; nothing inside ±22 degrees | D-246; GL.3 |
+| The default chain with the notch's code | byte for byte as before: 24 of 24 hashes against `d54deb9` | D-246; GL.5 |
+| The hyperbolic sweep on `popoto_12km_large_submerged`, C++ chain, 6 pings, plain filter (closing / oblique / crossing margin) | **small gain**: linear 1 s 7.98 / 9.22 / 11.41 dB; hyperbolic 1 s 8.83 / 8.79 / 11.63; linear 4 s same level 9.17 / 11.37 / 12.48; hyperbolic 4 s 10.40 / 11.20 / 13.35; linear 4 s `combine: cfar` 10.83 / 12.33 / 13.60. Four times the energy buys 1 to 2.4 dB (reverberation-limited). The noise-limited case not run (`sonar-rctz`) | D-247 (job 6b091ba66c5d61fff188a75c) |
+| The shipped transmitter (1 s, 197 dB) at the deep site, both classes, 12 km | holds up to sea state 3; at sea state 4 -4.0 / -1.9 dB with the bubble law, -0.2 / +1.4 dB without (`large_submerged` / `ship`) | D-247; `docs/design/popoto_trade_study.md` section 0 |
+| Least energy a ping holding both classes at the deep site, sea states 2 to 6 | with the bubble law 197, 197, 203, 206, 212 dB re 1 uPa^2 s at 1 m; without it 200 at sea state 4 and 203 at 5; sea state 6 needs 8 s at 203 dB (no single source identified; 6 km blind range) | D-247; section 0 |
+| The linear sweep's closed-form peak loss on a mover, plain filter | 8.8 / 14.8 dB at 2 / 8 m/s for 1 s; 17.8 / 23.9 dB for 8 s. Measured in free field (targets 20 dB over the class's low end): 6.5 to 12.3 dB at 1 s, 11.7 to 18.1 dB at 4 s | D-247; `docs/tasks/DOPPLER.md` HFM.2, HFM.4 |
+| The hyperbolic sweep in free field at 12 km, both engines, still platform | holds its zero-speed margin within -0.8 to +0.8 dB at 2 to 8 m/s for 1 to 8 s; range bias 3 T m per m/s (4-6 kHz); 2.6 dB more energy at 4.25 than at 5.75 kHz; main lobe 2 % wider, first sidelobe -12.7 against -13.3 dB | D-247; HFM.2 to HFM.4 |
+| The 3-D pages of the visualization | 96 pages (the tree before the two 12 km large-submerged scenes) loaded in headless Chromium with no error; embedded pages 0.74 to 0.89 MB, CDN pages 44 to 200 kB; `eigenray3d` rays 0 to 13.7 m from the target, travel time within 0.18 ms of the provider's delay | D-248; `docs/tasks/VISUALIZATION.md` 13.1 |
+| The sound of the visualization | 90 of 96 scenarios with sound (48 as recorded, 42 heterodyned), checked by spectrum, envelope, peak time and level only: **nobody has listened**; the four `rail_*` scenes' heterodyned files silent; 72 single arrivals silent; records bit-identical with the per-item taps off and on (SHA-256, both engines) | D-248; VISUALIZATION.md 14.2, 14.3 |
+| Full GPU suite, three shards, sixth batch's tree `67d962b` | **3321 passed, 121 skipped, 5 xfailed, none failed**; the fifth expected failure `test_hsb.py`'s frame-loss limit at 102.4 kHz (D-186); two of the new skips the browser checks | D-250 (jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05) |
 
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-245) ran its affected test files.
-The full GPU suite last ran on the fifth batch's fixed tree (`a37e0be`, D-245) as three shards: 3002
-passed, 117 skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b090cd36c5d61fff188820e,
-6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214); the first suite on the batch failed 4 (D-245). Also
-not measured: the tone path's false-alarm rate beyond the 4 target-free pings of each scene run (the
-grating-lobe notch, branch `notch`, is not merged), several seeds of the 12 km scenes, the bank with the
+rerun since, and each later package (D-158 to D-250) ran its affected test files.
+The full GPU suite last ran on the sixth batch's tree (`67d962b`, D-250) as three shards: 3321
+passed, 121 skipped, 5 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b0935f554072e8b71696d01,
+6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05); before it 3002 passed, 117 skipped, 4 xfailed on the
+fifth batch's fixed tree (D-245). Also not measured: the tone path's false-alarm rate on a train scene with a
+correct simulation (the simulator's reverberation Doppler, D-249, is not fixed; D-246), any noise-limited
+real scene through the chain with either sweep (`sonar-rctz`), the projector's response across 4-6 kHz for a
+hyperbolic sweep, anyone listening to the visualization's sound, several seeds of the 12 km scenes, the bank with the
 elevation rows on the device; Sensor Bridge's socket receiver on a host set up as its guide asks, and its RoCE receiver
 (D-189, `sonar-02c`); per-board frames through Sensor Bridge at a Popoto build's rate (D-200); the link
 budget and coverage against measured reverberation (every site value is illustrative). Anything on real

@@ -19,12 +19,12 @@ on the chain's own detector (free field, the ship-sized target); the 12 km requi
 `large_submerged` first and `ship` second (the owner, 2026-11-26), and three rows hold it for
 both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the fifth batch's tree, decisions D-241
-to D-243 with the repair of D-242, as three jobs on an NVIDIA L4 (3002 passed, 117 skipped, 4 xfailed,
-none failed; Hugging Face jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9,
-6b090cd46c5d61fff1888214; D-245), the opt-in 3-D propagation tier and the slow Bellhop3D checks
-included; the first suite on that batch failed 4 tests, because new device code had made two programs
-built from one library disagree in the last digits on the GPU (fixed, with a test that guards it); the
+(the depth sigma now says so). The full GPU suite last ran on the sixth batch's tree, decisions D-246
+to D-248, as three jobs on an NVIDIA L4 (3321 passed, 121 skipped, 5 xfailed, none failed; Hugging Face
+jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05; D-250), the opt-in
+3-D propagation tier and the slow Bellhop3D checks included; the first suite on the fifth batch had
+failed 4 tests, because new device code had made two programs built from one library disagree in the
+last digits on the GPU (fixed, with a test that guards it, D-245); the
 whole CPU suite has not been
 rerun on the present tree (last whole run on record: the tree of D-157, 157 of 157 ctest
 entries). Since D-227 the shipped sites state their boundary scattering (illustrative values) and the
@@ -38,19 +38,33 @@ mud; the owner has since said 12 km is for `large_submerged` first and `ship` se
 worst sea state, the detection probabilities and the waters are still open. The sweep's Doppler
 bank exists in the live chain as an option (D-232) and with its default combiner lowers every target's
 margin by 3.4 to 5.3 dB on the scenes measured, so it stays off; an opt-in CFAR combiner and a tone path
-(D-237) give the movers their margin back. Measured on a GPU since (D-241 to D-243): the tone path makes
-22 false detections on 4 target-free pings at 12 km at the default budget (the array's grating lobes at
-the tone's frequency), so by the owner's decision it stays off by default and a notch is to be added
-(D-244); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
+(D-237) give the movers their margin back. **The simulator's boundary reverberation applies Doppler as one
+shift at the record's centre frequency where each frequency should shift (D-249, found and not yet fixed;
+the owner: "FIx it"), so the reverberation Doppler of every moving-platform scene is in doubt until the
+fix.** Measured on a GPU since (D-241 to D-243): with the tone path on, 22 false detections on 4
+target-free pings at 12 km at the default budget, which D-246 found to be mostly that simulator artefact,
+not a property of the tone path, so its false-alarm rate on a train scene is not known; by the owner's
+decision the tone path stays off by default (D-244), with a grating-lobe notch merged for it (D-246); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
 0 of 6 pings for all three targets); with the bank on the chain still costs 3.4 to 6.0 times its cost a
 ping on the device. The owner's baseline is the plain sweep on the three-row face with every Doppler
-option off (D-244). On 2026-11-26 the boundary models, the sediment tier and time
+option off (D-244); the shipped transmitter (1 s, 197 dB) holds 12 km for both classes at the deep
+illustrative site only up to sea state 3, and a table of transmit options by sea state gives the energy each
+sea state needs (D-247; `docs/design/popoto_trade_study.md` sections 0 and 0a); a hyperbolic sweep (opt-in)
+keeps its margin on movers in free field but gains little on the real reverberation-limited 12 km scene, and
+the noise-limited case has not been run. On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
 got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
 scenes, D-216). Every shipped SAS scene
 but one (`sas_auv_multipath`) is free field: no surface or bed multipath (D-201). [`docs/STATUS.md`](docs/STATUS.md) says
 what works, how each part was checked, and lists what is open or known to be wrong;
 [`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
+
+**Pictures and sound of every scenario** (D-248): `tools/scenario_view.py` draws a scenario's rays and
+bounces at its propagation tier, the boundary and water models in force with their sources, the receive beams
+and the parts of the received signal, and writes a 3-D page (three.js, vendored under `third_party/three/` with
+the owner's approval) with the sound at each hydrophone. One scenario a family is committed:
+[`docs/figures/scenes/index.html`](docs/figures/scenes/index.html). Four tone-and-sweep scenes have no rays
+or sound on a CPU, six no sound, and nobody has listened to the sound yet (`docs/tasks/VISUALIZATION.md`).
 
 ## What is in it
 

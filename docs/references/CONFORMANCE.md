@@ -22,6 +22,17 @@ D-240 name no matrix row and the batch did not edit this file. The `penetration:
 cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
 the sharding) touch no conformance item.
 
+**State 2026-11-27, after the merge `bda7c7d` of the sixth batch (D-246 to D-250; full GPU suite as three shards
+3321 passed, 121 skipped, 5 xfailed; jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937,
+6b0935f754072e8b71696d05):** D-246 to D-250 name no matrix row and the batch did not edit this file. **Found, not
+fixed (D-249, `sonar-l8yp`): the boundary reverberation's Doppler is one shift at the record's centre frequency**
+(`python/gpusonar/sim/reverb.py` `_series_numpy`, `libs/sim/src/reverb.cpp`), where each frequency should shift by
+2 (v.u) f / c; no matrix row covers the reverberation's Doppler over a band, so no row's verdict changes, but every
+moving-platform reverberation measured near its Doppler ridges is in doubt until the fix (branch `revdop`; the owner:
+"FIx it"). The tone path's lobe notch (D-246), the transmit study and the hyperbolic sweep (D-247, no simulator change;
+the HFM echo of a mover checked as the time-scaled pulse in both engines) and the visualization (D-248: read-only, with
+opt-in taps that leave records bit-identical) touch no conformance item.
+
 **State 2026-11-27, after the merge `f40d4c3` of the fifth batch (D-241 to D-245; full GPU suite as three shards
 3002 passed, 117 skipped, 4 xfailed; jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9,
 6b090cd46c5d61fff1888214):** D-241 to D-245 name no matrix row and the batch did not edit this file or the

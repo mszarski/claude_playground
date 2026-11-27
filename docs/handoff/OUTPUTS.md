@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the gallery is unchanged since except `buried_objects`, regenerated after D-240; the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245 the same day): the gallery pictures, the headline numbers with their sources, what a
+decision D-181 (the gallery is unchanged since except `buried_objects`, regenerated after D-240; the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245 and D-250 the same day): the gallery pictures, the scene pages of the visualization (section 1.11, D-248), the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -435,6 +435,44 @@ Look at the peak at 1000 m on the target's bearing. Geometry: [`scenarios/popoto
 | --- | --- | --- | --- |
 | 1000.1 | 1000.0 | 0.0 | 29.8 |
 
+### 1.11 Scene pages: rays, bounces, beams, boundary models and sound (D-248)
+
+**What is missing or wrong first** (`docs/tasks/VISUALIZATION.md` sections 12 to 14; ours): four tone-and-sweep
+scenes (`flank_patrol_doppler`, `flank_patrol_doppler_tone`, `flank_patrol_doppler_underway`, `popoto_12km_doppler`)
+have no rays and no sound on this CPU (over 11 minutes a ping), and six have no sound (those four,
+`flank_bank_3d`, `popoto_far_mover_doppler`): their pages say so and name the GPU-job command. **Nobody has
+listened to any of the sound**: it is checked by spectrum, envelope, peak time and level only. Heterodyned FLS and
+SAS records are a millisecond click (silent for the four `rail_*` scenes); time stretch is to become the default
+for short records (the owner agreed, 2026-11-27; branch `viz6`, not merged). 72 "strongest" single arrivals are
+silent. The `eigenray3d` rays are Bellhop3D's own re-shot in its ray mode and matched by bounce counts (0 to 13.7 m
+from the target); per-bounce losses are the same law evaluated again, not the provider's numbers. The scene pages
+are not the gallery: they show what the simulator puts into a record, not what the chain makes of it (the
+chain's taps are not drawn yet, `chain` is null in the page data).
+
+`tools/scenario_view.py` (package `python/gpusonar/viz/`) draws, for one ping of a scenario: the rays per
+propagation tier with every bounce (grazing angle, loss), the surface, bed and water models in force with the
+reflection and scattering laws at the angles used, the receive beams and the projector's pattern, the parts of the
+signal against time, and the list of every model in force with key, value, source and status word. With `--3d` a
+3-D page (three.js) with the hydrophones, beams, targets and rays, and a sound panel that plays the record, its
+parts and single arrivals at each hydrophone while dots move along the rays.
+
+Committed under `docs/figures/scenes/` (3.6 MB in 42 entries, measured in the tree): 13 scenarios, one a family and
+`flank_seamount_3d` (Bellhop3D's rays), listed in `index.html` and `index.json`; for each a 2-D page `NAME.png`
+(67 to 157 kB; 1.40 MB in all), a 3-D page `NAME.html` that loads three.js from the pinned CDN (49 to 124 kB;
+0.96 MB in all: it needs the network to draw) and its 128-colour screenshot `NAME_3d.png` (56 to 104 kB; 1.03 MB
+in all); one sound folder, `popoto_trial_100m.audio/` (five heterodyned WAV files of hydrophone 0, its envelope and
+spectrogram data and a manifest; 0.24 MB). Not committed: the other 85 scenarios' pages, every scene trace, the
+embedded (offline) 3-D pages (0.74 to 0.89 MB each) and the rest of the sound (the full run made 6,117 WAV files of
+348 MB; its directory 540 MB with the pages); they stay in the session scratch directory and are regenerated. The
+prototype pages of `docs/tasks/viz_prototype/` (0.5 MB) predate the package.
+
+Regenerate (CPU, NumPy or C++ engine, Bellhop and Bellhop3D for their tiers): one scenario
+`PYTHONPATH=python python3 tools/scenario_view.py NAME --out DIR --3d`; everything
+`tools/scenario_view.py --all --3d --out DIR` (3.0 h for the 2-D pages and traces on this CPU, then the 3-D
+pages from the traces with `--traces DIR` in 3.0 min, the sound in 1 h 49 min; VISUALIZATION.md 12, 13.1, 14.2);
+`--three cdn` for the committed form, `--audio-method time_stretch` for an FLS or SAS record you want to hear;
+`node tools/page3d_check.js DIR` checks pages in headless Chromium.
+
 ## 2. Headline results
 
 Each table names its source. Where the source is a `DECISIONS.md` entry, the measurement
@@ -865,7 +903,10 @@ Runtimes are given only where a document records one.
 | `docs/tasks/doppler_bank_eval.json`, `doppler_bank_threshold.json` (D-232) | yes | `tools/doppler_bank_eval.py SCENE --background 4` per scene, the scenes gathered under `scenes` (the file's `tool` line; Bellhop for the eigenray scenes); `tools/doppler_bank_threshold.py [--reverb SCENE] --json FILE` | CPU | not recorded; the bank costs 22 to 51 times the chain a ping on the scenes (`docs/tasks/DOPPLER.md` table 9.5) |
 | `docs/tasks/doppler_d3_eval.json` (D-237) | yes | the commands in its `commands` block: `tools/doppler_bank_threshold.py --chain cfar ...`, `tools/doppler_bank_eval.py SCENE --combine cfar --background 4`, `tools/doppler_tone_eval.py` (`--alternate 10.5e+3` on `flank_patrol`; `popoto_12km_doppler`); Bellhop for the eigenray scenes | CPU | `flank_patrol_doppler_tone` did not finish in 4 h 40 min (its block `not_measured`); measured since in the `doppler` GPU job (D-241), its JSON in the approved dataset, not committed |
 | `docs/tasks/doppler_large_submerged_eval.json` (D-243) | yes | its commands: `tools/doppler_bank_eval.py popoto_12km_large_submerged` and `tools/doppler_tone_eval.py` with `--max-rate 8 --truth-at reflection --gate-range-m 100` (`docs/tasks/DOPPLER.md` LS.5); Bellhop | CPU | the sweep scene 6 pings in 27 min to simulate, the tone scene 58 min a ping (LS.1) |
-| The `doppler` job's outputs: `doppler_tone_eval.json`, `doppler_bank_at_default.json`, `timing_*.json`, `ls12_*.json` (D-241, D-243) | no; the approved dataset's folders `doppler_tone`, `doppler_fa`, `doppler_timing`, `doppler_ls12`; the numbers in `DECISIONS.md` D-241 to D-243 and `RESULTS.md` | job mode `doppler` with `GPUSONAR_ORACLES=1` (`GPUSONAR_DOPPLER_RUNS`, `bash tools/doppler_gpu_runs.sh --help`) | GPU | sub-run limits 80, 30, 40 and 80 min; the bank's false-alarm rows stopped at their one-hour limit (D-241) |
+| Scene pages `docs/figures/scenes/` (D-248) | 13 scenarios only (section 1.11); the rest no | `tools/scenario_view.py NAME --out DIR --3d [--three cdn] [--audio side]`; `--all` for every scenario and the index | CPU (Bellhop, Bellhop3D for their tiers); the four tone-and-sweep scenes need CUDA synthesis | 3.0 h for every 2-D page on this CPU; 3-D pages from cached traces 3.0 min; the sound 1 h 49 min |
+| `docs/tasks/hfm_doppler_eval.json` (D-247) | yes | `tools/hfm_doppler_eval.py --pulses 1 2 4 8 --pings 3 --ts-offset-db 20` (and the bank's `--pulses 2 4 --waveforms lfm --pings 1 --ts-offset-db 20 --bank --engines cpp --bank-engines cpp`; the file's commands) | CPU | not recorded here (a plain ping 0.9 to 1.2 s, the 1 s bank 42.5 s, `docs/tasks/DOPPLER.md` HFM.4) |
+| Transmit options by sea state and section 0a of `docs/design/popoto_trade_study.md` (D-247) | yes (in the study's `.json` and `.md`) | `tools/popoto_trade_study.py --transmit`, then `--report` (old sections byte-identical; `test_popoto_trade_study.py` compares the committed `.md` with a regeneration) | CPU | not recorded |
+| The `doppler` job's outputs: `doppler_tone_eval.json`, `doppler_bank_at_default.json`, `timing_*.json`, `ls12_*.json` (D-241, D-243; since D-246 `ls12_tone_train_lobe_off.json` too), `hfm12_*.json` (D-247) | no; the approved dataset's folders `doppler_tone`, `doppler_fa`, `doppler_timing`, `doppler_ls12` (where the `hfm12` run's files went is not recorded in the documents); the numbers in `DECISIONS.md` D-241 to D-243, D-246, D-247 and `RESULTS.md` | job mode `doppler` with `GPUSONAR_ORACLES=1` (`GPUSONAR_DOPPLER_RUNS`, `bash tools/doppler_gpu_runs.sh --help`) | GPU | sub-run limits 80, 30, 40 and 80 min; the bank's false-alarm rows stopped at their one-hour limit (D-241) |
 | Ten-seed evaluation: `classify_rules_eval.json`, `.md`, `captures/` | only the JSON of some runs, as `docs/benchmarks/classify_rules_eval_<commit>.json`; captures stay in the dataset | job mode `clseval` with `GPUSONAR_ORACLES=1`, `GPUSONAR_CLSEVAL_ARGS="--seeds 10 --commit <hash>"` | GPU | about 50 min for 12 scenes x 10 seeds on an L4 |
 | False-alarm count `at_default.json` | no; the table is in `RESULTS.md` | job mode `falsealarm` (`GPUSONAR_FA_ARGS`, e.g. `--maps long_range --pings 100000`) | GPU | long: the three-row static map timed out at about 43 000 pings |
 | `docs/benchmarks/bench_*`, `session_*`, `conditioning_*` | yes | job mode `benchmark` (`docs/benchmarks/README.md` has each file's exact settings); the job prints one `BENCHMARK_JSON {...}` line to save | GPU | not recorded; a rerun is a new measurement, not a regeneration |

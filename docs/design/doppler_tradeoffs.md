@@ -13,7 +13,9 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
   GL.3). The sweep path detects all three; only the rate is missing.
 - **The tone path's false-alarm rate is not known at the default budget.** Before the grating-lobe notch, the train scene
   at 12 km gave 22 false tone detections in 4 target-free pings at the default budget (GPU 2026-11-27, against 0 with
-  the tone path off). With the notch a synthetic field gives 15 -> 0 (GL.1); a stronger field still leaves some through
+  the tone path off). (Added by the document sweep of 2026-11-27: D-246 and `DOPPLER.md` GL.8 found those 22, and the
+  25 with the notch, mostly an artefact of the simulator's reverberation Doppler at the train's centre frequency,
+  D-249, not a property of the tone path.) With the notch a synthetic field gives 15 -> 0 (GL.1); a stronger field still leaves some through
   the beams' far sidelobes (GL.1 item 2). The GPU rerun is the acceptance.
 - **No path gives the tracker a rate**: the tracker takes the tone's coarse range sigma only (D5 not done). With
   alternating pings a 2 m/s target was called `static` (LS.1 item 4); with `combine: cfar` the crossing target was too.
