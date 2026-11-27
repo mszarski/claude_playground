@@ -96,7 +96,15 @@ DEFAULTS = {
                 "association": "likelihood",      # or "in_order", the rule before D-141 (gpusonar/detect.py, Tracker)
                 # s: on a ping whose transmit time does not increase over the ping before (a source without timestamps)
                 # the tracker's clock advances by this (sonar-4bs). None: off; such pings are counted (pings_without_time)
-                "ping_interval_s": None},
+                "ping_interval_s": None,
+                # D5 (opt-in): "update": a track takes a detection's measured range rate as a second, scalar Kalman update
+                # (detect.rate_model) and the classifier's rule mover_range_rate reads the filter's velocity;
+                # "update_and_gate": also a rate gate sigmas from the track's predicted one argues against the pair. "off"
+                # (default): as before. range_rate_from: which detections' rates are trusted, "tone" (the tone path's:
+                # doppler_path tone or both) or "any" (also the sweep bank's, which scatter by metres a second on extended
+                # targets, D-232: not a measurement). range_rate_nav_sigma_m_s: the own ship's velocity error along the line
+                # of sight, one sigma (an assumed navigation accuracy: unconfirmed), added in quadrature to the rate's step.
+                "range_rate": "off", "range_rate_from": "tone", "range_rate_nav_sigma_m_s": 0.05},
     "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
     "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
@@ -466,12 +474,43 @@ def check_choices(cfg: dict) -> None:
     if doppler.tone_on(cfg.get("doppler")) and cfg.get("elevation") is not None:
         raise ValueError("chain.doppler: tone is not made for the elevation option yet (a tone detection's coarse range has no elevation "
                          "search; libs/live LiveChain refuses it too)")
+    check_range_rate(cfg.get("tracker") or {})
     estimate = (cfg.get("cfar") or {}).get("range_estimate")
     if estimate is not None and estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
     if estimate not in (None, "centroid") and cfg.get("cell_statistic") != "multiscale":
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} is a setting of cell_statistic multiscale, not "
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
+
+
+RANGE_RATE_FROM = ("tone", "any")        # chain.tracker.range_rate_from (D5); libs/live the same words
+
+
+def check_range_rate(t: dict) -> None:
+    """chain.tracker.range_rate (D5), refused as libs/live refuses it: one of detect.RANGE_RATE; range_rate_from one of
+    RANGE_RATE_FROM; range_rate_nav_sigma_m_s finite, zero or more."""
+    mode = t.get("range_rate", "off")
+    if mode not in detect.RANGE_RATE:
+        raise ValueError(f"chain.tracker.range_rate: {mode!r} (one of {', '.join(detect.RANGE_RATE)})")
+    src = t.get("range_rate_from", "tone")
+    if src not in RANGE_RATE_FROM:
+        raise ValueError(f"chain.tracker.range_rate_from: {src!r} (tone or any)")
+    nav = t.get("range_rate_nav_sigma_m_s", 0.05)
+    if not (isinstance(nav, (int, float)) and np.isfinite(float(nav)) and float(nav) >= 0.0):
+        raise ValueError(f"chain.tracker.range_rate_nav_sigma_m_s: {nav!r} (m/s, finite, zero or more)")
+
+
+def range_rate_sigma(h, mode: str, source: str, nav_sigma: float) -> float:
+    """D5: the one-sigma (m/s) the tracker takes a detection's range rate with, or NaN (not used): the rate and its step
+    finite, the detection's path trusted (source "tone": doppler_path tone or both, the tone's bank; "any": every rate,
+    the sweep bank's too), and then sqrt(step^2 + nav_sigma^2): one hypothesis step (half the tone's resolution, c / (4 f
+    T); the parabola refines within it: on the scenes measured the error stayed within one step, D-241, D-243; ours) and
+    the own ship's velocity error. libs/live chain.cpp the same."""
+    if mode == "off" or not (np.isfinite(h.range_rate) and np.isfinite(h.range_rate_step)):
+        return float("nan")
+    if source == "tone" and h.doppler_path not in (1, 2):
+        return float("nan")
+    return float(np.sqrt(h.range_rate_step**2 + nav_sigma**2))
 
 
 # The chain's own keys: DEFAULTS' and the two opt-in hooks read with .get (multipath_depth.py, coverage.py).
@@ -571,6 +610,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
          "tracker_association": t["association"],
          **({"tracker_ping_interval_s": check_ping_interval(t["ping_interval_s"])} if t["ping_interval_s"] is not None else {}),
+         # D5 (opt-in): said only when on, so every other line is as before
+         **({"tracker_range_rate": t["range_rate"], "tracker_range_rate_from": t["range_rate_from"],
+             "tracker_range_rate_nav_sigma_m_s": float(t["range_rate_nav_sigma_m_s"])} if t["range_rate"] != "off" else {}),
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath")), "backend": cfg["backend"]}
     if cfg["range_doppler"] != "off":                  # opt-in (sonar-fyj): said only when on, so every other line is as before
@@ -1613,7 +1655,7 @@ class LiveChain:
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
                                       depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5),
-                                      association=t["association"])
+                                      association=t["association"], range_rate=t["range_rate"])
         self.tracker.tap = "tracker" in self._chain_taps             # opt-in, read only
         self.resolved = json.loads(d["json"])
 
@@ -1932,6 +1974,10 @@ class LiveChain:
             if bank is not None:
                 return -h.range_rate if np.isfinite(h.range_rate) else 0.0
             return float(v_own[:len(u)] @ u)
+        # D5 (opt-in): the platform for a detection's range rate, in the tracker's frame (across = east, forward = north,
+        # relative to the first ping's origin), and its velocity over ground (navigation's; not finite: the rate is not used).
+        tr_cfg = cfg["tracker"]
+        own_xy = origin[:2] - self._origin[:2]
         for i, h in enumerate(hits):
             look = np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside
             h_range = h.range + rd_factor * closing(h, look[:2]) if rd_factor else h.range
@@ -1996,6 +2042,13 @@ class LiveChain:
             local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
                                           depth_alternatives=alternatives, time=t + float(out_range[i]) / c_range,
                                           range_sigma=h.range_sigma))       # a tone's coarse range (D3); NaN: the tracker's
+            if tr_cfg["range_rate"] != "off":
+                m_ = local[-1]
+                m_.range_rate, m_.range_rate_step = float(h.range_rate), float(h.range_rate_step)
+                m_.range_rate_sigma = range_rate_sigma(h, tr_cfg["range_rate"], tr_cfg["range_rate_from"],
+                                                       float(tr_cfg["range_rate_nav_sigma_m_s"]))
+                m_.platform_x, m_.platform_y = float(own_xy[1]), float(own_xy[0])
+                m_.platform_vx, m_.platform_vy = float(v_own[1]), float(v_own[0])
         if self.tracker is not None:
             self.tracker.last_tap = None
         detector_tap, self._detector_tap = getattr(self, "_detector_tap", None), None
@@ -2009,7 +2062,8 @@ class LiveChain:
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=None, detections=c.get("detections"), time=t,
                                            outlier_alpha=c["outlier_alpha"], max_fit_rms_bearing=getattr(self, "_fit_rms_bearing", 0.0),
-                                           origin=(own[1], own[0]), evidence=evidence)
+                                           origin=(own[1], own[0]), evidence=evidence,
+                                           range_rate=cfg["tracker"]["range_rate"] != "off")
         if cfg["range_doppler"] == "full" and bank is None:
             # sonar-fyj: the target's own part, from its fitted velocity, on the reported position (before anything reads it).
             classify.shift_for_target_doppler(classes, lfm_factor, (own[1], own[0]))

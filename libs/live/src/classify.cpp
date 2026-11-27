@@ -320,6 +320,30 @@ void group_echoes(std::vector<TrackClass>& out, const ClassifyOptions& o, const 
   }
 }
 
+namespace {
+// D5: the filter's velocity as a speed test (classify.py filter_speed): v^T P^-1 v (0 when P is not positive definite),
+// |v|, and sqrt(u^T P u) with u = v / |v| (at v = 0 the larger axis' sigma); v = state[2:4], P = cov[2:4, 2:4].
+struct FilterSpeed {
+  double chi2 = 0.0, speed = 0.0, sigma = 0.0, vx = 0.0, vy = 0.0;
+};
+FilterSpeed filter_speed(const Track& t) {
+  FilterSpeed f;
+  f.vx = t.state[2];
+  f.vy = t.state[3];
+  const double a = t.cov[10], b = t.cov[11], d = t.cov[15];
+  const double det = a * d - b * b;
+  f.chi2 = det > 0.0 && a > 0.0 ? (d * f.vx * f.vx - 2.0 * b * f.vx * f.vy + a * f.vy * f.vy) / det : 0.0;
+  f.speed = std::hypot(f.vx, f.vy);
+  if (f.speed > 0.0) {
+    const double ux = f.vx / f.speed, uy = f.vy / f.speed;
+    f.sigma = std::sqrt(std::max(ux * ux * a + 2.0 * ux * uy * b + uy * uy * d, 0.0));
+  } else {
+    f.sigma = std::sqrt(std::max({a, d, 0.0}));
+  }
+  return f;
+}
+}  // namespace
+
 std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks, const ClassifyOptions& o,
                                         std::vector<ClassEvidence>* evidence) {
   const std::size_t first_evidence = evidence ? evidence->size() : 0;
@@ -347,10 +371,21 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
     const double limit = o.max_fit_rms_bearing > 0.0 ? std::max(o.max_fit_rms, o.max_fit_rms_bearing * std::hypot(f.x - o.origin_x, f.y - o.origin_y))
                                                      : o.max_fit_rms;
     const bool steady = o.max_fit_rms < 0.0 || f.rms <= limit;
+    // D5 (opt-in): the filter's velocity, which the range rate informs (classify.py `range_rate`).
+    const bool rated = o.range_rate && tr->rate_updates > 0;
+    const FilterSpeed fs = rated ? filter_speed(*tr) : FilterSpeed{};
+    const bool rate_mover = rated && fs.speed >= o.min_speed && fs.chi2 >= o.significance * o.significance && c.seen >= o.min_seen;
+    const bool fit_mover = c.speed >= o.min_speed && c.speed >= need * f.sigma && c.seen >= o.min_seen;
     if (n < o.min_points || !steady) {
       c.kind = Kind::Uncertain;
-    } else if (c.speed >= o.min_speed && c.speed >= need * f.sigma && c.seen >= o.min_seen) {
+    } else if (fit_mover) {
       c.kind = Kind::Mover;
+    } else if (rate_mover) {
+      c.kind = Kind::Mover;   // mover_range_rate: the filter's velocity, speed and sigma
+      c.vx = fs.vx;
+      c.vy = fs.vy;
+      c.speed = fs.speed;
+      c.speed_sigma = fs.sigma;
     } else if (c.speed < o.static_speed && c.seen >= o.min_seen) {
       c.kind = Kind::Static;
     } else if (c.speed < need * f.sigma && c.seen >= o.min_seen && c.speed < 3.0 * o.static_speed) {
@@ -366,7 +401,7 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
       e.rows = n;
       e.fitted = n_fit;
       e.speed = c.speed;
-      e.speed_sigma = f.sigma;
+      e.speed_sigma = c.speed_sigma;
       e.need = need;
       e.seen = c.seen;
       e.fit_rms = f.rms;
@@ -376,9 +411,15 @@ std::vector<TrackClass> classify_tracks(const std::vector<const Track*>& tracks,
       e.kind = kind_name(c.kind);
       if (n < o.min_points) e.rule = "few_points";
       else if (!steady) e.rule = "scatter";
-      else if (c.kind == Kind::Mover) e.rule = "mover";
+      else if (c.kind == Kind::Mover) e.rule = fit_mover ? "mover" : "mover_range_rate";
       else if (c.kind == Kind::Uncertain) e.rule = "uncertain_otherwise";
       else e.rule = (c.speed < o.static_speed && c.seen >= o.min_seen) ? "static_slow" : "static_insignificant";
+      if (o.range_rate) {   // D5: written out only with the rate on
+        e.has_rate = true;
+        e.rate_updates = tr->rate_updates;
+        e.filter_speed = rated ? fs.speed : std::numeric_limits<double>::quiet_NaN();
+        e.filter_chi2 = rated ? fs.chi2 : std::numeric_limits<double>::quiet_NaN();
+      }
       evidence->push_back(e);
     }
   }

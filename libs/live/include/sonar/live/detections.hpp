@@ -54,6 +54,14 @@ struct Detection {
   /// Which Doppler path found it (D3): 0 the sweep's map (or no Doppler path), 1 the tone's bank alone, 2 both (a sweep
   /// detection that took a tone detection's range rate).
   int doppler_path = 0;
+  /// D5 (opt-in, TrackerOptions::range_rate): the tracker takes `range_rate` as a measurement of the track's velocity with
+  /// this one-sigma (m/s), where the platform (the array in the tracker's frame at the ping: across, forward, m, and their
+  /// rates over ground, m/s) is finite. NaN: not used (no rate, or one not trusted: the sweep bank's, D-232). detect.py the same.
+  double range_rate_sigma = std::numeric_limits<double>::quiet_NaN();
+  double platform_x = std::numeric_limits<double>::quiet_NaN();
+  double platform_y = std::numeric_limits<double>::quiet_NaN();
+  double platform_vx = std::numeric_limits<double>::quiet_NaN();
+  double platform_vy = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]
@@ -89,6 +97,7 @@ struct Track {
   double depth_var = std::numeric_limits<double>::infinity();
   /// s: when `state` holds: its last detection's time (Detection::time), or the ping's after a miss.
   double time = std::numeric_limits<double>::quiet_NaN();
+  std::int64_t rate_updates = 0;  ///< D5: range-rate measurements the track took (0 with TrackerOptions::range_rate Off)
 };
 
 /// How detections are shared out among tracks on each ping (D-141; python/gpusonar/detect.py).
@@ -99,6 +108,14 @@ struct Track {
 enum class Association { Likelihood, InOrder };
 /// "likelihood" or "in_order"; throws std::invalid_argument for anything else.
 Association parse_association(const std::string& name);
+
+/// D5 (opt-in): Off, as before; Update: after its position update a track takes a detection's range rate (when
+/// Detection::range_rate_sigma and the platform are finite) as a second, scalar extended Kalman update; UpdateAndGate:
+/// also a pair whose rate lies gate sigmas or more from the track's predicted rate is no candidate. detect.py the same.
+enum class RangeRate { Off, Update, UpdateAndGate };
+/// "off", "update" or "update_and_gate"; throws std::invalid_argument for anything else.
+RangeRate parse_range_rate(const std::string& name);
+const char* range_rate_name(RangeRate mode);
 
 struct TrackerOptions {
   /// m/s^2: standard deviation of the white acceleration noise on each horizontal axis
@@ -115,6 +132,7 @@ struct TrackerOptions {
   double initial_speed_sigma = 10.0;
   double depth_process_noise = 0.5;  ///< m per sqrt(s): how fast a track's depth may wander
   Association association = Association::Likelihood;
+  RangeRate range_rate = RangeRate::Off;  ///< D5, opt-in
 };
 
 /// The tracker's opt-in tap (Tracker::set_tap; python/gpusonar/detect.py TRACKER_TAP, the same members): what one
@@ -136,6 +154,12 @@ struct TrackerTapPair {
   bool nearest = false;        ///< the track's smallest d2 (the first on a tie), kept even outside the gate
   double x = 0.0, y = 0.0;     ///< the track predicted to the detection's time (across, forward, m)
   double sxx = 0.0, sxy = 0.0, syy = 0.0;  ///< the innovation covariance there
+  double rate_d2 = std::numeric_limits<double>::quiet_NaN();  ///< D5 UpdateAndGate: the rate's y^2 / S; NaN: not used
+};
+/// D5: one range-rate update (TrackerOptions::range_rate not Off; detect.py TRACKER_TAP `rate`).
+struct TrackerTapRate {
+  std::int64_t track = 0, detection = 0;  ///< id; index into the update's detections
+  double z = 0.0, predicted = 0.0, innovation = 0.0, s = 0.0, sigma = 0.0;  ///< m/s; s in (m/s)^2
 };
 struct TrackerTap {
   double time = std::numeric_limits<double>::quiet_NaN();
@@ -147,6 +171,7 @@ struct TrackerTap {
   std::vector<std::pair<std::int64_t, std::int64_t>> born;  ///< (new track id, detection index)
   std::vector<std::int64_t> confirmed_now;
   std::vector<TrackerTapTrack> after;    ///< every track after the update, tentative ones too
+  std::vector<TrackerTapRate> rate;      ///< D5: the range-rate updates (written out only with range_rate on)
 };
 
 /// Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal plane.
@@ -214,6 +239,10 @@ struct ClassifyOptions {
   /// `max_fit_rms_bearing`, sonar-4jm): the scatter of measured positions across the line of sight grows with range.
   /// Applies where max_fit_rms is a limit (not below 0). 0: off.
   double max_fit_rms_bearing = 0.0;
+  /// D5 (opt-in; the chain sets it with TrackerOptions::range_rate on): a track that took a range rate whose filter
+  /// velocity is distinguishable from standing still (v^T P^-1 v >= significance^2) at min_speed or more is a mover
+  /// (rule mover_range_rate) where the fit does not make it one (classify.py `range_rate`).
+  bool range_rate = false;
 };
 
 /// The classifier's opt-in tap, per track (classify.py CLASS_EVIDENCE, the same members and rule names): the numbers
@@ -227,6 +256,9 @@ struct ClassEvidence {
   double extent_cells = std::numeric_limits<double>::quiet_NaN();
   std::string rule, kind;
   std::vector<std::string> later;  ///< line, small_extent, bounce, multipath:<parent or none>
+  bool has_rate = false;           ///< D5: ClassifyOptions::range_rate on (the members below are written out)
+  std::int64_t rate_updates = 0;
+  double filter_speed = std::numeric_limits<double>::quiet_NaN(), filter_chi2 = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Mover, static, line, multipath or uncertain, from each track alone (see classify.py). `evidence` (opt-in tap): one

@@ -1637,3 +1637,119 @@ tree `81364e0`, `popoto_12km_large_submerged_tone`, 4 target-free pings, default
 engines): tone path off 1 false detection; on with the lobe notch off 17, all on a lobe's ridge; on
 with the notch (auto) 0. At 3 a ping: off 16; on with the notch 25, of which 3 are the tone's. Not
 shown: more pings, the far-sidelobe case on a real scene.
+
+## D5: tracks use the measured range rate (2026-11-27, branch `d5rate`, issue `sonar-evd4`; opt-in, both engines)
+
+### D5.1 What failed, is uncertain or was not run (read first)
+
+1. **The defect is not shown removed on the scenes that showed it.** `flank_patrol_doppler_tone` (D-241) and
+   `popoto_12km_large_submerged` with alternating pings (D-243) need eigenray simulation that does not finish on this
+   CPU, and no cached records of them exist here. The GPU job's `tone` and `ls12` sub-runs now take a second pass with
+   the option on (section D5.4); not run.
+2. **Free-field forms do not reproduce it** (labelled: `--set fidelity=free_field --set reverberation=[]`, not a
+   measurement of the scenes). `flank_patrol_doppler_tone` free field, 6 pings, both engines: with the tone path on the
+   small vehicle is already a mover from ping 3 (0-based) without the rate (the line fit suffices at its free-field
+   signal), and the submarine too; with `range_rate: update` every class, ping by ping, is the same (the fit's mover
+   rule comes first, so the reported velocities are the fit's too); the wreck static in both. The 12 km scene free field
+   with alternating pings detects its targets on 0 to 2 of 12 pings and tracks none: says nothing either way.
+3. **Where it is shown (ours, synthetic):** the chain on alternating tone and sweep pings of `test_doppler_tone.py`
+   (flank_32, a 1.56 m/s mover at 600 m, 2 s pings): without the rate the one track is static on pings 4 to 7, with it a
+   mover on the same pings, both engines, still platform and under way at 1.5 m/s. The tracker alone (a 2 m/s target at
+   3 km, -1.2 m/s along the line of sight, 12 s pings, range sigma 20 m, bearing 1 degree, rate sigma 0.04 m/s, 20
+   seeds): first a mover on ping 9 to 14 (median 12) without the rate, on ping 4 (min_points) on 18 seeds and 5, 6 on
+   the others with it.
+4. **The 12 km oblique target may stay static even with the rate**: its radial part is 0.50 m/s, below `min_speed`
+   (1.0 m/s), and the rule tests |v|, whose part across the line of sight comes from the positions (about 200 m of
+   bearing error at 12 km). Expected from the design; to be seen on the GPU pass.
+5. **Not measured:** what `update_and_gate` does on a scene (it is tested on a made case: a wrong rate's pair refused, a
+   new track born); false movers from an overconfident covariance on extended targets; the navigation accuracy (the
+   0.05 m/s default is assumed, unconfirmed). The design adds one classifier rule (D5.2: the existing rules cannot read
+   the filter).
+6. Off is the chain as before: 10 of 10 report hashes (processing_seconds removed) equal a build of the base
+   `c77190e`, with the defaults and with `tracker.range_rate: off` said explicitly: `flank_patrol` and `popoto_12km`
+   (3 pings each, defaults), the tone path on `popoto_12km_doppler` (3 pings) and on alternating synthetic pings (8,
+   still and under way), each in both engines.
+
+### D5.2 Design
+
+- **Frame.** The tracker's state is (x, y, vx, vy) in its horizontal, world-fixed frame: x across = east (the record's y),
+  y forward = north (the record's x), metres from the array's centre at the first ping, velocities over ground
+  (`live.py` and `chain.cpp` build each tracker detection there; unchanged).
+- **The measurement** (ours, from the geometry). A detection's `range_rate` is the bank's, relative to the platform,
+  opening positive (a still scatterer reads -v_o . u: `doppler.hpp`). With the track's position p, velocity v, the
+  platform's position o (the array's centre at the ping) and velocity v_o (the mean of the transmit and receive poses'
+  velocities from navigation, the one the bank centres its hypotheses on), all in the tracker's frame:
+
+      z = h(x) + e,   h(x) = u . (v - v_o),   u = (p - o) / |p - o|
+
+  Its Jacobian (an extended Kalman update) is H = [w_t / R, u], R = |p - o|, w = v - v_o, w_t = w - u (u . w) (the
+  part across the line of sight). The vertical is left out: the slant's elevation (cos 0.5 degree = 0.99996) and
+  v_z u_z. The still target seen from a moving platform is the test of the sign: z = -u . v_o, h = -u . v_o at v = 0,
+  no innovation; read as over ground (v_o withheld) the same rate makes the track a mover or breaks it
+  (`test_tracker_range_rate.py`).
+- **Its variance.** sigma^2 = step^2 + sigma_nav^2: `range_rate_step` (the tone bank's hypothesis step c / (4 f T),
+  half the resolution; the parabola refines within it, and the errors measured on the scenes stayed within one step:
+  1.964 to 1.997 against 1.996 m/s at a step of 0.036 m/s, D-241; -0.454 to -0.551 against -0.50 at 0.058, D-243)
+  and `tracker.range_rate_nav_sigma_m_s`, the own ship's velocity error along the line of sight (default 0.05 m/s: an
+  assumed navigation accuracy, unconfirmed; the hardware's goes there; D5's plan asked for better than 0.075). Left
+  out: the track's bearing error times its speed across the line of sight in u (the EKF's position part of H carries
+  it to first order), the bank's quantisation correlation from ping to ping, and the clock (DOPPLER.md D7: 10 ppm is
+  0.0075 m/s at the scale of these numbers).
+- **Which rates are trusted.** Per detection: `Detection.range_rate_sigma` (both engines), NaN = not used. The chain
+  sets it only with `tracker.range_rate` on, for a finite rate and step, and with `range_rate_from: tone` (default)
+  only for `doppler_path` tone or both: the tone bank's. The sweep bank's (`doppler_path` sweep with `mode:
+  sweep_bank`) scatter by several m/s on extended hulls (D-232) and are not a measurement; `range_rate_from: any`
+  takes them too (not recommended). A ping without a finite velocity gives no rate.
+- **The update** (sequential: the noises of the position and the rate are independent). The position update as before,
+  then a scalar EKF update linearised at the updated state: y = z - h(x), S = H P H^T + sigma^2, K = P H^T / S,
+  x += K y, P = (I - K H) P (the position update's own form). A new track takes its first detection's rate too.
+- **Gating** (`update_and_gate`, opt-in within the option, since a wrong gate loses tracks): a (track, detection)
+  pair whose rate innovation at the predicted state has y^2 / S >= gate^2 (the tracker's gate, 4 sigma) is no
+  candidate. S is the rate's marginal; its correlation with the position's innovation is left out (ours). It only
+  vetoes: the association's cost is the position's, as before.
+- **The classifier: why a rule.** Every existing rule reads the line fitted through the track's measured positions
+  (D-157): its speed and sigma come from the positions alone, so a better filter velocity cannot reach them (the
+  filter's state is used today only to move a track shorter than three points). Hence one rule, `mover_range_rate`,
+  active only with the option on: a track that took a rate (`rate_updates` > 0), whose filter velocity v and covariance
+  P (state[2:4], cov[2:4, 2:4]) give v^T P^-1 v >= significance^2 (25: 2 degrees of freedom, 3.7e-6 for a still target
+  if P is right) at |v| >= min_speed and seen on min_seen of its pings (min_points and the fit limit as for any track),
+  is a mover where the fit does not already make it one; its reported velocity, speed and speed sigma are then the
+  filter's (sqrt(u^T P u), u = v / |v|). The static rules are untouched: a still target with the rate keeps the fit's
+  class (tested). Risks: an overconfident P (highlights jumping on a hull, process noise 0.05) gives false movers;
+  `min_speed` reads |v|, whose part across the line of sight comes from positions, so a slow radial component (the 12 km
+  oblique target: -0.50 m/s) alone does not reach min_speed 1.0 m/s.
+- **Taps** (opt-in, both engines; with the option off they are as before): the tracker tap gains `range_rate` and
+  `rate` [{track, detection, z, predicted, innovation, s, sigma}], and with `update_and_gate` each pair `rate_d2`; the
+  classifier's evidence `rate_updates`, `filter_speed`, `filter_chi2` and the rule name `mover_range_rate`.
+- **Unchanged:** no record field, no report-line field (a track's kind, velocity and speed change only with the option
+  on), every default. The tracker and the classifier run on the host in both engines (`detect.py`, `tracker.cpp` with
+  Eigen, called after the detector in `chain.cpp`); no `.cu` file changed.
+- **Keys:** `chain.tracker.range_rate: off | update | update_and_gate`, `range_rate_from: tone | any`,
+  `range_rate_nav_sigma_m_s` (`docs/CONFIGURATION.md`; `sonar_live` `tracker_range_rate*`).
+
+### D5.3 Tests (both engines; each fails on the branch's base `c77190e`: 29 of 29 in the new file)
+
+`tests/python/test_tracker_range_rate.py`: the measurement and its Jacobian (numerical); the closed-form covariance
+(a still target ahead at 3 km, noise-free, no process noise, six pings 12 s apart, range sigma 2 m, rate sigma
+0.06 m/s: the velocity sigma along the line of sight 0.0398 -> 0.0209 m/s, across 1.034 m/s either way, to 1e-9, both
+engines; GoogleTest `Tracker.RangeRateGivesTheClosedFormVelocityVarianceAlongTheLineOfSight` the same); the velocity
+error with noise (40 seeds: more than three times smaller along the line of sight, within 1.5 times the covariance's);
+pings to a mover (D5.1 item 3); a still target stays static (never a mover; the fit's class on every ping); a still
+target from a platform at 1.5 m/s stays static, and a naive form (the rate read as over ground) is wrong on at least
+18 of 20 seeds (measured 20: a mover on 5, uncertain or broken on 6, a static track that lost detections on 9); an
+untrusted rate (NaN sigma, the bank's scatter) changes nothing, bit for bit; `update_and_gate` refuses a wrong rate's
+pair; the taps (the rate's members only with the option on); the two trackers and classifiers equal (1e-8, three modes,
+both associations); off bit for bit as a tracker given no rate; the chain (both engines; alternating pings, still and
+moving platform) static -> mover; the two chains' report lines and taps equal with `update` and `update_and_gate`;
+which rates the chain trusts; the keys (said only when on, refused when wrong, in the binding and in `sonar_live`'s
+options). `test_doppler_gpu_job.py`: the eval tool's switch and the second passes.
+
+### D5.4 The GPU job (not run)
+
+`GPUSONAR_JOB=doppler GPUSONAR_DOPPLER_RUNS=tone,ls12` (tools/gpu_job.sh with GPUSONAR_ORACLES=1 for Bellhop): the `tone`
+sub-run runs `flank_patrol_doppler_tone` as before (-> `doppler_tone_eval.json`) and then again on the same cached
+pings with `--tracker-range-rate update --background 0` (-> `doppler_tone_eval_rate.json`); `ls12` adds the same second
+pass to `popoto_12km_large_submerged_tone` and to the alternating 12 pings of `popoto_12km_large_submerged`
+(`ls12_tone_train_rate.json`, `ls12_tone_alternate12_rate.json`; its default limit 80 -> 110 min). Each JSON gives per
+target the class ping by ping (`kinds`), `first_mover_ping`, and the last ping's speed, true speed and velocity error:
+the before -> after of D-241's small vehicle and D-243's oblique target in one job.

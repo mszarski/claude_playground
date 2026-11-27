@@ -6,7 +6,7 @@ scene's background, and the cost a ping.
     tools/doppler_tone_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0]
                                [--alternate HZ] [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
                                [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...]
-                               [--tone-lobe-notch auto|off]
+                               [--tone-lobe-notch auto|off] [--tracker-range-rate off|update|update_and_gate]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once and its records go through `LiveChain` with the deployment defaults (bearings
@@ -43,6 +43,12 @@ detection's range gate).
 
 `--tone-lobe-notch auto|off`: the tone path's grating-lobe notch (libs/live doppler.hpp step 4b; not given: the chain's
 default, auto). The simulated records do not depend on it: two runs with the same --cache take the same pings.
+
+`--tracker-range-rate`: the tracker's and classifier's use of the measured range rate (D5, `chain.tracker.range_rate`;
+not given: the chain's default, off) on the runs with the tone path on. Two runs with the same --cache take the same
+pings, so a run without it and a run with it are the classes before and after. Per target the JSON (always) gives each
+ping's class of the track nearest the target within the gate (`kinds`), the first ping it is a mover (`first_mover_ping`,
+0-based; None: never), and at the last ping the track's speed, the true speed and the error of its velocity over ground.
 
 Attribution (always, in the JSON): every false detection on the background pings and every detection on the target
 pings that matches no target gets its bearing, range, rate, snr and path; whether its beam has a visible grating lobe
@@ -90,6 +96,7 @@ CACHE = None          # --cache DIR: simulated records kept as container files, 
 BACKEND = "host"      # --backend: the chain's
 SIM_BACKEND = "host"  # --sim-backend: the simulator's (host or cuda)
 LOBE_NOTCH = None     # --tone-lobe-notch: auto | off (None: the chain's default)
+TRACKER_RATE = None   # --tracker-range-rate: off | update | update_and_gate (None: the chain's default, off)
 
 
 def simulate(cfg: dict, tag: str = "scene"):
@@ -161,6 +168,8 @@ def chain_config(engine: str, tone: dict | None, max_rate: float, budget: float 
             cfg["doppler"]["tone_lobe_notch"] = LOBE_NOTCH
         if budget is not None:
             cfg["doppler"]["tone_false_alarms_per_ping"] = budget
+        if TRACKER_RATE is not None:
+            cfg["tracker"] = {"range_rate": TRACKER_RATE}
     if budget is not None:
         cfg["cfar"] = {"false_alarms_per_ping": budget}
     return cfg
@@ -202,7 +211,12 @@ def tone_own(stage, tr, tone_gate: float):
             "range_error_m": float(d["range"] - tr["range"])}
 
 
-def per_target(reports, stages, truths: dict, tone_gate: float) -> dict:
+def nearest_track(rep, tr, gate_m: float):
+    near = [t for t in rep["tracks"] if np.hypot(t["x"] - tr["x"], t["y"] - tr["y"]) < gate_m]
+    return min(near, key=lambda t: np.hypot(t["x"] - tr["x"], t["y"] - tr["y"])) if near else None
+
+
+def per_target(reports, stages, truths: dict, tone_gate: float, velocities: dict | None = None) -> dict:
     out = {}
     for label, rows in truths.items():
         pings = []
@@ -218,7 +232,24 @@ def per_target(reports, stages, truths: dict, tone_gate: float) -> dict:
                       "paths": sorted({p["path"] for p in pings if p["path"]}), "tracked": bool(tracks),
                       "kind": tracks[0]["kind"] if tracks else None,
                       "track_error_m": float(min(np.hypot(t["x"] - tr["x"], t["y"] - tr["y"]) for t in tracks)) if tracks else None}
+        # D5: the class ping by ping (the nearest track within the gate), the first mover, the velocity at the last ping.
+        gate = 200.0 if alone else 100.0
+        near = [nearest_track(rep, row, gate) for rep, row in zip(reports, rows)]
+        kinds = [t["kind"] if t else None for t in near]
+        out[label]["kinds"] = kinds
+        out[label]["first_mover_ping"] = kinds.index("mover") if "mover" in kinds else None
+        v = (velocities or {}).get(label)
+        t = near[-1]
+        out[label]["true_speed_m_s"] = float(np.hypot(v[0], v[1])) if v is not None else None
+        out[label]["track_speed_m_s"] = float(t["speed_m_s"]) if t else None
+        out[label]["velocity_error_m_s"] = (float(np.hypot(t["vx"] - v[0], t["vy"] - v[1])) if t and v is not None else None)
     return out
+
+
+def target_velocities(cfg: dict) -> dict:
+    """Per target label: its velocity over ground (x north, y east, m/s; the report's vx, vy frame)."""
+    return {item["label"]: tuple(float(c) for c in (item.get("velocity") or [0.0, 0.0, 0.0])[:2])
+            for item in cfg.get("scene", []) if item.get("label")}
 
 
 def lobe_geometry(record, tone: dict | None, max_rate: float):
@@ -351,9 +382,11 @@ def main(argv=None) -> int:
     ap.add_argument("--truth-at", default="ping", choices=["ping", "reflection"])
     ap.add_argument("--gate-range-m", type=float, default=60.0)
     ap.add_argument("--tone-lobe-notch", choices=["auto", "off"], help="the tone path's grating-lobe notch (default: the chain's, auto)")
+    ap.add_argument("--tracker-range-rate", choices=["off", "update", "update_and_gate"],
+                    help="D5: the tracker takes the measured range rate, with the tone path on (default: the chain's, off)")
     a = ap.parse_args(argv)
-    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M, LOBE_NOTCH
-    CACHE, BACKEND, SIM_BACKEND, LOBE_NOTCH = a.cache, a.backend, a.sim_backend, a.tone_lobe_notch
+    global CACHE, BACKEND, SIM_BACKEND, GATE_RANGE_M, LOBE_NOTCH, TRACKER_RATE
+    CACHE, BACKEND, SIM_BACKEND, LOBE_NOTCH, TRACKER_RATE = a.cache, a.backend, a.sim_backend, a.tone_lobe_notch, a.tracker_range_rate
     GATE_RANGE_M = a.gate_range_m
     cfg = apply_sets(load_scenario_config(a.scene, expand=False), a.set)
     t0 = time.time()
@@ -373,7 +406,9 @@ def main(argv=None) -> int:
               "channels": int(records[0].samples.n_channels), "tone": tone, "max_range_rate_m_s": a.max_rate, "truth_at": a.truth_at,
               "gate_range_m": GATE_RANGE_M, "engines": {}, "background": {},
               "backend": a.backend, "sim_backend": a.sim_backend, "simulated_s": round(time.time() - t0, 1), "set": a.set,
-              "tone_lobe_notch": a.tone_lobe_notch or "auto (the chain's default)"}
+              "tone_lobe_notch": a.tone_lobe_notch or "auto (the chain's default)",
+              "tracker_range_rate": a.tracker_range_rate or "off (the chain's default)"}
+    vels = target_velocities(eval_cfg)
 
     def store():
         """The result so far (the C++ reports, kept for the comparison, left out)."""
@@ -391,10 +426,10 @@ def main(argv=None) -> int:
                 # window of fewer than three cells); off is the sweep pings alone.
                 use = records[1::2]
                 reports, seconds, stages = run_chain(use, chain_config(engine, t, a.max_rate))
-                targets = per_target(reports, stages, {k: v[1::2] for k, v in truths.items()}, tone_gate)
+                targets = per_target(reports, stages, {k: v[1::2] for k, v in truths.items()}, tone_gate, vels)
             else:
                 reports, seconds, stages = run_chain(records, chain_config(engine, t, a.max_rate))
-                targets = per_target(reports, stages, truths, tone_gate)
+                targets = per_target(reports, stages, truths, tone_gate, vels)
             res[name] = {"targets": targets, "seconds": seconds,
                          "seconds_median_after_first": float(np.median(seconds[1:])) if len(seconds) > 1 else seconds[0],
                          "detections_per_ping": [len(r["detections"]) for r in reports], "reports": reports if engine == "cpp" else None}
@@ -416,6 +451,10 @@ def main(argv=None) -> int:
                 say(f"  {label:14s} detected {s['detected']} of {len(s['pings'])}, paths {s['paths']}, snr "
                     f"{[None if p['snr_db'] is None else round(p['snr_db'], 1) for p in s['pings']]}, rate {[None if v is None else round(v, 3) for v in rr]} "
                     f"(true {round(s['pings'][0]['true_range_rate_m_s'], 3)}), tone margin {tm}; tracked {s['tracked']} ({s['kind']})")
+                ve = s["velocity_error_m_s"]
+                say(f"  {'':14s} classes by ping {s['kinds']}, first mover at ping {s['first_mover_ping']}, speed {s['track_speed_m_s'] and round(s['track_speed_m_s'], 2)} "
+                    f"(true {s['true_speed_m_s'] and round(s['true_speed_m_s'], 2)}), velocity error {ve and round(ve, 2)} m/s"
+                    f"{' (tracker range rate ' + a.tracker_range_rate + ')' if t is not None and a.tracker_range_rate else ''}")
         result["engines"][engine] = res
         store()
     if len(a.engines) == 2:

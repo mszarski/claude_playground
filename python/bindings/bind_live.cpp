@@ -69,6 +69,7 @@ py::dict tracker_tap_dict(const live::TrackerTap& tap, const live::TrackerOption
     x["nearest"] = q.nearest;
     x["x"] = std::vector<double>{q.x, q.y};
     x["s"] = std::vector<double>{q.sxx, q.sxy, q.syy};
+    if (o.range_rate == live::RangeRate::UpdateAndGate) x["rate_d2"] = finite_or_none(q.rate_d2);   // D5
     pairs.append(x);
   }
   for (const auto& [t, j] : tap.took) {
@@ -99,6 +100,22 @@ py::dict tracker_tap_dict(const live::TrackerTap& tap, const live::TrackerOption
   d["born"] = born;
   d["confirmed_now"] = now;
   d["after"] = after;
+  if (o.range_rate != live::RangeRate::Off) {   // D5: only with the rate on, so the tap is as before with it off
+    d["range_rate"] = live::range_rate_name(o.range_rate);
+    py::list rate;
+    for (const auto& r : tap.rate) {
+      py::dict x;
+      x["track"] = r.track;
+      x["detection"] = r.detection;
+      x["z"] = r.z;
+      x["predicted"] = r.predicted;
+      x["innovation"] = r.innovation;
+      x["s"] = r.s;
+      x["sigma"] = r.sigma;
+      rate.append(x);
+    }
+    d["rate"] = rate;
+  }
   return d;
 }
 
@@ -120,6 +137,11 @@ py::list evidence_list(const std::vector<live::ClassEvidence>& ev) {
     x["rule"] = e.rule;
     x["kind"] = e.kind;
     x["later"] = e.later;
+    if (e.has_rate) {   // D5: only with the rate on (classify.py the same)
+      x["rate_updates"] = e.rate_updates;
+      x["filter_speed"] = finite_or_none(e.filter_speed);
+      x["filter_chi2"] = finite_or_none(e.filter_chi2);
+    }
     out.append(x);
   }
   return out;
@@ -144,6 +166,8 @@ py::dict track_dict(const live::Track& t) {
   d["snr"] = t.snr;
   d["cells"] = t.cells;
   d["time"] = t.time;
+  d["cov"] = std::vector<double>(t.cov, t.cov + 16);
+  d["rate_updates"] = t.rate_updates;   // D5
   return d;
 }
 
@@ -611,32 +635,47 @@ void bind_live(py::module_& m) {
 
   py::class_<live::Tracker>(m, "LiveTracker")
       .def(py::init([](double process_noise, double range_sigma, double bearing_sigma, double gate, std::int64_t confirm_hits,
-                       std::int64_t max_misses, double initial_speed_sigma, const std::string& association) {
+                       std::int64_t max_misses, double initial_speed_sigma, const std::string& association, const std::string& range_rate) {
              live::TrackerOptions o{process_noise, range_sigma, bearing_sigma, gate, confirm_hits, max_misses, initial_speed_sigma};
              o.association = live::parse_association(association);
+             o.range_rate = live::parse_range_rate(range_rate);
              return live::Tracker(o);
            }),
            py::arg("process_noise") = 0.05, py::arg("range_sigma") = 2.0, py::arg("bearing_sigma") = 0.017453292519943295,
            py::arg("gate") = 4.0, py::arg("confirm_hits") = 3, py::arg("max_misses") = 3, py::arg("initial_speed_sigma") = 10.0,
-           py::arg("association") = "likelihood")
+           py::arg("association") = "likelihood", py::arg("range_rate") = "off")
       .def("update",
            [](live::Tracker& t, double time, const std::vector<std::tuple<double, double, double, std::int64_t>>& dets,
-              const std::optional<std::vector<std::optional<double>>>& times) {
+              const std::optional<std::vector<std::optional<double>>>& times,
+              const std::optional<std::vector<std::optional<std::vector<double>>>>& rates) {
              if (times && times->size() != dets.size()) throw py::value_error("LiveTracker.update: one time per detection");
+             if (rates && rates->size() != dets.size()) throw py::value_error("LiveTracker.update: one rate entry per detection");
              std::vector<live::Detection> d;
              for (std::size_t i = 0; i < dets.size(); ++i) {
                const auto& [r, b, s, c] = dets[i];
                d.push_back({r, b, s, c});
                // Each detection's own time (D-156); None: the ping's.
                if (times && (*times)[i]) d.back().time = *(*times)[i];
+               // D5: (range_rate, range_rate_sigma, platform_x, platform_y, platform_vx, platform_vy); None: no rate.
+               if (rates && (*rates)[i]) {
+                 const auto& q = *(*rates)[i];
+                 if (q.size() != 6) throw py::value_error("LiveTracker.update: a rate entry is (rate, sigma, px, py, pvx, pvy)");
+                 d.back().range_rate = q[0];
+                 d.back().range_rate_sigma = q[1];
+                 d.back().platform_x = q[2];
+                 d.back().platform_y = q[3];
+                 d.back().platform_vx = q[4];
+                 d.back().platform_vy = q[5];
+               }
              }
              py::list out;
              for (const live::Track* tr : t.update(time, d)) out.append(track_dict(*tr));
              return out;
            },
-           py::arg("time"), py::arg("detections"), py::arg("times") = py::none(),
+           py::arg("time"), py::arg("detections"), py::arg("times") = py::none(), py::arg("rates") = py::none(),
            "Advance to the ping at `time` with detections [(range, bearing, snr_db, cells)]; `times`: each one's own time "
-           "(s; None: the ping's).")
+           "(s; None: the ping's); `rates` (D5): each one's (range_rate, range_rate_sigma, platform_x, platform_y, "
+           "platform_vx, platform_vy) or None.")
       .def("set_tap", &live::Tracker::set_tap, py::arg("on"),
            "The opt-in tap (off by default): each update then leaves what it did in last_tap(); read only.")
       .def("last_tap", [](const live::Tracker& t) -> py::object {
@@ -649,7 +688,7 @@ void bind_live(py::module_& m) {
               std::int64_t min_points, double max_fit_rms, bool linear, double linear_length, double linear_width, bool multipath,
               double max_excess_range, double multipath_bearing, double multipath_velocity, double origin_x, double origin_y,
               std::optional<double> min_mover_cells, std::optional<double> row_snr_db, std::optional<double> time, bool fit_measured,
-              double outlier_alpha, double max_fit_rms_bearing) {
+              double outlier_alpha, double max_fit_rms_bearing, bool range_rate) {
              // None: the rule is off. Given: zero or more (as classify.py refuses a negative or NaN value).
              for (const auto& [name, val] : {std::pair{"min_mover_cells", min_mover_cells}, std::pair{"row_snr_db", row_snr_db}}) {
                if (val && !(*val >= 0.0)) throw py::value_error(std::string(name) + ": zero or more (None switches it off)");
@@ -677,7 +716,7 @@ void bind_live(py::module_& m) {
                                            multipath_velocity, origin_x, origin_y,
                                            min_mover_cells.value_or(-1.0), row_snr_db.value_or(-1.0),
                                            time.value_or(std::numeric_limits<double>::quiet_NaN()), outlier_alpha,
-                                           max_fit_rms_bearing};
+                                           max_fit_rms_bearing, range_rate};
              py::list out;
              for (const auto& c : live::classify_tracks(confirmed, o)) {
                py::dict d;
@@ -702,6 +741,7 @@ void bind_live(py::module_& m) {
            py::arg("multipath_bearing") = 0.05235987755982988, py::arg("multipath_velocity") = 2.5, py::arg("origin_x") = 0.0,
            py::arg("origin_y") = 0.0, py::arg("min_mover_cells") = py::none(), py::arg("row_snr_db") = py::none(),
            py::arg("time") = py::none(), py::arg("fit_measured") = true, py::arg("outlier_alpha") = 0.0, py::arg("max_fit_rms_bearing") = 0.0,
+           py::arg("range_rate") = false,
            "classify_tracks on the confirmed tracks. fit_measured false: through their filtered history instead of the "
            "measured positions (the rule before D-157), for the tests that hold the classifier to its golden. "
            "outlier_alpha, max_fit_rms_bearing (rad): classify.py's (sonar-ljh, sonar-4jm; 0: off).");
@@ -1367,6 +1407,20 @@ void bind_live(py::module_& m) {
           const double s = kw["tracker_ping_interval_s"].cast<double>();
           if (!(std::isfinite(s) && s > 0.0)) throw py::value_error("tracker_ping_interval_s: seconds above 0 (leave the key out for off)");
           o.tracker_ping_interval_s = s;
+        }
+        if (kw.contains("tracker_range_rate")) {             // D5 (opt-in); the classifier's rule follows the tracker's option
+          o.tracker.range_rate = live::parse_range_rate(kw["tracker_range_rate"].cast<std::string>());
+          o.classify.range_rate = o.tracker.range_rate != live::RangeRate::Off;
+        }
+        if (kw.contains("tracker_range_rate_from")) {
+          const auto from = kw["tracker_range_rate_from"].cast<std::string>();
+          if (from != "tone" && from != "any") throw py::value_error("tracker_range_rate_from: tone or any");
+          o.tracker_range_rate_tone_only = from == "tone";
+        }
+        if (kw.contains("tracker_range_rate_nav_sigma_m_s")) {
+          const double s = kw["tracker_range_rate_nav_sigma_m_s"].cast<double>();
+          if (!(std::isfinite(s) && s >= 0.0)) throw py::value_error("tracker_range_rate_nav_sigma_m_s: m/s, finite, zero or more");
+          o.tracker_range_rate_nav_sigma = s;
         }
         if (kw.contains("sbl_max_sources")) o.sbl.max_sources = kw["sbl_max_sources"].cast<std::int32_t>();
         if (kw.contains("gate_fft")) o.gate_fft = kw["gate_fft"].cast<std::int64_t>();
