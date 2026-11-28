@@ -5846,3 +5846,76 @@ owner's decisions that followed are D-256.
   hyperbolic candidate leaves out that the oblique hull is detected on all six pings but not
   tracked (D-260, DM.6); the state documents say so. D-257's "15" and D-258's "29" tests are
   collected counts (11 and 18 `def test_`). The sweep found no error in D-255 to D-261.
+
+### D-262 The 12 km baseline transmits a hyperbolic sweep of 2 s at 197 dB, plain filter (issue sonar-7h6q; branch `hfmbase`; carries out D-256; a default moved)
+
+2026-11-28. Ours unless marked. The account is `docs/tasks/DOPPLER.md` "The baseline becomes the 2 s
+hyperbolic sweep" (HB.1 to HB.4).
+
+- **Worse, first.**
+  - Nothing is seen inside 1.5 km (c T / 2; 0.75 km before). The three elevation scenes
+    (`popoto_elevation_free`, `_shallow`, `_rehearsal`, targets at about 1 km) keep the 1 s linear
+    sweep by stated override, with a test. So the stacked rows' elevation is demonstrated with the
+    short pulse only; no depth at 12 km has been measured.
+  - The builds' own trials moved their near target from 1000 m to 1700 m and two self-checks fail
+    (they are not suite tests): the three-row rehearsal's depth honesty at 1.7 km (28 m, 35 m and
+    none for 60 m true; it fails there with the 1 s sweep too and passes at 1.0 km: the geometry,
+    not the sweep); the one- and two-row "free" range check misses 3 m by about 0.06 m (the
+    leading-edge range sits about 3.0 m early with a 2 s pulse, 1.6 m with 1 s, either sweep). Not
+    loosened. Both are being worked (issues sonar-9035, sonar-8h09).
+  - One self-check's criterion changed, reviewed by the orchestrator: the three-row "free" range
+    check compares with the truth displaced by the hyperbolic sweep's predicted range bias
+    (f_stop T / B per m/s of range rate: 6 m per m/s), keeping the raw error and the bias in its
+    output. The bias is the accepted cost of D-256; the check says so in its text.
+  - A mover's range reads 6 m per m/s off and the plain filter cannot correct it; no range rate.
+  - Gallery on the device, before -> after (job 6b0a8a776c5d61fff18bd237 against D-253's):
+    `popoto_env_winter_sand_200m` the ship's track 2.8 -> 9.3 m from its centre (one more
+    uncertain track); `popoto_env_deep_silt_1000m` confirmed tracks 3 -> 2, the ship's track 301 ->
+    305 m off (wrong before and after); `popoto_12km` 2.1 -> 1.1 m, one multipath track now
+    uncertain; `popoto_env_gravel_30m` 10.0 -> 8.4 m, tracks 2 -> 3. Every named target is tracked
+    as before with the same class. FLS, SAS, flank and pool scenes: numerically as before.
+  - Projector (via secondary, the repository's sheets): 2 s at 197 dB holds with the TR-1075D
+    (201.7 dB at its 30 % rating; 10.6 % duty needed); the TR-1075A has 0.1 dB to spare at 6 kHz;
+    the T335 drops out (10 % duty rating); no sheet states the longest pulse at that drive, and one
+    amplifier's rating names a 1 s burst only. `transmit` stays flagged unconfirmed.
+  - The simulator is 5 to 17 times slower on a CPU with the 2 s sampled pulse; the chain's cost a
+    ping is unchanged.
+- Found and fixed on the way: `range_doppler: ownship | full` applied a factor of 0 on a sampled
+  pulse without saying so; both engines (and the gallery's switch) now refuse it with one message.
+  The multipath-depth stage differed between the engines at 2 of 244 envelope points on the new
+  records; the Python engine now times its window with the C++ arithmetic (agreement 1e-13).
+- What changed: `configs/sonars/popoto_long_range.yaml`, the face builds of one, two and three rows
+  and what is generated from them, and every scene on them. A build spec's
+  `projector.waveform.type` gains `hfm`. Stated linear by their own files: the 0.1 s static and
+  test-vehicle builds, the sea-state-5 alternate (a placeholder: "needs a larger transmitter, not
+  yet identified"), `popoto_12km_large_submerged` (the bank's scene), the three elevation scenes;
+  the trains are unchanged. FLS, SAS and flank records hash identical.
+- Measured with the baseline from its own configuration (job 6b0a8a7854072e8b716cb7a8, deep site, 6
+  pings): sea state 3 every target 6 of 6 (closing +1.28 dB, crossing +5.13, point +6.12, ship
+  +6.26; the oblique hull as D-260's `ss3_hfm2`, +0.73 dB: thin, one seed); sea state 4 the two
+  hulls 0 of 6; sea state 5 nothing held. On the 12 km shelf scene (job 6b0a8a7954072e8b716cb7aa):
+  closing 9.84 dB, oblique 10.0 dB, crossing 12.61 dB, all 6 of 6 and tracked as movers (the 1 s
+  linear sweep: 7.98, 9.22, 11.41 dB, D-243). These three cases are not yet merged into
+  `docs/tasks/doppler_deep12_eval.json` (its tool needs the built module; follow-up).
+- Planner: free field one / two / three rows -1.1 / +1.4 / +2.9 -> +1.9 / +4.4 / +5.9 dB. POP-3:
+  the baseline holds sea state 3 measured (thin), not sea state 4; sea state 5 needs a larger
+  transmitter not yet identified; the summer-mud shadow held by neither.
+- Tests whose expectations changed are listed in HB.4, each derived in place, no tolerance loosened;
+  the tests of the linear sweep and the bank state the 1 s sweep their figures were made with. New:
+  `tests/python/test_hfm_baseline.py`.
+
+### D-263 The merge of D-262 (the ninth batch)
+
+2026-11-28.
+
+- Full GPU suite on the batch's tree (branch `batch9` at `dfe9733`; NVIDIA L4; three shards,
+  Hugging Face jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; the
+  same switches as D-261): **3507 passed, 124 skipped, 4 xfailed, none failed**. Before: 3494
+  passed, 124 skipped (D-261). The suite takes longer with the 2 s pulse: the slowest shard 60
+  minutes of tests (40 before).
+- No merge conflict. The gallery is regenerated on this tree and committed whole.
+- At this tree: 100 scenario files; 176 Python test files (2116 `def test_` functions); GoogleTest
+  219 cases by the sources' count (218 `TEST` and 1 `TEST_P`).
+- Started on this tree, not merged: the depth estimate against range (sonar-9035), the
+  leading-edge range offset (sonar-8h09), a short-range mode (sonar-9ed5): the owner, 2026-11-28,
+  shown the two failing self-checks and the blind range: "do all 3".

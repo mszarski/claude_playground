@@ -285,7 +285,10 @@ REQUIREMENT_BUILD = "popoto_face_3x32"
 # its own build, at sea state 5. The margins are read from the trade study's transmit grid and the alternate's own plan, not typed.
 REQUIREMENT_SEA_STATE_OWNER = ("2026-11-27", "Make it sea state 5 but have that as an alternate and the baseline is sea state 3 (i.e. for testing and "
                                "prototyping, so the first design end to end can be ss3)")
-REQUIREMENT_DESIGNS = {"baseline": {"build": "popoto_face_3x32", "option": "1 s 197 dB", "sea_state": 3},
+# The baseline's transmit option is the shipped one: since D-256 (the owner, 2026-11-28) a hyperbolic sweep of 2 s at 197 dB
+# (configs/builds/popoto_face_3x32.yaml; until then 1 s at 197 dB, linear). The trade study's grid is waveform-blind, so its
+# `2 s 197 dB` cells are this baseline's at zero radial speed.
+REQUIREMENT_DESIGNS = {"baseline": {"build": "popoto_face_3x32", "option": "2 s 197 dB", "sea_state": 3},
                        "alternate": {"build": "popoto_face_3x32_ss5", "option": "4 s 200 dB", "sea_state": 5}}
 SEA_STATE_SITE = "deep_no_bottom_return_sea_state_5"        # the illustrative site the alternate is for
 
@@ -378,10 +381,20 @@ def _deep12():
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def sweep_word(d: dict) -> str:
+    """'hyperbolic' or 'linear': the sweep of a derived build (its sonar's `transmit.waveform`)."""
+    w = d["sonar_config"]["transmit"]["waveform"]
+    return "hyperbolic" if (w.get("type") == "sampled" and w.get("source") == "hfm") else "linear"
+
+
 def measured_words(a: dict) -> str:
     """'**fails** for `closing` 0 of 6, ...; passes `crossing` 6 of 6, ...' of one design's measured acceptance."""
     bad = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "FAIL"]
     good = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "PASS"]
+    if not bad and all(lb in a["targets"] for lb in ("closing", "oblique")):
+        hulls = " / ".join(f"{a['targets'][lb]['margin_db']:+.2f}" for lb in ("closing", "oblique"))
+        return (f"holds every target ({', '.join(good)}), the two resolved hulls by {hulls} dB (closing / oblique; one seed: **thin**)"
+                + (f" [measured as `{a['case']}`, the same transmission, before the default moved]" if a.get("measured_as") else ""))
     return ("**fails** for " + ", ".join(bad) + "; " if bad else "") + "passes " + (", ".join(good) or "nothing")
 
 
@@ -394,7 +407,7 @@ def designs_text(X: dict) -> str:
     def m(d, k="margins_db"):
         return f"`{c1}` {d[k][c1]:+.1f} dB, `{c2}` {d[k][c2]:+.1f} dB"
     return (f"**By sea state (the owner, {REQUIREMENT_SEA_STATE_OWNER[0]}: \"{REQUIREMENT_SEA_STATE_OWNER[1]}\"; D-255)**: the **baseline** "
-            f"(`{b['build']}`, the shipped transmitter, {b['option']}) holds both classes at 12 km at the deep site with the {b['bubble_law']} bubble law up to sea state {b['sea_state']} "
+            f"(`{b['build']}`, the shipped transmitter, {b['option']}, a hyperbolic sweep with the plain filter since D-256) holds both classes at 12 km at the deep site with the {b['bubble_law']} bubble law up to sea state {b['sea_state']} "
             f"({m(b)} at sea state {b['sea_state']}; at sea state {b['sea_state'] + 1}: {m(b, 'next_sea_state_margins_db')}); the **alternate** for sea state {a['sea_state']} "
             f"(`{a['build']}`, the same face with {a['option']}) holds both at sea state {a['sea_state']} ({m(a)}, its own plan at `{SEA_STATE_SITE}`), "
             "each for an echo with no radial speed (`docs/design/popoto_trade_study.md` sections 0 and 0a; ours, illustrative sites, assumed target strengths)."
@@ -402,9 +415,11 @@ def designs_text(X: dict) -> str:
                "ours, one seed, 6 pings; held: detected on half the pings or more): the planner's margins hold for an unresolved, non-moving target (the +25 dB point), not for the "
                f"class's hull whose five highlights resolve in range; the baseline at sea state {b['sea_state']} {measured_words(b['measured'])}; the alternate as configured (linear, plain filter) "
                f"at sea state {a['sea_state']} {measured_words(a['measured'])}"
-               + "".join(f"; {o['what'].replace('the alternate' + chr(39) + 's energy, ', '')}: {measured_words(o)}" for o in a.get("measured_other_filters", {}).values()) + "."
+               + "".join(f"; {o['what'].replace('the alternate' + chr(39) + 's energy, ', '')}: {measured_words(o)}" for o in a.get("measured_other_filters", {}).values())
+               + ". **Sea state 5 needs a larger transmitter, not yet identified** (the owner, 2026-11-28, D-256): the alternate build is a placeholder and sea state 5 is "
+               "not claimed as met; sea state 4 is not held by the baseline (the candidate at sea state 4, below)."
                if b.get("measured") and a.get("measured") else "")
-            + (" **Candidates measured** (opt-in cases, `docs/tasks/DOPPLER.md` DM.5 and DM.6; no configuration changed: the waveform is the owner's choice): "
+            + (" **Candidates measured** (opt-in cases, `docs/tasks/DOPPLER.md` DM.5 and DM.6; the owner chose the hyperbolic 2 s at 197 dB as the baseline, D-256): "
                + "; ".join(f"{v['what']}: " + (("every target held, the resolved hulls by " + " / ".join(f"{v['targets'][lb]['margin_db']:+.1f}" for lb in ("closing", "oblique")) + " dB (closing / oblique; one seed)")
                           if v["accepted"] else measured_words(v)) for v in X["designs"]["candidates"].values()) + "."
                if X["designs"].get("candidates") else ""))
@@ -492,7 +507,7 @@ def twelve_km() -> list:
     else:
         whom = "The per-site figures are pending (`docs/design/popoto_depth_planner.json` or `popoto_trade_study.json` is missing)."
     L.append("The owner: \"What does it look like for popoto at 12km though. Need that design\". This section is self-contained: what the system that detects at 12 km is, and what it can and cannot tell you there.\n"
-             + whom + f" Everything is for the full face ({d3['band_hz'][0] / 1e3:g}–{d3['band_hz'][1] / 1e3:g} kHz, a {d3['pulse_s']:g} s sweep, "
+             + whom + f" Everything is for the full face ({d3['band_hz'][0] / 1e3:g}–{d3['band_hz'][1] / 1e3:g} kHz, a {d3['pulse_s']:g} s {sweep_word(d3)} sweep (D-256), "
              f"{d3['source_level_db']:g} dB re 1 µPa at 1 m, rows of the long module, outer rows {d3['elevation']['baseline_m']:g} m apart).\n")
     if X:
         L.extend(twelve_km_sites_table(X))
@@ -670,7 +685,7 @@ def twelve_km() -> list:
                  + ("Decimate-first timings: `docs/design/popoto_stage2.json`." if T.get("stage2") else "Timings with the decimate-first stage: **pending** (`popoto_stage2.json`). Raw full-rate pings have not been run on a GPU."))
     L.append("\n**What the earlier builds reach instead** (noise-limited, ship / small): " + "; ".join(
         f"`{n}`: {_km(build(n)[2]['reach_ship_m'])} / {_km(build(n)[2]['reach_small_m'])} km" for n in ("popoto_testauv_1x32", "popoto_static_2x32", "popoto_static_3x32"))
-             + f". They use a {build('popoto_testauv_1x32')[1]['pulse_s']:g} s pulse (10 dB less processing gain than 1 s) for short-range trials; the static array with the face's 1 s pulse has the face's reach. No projector is chosen for them either.\n")
+             + f". They use a {build('popoto_testauv_1x32')[1]['pulse_s']:g} s linear sweep ({10.0 * np.log10(d3['pulse_s'] / build('popoto_testauv_1x32')[1]['pulse_s']):.0f} dB less energy than the face's {d3['pulse_s']:g} s at the same level) for short-range trials. No projector is chosen for them either.\n")
     L.append("Scenarios and files for this point: `popoto_12km` (one row), `popoto_12km_2row` with `configs/deploy/popoto_face_2row.yaml`, `popoto_12km_3row` with `configs/deploy/popoto_vehicle_elevation.yaml`; "
              "`tests/python/test_buildspec.py` runs the stacked-row ones through both engines (image-source paths always; Bellhop when present).\n")
     return L

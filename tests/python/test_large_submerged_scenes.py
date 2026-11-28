@@ -57,6 +57,9 @@ def test_the_sweep_scene_is_popoto_12km_with_the_targets_replaced():
     a, b = load_scenario_config(SWEEP, expand=False), load_scenario_config("popoto_12km", expand=False)
     for c in (a, b):
         c.pop("name"), c.pop("scene"), c.pop("environment_overrides")
+    # D-256: popoto_12km's sonar sends the 2 s hyperbolic sweep since; this scene (the bank's) keeps the 1 s linear sweep it was
+    # made with, stated in it: that is the one other difference
+    assert a["sonar_overrides"].pop("transmit") == {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}
     assert a == b
 
 
@@ -66,6 +69,7 @@ def test_the_tone_scene_is_the_sweep_scene_with_a_tone_above_the_band():
     popoto_12km_doppler); the chain's tone keys come from the segment table."""
     a, b = copy.deepcopy(load_scenario_config(TONE, expand=False)), copy.deepcopy(load_scenario_config(SWEEP, expand=False))
     wave = a["sonar_overrides"].pop("transmit")["waveform"]
+    b["sonar_overrides"].pop("transmit")              # D-256: the sweep scene states its 1 s linear sweep (the train keeps that sweep's energy)
     for c in (a, b):
         c.pop("name"), c.pop("environment_overrides")
     assert a == b

@@ -5857,8 +5857,65 @@
  },
  "acceptance": {
   "baseline": {
+   "case": "ss3_hfm2",
+   "what": "the baseline (shipped since D-256: hyperbolic 2 s, 197 dB, plain filter) at sea state 3",
+   "targets": {
+    "closing": {
+     "verdict": "PASS",
+     "detected": 6,
+     "pings": 6,
+     "margin_db": 1.2813805865,
+     "predicted_db": 4.448899461899565,
+     "class": "large_submerged"
+    },
+    "oblique": {
+     "verdict": "PASS",
+     "detected": 6,
+     "pings": 6,
+     "margin_db": 0.7262704423333334,
+     "predicted_db": 5.779687874898412,
+     "class": "large_submerged"
+    },
+    "crossing": {
+     "verdict": "PASS",
+     "detected": 6,
+     "pings": 6,
+     "margin_db": 5.131767452999999,
+     "predicted_db": 5.7835526243480375,
+     "class": "large_submerged"
+    },
+    "ship": {
+     "verdict": "PASS",
+     "detected": 6,
+     "pings": 6,
+     "margin_db": 6.260549536666667,
+     "predicted_db": 11.950993575223826,
+     "class": "ship"
+    },
+    "point": {
+     "verdict": "PASS",
+     "detected": 6,
+     "pings": 6,
+     "margin_db": 6.123433895000001,
+     "predicted_db": 5.797361510988152,
+     "class": "large_submerged"
+    }
+   },
+   "accepted": true,
+   "measured_as": "ss3_hfm2: the same transmission as ss3_baseline (the shipped sonar), measured as a candidate before the default moved (DOPPLER.md DM.6); ss3_baseline itself is not run yet",
+   "predicted_before_run": {
+    "bracket_verdict_resolved_hulls": "held",
+    "point_predicted_margin_db": 5.7979315109881515,
+    "resolved_hulls_held_measured": true,
+    "single_listed_projector": true,
+    "blind_range_m": 1500.0,
+    "duty": 0.1056338028169014,
+    "range_bias_m_per_m_s": 6.0
+   }
+  },
+  "former_baseline": {
    "case": "ss3_lfm1",
-   "what": "the baseline (shipped: 1 s, 197 dB, linear, plain filter) at sea state 3",
+   "what": "the former baseline (1 s, 197 dB, linear, plain filter; shipped until D-256) at sea state 3",
    "targets": {
     "closing": {
      "verdict": "FAIL",

@@ -46,7 +46,7 @@ from gpusonar import elevation  # noqa: E402
 
 KINDS = ("free", "shallow", "rehearsal", "passing", "submerged", "passive", "stream")
 CRITERIA = {
-    "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate; "
+    "free": "every target: range within 3 m (of the truth displaced by a hyperbolic sweep's predicted range bias, f_stop T / B per m/s of range rate: D-256), bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate; "
             "rows, on every ping: the true depth within two of the depth's stated sigma, and the multipath term of that sigma no more than 3 m + 0.3% of range (nothing shares the range cell in free field)",
     "shallow": "the target: the detection's first arrival within 6 m of the target's range (a detection is the direct echo and the bounces behind it, reported at their energy-weighted range: "
                "that range and the detection's extent are recorded, not judged), bearing within 1 deg; rows, on every ping: the true depth within two of the depth's stated sigma "
@@ -264,9 +264,14 @@ def _nearest(report, target, first_arrival=False):
     return (min(near or hits, key=lambda x: abs(_range_of(x, first_arrival) - rng))), own, rng
 
 
-def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tolerance=3.0, first_arrival=False):
+def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tolerance=3.0, first_arrival=False, bias_per_m_s=0.0, own_velocity=None):
     """Errors of the detection nearest one target, and whether they pass. `first_arrival`: the range checked is the
-    detection's first arrival (`_range_of`); the error of its energy-weighted range and its extent are kept beside it."""
+    detection's first arrival (`_range_of`); the error of its energy-weighted range and its extent are kept beside it.
+    `bias_per_m_s` (s; D-256): a hyperbolic sweep with the plain filter reads an echo of range rate r (opening positive)
+    displaced by r x f_stop T / B (gpusonar.doppler.hfm_range_factor; 6 m per m/s at 2 s, 4-6 kHz), which the chain cannot
+    correct (it gives no range rate, and range_doppler is refused for a sampled pulse): the range is checked against the
+    truth displaced by that predicted bias, from the still target's range rate seen from the platform moving at
+    `own_velocity`; the bias and the raw error are both kept. 0 (a linear sweep): as before."""
     det, own, rng = _nearest(report, target, first_arrival)
     if det is None:
         return {"found": False, "ok": False}
@@ -274,7 +279,12 @@ def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tole
     out = {"found": True, "range_error_m": _range_of(det, first_arrival) - rng, "bearing_error_deg": det["bearing_deg"] - bearing, "snr_db": det["snr_db"]}
     if first_arrival:
         out["mean_range_error_m"], out["extent_m"] = det["range_m"] - rng, det.get("extent_m")
-    ok = abs(out["range_error_m"]) <= range_tolerance and abs(out["bearing_error_deg"]) <= 1.0
+    bias = 0.0
+    if bias_per_m_s and own_velocity is not None:
+        u = (np.asarray(target, dtype=float) - own) / rng
+        bias = float(bias_per_m_s * -(np.asarray(own_velocity, dtype=float) @ u))
+        out["predicted_range_bias_m"] = bias
+    ok = abs(out["range_error_m"] - bias) <= range_tolerance and abs(out["bearing_error_deg"]) <= 1.0
     if rows > 1:
         true_el = float(np.degrees(np.arcsin((own[2] - target[2]) / rng)))
         out["true_depth_m"], out["true_elevation_deg"] = float(target[2]), true_el
@@ -292,6 +302,16 @@ def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tole
             ok = ok and out["depth_error_m"] is not None and abs(out["depth_error_m"]) <= 3.0 + (rng * np.sin(np.radians(allowance_deg)) if allowance_deg else 0.003 * rng)
     out["ok"] = bool(ok)
     return out
+
+
+def _hfm_bias_per_m_s(spec: dict) -> float:
+    """f_stop T / B (s) for a build whose pulse is a hyperbolic sweep (D-256), else 0: what `_check_target` displaces the truth by."""
+    wf = spec["projector"]["waveform"]
+    if wf.get("type") != "hfm":
+        return 0.0
+    from gpusonar import doppler as dop
+    f_lo, f_hi = (float(x) for x in spec["projector"]["band_hz"])
+    return float(dop.hfm_range_factor(f_lo, f_hi, float(wf["duration_s"])))
 
 
 DEPTH_SIGMAS = 2.0      # a depth is honest when the truth lies within this many of its own stated sigma
@@ -450,7 +470,8 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                             # With boundaries a detection is a cluster of the direct echo and its first bounces, a few metres deep. Range and bearing
                             # are checked here and, in free field, the depth against the truth to 3 m + 0.3 % of the range.
                             e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") and not bounded else 1, 0.0, sign, range_tolerance=6.0 if bounded else 3.0,
-                                                          first_arrival=bounded)
+                                                          first_arrival=bounded, bias_per_m_s=_hfm_bias_per_m_s(spec),
+                                                          own_velocity=sc["platform"].get("velocity"))
                                             for t in truth["targets"]]
                             e["ok"] = all(t["ok"] for t in e["targets"])
                             if truth.get("check_depth") and rows > 1:
@@ -490,8 +511,12 @@ def _stream_test(spec: dict) -> dict:
     over = {"receive": {"window": {"range": [r0, r0 + 60.0]}}}
     sonar = SonarModel.load(n["sonar"], over)
     rng = np.random.default_rng(3)
+    # Pings 3 s apart, or (a pulse long enough that the window, which closes 2 r / c + T after the trigger, runs past 2.5 s: the
+    # 2 s hyperbolic sweep of D-256 closes it at 4.2 s) the next whole second after the window closes, plus one.
+    t_close = 2.0 * (r0 + 60.0) / 1500.0 + float(spec["projector"]["waveform"]["duration_s"])
+    interval = 3.0 if t_close < 2.5 else float(np.ceil(t_close)) + 1.0
     recs = [simulate_ping(sonar, make_pose(position=(0.0, 0.0, 10.0)), Scene().add_points([[20.0, r0 + 30.0, 12.0]], target_strength_db=10.0), environment={"sound_speed": 1500.0},
-                          sequence=i, time_ns=int(3e9 * i), noise_rms=1e-5, rng=rng, adc=False) for i in range(2)]
+                          sequence=i, time_ns=int(interval * 1e9 * i), noise_rms=1e-5, rng=rng, adc=False) for i in range(2)]
     n_ch = recs[0].samples.n_channels
     lsb = recs[0].metadata.adc_full_scale / 2 ** 23
 
@@ -503,7 +528,7 @@ def _stream_test(spec: dict) -> dict:
 
     from gpusonar.sources.flank_stream import block_samples_for
     block = block_samples_for(n_ch)                             # the stream's payload budget, whatever the channel count
-    emulator = FlankBoardEmulator(recs, 3.0, block_samples=block)
+    emulator = FlankBoardEmulator(recs, interval, block_samples=block)
     blocks = list(emulator.blocks())
     out = {"channels": n_ch, "boards": len(sonar.boards), "block_samples": block, "block_bytes": len(blocks[0])}
     assembler = PingAssembler(sonar)

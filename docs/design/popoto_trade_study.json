@@ -116491,7 +116491,7 @@
     "pulse_s": 1.0,
     "source_level_db": 197.0,
     "energy_db": 197.0,
-    "shipped": true,
+    "shipped": false,
     "paired": false,
     "costs": {
      "blind_range_m": 750.0,
@@ -116569,7 +116569,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Neptune T335 (198.5 dB at its rated drive, no cavitation statement on its sheet); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": true
    },
    {
     "id": "2 s 194 dB",
@@ -116649,7 +116650,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 10 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 9 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "1 s 200 dB",
@@ -116723,7 +116725,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 29 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "2 s 197 dB",
@@ -116731,7 +116734,7 @@
     "pulse_s": 2.0,
     "source_level_db": 197.0,
     "energy_db": 200.01,
-    "shipped": false,
+    "shipped": true,
     "paired": false,
     "costs": {
      "blind_range_m": 1500.0,
@@ -116803,7 +116806,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "1 s 203 dB",
@@ -116870,7 +116874,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 201.7 dB at the rating that covers 6 % duty: 1.3 dB short); it would need 2 x Massa TR-1075D in phase (197.0 dB each against 201.7 dB at its rated drive; each free of cavitation below 18 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "2 s 200 dB",
@@ -116944,7 +116949,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 29 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "4 s 197 dB",
@@ -117024,7 +117030,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 18 m by its maker); Massa TR-1075A (197.1 dB at its rated drive, free of cavitation below 17 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "2 s 203 dB",
@@ -117091,7 +117098,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 201.7 dB at the rating that covers 11 % duty: 1.3 dB short); it would need 2 x Massa TR-1075D in phase (197.0 dB each against 201.7 dB at its rated drive; each free of cavitation below 18 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "4 s 200 dB",
@@ -117165,7 +117173,8 @@
       "words": "Massa TR-1075D (201.7 dB at its rated drive, free of cavitation below 29 m by its maker)",
       "status": "via secondary (the sheets as read in projector_selection.md; tools/projector_candidates.py)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "8 s 197 dB",
@@ -117234,7 +117243,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 197.0 dB at the rating that covers 32 % duty: 0.0 dB short); it would need 2 x Massa TR-1075D in phase (191.0 dB each against 197.0 dB at its rated drive; each free of cavitation below 4 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "4 s 203 dB",
@@ -117301,7 +117311,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 201.7 dB at the rating that covers 19 % duty: 1.3 dB short); it would need 2 x Massa TR-1075D in phase (197.0 dB each against 201.7 dB at its rated drive; each free of cavitation below 18 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "8 s 200 dB",
@@ -117370,7 +117381,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 197.0 dB at the rating that covers 32 % duty: 3.0 dB short); it would need 2 x Massa TR-1075D in phase (194.0 dB each against 197.0 dB at its rated drive; each free of cavitation below 10 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    },
    {
     "id": "8 s 203 dB",
@@ -117439,7 +117451,8 @@
       "words": "no source identified: no listed unit reaches it across 4-6 kHz at this duty (the nearest, Massa TR-1075D, gives 197.0 dB at the rating that covers 32 % duty: 6.0 dB short); it would need 3 x Massa TR-1075D in phase (193.5 dB each against 197.0 dB at its rated drive; each free of cavitation below 8 m by its maker; 20 log10 N with mutual coupling ignored, projector_selection.md Sec. 3.2's rule)",
       "status": "unconfirmed (no single listed source; the array figure ignores mutual coupling, which an NPS model found 2 dB off in places: projector_selection.md Sec. 3.2)"
      }
-    }
+    },
+    "former_shipped": false
    }
   ],
   "radial_m_s": [
@@ -124152,19 +124165,19 @@
    }
   },
   "requirement": {
-   "1 s 197 dB": "With 1 s 197 dB (4-6 kHz sweep; 197.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 3 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "2 s 194 dB": "With 2 s 194 dB (4-6 kHz sweep; 197.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 3 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "1 s 200 dB": "With 1 s 200 dB (4-6 kHz sweep; 200.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 4 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "2 s 197 dB": "With 2 s 197 dB (4-6 kHz sweep; 200.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 4 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "1 s 203 dB": "With 1 s 203 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "2 s 200 dB": "With 2 s 200 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "4 s 197 dB": "With 4 s 197 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
-   "2 s 203 dB": "With 2 s 203 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
-   "4 s 200 dB": "With 4 s 200 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
-   "8 s 197 dB": "With 8 s 197 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
-   "4 s 203 dB": "With 4 s 203 dB (4-6 kHz sweep; 209.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
-   "8 s 200 dB": "With 8 s 200 dB (4-6 kHz sweep; 209.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
-   "8 s 203 dB": "With 8 s 203 dB (4-6 kHz sweep; 212.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) up to sea state 6 with the apl_1994 bubble law (up to sea state 6 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile."
+   "1 s 197 dB": "With 1 s 197 dB (4-6 kHz sweep; 197.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 3 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "2 s 194 dB": "With 2 s 194 dB (4-6 kHz sweep; 197.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 3 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "1 s 200 dB": "With 1 s 200 dB (4-6 kHz sweep; 200.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 4 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "2 s 197 dB": "With 2 s 197 dB (4-6 kHz sweep; 200.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 3 with the apl_1994 bubble law (up to sea state 4 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "1 s 203 dB": "With 1 s 203 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "2 s 200 dB": "With 2 s 200 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "4 s 197 dB": "With 4 s 197 dB (4-6 kHz sweep; 203.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 4 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at deep_no_bottom_return_sea_state_5, summer_60m_mud_profile.",
+   "2 s 203 dB": "With 2 s 203 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
+   "4 s 200 dB": "With 4 s 200 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
+   "8 s 197 dB": "With 8 s 197 dB (4-6 kHz sweep; 206.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
+   "4 s 203 dB": "With 4 s 203 dB (4-6 kHz sweep; 209.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
+   "8 s 200 dB": "With 8 s 200 dB (4-6 kHz sweep; 209.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 5 with the apl_1994 bubble law (up to sea state 5 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile.",
+   "8 s 203 dB": "With 8 s 203 dB (4-6 kHz sweep; 212.0 dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against `large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) up to sea state 6 with the apl_1994 bubble law (up to sea state 6 without it); at the illustrative sites' own conditions at deep_no_bottom_return, deep_no_bottom_return_sea_state_5, shelf_100m_sand, slope_1000m_silt_profile, winter_200m_sand_profile, not at summer_60m_mud_profile."
   },
   "seconds": 1278.9,
   "waveforms": {

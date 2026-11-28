@@ -343,6 +343,14 @@ LiveChain::LiveChain(const ChainOptions& options)
 
 Report LiveChain::process(PingRecord& record) {
   const auto t_start = std::chrono::steady_clock::now();
+  // D-256: the range-Doppler correction is the linear sweep's coupling (lfm_range_doppler_factor). A sampled pulse (type
+  // Arbitrary: the hyperbolic sweep the long-range baseline sends, a train, a code) has another coupling, or none, that the
+  // record does not say: correcting it as 0 would be silently wrong, so it is refused. live.py the same, word for word.
+  if (opt_.range_doppler != RangeDoppler::Off && record.transmit.waveform.type == WaveformType::Arbitrary) {
+    throw std::invalid_argument(std::string("range_doppler ") + range_doppler_name(opt_.range_doppler) +
+                                ": the record's pulse is a sampled waveform (e.g. a hyperbolic sweep); its range-Doppler coupling is not a linear "
+                                "sweep's and is not corrected: set range_doppler off");
+  }
   Report rep;
   tracker_tapped_ = false;   // the opt-in taps hold this ping's or nothing
   detector_tapped_ = false;

@@ -39,7 +39,10 @@ SAND = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}            # the po
 def scenario(own: float, target: float, rng: float, surface: bool, bottom_z=None, spread=None, noise=False, ts=25.0, seed=3) -> dict:
     """One point target at broadside of the long-range row, straight rays; `surface` False: free field."""
     cfg = {"name": "surface_image_check", "sonar": "popoto_long_range", "fidelity": "image_source" if surface else "free_field",
-           "sonar_overrides": {"receive": {"kind": "baseband", "sample_rate": 8.0e3, "window": {"range": [rng - 400.0, rng + 400.0]}}},
+           # D-256: popoto_long_range sends a 2 s hyperbolic sweep since; `echo` compresses with the 1 s linear sweep's replica, so the
+           # check states that sweep (the model is the flat band's; the committed validation was made with it)
+           "sonar_overrides": {"receive": {"kind": "baseband", "sample_rate": 8.0e3, "window": {"range": [rng - 400.0, rng + 400.0]}},
+                               "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}},
            "environment": {"sound_speed": 1500.0, "temperature": 12.0, "salinity": 35.0},
            "platform": {"position": [0.0, 0.0, float(own)], "rpy": [0, 0, 0], "velocity": [0.0, 0.0, 0.0]},
            "pings": {"count": 1, "interval": 20.0},

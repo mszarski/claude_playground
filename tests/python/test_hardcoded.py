@@ -532,9 +532,10 @@ def test_program_block_queue_is_bounded_and_counts_what_it_drops(tmp_path):
 
 # --- tracks do not depend on depth, an elevation pick or an unproven neighbour -------------------------------------------
 
-def _twelve_km_two_rows(pings=6):
+def _twelve_km_two_rows(pings=6, former_sweep=False):
     """popoto_12km_2row by straight rays (runs anywhere), the ship's points 4 dB up, no reverberation: at this level and
-    without a water depth the two rows' elevation is ambiguous on every ping, and its pick changes from ping to ping."""
+    without a water depth the two rows' elevation is ambiguous on every ping, and its pick changes from ping to ping.
+    `former_sweep`: the 1 s linear sweep the scene sent until D-256 (the level above was set for it)."""
     import importlib.util
     from gpusonar.config import load_scenario_config
     from gpusonar.sim import run_scenario
@@ -547,6 +548,8 @@ def _twelve_km_two_rows(pings=6):
     cfg.pop("reverberation", None)
     cfg["scene"][0]["target_strength_db"] += 4.0
     cfg["pings"]["count"] = pings
+    if former_sweep:
+        cfg["sonar_overrides"]["transmit"] = {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}
     return run_scenario(cfg).records
 
 
@@ -554,7 +557,10 @@ def test_an_ambiguous_elevation_does_not_move_the_detection_and_the_mover_keeps_
     """Two rows, a mover at 12 km, the elevation pick jumping between +10, -12 and -30 degrees: placed by the pick, the
     detection moved by hundreds of metres from ping to ping, the track appeared two pings late 300 m off and stayed
     `uncertain`. Now the correction is applied only to an unambiguous elevation, and the report says when it was not."""
-    recs = _twelve_km_two_rows()
+    # D-256: with the shipped 2 s hyperbolic sweep (3 dB more energy) a second, weaker arrival 165 m behind the ship crosses the
+    # threshold (9.5 dB against the ship's 21.3) and the one-detection premise of this test about the ambiguity rule no longer
+    # holds: the test keeps the 1 s linear sweep its level was set for.
+    recs = _twelve_km_two_rows(former_sweep=True)
     chain = load_yaml(ROOT / "configs" / "deploy" / "popoto_face_2row.yaml")["chain"]
     chain.pop("sync", None)
     chain["elevation"] = dict(chain["elevation"], correct_bearing=True, water_depth=None)

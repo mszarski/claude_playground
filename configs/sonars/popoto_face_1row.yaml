@@ -12,7 +12,7 @@ transmit:
   lever_arm: [4, 0, 0]
 receive:
   window:
-    range: [750.0, 12700.0]
+    range: [1500.0, 12700.0]
 hardware:
   boards:
     model: Popoto PMM6081

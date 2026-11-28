@@ -213,6 +213,15 @@ def scene_config(name, args):
     load_scenario_config, _, _, _, _ = _imports()
     from gpusonar.sonar import SonarModel
     cfg = load_scenario_config(name, expand=False)
+    if getattr(args, "set", None):
+        # --set KEY=VALUE (opt-in), as tools/doppler_tone_eval.py takes it: e.g. the 1 s linear sweep popoto_long_range sent until
+        # D-256, which the committed baseline runs on popoto_12km were made with (tools/regen_stale.py states it)
+        import sys as _sys
+        from pathlib import Path as _Path
+        _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+        import doppler_tone_eval
+        cfg = doppler_tone_eval.apply_sets(cfg, args.set)
+        cfg.pop("_sets", None)
     if args.platform_speed is not None:
         cfg.setdefault("platform", {})["velocity"] = [float(args.platform_speed), 0.0, 0.0]
     if getattr(args, "mute", None):
@@ -610,6 +619,7 @@ def main(argv=None):
     m.add_argument("--comb", choices=("whole", "tones"), default="whole",
                    help="a comb segment: correlate with it as sent (whole), or with each tone and sum the powers (tones)")
     m.add_argument("--json", help="write the results here")
+    m.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene first (KEY dotted, VALUE YAML; opt-in)")
     fd = sub.add_parser("fade", help="a train's tone against its sweep: echo energy over transmitted energy per geometry")
     fd.add_argument("scenario")
     fd.add_argument("--target", required=True, help="the scene label to move")

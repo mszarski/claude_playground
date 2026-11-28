@@ -95,14 +95,24 @@ def generator():
     return mod
 
 
-def rehearsal(gen, build, tmp_path):
-    """The build's `rehearsal` trial as the generator's self-test runs it: records, the chain's settings, the truth."""
+def rehearsal(gen, build, tmp_path, former=True):
+    """The build's `rehearsal` trial as the generator's self-test runs it: records, the chain's settings, the truth.
+    `former` (D-256): the trial as it was before the face's pulse became the 2 s hyperbolic sweep, the 1 s linear sweep and the
+    near target at 1000 m (now inside the 1.5 km blind range: the trial moved to 1700 m), stated here, on which the expectations
+    below were measured. The build's own trial at 1700 m with either sweep: tools/build_from_spec.py --self-test."""
+    import copy
     from gpusonar.sim import run_scenario
     spec = bs.load(build)
+    if former:
+        spec = copy.deepcopy(spec)
+        spec["projector"]["waveform"] = {"type": "lfm", "duration_s": 1.0, "window_alpha": 0.1}
+        spec["trial"]["ranges_m"] = [1000.0] + list(spec["trial"]["ranges_m"][1:])
     gen.generate(spec, tmp_path, diagrams=False)
     config.add_config_dir(tmp_path / "configs")
     try:
         sc = bs.scenario_configs(spec)["rehearsal"]
+        if former:
+            sc.setdefault("sonar_overrides", {})["transmit"] = {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}
         truth = sc.pop("truth")
         # Change A (energy truncation rule in the trial scenarios): the generator no longer states `max_order`, so its
         # rehearsal keeps bounces by energy (eight here). These tests are about the three first-order paths sharing the

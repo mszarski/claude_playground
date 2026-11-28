@@ -2154,3 +2154,113 @@ where detected on every ping (`ss3_hfm2` +6.12 against +5.80; `ss5_hfm4p203` +5.
   - the bank in the baseline instead: the deployment file's `chain.doppler: {mode: sweep_bank, combine: cfar}`, which reverses
     D-244's "every Doppler option off" baseline, at 87 hypotheses a beam for 2 s;
   - either way a default result moves: the owner's approval with before -> after first.
+
+## The baseline becomes the 2 s hyperbolic sweep (D-256; 2026-11-28, branch `hfmbase`, issue `sonar-7h6q`)
+
+Appended; nothing above was rewritten. The owner (D-256): the 12 km long-range baseline transmits a hyperbolic sweep of 2 s at
+197 dB rms, 4-6 kHz, plain matched filter, every Doppler option off. Configured in `configs/sonars/popoto_long_range.yaml`
+(POP-3's file) and the face builds `configs/builds/popoto_face_{1,2,3}x32.yaml` (`projector.waveform.type: hfm`, a new type of
+the build spec that writes `{type: sampled, source: hfm}`). Every number below is **ours**; the CPU runs are quick forms.
+
+### HB.1 What got worse, is uncertain or was not run (read first)
+
+1. **Nothing inside 1.5 km.** The window opens at c T / 2 = 1500 m (750 m before). The three row and elevation scenes that
+   showed the stacked rows at about 1 km (`popoto_elevation_free`, `popoto_elevation_shallow`, `popoto_elevation_rehearsal`)
+   now state the former 1 s linear sweep by override, targets kept; the face builds' own simulated trials moved their near
+   target from 1000 m to 1700 m. The stacked rows' elevation at 12 km with the new baseline is shown only by
+   `tests/python/test_buildspec.py` (`popoto_12km_3row`, image-source and Bellhop: detected and tracked on both engines);
+   no depth figure at 12 km was measured here. Whether a short-range mode is wanted (a short pulse for the first
+   kilometres) is a question for the owner.
+2. **A range bias on movers the plain filter cannot remove**: f_stop T / B = 6 m per m/s of range rate (closing reads
+   nearer; `gpusonar.doppler.hfm_range_factor`), against the linear sweep's uncorrected f_c T / B = 2.5 m per m/s at 1 s. The
+   range-Doppler correction (`chain.range_doppler: ownship | full`) is the linear sweep's: on a sampled record it gave a
+   factor of 0, silently. It is now **refused** in both engines (and in `tools/gallery.py --range-doppler`) with the same words.
+   The face builds' self-test checks the range against the truth displaced by the predicted bias (`build_from_spec.py`).
+3. The deep-site acceptance of the baseline is the DM.6 run of `ss3_hfm2` (the same transmission, one seed, 6 pings): every
+   target 6 of 6, the resolved hulls by **+1.28 (closing) and +0.73 dB (oblique): thin**; sea state 4 not held (`ss4_hfm2`).
+   `ss3_baseline` (the shipped sonar with no waveform set) is not run yet: GPU job below.
+4. **The face's own simulated rehearsal fails its depth check at the new near range.** `tools/build_from_spec.py
+   popoto_face_3x32 --self-test`: free field and the board stream pass; the rehearsal (100 m of water, a target at 60 m,
+   now 1.7 km out) gives depths 28, 35 m and none on its three pings where 60 is true (C++ and Python alike): not honest.
+   With the 1 s linear sweep at 1.7 km it gives no depth on any ping; at the former 1000 m with that sweep it is honest
+   (59, 60, 63 m). So it is the geometry the blind range forces, not the sweep. Not fixed; the multipath-sigma tests keep
+   the former 1 km trial by statement (`tests/python/test_multipath_sigma.py`).
+5. **Found on the way and fixed (both engines equal again):** on the 2 s hyperbolic record at 6 km the C++ and Python
+   multipath-depth stages differed at 2 of 244 points of the depth likelihood's envelope (by up to 8, the depth and its
+   sigma equal): the Python window's times were dt (k - n0) where the C++ engine's are -dt n0 + dt k, and the anchor's
+   t0, on a half step when the echo peaks on an odd sample, rounded apart. `multipath_depth.window_times` and `likelihood`
+   now use the C++ engine's arithmetic (the two agree to 1e-13 on the cases tested, 1e-9 before on the linear sweep).
+6. The simulator's cost on this CPU: a sampled 2 s pulse simulates 5 to 17 times slower than the analytic 1 s sweep (the
+   quick forms below; other jobs were running); the chain's cost a ping is unchanged (0.9 to 2.8 s, C++).
+7. Projector (via secondary, the sheets as read in `docs/design/projector_selection.md`): the TR-1075D gives 2 s at 197 dB
+   (201.7 dB at its 30 % rating, 10.6 % duty); the TR-1075A only with 0.1 dB to spare at 6 kHz; the Neptune T335 no longer
+   qualifies (its 10 % duty rating); no sheet states the longest pulse at that drive; one amplifier rating names a 1 s burst.
+
+8. **Tests that now state the 1 s linear sweep** (their levels, windows at about 1 km or stored figures were made with it;
+   each says so in place; no tolerance changed): `test_detector.py` (its long-range sonar at 0.9 to 1.7 km, and the D-158
+   golden lines' generator), `test_doppler_bank.py`, `test_doppler_cfar.py`, `test_doppler_device.py` (the bank), `test_elevation.py`
+   (rows at 1 km), `test_multipath_sigma.py` (the build's former 1 km trial), `test_multipath_depth.py` (three tests tuned to the
+   1 s echo), `test_hardcoded.py` (the ambiguity rule: with the 2 s sweep a second arrival 165 m behind the ship crosses the
+   threshold), `test_reverb_budget.py` (the deep-silt prediction; with the 2 s sweep reverberation over noise is 3.2 dB higher,
+   held), `test_rows_reverberation_gain.py` (the trade study's grid figures), `test_doppler_scenes.py` (the train's base sweep).
+   The 1 s / 2 s difference that shows in `test_elevation.py` when it is not stated: two rows' repeats come 11.7 to 12.8 deg
+   apart on the hyperbolic sweep against 11.5 at 5 kHz (its energy weighs the low end of the band, 1 / f^2).
+
+### HB.2 Before -> after, the long-range scenes (quick forms on this CPU; both engines equal to 1e-6 dB on every case)
+
+`tools/doppler_bank_eval.py SCENE --pings 3 --background 1 --off-only --engines python cpp --truth-at reflection --gate-range-m 250
+--set propagation.max_arrivals=16` (`--chain-set elevation={}` for the stacked rows; no max_arrivals for the image-source scene).
+Margin: the mean over the pings detected (C++). Range error: the detection's range less the truth's at reflection; the
+predicted change is (6 - 2.5) m per m/s x the range rate (the HFM's bias less the linear sweep's coupling).
+
+| Scene (target, range rate) | Detected | Margin (dB) | Range error (m), change predicted | Tracked (class) | False, 1 target-free ping |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_face_2row_shallow` (target, -0.20 m/s) | 3 -> 3 of 3 | 19.45 -> 21.00 | -0.5 -> -1.0 (-0.7) | yes -> yes (uncertain) | 0 -> 0 |
+| `popoto_12km_two_ships` (ship_b, -0.37) | 3 -> 3 | 5.56 -> 7.40 | -0.4 -> -1.6 (-1.3) | yes -> yes | 0 -> 0 |
+| `popoto_12km_two_ships` (ship_a, -0.37) | 3 -> 3 | 8.21 -> 11.28 | -2.1 -> -3.1 (-1.3) | yes -> yes | |
+| `popoto_12km_2row` (ship, -0.37) | 3 -> 3 | 10.51 -> 13.54 | -2.2 -> -3.3 (-1.3) | yes -> yes | 0 -> 0 |
+| `popoto_12km_3row` (ship, -0.37) | 3 -> 3 | 12.33 -> 15.49 | -1.2 -> +0.1 (-1.3) | yes -> yes | 0 -> 0 |
+| `popoto_12km` (ship, -0.37) | 3 -> 3 | 8.08 -> 11.57 | -2.2 -> -3.1 (-1.3) | yes -> yes | 0 -> 0 |
+
+The gallery's long-range scenes, `tools/gallery.py --quick --backend host --no-animation` (4 pings, 16 arrivals), worst first:
+
+| Scene | Detections a ping | Ship tracked; position error (m) | Peak over median, 32 hydrophones (dB) | Classes | Seconds (simulation and chain) |
+| --- | --- | --- | --- | --- | --- |
+| `popoto_env_deep_silt_1000m` | 2,2,3,3 -> 1,1,1,2 | no -> no (a track 301 m off, before and after) | 11.9 -> 11.9 | mover 1, multipath 1 -> mover 1 | 31 -> 205 |
+| `popoto_env_summer_mud_60m` | 0 -> 0 (the summer shadow) | no -> no | 12.4 -> 12.5 | none -> none | 29 -> 248 |
+| `popoto_12km` | 1,2,2,1 -> 1,1,2,3 | yes, 1.3 -> 2.9 | 23.2 -> 28.3 | mover -> mover | 62 -> 362 |
+| `popoto_env_gravel_30m` | 1,1,1,1 -> 1,1,1,1 | yes, 16.9 -> 18.4 | 34.6 -> 35.2 | mover -> mover | 46 -> 355 |
+| `popoto_env_winter_sand_200m` | 4,5,5,5 -> 4,5,5,5 | yes, 8.3 -> 8.6 | 31.2 -> 33.6 | mover 1, multipath 4 -> the same | 41 -> 346 |
+
+Unchanged by construction (their transmit hashed equal before and after: type, band, length, levels, replica, window): the
+scenes that state their own pulse (`popoto_12km_large_submerged` and the three elevation scenes, now by override; the trains
+`popoto_12km_doppler`, `popoto_12km_large_submerged_tone`, `popoto_far_mover_doppler`), every 0.1 s static and test-AUV scene, the
+27.5 kHz Popoto scenes, `popoto_far_mover` (6-10 kHz). FLS, SAS and flank_32: no resolved config changed; one simulated ping each
+of `point_grid_flank_32`, `point_grid_fls_300k`, `point_grid_sas_auv`, `point_grid_popoto_8` hashed equal before and after.
+
+### HB.3 The planner, the trade study, POP-3
+
+- Free field, the ship-sized +25 dB at 12 km (`buildspec.performance`): one row's SNR 14.6 -> 17.6 dB; margin 1 / 2 / 3 rows
+  -1.1 / +1.4 / +2.9 -> **+1.9 / +4.4 / +5.9 dB** (detection probability 0.22 / 0.87 / 0.99 -> 0.94 / 1.00 / 1.00): +3.01 dB of
+  energy, the thresholds 0.019 / 0.014 / 0.012 dB lower for the window from 1.5 km.
+- The depth plan (`docs/design/popoto_depth_planner.json`, three rows, recommended own depth): +3.0 dB at the noise-limited
+  sites, +1.6 to +2.9 at the reverberation-limited ones; held at the same 4 of 6 sites by both classes; at
+  `deep_no_bottom_return_sea_state_5` -4.0 / -3.1 dB (`large_submerged` / `ship`; -7.1 / -6.1 before); `summer_60m_mud_profile`
+  -1.7 / -93.1 (-4.7 / -96.1). Every site equals the trade study's `2 s 197 dB` column within 0.001 dB.
+- The trade study's section 0 marks `2 s 197 dB` as shipped (hyperbolic) and `1 s 197 dB` as shipped until D-256; the grid
+  sections 1 to 6 stay of the 1 s sweep they were run at, now said so; the requirement sentence follows the shipped option
+  (deep site up to sea state 3 with the bubble law, 4 without it).
+- POP-3: `met` true and the status "partly met" as before (the summer mud's shadow is held by neither design); the cell now
+  reads the baseline as measured holding every target at sea state 3 (thin), sea state 4 not held, and the alternate a
+  placeholder needing a larger transmitter not yet identified.
+
+### HB.4 The GPU job (not run here)
+
+- The full gallery: `GPUSONAR_JOB=gallery` (the long-range scenes with the 2 s sweep; `docs/handoff/examples/live_popoto_12km_*`
+  and `docs/figures`).
+- The deep-site acceptance of the baseline from its own config: `GPUSONAR_JOB=doppler GPUSONAR_DOPPLER_RUNS=deep12
+  GPUSONAR_DOPPLER_DEEP12_CASES=ss3_baseline,ss4_baseline,ss5_baseline,ss3_lfm1`, then `tools/deep12_eval.py DIR --json
+  docs/tasks/doppler_deep12_eval.json` (keep the committed rows: merge), which makes `acceptance.baseline` the measured
+  `ss3_baseline` instead of its stand-in `ss3_hfm2`.
+- The main target on the shelf with the baseline: `GPUSONAR_JOB=doppler GPUSONAR_DOPPLER_RUNS=hfm12 GPUSONAR_DOPPLER_HFM12_BASELINE=only`
+  (`popoto_12km_large_submerged`, which keeps its 1 s linear sweep as the bank's scene, with the 2 s hyperbolic sweep set).

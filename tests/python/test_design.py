@@ -59,7 +59,9 @@ def test_derived_numbers_follow_from_the_configs(built):
     # 12 km: one row's SNR against what the chain's own detector needs of it (no typed threshold); the 27.5 kHz array is nowhere near
     from gpusonar import buildspec as bs
     need = {n: bs.detection(bs.derive(bs.load(f"popoto_face_{n}x32")))["threshold_db"] for n in (1, 3)}
-    assert need[3] < far["_eq"].snr(12000.0) < need[1] and D["popoto_array"]["_eq"].snr(12000.0) < 0.0
+    # D-256: the 2 s hyperbolic sweep carries 3 dB more energy than the former 1 s linear sweep, so ONE row now holds the
+    # free-field point too (one row's SNR 17.9 dB here against 15.8 needed; at 1 s it was 14.9 dB, between the three rows' and one row's need)
+    assert need[3] < need[1] < far["_eq"].snr(12000.0) and D["popoto_array"]["_eq"].snr(12000.0) < 0.0
     assert far["array_gain_db"] == pytest.approx(bs.directivity_db(32, 0.15, 5000.0), abs=1e-9)        # from_sonar: the array's gain against isotropic noise
 
 
@@ -184,7 +186,12 @@ def test_design_point_table_per_site_equals_the_planner(built):
     _, _, text = built
     sec = _section(text, "The 12 km design point")
     sites, plans = _sites()
-    trade = _json.loads(_TRADE.read_text())["answers"]["per_class_site"]
+    # D-256: the depth plan is of the shipped 2 s hyperbolic sweep; the trade study's per-site grid (`answers.per_class_site`) was
+    # run at the former 1 s linear sweep, so the plan is held to the transmit grid's own column for the shipped option at each
+    # site's stated conditions (the planner is waveform-blind: the same model, 3 dB more energy, the window from 1.5 km).
+    tx = _json.loads(_TRADE.read_text())["transmit"]
+    shipped = next(o["id"] for o in tx["options"] if o["shipped"])
+    assert shipped == "2 s 197 dB"
     # The section leads with the two named classes, the primary first, and keeps xl_auv as information only.
     head = sec.strip().split("\n\n", 1)[0]
     assert head.index("`large_submerged`") < head.index("`ship`")
@@ -200,7 +207,7 @@ def test_design_point_table_per_site_equals_the_planner(built):
             margin, held, reach_km, depth, _ = rows[(s, c)]
             rec = plans[s]["classes"][c]["recommended"]
             assert margin == pytest.approx(rec["margin_db"], abs=0.051)                         # printed to 0.1 dB
-            assert margin == pytest.approx(trade[c][s]["shipped_3x32"]["A"]["margin_db"], abs=0.051)
+            assert margin == pytest.approx(tx["grid"]["results"][f"{s}__as_stated"][shipped][c]["margin_db"], abs=0.051)
             assert held == ("yes" if rec["margin_db"] >= 0.0 else "no")
             assert reach_km == pytest.approx(rec["reach_m"] / 1e3, abs=0.051)
             assert depth == pytest.approx(rec["own_depth_m"], abs=0.5)
@@ -251,12 +258,14 @@ def test_pop3_states_the_baseline_and_the_alternate_by_sea_state(built):
         "popoto_face_3x32", 3, "popoto_face_3x32_ss5", 5)
     grid = _tx_grid()
     for c in ("large_submerged", "ship"):
-        b = grid["deep_no_bottom_return__ss3__apl_1994"]["1 s 197 dB"][c]["margin_db"]
+        b = grid["deep_no_bottom_return__ss3__apl_1994"]["2 s 197 dB"][c]["margin_db"]      # D-256: the baseline's option (1 s 197 dB before)
         a = grid["deep_no_bottom_return__ss5__apl_1994"]["4 s 200 dB"][c]["margin_db"]
         assert D["baseline"]["margins_db"][c] == pytest.approx(b, abs=1e-9) and b >= 0.0
         assert D["alternate"]["margins_db"][c] == pytest.approx(a, abs=0.05) and a >= 0.0      # the build's own plan against the grid
-        assert D["baseline"]["next_sea_state_margins_db"][c] < 0.0                              # the baseline stops at sea state 3
         assert f"{b:+.1f} dB" in v and f"{a:+.1f} dB" in v
+    # The baseline stops at sea state 3: at sea state 4 not both classes are held (D-256's 2 s: `large_submerged` -0.9 dB,
+    # `ship` +1.1 dB by the planner; with the 1 s pulse both were under 0, -4.0 / -1.9 dB). Measured at sea state 4 the hulls fail.
+    assert min(D["baseline"]["next_sea_state_margins_db"].values()) < 0.0
     assert v.index("the **baseline**") < v.index("up to sea state 3") < v.index("the **alternate** for sea state 5")
     assert "`popoto_face_3x32_ss5`" in v and "4 s 200 dB" in v
 
@@ -309,14 +318,27 @@ def test_pop3_status_says_what_was_measured_for_each_design(built):
     assert r["met"] is True and r["status"] == "partly met"
     m = r["met_text"]
     A = _deep12()["acceptance"]
-    for name in ("baseline", "alternate"):
+    # D-256: the baseline is the 2 s hyperbolic sweep, measured (as the candidate ss3_hfm2, the same transmission) holding every
+    # target on 6 of 6 pings, the resolved hulls by +1.28 / +0.73 dB; the status says so, and that it is thin. Before, the 1 s
+    # linear baseline failed the closing and oblique hulls and the ship (0 of 6 each): that case is now `former_baseline`.
+    base = A["baseline"]
+    assert base["accepted"] and all(v["verdict"] == "PASS" for v in base["targets"].values())
+    part = m.split("baseline (`", 1)[1].split("; alternate (`", 1)[0]
+    assert "measured holds every target" in part and "**thin**" in part and "**fails**" not in part, part
+    for lb in ("closing", "oblique"):
+        assert f"{base['targets'][lb]['margin_db']:+.2f}" in part
+    assert "sea state 4: not held" in part
+    former = A["former_baseline"]
+    assert former["case"] == "ss3_lfm1" and not former["accepted"]
+    for name in ("alternate",):
         bad = [lb for lb, v in A[name]["targets"].items() if v["verdict"] == "FAIL"]
         good = [lb for lb, v in A[name]["targets"].items() if v["verdict"] == "PASS"]
         assert bad and good
-        part = m.split(f"{name} (`", 1)[1].split("; alternate (`" if name == "baseline" else "; held by neither", 1)[0]
+        part = m.split(f"{name} (`", 1)[1].split("; held by neither", 1)[0]
         assert "measured" in part and "**fails**" in part, part
         for lb in bad:
             assert f"`{lb}`" in part.split("**fails**", 1)[1].split("passes", 1)[0], (name, lb)
+        assert "needs a larger transmitter, not yet identified" in part
     assert "at the deep site: yes;" not in m and "at sea state 5: yes," not in m          # no bare pass for what the measurement fails
     v = r["value"]
     assert "**Measured**" in v and "unresolved" in v and "doppler_deep12_eval.json" in v

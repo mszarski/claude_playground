@@ -268,12 +268,12 @@ def test_off_broadside_the_beam_integral_is_the_patterns_own():
 FLANK_TARGETS = {"submarine": ((-600.0, 2900.0, 60.0), 16.0), "small_vehicle": ((900.0, 2000.0, 40.0), -3.0), "wreck": ((1500.0, 3270.0, 98.0), 12.0)}
 
 
-def flank_prediction(name, point, ts, items=None):
+def flank_prediction(name, point, ts, items=None, edit=None):
     """The coverage picture's figures (C++, both engines' class) for a target of `ts` at `point` in a flank scenario as
     the gallery images it: one ping, Hann-weighted beam on the target's bearing (its gain against isotropic noise and its
     beam integral), the scene's source level, noise, absorption, water, bottom and reverberation items; the projector
     0.5 m below the array (flank_32's lever arm). Rays: the coverage defaults. {sinr_db, snr_noise_db, r_over_n_db}."""
-    parts = rb.scenario_parts(name)
+    parts = rb.scenario_parts(name if edit is None else edit(load_scenario_config(name, expand=False)))
     env, sonar = parts["environment"], parts["sonar"]
     c, fc = float(env["sound_speed"]), parts["frequency"]
     own = float(parts["config"]["platform"]["position"][2])
@@ -379,11 +379,11 @@ def test_flank_patrol_margins_predicted_against_the_simulated_data():
     assert np.sqrt(np.mean([(m["margin_db"] - q["sinr_db"]) ** 2 for m, q in rows.values()])) < 3.0
 
 
-def _measured_r_over_n(name, range_m, bearing=0.0):
+def _measured_r_over_n(name, range_m, bearing=0.0, edit=None):
     """Reverberation over noise (dB) on the beam at `bearing` (rad) in the ring about `range_m`: the scene's target-free
     reverberation alone against its noise alone, one ping each."""
-    rev, r, b = flank_map(name, scene=False, noise=False)
-    noise, _, _ = flank_map(name, scene=False, reverberation=False)
+    rev, r, b = flank_map(name, scene=False, noise=False, edit=edit)
+    noise, _, _ = flank_map(name, scene=False, reverberation=False, edit=edit)
     ib, ring = int(np.argmin(np.abs(b - bearing))), _ring(r, range_m)
     return float(10.0 * np.log10(rev[ib, ring].mean() / noise[ib, ring].mean()))
 
@@ -394,9 +394,17 @@ def test_a_noise_limited_scene_is_unchanged_and_the_reverberation_is_the_datas_a
     ship at 10 km): reverberation over noise measured -15.1 dB, predicted -15.4, so the budget with the term is the
     noise-only one within 0.2 dB (0.13 dB). flank_target_10km (100 m over sand, Lambert -27 dB): measured -6.5, predicted
     -5.2; the term costs that target 1.1 dB. Held: each within 1.5 dB of the data."""
-    deep = flank_prediction("popoto_env_deep_silt_1000m", (800.0, 10000.0, 4.0), 18.0)
+    # D-256: the scene's sonar sends the 2 s hyperbolic sweep since; these figures were measured with the 1 s linear sweep it
+    # sent before, which is stated here. With the 2 s sweep reverberation over noise is 10 log10 2 higher (-12.2 dB predicted)
+    # and the term costs 0.25 dB: held below, the prediction only.
+    def former(cfg):
+        cfg.setdefault("sonar_overrides", {})["transmit"] = {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}
+        return cfg
+    deep = flank_prediction("popoto_env_deep_silt_1000m", (800.0, 10000.0, 4.0), 18.0, edit=former)
     assert abs(deep["sinr_db"] - deep["snr_noise_db"]) < 0.2, deep
-    assert abs(_measured_r_over_n("popoto_env_deep_silt_1000m", 10000.0) - deep["r_over_n_db"]) < 1.5
+    assert abs(_measured_r_over_n("popoto_env_deep_silt_1000m", 10000.0, edit=former) - deep["r_over_n_db"]) < 1.5
+    shipped = flank_prediction("popoto_env_deep_silt_1000m", (800.0, 10000.0, 4.0), 18.0)
+    assert shipped["r_over_n_db"] - deep["r_over_n_db"] == pytest.approx(10.0 * np.log10(2.0), abs=0.3), (shipped, deep)
     flat = flank_prediction("flank_target_10km", (0.0, 10000.0, 50.0), 10.0)
     measured = _measured_r_over_n("flank_target_10km", 10000.0)
     print("reverberation over noise at 10 km: deep silt", deep["r_over_n_db"], "flank", measured, flat["r_over_n_db"])

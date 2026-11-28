@@ -69,7 +69,10 @@ from gpusonar.live import LiveChain  # noqa: E402
 from gpusonar.sim import Scene, make_pose, simulate_ping  # noqa: E402
 from gpusonar.sonar import SonarModel  # noqa: E402
 
-SONARS = {"long_range": ("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}}}),
+# D-256: popoto_long_range sends a 2 s hyperbolic sweep since, which the bank refuses: this tool's long-range sonar states the
+# 1 s linear sweep it was measured with (and the bank needs).
+SONARS = {"long_range": ("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}},
+                                               "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}}),
           "flank": ("flank_32", {"receive": {"kind": "baseband", "sample_rate": 16000.0, "window": {"range": [900.0, 1700.0]}}})}
 CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "cell_statistic": "multiscale"}
 NOISE_RMS = 2e-4
