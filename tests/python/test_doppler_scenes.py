@@ -42,6 +42,16 @@ def _sonar(cfg):
     return SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
 
 
+# D-256: popoto_12km's sonar now sends a 2 s hyperbolic sweep; popoto_12km_doppler's train was made from (and keeps the energy
+# of) its former 1 s linear sweep, which the train states whole. The base the train is held to is popoto_12km with that sweep.
+FORMER_SWEEP = {"popoto_12km_doppler": {"transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}}}
+
+
+def _base_sonar(name, base):
+    from gpusonar.config import deep_merge
+    return SonarModel.load(base["sonar"], deep_merge(base.get("sonar_overrides") or {}, FORMER_SWEEP.get(name, {})))
+
+
 @pytest.mark.parametrize("name", list(SCENES))
 def test_a_doppler_scene_is_its_base_scene_with_a_train_of_the_same_energy(name):
     cfg, base = load_scenario_config(name, expand=False), load_scenario_config(SCENES[name], expand=False)
@@ -55,7 +65,7 @@ def test_a_doppler_scene_is_its_base_scene_with_a_train_of_the_same_energy(name)
     if name.endswith("_underway"):
         assert a["platform"].pop("velocity") == [1.5, 0, 0] and b["platform"].pop("velocity") == [0, 0, 0]
     assert a == b
-    sonar, old = _sonar(cfg), _sonar(base)
+    sonar, old = _sonar(cfg), _base_sonar(name, base)
     w = sonar.sampled_waveform
     kinds = [s.kind for s in w.segments]
     assert kinds == ["cw", "gap", "lfm"]

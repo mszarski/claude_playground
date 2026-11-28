@@ -382,6 +382,7 @@ def doppler_range(record, rng, look):
         raise ValueError(f"RANGE_DOPPLER = {RANGE_DOPPLER!r}: one of {RANGE_DOPPLERS}")
     if RANGE_DOPPLER == "off":
         return float(rng)
+    detect.refuse_unmodelled_coupling(record.transmit.waveform, RANGE_DOPPLER)     # D-256: not a linear sweep: refused, not corrected as 0
     g = record.geometry
     v = 0.5 * (np.asarray(g.tx_pose.velocity, dtype=float) + np.asarray(g.rx_pose.velocity, dtype=float))
     return float(rng) + detect.lfm_range_doppler_factor(record.transmit.waveform) * float(v[:2] @ np.asarray(look, dtype=float)[:2])
@@ -392,6 +393,7 @@ def target_doppler(record, origin_yx):
     ownship in the tracker's (y, x) order}; None otherwise."""
     if RANGE_DOPPLER != "full":
         return None
+    detect.refuse_unmodelled_coupling(record.transmit.waveform, RANGE_DOPPLER)
     return {"factor": detect.lfm_range_doppler_factor(record.transmit.waveform), "origin": [float(v) for v in origin_yx]}
 
 

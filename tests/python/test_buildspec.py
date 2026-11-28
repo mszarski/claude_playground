@@ -67,7 +67,8 @@ def test_every_stage_sonar_states_its_own_receive_window():
         got = load_sonar_config(bs.names(spec)["sonar"])["receive"]["window"]["range"]
         assert got == bs.window_range(spec) and got[0] == pytest.approx(0.5 * 1500.0 * spec["projector"]["waveform"]["duration_s"])   # from the blind range
         assert "receive.window" in load_sonar_config(bs.names(spec)["sonar"])["unconfirmed"]        # a choice, flagged
-    assert load_sonar_config("popoto_long_range_3row")["receive"]["window"]["range"] == [750.0, 12700.0]
+    # D-256: c T / 2 = 1500 x 2 / 2 m for the 2 s hyperbolic sweep (750 m with the former 1 s linear sweep)
+    assert load_sonar_config("popoto_long_range_3row")["receive"]["window"]["range"] == [1500.0, 12700.0]
 
 
 # --- specs, validator ---------------------------------------------------------------------------------
@@ -188,7 +189,8 @@ def test_derived_numbers_are_arithmetic_on_the_files():
     d = bs.describe_shipped("popoto_long_range_3row", "popoto_vehicle_elevation")
     assert (d["channels"], d["n_boards"], d["rows"], d["per_row"]) == (96, 12, 3, [32, 32, 32])
     assert d["rate_total_bit_s"] == 96 * 102400 * 24 and d["rate_board_bit_s"] == 8 * 102400 * 24
-    assert d["blind_range_m"] == 750.0 and d["ping_interval_s"] == pytest.approx(2 * 12700 / 1500 + 1.0)
+    # D-256: the 2 s hyperbolic sweep (1 s linear before): blind range c T / 2 = 1500 m (750), ping interval 2 r / c + T
+    assert d["blind_range_m"] == 1500.0 and d["ping_interval_s"] == pytest.approx(2 * 12700 / 1500 + 2.0)
     assert d["samples_per_ping"] == int(np.ceil((d["window_s"][1] - d["window_s"][0]) * 102400)) and d["record_bytes_per_ping"] == 96 * d["samples_per_ping"] * 4
     study = json.loads((ROOT / "docs" / "design" / "popoto_elevation_study.json").read_text())
     pj = study["projector"]
@@ -204,7 +206,7 @@ def test_derived_numbers_are_arithmetic_on_the_files():
     ds = json.loads((ROOT / "docs" / "design" / "direct_sound_study.json").read_text())["popoto_long_range_3row"]["summary"]
     assert d["direct"]["over_full_scale_db"] == pytest.approx(ds["overload_db_nearest"], abs=1e-6) and d["direct"]["over_full_scale_farthest_db"] == pytest.approx(ds["overload_db_farthest"], abs=1e-6)
     assert d["direct"]["hydrophones_overloaded"] == ds["hydrophones_overloaded"] == 96 and d["direct"]["distance_for_full_scale_m"] == pytest.approx(ds["distance_for_no_overload_m"], rel=1e-6)
-    assert d["direct"]["gain_reduction_needed_db"] == pytest.approx(ds["gain_reduction_for_no_overload_db"]) and d["direct"]["min_range_memoryless_m"] == pytest.approx(753.2, abs=0.1)
+    assert d["direct"]["gain_reduction_needed_db"] == pytest.approx(ds["gain_reduction_for_no_overload_db"]) and d["direct"]["min_range_memoryless_m"] == pytest.approx(1503.2, abs=0.1)   # c / 2 (T + farthest / c): 753.2 m at 1 s
     one = bs.describe_shipped("popoto_testauv_1row", "popoto_testauv_1row")
     assert one["elevation"] is None and one["n_boards"] == 4 and one["blind_range_m"] == 75.0
 
@@ -411,7 +413,9 @@ def test_the_budgets_threshold_is_the_deployed_detectors_and_no_gain_is_counted_
     # the 12 km design point: -1.1 / +1.4 / +2.9 dB and 0.22 / 0.87 / 0.99. It was -1.0 / +1.5 / +3.0 and 0.24 / 0.89 / 0.99 while
     # the detector counted its tests with one flat factor: counted as measured (libs/live detector.hpp, kSearchSample) the
     # thresholds are 0.12 to 0.15 dB higher.
-    for p, margin, pd in ((one, -1.1, 0.22), (two, 1.4, 0.87), (three, 2.9, 0.99)):
+    # D-256: the 2 s pulse carries 10 log10 2 = 3.01 dB more energy at the same 197 dB, and the window opening at 1.5 km instead
+    # of 0.75 km lowers the thresholds by 0.019 / 0.014 / 0.012 dB: +1.9 / +4.4 / +5.9 dB and 0.94 / 1.00 / 1.00 (1 s linear: above).
+    for p, margin, pd in ((one, 1.9, 0.94), (two, 4.4, 1.0), (three, 5.9, 1.0)):
         assert p["margin_db"]["ship"][r] == pytest.approx(margin, abs=0.15) and p["detection_probability"]["ship"][r] == pytest.approx(pd, abs=0.03)
     # the short row closer than half a wavelength: 12.9 dB against sea noise, not 10 log 32 (D-103's closed form)
     assert perf["popoto_testauv_1x32"]["gain_isotropic_noise_db"] == pytest.approx(12.9, abs=0.1)

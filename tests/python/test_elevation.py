@@ -42,8 +42,10 @@ def sonar_rows(name=FACE3, window=(900.0, 1100.0), **over):
     if name == NEAR2:
         name = STATIC2
         over = dict(over, array=dict({"layouts": {"two_rows": {"rows": [{"up": -0.15}, {"up": 0.15}]}}}, **over.get("array", {})))
+    # D-256: the face sonars send a 2 s hyperbolic sweep since; these row and elevation tests (made at about 1 km, inside its 1.5 km
+    # blind range) state the 1 s linear sweep they were written with, for every array
     return SonarModel.load(name, {"receive": dict(BASEBAND, window={"range": list(window)}),
-                                  "transmit": {"waveform": {"duration": 1.0}}, **over})
+                                  "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}, **over})
 
 
 def truth(record, rows, target):

@@ -31,7 +31,7 @@ sonar_overrides:
       f_start: 4.0e+3                     # the band the train occupies: the sweep's and the tone above it
       f_stop: 6.6e+3
       source_level_db_rms: null           # derived from source_energy_db (sonar.py)
-      source_energy_db: 196.72            # dB re 1 uPa^2 s at 1 m: popoto_long_range's sweep, all of it
+      source_energy_db: 196.72            # dB re 1 uPa^2 s at 1 m: popoto_long_range's sweep, all of it (its 1 s linear sweep until D-256; the 2 s hyperbolic one since carries 199.73 dB: this train keeps its own)
       segments:
         - {kind: cw, frequency: 6.5e+3, duration: 1.0, window_alpha: 1.0, energy_share: 0.5}
         - {kind: gap, duration: 0.0}

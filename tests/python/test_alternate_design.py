@@ -19,8 +19,10 @@ from gpusonar.config import load_sonar_config, load_yaml  # noqa: E402
 ALT, BASE = "popoto_face_3x32_ss5", "popoto_face_3x32"
 # The fields the alternate names (and nothing else): what it IS (energy), what it is called, and the simulated trial's range moved
 # beyond the 4 s pulse's 3 km blind range.
+# D-256: the baseline's waveform became the 2 s hyperbolic sweep; the alternate, a placeholder, keeps its 4 s LINEAR sweep, stated
+# in its own file, so the waveform's type is now a field the two differ in too.
 SPEC_CHANGES = {("build",), ("title",), ("stage",), ("names", "sonar"), ("names", "deploy"), ("projector", "source_level_db_rms"),
-                ("projector", "waveform", "duration_s"), ("trial", "ranges_m")}
+                ("projector", "waveform", "duration_s"), ("projector", "waveform", "type"), ("trial", "ranges_m")}
 
 
 def tool(name):
@@ -44,7 +46,7 @@ def test_the_alternate_build_changes_only_what_it_names():
     alt, base = load_yaml(ROOT / "configs" / "builds" / f"{ALT}.yaml"), load_yaml(ROOT / "configs" / "builds" / f"{BASE}.yaml")
     assert differences(alt, base) == SPEC_CHANGES
     assert alt["projector"]["source_level_db_rms"] == 200.0 and alt["projector"]["waveform"]["duration_s"] == 4.0
-    assert alt["projector"]["waveform"]["type"] == base["projector"]["waveform"]["type"] == "lfm"      # the shape: to be chosen from deep12
+    assert alt["projector"]["waveform"]["type"] == "lfm" and base["projector"]["waveform"]["type"] == "hfm"      # D-256 (before: both lfm)
     assert alt["projector"]["model"] is None                                                              # no projector is chosen
     assert not [i for i in bs.validate(bs.load(ALT)) if i.level == "error"]
     text = (ROOT / "configs" / "builds" / f"{ALT}.yaml").read_text()
@@ -56,13 +58,17 @@ def test_the_alternate_sonar_and_deployment_differ_from_the_shipped_only_in_name
     alt, base = load_sonar_config("popoto_long_range_3row_ss5"), load_sonar_config("popoto_long_range_3row")
     got = differences(alt, base)
     assert got == {("name",), ("build",), ("transmit", "waveform", "duration"), ("transmit", "waveform", "source_level_db_rms"),
-                   ("receive", "window", "range")}, got
+                   ("receive", "window", "range"), ("transmit", "waveform", "type"), ("transmit", "waveform", "source")}, got   # D-256: type, source
+    assert alt["transmit"]["waveform"]["type"] == "lfm" and alt["transmit"]["waveform"]["source"] is None
     assert alt["transmit"]["waveform"]["duration"] == 4.0 and alt["transmit"]["waveform"]["source_level_db_rms"] == 200.0
     assert alt["receive"]["window"]["range"] == [3000.0, 12700.0]           # opens at the blind range c T / 2
     assert "receive.window" in alt["unconfirmed"] and "transmit" in alt["unconfirmed"]
     a = load_yaml(ROOT / "configs" / "deploy" / "popoto_vehicle_elevation_ss5.yaml")
     b = load_yaml(ROOT / "configs" / "deploy" / "popoto_vehicle_elevation.yaml")
-    assert differences(a, b) == {("source", "sonar"), ("source", "timeout"), ("chain", "coverage", "budget", "source_level_db")}
+    # D-256: and the rows' gain the coverage picture states (3.99 dB for the alternate's window from 3 km, 3.98 for the baseline's from
+    # 1.5 km; both were 3.99 while the baseline's window opened at 0.75 km: the detector's arithmetic over the window, rounded to 0.01 dB)
+    assert differences(a, b) == {("source", "sonar"), ("source", "timeout"), ("chain", "coverage", "budget", "source_level_db"),
+                                 ("chain", "coverage", "reverberation", "rows_gain_db")}
     # the shipped (baseline) files are what the shipped spec generates, and so is the alternate's
     gen = tool("build_from_spec")
     for rel, text in gen.shipped_files().items():

@@ -26,6 +26,8 @@ sonar: popoto_long_range
 fidelity: eigenray
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
+  transmit:
+    waveform: {type: lfm, source: null, duration: 1.0e+0}   # D-256: the shipped sonar sends a 2 s hyperbolic sweep; this is the sweep bank's scene (D4, D-243, DOPPLER.md HFM.8, LS), and the bank takes a linear sweep only, so it keeps the former 1 s linear sweep, stated here (the baseline on this geometry: tools/doppler_gpu_runs.sh hfm12 with GPUSONAR_DOPPLER_HFM12_BASELINE)
 environment: {base: shelf_100m_sand_12c, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   max_range: 13200.0

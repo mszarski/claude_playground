@@ -1,7 +1,13 @@
 # Build spec: the ALTERNATE design for sea state 5 (opt-in; the owner, 2026-11-27, D-255: "Make it sea state 5 but have
 # that as an alternate and the baseline is sea state 3"). The shipped full face (configs/builds/popoto_face_3x32.yaml,
-# the BASELINE: 1 s at 197 dB, 12 km up to sea state 3) with ONLY the transmit energy changed: 4 s at 200 dB.
-# Nothing shipped changes; this file and the files generated from it are new.
+# the BASELINE: since D-256 a hyperbolic 2 s sweep at 197 dB, 12 km up to sea state 3) with ONLY the transmit changed:
+# 4 s at 200 dB, linear.
+#
+# STATUS (the owner, 2026-11-28, D-256): A PLACEHOLDER. Sea state 5 needs a larger transmitter, not yet identified, and is
+# NOT claimed as met. Measured at the deep site at sea state 5 (docs/tasks/DOPPLER.md DM.1, DM.6; ours, one seed) this
+# build as configured (4 s at 200 dB, linear, plain filter) fails the closing and oblique hulls and the ship (0 of 6 each);
+# only 4 s at 203 dB or 8 s at 203 dB (hyperbolic) held the resolved hulls, and no single listed projector gives either.
+# Its linear sweep is stated explicitly here (the shipped base sonar is the hyperbolic sweep since D-256).
 #
 # Why 4 s at 200 dB (docs/design/popoto_trade_study.md section 0, `tools/popoto_trade_study.py --transmit`; ours, model;
 # sites illustrative, target strengths assumed): the least energy a ping that holds `large_submerged` and `ship` at 12 km
@@ -82,7 +88,7 @@ projector:
   amplifier: null
   source_level_db_rms: 200.0         # RMS level, dB re 1 uPa at 1 m: the alternate's 4 s at 200 dB (206 dB re 1 uPa^2 s at 1 m a ping; see the head); not a part's figure
   band_hz: [4000.0, 6000.0]
-  waveform: {type: lfm, duration_s: 4.0, window_alpha: 0.1}   # the shape (lfm, or hfm) to be chosen from the deep12 run
+  waveform: {type: lfm, duration_s: 4.0, window_alpha: 0.1}   # a placeholder (D-256): sea state 5 needs a larger transmitter, not yet identified
   blanking_after_s: null         # recovery of the inputs after the direct sound: NOT KNOWN (a bench measurement)
   position_m: [4.0, 0, 0]        # body frame [along, out, down] from the array's centre: a placeholder
 

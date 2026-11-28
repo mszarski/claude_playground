@@ -2,7 +2,13 @@
 """The deep site at 12 km, measured against the planner (issue sonar-rctz; docs/tasks/DOPPLER.md "Deep site at 12 km").
 
     tools/deep12_eval.py DIR [--json OUT] [--markdown]     # DIR: the deep12_<case>.json of tools/doppler_gpu_runs.sh `deep12`
-    tools/deep12_eval.py --predict ss3_lfm1                 # the planner's figures for one case, nothing measured
+    tools/deep12_eval.py --predict ss3_baseline             # the planner's figures for one case, nothing measured
+    tools/deep12_eval.py --reaccept docs/tasks/doppler_deep12_eval.json   # the acceptance block again from the stored rows
+
+Cases: ss<3|4|5>_baseline is the SHIPPED sonar as it is (since D-256 the hyperbolic 2 s sweep at 197 dB; no waveform is
+set); ss<n>_<lfm|hfm><seconds>[p<level>][_cfar] states its transmission whole (`sets`: type, source, length, level), so a
+linear case stays linear whatever the shipped sonar sends. The former baseline (1 s linear, shipped until D-256) is
+`ss3_lfm1`, kept as a named comparison (`former_baseline`).
 
 For each case (sea state x transmission x filter) and each target of popoto_12km_deep_sea_state_5, beside what the chain
 measured (tools/doppler_bank_eval.py: detected pings, the mean margin over the detected pings, tracked and its class at the
@@ -47,22 +53,35 @@ sys.path.insert(0, str(ROOT / "tools"))
 SCENE = "popoto_12km_deep_sea_state_5"
 CLASS_OF = {"closing": "large_submerged", "oblique": "large_submerged", "crossing": "large_submerged", "point": "large_submerged", "ship": "ship"}
 WAVES = {"lfm1": ("lfm", 1.0, 197.0), "hfm1": ("hfm", 1.0, 197.0), "lfm4p200": ("lfm", 4.0, 200.0), "hfm4p200": ("hfm", 4.0, 200.0)}
-DESIGN = {"lfm1": "baseline (shipped: 1 s, 197 dB)", "lfm4p200": "sea-state-5 alternate (4 s, 200 dB), linear",
+SHIPPED = ("hfm", 2.0, 197.0)       # configs/sonars/popoto_long_range.yaml since D-256 (tests/python/test_hfm_baseline.py holds the two together)
+WF = "sonar_overrides.transmit.waveform"
+DESIGN = {"baseline": "baseline (shipped since D-256: hyperbolic 2 s, 197 dB, plain filter)",
+          "lfm1": "former baseline (1 s, 197 dB, linear; shipped until D-256)", "lfm4p200": "sea-state-5 alternate (4 s, 200 dB), linear",
           "hfm4p200": "sea-state-5 alternate (4 s, 200 dB), hyperbolic", "hfm1": "hyperbolic 1 s, 197 dB"}
 
 
 def parse_case(name: str) -> dict:
     """ss<3|4|5>_<lfm|hfm><seconds>[p<rms level dB>][_cfar] (tools/doppler_gpu_runs.sh `deep12` reads the same form): the pulse
     defaults to the shipped 1 s, the level to its 197 dB; the bank (`_cfar`) takes a linear sweep only."""
+    b = re.fullmatch(r"(ss[345])_baseline", name)
+    if b:
+        wave, T, sl = SHIPPED
+        return {"case": name, "sea_state": int(b.group(1)[2]), "key": "baseline", "wave": wave, "pulse_s": T, "source_level_db": sl,
+                "bank": False, "design": DESIGN["baseline"], "sets": []}
     m = re.fullmatch(r"(ss[345])_((lfm|hfm)([0-9]+)(?:p([0-9]+))?)(_cfar)?", name)
     if not m or (m.group(6) and m.group(3) != "lfm"):
-        raise ValueError(f"deep12 case {name!r}: ss3|ss4|ss5 _ <lfm|hfm><seconds>[p<level>] [_cfar, linear only]")
+        raise ValueError(f"deep12 case {name!r}: ss3|ss4|ss5 _ baseline, or _ <lfm|hfm><seconds>[p<level>] [_cfar, linear only]")
     key, wave, T, sl = m.group(2), m.group(3), float(m.group(4)), float(m.group(5) or 197)
     if T <= 0.0:
         raise ValueError(f"deep12 case {name!r}: the pulse must be longer than 0 s")
     design = DESIGN.get(key) or f"{'hyperbolic' if wave == 'hfm' else 'linear'} {T:g} s, {sl:g} dB"
+    # The transmission stated whole, in tools/doppler_gpu_runs.sh's order (type, source, length, level): the shipped sonar is
+    # no longer the linear sweep (D-256), so a linear case says so and nulls the hyperbolic sweep's `source`.
+    sets = ([f"{WF}.type=lfm", f"{WF}.source=null"] if wave == "lfm" else [f"{WF}.type=sampled", f"{WF}.source=hfm"]) + [f"{WF}.duration={T:.1f}"]
+    if sl != 197.0:
+        sets.append(f"{WF}.source_level_db_rms={sl:.1f}")
     return {"case": name, "sea_state": int(m.group(1)[2]), "key": key, "wave": wave, "pulse_s": T, "source_level_db": sl,
-            "bank": bool(m.group(6)), "design": design}
+            "bank": bool(m.group(6)), "design": design, "sets": sets}
 
 
 _CACHE: dict = {}
@@ -257,7 +276,9 @@ def summarise(folder: Path) -> dict:
             "rows": rows, "background_default_budget": backgrounds} | {"acceptance": None}
 
 
-ACCEPTANCE = {"baseline": ("ss3_lfm1", "the baseline (shipped: 1 s, 197 dB, linear, plain filter) at sea state 3"),
+# name: (case, words[, a case measured with the same transmission, used until the named case itself is run])
+ACCEPTANCE = {"baseline": ("ss3_baseline", "the baseline (shipped since D-256: hyperbolic 2 s, 197 dB, plain filter) at sea state 3", "ss3_hfm2"),
+              "former_baseline": ("ss3_lfm1", "the former baseline (1 s, 197 dB, linear, plain filter; shipped until D-256) at sea state 3"),
               "alternate": ("ss5_lfm4p200", "the sea-state-5 alternate as configured (4 s, 200 dB, linear, plain filter) at sea state 5"),
               "alternate_bank": ("ss5_lfm4p200_cfar", "the alternate's energy, linear with the bank (combine: cfar) at sea state 5"),
               "alternate_hfm": ("ss5_hfm4p200", "the alternate's energy, hyperbolic, plain filter, at sea state 5"),
@@ -276,14 +297,20 @@ def acceptance(S: dict) -> dict:
     form's loss); `accepted` only when every hull and the ship pass."""
     R = {(r["case"], r["target"]): r for r in S["rows"]}
     out = {}
-    for name, (case, words) in ACCEPTANCE.items():
+    for name, (case, words, *same) in ACCEPTANCE.items():
+        stand_in = None
         if not any(k[0] == case for k in R):
-            continue
+            if not same or not any(k[0] == same[0] for k in R):
+                continue
+            stand_in, case = case, same[0]
         t = {lb: {"verdict": R[(case, lb)]["verdict"], "detected": R[(case, lb)]["measured_detected"], "pings": R[(case, lb)]["measured_pings"],
                   "margin_db": R[(case, lb)]["measured_margin_db"], "predicted_db": R[(case, lb)]["planner_predicted_mover_db"],
                   "class": R[(case, lb)]["planner_class"]} for lb in HIGHLIGHTS if (case, lb) in R}
         out[name] = {"case": case, "what": words, "targets": t,
                      "accepted": all(v["verdict"] == "PASS" for lb, v in t.items() if lb != "point")}
+        if stand_in:
+            out[name]["measured_as"] = (f"{case}: the same transmission as {stand_in} (the shipped sonar), measured as a candidate before the default "
+                                        f"moved (DOPPLER.md DM.6); {stand_in} itself is not run yet")
         pre = _PREDICTED.get(case)
         if pre is not None:
             held = all(t[lb]["verdict"] == "PASS" for lb in ("closing", "oblique") if lb in t)
@@ -321,7 +348,13 @@ def main(argv=None) -> int:
     ap.add_argument("--predict", metavar="CASE")
     ap.add_argument("--source", help="where the case JSONs came from (jobs, tree, device), written into the result")
     ap.add_argument("--predict-cases", nargs="*", metavar="CASE", help="the predictions of these cases (default: DM.5's), written before they are run")
+    ap.add_argument("--reaccept", metavar="JSON", help="rewrite the `acceptance` block of a stored summary from its own rows (nothing else changes)")
     a = ap.parse_args(argv)
+    if a.reaccept:
+        S = json.loads(Path(a.reaccept).read_text())
+        S["acceptance"] = acceptance(S)
+        Path(a.reaccept).write_text(json.dumps(S, indent=1, default=float) + "\n")
+        return 0
     if a.predict:
         print(json.dumps(predict(a.predict), indent=1, default=float))
         return 0

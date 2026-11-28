@@ -1,7 +1,7 @@
 {
  "build": "popoto_face_3x32",
  "source_level_db": 197.0,
- "duty": 0.055762081784386616,
+ "duty": 0.1056338028169014,
  "depth_required_m": 500.0,
  "amplifiers": [
   {
@@ -895,18 +895,18 @@
     "url": "https://www.neptune-sonar.co.uk/downloads/3aced3db-b5b4-4f6e-8dd1-d0ed3e1bcbd6/T335.pdf",
     "where": "catalogue pp. B27-B28: specification table; Transmit Sensitivity, Admittance and Beam Pattern graphs",
     "rated_volts_rms": [
-     400.0,
-     400.0,
-     400.0
+     100.0,
+     100.0,
+     100.0
     ],
     "level_at_rated_db": [
-     198.54119982655925,
-     198.54119982655925,
-     198.54119982655925
+     186.5,
+     186.5,
+     186.5
     ],
-    "meets_level_across_band": true,
-    "short_by_db": 0.0,
-    "units_for_level": 1,
+    "meets_level_across_band": false,
+    "short_by_db": 10.5,
+    "units_for_level": 4,
     "depth_rating_m": 600.0,
     "depth_ok": true,
     "depth_margin": 1.2,
@@ -917,7 +917,7 @@
        334.9654391578276,
        334.9654391578276
       ],
-      "within_rating": true,
+      "within_rating": false,
       "watts": [
        291.72479811851036,
        246.84405994643188,
@@ -935,7 +935,7 @@
        237.13737056616552,
        237.13737056616552
       ],
-      "within_rating": true,
+      "within_rating": false,
       "watts": [
        146.20874454949075,
        123.7150915418768,
@@ -953,7 +953,7 @@
        167.88040181225605,
        167.88040181225605
       ],
-      "within_rating": true,
+      "within_rating": false,
       "watts": [
        73.27795621287582,
        62.00442448781801,
@@ -975,7 +975,7 @@
      "200": 215.073799298668,
      "500": 222.78306185082954
     },
-    "direct_worst_db": 12.625413176711724,
+    "direct_worst_db": 15.635713133351537,
     "direct_reduction_db": -9.5,
     "direct_how": "piston facing out from the face; the rows are 90 deg off its axis (worst frequency read from the sheet's pattern)"
    }
@@ -1121,7 +1121,7 @@
      "500": 224.62934707720768
     },
     "bound_minus_maker_db": 1.9316130984799145,
-    "direct_worst_db": 22.125413176711724,
+    "direct_worst_db": 25.135713133351537,
     "direct_reduction_db": 0.0,
     "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
    }
@@ -1261,7 +1261,7 @@
      "500": 224.62934707720768
     },
     "bound_minus_maker_db": 2.3085030377432076,
-    "direct_worst_db": 22.125413176711724,
+    "direct_worst_db": 25.135713133351537,
     "direct_reduction_db": 0.0,
     "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
    }
@@ -1313,18 +1313,18 @@
     "url": "https://www.neptune-sonar.co.uk/downloads/8682c070-8807-4d6c-bc6c-a37dcb3d849e/T296.pdf",
     "where": "catalogue pp. B19-B20",
     "rated_volts_rms": [
-     750.0,
-     750.0,
-     750.0
+     350.0,
+     350.0,
+     350.0
     ],
     "level_at_rated_db": [
-     197.001225267834,
-     199.501225267834,
-     195.001225267834
+     190.3813608870055,
+     192.8813608870055,
+     188.3813608870055
     ],
     "meets_level_across_band": false,
-    "short_by_db": 1.998774732165998,
-    "units_for_level": 2,
+    "short_by_db": 8.618639112994487,
+    "units_for_level": 3,
     "depth_rating_m": 600.0,
     "depth_ok": true,
     "depth_margin": 1.2,
@@ -1343,7 +1343,7 @@
        398.1071705534973,
        668.3439175686149
       ],
-      "within_rating": true
+      "within_rating": false
      },
      "191": {
       "volts_rms": [
@@ -1351,7 +1351,7 @@
        281.8382931264455,
        473.15125896148027
       ],
-      "within_rating": true
+      "within_rating": false
      }
     },
     "cavitation_anchor": null,
@@ -1363,7 +1363,7 @@
      "200": 219.86900607716916,
      "500": 227.57826862933072
     },
-    "direct_worst_db": 22.125413176711724,
+    "direct_worst_db": 25.135713133351537,
     "direct_reduction_db": 0.0,
     "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
    }
@@ -1425,18 +1425,18 @@
     "url": "https://www.neptune-sonar.co.uk/downloads/b76a71d6-dd89-48b1-8026-63b45c5761d3/T170.pdf",
     "where": "catalogue pp. B23-B24",
     "rated_volts_rms": [
-     750.0,
-     750.0,
-     750.0
+     250.0,
+     250.0,
+     250.0
     ],
     "level_at_rated_db": [
-     192.501225267834,
-     196.501225267834,
-     197.501225267834
+     182.95880017344075,
+     186.95880017344075,
+     187.95880017344075
     ],
     "meets_level_across_band": false,
-    "short_by_db": 4.498774732165998,
-    "units_for_level": 2,
+    "short_by_db": 14.04119982655925,
+    "units_for_level": 6,
     "depth_rating_m": Infinity,
     "depth_ok": true,
     "depth_margin": Infinity,
@@ -1483,7 +1483,7 @@
        398.1071705534973,
        354.8133892335753
       ],
-      "within_rating": true,
+      "within_rating": false,
       "watts": [
        278.67501938744783,
        174.33825117072257,
@@ -1518,7 +1518,7 @@
      "500": 230.9001484058744
     },
     "bound_minus_maker_db": 5.229538484515615,
-    "direct_worst_db": 13.620651102266368,
+    "direct_worst_db": 16.63095105890618,
     "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
     "direct_reduction_db": -8.504762074445356
    }
@@ -1670,7 +1670,7 @@
      "500": 229.93843682517897
     },
     "bound_minus_maker_db": 14.809751359815891,
-    "direct_worst_db": 13.620651102266368,
+    "direct_worst_db": 16.63095105890618,
     "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
     "direct_reduction_db": -8.504762074445356
    }
@@ -1722,18 +1722,18 @@
     "url": "https://www.neptune-sonar.co.uk/downloads/8df0fff1-08ad-40c2-a577-90a755c087ca/T160.pdf",
     "where": "catalogue pp. B21-B22",
     "rated_volts_rms": [
-     750.0,
-     750.0,
-     750.0
+     250.0,
+     250.0,
+     250.0
     ],
     "level_at_rated_db": [
-     191.001225267834,
-     191.501225267834,
-     187.501225267834
+     181.45880017344075,
+     181.95880017344075,
+     177.95880017344075
     ],
     "meets_level_across_band": false,
-    "short_by_db": 9.498774732165998,
-    "units_for_level": 3,
+    "short_by_db": 19.04119982655925,
+    "units_for_level": 9,
     "depth_rating_m": Infinity,
     "depth_ok": true,
     "depth_margin": Infinity,
@@ -1785,7 +1785,7 @@
      "500": 232.67511259812008
     },
     "bound_minus_maker_db": 13.00450267676132,
-    "direct_worst_db": 13.620651102266368,
+    "direct_worst_db": 16.63095105890618,
     "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
     "direct_reduction_db": -8.504762074445356
    }
@@ -1937,7 +1937,7 @@
      "500": 220.2182897884128
     },
     "bound_minus_maker_db": 6.926896904496175,
-    "direct_worst_db": 22.125413176711724,
+    "direct_worst_db": 25.135713133351537,
     "direct_reduction_db": 0.0,
     "direct_how": "no reduction taken: omnidirectional"
    }
@@ -1994,18 +1994,18 @@
     "url": "https://www.neptune-sonar.co.uk/downloads/fbeb4025-8243-4084-b976-7a59740bfbfa/T420.pdf",
     "where": "catalogue pp. B29-B30",
     "rated_volts_rms": [
-     2000.0,
-     2000.0,
-     2000.0
+     600.0,
+     600.0,
+     600.0
     ],
     "level_at_rated_db": [
-     181.02059991327963,
-     192.52059991327963,
-     190.02059991327963
+     170.56302500767288,
+     182.06302500767288,
+     179.56302500767288
     ],
     "meets_level_across_band": false,
-    "short_by_db": 15.979400086720375,
-    "units_for_level": 7,
+    "short_by_db": 26.436974992327123,
+    "units_for_level": 21,
     "depth_rating_m": 600.0,
     "depth_ok": true,
     "depth_margin": 1.2,
@@ -2057,7 +2057,7 @@
      "500": 217.20798983177298
     },
     "bound_minus_maker_db": 0.05323512912013939,
-    "direct_worst_db": 15.125413176711724,
+    "direct_worst_db": 18.135713133351537,
     "direct_reduction_db": -7.0,
     "direct_how": "piston facing out from the face; the rows are 90 deg off its axis (worst frequency read from the sheet's pattern)"
    }
@@ -2150,7 +2150,7 @@
      "200": 219.6102008873694,
      "500": 227.31946343953095
     },
-    "direct_worst_db": 13.620651102266368,
+    "direct_worst_db": 16.63095105890618,
     "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
     "direct_reduction_db": -8.504762074445356
    }
@@ -2243,7 +2243,7 @@
      "200": 222.35879850040615,
      "500": 230.0680610525677
     },
-    "direct_worst_db": 13.620651102266368,
+    "direct_worst_db": 16.63095105890618,
     "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
     "direct_reduction_db": -8.504762074445356
    }

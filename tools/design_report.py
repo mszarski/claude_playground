@@ -228,7 +228,8 @@ def requirements(D: dict) -> list:
     one_row = face["popoto_face_1x32"]["margin_db"]["ship"]["12000.0"]
     free = X["free"] if X else {"ship": {"margin_db": three["margin_db"]["ship"]["12000.0"], "ts_low_db": None}}
     design_ok = all(free[c]["margin_db"] >= 0.0 for c in (cls if X else ["ship"])) and d["max_range_m"] >= 12000.0
-    value = (f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones a row, {d['pulse_ms'] / 1e3:.0f} s pulse. "
+    value = (f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones a row, {d['pulse_ms'] / 1e3:.0f} s {rp.sweep_word(bs.derive(bs.load(rp.REQUIREMENT_BUILD)))} sweep "
+             f"(D-256: the owner's baseline waveform since 2026-11-28, plain matched filter; blind inside c T / 2 = {0.75 * d['pulse_ms'] / 1e3:.2f} km). "
              + (f"**Free field** (spherical spreading, no site), `{cls[0]}` and `{cls[1]}` at the low end of their assumed strengths ({free[cls[0]]['ts_low_db']:+g} and {free[cls[1]]['ts_low_db']:+g} dB, "
                 f"the budget's ship-sized target): " if X else "**Free field** (spherical spreading, no site), the ship-sized target: ")
              + f"{face['popoto_face_1x32']['row_snr_db']['ship']['12000.0']:.1f} dB in one row at 12 km, against what the chain's own detector needs of one row for a detection probability of {face['popoto_face_1x32']['detection']['probability']:g} on one ping: {at12} "
@@ -251,11 +252,13 @@ def requirements(D: dict) -> list:
                     + f"baseline (`{Dz['baseline']['build']}`, {Dz['baseline']['option']}) up to sea state {Dz['baseline']['sea_state']} at the deep site: planner "
                     + ("yes" if all(v >= 0.0 for v in Dz["baseline"]["margins_db"].values()) else "**no**")
                     + (f", measured {rp.measured_words(Dz['baseline']['measured'])}" if Dz["baseline"].get("measured") else "")
+                    + "; sea state 4: not held (measured)"
                     + (("; illustrative sites: the baseline **not** at " + ", ".join(f"`{s}`" for s in missed) + f" ({n - len(missed)} of {n} held by both classes)") if missed else f"; illustrative sites: the baseline at {n} of {n}")
                     + (f"; alternate (`{Dz['alternate']['build']}`, {Dz['alternate']['option']}) at sea state {Dz['alternate']['sea_state']}: planner "
                        + ("yes" if all(v >= 0.0 for v in Dz["alternate"]["margins_db"].values()) else "**no**")
                        + (", holding " + ", ".join(f"`{s}`" for s in covered) if covered else "")
-                       + (f"; measured (linear, plain filter) {rp.measured_words(Dz['alternate']['measured'])}" if Dz["alternate"].get("measured") else ""))
+                       + (f"; measured (linear, plain filter) {rp.measured_words(Dz['alternate']['measured'])}" if Dz["alternate"].get("measured") else "")
+                       + "; a placeholder: sea state 5 needs a larger transmitter, not yet identified, and is not claimed as met (D-256)")
                     + (("; held by neither design: " + ", ".join(f"`{s}`" for s in bad)) if bad else "")
                     + "; per site: *The 12 km design point*")
         status = ("partly met" if bad else "met") if design_ok else "not met"
@@ -1101,7 +1104,7 @@ def write_report(D, reqs, out_md):
         L.append(f"| {float(a):.1f} m aperture ({v['hydrophones']} hydrophones) | {v['best_frequency_hz'] / 1e3:.1f} kHz | {float(a):.1f} m | {v['source_level_db']:.0f} dB | {v['acoustic_power_w_omni']:.0f} W |")
     L.append(f"\n- **Chosen (`popoto_long_range`):** {lr['elements']} hydrophones at {lr['pitch_mm'] / 10:.0f} cm ({lr['array_length_m']:.1f} m), "
              f"{lr['centre_frequency_khz'] - lr['bandwidth_khz'] / 2:.0f} to {lr['centre_frequency_khz'] + lr['bandwidth_khz'] / 2:.0f} kHz, "
-             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {_face_12km()[2]:.1f} dB in one row at 12 km on the ship-sized target in free field, not at a site (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; "
+             f"{lr['pulse_ms'] / 1e3:.0f} s (a hyperbolic sweep since D-256; sized for the former 1 s linear sweep), {lr['source_level_db']:.0f} dB: {_face_12km()[2]:.1f} dB in one row at 12 km on the ship-sized target in free field, not at a site (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; "
              f"{lr['_eq'].snr(12000.0):.1f} dB with Sec. 5's Francois-Garrison). It was sized when the budget's threshold was a typed 13 dB "
              "(13 dB plus 2 dB). Against what the chain's own detector needs for a detection probability of "
              f"{_face_12km()[0]:g} on one ping: " + _face_12km()[1] + " (*The 12 km design point*). "

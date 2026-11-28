@@ -378,7 +378,12 @@ def window_times(g: Geometry, cfg: dict, spread: float):
     n_noise = int(cfg["noise_cells"]) * int(cfg["oversample"])
     n_before = int(np.ceil((spread + slack + guard) / dt))
     n_after = int(np.ceil((spread + slack + guard) / dt))
-    return dt * np.arange(-(n_noise + n_before), n_after + 1), n_noise
+    # t_first + dt k, the arithmetic of libs/live multipath_window_times and multipath_estimate, so that the two engines see the same
+    # times to the last bit: the anchor's t0 (likelihood) is rounded to the step and an echo peaking on an odd sample puts it on a half
+    # (D-256: found on the 2 s hyperbolic sweep at 6 km, where dt (k - n0) and -dt n0 + dt k rounded it apart and 2 of 244 envelope
+    # values differed by up to 8)
+    t_first = -dt * float(n_noise + n_before)
+    return t_first + dt * np.arange(n_noise + n_before + n_after + 1, dtype=float), n_noise
 
 
 def beam_window(record, bearing: float, range_m: float, t_rel, rows=None, backend=None):
@@ -433,7 +438,7 @@ def likelihood(y, t_rel, n_noise: int, g: Geometry, cfg: dict, depths=None, per_
         depths, per_fringe, _ = depth_grid(g, cfg)
     y = np.asarray(y, dtype=complex)
     t_rel = np.asarray(t_rel, dtype=float)
-    dt = float(t_rel[1] - t_rel[0])
+    dt = 1.0 / (float(cfg["oversample"]) * g.bandwidth)             # window_times' own step (not t_rel[1] - t_rel[0]: the C++ engine's dt)
     sigma2 = noise_power(y, n_noise)
     slack = 2.0 * float(g.slack_m or cfg["range_slack_m"]) / g.sound_speed + 2.0 / g.bandwidth
     near = np.nonzero(np.abs(t_rel) <= slack + 0.5 * dt)[0]

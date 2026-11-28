@@ -18,7 +18,7 @@ array:
       - {up: 0.75, out: 0.0}
 transmit:
   lever_arm: [4, 0, 0]
-  waveform: {duration: 4.0, source_level_db_rms: 200.0}
+  waveform: {type: lfm, duration: 4.0, source_level_db_rms: 200.0, source: null}
 receive:
   window:
     range: [3000.0, 12700.0]

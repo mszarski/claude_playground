@@ -197,7 +197,8 @@ def test_a_point_at_2_m_s_gains_the_mismatch_less_the_correction(engine):
 # --- the false-alarm rate -----------------------------------------------------------------------------------------------
 
 def _noise_pings(n, seed):
-    sonar = SonarModel.load("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1300.0]}}})
+    # D-256: the shipped popoto_long_range sends a 2 s hyperbolic sweep, which the bank refuses; this test is of the bank: its 1 s linear sweep is stated
+    sonar = SonarModel.load("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1300.0]}}, "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}})
     scene = Scene().add_points([[0.0, 1100.0, 0.0]], target_strength_db=-300.0)
     return [simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), scene, noise_rms=2e-4, rng=np.random.default_rng(seed + i), sequence=i,
                           time_ns=i * 10_000_000_000, environment={"sound_speed": C}, adc=False, absorption_model="none") for i in range(n)]
