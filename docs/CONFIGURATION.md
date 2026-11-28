@@ -96,6 +96,25 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `transmit.waveform.replica_sample_rate` | rate of the real replica stored in the record (default 4 × the top of the band) |
 | `transmit.direct_path` | absent or `false` (default): as before. `true`: the simulator adds the pulse as the hydrophones hear it straight from the projector at `transmit.lever_arm` (`sim/sources.py` `direct_arrival`): each element's own distance for the level (source level, 1/r), delay and phase (the array's near field), the element patterns, the projector's pattern per element when it has one, and the surface and bottom images when the scenario's provider has boundaries. `{boundaries: false}`: the straight arrival only. Analytic pulses: the C++ kernel on both engines; sampled pulses: C++ or NumPy by engine. Matters when the receive window includes the pulse, or with `receive.overload` |
 
+### `short_range` (optional): a second kind of ping, the same sweep cut short
+
+Opt-in (`docs/design/short_range_mode.md`). Absent (every shipped sonar): the sonar sends its own pulse only, as before.
+Present (in a sonar file or a scenario's `sonar_overrides`): short pings are interleaved with the sonar's own (the long ones)
+on a schedule. Nothing is added to the record: each ping carries its own replica (type, band, duration) and its own window
+(start time, samples), and the chain processes each ping as it is (its detector planned for that ping's pulse) with one
+tracker. Read by the simulator's straight run only (`platform.legs`, `motion` and `raster` refuse it).
+
+| Key | Meaning |
+| --- | --- |
+| `short_range.waveform` | keys laid over `transmit.waveform` for the short pings; normally only `duration` (s): the same sweep, band and level, shorter (`sonar.short_range_config`) |
+| `short_range.window` | the short pings' receive window (`{range: [near, far]}`, as `receive.window`), replacing the sonar's for them: from the short pulse's blind range c T / 2 to beyond the long pulse's |
+| `short_range.every` | one short ping after every `every` long pings (1: they alternate). The tracker counts a ping that cannot see a track as a miss (`tracker.max_misses`, 2): with `every` above it a track seen only by the short pings is dropped between them (not changed: a follow-up) |
+| `short_range.interval_s` | s from a short ping to the next long one; it must cover the short window (`2 far / c + duration`), and `pings.interval` (from a long ping to the next ping) the long window: the simulator refuses a schedule whose windows overlap. `pings.count` counts both kinds; ping i's kind and time: `sonar.ping_schedule` |
+
+Hardware facts it rests on, unconfirmed (owner questions): whether the projector and its drive board can change the pulse length
+from one ping to the next, and how soon after a transmission the receiver is usable (`projector.blanking_after_s` in a build
+spec: not known). Example: `configs/scenarios/popoto_short_range_mode.yaml`.
+
 ### `receive`
 
 | Key | Meaning |
@@ -204,7 +223,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `platform.raster` | a stop-and-go grid of positions: `x: [start, stop, step]`, `y: [...]` |
 | `platform.legs`, `platform.speed` | survey legs: each `{start, heading_deg, pings or length}`; yaw follows the heading. For a multi-element SAS, set `speed × pings.interval` to half the array length so phase centres are evenly spaced |
 | `pings.count`, `pings.interval` | number of transmits (1) and seconds between them (1.0) |
-| `pings.start_ns` | the first transmit's `time_ns` (ns since the Unix epoch, UTC); default 1 700 000 000 000 000 000 (2023-11-14 22:13:20 UTC). Ping i is at `start_ns` + i × `interval` |
+| `pings.start_ns` | the first transmit's `time_ns` (ns since the Unix epoch, UTC); default 1 700 000 000 000 000 000 (2023-11-14 22:13:20 UTC). Ping i is at `start_ns` + i × `interval` (with a sonar `short_range` block: at `start_ns` + its scheduled time, `sonar.ping_schedule`) |
 | `platform.rates`, `platform.attitude_rate_hz` | `rates: [roll, pitch, yaw]` rates (rad/s): the vehicle turns during each ping from `rpy` at each transmit, and the echoes are made with the turning array; the record then holds what navigation would give, the attitude at the transmit and samples of it over the receive window `attitude_rate_hz` (10) a second (`navigation.ins`), not the rates. Read only for a plain run or a `raster`, not with `legs` or `motion` |
 
 ### `scene`: a list of objects
