@@ -52,10 +52,17 @@
 #                                               limit; doppler_tone_eval.json, doppler_bank_at_default.json, timing_*.json and
 #                                               the logs, uploaded after each sub-run to GPUSONAR_UPLOAD_PATH, default doppler
 #                                               (bash tools/doppler_gpu_runs.sh --help lists its variables)
+#        GPUSONAR_JOB=depthrange tools/gpu_job.sh  the depth estimate against range on the three-row face with the 2 s
+#                                               hyperbolic baseline (tools/depth_range_sweep.py --backend cuda; docs/tasks/
+#                                               DEPTH_RANGE.md): deep water at own depths 30 and 225 m and 100 m of water at
+#                                               30 m, 1.7 to 12 km, targets at 4 (a ship), 30, 60, 150 and 300 m, two seeds;
+#                                               GPUSONAR_DEPTHRANGE_ARGS replaces the sweeps' common arguments; one JSON a
+#                                               sweep, uploaded after each to GPUSONAR_UPLOAD_PATH, default depthrange,
+#                                               then the pooled tables (tables.md, pooled.json)
 #        GPUSONAR_JOB=motion tools/gpu_job.sh  (with GPUSONAR_CERES=1) the motion-estimation tests
 #                                               (tests/python/test_motion*.py), then tools/motion_study.py timing
 #                                               (delay estimation: NumPy, C++ host, CUDA); log only, nothing uploaded
-# Uploads (gallery, elevbench, liveablate, benchall, clseval, falsealarm, doppler) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
+# Uploads (gallery, elevbench, liveablate, benchall, clseval, falsealarm, doppler, depthrange) happen only when GPUSONAR_UPLOAD_REPO names a Hugging Face
 # dataset (the job needs a token that may write to it).
 case "${1:-}" in -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0;; esac
 set -euo pipefail
@@ -207,6 +214,31 @@ if [ "${GPUSONAR_JOB:-tests}" = "doppler" ]; then
   status=0
   bash tools/doppler_gpu_runs.sh /work/doppler || status=$?
   ls -l /work/doppler
+  exit "$status"
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "depthrange" ]; then
+  # The stacked-row (and multipath-timing) depth against range with the baseline pulse, simulator and chain on the device
+  # (tools/depth_range_sweep.py); each sweep's JSON is uploaded as soon as it is written.
+  mkdir -p /work/depthrange
+  status=0
+  common="${GPUSONAR_DEPTHRANGE_ARGS:---ranges 1700,2000,3000,5000,8000,12000 --depths 4,30,60,150,300 --waveform hfm2 --pings 3 --seeds 1,2 --multipath}"
+  for sweep in "deep_own225:--water deep --own 225" "deep_own30:--water deep --own 30" "shelf100_own30:--water 100 --own 30"; do
+    name="${sweep%%:*}"
+    # shellcheck disable=SC2086
+    PYTHONPATH=python python3 tools/depth_range_sweep.py --backend cuda $common ${sweep#*:} --json "/work/depthrange/$name.json" \
+        > "/work/depthrange/$name.log" 2>&1 || status=$?
+    tail -n 40 "/work/depthrange/$name.log"
+    if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
+      hf upload "$GPUSONAR_UPLOAD_REPO" /work/depthrange "${GPUSONAR_UPLOAD_PATH:-depthrange}" --type dataset > /dev/null || true
+    fi
+  done
+  # The sweeps pooled: the tables of docs/tasks/DEPTH_RANGE.md and their JSON.
+  PYTHONPATH=python python3 tools/depth_range_sweep.py --table /work/depthrange/deep_own225.json /work/depthrange/deep_own30.json /work/depthrange/shelf100_own30.json --json /work/depthrange/pooled.json \
+      > /work/depthrange/tables.md 2>&1 || status=$?
+  tail -n 30 /work/depthrange/tables.md
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/depthrange "${GPUSONAR_UPLOAD_PATH:-depthrange}" --type dataset > /dev/null || true
+  fi
   exit "$status"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "motion" ]; then
