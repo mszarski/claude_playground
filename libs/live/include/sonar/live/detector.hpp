@@ -73,8 +73,11 @@ const char* range_estimate_name(RangeEstimate r);
 ///          kEdgeNoise x what a stronger kept peak's pulse puts there (DetectorPlan::edge_envelope, scalloped by the
 ///          sampling) is that peak's skirt or sidelobe, else it is an arrival of its own. The range is the nearest
 ///          arrival's: the power-weighted mean range of the group's samples within one range resolution of its peak
-///          sample. So a point echo reads at its peak and an extended echo at its nearest highlight (D-178's intent),
-///          not at the skirt's far end. Ours.
+///          sample; but where two adjacent samples over the threshold before that peak are not explained by any kept
+///          peak's pulse, an arrival that is no local peak lies there (the direct path on the rising side of stronger
+///          paths a metre or two behind it, in shallow water) and the range is the first of them (its leading edge).
+///          So a point echo reads at its peak and an extended echo at its nearest highlight (D-178's intent), not at
+///          the skirt's far end. Ours.
 enum class RangeEdge { Off, Pulse };
 /// "off" or "pulse"; throws std::invalid_argument for anything else.
 RangeEdge parse_range_edge(const std::string& name);

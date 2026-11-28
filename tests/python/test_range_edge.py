@@ -142,6 +142,29 @@ def test_a_strong_highlight_close_behind_a_weak_one_is_reported_at_the_weak_one(
         assert off[0]["range_m"] - truth < -0.1, (engine, off, truth)
 
 
+def test_a_direct_arrival_ahead_of_stronger_paths_close_behind_is_still_the_range():
+    """Shallow water's case (popoto_face_2row_shallow, 100 m of water: surface and bottom paths 0.6 to 1.9 m behind the
+    direct one): a 10 dB direct arrival with four 2 to 4 dB stronger paths 0.6 to 1.9 m behind, which add to a peak about
+    a metre behind it. The direct arrival's samples stand above what that peak's pulse explains, so pulse reads the
+    direct arrival (within 10 cm; the plain edge 0.65 m before it), not the composite peak; both engines alike. On that
+    scene's own records (3 pings, with `elevation`) pulse reads what the plain edge reads, to the sample: there the
+    direct arrival is a shoulder on the rise, no local peak, and the rule for two adjacent unexplained samples takes it."""
+    sonar = sonar_for()
+    p0 = np.array([0.0, R + 0.9, 0.0])
+    pts = [p0] + [p0 + np.array([0.0, dr, 0.0]) for dr in (0.6, 0.9, 1.2, 1.9)]
+    rec = ping(sonar, pts, [10.0, 12.0, 12.0, 14.0, 12.0], seed=13)
+    truth = two_way_range(rec, p0)
+    got = {}
+    for engine in ("cpp", "python"):
+        on = detect(rec, engine, "pulse")
+        off = detect(rec, engine)
+        assert len(on) == len(off) == 1, (engine, on, off)
+        assert abs(on[0]["range_m"] - truth) < 0.1, (engine, on[0]["range_m"] - truth, off[0]["range_m"] - truth)
+        assert off[0]["range_m"] - truth < -0.3
+        got[engine] = on[0]["range_m"]
+    assert got["python"] == pytest.approx(got["cpp"], abs=1e-6)
+
+
 def test_off_is_the_default_bit_for_bit_and_the_plan_says_the_option_only_when_on():
     sonar = sonar_for()
     p = np.array([0.0, R, 0.0])

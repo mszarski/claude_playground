@@ -261,13 +261,24 @@ def _pulse_edge_range(idx, line, fine_ranges, factor: float, plan: dict) -> floa
         return float(env[j]) if j < len(env) else 0.0
 
     kept, nearest = [], peaks[0]
-    for q in peaks:
+
+    def skirt(q):
         rq = float(fine_ranges[idx[q]])
-        if any(float(line[q]) <= EDGE_NOISE * float(line[k]) / scallop * envelope(abs(rq - float(fine_ranges[idx[k]]))) for k in kept):
+        return any(float(line[q]) <= EDGE_NOISE * float(line[k]) / scallop * envelope(abs(rq - float(fine_ranges[idx[k]]))) for k in kept)
+
+    for q in peaks:
+        if skirt(q):
             continue
         kept.append(q)
         if idx[q] < idx[nearest]:
             nearest = q
+    # An arrival that is no local peak (the direct path on the rising side of later, stronger paths): two adjacent samples
+    # over the threshold before the nearest arrival's peak that no kept peak's pulse explains; the range is the first.
+    q = 0
+    while q + 1 < n and idx[q] < idx[nearest]:
+        if line[q] > factor and idx[q + 1] == idx[q] + 1 and line[q + 1] > factor and not skirt(q) and not skirt(q + 1):
+            return float(fine_ranges[idx[q]])
+        q += 1
     r0 = float(fine_ranges[idx[nearest]])
     w_sum = r_sum = 0.0
     for q in range(n):

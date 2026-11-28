@@ -373,6 +373,21 @@ TEST(Detector, ThePulseReferencedEdgeReadsAPointEchoAtItsPeakAndKeepsANearerArri
   const auto both = two.detect();
   ASSERT_EQ(both.size(), 1U);
   EXPECT_NEAR(both[0].range, truth - 1.5, 0.03);
+  // An arrival that is no local peak: an echo that rises steadily for 3 m (x1.5 a sample, 20 dB at its start) into one
+  // 41 dB peak, steeper on its near side than the pulse's skirt. Its samples stand above what the peak's pulse explains:
+  // the range is their first, the leading edge, where the plain edge puts it too.
+  Map shoulder(33, 1, o), shoulder_off(33, 1, plain_first);
+  for (Map* map : {&shoulder, &shoulder_off}) {
+    for (std::int64_t j = 0; j <= 12; ++j) {
+      map->add(70, s0 - 12 + j, static_cast<float>(100.0 * std::pow(1.5, static_cast<double>(j))));
+      if (j < 12) map->add(70, s0 + 12 - j, static_cast<float>(100.0 * std::pow(1.5, static_cast<double>(j))));
+    }
+  }
+  const auto rise = shoulder.detect(), rise_off = shoulder_off.detect();
+  ASSERT_EQ(rise.size(), 1U);
+  ASSERT_EQ(rise_off.size(), 1U);
+  EXPECT_NEAR(rise[0].range, truth - 3.0, 1e-9);
+  EXPECT_EQ(rise[0].range, rise_off[0].range);
 }
 
 TEST(Detector, BackgroundFollowsASlopeAtTheEndsOfTheMap) {

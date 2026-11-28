@@ -382,19 +382,25 @@ double pulse_edge_range(const std::vector<std::pair<std::int64_t, double>>& line
     return j < plan.edge_envelope.size() ? plan.edge_envelope[j] : 0.0;
   };
   std::vector<std::size_t> kept;
-  std::size_t nearest = peaks.front();
-  for (std::size_t q : peaks) {
-    bool skirt = false;
+  const auto skirt = [&](std::size_t q) {
     for (std::size_t k : kept) {
       const double dx = std::abs(at(line[q].first) - at(line[k].first));
-      if (line[q].second <= kEdgeNoise * line[k].second / plan.edge_scallop * envelope(dx)) {
-        skirt = true;
-        break;
-      }
+      if (line[q].second <= kEdgeNoise * line[k].second / plan.edge_scallop * envelope(dx)) return true;
     }
-    if (skirt) continue;
+    return false;
+  };
+  std::size_t nearest = peaks.front();
+  for (std::size_t q : peaks) {
+    if (skirt(q)) continue;
     kept.push_back(q);
     if (line[q].first < line[nearest].first) nearest = q;
+  }
+  // An arrival that is no local peak (the direct path on the rising side of later, stronger paths a metre or two behind
+  // it, in shallow water): two adjacent samples over the threshold before the nearest arrival's peak that no kept
+  // peak's pulse explains. The range is then the first of them, the leading edge of that arrival.
+  for (std::size_t q = 0; q + 1 < line.size() && line[q].first < line[nearest].first; ++q) {
+    if (line[q].second <= factor || line[q + 1].first != line[q].first + 1 || line[q + 1].second <= factor) continue;
+    if (!skirt(q) && !skirt(q + 1)) return at(line[q].first);
   }
   // Its range: the power-weighted mean of the group's samples within one range resolution of its peak sample.
   const double r0 = at(line[nearest].first);
