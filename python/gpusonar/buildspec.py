@@ -102,7 +102,7 @@ SCHEMA = {
         "amplifier": ("str", "", False, "power amplifier part name", "datasheet title", F),
         "source_level_db_rms": ("num", "dB re 1 uPa at 1 m, rms", True, "source level in the band as an RMS pressure level (the usual datasheet convention; a peak figure is 3 dB higher for a tone)", "datasheet: TVR x rms drive voltage, or SL", "must be given: the link budget needs it; flag it assumed"),
         "band_hz": ("vec2", "Hz", True, "transmitted band", "datasheet: usable band; waveform design", "must be given"),
-        "waveform": ("map", "", True, "{type: lfm | cw, duration_s, window_alpha}", "waveform design", "must be given"),
+        "waveform": ("map", "", True, "{type: lfm | hfm | cw, duration_s, window_alpha} (hfm: the hyperbolic sweep across band_hz, written into the sonar file as {type: sampled, source: hfm}; the shipped 12 km face's, D-256)", "waveform design", "must be given"),
         "position_m": ("vec3", "m", True, "body frame [along, out, down] from the array's centre", "integration drawing", "must be given: a placeholder is allowed if flagged assumed"),
         "blanking_after_s": ("num", "s", False, "how long after the end of the direct sound the inputs are still unusable (recovery from overload): the first usable range follows from it", "bench measurement of the boards", "leave out: unknown, and the validator says so when the direct sound overloads the inputs"),
     },
@@ -362,6 +362,9 @@ def validate(spec: dict) -> list[Issue]:
             continue
         for where, msg in find_problems(items):
             err(where, msg)
+    wf0 = (spec.get("projector") or {}).get("waveform")
+    if isinstance(wf0, dict) and wf0.get("type") not in WAVEFORM_TYPES:
+        err("projector.waveform", "give {type: lfm | hfm | cw, duration_s: ...}")       # before anything derives from the pulse
     if get(spec, "operation", "coverage") is not None and not any(i.level == "error" for i in out):
         from . import coverage                              # the generator's own refusal (chain_config), said here so that --validate reports it
         try:
@@ -490,8 +493,8 @@ def validate(spec: dict) -> list[Issue]:
         err("boards.clocks", f"{len(clocks['explicit'])} explicit clock errors for {n_boards} boards")
     # projector and waveform
     wf = pj["waveform"]
-    if wf.get("type") not in ("lfm", "cw") or wf.get("duration_s") is None:
-        err("projector.waveform", "give {type: lfm | cw, duration_s: ...}")
+    if wf.get("type") not in WAVEFORM_TYPES or wf.get("duration_s") is None:
+        err("projector.waveform", "give {type: lfm | hfm | cw, duration_s: ...}")
         return out
     pulse = float(wf["duration_s"])
     if not 120.0 < float(pj["source_level_db_rms"]) < 240.0:
@@ -681,6 +684,19 @@ def adc_full_scale(spec: dict) -> float:
     return 0.5 * float(b["input_full_scale_vpp"]) * 10.0 ** (float(b.get("gain_db") or 0.0) / 20.0)
 
 
+WAVEFORM_TYPES = ("lfm", "hfm", "cw")
+
+
+def waveform_type_keys(kind: str) -> dict:
+    """The sonar file's keys for a spec's `projector.waveform.type`: lfm and cw are the analytic pulses of that name; hfm is
+    the hyperbolic sweep, which the simulator and the record carry as a sampled waveform (`type: sampled, source: hfm`,
+    gpusonar/sim/waveform.py; in the record WaveformType.Arbitrary with its replica: no schema change). D-256: the shipped
+    12 km face's waveform."""
+    if kind not in WAVEFORM_TYPES:
+        raise ValueError(f"projector.waveform.type {kind!r}: one of {', '.join(WAVEFORM_TYPES)}")
+    return {"type": "sampled", "source": "hfm"} if kind == "hfm" else {"type": kind}
+
+
 def window_range(spec: dict) -> list[float]:
     """[first, last] range (m) of the receive window: `operation.range_m`, with a first range of null
     replaced by the pulse's blind range c * duration / 2 (c the build's nominal sound speed, m/s;
@@ -726,7 +742,7 @@ def sonar_config(spec: dict) -> dict:
     wf = pj["waveform"]
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     transmit = {"kind": "point", "lever_arm": [float(x) if float(x) != int(float(x)) else int(float(x)) for x in pj["position_m"]],
-                "waveform": {"type": wf.get("type", "lfm"), "f_start": f_lo, "f_stop": f_hi, "duration": float(wf["duration_s"]),
+                "waveform": {**waveform_type_keys(wf.get("type", "lfm")), "f_start": f_lo, "f_stop": f_hi, "duration": float(wf["duration_s"]),
                              "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db_rms": float(pj["source_level_db_rms"])}}
     boards = board_table(spec)
     receive: dict = {"kind": "real", "sample_rate": float(b["sample_rate_hz"]), "adc_bits": int(b["adc_bits"]), "adc_full_scale": adc_full_scale(spec),
@@ -1087,6 +1103,12 @@ def against_base(cfg: dict, base_name: str) -> dict:
     `confirmed` the base's flags this build has settled."""
     base = load_sonar_config(base_name)
     out = {"base": base_name, **diff_against(cfg, base)}
+    # A waveform of another type than the base's: the base's keys this one does not have belong to the other waveform
+    # (a linear sweep over a base whose waveform is a sampled hyperbolic one would keep its `source: hfm`), so they are
+    # written as null and the file resolves to exactly this waveform.
+    wf, bw = (cfg.get("transmit") or {}).get("waveform"), (base.get("transmit") or {}).get("waveform")
+    if isinstance(wf, dict) and isinstance(bw, dict) and wf.get("type") != bw.get("type"):
+        out.setdefault("transmit", {}).setdefault("waveform", {}).update({k: None for k in bw if k not in wf})
     mine, theirs = list(cfg.get("unconfirmed", [])), list(base.get("unconfirmed", []))
 
     def covered(flag, by):

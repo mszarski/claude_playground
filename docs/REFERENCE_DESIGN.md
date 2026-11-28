@@ -212,7 +212,7 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `projector.amplifier` | — | no | power amplifier part name | datasheet title | leave it out: it is listed as unknown |
 | `projector.source_level_db_rms` | dB re 1 uPa at 1 m, rms | yes | source level in the band as an RMS pressure level (the usual datasheet convention; a peak figure is 3 dB higher for a tone) | datasheet: TVR x rms drive voltage, or SL | must be given: the link budget needs it; flag it assumed |
 | `projector.band_hz` | Hz | yes | transmitted band | datasheet: usable band; waveform design | must be given |
-| `projector.waveform` | — | yes | {type: lfm | cw, duration_s, window_alpha} | waveform design | must be given |
+| `projector.waveform` | — | yes | {type: lfm | hfm | cw, duration_s, window_alpha} (hfm: the hyperbolic sweep across band_hz, written into the sonar file as {type: sampled, source: hfm}; the shipped 12 km face's, D-256) | waveform design | must be given |
 | `projector.position_m` | m | yes | body frame [along, out, down] from the array's centre | integration drawing | must be given: a placeholder is allowed if flagged assumed |
 | `projector.blanking_after_s` | s | no | how long after the end of the direct sound the inputs are still unusable (recovery from overload): the first usable range follows from it | bench measurement of the boards | leave out: unknown, and the validator says so when the direct sound overloads the inputs |
 | `navigation.unit` | — | no | part name of the navigation / attitude source | platform documentation | leave it out: it is listed as unknown |
