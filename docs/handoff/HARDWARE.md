@@ -534,20 +534,20 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 | --- | --- |
 | Hydrophones | 1 x 32 = 32, pitch 0.15 m (0.60 wavelengths at the top of the band), row 4.65 m |
 | Boards | 4 of 8 inputs; reference summed into inputs [0, 8, 16, 24] |
-| Transmit | 4-6 kHz, 1 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
-| Receive window, ping interval | 750-12700 m; 17.93 s at the shortest; 1,733,974 samples a channel |
+| Transmit | 4-6 kHz, 2 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
+| Receive window, ping interval | 1500-12700 m; 18.93 s at the shortest; 1,733,974 samples a channel |
 | Beam, range cell | 3.2 deg at broadside; 0.375 m before windowing |
 | Ambiguity | no grating lobe within +/-42 deg (the deployment file steers [-60.0, 60.0, 0.5]) |
 | Elevation | none (one row) |
 | Clock agreement | 8.33 us within a row |
 | Data rate | 19.7 Mbit/s a board, 78.6 Mbit/s in all = 9,830,400 bytes/s of samples |
 | UDP stream | blocks of 128 samples, 12,416 bytes, 800 a second: 9,932,800 bytes/s with headers; socket buffer asked 8,388,608 bytes |
-| Recording | 222 MB a ping; 44.6 GB an hour raw, 5.2 decimated (shipped: raw) |
-| Direct sound | 193 dB re 1 uPa at the nearest hydrophone (1.68 m): +22 dB against full scale, +11 dB at the farthest; ends 1.004 s; first usable range 753 m |
+| Recording | 222 MB a ping; 42.2 GB an hour raw, 5.0 decimated (shipped: raw) |
+| Direct sound | 193 dB re 1 uPa at the nearest hydrophone (1.68 m): +22 dB against full scale, +11 dB at the farthest; ends 2.004 s; first usable range 1503 m |
 | Detector needs (one row's SNR) | 15.8 dB for a detection probability of 0.5 on one ping, 17.4 dB for 0.9 |
-| Noise-limited reach | 11.5 km (ship, +25 dB) / 4.7 km (small, +5 dB) |
-| At its design range, 12.7 km | ship: margin -2.6 dB, Pd 0.05; small: margin -22.6 dB, Pd 0.00 |
-| At 12 km | ship: one row's SNR 14.6 dB, margin -1.1 dB, Pd 0.22; small: margin -21.1 dB, Pd 0.00 |
+| Noise-limited reach | 12.9 km (ship, +25 dB) / 5.4 km (small, +5 dB) |
+| At its design range, 12.7 km | ship: margin +0.5 dB, Pd 0.64; small: margin -19.5 dB, Pd 0.00 |
+| At 12 km | ship: one row's SNR 17.6 dB, margin +1.9 dB, Pd 0.94; small: margin -18.1 dB, Pd 0.00 |
 
 **Simulated trials:** `popoto_12km` (the same row as `popoto_long_range`): the ship at 12 km detected on 6 of 6 pings and tracked from ping 3 in 100 m over sand, as a mover at 6.2 m/s (image-source paths) (`docs/design/popoto_12km.json`; stale since D-251, made under the old reverberation Doppler, issue `sonar-rar0`).
 
@@ -582,20 +582,20 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 | --- | --- |
 | Hydrophones | 2 x 32 = 64, pitch 0.15 m (0.60 wavelengths at the top of the band), row 4.65 m, rows at -0.75, +0.75 m |
 | Boards | 8 of 8 inputs; reference summed into inputs [0, 8, 16, 24, 32, 40, 48, 56] |
-| Transmit | 4-6 kHz, 1 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
-| Receive window, ping interval | 750-12700 m; 17.93 s at the shortest; 1,733,974 samples a channel |
+| Transmit | 4-6 kHz, 2 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
+| Receive window, ping interval | 1500-12700 m; 18.93 s at the shortest; 1,733,974 samples a channel |
 | Beam, range cell | 3.2 deg at broadside; 0.375 m before windowing |
 | Ambiguity | no grating lobe within +/-42 deg (the deployment file steers [-60.0, 60.0, 0.5]); elevation repeats every 11.5 deg, highest -0.6 dB |
 | Elevation | 0.18 deg at 20 dB a row; 0.057 deg per us between rows; 0.038 deg per mm a row stands out |
 | Clock agreement | 8.33 us within a row; 0.87 us between rows |
 | Data rate | 19.7 Mbit/s a board, 157.3 Mbit/s in all = 19,660,800 bytes/s of samples |
 | UDP stream | blocks of 64 samples, 12,416 bytes, 1600 a second: 19,865,600 bytes/s with headers; socket buffer asked 9,830,400 bytes |
-| Recording | 444 MB a ping; 89.1 GB an hour raw, 10.5 decimated (shipped: raw) |
-| Direct sound | 192 dB re 1 uPa at the nearest hydrophone (1.84 m): +21 dB against full scale, +11 dB at the farthest; ends 1.004 s; first usable range 753 m |
+| Recording | 444 MB a ping; 84.4 GB an hour raw, 9.9 decimated (shipped: raw) |
+| Direct sound | 192 dB re 1 uPa at the nearest hydrophone (1.84 m): +21 dB against full scale, +11 dB at the farthest; ends 2.004 s; first usable range 1503 m |
 | Detector needs (one row's SNR) | 13.2 dB for a detection probability of 0.5 on one ping, 14.8 dB for 0.9 |
-| Noise-limited reach | 12.7 km (ship, +25 dB) / 5.3 km (small, +5 dB) |
-| At its design range, 12.7 km | ship: margin -0.0 dB, Pd 0.49; small: margin -20.0 dB, Pd 0.00 |
-| At 12 km | ship: one row's SNR 14.6 dB, margin +1.4 dB, Pd 0.87; small: margin -18.6 dB, Pd 0.00 |
+| Noise-limited reach | 14.2 km (ship, +25 dB) / 6.1 km (small, +5 dB) |
+| At its design range, 12.7 km | ship: margin +3.0 dB, Pd 0.99; small: margin -17.0 dB, Pd 0.00 |
+| At 12 km | ship: one row's SNR 17.6 dB, margin +4.4 dB, Pd 1.00; small: margin -15.6 dB, Pd 0.00 |
 
 **Simulated trials:** `popoto_face_2row_shallow` (target at 60 m, 3 km): read 33, 33, 33, 33 m with the water-depth bound, two candidates without it. `popoto_12km_2row`: the ship detected on 6 of 6 pings (`docs/DESIGN.md`).
 
@@ -630,20 +630,20 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 | --- | --- |
 | Hydrophones | 3 x 32 = 96, pitch 0.15 m (0.60 wavelengths at the top of the band), row 4.65 m, rows at -0.75, -0.20, +0.75 m |
 | Boards | 12 of 8 inputs; reference summed into inputs [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88] |
-| Transmit | 4-6 kHz, 1 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
-| Receive window, ping interval | 750-12700 m; 17.93 s at the shortest; 1,733,974 samples a channel |
+| Transmit | 4-6 kHz, 2 s, 197 dB re 1 uPa at 1 m rms; projector at [4.0, 0.0, 0.0] m |
+| Receive window, ping interval | 1500-12700 m; 18.93 s at the shortest; 1,733,974 samples a channel |
 | Beam, range cell | 3.2 deg at broadside; 0.375 m before windowing |
 | Ambiguity | no grating lobe within +/-42 deg (the deployment file steers [-60.0, 60.0, 0.5]); elevation repeats every 11.5 deg, highest -4.2 dB |
 | Elevation | 0.18 deg at 20 dB a row; 0.057 deg per us between rows; 0.038 deg per mm a row stands out |
 | Clock agreement | 8.33 us within a row; 0.87 us between rows |
 | Data rate | 19.7 Mbit/s a board, 235.9 Mbit/s in all = 29,491,200 bytes/s of samples |
 | UDP stream | blocks of 42 samples, 12,224 bytes, 2438.1 a second: 29,803,276 bytes/s with headers; socket buffer asked 14,745,600 bytes |
-| Recording | 666 MB a ping; 133.7 GB an hour raw, 15.7 decimated (shipped: raw) |
-| Direct sound | 192 dB re 1 uPa at the nearest hydrophone (1.69 m): +22 dB against full scale, +11 dB at the farthest; ends 1.004 s; first usable range 753 m |
+| Recording | 666 MB a ping; 126.6 GB an hour raw, 14.9 decimated (shipped: raw) |
+| Direct sound | 192 dB re 1 uPa at the nearest hydrophone (1.69 m): +22 dB against full scale, +11 dB at the farthest; ends 2.004 s; first usable range 1503 m |
 | Detector needs (one row's SNR) | 11.8 dB for a detection probability of 0.5 on one ping, 13.4 dB for 0.9 |
-| Noise-limited reach | 13.4 km (ship, +25 dB) / 5.7 km (small, +5 dB) |
-| At its design range, 12.7 km | ship: margin +1.4 dB, Pd 0.87; small: margin -18.6 dB, Pd 0.00 |
-| At 12 km | ship: one row's SNR 14.6 dB, margin +2.9 dB, Pd 0.99; small: margin -17.1 dB, Pd 0.00 |
+| Noise-limited reach | 15.0 km (ship, +25 dB) / 6.5 km (small, +5 dB) |
+| At its design range, 12.7 km | ship: margin +4.4 dB, Pd 1.00; small: margin -15.6 dB, Pd 0.00 |
+| At 12 km | ship: one row's SNR 17.6 dB, margin +5.9 dB, Pd 1.00; small: margin -14.1 dB, Pd 0.00 |
 
 **Simulated trials:** `popoto_elevation_free` (rolled 3°, three targets near 1 km at 10, 60, 160 m): track depth errors 0.0, −0.0, −0.1 m. `popoto_elevation_rehearsal` (raw 102.4 kHz, 12 boards on their own clocks, rolling 1.5°/s): boards synchronised to 0.49 µs, depth 60, 60, 61 m for 60 m. `popoto_12km_3row`: the ship detected on 6 of 6 pings (`docs/DESIGN.md`).
 
