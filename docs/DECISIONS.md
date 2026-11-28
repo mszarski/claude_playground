@@ -5919,3 +5919,11 @@ hyperbolic sweep" (HB.1 to HB.4).
 - Started on this tree, not merged: the depth estimate against range (sonar-9035), the
   leading-edge range offset (sonar-8h09), a short-range mode (sonar-9ed5): the owner, 2026-11-28,
   shown the two failing self-checks and the blind range: "do all 3".
+- Corrections found by the document sweep (same day). D-262's gallery figures "from its centre" are
+  wrong in name: 2.8 -> 9.3 m (`popoto_env_winter_sand_200m`), 2.1 -> 1.1 m (`popoto_12km`) and
+  10.0 -> 8.4 m (`popoto_env_gravel_30m`) are `position_error_m`, the distance from the ship's
+  OUTLINE. From its centre (`centroid_error_m`) the winter-sand track moved 19.4 -> 13.2 m (nearer)
+  and `popoto_12km`'s 10.9 -> 7.2 m. D-262's "worse" list left out the gravel ship's speed estimate,
+  5.79 -> 4.41 m/s (true 6.0). `docs/design/popoto_12km.json` and `popoto_stage2.json` were not
+  regenerated and are of the 1 s sweep; `docs/tasks/DOPPLER.md` HB.1 item 3 says `ss3_baseline` is
+  not run, and it has been (D-262). The file is `docs/handoff/hardware_builds.json`.
