@@ -1252,6 +1252,8 @@ def test_every_chain_option_round_trips_through_binding_and_text(cell_statistic,
     as 0 by the program, so the decimate stage and the ensemble were off and the first gradient read 0."""
     from gpusonar import live
     chain = dict(_every_option_chain(tmp_path), cell_statistic=cell_statistic)
+    if cell_statistic == "multiscale":
+        chain["cfar"] = dict(chain["cfar"], range_edge_correction="pulse")     # opt-in (sonar-8h09): the leading edge's own setting
     o = live.cpp_chain_options(chain, live.sync_reference(chain))
     flat = live.program_options(chain)                           # no record: the binding is given no detection-probability table either
     via_binding = json.loads(core.LiveChainCpp(dict(o)).options())
@@ -1283,6 +1285,8 @@ def test_every_chain_option_round_trips_through_binding_and_text(cell_statistic,
     assert via_text["elevation_profile_ensemble_gradients"] == pytest.approx([0.0, 0.017, -0.05])
     assert via_text["backend"] == "host" and via_text["look"] == "port" and via_text["window"] == "rect"
     assert via_text["range_doppler"] == "full" and defaults["range_doppler"] == "off"
+    assert via_text.get("cfar_range_edge_correction") == ("pulse" if cell_statistic == "multiscale" else None)    # opt-in, said only when on
+    assert "cfar_range_edge_correction" not in defaults
     assert len(_same_options(via_text, defaults)) > 100
 
 

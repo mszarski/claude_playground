@@ -63,6 +63,33 @@ enum class RangeEstimate { Centroid, First };
 RangeEstimate parse_range_estimate(const std::string& name);
 const char* range_estimate_name(RangeEstimate r);
 
+/// What the leading edge (RangeEstimate::First) is referenced to (DetectorOptions::range_edge; opt-in, sonar-8h09).
+///   Off    the first sample over the single-sample threshold, as since D-157 (the default; bit for bit).
+///   Pulse  the leading edge of the nearest arrival that is not the compressed pulse of another: a point echo S over
+///          its background crosses the threshold F where S |rho(x)|^2 = F, rho the compressed pulse (the record's own
+///          replica's autocorrelation), on its skirt and range sidelobes, about (c / (2 pi B)) sqrt(S / F) before its
+///          peak for a flat band: the higher the SNR the earlier (-1.0 m at 34 dB, -1.9 m at 37 dB on a 4-6 kHz sweep).
+///          The group's local peaks over the threshold are taken strongest first; one whose power is no more than
+///          kEdgeNoise x what a stronger kept peak's pulse puts there (DetectorPlan::edge_envelope, scalloped by the
+///          sampling) is that peak's skirt or sidelobe, else it is an arrival of its own. The range is the nearest
+///          arrival's: the power-weighted mean range of the group's samples within one range resolution of its peak
+///          sample; but where two adjacent samples over the threshold before that peak are not explained by any kept
+///          peak's pulse, an arrival that is no local peak lies there (the direct path on the rising side of stronger
+///          paths a metre or two behind it, in shallow water) and the range is the first of them (its leading edge).
+///          So a point echo reads at its peak and an extended echo at its nearest highlight (D-178's intent), not at
+///          the skirt's far end. Ours.
+enum class RangeEdge { Off, Pulse };
+/// "off" or "pulse"; throws std::invalid_argument for anything else.
+RangeEdge parse_range_edge(const std::string& name);
+const char* range_edge_name(RangeEdge r);
+/// RangeEdge::Pulse: a local peak is put down to a stronger one's compressed pulse when its power is no more than this
+/// times what that pulse's envelope puts at its offset (3 dB: a sidelobe near the threshold is raised by noise by up to
+/// that much in about one in 100 samples at 13 dB; ours).
+constexpr double kEdgeNoise = 2.0;
+/// The table of the compressed pulse's power envelope (DetectorPlan::edge_envelope) reaches at most this far, m; beyond
+/// it the envelope is taken as zero (a 2 kHz sweep's sidelobes there are below -60 dB).
+constexpr double kEdgeEnvelopeMaxM = 128.0;
+
 struct DetectorOptions {
   /// Expected false detections per ping in Gaussian noise, all integration lengths and the whole map together.
   double false_alarms_per_ping = 1e-3;
@@ -85,6 +112,8 @@ struct DetectorOptions {
   /// A detection's range: the centroid of its samples (default) or its leading edge (RangeEstimate). It places the
   /// detection and gives its time, transmit + range / c (D-156).
   RangeEstimate range_estimate = RangeEstimate::Centroid;
+  /// What the leading edge is referenced to (RangeEdge): Off (default) or Pulse; Pulse needs range_estimate First.
+  RangeEdge range_edge = RangeEdge::Off;
   /// dB every test's threshold is raised by (each scale's factor times 10^(x / 10)): the live chain's Doppler bank sets
   /// it to the shift that keeps the false-alarm rate on the maximum over its hypotheses (doppler.hpp). 0: the plan as
   /// it was, bit for bit.
@@ -155,6 +184,14 @@ struct DetectorPlan {
   double source_ratio = 0.0;
   /// DetectorOptions::range_estimate: how a detection's range is taken.
   RangeEstimate range_estimate = RangeEstimate::Centroid;
+  /// DetectorOptions::range_edge. With Pulse: `edge_envelope[j]` is the largest power of the compressed pulse (peak 1)
+  /// at j x `edge_step_m` or further from its peak, either side (non-increasing; the record's own replica, as the chain
+  /// compresses it, dsp::make_replica); `edge_scallop` the pulse's power half a map step off its peak (what the
+  /// strongest sample of an echo may lack of its peak). Empty with Off.
+  RangeEdge range_edge = RangeEdge::Off;
+  std::vector<double> edge_envelope;
+  double edge_step_m = 0.0;
+  double edge_scallop = 1.0;
   std::string json() const;
   /// The threshold of scale `s` over the background estimated from `count` training cells.
   double threshold(std::size_t s, double count) const;
@@ -174,6 +211,12 @@ void check_plan(const DetectorPlan& plan);
 /// tone the triangle of its length; a taper narrows the band and so lowers the looks a cell mean holds (a 10 % Tukey
 /// taper on a sweep: 5.47 looks in a 2 m cell at 4 to 6 kHz where the sinc gives 5.80, and 5.42 measured on the map).
 std::vector<double> sample_correlation(const Waveform& waveform, double sound_speed, double step, std::int64_t n);
+
+/// The compressed pulse's power against range offset, peak 1: |r(2 x / c)|^2 / |r(0)|^2 with r the autocorrelation of
+/// the replica the chain compresses with (dsp::make_replica), at x = j `step` m, j = 0..n-1, on the near side
+/// (`near` true: the echo's samples before its peak) or the far side. By FFT, the replica sampled a whole number of
+/// times per `step` and finely enough for the band (as sample_correlation). RangeEdge::Pulse's envelope is built from it.
+std::vector<double> pulse_power(const Waveform& waveform, double sound_speed, double step, std::int64_t n, bool near);
 
 /// The detector's plan for a map of `n_cells` range cells of `samples_per_cell` samples `step` apart and the
 /// bearings given, `rows` maps added in power, a background of `train_cells` cells either side. `hann`: the

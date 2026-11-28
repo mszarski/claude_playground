@@ -1129,6 +1129,7 @@ void bind_live(py::module_& m) {
         number(kw, "threshold_offset_db", o.threshold_offset_db);
         number(kw, "pedestal_m", o.pedestal_m);
         if (kw.contains("range_estimate") && !kw["range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["range_estimate"].cast<std::string>());
+        if (kw.contains("range_edge_correction") && !kw["range_edge_correction"].is_none()) o.range_edge = live::parse_range_edge(kw["range_edge_correction"].cast<std::string>());
         if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
         double tolerance = live::kDerive;
         number(kw, "row_tolerance_m", tolerance);
@@ -1173,6 +1174,10 @@ void bind_live(py::module_& m) {
         out["u_step"] = p.u_step;
         out["source_ratio"] = p.source_ratio;
         out["range_estimate"] = live::range_estimate_name(p.range_estimate);
+        out["range_edge_correction"] = live::range_edge_name(p.range_edge);
+        out["edge_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.edge_envelope.size()), p.edge_envelope.data());
+        out["edge_step_m"] = p.edge_step_m;
+        out["edge_scallop"] = p.edge_scallop;
         out["json"] = p.json();
         return out;
       },
@@ -1234,6 +1239,10 @@ void bind_live(py::module_& m) {
         p.u_step = plan["u_step"].cast<double>();
         p.source_ratio = plan["source_ratio"].cast<double>();
         if (plan.contains("range_estimate")) p.range_estimate = live::parse_range_estimate(plan["range_estimate"].cast<std::string>());
+        if (plan.contains("range_edge_correction")) p.range_edge = live::parse_range_edge(plan["range_edge_correction"].cast<std::string>());
+        if (plan.contains("edge_envelope")) p.edge_envelope = plan["edge_envelope"].cast<std::vector<double>>();
+        if (plan.contains("edge_step_m")) p.edge_step_m = plan["edge_step_m"].cast<double>();
+        if (plan.contains("edge_scallop")) p.edge_scallop = plan["edge_scallop"].cast<double>();
         const std::int64_t n_b = cell_mean.shape(0), n_cells = cell_mean.shape(1), stride = fine.shape(1);
         if (fine_offset < 0 || fine_offset + n_cells * p.samples_per_cell > stride) throw std::invalid_argument("fine holds fewer samples than the cells need");
         live::DetectorCells cells;
@@ -1290,6 +1299,11 @@ void bind_live(py::module_& m) {
           return live::sample_correlation(record.transmit.waveform, record.environment.sound_speed, step, n);
         }, py::arg("record"), py::arg("step"), py::arg("n"),
         "Amplitude correlation of the compressed pulse between map samples `step` m apart, lags 0..n-1.");
+  m.def("live_pulse_power", [](const PingRecord& record, double step, std::int64_t n, bool near) {
+          return live::pulse_power(record.transmit.waveform, record.environment.sound_speed, step, n, near);
+        }, py::arg("record"), py::arg("step"), py::arg("n"), py::arg("near") = true,
+        "The compressed pulse's power (peak 1) at j step m from its peak, j = 0..n-1, on the near (or far) side: the envelope "
+        "cfar.range_edge_correction pulse is built from (libs/live detector.hpp pulse_power).");
   m.def("live_row_tolerance", &live::row_tolerance, py::arg("record"), py::arg("given") = live::kDerive,
         "Elements within this of one line are one row: `given`, or 2 cm, or a quarter of the shortest wavelength when less.");
   m.def("live_sync_tolerance", &live::sync_tolerance, py::arg("given_us"), py::arg("top_frequency"),
@@ -1438,6 +1452,7 @@ void bind_live(py::module_& m) {
         get("cfar_search_factor", o.detector.search_factor);
         get("cfar_merge_m", o.detector.merge_m);
         if (kw.contains("cfar_range_estimate") && !kw["cfar_range_estimate"].is_none()) o.range_estimate = live::parse_range_estimate(kw["cfar_range_estimate"].cast<std::string>());
+        if (kw.contains("cfar_range_edge_correction") && !kw["cfar_range_edge_correction"].is_none()) o.detector.range_edge = live::parse_range_edge(kw["cfar_range_edge_correction"].cast<std::string>());
         if (kw.contains("range_doppler")) o.range_doppler = live::parse_range_doppler(kw["range_doppler"].cast<std::string>());   // sonar-fyj
         o.doppler = doppler_options(kw);                       // the sweep's Doppler bank (D4): flat doppler_* keys
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();

@@ -66,7 +66,13 @@ DEFAULTS = {
              # refused. libs/live ChainOptions::range_estimate is the same rule. The elevation search, SBL's gates,
              # blanking and the burst filter go by the centroid either way (Detection.centroid_range); with "first" a
              # detection the elevation places reports and is timed at the elevation's own range.
-             "range_estimate": None},
+             "range_estimate": None,
+             # range_edge_correction (opt-in, sonar-8h09): "off" (default: the leading edge as above, bit for bit) or "pulse":
+             # the leading edge of the nearest arrival that is not a stronger arrival's own compressed pulse (its skirt and
+             # range sidelobes, from the record's replica), at that arrival's peak (libs/live detector.hpp RangeEdge). A point
+             # echo's first sample over the threshold lies (c / (2 pi B)) sqrt(S / F) before its peak (S its SNR, F the
+             # threshold): -1.9 m at 37 dB on a 4-6 kHz sweep. Needs range_estimate first; refused with doppler sweep_bank.
+             "range_edge_correction": "off"},
     "min_snr_db": 9.0,
     # The LFM range-Doppler coupling (sonar-fyj, opt-in): an echo closing at v reads f0 v T / B nearer with an up-chirp
     # (farther with a down-chirp; detect.lfm_range_doppler_factor). "off": not corrected, the default. "ownship": each
@@ -481,6 +487,15 @@ def check_choices(cfg: dict) -> None:
     if estimate not in (None, "centroid") and cfg.get("cell_statistic") != "multiscale":
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} is a setting of cell_statistic multiscale, not "
                          f"{cfg.get('cell_statistic')!r} (libs/live LiveChain refuses it too)")
+    edge = (cfg.get("cfar") or {}).get("range_edge_correction", "off")
+    if edge not in RANGE_EDGES:
+        raise ValueError(f"chain.cfar.range_edge_correction: {edge!r} ({' or '.join(RANGE_EDGES)})")
+    if edge != "off" and chain_range_estimate(cfg) != "first":
+        raise ValueError("chain.cfar.range_edge_correction: pulse is a setting of the leading edge (cfar.range_estimate first, "
+                         "cell_statistic multiscale; libs/live LiveChain refuses it too)")
+    if edge != "off" and doppler.on(cfg.get("doppler")):
+        raise ValueError("chain.cfar.range_edge_correction: pulse is not made for doppler sweep_bank (its hypotheses' pulses are not "
+                         "the replica's; libs/live LiveChain refuses it too)")
 
 
 RANGE_RATE_FROM = ("tone", "any")        # chain.tracker.range_rate_from (D5); libs/live the same words
@@ -714,10 +729,13 @@ def detector_options(cfg: dict) -> dict:
     if estimate not in RANGE_ESTIMATES:
         raise ValueError(f"chain.cfar.range_estimate: {estimate!r} ({' or '.join(RANGE_ESTIMATES)})")
     o["range_estimate"] = estimate
+    if f.get("range_edge_correction", "off") != "off":       # opt-in (sonar-8h09): said only when on, so every other plan is as before
+        o["range_edge_correction"] = f["range_edge_correction"]
     return o
 
 
 RANGE_ESTIMATES = ("centroid", "first")        # libs/live detector.hpp parse_range_estimate refuses anything else
+RANGE_EDGES = ("off", "pulse")                 # libs/live detector.hpp parse_range_edge the same words
 
 
 def chain_range_estimate(cfg: dict) -> str:

@@ -327,6 +327,69 @@ TEST(Detector, TwoEchoesBeyondTheMergeDistanceAreTwoAndNearerAreOne) {
   EXPECT_EQ(plain.detect().size(), 2U);
 }
 
+// cfar range_edge_correction pulse (opt-in, sonar-8h09): the leading edge referenced to the compressed pulse.
+TEST(Detector, ThePulseReferencedEdgeReadsAPointEchoAtItsPeakAndKeepsANearerArrival) {
+  const PingRecord rec = row_record();
+  // The envelope: peak 1, non-increasing, the replica's own compressed pulse; only with the option, only with `first`.
+  DetectorOptions o;
+  o.range_estimate = RangeEstimate::First;
+  o.range_edge = RangeEdge::Pulse;
+  Map m(31, 1, o);
+  ASSERT_FALSE(m.plan.edge_envelope.empty());
+  EXPECT_DOUBLE_EQ(m.plan.edge_envelope[0], 1.0);
+  for (std::size_t j = 1; j < m.plan.edge_envelope.size(); ++j) EXPECT_LE(m.plan.edge_envelope[j], m.plan.edge_envelope[j - 1]);
+  EXPECT_NEAR(m.plan.edge_step_m, 0.0625, 1e-12);
+  EXPECT_NE(m.plan.json().find("\"range_edge_correction\": \"pulse\""), std::string::npos);
+  DetectorOptions plain_first;
+  plain_first.range_estimate = RangeEstimate::First;
+  Map off(31, 1, plain_first);
+  EXPECT_TRUE(off.plan.edge_envelope.empty());
+  EXPECT_EQ(off.plan.json().find("range_edge"), std::string::npos);
+  DetectorOptions centroid;
+  centroid.range_edge = RangeEdge::Pulse;
+  EXPECT_THROW(Map(31, 1, centroid), std::invalid_argument);
+  EXPECT_THROW(parse_range_edge("on"), std::invalid_argument);
+  // A point echo 40 dB over the noise at a sample, its compressed pulse laid along range: off reads its skirt, more
+  // than half a metre early; pulse within 3 cm.
+  const std::int64_t s0 = 300 * 8 + 5;
+  const double truth = m.fine_ranges[static_cast<std::size_t>(s0)];
+  const std::vector<double> p = pulse_power(rec.transmit.waveform, 1500.0, 0.25, 64, true);
+  for (Map* map : {&m, &off}) {
+    for (std::int64_t j = -63; j <= 63; ++j) map->add(70, s0 + j, static_cast<float>(1e4 * p[static_cast<std::size_t>(std::abs(j))]));
+  }
+  const auto edged = m.detect(), plain = off.detect();
+  ASSERT_EQ(edged.size(), 1U);
+  ASSERT_EQ(plain.size(), 1U);
+  EXPECT_LT(plain[0].range, truth - 0.5);
+  EXPECT_NEAR(edged[0].range, truth, 0.03);
+  EXPECT_EQ(edged[0].centroid_range, plain[0].centroid_range);       // only the range moves
+  // A weaker arrival 1.5 m in front (13 dB under the strong one, 2.7 dB above its pulse's skirt there with the noise
+  // and scalloping allowance): pulse reads it.
+  Map two(32, 1, o);
+  for (std::int64_t j = -63; j <= 63; ++j) {
+    two.add(70, s0 + j, static_cast<float>(1e4 * p[static_cast<std::size_t>(std::abs(j))]));
+    two.add(70, s0 - 6 + j, static_cast<float>(500.0 * p[static_cast<std::size_t>(std::abs(j))]));
+  }
+  const auto both = two.detect();
+  ASSERT_EQ(both.size(), 1U);
+  EXPECT_NEAR(both[0].range, truth - 1.5, 0.03);
+  // An arrival that is no local peak: an echo that rises steadily for 3 m (x1.5 a sample, 20 dB at its start) into one
+  // 41 dB peak, steeper on its near side than the pulse's skirt. Its samples stand above what the peak's pulse explains:
+  // the range is their first, the leading edge, where the plain edge puts it too.
+  Map shoulder(33, 1, o), shoulder_off(33, 1, plain_first);
+  for (Map* map : {&shoulder, &shoulder_off}) {
+    for (std::int64_t j = 0; j <= 12; ++j) {
+      map->add(70, s0 - 12 + j, static_cast<float>(100.0 * std::pow(1.5, static_cast<double>(j))));
+      if (j < 12) map->add(70, s0 + 12 - j, static_cast<float>(100.0 * std::pow(1.5, static_cast<double>(j))));
+    }
+  }
+  const auto rise = shoulder.detect(), rise_off = shoulder_off.detect();
+  ASSERT_EQ(rise.size(), 1U);
+  ASSERT_EQ(rise_off.size(), 1U);
+  EXPECT_NEAR(rise[0].range, truth - 3.0, 1e-9);
+  EXPECT_EQ(rise[0].range, rise_off[0].range);
+}
+
 TEST(Detector, BackgroundFollowsASlopeAtTheEndsOfTheMap) {
   // Power falling 3 dB per 300 cells: the plain mean of a one-sided window is low by the slope times the centroid's
   // offset (125 cells at the very end: 1.25 dB); the detector's background is within 0.15 dB everywhere.

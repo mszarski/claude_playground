@@ -184,6 +184,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("cfar_search_factor")) c.detector.search_factor = v();
   else if (is("cfar_merge_m")) c.detector.merge_m = v();
   else if (is("cfar_range_estimate")) c.range_estimate = parse_range_estimate(value);
+  else if (is("cfar_range_edge_correction")) c.detector.range_edge = parse_range_edge(value);   // off | pulse (opt-in, sonar-8h09)
   else if (is("doppler_mode")) c.doppler.mode = parse_doppler_mode(value);   // off | sweep_bank (doppler.hpp; D4)
   else if (is("doppler_max_range_rate_m_s")) c.doppler.max_range_rate = option_nonnegative(key, value);
   else if (is("doppler_step_m_s")) c.doppler.step = v();          // NaN (nan): c / (2 B T)
@@ -562,6 +563,7 @@ std::string options_json(const ChainOptions& c) {
       .num("cfar_sidelobe_margin_db", d.sidelobe_margin_db).num("cfar_sidelobe_floor_db", d.sidelobe_floor_db).num("cfar_search_factor", d.search_factor)
       .text("cfar_range_estimate", range_estimate_name(chain_range_estimate(c)))   // the value the chain uses (D-158)
       .text("range_doppler", range_doppler_name(c.range_doppler));
+  if (d.range_edge != RangeEdge::Off) j.text("cfar_range_edge_correction", range_edge_name(d.range_edge));   // said only when on
   const DopplerOptions& dop = c.doppler;
   j.text("doppler_mode", doppler_mode_name(dop.mode)).num("doppler_max_range_rate_m_s", dop.max_range_rate).num("doppler_step_m_s", dop.step)
       .integer("doppler_hypotheses", dop.hypotheses).num("doppler_unknown_ownship_m_s", dop.unknown_ownship)

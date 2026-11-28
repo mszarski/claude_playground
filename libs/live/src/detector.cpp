@@ -5,12 +5,14 @@
 #include <cmath>
 #include <complex>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
 #include "sonar/core/parallel.hpp"
 #include "sonar/detect/statistic.hpp"
 #include "sonar/live/detector_kernel.hpp"
+#include "sonar/dsp/fft.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 
 namespace sonar::live {
@@ -79,6 +81,47 @@ RangeEstimate parse_range_estimate(const std::string& name) {
 
 const char* range_estimate_name(RangeEstimate r) { return r == RangeEstimate::First ? "first" : "centroid"; }
 
+RangeEdge parse_range_edge(const std::string& name) {
+  if (name == "off") return RangeEdge::Off;
+  if (name == "pulse") return RangeEdge::Pulse;
+  throw std::invalid_argument("cfar range_edge_correction '" + name + "': one of off, pulse");
+}
+
+const char* range_edge_name(RangeEdge r) { return r == RangeEdge::Pulse ? "pulse" : "off"; }
+
+std::vector<double> pulse_power(const Waveform& w, double sound_speed, double step, std::int64_t n, bool near) {
+  // The matched filter's output for an echo of the replica is the replica's autocorrelation; its power, peak 1. The
+  // replica as the chain compresses with it (dsp::make_replica at baseband about the band's centre: the same filter as
+  // pulse_compress's), sampled a whole number of times per `step` of two-way time, finely enough for the band and the
+  // pulse (sample_correlation's rule). An echo at lag +t correlates with the replica at -t: the near side (the echo's
+  // samples before its peak) is r(-t).
+  std::vector<double> p(static_cast<std::size_t>(std::max<std::int64_t>(n, 1)), 0.0);
+  p[0] = 1.0;
+  const double tau = 2.0 * step / sound_speed;
+  if (!(tau > 0.0 && w.duration > 0.0) || p.size() == 1) return p;
+  const double band = std::abs(w.f_stop - w.f_start);
+  const double finest = std::max(kReplicaSamplesPerBand * band, kReplicaSamplesPerPulse / w.duration);
+  const auto per_step = static_cast<std::size_t>(std::max(std::ceil(finest * tau), 1.0));
+  const std::vector<std::complex<float>> h = dsp::make_replica(w, static_cast<double>(per_step) / tau, w.center());
+  if (h.empty()) return p;
+  const std::size_t n_fft = dsp::good_fft_size(2 * h.size() + 1);
+  std::vector<std::complex<float>> x(n_fft, {0.0F, 0.0F});
+  std::copy(h.begin(), h.end(), x.begin());
+  dsp::fft(x, false);
+  for (auto& v : x) v = std::complex<float>(std::norm(v), 0.0F);
+  dsp::fft(x, true);
+  const double zero = std::norm(std::complex<double>(x[0]));
+  if (!(zero > 0.0)) return p;
+  for (std::size_t j = 1; j < p.size(); ++j) {
+    const std::size_t lag = j * per_step;
+    if (lag >= h.size()) break;      // beyond the pulse's length: no overlap
+    // x[m] = sum_k h[k + m] conj(h[k]): an echo delayed by lag m (its sample m after the peak) is x[m] (far side); the
+    // near side is x[-m] = x[n_fft - m].
+    p[j] = std::norm(std::complex<double>(near ? x[n_fft - lag] : x[lag])) / zero;
+  }
+  return p;
+}
+
 std::string DetectorPlan::json() const {
   std::ostringstream s;
   s << std::setprecision(6);
@@ -94,6 +137,7 @@ std::string DetectorPlan::json() const {
   s << "]";
   // Said only when not the default, so that the default plan's line is the one it was.
   if (range_estimate != RangeEstimate::Centroid) s << ", \"range_estimate\": \"" << range_estimate_name(range_estimate) << "\"";
+  if (range_edge != RangeEdge::Off) s << ", \"range_edge_correction\": \"" << range_edge_name(range_edge) << "\"";
   s << "}";
   return s.str();
 }
@@ -208,6 +252,26 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
       p.range_envelope[static_cast<std::size_t>(d)] = std::max(p.range_envelope[static_cast<std::size_t>(d)], std::min(1.0, m * m));
     }
   }
+  if (options.range_edge == RangeEdge::Pulse) {
+    // RangeEdge::Pulse (opt-in): the compressed pulse's power envelope from the record's own replica, every quarter of a
+    // map step, out to the pulse's own length in range (c T / 2: no overlap beyond) or kEdgeEnvelopeMaxM, whichever is
+    // nearer; the larger of its two sides, then the largest from each offset outward (non-increasing).
+    if (options.range_estimate != RangeEstimate::First) {
+      throw std::invalid_argument("plan_detector: range_edge_correction pulse is a setting of range_estimate first");
+    }
+    p.range_edge = RangeEdge::Pulse;
+    p.edge_step_m = 0.25 * step;
+    const double reach = std::min(0.5 * c * w.duration + p.resolution_m, kEdgeEnvelopeMaxM);
+    const auto n_edge = static_cast<std::int64_t>(std::ceil(reach / p.edge_step_m)) + 1;
+    const std::vector<double> near = pulse_power(w, c, p.edge_step_m, n_edge, true), far = pulse_power(w, c, p.edge_step_m, n_edge, false);
+    p.edge_envelope.assign(near.size(), 0.0);
+    double top = 0.0;
+    for (std::size_t j = near.size(); j-- > 0;) {
+      top = std::max({top, near[j], far[j]});
+      p.edge_envelope[j] = std::min(top, 1.0);
+    }
+    p.edge_scallop = p.edge_envelope.size() > 2 ? p.edge_envelope[2] : 1.0;      // half a map step off the peak
+  }
   // Bearing sidelobes: the pattern of each line of hydrophones as the record has them (a dead board is a gap), with the
   // map's aperture window laid as the map lays it, averaged over the band (which fills the nulls) and over the lines
   // (their maps are added in power).
@@ -289,6 +353,65 @@ double median(std::vector<double>& v) {
   std::sort(v.begin(), v.end());
   const std::size_t h = v.size() / 2;
   return v.size() % 2 ? v[h] : 0.5 * (v[h - 1] + v[h]);
+}
+
+/// RangeEdge::Pulse: the range of the nearest arrival of a group that is not another's compressed pulse (detector.hpp
+/// RangeEdge). `line`: (sample, power over background), sorted by sample, the strongest of the group's bearings at each.
+/// NaN when no sample exceeds `factor` (the caller keeps the leading edge's own fallback). detect.py _pulse_edge_range is
+/// the same arithmetic in the same order.
+double pulse_edge_range(const std::vector<std::pair<std::int64_t, double>>& line, const std::vector<double>& fine_ranges,
+                        std::int64_t fine_offset, double factor, const DetectorPlan& plan) {
+  const auto at = [&](std::int64_t s) { return fine_ranges[static_cast<std::size_t>(fine_offset + s)]; };
+  // The local peaks over the threshold, as the arrivals are found (a run of samples the group does not hold ends one).
+  std::vector<std::size_t> peaks;
+  for (std::size_t q = 0; q < line.size(); ++q) {
+    const bool left = q > 0 && line[q - 1].first == line[q].first - 1, right = q + 1 < line.size() && line[q + 1].first == line[q].first + 1;
+    if (line[q].second <= factor) continue;
+    if ((left && line[q - 1].second >= line[q].second) || (right && line[q + 1].second > line[q].second)) continue;
+    peaks.push_back(q);
+  }
+  if (peaks.empty()) return std::numeric_limits<double>::quiet_NaN();
+  // Strongest first (ties: the nearer first). A peak no more than kEdgeNoise times what a stronger kept peak's pulse puts
+  // at its offset (the envelope at the offset less one map step, for where each lies between samples; the kept peak's
+  // own peak up to 1 / edge_scallop above its sample) is that peak's skirt or sidelobe.
+  std::stable_sort(peaks.begin(), peaks.end(), [&](std::size_t a, std::size_t b) { return line[a].second > line[b].second; });
+  const double slack = plan.step_m, h = plan.edge_step_m;
+  const auto envelope = [&](double dx) {
+    const double x = std::max(dx - slack, 0.0);
+    const auto j = static_cast<std::size_t>(std::floor(x / h));
+    return j < plan.edge_envelope.size() ? plan.edge_envelope[j] : 0.0;
+  };
+  std::vector<std::size_t> kept;
+  const auto skirt = [&](std::size_t q) {
+    for (std::size_t k : kept) {
+      const double dx = std::abs(at(line[q].first) - at(line[k].first));
+      if (line[q].second <= kEdgeNoise * line[k].second / plan.edge_scallop * envelope(dx)) return true;
+    }
+    return false;
+  };
+  std::size_t nearest = peaks.front();
+  for (std::size_t q : peaks) {
+    if (skirt(q)) continue;
+    kept.push_back(q);
+    if (line[q].first < line[nearest].first) nearest = q;
+  }
+  // An arrival that is no local peak (the direct path on the rising side of later, stronger paths a metre or two behind
+  // it, in shallow water): two adjacent samples over the threshold before the nearest arrival's peak that no kept
+  // peak's pulse explains. The range is then the first of them, the leading edge of that arrival.
+  for (std::size_t q = 0; q + 1 < line.size() && line[q].first < line[nearest].first; ++q) {
+    if (line[q].second <= factor || line[q + 1].first != line[q].first + 1 || line[q + 1].second <= factor) continue;
+    if (!skirt(q) && !skirt(q + 1)) return at(line[q].first);
+  }
+  // Its range: the power-weighted mean of the group's samples within one range resolution of its peak sample.
+  const double r0 = at(line[nearest].first);
+  double w_sum = 0.0, r_sum = 0.0;
+  for (const auto& v : line) {
+    const double r = at(v.first);
+    if (std::abs(r - r0) > plan.resolution_m) continue;
+    w_sum += v.second;
+    r_sum += v.second * r;
+  }
+  return w_sum > 0.0 ? r_sum / w_sum : r0;
 }
 
 // Training cells of each range cell (the same for every bearing): [j - guard - train, j - guard) and (j + guard, j + guard + train];
@@ -658,6 +781,10 @@ std::vector<Detection> multiscale_group(const float* fine, std::int64_t fine_str
           d.range = fine_ranges[static_cast<std::size_t>(fine_offset + q.first)];
           break;
         }
+      }
+      if (plan.range_edge == RangeEdge::Pulse) {
+        const double edge = pulse_edge_range(line, fine_ranges, fine_offset, sample_factor, plan);
+        if (std::isfinite(edge)) d.range = edge;
       }
     }
     out.push_back(d);

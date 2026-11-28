@@ -318,6 +318,14 @@ LiveChain::LiveChain(const ChainOptions& options)
   if (opt_.range_estimate && *opt_.range_estimate != RangeEstimate::Centroid && !opt_.cell_multiscale) {
     throw std::invalid_argument(std::string("LiveChain: cfar_range_estimate ") + range_estimate_name(*opt_.range_estimate) + " is a setting of cell_statistic multiscale");
   }
+  // RangeEdge::Pulse (opt-in, sonar-8h09): the leading edge's own setting, from the zero-Doppler replica's pulse; live.py
+  // check_choices refuses the same cases with the same words.
+  if (opt_.detector.range_edge != RangeEdge::Off && chain_range_estimate(opt_) != RangeEstimate::First) {
+    throw std::invalid_argument("LiveChain: cfar_range_edge_correction pulse is a setting of the leading edge (cfar_range_estimate first, cell_statistic multiscale)");
+  }
+  if (opt_.detector.range_edge != RangeEdge::Off && opt_.doppler.mode != DopplerMode::Off) {
+    throw std::invalid_argument("LiveChain: cfar_range_edge_correction pulse is not made for doppler sweep_bank (its hypotheses' pulses are not the replica's)");
+  }
   if (opt_.doppler.mode != DopplerMode::Off && !opt_.cell_multiscale) {
     throw std::invalid_argument("LiveChain: doppler sweep_bank needs cell_statistic multiscale (its thresholds carry the bank's shift)");
   }
