@@ -11,7 +11,7 @@ from .. import _gpusonar as core
 from .. import acoustics
 from .. import environment as site
 from ..config import dump_yaml, load_scenario_config
-from ..sonar import SonarModel, resolve_environment
+from ..sonar import SonarModel, ping_schedule, resolve_environment, short_range_block, short_range_config, window_end_s
 from . import engine as _engine
 from . import receiver
 from .propagation import EigenrayProvider, make_provider, two_way_paths
@@ -619,6 +619,7 @@ class ScenarioResult:
     front_end: list = None                 # per ping, what the overload model did (receive.overload / transmit.direct_path), or None
     legs: list = None                      # survey leg index of each record (platform.legs), or None
     times: np.ndarray = None               # [n_pings] scenario time of each transmit, s
+    kinds: list = None                     # per record "long" or "short" (the sonar's short_range block), or None without one
 
 
 def run_scenario(name_or_config, overrides: dict | None = None, output: str | None = None,
@@ -693,6 +694,25 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
         beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)
+    # The short-range mode (sonar.short_range, opt-in): a second kind of ping on a schedule. Its pings are made by a sonar model
+    # of their own (the sweep cut short, its own window) and draw their noise from a generator of their own, so that the long
+    # pings of a run with the mode are those of a run without it at the same transmit times.
+    short_cfg = short_range_block(sonar.config)
+    short_sonar = short_rng = schedule = None
+    if short_cfg is not None:
+        if any(plat.get(k) is not None for k in ("legs", "motion", "raster")):
+            raise ValueError("sonar short_range: a straight run only (platform.legs, platform.motion and platform.raster are not scheduled)")
+        short_sonar = SonarModel.from_config(short_range_config(sonar.config))
+        short_rng = np.random.default_rng([int(cfg.get("seed", 0)), 0x5352])
+        schedule = ping_schedule(count, interval, short_cfg)
+        c_nominal = float(env.get("sound_speed") or sonar.nominal_sound_speed)
+        long_end, short_end = window_end_s(sonar, c_nominal), window_end_s(short_sonar, c_nominal)
+        if long_end > interval + 1e-9:
+            raise ValueError(f"sonar short_range: the long ping's window closes {long_end:.3f} s after it is sent, after the short ping "
+                             f"(pings.interval {interval:g} s): make the interval longer or the window shorter")
+        if short_end > float(short_cfg["interval_s"]) + 1e-9:
+            raise ValueError(f"sonar short_range: the short ping's window closes {short_end:.3f} s after it is sent, after the next long "
+                             f"ping (short_range.interval_s {float(short_cfg['interval_s']):g} s)")
     front_end = None
     if sonar.config["transmit"].get("direct_path") or sonar.config["receive"].get("overload") is not None:
         front_end = []                     # the truth about overload: beside the records, never in them
@@ -746,10 +766,14 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             ys = np.arange(*[float(v) for v in raster["y"]])
             positions = [np.array([px, py, position[2]]) for px in xs for py in ys]
             stop_and_go = True
+        elif schedule is not None:
+            ping_times = [t_ for _, t_ in schedule]
+            positions = [position + velocity * t_ for t_ in ping_times]
         else:
             positions = [position + velocity * (i * interval) for i in range(count)]
         for i, pos in enumerate(positions):
-            t = i * interval
+            t = i * interval if schedule is None else schedule[i][1]
+            short = schedule is not None and schedule[i][0] == "short"
             # platform.rates (rad/s): the vehicle rolls, pitches and yaws during the ping, from `rpy` at each
             # transmit. The echoes are made with the turning array; the record handed to a processor then
             # holds what navigation would give it: the attitude at the transmit and samples of it over
@@ -758,8 +782,8 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity, rates or (0.0, 0.0, 0.0))
             truth_positions.append(pos)
             records.append(simulate_ping(
-                sonar, pose, scene, environment=env, sequence=i, sub_sequence=i % n_sub,
-                time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=rng, backend=backend,
+                short_sonar if short else sonar, pose, scene, environment=env, sequence=i, sub_sequence=i % n_sub,
+                time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=short_rng if short else rng, backend=backend,
                 **ping_kwargs))
             if rates and any(float(v) != 0.0 for v in rates):
                 _add_true_ins(records[-1], np.zeros(3), float(plat.get("attitude_rate_hz", 10.0)))
@@ -790,4 +814,5 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     # The result's config: the scenario with its site values filled in and the environment resolved.
     cfg = {**cfg, "environment": env}
     return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), legs=leg_of_record,
-                          times=np.asarray(ping_times, dtype=float), front_end=front_end)
+                          times=np.asarray(ping_times, dtype=float), front_end=front_end,
+                          kinds=None if schedule is None else [k for k, _ in schedule])

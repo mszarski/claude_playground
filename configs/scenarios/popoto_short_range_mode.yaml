@@ -1,0 +1,29 @@
+# The short-range mode (opt-in; docs/design/short_range_mode.md): the long-range array's 2 s hyperbolic sweep (D-256, blind
+# inside c T / 2 = 1.5 km) alternating with the same sweep cut to 0.25 s (blind inside 187.5 m), sent when the long ping's
+# window closes; the next long ping follows the short one's window. One ship-sized mover at 12 km (the long mode's), a still
+# object at 800 m (inside the long mode's blind range: only the short pings see it) and a mover opening through the hand-over
+# range, 1300 m to about 1760 m at 4 m/s over the run (both kinds see it beyond 1.5 km: one track). Free field and the site's
+# ambient noise, so that a CPU can run it (the 2 s sampled pulse is slow to synthesise: docs/tasks/DOPPLER.md HB.1 item 6).
+# Ten pings: long, short, long, short ... (`pings.count` counts both kinds).
+# tests/python/test_short_range_mode.py holds what it shows; `sonar_overrides.short_range` with `null` is the baseline alone.
+name: popoto_short_range_mode
+sonar: popoto_long_range
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [1500.0, 12700.0]}}    # the long ping: from its blind range to 12.7 km
+  short_range:
+    waveform: {duration: 2.5e-1}      # the same 4-6 kHz hyperbolic sweep at the same 197 dB rms, 0.25 s: 9.0 dB less energy
+    window: {range: [190.0, 3000.0]}  # blind inside c T / 2 = 187.5 m; to twice the long mode's blind range
+    every: 1                          # one short ping after every long one
+    interval_s: 4.3                   # its window closes 2 x 3000 / c + 0.25 = 4.26 s after it is sent (c = 1497 m/s here)
+environment: {base: coastal_12c, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 10, interval: 19.0}   # the long ping's window closes 2 x 12700 / c + 2 = 18.97 s after it is sent; the cycle is 23.3 s
+scene:
+  - {type: points, label: ship, positions: [[400.0, 12000.0, 4.0]], target_strength_db: 25.0, velocity: [-6.0, 0.0, 0.0]}
+  - {type: points, label: near, positions: [[-150.0, 800.0, 30.0]], target_strength_db: 10.0}
+  - {type: points, label: crossing, positions: [[0.0, 1300.0, 30.0]], target_strength_db: 10.0, velocity: [0.0, 4.0, 0.0]}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 61

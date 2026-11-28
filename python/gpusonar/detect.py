@@ -232,6 +232,64 @@ def check_plan(plan: dict) -> None:
         raise ValueError("detector plan: scales after the first are means of one cell or more")
 
 
+EDGE_NOISE = 2.0      # libs/live detector.hpp kEdgeNoise (3 dB)
+
+
+def _pulse_edge_range(idx, line, fine_ranges, factor: float, plan: dict) -> float:
+    """cfar.range_edge_correction pulse (opt-in, sonar-8h09; libs/live detector.cpp pulse_edge_range, the same arithmetic in
+    the same order): the range of the group's nearest arrival that is not a stronger arrival's compressed pulse. `idx`: the
+    group's samples (sorted), `line` their power over the background (the strongest of the group's bearings). NaN when
+    no sample exceeds `factor`."""
+    n = len(idx)
+    peaks = []
+    for q in range(n):
+        left = q > 0 and idx[q - 1] == idx[q] - 1
+        right = q + 1 < n and idx[q + 1] == idx[q] + 1
+        if line[q] <= factor:
+            continue
+        if (left and line[q - 1] >= line[q]) or (right and line[q + 1] > line[q]):
+            continue
+        peaks.append(q)
+    if not peaks:
+        return float("nan")
+    peaks.sort(key=lambda q: -line[q])          # stable: ties keep the nearer first
+    slack, h, scallop = float(plan["step_m"]), float(plan["edge_step_m"]), float(plan["edge_scallop"])
+    env = plan["edge_envelope"]
+
+    def envelope(dx):
+        j = int(np.floor(max(dx - slack, 0.0) / h))
+        return float(env[j]) if j < len(env) else 0.0
+
+    kept, nearest = [], peaks[0]
+
+    def skirt(q):
+        rq = float(fine_ranges[idx[q]])
+        return any(float(line[q]) <= EDGE_NOISE * float(line[k]) / scallop * envelope(abs(rq - float(fine_ranges[idx[k]]))) for k in kept)
+
+    for q in peaks:
+        if skirt(q):
+            continue
+        kept.append(q)
+        if idx[q] < idx[nearest]:
+            nearest = q
+    # An arrival that is no local peak (the direct path on the rising side of later, stronger paths): two adjacent samples
+    # over the threshold before the nearest arrival's peak that no kept peak's pulse explains; the range is the first.
+    q = 0
+    while q + 1 < n and idx[q] < idx[nearest]:
+        if line[q] > factor and idx[q + 1] == idx[q] + 1 and line[q + 1] > factor and not skirt(q) and not skirt(q + 1):
+            return float(fine_ranges[idx[q]])
+        q += 1
+    r0 = float(fine_ranges[idx[nearest]])
+    w_sum = r_sum = 0.0
+    for q in range(n):
+        r = float(fine_ranges[idx[q]])
+        if abs(r - r0) > float(plan["resolution_m"]):
+            continue
+        w_sum += float(line[q])
+        r_sum += float(line[q]) * r
+    return r_sum / w_sum if w_sum > 0.0 else r0
+
+
 def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
                plan: dict, level: np.ndarray | None = None) -> tuple[list[Detection], np.ndarray]:
     """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
@@ -341,6 +399,10 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
                 # single-sample threshold, else the nearest cell's centre.
                 over_ = np.flatnonzero(line > sample_factor)
                 rng = float(fine_ranges[idx[over_[0]]]) if len(over_) else near
+                if plan.get("range_edge_correction", "off") == "pulse":
+                    edge = _pulse_edge_range(idx, line, fine_ranges, sample_factor, plan)
+                    if np.isfinite(edge):
+                        rng = edge
             out.append(Detection(rng, float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
                                  extent=far - near + float(plan["cell_m"]), arrivals=arrivals, centroid_range=centroid))
