@@ -83,7 +83,8 @@ SITE_SCENES = {   # a scene that simulates the water of a planning site: its typ
     "popoto_12km_two_ships": "shelf_100m_sand_12c", "popoto_env_deep_silt_1000m": "slope_1000m_silt_profile",
     "popoto_env_winter_sand_200m": "winter_200m_sand_profile", "popoto_env_summer_mud_60m": "summer_60m_mud_profile",
     "flank_patrol": None, "flank_target_1km": None, "flank_target_5km": None, "flank_target_10km": None, "popoto_far_mover": None,
-    "popoto_trial_100m": None, "popoto_trial_1000m": None, "popoto_trial_2000m": None}
+    "popoto_trial_100m": None, "popoto_trial_1000m": None, "popoto_trial_2000m": None,
+    "popoto_12km_deep": "deep_no_bottom_return", "popoto_12km_deep_sea_state_5": "deep_no_bottom_return_sea_state_5"}   # sonar-rctz
 
 
 @pytest.mark.parametrize("name", sorted(SITE_SCENES))

@@ -80,8 +80,12 @@ def test_the_scene_loads_and_takes_its_site_by_name(name):
     surf = cfg["time_spread"]["surface"]
     assert (surf.get("bubble_loss_db") or {}).get("model") == site.get("bubble_model")
     assert surf["wind_speed"] == pytest.approx(env["wind_speed"])
-    # the boundaries' reverberation by the one rule: the surface at the site's wind, no bottom
+    # the boundaries' reverberation: typed as the one rule gives it (the surface at the site's wind, no bottom), filled from the site
     assert cfg["reverberation"] == [{"model": "chapman_harris", "wind_speed": env["wind_speed"], "boundary_z": 0.0}]
+    assert raw["reverberation"] == [{"model": "chapman_harris"}] and "reverberation" not in cfg["_environment_filled"]
+    from gpusonar.environment import boundary_scattering
+    rule = boundary_scattering(env, 5000.0, name)["items"]
+    assert [{k: v for k, v in it.items() if k != "boundary"} for it in rule] == [{"model": "chapman_harris", "wind_speed": env["wind_speed"]}]
     assert cfg["receiver"]["ambient_noise"] == {"model": "wenz", "wind_speed": env["wind_speed"], "shipping": 0.5}
 
 
