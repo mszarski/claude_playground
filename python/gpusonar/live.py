@@ -1735,7 +1735,11 @@ class LiveChain:
                 # statistics; sidelobes of a stronger cell dropped; touching cells one detection (libs/live detector.hpp).
                 n_rows = len(rows) if rows is not None else 1
                 divisor = float(bank.get("budget_divisor", 1.0)) if bank is not None else 1.0
-                key = (power.shape[1], k, train, n_rows, shift, None if bank is None else float(bank["pedestal_m"]), divisor)
+                # The plan is the pulse's too (its replica's autocorrelation, its range sidelobes): a stream of two kinds of ping
+                # (the short-range mode: the sweep cut short, docs/design/short_range_mode.md) is planned for each ping's own pulse,
+                # whatever its window (libs/live chain.cpp the same).
+                pulse = (int(w_.type), float(w_.f_start), float(w_.f_stop), float(w_.duration), float(w_.window_alpha))
+                key = (power.shape[1], k, train, n_rows, shift, None if bank is None else float(bank["pedestal_m"]), divisor, pulse)
                 if self._plan_key != key:
                     o = detector_options(cfg)
                     if divisor != 1.0:

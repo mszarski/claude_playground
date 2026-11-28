@@ -42,9 +42,10 @@ FAMILIES = [
         "popoto_12km", "popoto_12km_2row", "popoto_12km_3row", "popoto_12km_doppler", "popoto_12km_two_ships",
         "popoto_12km_large_submerged", "popoto_12km_large_submerged_tone", "popoto_12km_deep", "popoto_12km_deep_sea_state_5",
         "popoto_env_winter_sand_200m", "popoto_env_summer_mud_60m", "popoto_env_gravel_30m",
-        "popoto_env_deep_silt_1000m")),
+        "popoto_env_deep_silt_1000m", "popoto_short_range_mode")),
     ("Stacked rows", "rows", (
-        "popoto_elevation_free", "popoto_elevation_shallow", "popoto_elevation_rehearsal", "popoto_face_2row_shallow")),
+        "popoto_elevation_free", "popoto_elevation_shallow", "popoto_elevation_rehearsal", "popoto_face_2row_shallow",
+        "popoto_elevation_short_range")),
     ("Staged builds", "staged", (
         "popoto_testauv_trial_1row", "popoto_static_trial_2row", "popoto_static_trial_3row", "popoto_static_free",
         "popoto_static_passing")),

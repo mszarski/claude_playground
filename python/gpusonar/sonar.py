@@ -536,6 +536,70 @@ class SonarModel:
         return r
 
 
+# --- the short-range mode: a second kind of ping (opt-in; docs/design/short_range_mode.md) -----------------------------
+# A sonar file's optional `short_range` block adds short pings to a run: the same sweep cut short (its own `waveform` keys laid
+# over transmit.waveform, normally only `duration`) with its own receive window, one after every `every` long pings, each
+# followed by `interval_s` before the next long ping. The records need nothing new: each carries its own replica (type,
+# band, duration) and its own window (start time, samples), and that is how the chain tells the kinds apart. Without the
+# block a sonar sends only its own pulse, as before.
+SHORT_RANGE_KEYS = ("waveform", "window", "every", "interval_s")
+
+
+def short_range_block(cfg: dict) -> dict | None:
+    """The sonar's `short_range` block, checked, or None when it has none (the default: one kind of ping)."""
+    sr = cfg.get("short_range")
+    if not sr:
+        return None
+    if not isinstance(sr, dict):
+        raise ValueError("short_range: a mapping {waveform, window, every, interval_s} (docs/CONFIGURATION.md)")
+    unknown = sorted(set(sr) - set(SHORT_RANGE_KEYS))
+    if unknown:
+        raise ValueError(f"short_range: unknown key(s) {unknown}; the keys are {list(SHORT_RANGE_KEYS)}")
+    for key in ("window", "interval_s"):
+        if sr.get(key) is None:
+            raise ValueError(f"short_range.{key} must be given (docs/CONFIGURATION.md)")
+    if int(sr.get("every", 1)) < 1:
+        raise ValueError("short_range.every: one short ping after every `every` long pings, 1 or more")
+    if not float(sr["interval_s"]) > 0.0:
+        raise ValueError("short_range.interval_s must be positive")
+    return sr
+
+
+def short_range_config(cfg: dict) -> dict:
+    """The sonar config of the short pings: transmit.waveform with the block's `waveform` keys laid over it, the block's
+    `window` as receive.window, the block itself removed. Everything else (array, level, band, boards) is the sonar's."""
+    import copy
+    from .config import deep_merge
+    sr = short_range_block(cfg)
+    if sr is None:
+        raise ValueError("short_range_config: the sonar has no short_range block")
+    out = copy.deepcopy({k: v for k, v in cfg.items() if k != "short_range"})
+    out["transmit"]["waveform"] = deep_merge(out["transmit"]["waveform"], copy.deepcopy(sr.get("waveform") or {}))
+    out["receive"]["window"] = copy.deepcopy(sr["window"])
+    return out
+
+
+def ping_schedule(count: int, interval: float, short_range: dict | None) -> list[tuple[str, float]]:
+    """(kind, transmit time from the first ping, s) of each of `count` pings: "long" every `interval`, as before, when there
+    is no short_range block; with one, `every` long pings then one short ping, the short one sent `interval` after the long
+    one before it and the next long one `short_range.interval_s` after it."""
+    if short_range is None:
+        return [("long", i * float(interval)) for i in range(int(count))]
+    every = int(short_range.get("every", 1))
+    out, t = [], 0.0
+    for i in range(int(count)):
+        kind = "short" if i % (every + 1) == every else "long"
+        out.append((kind, t))
+        t += float(short_range["interval_s"]) if kind == "short" else float(interval)
+    return out
+
+
+def window_end_s(model: "SonarModel", sound_speed: float | None = None) -> float:
+    """When the receive window closes, s after the transmission starts."""
+    start, n = model.window(sound_speed)
+    return float(start + n / model.sample_rate)
+
+
 def resolve_environment(env: dict | None, depth: float = 0.0) -> dict:
     """The environment the simulator works with (gpusonar/environment.py `resolve`): sound speed filled in from
     temperature and salinity, a profile, or `acoustics.NOMINAL_SOUND_SPEED`; `env` may be a mapping, the name

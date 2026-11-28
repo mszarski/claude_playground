@@ -1,0 +1,28 @@
+# The stacked rows' elevation at about 1 km with the short-range mode (opt-in; docs/design/short_range_mode.md): the
+# three-row long-range array sends the shipped 2 s hyperbolic sweep (D-256), blind inside 1.5 km, alternating with the same
+# sweep cut to 0.25 s, blind inside 187.5 m. The targets are popoto_elevation_free's (three, near 1 km, above, level with and
+# below the vehicle, rolled 3 degrees, free field, in noise): inside the long pings' blind range, so only the short pings see
+# them, and the depths the chain reports must be the targets'. What popoto_elevation_free shows with the former 1 s linear
+# sweep by override, this shows with the shipped long pulse and the short-range mode.
+# Chain: configs/deploy/popoto_vehicle_elevation.yaml (without sync: these pings are at baseband).
+name: popoto_elevation_short_range
+sonar: popoto_long_range_3row
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [1500.0, 3000.0]}}    # the long ping: from its blind range to 3 km
+  short_range:
+    waveform: {duration: 2.5e-1}      # the same sweep at the same level, 0.25 s
+    window: {range: [700.0, 1400.0]}
+    every: 1
+    interval_s: 2.2                   # its window closes 2 x 1400 / c + 0.25 = 2.12 s after it is sent
+environment: {base: coastal_12c, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
+platform: {position: [0, 0, 60.0], rpy: [0.0524, 0, 0], velocity: [1.5, 0, 0]}     # roll 3 degrees
+pings: {count: 6, interval: 6.1}     # the long ping's window closes 2 x 3000 / c + 2 = 6.01 s after it is sent
+scene:
+  - {type: points, label: shallow, positions: [[-300.0, 900.0, 10.0]], target_strength_db: 10.0}
+  - {type: points, label: level,   positions: [[100.0, 1000.0, 60.0]], target_strength_db: 10.0}
+  - {type: points, label: deep,    positions: [[500.0, 1100.0, 160.0]], target_strength_db: 10.0}
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 11
