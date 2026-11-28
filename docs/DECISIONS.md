@@ -5842,3 +5842,7 @@ owner's decisions that followed are D-256.
 - The container was restarted during this batch (2026-11-27); two agents' background runs were lost
   and no committed work.
 - Not in this merge: the baseline's waveform change of D-256 (branch `hfmbase`).
+- Notes from the document sweep (same day): D-256's "holds every target on 6 of 6 pings" for the 2 s
+  hyperbolic candidate leaves out that the oblique hull is detected on all six pings but not
+  tracked (D-260, DM.6); the state documents say so. D-257's "15" and D-258's "29" tests are
+  collected counts (11 and 18 `def test_`). The sweep found no error in D-255 to D-261.
