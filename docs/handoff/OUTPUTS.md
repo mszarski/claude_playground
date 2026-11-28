@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245, D-250 and D-254 the same day; the gallery was regenerated whole at the seventh batch's tree, D-253, and its tables re-read from `gallery.json` at D-254): the gallery pictures, the scene pages and chain views of the visualization (section 1.11, D-248, D-253), the headline numbers with their sources, what a
+decision D-181 (the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245, D-250 and D-254 the same day, to D-261 on 2026-11-28; the gallery was regenerated whole at the seventh batch's tree, D-253, and its tables re-read from `gallery.json` at D-254): the gallery pictures, the scene pages and chain views of the visualization (section 1.11, D-248, D-253), the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -25,10 +25,12 @@ entry of `docs/figures/gallery.json` per scene.
   `quick: false`; the `seconds` entries sum to 498 s.
 - **Worse against the file before it, first** (the D-179 gallery with `buried_objects` of
   `8391941`, which predates other decisions too): `fls_170k_traffic` has one mover not on a moving
-  object (movers 3 -> 4; issue `sonar-4pon`, not explained); `popoto_env_gravel_30m` confirmed
-  tracks 3 -> 2 (the static one lost). Also moved: `fls_120k_transit` detections a ping 6 to 9 ->
+  object (movers 3 -> 4; explained by D-259, `sonar-4pon` closed: a wake track, a false mover in 5
+  of 8 full-size seeds under the default reverberation law and 3 of 8 under the old one, so a rate the
+  committed 0 drew favourably, not shown to be D-251's); `popoto_env_gravel_30m` confirmed
+  tracks 3 -> 2 (the static one lost; it was on no object, D-259). Also moved: `fls_120k_transit` detections a ping 6 to 9 ->
   5 to 8; `fls_120k_cluttered_seabed` confirmed tracks 65 -> 66; `flank_patrol` 3 to 6 -> 4 to 6
-  detections a ping. Every named target is tracked as before with the same class (D-251). The
+  detections a ping (D-216's, D-259). Every named target is tracked as before with the same class (D-251). The
   one-detection differences of the fourth batch's job (`sonar-pli3`) are closed: superseded, not
   explained (D-253).
 - One run, **one seed per scene**. Where a number depends on the seed, section 2.2 has the
@@ -149,7 +151,10 @@ Same objects at 330 kHz; the pinnacle is absent. Geometry: [`scenarios/fls_330k_
 - In the same scene the **kayak and the mooring buoy are not tracked**, and the boat's
   velocity is off (table).
 - **`fls_170k_traffic` reports one false mover since the gallery of D-253** (movers 3 -> 4; none
-  before; issue `sonar-4pon`: which track and why is not known).
+  before). Which and why (D-259): a track on the crossing boat's still wake hopping between two wake
+  clusters 11 m apart (2.54 ± 0.33 m/s against 2.31 m/s needed); over 8 full-size seeds such a mover
+  appears in 5 (3 of 8 under `doppler: centre`). A wake or hop rule would move a default (`sonar-ya9s`).
+  `tools/gallery.py --evidence` (opt-in) writes each track's classifier evidence into `gallery.json`.
 - `fls_120k_cluttered_seabed` makes 66 tracks for two boats; 10 are `uncertain` and 2 are
   `line`. Everything on the bed makes a track.
 - `fls_170k_traffic`: the closing boat's track is 4.5 m from the boat's centre because its
@@ -311,7 +316,8 @@ Two depth slices (at the cylinder's top, 0.25 m, and the sphere's top, 0.14 m) a
   reverberation term (`sonar-w2w3`, D-221, D-227) the coverage picture predicts 10.3 dB against
   6.9 dB measured on its beam, the rest mostly its 2 m/s against the 1 s LFM (3.4 dB, D-227). [`SCENARIOS.md`](../SCENARIOS.md), `flank_patrol`.
 - 5 tracks for two objects: multipath splits the wreck's echo into several clusters and
-  each starts a track; 1 track is `uncertain` (2 before the gallery of D-253).
+  each starts a track; 1 track is `uncertain` (2 before the gallery of D-253; that difference is D-216's
+  geometric-mean bistatic rule, D-259).
 - The outcome rests on an assumed seabed (-27 dB Lambert), wind (5 m/s) and noise (45 dB);
   none is measured. The platform stands still.
 
@@ -388,7 +394,8 @@ Left: the first ping; the ship's echo is spread over some 250 m of range behind 
   LFM range-Doppler coupling 3.0 m + leading edge 0.4 m; not cured. On seed 52 the ship is
   `uncertain`, not a mover. The peak is 3.3 dB under the gallery of before D-137
   (issue `sonar-9b8`). **2 confirmed tracks since the gallery of D-253, where there were 3** (the
-  static one lost; D-251).
+  static one lost; D-251; it was on no object, a four-row track of 11 to 15 dB arrivals about 100 m beyond
+  the ship, D-259).
 - Winter over sand (200 m, 8 km): tracked, 2.8 m from the hull; a stray detection 18 to
   22 m beyond the hull at ping 1 on every seed (D-170, issue `sonar-2o5`).
 - Bottom parameters are textbook values per sediment, and all four waters are
@@ -510,7 +517,17 @@ is recorded only there (not in `RESULTS.md`, and with no committed JSON); that i
 
 ### 2.1 Detection at the 12 km design point
 
-**What is wrong first:** one row of 32 hydrophones is 1.1 dB short at 12 km (detection
+**What is wrong first: the shipped baseline does not hold the resolved hull at the deep site** (D-260;
+`docs/tasks/doppler_deep12_eval.json`, the `doppler` job's `deep12` sub-run on an L4, one seed, 6 pings a case;
+illustrative site, assumed class values). At sea state 3 with the apl_1994 bubble law the three-row face with
+the shipped 1 s, 197 dB linear sweep and the plain filter holds neither the closing nor the oblique
+`large_submerged` hull nor the ship (0 of 6 pings each); the crossing hull 6 of 6 (+2.95 dB), the planner's
++25 dB point 6 of 6 (+3.41 dB against +2.79 predicted). Every margin below is for a steady point echo; the
+resolved hull is 3.8 to 6.0 dB under the point in the same case. The sea-state-5 alternate (4 s, 200 dB) at sea
+state 5 holds neither hull with any filter. The owner's fix (D-256), a 2 s hyperbolic sweep at 197 dB, holds
+every target on 6 of 6 at sea state 3 (+1.28 / +0.73 dB on the hulls, one seed; the oblique hull not tracked) and
+not at sea state 4; it is not merged (branch `hfmbase`). On the reverberation-limited shelf the 1 s sweep holds
+every hull (8.0 to 11.4 dB, D-243; `docs/tasks/doppler_large_submerged_eval.json`). Then: one row of 32 hydrophones is 1.1 dB short at 12 km (detection
 probability 0.22 on one ping). The target strength (+25 dB) is a placeholder, the source
 level (197 dB) is of a projector not yet chosen, and the boards are used an octave below
 their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 12 km is
@@ -530,7 +547,8 @@ section 1.7).
 **Per class and site, with the reverberation term: the trade study** (D-233;
 `docs/design/popoto_trade_study.md`, generated by `tools/popoto_trade_study.py --report` from
 `popoto_trade_study.json`, grid run on tree `de3717b`; every site value illustrative, every target
-strength assumed, the class at the low end of its strength). Worst first: the +5 dB class (`xl_auv`) is
+strength assumed, the class at the low end of its strength; **the planner's figures for an unresolved,
+non-moving target: measured at the deep site the resolved hull is not held, above**). Worst first: the +5 dB class (`xl_auv`) is
 not met at 12 km by the shipped 3 x 32 at any of the 6 sites (−4.6 dB on the shelf to −27.1 dB at sea
 state 5, −116.1 dB in the summer mud shadow), and at three sites no variant in the grid (up to 3 x 96,
 200 dB) reaches it. `ship` and `large_submerged` fail at sea state 5 (−6.1, −7.1 dB) and over summer mud
@@ -540,8 +558,9 @@ scattering changes which geometries hold 12 km. Against the chain: `xl_auv` at 8
 ship at 12 km 4.8 dB low. Since D-235 the owner has said 12 km is for `large_submerged` first and `ship`
 second; since D-238 `DESIGN.md`'s POP-3 reads "partly met" (free field yes with three rows, +2.9 dB; not at
 `deep_no_bottom_return_sea_state_5` or `summer_60m_mud_profile`) and "The 12 km design point" has the
-per-site table. The detection probability, the false-alarm rate, the worst sea state and the waters are
-still the owner's (`STATUS.md` questions 51, 52, 55 and 56). Since D-244 the baseline is the plain sweep
+per-site table (since D-260 also the measured verdicts per design). The detection probability, the
+false-alarm rate and the waters are still the owner's (`STATUS.md` questions 51, 52, 55 and 56); the worst sea
+state is answered (D-255: the baseline sea state 3, an alternate sea state 5). Since D-244 the baseline is the plain sweep
 on the three-row face with every Doppler option off. Through the chain at 12 km (D-243; two opt-in
 scenes, one seed, assumed class values): the sweep alone holds three `large_submerged` geometries on 6 of
 6 pings at 7.98 to 11.41 dB, 2.5 to 5.9 dB under the planner's point target; **with the tone path on, 22
@@ -564,10 +583,9 @@ hydrophones at 27.5 kHz would need 322 dB (not possible); 190 dB reaches 2.7 km.
 
 Through the chain on simulated pings. Source: `docs/design/popoto_12km.json`
 (`tools/popoto_12km_study.py`; keys `cases.<case>.<rows>.pings_detected`, `median_snr_db`,
-`track_confirmed_at_ping`). **This file was last written 2026-11-20 (commit `fa57b04`),
-before detections moved to their reflection time (D-156), the leading-edge default (D-160)
-and everything after. It has not been regenerated; detection counts are unlikely to move,
-positions would.**
+`track_confirmed_at_ping`). Regenerated whole on an NVIDIA L4 under D-251 (D-260, tree `1166ca6`; its
+`regenerated` block): every case's pings detected, median SNR and track ping as before (winter sand two rows
+31.4 -> 31.5 dB); before that it was last written 2026-11-20.
 
 | Case (key under `cases`) | Pings detected of 6, 1 / 2 / 3 rows | Median SNR, dB | Track confirmed at ping |
 | --- | --- | --- | --- |
@@ -577,7 +595,7 @@ positions would.**
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 0 / 0 / 0 | – / – / – | none / none / none |
 | popoto_env_gravel_30m at 12 km, Bellhop | 6 / 6 / 6 | 33.8 / 34.3 / 34.4 | 3 / 3 / 3 |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 0 / 0 / 0 | – / – / – | none / none / none |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 6 / 6 / 6 | 23.6 / 31.4 / 32.6 | 3 / 3 / 3 |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 6 / 6 / 6 | 23.6 / 31.5 / 32.6 | 3 / 3 / 3 |
 
 ### 2.2 Position and speed errors per scene over ten seeds
 
@@ -927,7 +945,7 @@ Runtimes are given only where a document records one.
 | Architecture diagrams `docs/architecture/*.png` | yes | `tools/architecture_diagrams.py` | CPU | not recorded |
 | Build diagrams `docs/design/build_*.png` | yes | `tools/build_diagrams.py` | CPU | not recorded |
 | `docs/DESIGN.md`, `docs/design/derived.json`, design figures | yes | `tools/design_report.py` (`--check` fails if a requirement is not met) | CPU | not recorded |
-| `docs/design/popoto_12km.json` | yes (stale, see 2.1) | `tools/popoto_12km_study.py` with `GPUSONAR_BELLHOP` set (`--quick` for a short run) | CPU | long: the Bellhop cases take 220 to 770 s each to simulate (`simulate_seconds` in the file) |
+| `docs/design/popoto_12km.json` | yes (regenerated on an L4 under D-251, D-260; see 2.1) | `tools/popoto_12km_study.py` with `GPUSONAR_BELLHOP` set (`--quick` for a short run) | CPU | long: the Bellhop cases take 220 to 770 s each to simulate (`simulate_seconds` in the file) |
 | `docs/design/popoto_range_study.json`, `.png` | yes | `tools/popoto_range_study.py` | CPU | not recorded |
 | `docs/design/popoto_trade_study.json`, `.md` (D-233) | yes | `tools/popoto_trade_study.py --grid`, then `--sensitivity`, `--coverage`, `--measure-rows`, `--crosscheck` (each merged into the JSON), then `--report` for the `.md`; the profile sites need `GPUSONAR_BELLHOP`; `OMP_NUM_THREADS=1` advised | CPU | not recorded; `--measure-rows` takes minutes (its docstring) |
 | `docs/tasks/doppler_bank_eval.json`, `doppler_bank_threshold.json` (D-232) | yes | `tools/doppler_bank_eval.py SCENE --background 4` per scene, the scenes gathered under `scenes` (the file's `tool` line; Bellhop for the eigenray scenes); `tools/doppler_bank_threshold.py [--reverb SCENE] --json FILE` | CPU | not recorded; the bank costs 22 to 51 times the chain a ping on the scenes (`docs/tasks/DOPPLER.md` table 9.5) |
@@ -937,7 +955,9 @@ Runtimes are given only where a document records one.
 | Scene pages `docs/figures/scenes/` (D-248) | 13 scenarios only (section 1.11); the rest no | `tools/scenario_view.py NAME --out DIR --3d [--three cdn] [--audio side]`; `--all` for every scenario and the index | CPU (Bellhop, Bellhop3D for their tiers); the four tone-and-sweep scenes need CUDA synthesis | 3.0 h for every 2-D page on this CPU; 3-D pages from cached traces 3.0 min; the sound 1 h 49 min |
 | `docs/tasks/hfm_doppler_eval.json` (D-247) | yes | `tools/hfm_doppler_eval.py --pulses 1 2 4 8 --pings 3 --ts-offset-db 20` (and the bank's `--pulses 2 4 --waveforms lfm --pings 1 --ts-offset-db 20 --bank --engines cpp --bank-engines cpp`; the file's commands) | CPU | not recorded here (a plain ping 0.9 to 1.2 s, the 1 s bank 42.5 s, `docs/tasks/DOPPLER.md` HFM.4) |
 | Transmit options by sea state and section 0a of `docs/design/popoto_trade_study.md` (D-247) | yes (in the study's `.json` and `.md`) | `tools/popoto_trade_study.py --transmit`, then `--report` (old sections byte-identical; `test_popoto_trade_study.py` compares the committed `.md` with a regeneration) | CPU | not recorded |
-| The `doppler` job's outputs: `doppler_tone_eval.json`, `doppler_bank_at_default.json`, `timing_*.json`, `ls12_*.json` (D-241, D-243; since D-246 `ls12_tone_train_lobe_off.json` too), `hfm12_*.json` (D-247) | no; the approved dataset's folders `doppler_tone`, `doppler_fa`, `doppler_timing`, `doppler_ls12` (where the `hfm12` run's files went is not recorded in the documents); the numbers in `DECISIONS.md` D-241 to D-243, D-246, D-247 and `RESULTS.md` | job mode `doppler` with `GPUSONAR_ORACLES=1` (`GPUSONAR_DOPPLER_RUNS`, `bash tools/doppler_gpu_runs.sh --help`) | GPU | sub-run limits 80, 30, 40 and 80 min; the bank's false-alarm rows stopped at their one-hour limit (D-241) |
+| `docs/tasks/doppler_deep12_eval.json` (D-260) | yes | the `doppler` job's `deep12` sub-run (`GPUSONAR_DOPPLER_RUNS=deep12`, cases by `GPUSONAR_DOPPLER_DEEP12_CASES`), its case JSONs gathered into one folder, then `tools/deep12_eval.py DIR --json docs/tasks/doppler_deep12_eval.json --source SOURCE` (`--predict-cases` writes predictions before a run: `docs/tasks/deep12_round3_predictions.json`) | GPU (a 4 s hyperbolic case's 6 pings in 27 s on an L4; 567 s a ping on this CPU) | the case's limit 45 min |
+| The stale parts of the Doppler task JSONs and `docs/design/popoto_12km.json` (D-260) | yes (regenerated) | the `doppler` job's `regen` sub-run (`tools/regen_stale.py`; `--list` names the parts, their commands and what is kept) | GPU | a part's limit 60 min |
+| The `doppler` job's outputs: `doppler_tone_eval.json`, `doppler_bank_at_default.json`, `timing_*.json`, `ls12_*.json` (D-241, D-243; since D-246 `ls12_tone_train_lobe_off.json` too; since D-258 the range-rate passes `doppler_tone_eval_rate.json`, `ls12_tone_train_rate.json`, `ls12_tone_alternate12_rate.json`), `hfm12_*.json` (D-247), `deep12_<case>.json` (D-260) | no; the approved dataset's folders `doppler_tone`, `doppler_fa`, `doppler_timing`, `doppler_ls12` (where the `hfm12` run's files went is not recorded in the documents); the numbers in `DECISIONS.md` D-241 to D-243, D-246, D-247 and `RESULTS.md` | job mode `doppler` with `GPUSONAR_ORACLES=1` (`GPUSONAR_DOPPLER_RUNS`, `bash tools/doppler_gpu_runs.sh --help`) | GPU | sub-run limits 80, 30, 40 and 80 min; the bank's false-alarm rows stopped at their one-hour limit (D-241) |
 | Ten-seed evaluation: `classify_rules_eval.json`, `.md`, `captures/` | only the JSON of some runs, as `docs/benchmarks/classify_rules_eval_<commit>.json`; captures stay in the dataset | job mode `clseval` with `GPUSONAR_ORACLES=1`, `GPUSONAR_CLSEVAL_ARGS="--seeds 10 --commit <hash>"` | GPU | about 50 min for 12 scenes x 10 seeds on an L4 |
 | False-alarm count `at_default.json` | no; the table is in `RESULTS.md` | job mode `falsealarm` (`GPUSONAR_FA_ARGS`, e.g. `--maps long_range --pings 100000`) | GPU | long: the three-row static map timed out at about 43 000 pings |
 | `docs/benchmarks/bench_*`, `session_*`, `conditioning_*` | yes | job mode `benchmark` (`docs/benchmarks/README.md` has each file's exact settings); the job prints one `BENCHMARK_JSON {...}` line to save | GPU | not recorded; a rerun is a new measurement, not a regeneration |

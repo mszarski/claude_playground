@@ -22,6 +22,15 @@ D-240 name no matrix row and the batch did not edit this file. The `penetration:
 cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
 the sharding) touch no conformance item.
 
+**State 2026-11-28, after the merge `08ddfab` of the eighth batch (D-255 to D-261; full GPU suite as three shards
+3494 passed, 124 skipped, 4 xfailed; jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00,
+6b0a30156c5d61fff18ac1ae):** D-255 to D-261 name no matrix row and the batch did not edit this file. The FLS
+deployment files and `look: boresight` (D-257), the tracker's range rate (D-258) and the gallery's evidence (D-259)
+are chain and tool changes; the deep-site package (D-260) changed no simulator default: its two scenes state the
+planner's site, and the site's `bubble_model` reaches the simulator only through the scene's
+`time_spread.surface.bubble_loss_db` (a test holds the two equal). The outputs D-251 made stale were regenerated
+(`sonar-rar0` closed). No row's verdict changes.
+
 **State 2026-11-27, after the merge `e06fac8` of the seventh batch (D-251 to D-254; full GPU suite as three shards
 3392 passed, 122 skipped, 4 xfailed; jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58,
 6b0947c36c5d61fff188c461):** D-251 to D-254 name no matrix row and the batch did not edit this file. **D-251 fixes the

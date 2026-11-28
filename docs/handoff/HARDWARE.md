@@ -204,7 +204,7 @@ through `base:` (D-127). Build spec fields are in `configs/builds/<build>.yaml`;
 | # | Assumption, value | Status, source | File and key | Consumed by | If wrong | Confirm by |
 | --- | --- | --- | --- | --- | --- | --- |
 | D1 | One projector, separate from the array, a point source with no beam pattern | ours; **no projector is chosen** (`projector.model: null`) | sonar file `transmit.kind: point`; build spec `projector` | simulator; direct sound (an omnidirectional source is the pessimistic case, D-125) | a directional source lowers the electrical power and may lower the direct sound | `docs/design/projector_selection.md`; the chosen part's beam pattern |
-| D2 | Source level 197 dB re 1 µPa at 1 m, rms | ours: a requirement from the 12 km budget (D-49), stated as rms (D-102). Since D-247 the transmitter is specified by energy and chosen for the sea state: the shipped 1 s 197 dB holds 12 km at the illustrative deep site only up to sea state 3; 203, 206 and 212 dB re 1 uPa^2 s at 1 m a ping for sea states 4, 5 and 6 with the bubble law, with the projectors that give each option (or none) in `docs/design/popoto_trade_study.md` section 0 (via secondary: the sheets as read in `projector_selection.md`). A hyperbolic sweep's 1 / f^2 spectrum needs the projector's response across 4-6 kHz, not known (`STATUS.md` question 61) | `popoto_long_range.yaml: transmit.waveform.source_level_db_rms`; build spec `projector.source_level_db_rms`; a typed copy in each face deployment file, `chain.coverage.budget.source_level_db` | `sonar.peak_pressure_at_1m` (the only place the √2 is applied); `buildspec.budget`; the coverage picture. A record stores the peak level, 200.01 (`docs/RECORD_FORMAT.md`) | margin moves dB for dB; 417 W acoustic if omnidirectional | the reference hydrophone at a measured distance |
+| D2 | Source level 197 dB re 1 µPa at 1 m, rms | ours: a requirement from the 12 km budget (D-49), stated as rms (D-102). Since D-247 the transmitter is specified by energy and chosen for the sea state: by the model, for a point target, the shipped 1 s 197 dB holds 12 km at the illustrative deep site only up to sea state 3 (measured, it does not hold the resolved hull or the moving ship there, D-260; the owner's fix, a 2 s hyperbolic sweep at 197 dB, D-256, not merged); 203, 206 and 212 dB re 1 uPa^2 s at 1 m a ping for sea states 4, 5 and 6 with the bubble law, with the projectors that give each option (or none) in `docs/design/popoto_trade_study.md` section 0 (via secondary: the sheets as read in `projector_selection.md`). A hyperbolic sweep's 1 / f^2 spectrum needs the projector's response across 4-6 kHz, not known (`STATUS.md` question 61) | `popoto_long_range.yaml: transmit.waveform.source_level_db_rms`; build spec `projector.source_level_db_rms`; a typed copy in each face deployment file, `chain.coverage.budget.source_level_db` | `sonar.peak_pressure_at_1m` (the only place the √2 is applied); `buildspec.budget`; the coverage picture. A record stores the peak level, 200.01 (`docs/RECORD_FORMAT.md`) | margin moves dB for dB; 417 W acoustic if omnidirectional | the reference hydrophone at a measured distance |
 | D3 | Projector position, body frame [along, starboard, down] from the array's centre: face [4.0, 0, 0] m; static frame [0, 0, 1.0]; test AUV [0, 0, 0.3]; the base file [0, 0, 1.5] | ours, placeholders | sonar file `transmit.lever_arm`; build spec `projector.position_m` | record `geometry/tx_lever_arm`; the backprojection and the elevation search hold the true path projector to target to hydrophone | range and elevation biased by the position error; the direct-sound level; the multipath bias on depth (`docs/DESIGN.md`, "Position and the multipath depth bias") | a tape; the direct arrival's delay per hydrophone (section 7, step 9) |
 | D4 | Amplifier, matching, energy storage, duty (1 s every 17.9 s, 5.6 %) | not chosen; duty is arithmetic on the files | build spec `projector.amplifier: null` | nothing in software | power design | the projector's efficiency and impedance |
 | D5 | FLS and SAS source levels 210 and 215 dB | ours, design values | `fls_120k/170k/330k.yaml`, `sas_minsas120.yaml`: `transmit.waveform.source_level_db_rms` | `docs/DESIGN.md` Sec. 5 | the range at which the SNR holds | a projector design |
@@ -276,6 +276,7 @@ Stream rates per build (bytes per second; `docs/handoff/hardware_builds.json`, `
 | `popoto_face_1x32` | 32 | 9,830,400 | 128, 12,416 | 800 | 9,932,800 | 8,388,608 |
 | `popoto_face_2x32` | 64 | 19,660,800 | 64, 12,416 | 1600 | 19,865,600 | 9,830,400 |
 | `popoto_face_3x32` | 96 | 29,491,200 | 42, 12,224 | 2438.1 | 29,803,276 | 14,745,600 |
+| `popoto_face_3x32_ss5` (alternate, a placeholder) | 96 | 29,491,200 | 42, 12,224 | 2438.1 | 29,803,276 | 14,745,600 |
 
 ### J. Recording
 
@@ -349,6 +350,15 @@ chosen for any build.**
 | `popoto_face_1x32` | 4 | `long_4p8m` | `popoto_face_1row` | `popoto_face_1row` | face 9 m × 2 m (the owner), rows inside 7 m | SPRINT-Nav (the owner) | `decimate_first_cpu` |
 | `popoto_face_2x32` | 5 | `long_4p8m` | `popoto_long_range_2row` | `popoto_face_2row` | the same face | the same | `gpu` |
 | `popoto_face_3x32` | 6, recommended | `long_4p8m` | `popoto_long_range_3row` | `popoto_vehicle_elevation` | the same face | the same | `gpu` |
+| `popoto_face_3x32_ss5` | 6a, the sea-state-5 alternate: **a placeholder that does not meet sea state 5** (D-255, D-256, D-260) | `long_4p8m` | `popoto_long_range_3row_ss5` | `popoto_vehicle_elevation_ss5` | the same face | the same | `gpu` |
+
+The alternate (`configs/builds/popoto_face_3x32_ss5.yaml`, opt-in; `hardware_builds.json`) is the full face with only its
+transmit energy changed: 4 s at 200 dB re 1 µPa at 1 m rms, linear sweep (206 dB re 1 µPa² s at 1 m a ping, the trade
+study's least energy holding both classes at sea state 5 for a point target), blind range 3.0 km (the receive window
+3.0 to 12.7 km), ping interval 20.9 s. **Measured at the deep site at sea state 5 (D-260) it holds neither the closing
+nor the oblique `large_submerged` hull with any filter tried**; 209 dB a ping holds them only as 4 s at 203 dB, and no
+single listed projector gives that or any sea-state-5 option that held (`docs/tasks/DOPPLER.md` DM.6, DM.7). The owner
+(D-256): sea state 5 is recorded as needing a larger transmitter not yet identified. No projector is chosen for it.
 
 Two hand-written deployment files also exist: `configs/deploy/popoto_vehicle.yaml` (one row on
 `popoto_long_range`, the example the documents use; it carries the commented-out lever-arm keys) and
@@ -549,7 +559,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 | At its design range, 12.7 km | ship: margin -2.6 dB, Pd 0.05; small: margin -22.6 dB, Pd 0.00 |
 | At 12 km | ship: one row's SNR 14.6 dB, margin -1.1 dB, Pd 0.22; small: margin -21.1 dB, Pd 0.00 |
 
-**Simulated trials:** `popoto_12km` (the same row as `popoto_long_range`): the ship at 12 km detected on 6 of 6 pings and tracked from ping 3 in 100 m over sand, as a mover at 6.2 m/s (image-source paths) (`docs/design/popoto_12km.json`; stale since D-251, made under the old reverberation Doppler, issue `sonar-rar0`).
+**Simulated trials:** `popoto_12km` (the same row as `popoto_long_range`): the ship at 12 km detected on 6 of 6 pings and tracked from ping 3 in 100 m over sand, as a mover at 6.2 m/s (image-source paths) (`docs/design/popoto_12km.json`; regenerated on an L4 under D-251, D-260: the same detections and track ping).
 
 **Tests that exercise it** (under `tests/python/` unless a path is given): `test_buildspec.py`, `test_deployment_defaults.py` (the coverage picture and its site), `test_source_level.py`, `test_sim.py`, `test_hardcoded.py`; the `popoto_12km` scenario in `test_live_cpp.py`, `test_detect.py`, `test_detector.py`, `test_classify.py`, `test_realistic_scenes.py`, `tests/cpp/test_live.cpp`. Its self-tests: `tools/build_from_spec.py configs/builds/popoto_face_1x32.yaml --out DIR --self-test`.
 
@@ -679,7 +689,21 @@ rig's first hardware-run checklist is `docs/HOLOSCAN_NOTES.md` section 11.
 
 ## 5. Link budget and the 12 km design point
 
-**What is at risk first.** One long row at 197 dB is 1.1 dB short at 12 km: a detection probability of 0.22
+**What is at risk first: measured, the shipped baseline does not hold the resolved hull at 12 km at the deep
+site** (D-260; simulator and both chain engines on an L4, `popoto_12km_deep_sea_state_5` at sea state 3 with the
+apl_1994 bubble law, one seed, 6 pings; `docs/tasks/doppler_deep12_eval.json`; illustrative site, assumed class
+values). The face (3 x 32, 1 s, 197 dB, linear sweep, plain filter) holds neither the closing nor the oblique
+`large_submerged` hull nor the ship (0 of 6 pings each); it holds the crossing hull (+2.95 dB) and an unresolved
++25 dB point (+3.41 dB against +2.79 predicted). Every margin in this section is the budget's or the planner's for
+a steady point echo: the class's hull, five highlights that resolve in range against a detector testing 0.375 m and
+2 m cells, is 3.8 to 6.0 dB under the point in the same case, and the linear sweep with the plain filter loses more
+on movers. The owner (D-256): the baseline's waveform becomes a 2 s hyperbolic sweep at the same 197 dB (measured:
+every target on 6 of 6 at sea state 3, +1.28 / +0.73 dB on the hulls, one seed; not at sea state 4; blind range 1.5
+km; a range bias of 6 m per m/s on movers; its 1 / f² spectrum on a projector whose response across 4-6 kHz is not
+known, `docs/STATUS.md` question 61). Not merged (branch `hfmbase`): every shipped file still has the 1 s linear
+sweep. On the reverberation-limited shelf the 1 s sweep holds every hull (8.0 to 11.4 dB, D-243).
+
+One long row at 197 dB is 1.1 dB short at 12 km: a detection probability of 0.22
 on one ping. Two rows have +1.4 dB (0.87), three +2.9 dB (0.99). The budget is still about 0.45 dB kind
 against the chain (three small terms stated and not added, D-117). These are figures for a steady point echo
 in noise with a placeholder target strength; a fluctuating or extended echo and reverberation are not in them

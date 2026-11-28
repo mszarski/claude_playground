@@ -6,6 +6,19 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
 
 ## What is worse or not known, first
 
+- **(Added by the document sweep after D-261.) At the noise-limited deep site the plain linear sweep, the shipped
+  baseline, does not hold the resolved hull at 12 km** (D-260; `docs/tasks/DOPPLER.md` DM.1 to DM.7;
+  `docs/tasks/doppler_deep12_eval.json`; one seed, 6 pings, L4): at sea state 3 the 1 s, 197 dB linear sweep with the
+  plain filter holds neither the closing nor the oblique `large_submerged` hull nor the ship (0 of 6 each). Two causes,
+  measured: the hull's highlights resolve in range (no Doppler path helps that: hull minus point -3.8 to -6.0 dB with a
+  filter that takes no Doppler loss) and the linear sweep's plain-filter loss on movers (at 4 s against the hyperbolic
+  sweep 9.3 dB on the ship, 6.0 dB on the closing hull; the bank recovers it within 0.1 to 0.8 dB of the hyperbolic
+  sweep, at 25.6 s a ping with three rows on the L4). With the bank (`combine: cfar`) the ship is held at the shipped
+  energy, the two hulls are not. The owner's decision (D-256): the baseline's waveform becomes a **2 s hyperbolic sweep
+  at 197 dB with the plain filter, no bank** (measured: every target held on 6 of 6 at sea state 3, the hulls by +1.28 /
+  +0.73 dB on one seed; not at sea state 4; costs: blind range 1.5 km, a range bias of 6 m per m/s on movers the plain
+  filter cannot correct, no range rate, the bank refuses it). Not merged (branch `hfmbase`, `sonar-7h6q`): the
+  "Plain sweep (default)" column below is still the shipped 1 s linear sweep.
 - **The tone path is the only one that measures a range rate, and it has three blind spots**: targets slow against the
   water (its notch: +-0.38 m/s at 6.5 kHz, 12 % of headings at 2 m/s, `DOPPLER.md` LS.3), every crossing target
   (on its beam's ridge: 0 of 3 tone pings on `popoto_12km_large_submerged`, LS.3), and, under way, targets coming nearly
@@ -25,6 +38,9 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
   path stays off by default, D-252.)
 - **No path gives the tracker a rate**: the tracker takes the tone's coarse range sigma only (D5 not done). With
   alternating pings a 2 m/s target was called `static` (LS.1 item 4); with `combine: cfar` the crossing target was too.
+  (Added after D-261: D5 is done, opt-in, D-258: `tracker.range_rate: update` takes the tone path's rate; on the device
+  the flank small vehicle is a mover from ping 3 and the 12 km oblique target too; the oblique target's class flickers
+  on alternating pings, and the crossing target, which the tone cannot see, is `uncertain`.)
 - **The sweep bank's rate is not a measurement** (LS.1 item 5: -3.4 to +7.9 m/s on a target at -0.50).
 
 ## The three, side by side
@@ -39,7 +55,7 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
 | Range rate on the report | none (no field: a contract) | the winning hypothesis, coarse, with `report: true` | the tone's, with `report: true`; `doppler_path` says which path |
 | False detections on noise at the default budget, long-range array | 39 in 40 000 pings: 0.97 of the budget (95 % 0.69 to 1.33; GPU 2026-11-27) | 8 in 10 296: 0.78 (0.34 to 1.53); `max` 0 in 16 557 (0 to 0.22) (GPU 2026-11-27) | not counted at the default budget; within the budget at 3 and 30 a ping on noise (`test_doppler_tone.py`); flank scene background 1 in 4 pings (GPU 2026-11-27) |
 | Cost a ping on an L4, C++ chain (GPU 2026-11-27) | flank_patrol 0.116 s, popoto_far_mover 0.062 s, popoto_12km 0.020 s | `cfar` 0.453, 0.403, 0.109 s (`max` 0.424, 0.379, 0.097; before the device batching 3.935, 2.766, 0.532) | popoto_12km_doppler 0.033 -> 0.048 s |
-| What the tracker does with it | positions only | positions only (rate unused) | positions, and the tone's coarse range sigma (c T / 8); rate unused (D5) |
+| What the tracker does with it | positions only | positions only (rate unused; `range_rate_from: any` would take it, not recommended, D-258) | positions, and the tone's coarse range sigma (c T / 8); since D-258 opt-in the rate too (`tracker.range_rate`) |
 | The ping | the shipped sweep | the shipped sweep (refused on a train, LS.1 item 6) | a tone 0.5 kHz above the sweep in the same ping (half the energy each, 2 s ping, unconfirmed for the projector), or tone and sweep pings in turn (half the update rate each) |
 
 ## When to turn each on
@@ -48,6 +64,7 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
 - **`combine: cfar`**: when the margin on movers matters more than about 0.5 dB on still targets and the classifier's
   calls on crossing targets are not relied on. Never `max` (it loses on every scene).
 - **Tone path**: when a measured range rate is wanted (for D5, the tracker and classifier) and the transmit can carry
-  the tone. It adds no detection at 12 km where the sweep holds all three `large_submerged` targets (LS.4); it adds a
+  the tone. It adds no detection at 12 km on the reverberation-limited shelf, where the sweep holds all three
+  `large_submerged` targets (LS.4; at the noise-limited deep site the 1 s sweep does not, D-260, above); it adds a
   rate on targets outside its notches. Keep `tone_lobe_notch: auto` (the default with the tone path); `off` only to
   compare. Do not rely on it for crossing targets or for targets within +-0.4 m/s of the water.

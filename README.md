@@ -13,15 +13,29 @@ of every other document).
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
 Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU, 12
 (propagation and reverberation) as far as open literature allows (audited 2026-11-25), and
-the CUDA backend has been run and benchmarked on rented GPUs. The long-range design is
-honest about where it stands: one long row at 197 dB is 1.1 dB short of detection at 12 km
+the CUDA backend has been run and benchmarked on rented GPUs. **Worst first: the shipped long-range
+baseline, as it stands in the tree today, does not meet its 12 km requirement at the deep site for the
+resolved hull.** Measured through the simulator and both chain engines (D-260; NVIDIA L4, illustrative deep
+site at sea state 3 with a bubble law, one seed, 6 pings; `docs/tasks/doppler_deep12_eval.json`), the shipped
+1 s, 197 dB linear sweep with the plain filter holds neither the closing nor the oblique `large_submerged`
+hull nor the ship (0 of 6 pings each), only the crossing hull and an unresolved point target; the planner's
+margins (the trade study's "holds both classes at the deep site up to sea state 3", "met by the shipped 3 x 32
+at 4 of 6 sites") are for an unresolved,
+non-moving target. The owner decided the fix (D-256): a 2 s hyperbolic sweep at 197 dB (measured: every target
+on 6 of 6 pings at sea state 3, thin margins, one seed; not at sea state 4), with sea state 5 recorded as
+needing a larger transmitter not yet identified. It is **not merged** (branch `hfmbase`): every shipped file
+still has the 1 s linear sweep. On the reverberation-limited 12 km shelf scene the 1 s sweep holds every hull
+on every ping (8.0 to 11.4 dB, D-243), with margin to spare for what the resolved hull costs. The long-range
+design is honest about where it stands in its budget too: one long row at 197 dB is 1.1 dB short of detection at 12 km
 on the chain's own detector (free field, the ship-sized target); the 12 km requirement is for
-`large_submerged` first and `ship` second (the owner, 2026-11-26), and three rows hold it for
-both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"), depth at range is limited by what is known of the sound-speed
+`large_submerged` first and `ship` second (the owner, 2026-11-26), and by the planner three rows hold it for
+both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"; since
+D-260 the cell also states the measured failure above), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the seventh batch's tree, decisions D-251
-to D-253, as three jobs on an NVIDIA L4 (3392 passed, 122 skipped, 4 xfailed, none failed; Hugging Face
-jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461; D-254), the opt-in
+(the depth sigma now says so). The full GPU suite last ran on the eighth batch's tree, decisions D-257
+to D-260, as three jobs on an NVIDIA L4 (3494 passed, 124 skipped, 4 xfailed, none failed; Hugging Face
+jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae; D-261; a first run on the
+batch failed 3 tests in its new files, fixed with the records unchanged, D-260), the opt-in
 3-D propagation tier and the slow Bellhop3D checks included; the first suite on the fifth batch had
 failed 4 tests, because new device code had made two programs built from one library disagree in the
 last digits on the GPU (fixed, with a test that guards it, D-245); the
@@ -33,30 +47,38 @@ depth plan and the coverage pictures include it: the +5 dB class over the 100 m 
 free-field link budgets have no site and stay noise-only, and say so. A trade study per site and
 class (D-233; `docs/design/popoto_trade_study.md`, illustrative sites, assumed target strengths) finds
 the +5 dB class short of 12 km at every site with the shipped three rows of 32, and at three sites no
-variant tried reaches it; the +25 dB classes are met at four of six sites, not at sea state 5 or over summer
-mud; the owner has since said 12 km is for `large_submerged` first and `ship` second (D-235), while the
-worst sea state, the detection probabilities and the waters are still open. The sweep's Doppler
+variant tried reaches it; by that model the +25 dB classes are met at four of six sites, not at sea state 5 or
+over summer mud (a point target's figures; measured, see above); the owner has since said 12 km is for
+`large_submerged` first and `ship` second (D-235) and set the sea state (D-255: the baseline at sea state 3, an
+alternate at sea state 5), while the detection probabilities and the waters are still open. The sweep's Doppler
 bank exists in the live chain as an option (D-232) and with its default combiner lowers every target's
 margin by 3.4 to 5.3 dB on the scenes measured, so it stays off; an opt-in CFAR combiner and a tone path
 (D-237) give the movers their margin back. **The simulator's boundary reverberation applied Doppler as one
 shift at the record's centre frequency where each frequency should shift (D-249); fixed, and the
-per-frequency law the default, since D-251 (the owner: "FIx it").** What got worse with it: on the
-regenerated gallery `fls_170k_traffic` has one mover not on a moving object (issue `sonar-4pon`) and
-`popoto_env_gravel_30m` one confirmed track fewer (3 -> 2); outputs made before the fix with a moving
-platform and boundary reverberation (the Doppler task files, `docs/design/popoto_12km.json`, one handoff
-example and the `docs/RESULTS.md` tables built from them) are still stale (issue `sonar-rar0`). Measured on
+per-frequency law the default, since D-251 (the owner: "FIx it").** What moved with it: on the
+regenerated gallery `fls_170k_traffic` has one mover not on a moving object and `popoto_env_gravel_30m` one
+confirmed track fewer (3 -> 2); D-259 found the first a wake track that appears in 5 of 8 seeds under the new
+law and 3 of 8 under the old (a rate, not shown to be caused by the fix) and the second a track on no object.
+The outputs made before the fix were regenerated (D-260); worse there: the closing hull untracked at the last
+alternating ping of the 12 km large-submerged scene, and 4 false detections on 4 target-free pings on
+`popoto_12km_doppler` with the default chain. Measured on
 a GPU (D-241 to D-243): with the tone path on, 22 false detections on 4 target-free pings at 12 km at the
 default budget, which D-246 found to be mostly that simulator artefact; counted again with the corrected
 simulator (D-252): 0 with the grating-lobe notch, 17 without it, on 4 target-free pings at the default
 budget; by the owner's decision the tone path stays off by default (D-244, D-252), with the notch merged
 for it (D-246); without it the default chain is blind on the tone-and-sweep scene (`flank_patrol_doppler_tone`:
 0 of 6 pings for all three targets); with the bank on the chain still costs 3.4 to 6.0 times its cost a
-ping on the device. The owner's baseline is the plain sweep on the three-row face with every Doppler
-option off (D-244); the shipped transmitter (1 s, 197 dB) holds 12 km for both classes at the deep
-illustrative site only up to sea state 3, and a table of transmit options by sea state gives the energy each
-sea state needs (D-247; `docs/design/popoto_trade_study.md` sections 0 and 0a); a hyperbolic sweep (opt-in)
-keeps its margin on movers in free field but gains little on the real reverberation-limited 12 km scene, and
-the noise-limited case has not been run. On 2026-11-26 the boundary models, the sediment tier and time
+ping on the device. Tracks can take the measured range rate since D-258 (opt-in): on the device the small
+vehicle becomes a mover from ping 3 (2.03 m/s, true 2.0); the 12 km oblique target's class flickers on
+alternating pings. The owner's baseline is the plain sweep on the three-row face with every Doppler
+option off (D-244); by the model the shipped transmitter (1 s, 197 dB) holds 12 km for both classes at the deep
+illustrative site up to sea state 3 for a point target, and a table of transmit options by sea state gives the
+energy each sea state needs (D-247; `docs/design/popoto_trade_study.md` sections 0 and 0a, which since D-260
+also carry the measured table); a hyperbolic sweep gains little on the real reverberation-limited 12 km scene,
+and at the noise-limited deep site a 2 s hyperbolic sweep at 197 dB holds the resolved hull at sea state 3
+where a 1 s one does not (D-260, above). The
+forward-looking sonars have their own deployment files since D-257 (opt-in `look: boresight`: the chain's
+default look, a flank array's, puts an FLS's echoes astern). On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what
 got worse is in each decision (for example surface reverberation about 1 dB lower in the multipath
 scenes, D-216). Every shipped SAS scene
@@ -249,7 +271,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 98 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 100 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |
