@@ -9,10 +9,14 @@ fourth batch) on 2026-11-27, the same way; then to D-245 (the merge `f40d4c3` of
 the same way, with the rule for device code learned in D-242 in section 11; then to D-250 (the merge `bda7c7d` of the
 sixth batch) the same day, the same way, with three.js in section 2; then to D-254 (the merge `e06fac8` of the
 seventh batch and the regenerated gallery `082dd21`) the same day, the same way; then to D-261 (the merge `08ddfab` of
-the eighth batch) on 2026-11-28, the same way, with the `doppler` job's new sub-runs in section 4. **Read first: the
-shipped long-range baseline does not meet its 12 km requirement at the deep site for the resolved hull (D-260), and the
-owner's fix (a 2 s hyperbolic sweep at 197 dB, D-256) is not merged (branch `hfmbase`)**: section 10, and
-`docs/STATUS.md` open item 90. These notes are for whoever picks the work up next, a person or a coding
+the eighth batch) on 2026-11-28, the same way, with the `doppler` job's new sub-runs in section 4; then to D-263 (the
+merge `e16e214` of the ninth batch and the regenerated gallery `4720050`) the same day, the same way. **Read first:
+since D-262 the 12 km long-range baseline in the tree is a 2 s hyperbolic sweep at 197 dB with the plain filter
+(the owner's decision, D-256). What got worse with it: nothing is seen inside 1.5 km; no depth at 12 km is
+measured (the elevation scenes keep the 1 s sweep); two face self-checks fail; a mover's range reads 6 m per m/s
+off, with no range rate. Measured at the deep site it holds every target at sea state 3 on one seed, the resolved
+hulls by +1.28 / +0.73 dB (thin), not at sea state 4; sea state 5 needs a larger transmitter not yet
+identified**: section 10, and `docs/STATUS.md` open items 96 to 100. These notes are for whoever picks the work up next, a person or a coding
 model. `docs/STATUS.md` is the authoritative list of what works and what is wrong; this
 file tells you how to work here and where the edges are. The wider handoff set is in
 `docs/handoff/` (start at `docs/handoff/README.md`).
@@ -76,9 +80,10 @@ Set by the owner since (each is in `docs/DECISIONS.md`):
   ping (`missing: drop`, D-184); the Sensor Bridge receiver's queue holds 4 s of stream
   (D-187); a frame damaged in the first 0.25 s of a Popoto-rate loopback is start-up loss
   (D-188); `flank_patrol`'s small vehicle stays a hard target (D-198); the long-range baseline is the
-  plain filter with every Doppler option off and the tone path off (D-244); its waveform is decided as a 2 s
-  hyperbolic sweep at 197 dB (D-256), **not yet merged** (branch `hfmbase`): until then the shipped 1 s linear
-  sweep is the default.
+  plain filter with every Doppler option off and the tone path off (D-244); its waveform is a 2 s hyperbolic
+  sweep at 197 dB (D-256 decided, D-262 done; the 1 s linear sweep until then): blind inside 1.5 km, a mover's
+  range 6 m per m/s off, no range rate. The scenes and tests made for the 1 s linear sweep (the three elevation
+  scenes, the bank's scene `popoto_12km_large_submerged`, the 0.1 s builds, the sea-state-5 placeholder) state it.
 - **Left opt-in on purpose** (each measured better on some scenes and worse on others):
   the per-axis outlier test `classify.outlier_alpha` (D-159), the classification rules from
   detections (D-152), the sub-grid Popoto bearing (D-176), the LFM range-Doppler correction
@@ -268,10 +273,10 @@ Flavours and pitfalls:
 | --- | --- |
 | The handoff set: entry point, hardware, software, tests, outputs | `docs/handoff/README.md`, `HARDWARE.md`, `SOFTWARE.md`, `TESTS.md`, `OUTPUTS.md` |
 | What works, what is wrong, questions for the owner | `docs/STATUS.md` (open items 1 to 95, owner questions 1 to 68) |
-| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-261; later entries amend earlier ones) |
+| Why anything is the way it is | `docs/DECISIONS.md` (D-1 to D-263; later entries amend earlier ones) |
 | Every measured number and its source | `docs/RESULTS.md` (the Sensor Bridge numbers of D-153 to D-192 are summarised there, and D-193 to D-201 in a summary table before "Not yet measured"; D-160, D-161, D-176 and D-181 are measured in their `DECISIONS.md` entries only) |
 | Scenes, with figures and per-scene results | `docs/SCENARIOS.md`, `docs/figures/` (gallery of D-253) |
-| Work waiting on owner input, written as briefs for an agent | `docs/tasks/VEHICLE_ADAPTERS.md` (`sonar-o7m`), `docs/tasks/REAL_DATA.md` (`sonar-sul`); `docs/tasks/PROPAGATION_3D.md` (`sonar-rcq`: the scope of 3-D propagation, its packages P1 to P6 done, owner questions in section 6); `docs/tasks/DOPPLER.md` (`sonar-u1fu`: packages D2, D4, D3 and D8 done, "D3 done" says what was not measured, "D8" the device port and the defect of D8.5, "Large submerged at 12 km" the 12 km scenes, "D5" the tracker's range rate, "Deep site at 12 km" the measurement that fails the shipped baseline for the resolved hull (DM.1 to DM.7); its question 1 answered, D-231) |
+| Work waiting on owner input, written as briefs for an agent | `docs/tasks/VEHICLE_ADAPTERS.md` (`sonar-o7m`), `docs/tasks/REAL_DATA.md` (`sonar-sul`); `docs/tasks/PROPAGATION_3D.md` (`sonar-rcq`: the scope of 3-D propagation, its packages P1 to P6 done, owner questions in section 6); `docs/tasks/DOPPLER.md` (`sonar-u1fu`: packages D2, D4, D3 and D8 done, "D3 done" says what was not measured, "D8" the device port and the defect of D8.5, "Large submerged at 12 km" the 12 km scenes, "D5" the tracker's range rate, "Deep site at 12 km" the measurement that failed the 1 s baseline for the resolved hull (DM.1 to DM.7), "The baseline becomes the 2 s hyperbolic sweep" the baseline since D-262 (HB.1 to HB.4); its question 1 answered, D-231) |
 | The Popoto array design, budget, builds | `docs/DESIGN.md` (generated by `tools/design_report.py`), `docs/REFERENCE_DESIGN.md`, `docs/DEPLOYMENT.md` (since D-257 also "A forward-looking sonar"), `docs/design/` (the 12 km trade study per site and class: `docs/design/popoto_trade_study.md`, D-233; its sections 0 and 0a carry the deep site's measured table since D-260) |
 | Config keys | `docs/CONFIGURATION.md`; files in `configs/{sonars,scenarios,environments,deploy,builds,chains,nav}` |
 | Physics and paper reading | `docs/PHYSICS_NOTES.md`, `docs/PAPER_NOTES.md`, `docs/REFERENCES.md` |
@@ -313,9 +318,10 @@ Code worth knowing first:
   (`doppler.batched`), on CPU threads or the device; the shared kernels are launched through their own
   files' launchers (section 11).
 
-## 6. State of verification (to D-261)
+## 6. State of verification (to D-263)
 
-- **GPU, latest (NVIDIA L4, three shards, HF jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae, the eighth batch's tree `3fb6bf4` of D-257 to D-260, merged as `08ddfab`, the same switches as D-254): 3494 passed, 124 skipped, 4 xfailed, none failed** (D-261). **The first run of the batch (at `ff04b58`) failed 3 tests**, 3488 passed: all from the deep-site package's new files in test files its agent had not run (a list of shipped sonars; D-227's "a scene states its site once"; a no-bottom warning), fixed in the scenes and the list, records unchanged (hashes; D-260). One conflict in building the batch (`docs/tasks/DOPPLER.md`: both appended sections kept). The two more skips than D-254's 122 are not itemised in D-261 (`docs/handoff/TESTS.md` section 1). The container was restarted during the batch; two agents' background runs were lost, no committed work.
+- **GPU, latest (NVIDIA L4, three shards, HF jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3, the ninth batch's tree `dfe9733` of D-262, merged as `e16e214`, the same switches as D-261): 3507 passed, 124 skipped, 4 xfailed, none failed** (D-263). The suite takes longer with the 2 s pulse: the slowest shard 60 minutes of tests (40 before). No merge conflict.
+- **The suite before it (NVIDIA L4, three shards, HF jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae, the eighth batch's tree `3fb6bf4` of D-257 to D-260, merged as `08ddfab`, the same switches as D-254): 3494 passed, 124 skipped, 4 xfailed, none failed** (D-261). **The first run of the batch (at `ff04b58`) failed 3 tests**, 3488 passed: all from the deep-site package's new files in test files its agent had not run (a list of shipped sonars; D-227's "a scene states its site once"; a no-bottom warning), fixed in the scenes and the list, records unchanged (hashes; D-260). One conflict in building the batch (`docs/tasks/DOPPLER.md`: both appended sections kept). The two more skips than D-254's 122 are not itemised in D-261 (`docs/handoff/TESTS.md` section 1). The container was restarted during the batch; two agents' background runs were lost, no committed work.
 - **The suite before it (NVIDIA L4, three shards, HF jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461, the seventh batch's tree `81364e0` of D-251 to D-253, merged as `e06fac8`, the same switches as D-250): 3392 passed, 122 skipped, 4 xfailed, none failed** (D-254). D-250's fifth expected failure, `test_hsb.py`'s load-dependent frame-loss limit, did not occur. The tracker-view branch alone: 3357 passed. One conflict in building the batch (`docs/handoff/SIMULATION.md`: the fix branch's row kept).
 - **Before that (NVIDIA L4, three shards, HF jobs 6b0935f554072e8b71696d01, 6b0935f66c5d61fff188b937, 6b0935f754072e8b71696d05, the sixth batch's tree `67d962b` of D-246 to D-248, merged as `bda7c7d`, the same switches as D-245): 3321 passed, 121 skipped, 5 xfailed, none failed** (D-250). The fifth expected failure is `test_hsb.py`'s measured frame-loss limit at 102.4 kHz (D-186), which reports as an expected failure when the job's machine loses frames; two of the four more skips are the visualization's browser checks ("Node is not installed"). A first launch was cancelled early: two visualization tests still expected 96 scenario files (corrected in `67d962b`). The merge differs from the tested tree only in `docs/DECISIONS.md` and the issue export.
 - **Before that (NVIDIA L4, three shards, HF jobs 6b090cd36c5d61fff188820e, 6b090cd354072e8b71692fa9, 6b090cd46c5d61fff1888214, the fifth batch's fixed tree `a37e0be` of D-241 to D-243 with D-242's repair, merged as `f40d4c3`, the same switches as D-240): 3002 passed, 117 skipped, 4 xfailed, none failed** (D-245). **The first suite on the batch (`batch5` at `d54deb9`) failed 4 tests** (2996 passed): bit-identity comparisons between two programs on cuda with every Doppler option off, broken by a device kernel instantiated in two `.cu` files (D-242; section 11); fixed without changing the four tests, and merged only after the suite on the fix passed.
@@ -329,19 +335,32 @@ Code worth knowing first:
   157 ctest entries; `docs/STATUS.md`, the paragraphs before "Open questions for the project
   owner"). Since then each package ran its affected test files locally and the whole suite on the
   GPU job. A whole CPU run at HEAD is not on record.
-- The gallery (`docs/figures/`, `gallery.json`) is from the L4 job 6b0947c46c5d61fff188c465 on the
+- The gallery (`docs/figures/`, `gallery.json`) is from the L4 job 6b0a8a776c5d61fff18bd237 on the ninth
+  batch's tree `dfe9733` (D-262, committed whole as `4720050`), with the 2 s hyperbolic baseline. **Worse against
+  the file before it:** `popoto_env_winter_sand_200m` the ship's track 2.8 -> 9.3 m from its outline (one more
+  uncertain track); `popoto_env_deep_silt_1000m` confirmed tracks 3 -> 2, the ship's track 301 -> 305 m off (wrong
+  before and after); `popoto_12km` one multipath track now uncertain (its ship 2.1 -> 1.1 m); `popoto_env_gravel_30m`
+  10.0 -> 8.4 m, tracks 2 -> 3. FLS, SAS, flank and pool scenes numerically as before. Stale with the baseline:
+  `docs/tasks/doppler_deep12_eval.json` (the baseline's own cases not merged, `sonar-n8ho`),
+  `docs/handoff/examples/live_popoto_12km_*`, `docs/handoff/hardware_builds.json` at 1000 m (inside the blind
+  range), `docs/design/popoto_12km.json` (`docs/STATUS.md` item 99). The gallery before it was from the L4 job
+  6b0947c46c5d61fff188c465 on the
   seventh batch's tree `81364e0` (D-253, committed whole as `082dd21`), under the per-frequency
-  reverberation Doppler (D-251). **Worse against the file before it:** `fls_170k_traffic` one mover not on a
+  reverberation Doppler (D-251). **Worse against the file before that:** `fls_170k_traffic` one mover not on a
   moving object; `popoto_env_gravel_30m` confirmed tracks 3 -> 2. Explained since (D-259, `sonar-4pon` closed):
   the first is a wake track that appears in 5 of 8 full-size seeds under the default law and 3 of 8 under the
   old (a rate, not shown to be D-251's), the second a track on no object; `flank_patrol`'s difference is D-216's.
   `sonar-pli3` is closed (its one-detection differences superseded, not explained). The outputs D-251 made stale
   were regenerated (D-260, `sonar-rar0` closed; worse: the closing hull untracked at the last alternating ping,
   `popoto_12km_doppler`'s default chain 4 false detections on 4 target-free pings). Still stale: `sonar-tmvu`'s
-  (`docs/STATUS.md`, the list of stale generated files; still open at D-261).
-- Not in either suite: the generator's self-tests. Last recorded result 42 of 42 on both
-  engines for the six builds (D-143, 2026-11-19); since then only checked that every
-  deploy and build file is accepted by both engines (D-166, D-177).
+  (`docs/STATUS.md`, the list of stale generated files; still open at D-263).
+- Not in either suite: the generator's self-tests. **With the 2 s baseline two fail (D-262, not loosened):** the
+  three-row rehearsal's depth honesty at 1.7 km (28 m, 35 m and none for 60 m true; the geometry, it fails with the
+  1 s sweep there too; `sonar-9035`) and the one- and two-row "free" range check, which misses 3 m by about 0.06 m
+  (the leading edge sits about 3.0 m early with a 2 s pulse; `sonar-8h09`); the three-row "free" range check now
+  compares with the truth displaced by the predicted bias. Before: 42 of 42 on both engines for the six builds
+  (D-143, 2026-11-19, the 1 s sweep); in between only checked that every deploy and build file is accepted by both
+  engines (D-166, D-177).
 - Nothing has run on real hardware or real data. Nothing has run on DGX Spark or Jetson.
 
 ## 7. What was done in D-158 to D-201, and what each broke or left open
@@ -406,7 +425,8 @@ Numbers are in the `DECISIONS.md` entries. Issues named here are open in `bd` un
 | (2026-11-26) | The opt-in `eigenray3d` tier (Bellhop3D), the cross-slope warning, one top-level `bathymetry`, `flank_seamount_3d` (`docs/tasks/PROPAGATION_3D.md` P1 to P6) | No reverberation over relief at that tier; its acceptance test takes 8 minutes and runs only with `GPUSONAR_SLOW_ORACLES=1` (the entry is D-202) |
 | D-204 to D-225 (2026-11-26) | Five 3-D scenes; the general image construction in C++; the conformance alignments applied (grain-size relations, the fit's small-slope and prior, elastic rock in the simulator, Bellhop and the live chain, `dahl_1997` and the geometric-mean bistatic rule, the large-scale slope law); `penetration: fluid` (the two buried scenes) and `rough`; the engine never silent and recorded; the link budget's reverberation term; four papers and five site rows | Surface reverberation about 1 dB lower in multipath scenes; SPACE'08 steep tails 1.89 measured over model, the Kirchhoff tail rejected as the cause; rock shear unconfirmed; `rough` costly on large scenes; design budgets noise-only (no site states scattering); three fit tests and two other tests weakened (D-216, D-223, D-225); gallery and `sst_validation` stale |
 | D-226 to D-229 (2026-11-26) | Williams-Jackson (1998) and Jackson-Briggs (1992) as opt-ins; the sites' boundary scattering in the depth plan and the coverage pictures; the Doppler workstream scoped (`docs/tasks/DOPPLER.md`); the owner's answers 36 to 42 | The +5 dB class over the 100 m shelf reaches 2.56 km in the plan (8.02 to 9.58 before); every site value illustrative; `flank_patrol` worst margin error 3.4 dB; simulated surface reverberation has no Doppler spread at long range |
-| D-255 to D-261 (2026-11-27 and 28) | The owner's decisions: the baseline at sea state 3, an alternate at sea state 5, an FLS deployment block (D-255); after the deep site's measurement, the baseline's waveform a 2 s hyperbolic sweep at 197 dB and sea state 5 as needing a larger transmitter not yet identified (D-256; branch `hfmbase`, `sonar-7h6q`, not merged). FLS deployment files and `look: boresight`, opt-in (D-257); tracks use the measured range rate, `tracker.range_rate`, opt-in (D-258); the gallery's differences explained, gallery `--evidence` and `--reverb` (D-259); the deep site at 12 km measured, the scenes `popoto_12km_deep` and `popoto_12km_deep_sea_state_5`, the placeholder alternate build `popoto_face_3x32_ss5`, `tools/deep12_eval.py`, the stale outputs of D-251 regenerated with `tools/regen_stale.py`, the `deep12` and `regen` sub-runs (D-260); the merge (D-261) | **The shipped baseline (1 s, 197 dB, linear, plain filter) at the deep site at sea state 3 holds neither the closing nor the oblique `large_submerged` hull nor the ship (0 of 6 pings each); the alternate fails at sea state 5 for both hulls**; the planner's margins hold for an unresolved, non-moving target only; the decided fix holds the hulls at sea state 3 by +1.28 / +0.73 dB on one seed, the oblique hull not tracked, not at sea state 4; regenerating D-251's outputs: the closing hull untracked at the last alternating ping, `popoto_12km_doppler` 4 false detections on 4 target-free pings; `fls_170k_traffic`'s wake false mover a rate of 5 of 8 seeds, a rule would move a default (`sonar-ya9s`); the range rate: the oblique target's class flickers on alternating pings, the navigation accuracy assumed; FLS: no 300k or 750k files, the engines disagree on the pool scenes with the defaults, one test narrowed (`sonar-w3fq`); the first suite on the batch failed 3 tests (fixed, D-260) |
+| D-262, D-263 (2026-11-28) | The 12 km baseline transmits a hyperbolic sweep of 2 s at 197 dB, plain filter (D-262, `sonar-7h6q` closed; a default moved; `docs/tasks/DOPPLER.md` HB.1 to HB.4); `projector.waveform.type: hfm` in a build spec; `range_doppler: ownship \| full` refused on a sampled pulse in both engines; the Python multipath-depth window timed as the C++ engine's; the gallery regenerated (job 6b0a8a776c5d61fff18bd237, `4720050`); the merge (D-263) | **Nothing seen inside 1.5 km; the elevation scenes keep the 1 s sweep, no depth at 12 km measured; two face self-checks fail (depth at 1.7 km, `sonar-9035`; the 3 m range check by 0.06 m, `sonar-8h09`) and one's criterion changed; a mover's range 6 m per m/s off, no range rate; the winter-sand ship's track 2.8 -> 9.3 m; deep silt confirmed tracks 3 -> 2; the projector's longest pulse at that drive on no sheet; the simulator 5 to 17 times slower on a CPU**; the baseline holds sea state 3 at the deep site thinly (+1.28 / +0.73 dB on the hulls, one seed), not sea state 4; `doppler_deep12_eval.json` lacks the baseline's own cases (`sonar-n8ho`); not merged: `depthrange`, `rangeedge`, `shortmode` |
+| D-255 to D-261 (2026-11-27 and 28) | The owner's decisions: the baseline at sea state 3, an alternate at sea state 5, an FLS deployment block (D-255); after the deep site's measurement, the baseline's waveform a 2 s hyperbolic sweep at 197 dB and sea state 5 as needing a larger transmitter not yet identified (D-256; done in D-262, merged D-263). FLS deployment files and `look: boresight`, opt-in (D-257); tracks use the measured range rate, `tracker.range_rate`, opt-in (D-258); the gallery's differences explained, gallery `--evidence` and `--reverb` (D-259); the deep site at 12 km measured, the scenes `popoto_12km_deep` and `popoto_12km_deep_sea_state_5`, the placeholder alternate build `popoto_face_3x32_ss5`, `tools/deep12_eval.py`, the stale outputs of D-251 regenerated with `tools/regen_stale.py`, the `deep12` and `regen` sub-runs (D-260); the merge (D-261) | **The shipped baseline (1 s, 197 dB, linear, plain filter) at the deep site at sea state 3 holds neither the closing nor the oblique `large_submerged` hull nor the ship (0 of 6 pings each); the alternate fails at sea state 5 for both hulls**; the planner's margins hold for an unresolved, non-moving target only; the decided fix holds the hulls at sea state 3 by +1.28 / +0.73 dB on one seed, the oblique hull not tracked, not at sea state 4; regenerating D-251's outputs: the closing hull untracked at the last alternating ping, `popoto_12km_doppler` 4 false detections on 4 target-free pings; `fls_170k_traffic`'s wake false mover a rate of 5 of 8 seeds, a rule would move a default (`sonar-ya9s`); the range rate: the oblique target's class flickers on alternating pings, the navigation accuracy assumed; FLS: no 300k or 750k files, the engines disagree on the pool scenes with the defaults, one test narrowed (`sonar-w3fq`); the first suite on the batch failed 3 tests (fixed, D-260) |
 | D-251 to D-254 (2026-11-27) | The reverberation's Doppler per frequency as the default (`doppler: per_frequency \| centre` on reverberation items; both engines and the CUDA sum; D-251); the tone path at 12 km counted again with it (D-252); the live chain in the viewer (`tools/scenario_view.py --chain`) with opt-in read-only taps in both engines (tracker, classifier, detector), the audio default by record (time stretch under 0.5 s), the gallery regenerated (D-253); the merge (D-254) | **On the regenerated gallery `fls_170k_traffic` has one mover not on a moving object** (`sonar-4pon`) and `popoto_env_gravel_30m` one confirmed track fewer (3 -> 2); outputs made before D-251 with a moving platform and boundary reverberation are stale (`sonar-rar0`); two tests changed with the default (a bound 13 -> 15, one test sums six seeds; no tolerance loosened); the generator 1.0 to 1.14 times slower in C++, 1.1 to 1.4 in NumPy; the tone path: 0 false detections with the notch, 17 without, on 4 target-free pings only, still off by default; **the chain's default `look: starboard` mirrors an FLS's echoes astern** (the viewer sets `look: port`; an FLS deployment block is the owner's, `sonar-tpex`); the pool scenes have no chain view; `popoto_env_summer_mud_60m` no detection; nobody has listened |
 | D-246 to D-250 (2026-11-27) | The tone path's grating-lobe and endfire notch, opt-in with the tone path (`doppler.tone_lobe_notch`, `tone_lobe_floor_db`), its coverage of both paths and `docs/design/doppler_tradeoffs.md`, the attribution of false detections (D-246); transmit options by sea state and the plain filter on a mover, linear against hyperbolic sweep (`popoto_trade_study.py --transmit`, sections 0 and 0a; `source: hfm` through both engines, `tools/hfm_doppler_eval.py`, the `hfm12` sub-run; D-247); the visualization: 2-D pages, a 3-D viewer and sound for every scenario (`tools/scenario_view.py`, `python/gpusonar/viz/`, three.js vendored; D-248); the simulator's reverberation Doppler found (D-249); the merge (D-250) | **The simulator's boundary reverberation applied Doppler as one shift at the record's centre frequency** (D-249; fixed by D-251; the owner: "FIx it", `sonar-l8yp`); **D-243's 22 false tone detections were mostly that artefact** (D-246: 25 with the notch, at its edge; recounted by D-252); far-sidelobe false detections remain (`sonar-wntj`); **the hyperbolic sweep's gain on the real 12 km scene is small** (1 to 2.4 dB for four times the energy) and the noise-limited case is not run (`sonar-rctz`); **the shipped transmitter holds 12 km at the deep site only to sea state 3** (the model's, for a point target; measured by D-260, not even there for the resolved hull); the visualization: four scenes without rays or sound, six without sound, nobody has listened, FLS and SAS sound a click (time stretch agreed; the default since D-253) |
 | D-241 to D-245 (2026-11-27) | `GPUSONAR_JOB=doppler` (`tools/doppler_gpu_runs.sh`; sub-runs `tone`, `falsealarm`, `timing`, opt-in `ls12`) and its first runs (D-241); `doppler.batched` and `doppler.batch`: the sweep bank and the tone bank batched on the device (`libs/live/src/doppler_cuda.cu`, `doppler_batched.cpp`, `include/sonar/live/doppler_batched.hpp`; D-242); two opt-in 12 km large-submerged scenes and the ls12 sub-run (D-243); the owner's decisions on the baseline, the tone path and the transmitter (D-244); the merge (D-245) | **With the tone path on, 22 false detections on 4 target-free pings at 12 km at the default budget**, all the tone's, against 0 off (put on the grating lobes beyond ±32.4 degrees by D-243; mostly a simulator artefact by D-246); the tone path stays off by default (D-244; the notch is branch `notch`, `sonar-bc5r`; the far-sidelobe choice `sonar-wntj`); **the default chain is blind on `flank_patrol_doppler_tone`** (0 of 6 pings for all three targets, 26 false detections on 4 target-free pings; D-241); **D-242's first device code broke the default chain on cuda** (four bit-identity tests failed; a kernel instantiated in two `.cu` files; fixed, guarded by a test); the bank still costs 3.4 to 6.0 times the chain a ping on the device (`sonar-j1f9`); tracks ignore the measured rate (`sonar-evd4`); one device test loosened to 1e-5 m/s; the bank's false-alarm rows stopped at their one-hour limit |
@@ -437,10 +457,12 @@ progress). Recounted from the export at `bec83e5` (after the seventh merge and i
 counted from the file, not with `bd`): 106 not closed of 227; P1: 9 (5 in progress, 4 open); P2: 18, all open; P3:
 52, all open; P4: 27 (1 in progress). Recounted from the export at `138ee99` (after the eighth merge and its follow-ups
 were filed; counted from the file, not with `bd`): 106 not closed of 232; P1: 10 (6 in progress, 4 open); P2: 17, all
-open; P3: 52, all open; P4: 27 (1 in progress). The themes below were made from the first count; the rows "Doppler" and "The
+open; P3: 52, all open; P4: 27 (1 in progress). Recounted from the export at `050b568` (after the ninth merge and its
+follow-ups were filed; counted from the file, not with `bd`): 108 not closed of 235; P1: 11 (5 in progress, 6 open); P2:
+18 (1 in progress, 17 open); P3: 52, all open; P4: 27 (1 in progress). The themes below were made from the first count; the rows "Doppler" and "The
 12 km requirement" were added at D-234, "Visualization" and the fourth merge's issues at D-240, the fifth merge's
 issues at D-245, the sixth merge's at D-250 (the row "Simulator" new), the seventh merge's at D-254, the eighth merge's at
-D-261 (the row "FLS chain" new).
+D-261 (the row "FLS chain" new), the ninth merge's at D-263.
 "In progress" on a milestone issue means the milestone is not closed, not that someone is working on
 it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documentation set
 (`sonar-4mu`) were closed on 2026-11-24 and 25.
@@ -451,7 +473,7 @@ it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documen
 | Milestones not closed | `sonar-l59` (P1) M11 Holoscan integration; `sonar-3s7` (P1) M13 performance model and Jetson; `sonar-k29` (P1) stacked rows for elevation |
 | Link budget | `sonar-w2w3` (P1; closed 2026-11-26 in the export): the reverberation term exists since D-221 (`coverage.reverberation`, `SonarEquation(reverberation_db=...)`); since D-227 the depth plan and the coverage picture include the sites' scattering (illustrative values; the +5 dB class over the 100 m shelf 8.0 to 9.6 → 2.56 km in the plan); the free-field budgets stay noise-only and say so |
 | Doppler | `sonar-u1fu` (P1, in progress) the workstream: D2, D4, D3 and D8 merged (D-231, D-232, D-237, D-242: `doppler.combine: cfar`, `doppler.tone: bank`, `doppler.batched`, opt-in); closed with the fifth merge: `sonar-iu67` (the GPU job mode and its runs, D-241), `sonar-ca0o` (the device port, D-242), `sonar-094p` (taken into `sonar-iu67`); `sonar-bc5r` the tone path's grating-lobe notch (closed, merged D-246, D-250; the tone path still off by default); `sonar-evd4` the tracker uses the measured rate (D5; closed, merged D-258, D-261, opt-in); `sonar-wntj` (P2) the tone's far-sidelobe false detections, the owner to choose; `sonar-j1f9` (P2) batch the backprojection across hypotheses, cache the filters, no map re-upload; `sonar-r8nr` (P2) the Python chain's nonsense on a short CW record; `sonar-ef64` (P3) the bank's sidelobe detections under very strong echoes; `sonar-itzy` (P3) the winning hypothesis for elevation and SBL; `sonar-3in1` (P3) the tone margins' scatter (more background pings, the clipped window) |
-| The 12 km requirement | **`sonar-7h6q` (P1, in progress) the baseline's waveform: a 2 s hyperbolic sweep at 197 dB, every long-range result regenerated (D-256; branch `hfmbase`, not merged; until it merges the shipped baseline does not meet 12 km at the deep site for the resolved hull, D-260)**; `sonar-2bjq` (P2) the resolved hull in the detector (a test summed over highlights or pings; the oblique hull detected and not tracked; several seeds; the closing hull untracked at the last alternating ping); `sonar-9ed5` (P2) the owner: a short-range mode for the long-range sonar, the projector's longest pulse at full drive; `sonar-bh5c` (P1) the owner: what the 12 km requirement is for, the operating area's wind and bottom backscatter, whether 32 a row is fixed, the "sea state 5" label; `sonar-3983` (P1, in progress) the trade study; `sonar-b1p0` (P2) its follow-ups: own depth by reach, the rows measurement at more sites and pings, the ship's 4.8 dB cross-check gap; `sonar-qbrg` scenes with `large_submerged` at 12 km (closed, merged D-243, D-245); `sonar-vjq7` transmit options by sea state and the requirement's wording (closed, merged D-247, D-250; the proposed POP-3 sentence is in `STATUS.md`, not yet in `tools/design_report.py`); `sonar-rctz` the noise-limited chain run at the deep site (closed, merged D-260, D-261: the baseline fails for the resolved hull); `sonar-8fzu` (P3) regenerate `REFERENCE_DESIGN.md` and the planner JSON for the new fields. Since D-235 the owner has said whom 12 km is for (`large_submerged` first, `ship` second); POP-3 reads "partly met" (D-238); since D-244 the baseline is the plain sweep with every Doppler option off, the requirement to be worded with its conditions and the transmitter specified by energy; since D-255 the baseline at sea state 3 and an alternate at sea state 5 |
+| The 12 km requirement | `sonar-7h6q` the baseline's waveform, a 2 s hyperbolic sweep at 197 dB (closed: D-262, merged D-263); **`sonar-9035` (P1) the depth estimate against range at 2, 5 and 12 km with the baseline (branch `depthrange`, not merged; the three-row rehearsal's depth fails at 1.7 km); `sonar-8h09` (P1) the leading-edge range offset, 3.0 m at 2 s (branch `rangeedge`, not merged)**; `sonar-n8ho` (P2) the baseline's own deep-site and shelf cases into `doppler_deep12_eval.json`, the 12 km examples regenerated; `sonar-2bjq` (P2) the resolved hull in the detector (a test summed over highlights or pings; the oblique hull detected and not tracked; several seeds; the closing hull untracked at the last alternating ping); `sonar-9ed5` (P2, in progress) a short-range mode for the long-range sonar (the owner: "do all 3", D-263; branch `shortmode`, not merged), the projector's longest pulse at full drive; `sonar-bh5c` (P1) the owner: what the 12 km requirement is for, the operating area's wind and bottom backscatter, whether 32 a row is fixed, the "sea state 5" label; `sonar-3983` (P1, in progress) the trade study; `sonar-b1p0` (P2) its follow-ups: own depth by reach, the rows measurement at more sites and pings, the ship's 4.8 dB cross-check gap; `sonar-qbrg` scenes with `large_submerged` at 12 km (closed, merged D-243, D-245); `sonar-vjq7` transmit options by sea state and the requirement's wording (closed, merged D-247, D-250; the proposed POP-3 sentence is in `STATUS.md`, not yet in `tools/design_report.py`); `sonar-rctz` the noise-limited chain run at the deep site (closed, merged D-260, D-261: the baseline fails for the resolved hull); `sonar-8fzu` (P3) regenerate `REFERENCE_DESIGN.md` and the planner JSON for the new fields. Since D-235 the owner has said whom 12 km is for (`large_submerged` first, `ship` second); POP-3 reads "partly met" (D-238); since D-244 the baseline is the plain sweep with every Doppler option off, the requirement to be worded with its conditions and the transmitter specified by energy; since D-255 the baseline at sea state 3 and an alternate at sea state 5 |
 | Visualization | `sonar-6k79` (P1) rays, bounces and the received signal at each hydrophone for every scenario: the 2-D pages, the 3-D viewer with three.js vendored from the npm registry and the sound merged (D-248, D-250; `docs/tasks/VISUALIZATION.md`), and since D-253 the chain view with opt-in taps in both engines, the audio fixes and time stretch by default for records under 0.5 s (merged D-254); left: page clutter, the short scenes' sound remade, full-ping chain runs on the GPU, the four scenes without rays; `sonar-tpex` a deployment block for the FLS (closed: the files and `look: boresight`, D-257, D-261; the viewer takes the look from the file); `sonar-bbqr` (P3) the software diagrams miss `doppler_cuda.cu` |
 | FLS chain | `sonar-ya9s` (P2) the owner: a wake or hop rule for the FLS classifier (moves a default; D-259); `sonar-w3fq` (P2) the Python chain refusing sub-three-cell windows as C++ does, FLS 300k and 750k files, FLS tracker tuning (D-257); `sonar-4pon` (closed, D-259: the wake false mover explained) |
 | Simulator | `sonar-l8yp` (P1) the boundary reverberation's Doppler at the centre frequency: closed, fixed by D-251 (merged D-254); `sonar-rar0` regenerate the outputs it made stale (closed, D-260, D-261) |
@@ -470,7 +492,9 @@ it now. Milestone 12 (`sonar-dzu`), `sonar-k7m` (closer to SST) and this documen
 
 Also known, with no issue: `docs/design/popoto_depth_planner.json`, `docs/figures/fjord_depth_plan.md`
 and the depth sections of `DESIGN.md` predate the detector recount (STATUS open item 37);
-`docs/design/popoto_12km.json` was regenerated on an L4 under D-251 (D-260);
+`docs/design/popoto_12km.json` was regenerated on an L4 under D-251 (D-260) and not with the 2 s baseline (D-262),
+so it is of the 1 s sweep; `docs/handoff/hardware_builds.json` evaluates the face builds at 1000 m, inside the 1.5 km
+blind range;
 `RESULTS.md`'s "Sensor Bridge loopback" section keeps its first record (the loopback test not yet
 passed) beside a "Since then" paragraph that says it has passed since D-153.
 
@@ -480,7 +504,7 @@ Five lists. Nothing in them can be settled from the repository.
 
 | List | Where | Count | About |
 | --- | --- | --- | --- |
-| Open questions for the project owner | `docs/STATUS.md`, section of that name | 68 numbered (35 when this table was written); 1 to 12 are the Popoto array, and 17, 19, 22, 28, 29, 35 to 43, 50, 54, 56, 58 to 60 and 63 are marked applied or answered, 51 in part (its worst sea state answered by D-255) | rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site; then wire format (13-15), defaults not applied (16, 18, 20, 21), reading and older items (23-27); raised since D-182 (30-34): board timing, the grating lobe, the fjord beds, SAS with bed multipath, 3-D propagation; Doppler (43-49, from `docs/tasks/DOPPLER.md` section 5; 43, the transmitter, answered: free to choose along with the Popoto, D-231); the default bistatic roughness model (50, answered); what the 12 km requirement is for, the operating area, 32 a row, the "sea state 5" label (51-54, from the trade study; `sonar-bh5c`; 51 answered in part, D-235: `large_submerged` first and `ship` second, still open the worst sea state, the detection and false-alarm probabilities and the slowest radial speed; 54 answered, the labels corrected); whether `--check` fails on "partly met" (55, D-238); the owner's decisions of 2026-11-27 (56, answered, D-244); the far-sidelobe remedy for the tone path (57, `sonar-wntj`); three.js vendored from the npm registry (58, answered, D-248: yes); time stretch for short records (59, answered, D-248: agreed); the simulator's reverberation Doppler (60, answered, D-249: fix it); the projector's response across 4-6 kHz for a hyperbolic sweep (61); the POP-3 wording the transmit study supports (62; measured, it does not hold for the resolved hull, D-260); an FLS deployment block (63, answered by D-255, built by D-257); the worst sea state (answered by D-255: the baseline sea state 3, an alternate sea state 5) and, after the deep-site measurement, the baseline's waveform and sea state 5 (answered by D-256: a 2 s hyperbolic sweep at 197 dB; sea state 5 needs a larger transmitter not yet identified); raised by the eighth merge: a wake or hop rule for the FLS classifier (64, `sonar-ya9s`), FLS tracker tuning (65, `sonar-w3fq`), a short-range mode and the projector's longest pulse at full drive (66, `sonar-9ed5`), the resolved hull in the detector (67, `sonar-2bjq`), a larger transmitter for sea state 5 (68) |
+| Open questions for the project owner | `docs/STATUS.md`, section of that name | 69 numbered (35 when this table was written); 1 to 12 are the Popoto array, and 17, 19, 22, 28, 29, 35 to 43, 50, 54, 56, 58 to 60 and 63 are marked applied or answered, 51 in part (its worst sea state answered by D-255) | rows, band, converter, projector, static frame, navigation unit, target classes, waters, dive, recording, receive windows, coverage site; then wire format (13-15), defaults not applied (16, 18, 20, 21), reading and older items (23-27); raised since D-182 (30-34): board timing, the grating lobe, the fjord beds, SAS with bed multipath, 3-D propagation; Doppler (43-49, from `docs/tasks/DOPPLER.md` section 5; 43, the transmitter, answered: free to choose along with the Popoto, D-231); the default bistatic roughness model (50, answered); what the 12 km requirement is for, the operating area, 32 a row, the "sea state 5" label (51-54, from the trade study; `sonar-bh5c`; 51 answered in part, D-235: `large_submerged` first and `ship` second, still open the worst sea state, the detection and false-alarm probabilities and the slowest radial speed; 54 answered, the labels corrected); whether `--check` fails on "partly met" (55, D-238); the owner's decisions of 2026-11-27 (56, answered, D-244); the far-sidelobe remedy for the tone path (57, `sonar-wntj`); three.js vendored from the npm registry (58, answered, D-248: yes); time stretch for short records (59, answered, D-248: agreed); the simulator's reverberation Doppler (60, answered, D-249: fix it); the projector's response across 4-6 kHz for a hyperbolic sweep (61); the POP-3 wording the transmit study supports (62; measured, it does not hold for the resolved hull, D-260); an FLS deployment block (63, answered by D-255, built by D-257); the worst sea state (answered by D-255: the baseline sea state 3, an alternate sea state 5) and, after the deep-site measurement, the baseline's waveform and sea state 5 (answered by D-256: a 2 s hyperbolic sweep at 197 dB; sea state 5 needs a larger transmitter not yet identified); raised by the eighth merge: a wake or hop rule for the FLS classifier (64, `sonar-ya9s`), FLS tracker tuning (65, `sonar-w3fq`), a short-range mode and the projector's longest pulse at full drive (66, `sonar-9ed5`; the mode answered "do it", D-263, in progress; the pulse still open), the resolved hull in the detector (67, `sonar-2bjq`), a larger transmitter for sea state 5 (68); raised by the ninth merge: whether the leading-edge range correction becomes the default (69, when `sonar-8h09` reports) |
 | Vehicle adapters | `docs/tasks/VEHICLE_ADAPTERS.md` section 3 (issue `sonar-o7m`) | 17 | the boards' output format, timing and transmit signal; the navigation unit's interface; the clock between them; the lever arm |
 | Real data | `docs/tasks/REAL_DATA.md` section 3 (issue `sonar-sul`) | 11 | which data exists (FLS log, SAS image, Popoto recording), its instruments, levels, geometry and navigation |
 | Doppler | `docs/tasks/DOPPLER.md` section 5 (issue `sonar-u1fu`; the same as `STATUS.md` questions 43 to 49) | 7; 1 answered (the transmitter is free to choose along with the Popoto, 2026-11-26, D-231) | the slowest target speed of interest, whether stationary targets must stay detectable, the 12 km class and aspect (now `STATUS.md` question 51), the navigation unit's velocity accuracy, a `range_rate_m_s` report field, real data with a CW transmit |
@@ -512,41 +536,47 @@ default with the old law an option (D-249; done, D-251); the baseline at sea sta
 alternate at sea state 5, and an FLS deployment block (D-255; the block done, D-257); after the deep-site measurement the
 baseline's waveform a 2 s hyperbolic sweep at 197 dB with the plain filter, done as its own package with every
 long-range result regenerated, and sea state 5 recorded as needing a larger transmitter not yet identified (D-256;
-branch `hfmbase`, not merged).
+done, D-262); the depth estimate against range, the leading-edge range offset and a short-range mode, shown the two
+failing self-checks and the blind range: "do all 3" (2026-11-28, D-263; in progress on branches `depthrange`,
+`rangeedge`, `shortmode`).
 
 ## 10. Design numbers to keep straight
 
-**First (D-260, 2026-11-27): every margin in this section is the budget's or the planner's, for a steady,
-unresolved, non-moving point echo.** Measured through the simulator and both chain engines at the illustrative deep
-site at sea state 3 with the apl_1994 bubble law (one seed, 6 pings; `docs/tasks/doppler_deep12_eval.json`), the
-shipped baseline (1 s, 197 dB, linear, plain filter) holds neither the closing nor the oblique `large_submerged` hull
-nor the ship (0 of 6 pings each); it holds the crossing hull (+2.95 dB) and the planner's +25 dB point (+3.41 dB
-against +2.79 predicted; the point within 0.62 dB wherever detected on every ping). The class's hull, five highlights
-that resolve in range against a detector testing 0.375 m and 2 m cells, is 3.8 to 6.0 dB under the point in the same
-case. The owner's fix (D-256), a 2 s hyperbolic sweep at 197 dB with the plain filter, holds every target on 6 of 6
-at sea state 3 (+1.28 / +0.73 dB on the closing / oblique hull, one seed; the oblique hull not tracked) and not at sea
-state 4; it is not merged (branch `hfmbase`), so every shipped file and every number below is of the 1 s linear sweep.
-On the reverberation-limited shelf (`popoto_12km_large_submerged`) the 1 s sweep holds every hull on 6 of 6 pings at
-8.0 to 11.4 dB (D-243): the margin there has room for the 2.5 to 5.9 dB the hull loses against the point.
+**First (D-262, 2026-11-28): the 12 km baseline is a 2 s hyperbolic sweep at 197 dB with the plain filter, and
+every margin in this section is the budget's or the planner's, for a steady, unresolved, non-moving point echo.**
+What the 2 s pulse costs: nothing is seen inside 1.5 km (c T / 2; 0.75 km at 1 s); a mover's range reads 6 m per
+m/s of range rate off (f_stop T / B), which the plain filter cannot correct; no range rate; the elevation scenes
+keep the 1 s sweep and no depth at 12 km is measured. Measured with it through the simulator and both chain
+engines at the illustrative deep site at sea state 3 with the apl_1994 bubble law (one seed, 6 pings; job
+6b0a8a7854072e8b716cb7a8): every target 6 of 6, closing hull +1.28 dB, crossing +5.13, point +6.12, ship +6.26,
+the oblique hull +0.73 dB as D-260's `ss3_hfm2` (the same transmission; detected and not tracked there): the two
+resolved hulls thin. Sea state 4: the two hulls 0 of 6. Sea state 5: nothing held (it needs a larger transmitter
+not yet identified). The planner gives the baseline +5.4 / +6.3 dB there at sea state 3 (`large_submerged` /
+`ship`, `DESIGN.md` POP-3): the class's hull, five highlights that resolve in range against a detector testing
+0.375 m and 2 m cells, came 3.8 to 6.0 dB under the point in the same case (D-260). The 1 s linear sweep before it
+held neither the closing nor the oblique hull nor the ship there (0 of 6, D-260). On the reverberation-limited
+12 km shelf the baseline gives 9.84 / 10.0 / 12.61 dB (closing / oblique / crossing), all 6 of 6 and tracked as
+movers (job 6b0a8a7954072e8b716cb7aa; 7.98 / 9.22 / 11.41 with the 1 s sweep, D-243).
 
 Checked 2026-11-24 against `docs/design/derived.json` (requirement `POP-3`, sonar
-`popoto_long_range`), `docs/design/popoto_12km.json` and `docs/design/popoto_stage2.json`.
-All three statements still hold.
+`popoto_long_range`), `docs/design/popoto_12km.json` and `docs/design/popoto_stage2.json`; the first bullet
+re-read from `derived.json` at D-263 (2026-11-28). `popoto_12km.json` and `popoto_stage2.json` are of the 1 s
+sweep (not regenerated by D-262).
 
-- 12 km link-budget margins for one, two and three rows at 197 dB: −1.1 / +1.4 / +2.9 dB;
-  single-ping detection probability 0.22 / 0.87 / 0.99 (`derived.json`, `POP-3`: one row
-  has 14.6 dB at 12 km and needs 15.8, 13.2 and 11.8 dB). One row of 32 hydrophones needs
-  198 dB at 4.2 kHz. These are for a steady point echo of +25 dB (a placeholder) in noise,
-  spherical spreading.
+- 12 km link-budget margins for one, two and three rows at 197 dB with the 2 s baseline: +1.9 / +4.4 / +5.9 dB;
+  single-ping detection probability 0.94 / 1.00 / 1.00 (`derived.json`, `POP-3`: one row has 17.6 dB at 12 km and
+  needs 15.8, 13.2 and 11.8 dB). With the 1 s sweep: −1.1 / +1.4 / +2.9 dB, 0.22 / 0.87 / 0.99 (14.6 dB in one
+  row). The range study's "one row of 32 hydrophones needs 198 dB at 4.2 kHz" is for the 1 s pulse. These are for
+  a steady point echo of +25 dB (a placeholder) in noise, spherical spreading.
 - In simulation the ship at 12 km is detected on 6 of 6 pings and tracked from ping 3 in
   100 m over sand with one, two and three rows; not detected in the deep-silt and
   summer-mud waters (`popoto_12km.json`, keys `cases.*.{1,2,3}.pings_detected` and
   `track_confirmed_at_ping`). Regenerated on an L4 under D-251 (D-260): every case's pings detected, median
-  SNR and track ping as before.
+  SNR and track ping as before. Of the 1 s sweep: not regenerated with the 2 s baseline.
 - Full-rate GPU ping (0.5 to 13 km at 102.4 kHz, C++ chain, L4): 0.48 / 1.03 / 1.49 s for
-  one, two and three rows against a 17.9 s ping interval (`popoto_stage2.json`,
-  `decimation.timing.cuda`; `derived.json` `min_ping_interval_s` 17.93); timed on a loaded
-  machine, so upper figures.
+  one, two and three rows against the 1 s sweep's 17.9 s ping interval (`popoto_stage2.json`,
+  `decimation.timing.cuda`; timed on a loaded machine, so upper figures; not re-timed with the 2 s pulse). With
+  the 2 s baseline `derived.json` gives `min_ping_interval_s` 18.93 and the window opens at 1.5 km.
 - The live chain on the device at the working rate: 12.7 / 25.9 / 37.5 ms a ping for one,
   two and three rows (L4, `docs/benchmarks/live_chain_ablation_l4_b2a918e.json`, D-150), on
   pings with ideal clocks: that benchmark and the full-rate one leave board synchronisation
@@ -558,9 +588,10 @@ All three statements still hold.
   it 3.558, 2.410 and 0.372 s with `max` (job 6b08c9d954072e8b71685cd6, D-241). The bank still costs 3.4 to
   6.0 times the chain a ping (D-245's correction); it is off by default.
 - The 12 km transmitter by sea state (D-247; `docs/design/popoto_trade_study.md` section 0; illustrative deep
-  site, assumed target strengths, the shipped 3 x 32 face; **the model's, for a point target**): the shipped 1 s
-  197 dB holds `large_submerged` and `ship` up to sea state 3 (+2.4 / +3.3 dB; measured, not for the resolved hull
-  or the moving ship, above); the least energy a ping that holds both at sea states 2 to 6 with the
+  site, assumed target strengths, the shipped 3 x 32 face; **the model's, for a point target**): the 1 s 197 dB
+  shipped until D-262 held `large_submerged` and `ship` up to sea state 3 (+2.4 / +3.3 dB; measured, not for the
+  resolved hull or the moving ship, above); the 2 s 197 dB baseline +5.4 / +6.3 dB at sea state 3 and -0.9 / +1.1 dB
+  at sea state 4 (`DESIGN.md` POP-3; measured, sea state 3 held thinly, sea state 4 not, above); the least energy a ping that holds both at sea states 2 to 6 with the
   apl_1994 bubble law is 197, 197, 203, 206, 212 dB re 1 uPa^2 s at 1 m. With the plain filter the linear
   sweep's peak loss on a mover is 8.8 / 14.8 dB at 2 / 8 m/s for 1 s and grows with the pulse.
 - **The link budget's margins above are for noise.** The term exists (`coverage.reverberation`,
@@ -574,8 +605,9 @@ All three statements still hold.
   illustrative sites, assumed strengths): the +5 dB `xl_auv` is not met at 12 km by the shipped 3 x 32 at
   any of 6 sites (−4.6 to −116.1 dB); `ship` is met at four (+8.8 to +29.8 dB) and fails at sea state 5
   (−6.1) and over summer mud (−96.1); one row of 32 holds 12 km wherever three do. Not robust to one sea
-  state or 3 dB of bottom scattering. The planner's figures for a point target: at the deep site, one of the four,
-  the baseline measured does not hold the resolved hull (above).
+  state or 3 dB of bottom scattering. The planner's figures for a point target, and the grid's of the 1 s
+  linear sweep: at the deep site, one of the four, the 1 s baseline measured did not hold the resolved hull, and
+  the 2 s baseline holds it by +1.28 / +0.73 dB on one seed (above).
 
 ## 11. How to work here
 

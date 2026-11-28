@@ -13,29 +13,34 @@ of every other document).
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
 Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU, 12
 (propagation and reverberation) as far as open literature allows (audited 2026-11-25), and
-the CUDA backend has been run and benchmarked on rented GPUs. **Worst first: the shipped long-range
-baseline, as it stands in the tree today, does not meet its 12 km requirement at the deep site for the
-resolved hull.** Measured through the simulator and both chain engines (D-260; NVIDIA L4, illustrative deep
-site at sea state 3 with a bubble law, one seed, 6 pings; `docs/tasks/doppler_deep12_eval.json`), the shipped
-1 s, 197 dB linear sweep with the plain filter holds neither the closing nor the oblique `large_submerged`
-hull nor the ship (0 of 6 pings each), only the crossing hull and an unresolved point target; the planner's
-margins (the trade study's "holds both classes at the deep site up to sea state 3", "met by the shipped 3 x 32
-at 4 of 6 sites") are for an unresolved,
-non-moving target. The owner decided the fix (D-256): a 2 s hyperbolic sweep at 197 dB (measured: every target
-on 6 of 6 pings at sea state 3, thin margins, one seed; not at sea state 4), with sea state 5 recorded as
-needing a larger transmitter not yet identified. It is **not merged** (branch `hfmbase`): every shipped file
-still has the 1 s linear sweep. On the reverberation-limited 12 km shelf scene the 1 s sweep holds every hull
-on every ping (8.0 to 11.4 dB, D-243), with margin to spare for what the resolved hull costs. The long-range
-design is honest about where it stands in its budget too: one long row at 197 dB is 1.1 dB short of detection at 12 km
-on the chain's own detector (free field, the ship-sized target); the 12 km requirement is for
+the CUDA backend has been run and benchmarked on rented GPUs. **Since D-262 (merged
+with the ninth batch, D-263) the 12 km long-range baseline is a 2 s hyperbolic sweep at 197 dB with the plain
+filter** (the owner's decision, D-256). Worst first, what it cost: nothing is seen inside 1.5 km (0.75 km
+before); the three elevation scenes keep the 1 s linear sweep (targets at about 1 km), so no depth at 12 km has
+been measured; two of the face builds' self-checks fail (the three-row rehearsal's depth at 1.7 km; the one- and
+two-row 3 m range check, by about 0.06 m) and one's criterion changed; a mover's range reads 6 m per m/s of range
+rate off, with no range rate; on the regenerated gallery the winter-sand ship's track moved from 2.8 to 9.3 m from
+its outline and the deep-silt scene lost a confirmed track; no projector sheet states the longest pulse at that
+drive (via secondary); the simulator is 5 to 17 times slower on a CPU. What it holds, measured through the
+simulator and both chain engines (NVIDIA L4, illustrative deep site with a bubble law, one seed, 6 pings): at sea
+state 3 every target on 6 of 6 pings, the two resolved `large_submerged` hulls by only +1.28 and +0.73 dB (thin;
+the oblique hull detected but not tracked in D-260's run); not at sea state 4; sea state 5 needs a larger
+transmitter not yet identified; the summer mud's shadow is held by neither design. On the reverberation-limited
+12 km shelf scene the hulls give 9.84 to 12.61 dB, all tracked as movers. The 1 s linear sweep it replaced held
+neither the closing nor the oblique hull nor the ship at the deep site (0 of 6, D-260). The planner's margins
+are the model's, for an unresolved, non-moving target. Started and not merged (branches `depthrange`,
+`rangeedge`, `shortmode`): the depth estimate against range, the leading-edge range offset, a short-range mode.
+The long-range design is honest about where it stands in its budget too: by the planner one long row at 197 dB
+has +1.9 dB at 12 km on the chain's own detector with the 2 s pulse (free field, the ship-sized target; -1.1 dB
+with the 1 s pulse); the 12 km requirement is for
 `large_submerged` first and `ship` second (the owner, 2026-11-26), and by the planner three rows hold it for
 both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"; since
-D-260 the cell also states the measured failure above), depth at range is limited by what is known of the sound-speed
+D-260 the cell also states what was measured, since D-262 with the 2 s baseline), depth at range is limited by what is known of the sound-speed
 profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the eighth batch's tree, decisions D-257
-to D-260, as three jobs on an NVIDIA L4 (3494 passed, 124 skipped, 4 xfailed, none failed; Hugging Face
-jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae; D-261; a first run on the
-batch failed 3 tests in its new files, fixed with the records unchanged, D-260), the opt-in
+(the depth sigma now says so). The full GPU suite last ran on the ninth batch's tree, decision D-262, as three
+jobs on an NVIDIA L4 (3507 passed, 124 skipped, 4 xfailed, none failed; Hugging Face jobs 6b0a8a766c5d61fff18bd22e,
+6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; D-263; the slowest shard 60 minutes of tests; the first run on
+the eighth batch had failed 3 tests in its new files, fixed with the records unchanged, D-260), the opt-in
 3-D propagation tier and the slow Bellhop3D checks included; the first suite on the fifth batch had
 failed 4 tests, because new device code had made two programs built from one library disagree in the
 last digits on the GPU (fixed, with a test that guards it, D-245); the
@@ -57,7 +62,7 @@ margin by 3.4 to 5.3 dB on the scenes measured, so it stays off; an opt-in CFAR 
 shift at the record's centre frequency where each frequency should shift (D-249); fixed, and the
 per-frequency law the default, since D-251 (the owner: "FIx it").** What moved with it: on the
 regenerated gallery `fls_170k_traffic` has one mover not on a moving object and `popoto_env_gravel_30m` one
-confirmed track fewer (3 -> 2); D-259 found the first a wake track that appears in 5 of 8 seeds under the new
+confirmed track fewer (3 -> 2; 3 again with the 2 s baseline, D-262); D-259 found the first a wake track that appears in 5 of 8 seeds under the new
 law and 3 of 8 under the old (a rate, not shown to be caused by the fix) and the second a track on no object.
 The outputs made before the fix were regenerated (D-260); worse there: the closing hull untracked at the last
 alternating ping of the 12 km large-submerged scene, and 4 false detections on 4 target-free pings on
@@ -71,12 +76,12 @@ for it (D-246); without it the default chain is blind on the tone-and-sweep scen
 ping on the device. Tracks can take the measured range rate since D-258 (opt-in): on the device the small
 vehicle becomes a mover from ping 3 (2.03 m/s, true 2.0); the 12 km oblique target's class flickers on
 alternating pings. The owner's baseline is the plain sweep on the three-row face with every Doppler
-option off (D-244); by the model the shipped transmitter (1 s, 197 dB) holds 12 km for both classes at the deep
+option off (D-244); by the model the transmitter then shipped (1 s, 197 dB) held 12 km for both classes at the deep
 illustrative site up to sea state 3 for a point target, and a table of transmit options by sea state gives the
 energy each sea state needs (D-247; `docs/design/popoto_trade_study.md` sections 0 and 0a, which since D-260
 also carry the measured table); a hyperbolic sweep gains little on the real reverberation-limited 12 km scene,
 and at the noise-limited deep site a 2 s hyperbolic sweep at 197 dB holds the resolved hull at sea state 3
-where a 1 s one does not (D-260, above). The
+where a 1 s one does not (D-260): it is the baseline since D-262 (above). The
 forward-looking sonars have their own deployment files since D-257 (opt-in `look: boresight`: the chain's
 default look, a flank array's, puts an FLS's echoes astern). On 2026-11-26 the boundary models, the sediment tier and time
 spreading were aligned to the read references (`docs/references/CONFORMANCE.md`, D-208 to D-224); what

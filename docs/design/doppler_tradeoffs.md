@@ -6,6 +6,17 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
 
 ## What is worse or not known, first
 
+- **(Added by the document sweep after D-263.) Since D-262 the 12 km baseline is the 2 s hyperbolic sweep at 197 dB
+  with the plain filter** (`configs/sonars/popoto_long_range.yaml`; `docs/tasks/DOPPLER.md` HB.1 to HB.4). What it cost,
+  first: nothing is seen inside 1.5 km (0.75 km before); a mover's range reads 6 m per m/s of range rate off, which the
+  plain filter cannot correct; no range rate from the sweep (the bank takes a linear sweep only, and `range_doppler:
+  ownship | full` is now refused on a sampled pulse in both engines, where it applied 0 silently); the elevation scenes
+  keep the 1 s linear sweep, so no depth at 12 km is measured; two face self-checks fail. Measured from its own
+  configuration (one seed, 6 pings, L4): at the deep site at sea state 3 every target 6 of 6, the resolved hulls by
+  +1.28 / +0.73 dB (thin); sea state 4 not held; sea state 5 nothing held; on the 12 km shelf 9.84 / 10.0 / 12.61 dB,
+  all tracked as movers (the 1 s linear sweep 7.98 / 9.22 / 11.41 dB). **The "Plain sweep (default)" column below
+  was written for the 1 s linear sweep shipped until D-262**; the bank and the tone path in it still take a linear
+  sweep (the bank's scene `popoto_12km_large_submerged` and the trains state their own pulses).
 - **(Added by the document sweep after D-261.) At the noise-limited deep site the plain linear sweep, the shipped
   baseline, does not hold the resolved hull at 12 km** (D-260; `docs/tasks/DOPPLER.md` DM.1 to DM.7;
   `docs/tasks/doppler_deep12_eval.json`; one seed, 6 pings, L4): at sea state 3 the 1 s, 197 dB linear sweep with the
@@ -17,8 +28,7 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
   energy, the two hulls are not. The owner's decision (D-256): the baseline's waveform becomes a **2 s hyperbolic sweep
   at 197 dB with the plain filter, no bank** (measured: every target held on 6 of 6 at sea state 3, the hulls by +1.28 /
   +0.73 dB on one seed; not at sea state 4; costs: blind range 1.5 km, a range bias of 6 m per m/s on movers the plain
-  filter cannot correct, no range rate, the bank refuses it). Not merged (branch `hfmbase`, `sonar-7h6q`): the
-  "Plain sweep (default)" column below is still the shipped 1 s linear sweep.
+  filter cannot correct, no range rate, the bank refuses it). (Since D-262 merged, D-263; the item above.)
 - **The tone path is the only one that measures a range rate, and it has three blind spots**: targets slow against the
   water (its notch: +-0.38 m/s at 6.5 kHz, 12 % of headings at 2 m/s, `DOPPLER.md` LS.3), every crossing target
   (on its beam's ridge: 0 of 3 tone pings on `popoto_12km_large_submerged`, LS.3), and, under way, targets coming nearly

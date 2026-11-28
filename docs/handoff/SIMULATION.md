@@ -20,8 +20,14 @@ the same day, and to D-261 on 2026-11-28 (the merge `08ddfab` of the eighth batc
 they measured, D-260; the site's bubble law reaching the simulator only through the scene; the D-251-stale outputs
 regenerated). **What the deep site found first (D-260):** with the planner's site, noise, absorption and surface in
 the simulator, the class's hulls, whose five highlights resolve in range, come 3.8 to 6.0 dB under an unresolved
-point of the same strength through the chain, so the planner's margins hold for a point only; the shipped baseline
-fails there at sea state 3 for the resolved hull (`docs/STATUS.md` open item 90).
+point of the same strength through the chain, so the planner's margins hold for a point only; the 1 s linear
+baseline failed there at sea state 3 for the resolved hull (`docs/STATUS.md` open item 90). Brought to D-263 the
+same day (the merge `e16e214` of the ninth batch): **since D-262 the 12 km baseline (`popoto_long_range` and the
+face builds) transmits a sampled hyperbolic sweep of 2 s at 197 dB** (`{type: sampled, source: hfm}`): the
+simulator is 5 to 17 times slower on a CPU with it than with the analytic 1 s sweep; the scenes that exist for the
+linear sweep state the 1 s sweep by override (the three elevation scenes, `popoto_12km_large_submerged`); the
+trains and the 0.1 s builds are unchanged; FLS, SAS and flank records hash identical (D-262, `docs/STATUS.md` items
+96 to 100).
 
 Everything in this project that looks like a result is a result on simulated data. This file says
 what makes that data, which parts were checked against what, and which parts are known to be wrong
@@ -303,26 +309,26 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
-| `popoto_12km` | `popoto_long_range` | eigenray | the design point: a mover at 12 km in 100 m over sand, six pings | gallery; `realistic_scenes`, `detector`, `classify`, `deployment_defaults` and five more; `EXAMPLES.md` example 5 | CPU 2 min (older run); measured here 5 min 42 s on 2 threads with the live chain; L4 52.3 s |
+| `popoto_12km` | `popoto_long_range` | eigenray | the design point: a mover at 12 km in 100 m over sand, six pings | gallery; `realistic_scenes`, `detector`, `classify`, `deployment_defaults` and five more; `EXAMPLES.md` example 5 | CPU 2 min (older run); measured here 5 min 42 s on 2 threads with the live chain; L4 102.4 s with the 2 s pulse (D-262's gallery; 52.3 s before) |
 | `popoto_12km_2row`, `_3row` | `popoto_long_range_2row`, `_3row` | eigenray | the same with stacked rows; the ship 4 m deep | `multipath_depth`, `buildspec`; `popoto_12km_study.py` | not recorded |
 | `popoto_12km_doppler` | `popoto_long_range` | eigenray | `popoto_12km` with a 1 s Hann tone at 5 kHz, then the 4-6 kHz sweep (a 2 s ping); the ship's radial speed is small, so the Doppler path is not expected to help (tone with the bank 33.2 dB; D-231) | `doppler_scenes`; `doppler_study.py` | as above |
-| `popoto_12km_large_submerged` | `popoto_long_range` | eigenray | `popoto_12km`'s water, array, platform and seed with three `large_submerged` targets (assumed class values) 50 m deep: closing at 6 m/s bow-on, oblique and crossing at 2 m/s; the shipped sweep only (D-243). The sweep alone holds all three on 6 of 6 pings, 7.98 to 11.41 dB, 2.5 to 5.9 dB under the planner's point target (the hull's highlights resolve in range) | `large_submerged_scenes`; `doppler_tone_eval.py --alternate`, `doppler_bank_eval.py`; the `doppler` job's opt-in `ls12` sub-run | CPU 27 min for 6 pings (`docs/tasks/DOPPLER.md` LS.1) |
+| `popoto_12km_large_submerged` | `popoto_long_range` | eigenray | `popoto_12km`'s water, array, platform and seed with three `large_submerged` targets (assumed class values) 50 m deep: closing at 6 m/s bow-on, oblique and crossing at 2 m/s; the 1 s linear sweep, stated in its file since D-262 (the bank's scene; with the 2 s hyperbolic baseline set, 9.84 / 10.0 / 12.61 dB, all tracked as movers, D-262). The 1 s sweep alone holds all three on 6 of 6 pings, 7.98 to 11.41 dB, 2.5 to 5.9 dB under the planner's point target (the hull's highlights resolve in range) | `large_submerged_scenes`; `doppler_tone_eval.py --alternate`, `doppler_bank_eval.py`; the `doppler` job's opt-in `ls12` sub-run | CPU 27 min for 6 pings (`docs/tasks/DOPPLER.md` LS.1) |
 | `popoto_12km_large_submerged_tone` | `popoto_long_range` | eigenray | the same with a 1 s Hann tone at 6.5 kHz above the 4-6 kHz sweep in one 2 s ping (D-243). With the tone path on, 22 false detections on 4 target-free pings at the default budget, all the tone's (device run); **D-246: mostly an artefact of this simulator's reverberation Doppler at the train's 5.3 kHz centre (section 1, D-249; fixed by D-251), not a property of the tone path**; with the grating-lobe notch 25, at the notch's edge, under the old law. **With the corrected simulator (D-252, job 6b0947c354072e8b71697a5a): 0 false detections on 4 target-free pings at the default budget with the notch, 17 without it, 1 with the tone path off** | `large_submerged_scenes`; `doppler_tone_eval.py`; the `ls12` sub-run | CPU 58 min a ping (LS.1); the device run in job 6b08f68754072e8b7168e9c6 |
 | `popoto_12km_deep` | `popoto_long_range_3row` | image_source | the trade study's noise-limited planning site `deep_no_bottom_return` by name (no bottom, isovelocity, 5 m/s, no bubble law; the planner's water: Ainslie-McColm at 12 C and 50 m), direct path and rough surface image only, the three-row face at the planner's 225 m; `popoto_12km_large_submerged`'s three hulls, a ship at +29 degrees (-3.65 m/s) and a +25 dB point moving with the platform (range rate 0) | `deep12_scenes`; `doppler_bank_eval.py --chain-set elevation={}` | CPU 17 s a ping (1 s LFM, 96 channels) |
 | `popoto_12km_deep_sea_state_5` | `popoto_long_range_3row` | image_source | the same at `deep_no_bottom_return_sea_state_5` (12.6 m/s, the apl_1994 bubble law through `time_spread.surface.bubble_loss_db`); sea states 3 and 4 by `--set environment.sea_state=N`: the check of the transmit table's noise-limited claims, the baseline (1 s, 197 dB, sea state 3) and the sea-state-5 alternate (4 s, 200 dB; D-255). Measured (D-260, L4, one seed, 6 pings): the baseline holds neither the closing nor the oblique hull nor the ship at sea state 3; the alternate neither hull at sea state 5. The site's `bubble_model` reaches the simulator only through the scene's `time_spread.surface.bubble_loss_db` (a test holds the two equal); the scene's noise is the planner's at the band centre, +1.62 / -1.37 dB at 4 / 6 kHz (band mean +0.13 dB) | `deep12_scenes`; the `doppler` job's opt-in `deep12` sub-run | CPU 17 s a ping (1 s LFM), 567 s a ping (4 s HFM, sampled) |
 | `popoto_12km_two_ships` | `popoto_long_range` | eigenray | two ships 852 m apart at one bearing and velocity: echo grouping's chain-merge case (D-172, issue `sonar-a5x`) | `classify_rules_eval.py --scenes` (a study scene; no test loads it by name) | not recorded |
-| `popoto_env_winter_sand_200m` | `popoto_long_range` | eigenray | 8 km in a surface duct | gallery; `realistic_scenes` | CPU 2 min; L4 26.3 s |
-| `popoto_env_summer_mud_60m` | `popoto_long_range` | eigenray | 4 km under a thermocline over mud: not detected | gallery; `realistic_scenes` | CPU 52 s; L4 7.3 s |
-| `popoto_env_gravel_30m` | `popoto_long_range` | eigenray | 3 km in 30 m over gravel; 14 % of arrival energy cut at the cap | gallery; `study_resume` | CPU 2 min; L4 31.8 s |
-| `popoto_env_deep_silt_1000m` | `popoto_long_range` | eigenray | 10 km in 1000 m over silt | gallery | CPU 59 s; L4 11.7 s |
+| `popoto_env_winter_sand_200m` | `popoto_long_range` | eigenray | 8 km in a surface duct | gallery; `realistic_scenes` | CPU 2 min; L4 55.5 s with the 2 s pulse (26.3 s before) |
+| `popoto_env_summer_mud_60m` | `popoto_long_range` | eigenray | 4 km under a thermocline over mud: not detected | gallery; `realistic_scenes` | CPU 52 s; L4 12.5 s with the 2 s pulse (7.3 s before) |
+| `popoto_env_gravel_30m` | `popoto_long_range` | eigenray | 3 km in 30 m over gravel; 14 % of arrival energy cut at the cap | gallery; `study_resume` | CPU 2 min; L4 78.1 s with the 2 s pulse (31.8 s before) |
+| `popoto_env_deep_silt_1000m` | `popoto_long_range` | eigenray | 10 km in 1000 m over silt | gallery | CPU 59 s; L4 18.9 s with the 2 s pulse (11.7 s before) |
 
 ### Stacked rows: elevation and depth (4)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
-| `popoto_elevation_free` | `popoto_long_range_3row` | free | three rows, rolled 3°, three targets above, level, below | `elevation`; `popoto_elevation_bench.py` | not recorded |
-| `popoto_elevation_shallow` | `popoto_long_range_3row` | image | 100 m over sand, a target at 50 m depth | `elevation` | not recorded |
-| `popoto_elevation_rehearsal` | `popoto_long_range_3row_clocks` | image | raw 102.4 kHz samples on twelve boards with their own clocks, rolling | `elevation`, `deployment_defaults` | not recorded |
+| `popoto_elevation_free` | `popoto_long_range_3row` | free | three rows, rolled 3°, three targets above, level, below; the 1 s linear sweep by stated override since D-262 (targets near 1 km, inside the 2 s baseline's blind range) | `elevation`; `popoto_elevation_bench.py` | not recorded |
+| `popoto_elevation_shallow` | `popoto_long_range_3row` | image | 100 m over sand, a target at 50 m depth; the 1 s linear sweep by override since D-262 | `elevation` | not recorded |
+| `popoto_elevation_rehearsal` | `popoto_long_range_3row_clocks` | image | raw 102.4 kHz samples on twelve boards with their own clocks, rolling; the 1 s linear sweep by override since D-262 | `elevation`, `deployment_defaults` | not recorded |
 | `popoto_face_2row_shallow` | `popoto_long_range_2row` | image | the geometry in which two rows cannot separate direct, surface and bottom echoes | `elevation` | not recorded |
 
 ### Staged builds: trials in open water (5)
