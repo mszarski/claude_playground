@@ -1429,6 +1429,11 @@ class LiveChain:
         if tap:
             tap.records("raw", [record])
         cfg = self.cfg
+        if self._cpp is None:
+            # D-256: the correction is the linear sweep's coupling (detect.lfm_range_doppler_factor). A sampled pulse (the hyperbolic
+            # sweep the long-range baseline sends, a train, a code) has another coupling, or none, that the record does not say:
+            # correcting it as 0 would be silently wrong, so it is refused. libs/live LiveChain::process the same, word for word.
+            detect.refuse_unmodelled_coupling(record.transmit.waveform, cfg["range_doppler"])
         if not self._coverage_table:
             # The probability that this chain reports an echo against its link-budget SNR, from the detector's own plan
             # (detection_probability): made once, for the coverage picture of either engine.

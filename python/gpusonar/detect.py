@@ -125,6 +125,17 @@ def lfm_range_doppler_factor(waveform) -> float:
     return 0.5 * (float(waveform.f_start) + float(waveform.f_stop)) * float(waveform.duration) / sweep
 
 
+def refuse_unmodelled_coupling(waveform, mode: str) -> None:
+    """D-256: raise when a range-Doppler correction `mode` other than "off" is asked of a sampled pulse (WaveformType.Arbitrary:
+    the hyperbolic sweep of the long-range baseline, a train, a code), whose coupling is not the linear sweep's and is not in the
+    record: `lfm_range_doppler_factor` would give 0, a correction silently not made. The live chain (both engines) refuses it
+    with the same words; tools/gallery.py through this function."""
+    from . import _gpusonar as core
+    if mode != "off" and waveform.type == core.WaveformType.Arbitrary:
+        raise ValueError(f"range_doppler {mode}: the record's pulse is a sampled waveform (e.g. a hyperbolic sweep); its range-Doppler "
+                         "coupling is not a linear sweep's and is not corrected: set range_doppler off")
+
+
 def group_flagged(rows, cols, bearings, merge_cells: int, merge_u: float) -> np.ndarray:
     """Which flagged cells (bearing index `rows`, range-cell index `cols`) are one detection: the group number of each.
     Two cells belong together when they are no further apart than `merge_cells` + 1 cells in range and `merge_u` in
