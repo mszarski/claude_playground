@@ -141,8 +141,14 @@ def test_no_long_range_scene_puts_a_target_inside_its_pulse():
         cfg = load_scenario_config(name)
         if not isinstance(cfg.get("sonar"), str) or not cfg["sonar"].startswith(("popoto_long_range", "popoto_face_1row")):
             continue
-        w = load_sonar_config(cfg["sonar"], cfg.get("sonar_overrides"))["transmit"]["waveform"]
+        sonar_cfg = load_sonar_config(cfg["sonar"], cfg.get("sonar_overrides"))
+        w = sonar_cfg["transmit"]["waveform"]
         blind = 0.5 * C * float(w["duration"])
+        if sonar_cfg.get("short_range"):
+            # The short-range mode (docs/design/short_range_mode.md): its short pings see inside the long pulse's blind
+            # range, so a target is lost only inside the short pulse's (tests/python/test_short_range_mode.py shows both).
+            short = (sonar_cfg["short_range"].get("waveform") or {}).get("duration", w["duration"])
+            blind = 0.5 * C * min(float(w["duration"]), float(short))
         p = np.asarray(cfg.get("platform", {}).get("position", [0.0, 0.0, 0.0]), dtype=float)
         for item in cfg.get("scene") or []:
             for q in item.get("positions") or ([item["position"]] if item.get("position") else []):

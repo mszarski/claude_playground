@@ -2264,3 +2264,14 @@ of `point_grid_flank_32`, `point_grid_fls_300k`, `point_grid_sas_auv`, `point_gr
   `ss3_baseline` instead of its stand-in `ss3_hfm2`.
 - The main target on the shelf with the baseline: `GPUSONAR_JOB=doppler GPUSONAR_DOPPLER_RUNS=hfm12 GPUSONAR_DOPPLER_HFM12_BASELINE=only`
   (`popoto_12km_large_submerged`, which keeps its 1 s linear sweep as the bank's scene, with the 2 s hyperbolic sweep set).
+
+## The short-range mode (2026-11-28, branch `shortmode`, issue `sonar-9ed5`; opt-in)
+
+Appended; nothing above was rewritten. HB.1 item 1 (nothing inside 1.5 km with the 2 s baseline) has an opt-in answer:
+a sonar's `short_range` block sends the same sweep cut to 0.25 s in its own slot after every long ping. The account, with
+the options not chosen and their numbers, is `docs/design/short_range_mode.md`. Worst first: it costs the long mode 18 %
+of its update rate (cycle 23.2 s instead of 18.93 s). Its short pulse has 9.0 dB less energy. The simulator does not model
+one ping's echoes arriving in the next ping's window. `xl_auv` at +5 dB barely meets at the hand-over. On
+`popoto_short_range_mode` (free field, both engines equal): the object at 800 m is seen on 5 of 5 short pings and on no
+baseline ping; a mover crossing 1.5 km is one track; the 12 km ship's detections equal the baseline's at the same transmit
+times. The rows' elevation at 1 km works on the short pings (`popoto_elevation_short_range`).

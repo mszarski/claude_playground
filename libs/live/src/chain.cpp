@@ -655,8 +655,10 @@ Report LiveChain::process(PingRecord& record) {
     // Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
     // statistics; sidelobes of a stronger cell dropped; touching cells one detection (detector.hpp).
     const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
+    const Waveform& pw = record.transmit.waveform;
+    const std::array<double, 5> pulse{static_cast<double>(static_cast<int>(pw.type)), pw.f_start, pw.f_stop, pw.duration, pw.window_alpha};
     if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows || plan_offset_db_ != doppler_.threshold_db ||
-        plan_divisor_ != doppler_.budget_divisor) {
+        plan_divisor_ != doppler_.budget_divisor || plan_pulse_ != pulse) {
       DetectorOptions detector = opt_.detector;
       detector.false_alarms_per_ping /= doppler_.budget_divisor;   // combine cfar: the union bound over the hypotheses; 1 otherwise
       detector.range_estimate = chain_range_estimate(opt_);
@@ -671,6 +673,7 @@ Report LiveChain::process(PingRecord& record) {
       plan_rows_ = n_rows;
       plan_offset_db_ = doppler_.threshold_db;
       plan_divisor_ = doppler_.budget_divisor;
+      plan_pulse_ = pulse;
     }
     // The statistic on the chain's backend (the device gives the host's flags: detector.hpp, multiscale_cells).
     found = multiscale_detect(fine_.data(), fine_stride, fine_offset, last_power.data(), n_b, n_cells, fine_ranges_, last_ranges, bearings,

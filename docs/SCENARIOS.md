@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 100 scenario files; the forty-five named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 102 scenario files; the forty-seven named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 | Scene pages (D-248): rays and bounces per tier, beams, the boundary and water models in force with their sources, the parts of the signal, and a 3-D page with sound at each hydrophone | 13 scenarios committed under `docs/figures/scenes/` (one a family and `flank_seamount_3d`; `index.html` lists them); the others are regenerated, not committed; four scenes have no rays or sound and six no sound on a CPU (`docs/tasks/VISUALIZATION.md` sections 12 to 14). Since D-253 the live chain drawn on the same page (`--chain`: detections, tracks, truth; section 15), two such pages under `docs/figures/scenes/chain/`; the two pool scenes had no chain view under the chain's defaults (fewer than three 2 m cells in their windows) and run with their deployment files since sonar-tpex (`configs/deploy/l12_5d.yaml`, `p4_2v.yaml`: detections, no confirmed track in their one or two pings; views not regenerated) | `tools/scenario_view.py` |
@@ -1049,10 +1049,11 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 
 ## Every scenario file
 
-All 100 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+All 102 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
 it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
 runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
-set. Forty-five files have no geometry diagram in `docs/scenarios/` yet: the four Doppler scenes of `sonar-u1fu` and
+set. Forty-seven files have no geometry diagram in `docs/scenarios/` yet: the two scenes of the short-range mode
+(`popoto_short_range_mode`, `popoto_elevation_short_range`; the tool draws one window, not two kinds of ping), the four Doppler scenes of `sonar-u1fu` and
 `flank_patrol_doppler_tone` (the geometry of `flank_patrol`, `popoto_far_mover` and `popoto_12km`, whose diagrams apply),
 the two `popoto_12km_large_submerged*` scenes (`popoto_12km`'s water and array, their own targets), the two `popoto_12km_deep*` scenes, `asiaex_dahl_2004`, `flank_seamount_3d` and the nine 3-D
 scenes and twins of `sonar-d7sw` (the tool draws neither a 3-D bed nor the `eigenray3d` tier), the nine of the
@@ -1191,6 +1192,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_env_summer_mud_60m` | Gallery. At 4 km under a summer thermocline over mud: not detected. Needs Bellhop. |
 | `popoto_env_gravel_30m` | Gallery. At 3 km in 30 m over gravel. Needs Bellhop. Keeps arrivals by energy: 64, the cap (14 % left out; D-137). |
 | `popoto_env_deep_silt_1000m` | Gallery. At 10 km in 1000 m over silt. Needs Bellhop. |
+| `popoto_short_range_mode` | The short-range mode (opt-in; `docs/design/short_range_mode.md`): the shipped 2 s hyperbolic sweep (blind inside 1.5 km) alternating with the same sweep cut to 0.25 s (blind inside 187.5 m), stated in `sonar_overrides.short_range`; free field and ambient noise; a ship-sized mover at 12 km, a still +10 dB object at 800 m and a +10 dB mover opening from 1300 m at 4 m/s; ten pings, long and short in turn. Measured (ours, both engines, the same report): the near object on 5 of 5 short pings and tracked; the mover one track across 1.5 km from both kinds; the ship on 5 of 5 long pings, its detections the baseline's to the printed digit; without the block the near object is in no record. `tests/python/test_short_range_mode.py`. |
 
 ### Stacked rows: elevation and depth
 
@@ -1200,6 +1202,7 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_elevation_shallow` | Three rows at 30 m in 100 m of water over sand, a target at 50 m depth 1 km away; image-source multipath to second order. The 1 s linear sweep by stated override since D-262. |
 | `popoto_elevation_rehearsal` | The full stacked-row system as it would run: raw 102.4 kHz samples on twelve boards with their own clocks, the vehicle rolled and rolling, a deep and a shallow target near 1 km. Chain: `configs/deploy/popoto_elevation_rehearsal.yaml`. The 1 s linear sweep by stated override since D-262. |
 | `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes, and the depth sigma now says so (`STATUS.md`, open item 6). |
+| `popoto_elevation_short_range` | `popoto_elevation_free`'s three targets near 1 km with the shipped 2 s sweep and the short-range mode (the same sweep at 0.25 s in turn): the targets are inside the long pulse's blind range, the short pings give each its depth within 2 m in both engines. |
 
 ### The staged builds: trials in open water
 

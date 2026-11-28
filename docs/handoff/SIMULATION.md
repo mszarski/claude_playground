@@ -195,13 +195,14 @@ checked in closed form: compressed peak minus (SL − 2TL + TS) is 0.004 dB in f
 
 ## 4. The scenario catalogue
 
-`configs/scenarios/` holds **100 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
+`configs/scenarios/` holds **102 files**: the 76 described before `sonar-0nsi`, its four multipath scenes
 (`fls_120k_quay_multipath`, `pool_fls_p4_2v_walls`, `sas_auv_multipath`, `sas_auv_multipath_free`), `flank_seamount_3d` (added 2026-11-26 with the `eigenray3d` tier)
 the nine 3-D scenes and twins of `sonar-d7sw` (2026-11-26; flank table below), `asiaex_dahl_2004` (D-217) and the four Doppler
 scenes of D-231 (`flank_patrol_doppler`, `flank_patrol_doppler_underway`, `popoto_far_mover_doppler`, `popoto_12km_doppler`)
 and `flank_patrol_doppler_tone` (D-237), and the two 12 km large-submerged scenes of D-243
 (`popoto_12km_large_submerged`, `popoto_12km_large_submerged_tone`), and the two deep-site scenes of issue `sonar-rctz`
-(`popoto_12km_deep`, `popoto_12km_deep_sea_state_5`). `docs/SCENARIOS.md` lists all 100.
+(`popoto_12km_deep`, `popoto_12km_deep_sea_state_5`), and the two scenes of the short-range mode (`popoto_short_range_mode`,
+`popoto_elevation_short_range`; `docs/design/short_range_mode.md`). `docs/SCENARIOS.md` lists all 102.
 `tools/scenario_view.py` makes a scene page for any scenario (rays, bounces, beams, the models in force, the
 signal's parts) and a 3-D page with sound (D-248; `docs/tasks/VISUALIZATION.md` sections 12 to 14); it reads
 the simulator and changes nothing in it (the opt-in taps leave records bit-identical). Four scenes have no rays
@@ -305,7 +306,7 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_far_mover` | `popoto_array` | eigenray | a ship-sized mover at 6 km, ownship at 1.5 m/s, six pings | gallery; `realistic_scenes` | CPU 4 min; L4 25.5 s |
 | `popoto_far_mover_doppler` | `popoto_array` | eigenray | `popoto_far_mover` with the train of `flank_patrol_doppler`; noise-limited, so the tone keeps its margin (47.9 dB with the bank; D-231) | `doppler_scenes`; `doppler_study.py` | as above |
 
-### The 12 km design (13)
+### The 12 km design (14)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -321,8 +322,9 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_env_summer_mud_60m` | `popoto_long_range` | eigenray | 4 km under a thermocline over mud: not detected | gallery; `realistic_scenes` | CPU 52 s; L4 12.5 s with the 2 s pulse (7.3 s before) |
 | `popoto_env_gravel_30m` | `popoto_long_range` | eigenray | 3 km in 30 m over gravel; 14 % of arrival energy cut at the cap | gallery; `study_resume` | CPU 2 min; L4 78.1 s with the 2 s pulse (31.8 s before) |
 | `popoto_env_deep_silt_1000m` | `popoto_long_range` | eigenray | 10 km in 1000 m over silt | gallery | CPU 59 s; L4 18.9 s with the 2 s pulse (11.7 s before) |
+| `popoto_short_range_mode` | `popoto_long_range` with `short_range` | free | the short-range mode (opt-in; `docs/design/short_range_mode.md`): the 2 s hyperbolic sweep alternating with the same sweep cut to 0.25 s; a ship at 12 km, a still object at 800 m (inside the long pulse's 1.5 km blind range) and a mover opening through 1.5 km; ten pings | `short_range_mode` | simulation 10 s for ten pings, each chain 70 s (measured here, one thread) |
 
-### Stacked rows: elevation and depth (4)
+### Stacked rows: elevation and depth (5)
 
 | Scenario | Sonar | Tier | What it exercises | Used by | Cost |
 | --- | --- | --- | --- | --- | --- |
@@ -330,6 +332,7 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_elevation_shallow` | `popoto_long_range_3row` | image | 100 m over sand, a target at 50 m depth; the 1 s linear sweep by override since D-262 | `elevation` | not recorded |
 | `popoto_elevation_rehearsal` | `popoto_long_range_3row_clocks` | image | raw 102.4 kHz samples on twelve boards with their own clocks, rolling; the 1 s linear sweep by override since D-262 | `elevation`, `deployment_defaults` | not recorded |
 | `popoto_face_2row_shallow` | `popoto_long_range_2row` | image | the geometry in which two rows cannot separate direct, surface and bottom echoes | `elevation` | not recorded |
+| `popoto_elevation_short_range` | `popoto_long_range_3row` with `short_range` | free | `popoto_elevation_free`'s targets near 1 km with the shipped 2 s sweep and the short-range mode: the depths from the short pings | `short_range_mode` | not recorded |
 
 ### Staged builds: trials in open water (5)
 

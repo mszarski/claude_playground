@@ -13,6 +13,7 @@
 // record for a downstream tracker.
 #pragma once
 
+#include <array>
 #include <complex>
 #include <cstdint>
 #include <optional>
@@ -346,6 +347,9 @@ class LiveChain {
   std::int64_t plan_cells_ = 0, plan_train_ = 0, plan_rows_ = 0;
   double plan_offset_db_ = 0.0;     ///< the threshold offset the plan was made with (the Doppler bank's)
   double plan_divisor_ = 1.0;       ///< the budget divisor the plan was made with (the Doppler bank's, combine cfar)
+  /// The pulse the plan was made for (type, f_start, f_stop, duration, window_alpha): a stream of two kinds of ping (the short-range
+  /// mode, docs/design/short_range_mode.md) is planned for each ping's own pulse (the Python engine the same).
+  std::array<double, 5> plan_pulse_{};
   DopplerPlan doppler_;
   ToneStage tone_;
   std::vector<std::int32_t> which_;
