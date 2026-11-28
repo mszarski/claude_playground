@@ -23,7 +23,10 @@ from gpusonar.live import LiveChain
 from gpusonar.sim import Scene, make_pose, simulate_ping
 from gpusonar.sonar import SonarModel
 
-WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}}}
+# D-256: the shipped long-range sonar sends a 2 s hyperbolic sweep, blind inside 1.5 km. These detector tests work at 0.9 to
+# 1.7 km and their figures (thresholds, looks, the golden detections of D-158) are the 1 s linear sweep's: they state it.
+WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}},
+          "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}}
 KW = dict(environment={"sound_speed": 1500.0}, adc=False, absorption_model="none")
 POSE = dict(position=(0.0, 0.0, 0.0))
 NOISE = 2e-4

@@ -339,28 +339,30 @@ def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
     sub-run without stopping the others. It measures nothing."""
     out = tmp_path / "doppler"
     env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="deep12", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
-               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1,ss3_hfm2")
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1,ss3_hfm2,ss3_baseline")
     env.pop("GPUSONAR_UPLOAD_REPO", None)
     got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True,
                          timeout=1500)
     assert got.returncode == 2, got.stdout[-4000:] + got.stderr[-2000:]           # the unknown case, and only it
-    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 5
+    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 6
     want = {"ss3_lfm1": (3, "Lfm", 1.0, 197.0, True), "ss5_hfm1": (5, "Arbitrary", 1.0, 197.0, True),
             "ss5_lfm4p200": (5, "Lfm", 4.0, 200.0, True), "ss5_lfm4p200_cfar": (5, "Lfm", 4.0, 200.0, False),
-            "ss3_hfm2": (3, "Arbitrary", 2.0, 197.0, True)}          # a 2 s sampled pulse (DM.5's candidate baseline)
+            "ss3_hfm2": (3, "Arbitrary", 2.0, 197.0, True),          # a 2 s sampled pulse (DM.5's candidate baseline)
+            "ss3_baseline": (3, "Arbitrary", 2.0, 197.0, True)}      # D-256: the shipped sonar as it is, no waveform set
     for name, (ss, kind, dur, level, off_only) in want.items():
         res = json.loads((out / f"deep12_{name}.json").read_text())
         assert res["scene"] == "popoto_12km_deep_sea_state_5" and f"environment.sea_state={ss}" in res["set"], name
         assert res["transmit"]["type"] == kind and res["transmit"]["duration"] == dur and res["off_only"] == off_only, name
         assert res["chain_set"] == ["elevation={}"] and res["channels"] == 96 and res["truth_at"] == "reflection", name
-        assert set(res["engines"]) == ({"python", "cpp"} if name == "ss3_lfm1" else {"cpp"}), name
+        assert set(res["engines"]) == ({"python", "cpp"} if name == "ss3_baseline" else {"cpp"}), name    # D-256: the baseline's case (ss3_lfm1 before)
+        assert not any(x.startswith("sonar_overrides.transmit") for x in res["set"]) if name == "ss3_baseline" else True, name
         assert set(res["engines"]["cpp"]["summary"]) == {"closing", "oblique", "crossing", "ship", "point"}, name
         assert res["background"]["default"]["pings"] == 1, name
         if kind == "Lfm":
             assert res["transmit"]["source_level_db_peak"] == pytest.approx(level + 10 * np.log10(2.0), abs=0.01), name    # rms + 3 dB
     a, b = (json.loads((out / f"deep12_{n}.json").read_text()) for n in ("ss5_lfm4p200", "ss5_lfm4p200_cfar"))
     assert a["engines"]["cpp"]["off"]["detections_per_ping"] == b["engines"]["cpp"]["off"]["detections_per_ping"]
-    assert len(list((out / "cache").glob("*.h5"))) == 2 * 4                     # four plain cases, scene and background each: the bank made none
+    assert len(list((out / "cache").glob("*.h5"))) == 2 * 5                     # five plain cases, scene and background each: the bank made none
 
 
 # --- the regen sub-run: the outputs D-251 made stale (issue sonar-rar0) -----------------------------------------------------

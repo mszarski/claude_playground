@@ -21,7 +21,10 @@ FLANK_CHAIN = {"bearings_deg": [-40.0, 40.0, 1.0], "range_cell_m": 1.0, "cfar": 
                "classify": {"min_speed": 1.0, "static_speed": 0.6, "max_fit_rms": 10.0, "multipath": None}}
 # test_detector.py's long-range sonar: a weak first arrival and five 6 dB stronger ones 10 to 50 m behind it, and a
 # second target, over four pings.
-POPOTO_WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}}}
+# D-256: the shipped popoto_long_range sends a 2 s hyperbolic sweep (blind inside 1.5 km); the golden lines were made with its
+# former 1 s linear sweep, stated here so that they stay what they were (an older tree reads the same override as its default).
+POPOTO_WINDOW = {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1700.0]}},
+                 "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}}
 POPOTO_CHAIN = {"backend": "host"}
 
 

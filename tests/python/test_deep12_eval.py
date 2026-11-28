@@ -16,7 +16,9 @@ import popoto_trade_study as T  # noqa: E402
 def test_cases_parse_and_unknown_ones_are_refused():
     k = deep12_eval.parse_case("ss5_lfm4p200_cfar")
     assert (k["sea_state"], k["wave"], k["pulse_s"], k["source_level_db"], k["bank"]) == (5, "lfm", 4.0, 200.0, True)
-    assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("baseline")
+    # D-256: the 1 s linear sweep is the FORMER baseline; `ss3_baseline` is the shipped sonar as it is (2 s hyperbolic)
+    assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("former baseline")
+    assert deep12_eval.parse_case("ss3_baseline")["design"].startswith("baseline")
     for bad in ("ss6_lfm1", "ss3_cw1", "ss3_lfm0", "ss3_hfm1_max"):        # ss3_lfm2 is a case since DM.5 (any pulse)
         with pytest.raises(ValueError):
             deep12_eval.parse_case(bad)
@@ -86,7 +88,8 @@ def test_verdicts_one_highlight_and_the_detector_scales():
             S["rows"].append({"case": case, "target": lb, "verdict": "PASS" if 2 * n >= 6 else "FAIL", "measured_detected": n, "measured_pings": 6,
                               "measured_margin_db": 1.0, "planner_predicted_mover_db": 0.5, "planner_class": "large_submerged"})
     A = deep12_eval.acceptance(S)
-    assert A["baseline"]["accepted"] and not A["alternate_hfm"]["accepted"] and "alternate" not in A
+    # D-256: ss3_lfm1 is the former baseline; the baseline is ss3_baseline (or its stand-in ss3_hfm2), not among these rows
+    assert A["former_baseline"]["accepted"] and not A["alternate_hfm"]["accepted"] and "alternate" not in A and "baseline" not in A
 
 
 def test_the_committed_measurement_states_both_designs_verdicts():
@@ -94,8 +97,12 @@ def test_the_committed_measurement_states_both_designs_verdicts():
     every ping; the resolved hulls fall 2 to 7 dB under their own prediction with the filters that take no Doppler loss."""
     S = json.loads((ROOT / "docs" / "tasks" / "doppler_deep12_eval.json").read_text())
     A = S["acceptance"]
-    assert not A["baseline"]["accepted"] and not A["alternate"]["accepted"]
-    assert [lb for lb, v in A["baseline"]["targets"].items() if v["verdict"] == "FAIL"] == ["closing", "oblique", "ship"]
+    # D-256: the baseline is the 2 s hyperbolic sweep, measured as the candidate ss3_hfm2 (the same transmission): accepted, every
+    # target 6 of 6; the former 1 s linear baseline (ss3_lfm1, `former_baseline`) fails the closing and oblique hulls and the ship
+    assert A["baseline"]["accepted"] and A["baseline"]["case"] == "ss3_hfm2" and "measured_as" in A["baseline"]
+    assert all(v["detected"] == 6 for v in A["baseline"]["targets"].values())
+    assert not A["former_baseline"]["accepted"] and not A["alternate"]["accepted"]
+    assert [lb for lb, v in A["former_baseline"]["targets"].items() if v["verdict"] == "FAIL"] == ["closing", "oblique", "ship"]
     for r in S["rows"]:
         if r["target"] == "point" and r["measured_detected"] == 6:
             assert abs(r["difference_db"]) < 1.0, r["case"]
@@ -112,7 +119,7 @@ def test_any_pulse_and_level_parse_and_the_window_holds_the_pulse():
                        ("ss3_lfm2_cfar", ("lfm", 2.0, 197.0, True)), ("ss5_hfm8p203", ("hfm", 8.0, 203.0, False)), ("ss3_hfm1p200", ("hfm", 1.0, 200.0, False))):
         k = deep12_eval.parse_case(name)
         assert (k["wave"], k["pulse_s"], k["source_level_db"], k["bank"]) == want, name
-    assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("baseline")
+    assert deep12_eval.parse_case("ss3_lfm1")["design"].startswith("former baseline")      # D-256
     with pytest.raises(ValueError):
         deep12_eval.parse_case("ss3_hfm2_cfar")                 # the bank takes a linear sweep only
     cfg = load_scenario_config("popoto_12km_deep_sea_state_5", expand=False)

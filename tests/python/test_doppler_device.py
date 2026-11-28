@@ -33,7 +33,8 @@ strip = lambda r: {k: v for k, v in r.items() if k != "processing_seconds"}  # n
 
 # Two arrays: the flank array (6-10 kHz, 1 s sweep) and the long-range array (popoto_long_range's sweep), short windows.
 SONARS = {"flank": ("flank_32", {"receive": {"window": {"range": [100.0, 400.0]}}}),
-          "long_range": ("popoto_long_range", {"receive": {"window": {"range": [200.0, 700.0]}}})}
+          # D-256: popoto_long_range now sends a 2 s hyperbolic sweep, which the bank refuses: its former 1 s linear sweep is stated
+          "long_range": ("popoto_long_range", {"receive": {"window": {"range": [200.0, 700.0]}}, "transmit": {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}})}
 T_TONE = 0.5
 CW = {"type": "cw", "f_start": 8000.0, "f_stop": 8000.0, "duration": T_TONE, "window_alpha": 1.0}
 

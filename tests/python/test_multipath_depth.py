@@ -24,8 +24,13 @@ KNOWN = {"gradient_sigma_per_s": 0.0}                            # the simulated
                                                                  # is the fit's own (the gradient prior has its own test below)
 
 
+# D-256: popoto_long_range sends the 2 s hyperbolic sweep since. A test whose levels were tuned to the 1 s linear sweep it sent
+# before (its echo energy and structure) states that sweep with `former=True`.
+FORMER_SWEEP = {"waveform": {"type": "lfm", "source": None, "duration": 1.0}}
+
+
 def scenario(own, target, rng, ts=25.0, seed=3, sonar="popoto_long_range", half=600.0, surface=True, bottom_z=None, spread=None, scene=None,
-             noise=True, pings=1):
+             noise=True, pings=1, former=False):
     """One point target at broadside of a one-row sonar, straight rays, built here with overrides (no scenario file)."""
     cfg = {"name": "multipath_depth_test", "sonar": sonar, "fidelity": "image_source" if surface else "free_field",
            "sonar_overrides": {"receive": {"kind": "baseband", "sample_rate": 8.0e3, "window": {"range": [max(rng - half, 80.0), rng + half]}}},
@@ -42,6 +47,8 @@ def scenario(own, target, rng, ts=25.0, seed=3, sonar="popoto_long_range", half=
         cfg["time_spread"] = spread
     if noise:
         cfg["receiver"]["ambient_noise"] = {"wind_speed": 5.0, "shipping": 0.5}
+    if former:
+        cfg["sonar_overrides"]["transmit"] = dict(FORMER_SWEEP)
     return cfg
 
 
@@ -308,7 +315,7 @@ def test_a_track_adds_up_pings_that_are_each_too_weak():
     cfg = mp.options(KNOWN)
     single = 0
     for seed in range(8):
-        rec, origin = prepared(scenario(own, target, rng, ts=16.0, seed=1500 + seed))      # 3 dB below the 19 it was tuned at: source levels are RMS now (D-102), echoes 3 dB up
+        rec, origin = prepared(scenario(own, target, rng, ts=16.0, seed=1500 + seed, former=True))      # 3 dB below the 19 it was tuned at: source levels are RMS now (D-102), echoes 3 dB up; the 1 s sweep it was tuned with (D-256)
         slant = float(np.hypot(rng, target - own)) + 1.0
         d = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, o)
         single += bool(d["valid"])
@@ -322,7 +329,7 @@ def test_a_track_adds_up_pings_that_are_each_too_weak():
     ref = mp.TrackDepth(cfg)
     stage2 = core.MultipathDepth(mp.cpp_options(KNOWN))
     for seed in range(3):
-        rec, origin = prepared(scenario(own, target, rng, ts=26.0, seed=1600 + seed))
+        rec, origin = prepared(scenario(own, target, rng, ts=26.0, seed=1600 + seed, former=True))
         slant = float(np.hypot(rng, target - own)) + 1.0
         e = mp.estimate_detection(rec, origin, 0.0, slant, cfg)
         g = mp.geometry(rec, origin, slant, cfg)
@@ -350,7 +357,7 @@ def test_fuse_with_a_stacked_row_depth_and_pick_among_two_row_candidates():
 
 # --- through the chain, both engines --------------------------------------------------------------------------------------
 
-def chain_scenario(range_m, ts_db, sonar_rows=1, pings=4):
+def chain_scenario(range_m, ts_db, sonar_rows=1, pings=4, former=False):
     from gpusonar.config import load_scenario_config
     cfg = load_scenario_config({1: "popoto_12km", 2: "popoto_12km_2row"}[sonar_rows])
     cfg.pop("truth", None)
@@ -361,6 +368,8 @@ def chain_scenario(range_m, ts_db, sonar_rows=1, pings=4):
     cfg["platform"] = {"position": [0.0, 0.0, 225.0], "rpy": [0.0, 0.0, 0.0], "velocity": [0.0, 0.0, 0.0]}
     cfg["pings"] = {"count": pings, "interval": 18.0}
     cfg["scene"] = [{"type": "points", "label": "submerged", "positions": [[300.0, range_m, 150.0]], "target_strength_db": ts_db}]
+    if former:
+        cfg["sonar_overrides"]["transmit"] = dict(FORMER_SWEEP)
     return cfg
 
 
@@ -415,7 +424,7 @@ def test_chain_reports_depth_on_both_engines_and_changes_nothing_else(range_m, t
 def test_two_rows_multipath_depth_selects_the_elevation():
     """Two stacked rows give several possible elevations; the depth from multipath timing picks the one that is true.
     6 km, array at 225 m, target at 150 m: the candidates are hundreds of metres apart in depth."""
-    records = run_scenario(chain_scenario(6000.0, 18.0, sonar_rows=2)).records
+    records = run_scenario(chain_scenario(6000.0, 18.0, sonar_rows=2, former=True)).records      # the 1 s sweep its figures were measured with (D-256)
     for engine in ("cpp", "python"):
         with LiveChain({"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": engine, "elevation": {"correct_bearing": False},
                         "multipath_depth": dict(KNOWN)}) as chain:
@@ -447,7 +456,7 @@ def test_depth_in_refracting_water_from_bellhop_arrivals():
     depth = [0.0, 30.0, 70.0, 1000.0]
     speed = [1500.0, 1500.5, 1494.5, 1510.3]
     own, target, rng = 225.0, 150.0, 6000.0
-    cfg = scenario(own, target, rng, ts=18.0)
+    cfg = scenario(own, target, rng, ts=18.0, former=True)          # the 1 s sweep its figures were measured with (D-256)
     cfg["fidelity"] = "eigenray"
     cfg["propagation"] = {"environment": {"depth": 1000.0, "ssp_depth": depth, "ssp_speed": speed, "bottom_speed": 1480.0, "bottom_density": 1.2,
                                           "bottom_attenuation": 1.0},

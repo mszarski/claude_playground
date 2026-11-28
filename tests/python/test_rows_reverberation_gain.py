@@ -9,6 +9,7 @@ simulated with the bistatic reverberation generator, one site, 3 pings): today's
 its recommended own depth moves from 2.56 km (bound A) to 8.02 km. The gain is an input, not physics of the code.
 """
 
+import copy
 import json
 from pathlib import Path
 
@@ -29,7 +30,10 @@ SHELF = "shelf_100m_sand"
 def shelf3():
     """The 3 x 32 face over the shelf: the default plan and the plan with the study's measured gain (one cache: the
     factor and the reverberation level do not depend on the rows' gain)."""
-    spec = bs.load("popoto_face_3x32")
+    # D-256: the shipped face sends the 2 s hyperbolic sweep since; the study's figures held here (docs/design/popoto_trade_study.json,
+    # `shelf_with_measured_gain`, and the reaches below) were made at the grid's 1 s linear sweep, which is stated here
+    spec = copy.deepcopy(bs.load("popoto_face_3x32"))
+    spec["projector"]["waveform"] = {"type": "lfm", "duration_s": 1.0, "window_alpha": 0.1}
     d = bs.derive(spec)
     env = next(e for e in bs.environments_of(spec) if e["name"] == SHELF)
     classes = bs.target_classes_of(spec, range_m=12000.0)
@@ -67,10 +71,22 @@ def test_incoherent_is_the_detectors_own_rows_gain():
         assert STUDY["subsets"][str(rows)]["chain_gain_db"] < g < 10.0 * np.log10(rows)
 
 
-def test_default_plan_is_unchanged(shelf3):
+@pytest.fixture(scope="module")
+def shelf3_shipped():
+    """The 3 x 32 face as shipped (D-256: the 2 s hyperbolic sweep), the default plan and "none": what
+    docs/design/popoto_depth_planner.json holds."""
+    spec = bs.load("popoto_face_3x32")
+    d = bs.derive(spec)
+    env = next(e for e in bs.environments_of(spec) if e["name"] == SHELF)
+    classes = bs.target_classes_of(spec, range_m=12000.0)
+    cache = {}
+    return {"default": depthplan.plan(d, env, classes, cache=cache), "none": depthplan.plan(d, env, classes, cache=cache, reverberation_rows_gain="none")}
+
+
+def test_default_plan_is_unchanged(shelf3_shipped):
     """Bound A by default: the plan with no setting, with "none", and the shipped docs/design/popoto_depth_planner.json
     agree (the shipped file's numbers to 1e-9 relative), and the reverberation block states 0 dB as before."""
-    _, _, _, P, _ = shelf3
+    P = shelf3_shipped
     a, n = P["default"], P["none"]
     assert a["reverberation"]["rows_gain_against_reverberation_db"] == 0.0
     assert "rows_gain_against_reverberation" not in a["reverberation"]

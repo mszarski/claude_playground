@@ -62,7 +62,9 @@ def test_quick_case_runs_and_bound_a_is_the_planners_figure(tmp_path):
     assert t.main(["--quick", "--site", "deep_no_bottom_return", "--class", "ship", "--out", str(out)]) == 0
     R = json.loads(out.with_suffix(".json").read_text())
     r = R["grid"]["results"]["3x32|2k|1s|197dB"]["deep_no_bottom_return"]["classes"]["ship"]
-    spec = bs.load("popoto_face_3x32")
+    # The grid's variant is the 1 s 197 dB sweep (the shipped waveform until D-256, at which the grid runs): its planner figure
+    # is the face spec with that pulse (before D-256 the shipped spec itself).
+    spec = t.variant_spec(3, 32, "2k", 1.0, 197.0)
     env = next(e for e in bs.environments_of(spec) if e["name"] == "deep_no_bottom_return")
     ship = [c for c in bs.target_classes_of(spec) if c["name"] == "ship"]
     P = depthplan.plan(bs.derive(spec), env, ship, keep_grid=False)["classes"]["ship"]["recommended"]
@@ -265,4 +267,5 @@ def test_the_report_states_what_was_measured_and_no_longer_says_not_run():
         old = "\n".join(t.transmit_section(R) + t.waveform_section(R))
     finally:
         t.DEEP12 = real
-    assert "**Not run.** No transmit option other than the shipped 1 s" in old and "UNRESOLVED" not in old
+    # D-256 renamed the 1 s sweep in this sentence (it is no longer the shipped one); the sentence is otherwise as before
+    assert "**Not run.** No transmit option other than the 1 s linear sweep (shipped until D-256)" in old and "UNRESOLVED" not in old
