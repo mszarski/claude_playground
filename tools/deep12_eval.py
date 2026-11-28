@@ -260,7 +260,15 @@ def summarise(folder: Path) -> dict:
 ACCEPTANCE = {"baseline": ("ss3_lfm1", "the baseline (shipped: 1 s, 197 dB, linear, plain filter) at sea state 3"),
               "alternate": ("ss5_lfm4p200", "the sea-state-5 alternate as configured (4 s, 200 dB, linear, plain filter) at sea state 5"),
               "alternate_bank": ("ss5_lfm4p200_cfar", "the alternate's energy, linear with the bank (combine: cfar) at sea state 5"),
-              "alternate_hfm": ("ss5_hfm4p200", "the alternate's energy, hyperbolic, plain filter, at sea state 5")}
+              "alternate_hfm": ("ss5_hfm4p200", "the alternate's energy, hyperbolic, plain filter, at sea state 5"),
+              # DM.5's energy candidates (opt-in cases; nothing configured): the measured answer to "what would accept the resolved hull"
+              "candidate_ss3_hfm2": ("ss3_hfm2", "candidate baseline: hyperbolic 2 s, 197 dB (200 dB a ping), plain filter, at sea state 3"),
+              "candidate_ss3_hfm1p200": ("ss3_hfm1p200", "candidate baseline: hyperbolic 1 s, 200 dB (200 dB a ping), plain filter, at sea state 3"),
+              "candidate_ss3_lfm2_cfar": ("ss3_lfm2_cfar", "candidate baseline: linear 2 s, 197 dB (200 dB a ping) with the bank, at sea state 3"),
+              "candidate_ss4_hfm2": ("ss4_hfm2", "the hyperbolic 2 s, 197 dB candidate at sea state 4"),
+              "candidate_ss5_hfm4p203": ("ss5_hfm4p203", "candidate alternate: hyperbolic 4 s, 203 dB (209 dB a ping), plain filter, at sea state 5"),
+              "candidate_ss5_hfm8p200": ("ss5_hfm8p200", "candidate alternate: hyperbolic 8 s, 200 dB (209 dB a ping), plain filter, at sea state 5"),
+              "candidate_ss5_hfm8p203": ("ss5_hfm8p203", "upper bracket: hyperbolic 8 s, 203 dB (212 dB a ping), plain filter, at sea state 5")}
 
 
 def acceptance(S: dict) -> dict:
@@ -276,6 +284,14 @@ def acceptance(S: dict) -> dict:
                   "class": R[(case, lb)]["planner_class"]} for lb in HIGHLIGHTS if (case, lb) in R}
         out[name] = {"case": case, "what": words, "targets": t,
                      "accepted": all(v["verdict"] == "PASS" for lb, v in t.items() if lb != "point")}
+        pre = _PREDICTED.get(case)
+        if pre is not None:
+            held = all(t[lb]["verdict"] == "PASS" for lb in ("closing", "oblique") if lb in t)
+            out[name]["predicted_before_run"] = {"bracket_verdict_resolved_hulls": pre["bracket_verdict_resolved_hulls"],
+                                                 "point_predicted_margin_db": pre["point_predicted_margin_db"],
+                                                 "resolved_hulls_held_measured": held,
+                                                 "single_listed_projector": pre["single_listed_projector"], "blind_range_m": pre["blind_range_m"],
+                                                 "duty": pre["duty"], "range_bias_m_per_m_s": pre["range_bias_m_per_m_s"]}
     return out
 
 

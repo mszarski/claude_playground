@@ -366,6 +366,7 @@ def requirement_designs(T: dict) -> tuple:
         for name in REQUIREMENT_DESIGNS:
             designs[name]["measured"] = M["acceptance"].get(name)
         designs["alternate"]["measured_other_filters"] = {k: M["acceptance"].get(k) for k in ("alternate_bank", "alternate_hfm") if M["acceptance"].get(k)}
+        designs["candidates"] = {k: v for k, v in M["acceptance"].items() if k.startswith("candidate_")}
     designs["alternate"]["grid_margins_db"] = {c: ((grid.get(f"deep_no_bottom_return__ss5__{law}") or {}).get(REQUIREMENT_DESIGNS["alternate"]["option"]) or {}).get(c, {}).get("margin_db")
                                                for c in REQUIREMENT_CLASSES}
     return designs, alternate_rows
@@ -402,7 +403,11 @@ def designs_text(X: dict) -> str:
                f"class's hull whose five highlights resolve in range; the baseline at sea state {b['sea_state']} {measured_words(b['measured'])}; the alternate as configured (linear, plain filter) "
                f"at sea state {a['sea_state']} {measured_words(a['measured'])}"
                + "".join(f"; {o['what'].replace('the alternate' + chr(39) + 's energy, ', '')}: {measured_words(o)}" for o in a.get("measured_other_filters", {}).values()) + "."
-               if b.get("measured") and a.get("measured") else ""))
+               if b.get("measured") and a.get("measured") else "")
+            + (" **Candidates measured** (opt-in cases, `docs/tasks/DOPPLER.md` DM.5 and DM.6; no configuration changed: the waveform is the owner's choice): "
+               + "; ".join(f"{v['what']}: " + (("every target held, the resolved hulls by " + " / ".join(f"{v['targets'][lb]['margin_db']:+.1f}" for lb in ("closing", "oblique")) + " dB (closing / oblique; one seed)")
+                          if v["accepted"] else measured_words(v)) for v in X["designs"]["candidates"].values()) + "."
+               if X["designs"].get("candidates") else ""))
 
 
 def _db(v: float) -> str:

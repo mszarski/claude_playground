@@ -1186,7 +1186,11 @@ def deep12_bullet(M: dict) -> str:
             f"class's +25 dB made of five highlights that resolve in range (the detector tests {scales} cells only) comes {-max(hull):.1f} to {-min(hull):.1f} dB under its own "
             "prediction with a filter that takes no Doppler loss (the bank, or a hyperbolic sweep), and the linear sweep with the plain filter loses more on a mover. "
             "So " + fails("baseline") + "; " + fails("alternate") + " (" + fails("alternate_hfm").split(": ", 1)[1].replace("fails for", "with a hyperbolic sweep: fails for") + "). "
-            "Detected on half the pings or more counts as held (the design's 0.5 a ping).")
+            "Detected on half the pings or more counts as held (the design's 0.5 a ping)."
+            + ((" **Measured energy candidates** (hyperbolic unless said; no configuration changed): every target held by "
+                + ", ".join(v["what"].split(": ", 1)[-1] for k, v in M["acceptance"].items() if k.startswith("candidate_") and v["accepted"])
+                + "; not by " + ", ".join(v["what"].split(": ", 1)[-1] for k, v in M["acceptance"].items() if k.startswith("candidate_") and not v["accepted"])
+                + " (the table at the end of this section).") if any(k.startswith("candidate_") for k in M["acceptance"]) else ""))
 
 
 def deep12_table(M: dict) -> list:

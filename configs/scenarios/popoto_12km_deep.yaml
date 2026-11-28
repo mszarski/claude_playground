@@ -13,8 +13,8 @@
 #     rest as later taps, which the planner's peak leaves out).
 #   - ambient noise: Wenz at the site's wind (receiver.ambient_noise from the environment), isotropic coherence, as
 #     the planner's buildspec.budget (Wenz at the band centre, the row's gain against isotropic noise).
-#   - reverberation: the site's boundaries by the one rule (`reverberation: site`): Chapman-Harris at the site's
-#     wind on the surface; the site states no bottom.
+#   - reverberation: what the one rule (gpusonar.environment.boundary_scattering) gives this site, typed: Chapman-Harris
+#     at the site's wind on the surface; the site states no bottom, so there is no bottom item.
 # The array: the three-row face (popoto_long_range_3row, configs/builds/popoto_face_3x32.yaml), at 225 m: the own
 # depth docs/design/popoto_depth_planner.json recommends for `ship` on this face at both deep sites, and the depth
 # that holds `ship` and `large_submerged` together best at this one (large_submerged alone: 245 m). Under way at
@@ -65,7 +65,8 @@ scene:
     positions: [[-6000.0, 10392.3, 50.0]]
     target_strength_db: 25.0
     velocity: [1.5, 0.0, 0.0]
-reverberation: site
+reverberation:                        # the site's boundaries by the one rule, typed (D-227: a shipped scene states its site once):
+  - {model: chapman_harris}           # the surface at the site's wind; the site states no bottom, so no bottom item
 receiver:
   adc: false
   ambient_noise: {model: wenz}        # wind and shipping: the environment's

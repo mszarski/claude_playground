@@ -137,3 +137,20 @@ def test_the_predictions_were_written_before_the_run_and_are_the_tools():
             assert c["range_bias_m_per_m_s"] == pytest.approx(3.0 * k["pulse_s"])
     by = {c["case"]: c for c in got["cases"]}
     assert by["ss3_hfm2"]["single_listed_projector"] and not by["ss5_hfm8p200"]["single_listed_projector"] and not by["ss5_hfm4p203"]["single_listed_projector"]
+
+
+def test_the_candidates_are_merged_with_their_predictions_beside_the_verdicts():
+    """The L4 run of DM.5's cases (job 6b0a19496c5d61fff18a650c): each candidate carries the prediction written before it ran; where
+    the bracket said held or not held, the measurement agrees (DM.6)."""
+    S = json.loads((ROOT / "docs" / "tasks" / "doppler_deep12_eval.json").read_text())
+    cand = {v["case"]: v for k, v in S["acceptance"].items() if k.startswith("candidate_")}
+    assert set(cand) == set(deep12_eval.ROUND3)
+    for case, v in cand.items():
+        p = v["predicted_before_run"]
+        if p["bracket_verdict_resolved_hulls"] == "held":
+            assert p["resolved_hulls_held_measured"], case
+        elif p["bracket_verdict_resolved_hulls"] == "not held":
+            assert not p["resolved_hulls_held_measured"], case
+    assert not cand["ss4_hfm2"]["accepted"] and cand["ss3_hfm2"]["accepted"] and not cand["ss5_hfm8p200"]["accepted"]
+    rows = [r for r in S["rows"] if r["case"] in cand and r["target"] in ("closing", "oblique")]
+    assert all(r["predicted_before_run"] is not None for r in rows)

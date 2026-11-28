@@ -55,7 +55,9 @@ def test_every_named_sonar_is_shipped():
                                          "popoto_static_2row", "popoto_static_3row", "popoto_static_2row_clocks",
                                          "popoto_static_3row_clocks",
                                          # the face with one row of the long module: generated from configs/builds/popoto_face_1x32.yaml
-                                         "popoto_face_1row", "popoto_face_1row_clocks"}
+                                         "popoto_face_1row", "popoto_face_1row_clocks",
+                                         # the sea-state-5 alternate of the full face (D-255): generated from configs/builds/popoto_face_3x32_ss5.yaml
+                                         "popoto_long_range_3row_ss5", "popoto_long_range_3row_ss5_clocks"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)

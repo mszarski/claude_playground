@@ -2103,3 +2103,54 @@ The one-highlight figures are under the threshold in every case but the ship's: 
 to 209 dB has a single listed projector (4 s at 203 dB: two TR-1075D in phase; 8 s at 200 dB: 3.0 dB short at 32 % duty).
 The run: the `deep12` sub-run with these cases, the sea-state-3 candidates first (GPUSONAR_DOPPLER_DEEP12_CASES); each
 case limited to 45 min; on the L4 the 4 s hyperbolic cases simulated 6 pings in 27 s (DM), the 8 s ones are untimed.
+
+### DM.6 The energy candidates, measured (appended 2026-11-28; job 6b0a19496c5d61fff18a650c, NVIDIA L4, tree `7aa84e1`; nothing above rewritten)
+
+The seven cases of DM.5, 6 pings and 4 target-free pings each, C++ chain on cuda; merged into `docs/tasks/doppler_deep12_eval.json`
+(`acceptance.candidate_*`, each with the prediction written before the run). DM.3's "what the resolved hull needs" was the model
+and a bracket; this is the measurement. Ours; one seed.
+
+**What it does not show, first.** One seed. The resolved hulls are held with little to spare: at sea state 3 the oblique hull by
++0.2 to +0.7 dB and the closing hull by +0.8 to +1.3 dB (mean over the pings detected): a second seed may move a verdict. **The
+oblique hull is detected on 6 of 6 pings and NOT tracked** in `ss3_hfm2` and in all three sea-state-5 cases (tracked, `static`, in
+`ss3_hfm1p200` and `ss3_lfm2_cfar`); not investigated: `tools/doppler_bank_eval.py` keeps per ping only the strongest detection in
+the gate and the tracks within 100 m of the hull's centre at the last ping, so whether a track exists elsewhere on the 100 m hull,
+or none confirms, is not in the output (a follow-up: write the tracks' positions; a CPU rerun of one case takes about 30 min).
+
+| Case | Predicted before the run (point; bracket) | closing | oblique | crossing | ship | point | Resolved hulls held? | False detections, 4 target-free pings (default / 3 a ping) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ss3_hfm2` (hyperbolic 2 s, 197 dB (200 dB a ping), plain filter, at sea state 3) | +5.80 dB; held | 6 of 6, +1.28 | 6 of 6, +0.73, not tracked | 6 of 6, +5.13 | 6 of 6, +6.26 | 6 of 6, +6.12 | **yes** | 0 / 1 |
+| `ss3_hfm1p200` (hyperbolic 1 s, 200 dB (200 dB a ping), plain filter, at sea state 3) | +5.79 dB; held | 5 of 6, +1.23 | 5 of 6, +0.66 | 6 of 6, +5.71 | 6 of 6, +6.58 | 6 of 6, +5.71 | **yes** | 0 / 0 |
+| `ss3_lfm2_cfar` (linear 2 s, 197 dB (200 dB a ping) with the bank, at sea state 3) | +5.05 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +0.83 | 5 of 6, +0.22 | 6 of 6, +4.81 | 6 of 6, +5.73 | 6 of 6, +5.05 | **yes** | 0 / 3 |
+| `ss4_hfm2` (the hyperbolic 2 s, 197 dB candidate at sea state 4) | -0.73 dB; not held | 0 of 6, —, not tracked | 0 of 6, —, not tracked | 3 of 6, +1.46 | 6 of 6, +1.27 | 5 of 6, +0.90, not tracked | **NO** | 0 / 1 |
+| `ss5_hfm4p203` (hyperbolic 4 s, 203 dB (209 dB a ping), plain filter, at sea state 5) | +5.08 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +1.22 | 4 of 6, +0.56, not tracked | 6 of 6, +4.71 | 6 of 6, +4.18 | 6 of 6, +5.07 | **yes** | 0 / 0 |
+| `ss5_hfm8p200` (hyperbolic 8 s, 200 dB (209 dB a ping), plain filter, at sea state 5) | +5.09 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +0.33 | 2 of 6, +1.20, not tracked | 5 of 6, +5.12 | 6 of 6, +4.01 | 6 of 6, +4.90 | **NO** | 0 / 0 |
+| `ss5_hfm8p203` (hyperbolic 8 s, 203 dB (212 dB a ping), plain filter, at sea state 5) | +8.08 dB; held | 6 of 6, +2.64 | 6 of 6, +2.40, not tracked | 6 of 6, +7.21 | 6 of 6, +6.67 | 6 of 6, +7.91 | **yes** | 0 / 0 |
+
+Against the predictions: the three "held" predictions held (`ss3_hfm2`, `ss3_hfm1p200`, `ss5_hfm8p203`), the "not held" one did not
+(`ss4_hfm2`: closing and oblique 0 of 6); of the three inside the bracket, two held (`ss3_lfm2_cfar`, `ss5_hfm4p203`, the oblique hull
+on 4 of 6) and one did not (`ss5_hfm8p200`, the oblique hull on 2 of 6). The point came out within -0.19 to +0.33 dB of its prediction
+where detected on every ping (`ss3_hfm2` +6.12 against +5.80; `ss5_hfm4p203` +5.07 against +5.08).
+
+### DM.7 What the owner chooses, measured (replaces DM.3's model figures; nothing configured)
+
+- **Sea state 3 (the baseline's).** +3 dB of energy, 200 dB re 1 uPa^2 s at 1 m a ping, with a filter that takes no Doppler loss,
+  holds every target on 5 or 6 of 6 pings: hyperbolic 2 s at 197 dB (the shipped level: a TR-1075D or TR-1075A class source by
+  the sheets, via secondary; blind range 1.5 km; duty 10.6 %; range bias 6 m per m/s), hyperbolic 1 s at 200 dB (TR-1075D only,
+  free of cavitation below 29 m; blind 0.75 km; duty 5.6 %; 3 m per m/s), or linear 2 s at 197 dB with the bank (87 hypotheses
+  a beam: 7.3 s a ping with three rows on the L4, against 0.05 s plain). The shipped 1 s, 197 dB linear sweep holds the
+  crossing hull and the point only (DM.1). The candidate does not reach sea state 4 (`ss4_hfm2`: closing and oblique 0 of 6).
+- **Sea state 5 (the alternate's).** 209 dB a ping holds the resolved hulls only as 4 s at 203 dB (oblique 4 of 6); 8 s at
+  200 dB does not (oblique 2 of 6). 212 dB (8 s at 203 dB) holds every target on 6 of 6. **No single listed projector gives
+  any of the three** (4 s at 203 dB: two TR-1075D in phase, unconfirmed; 8 s: 32 % duty, a 6 km blind range).
+- **What a decision would change** (the owner's; none made here):
+  - a hyperbolic sweep in a build: `python/gpusonar/buildspec.py` first (its `projector.waveform.type` takes `lfm` or `cw`
+    only: an `hfm` type writing `{type: sampled, source: hfm}` into the generated sonar, with tests); then the build
+    (`configs/builds/popoto_face_3x32.yaml` for the baseline, `popoto_face_3x32_ss5.yaml` for the alternate) and
+    `tools/build_from_spec.py --write-shipped` (`configs/sonars/popoto_long_range_3row*.yaml` with the window opening at the
+    new blind range, `configs/deploy/popoto_vehicle_elevation*.yaml`); then the generated documents (`docs/DESIGN.md`,
+    `docs/handoff/hardware_builds.json`, `docs/design/projector_requirements.json`, the depth plan) and every result of the
+    three-row face. The chain needs no change for the hyperbolic sweep (HFM.3); the bank refuses it;
+  - the bank in the baseline instead: the deployment file's `chain.doppler: {mode: sweep_bank, combine: cfar}`, which reverses
+    D-244's "every Doppler option off" baseline, at 87 hypotheses a beam for 2 s;
+  - either way a default result moves: the owner's approval with before -> after first.

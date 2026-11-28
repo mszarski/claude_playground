@@ -44,7 +44,8 @@ scene:
     positions: [[-6000.0, 10392.3, 50.0]]
     target_strength_db: 25.0
     velocity: [1.5, 0.0, 0.0]
-reverberation: site
+reverberation:                        # the site's boundaries by the one rule, typed (D-227: a shipped scene states its site once):
+  - {model: chapman_harris}           # the surface at the site's wind; the site states no bottom, so no bottom item
 receiver:
   adc: false
   ambient_noise: {model: wenz}        # wind and shipping: the environment's
