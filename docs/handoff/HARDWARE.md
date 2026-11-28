@@ -42,14 +42,14 @@ value, the file and key, the code that reads it, and how to confirm it.
 | 3 | Whether the boards can stream raw samples over Ethernet at all. The plan documents recording to `.wav` files. The UDP block format (`GSFB`) is ours; since D-184 one stream per board is enough (the receivers merge them), but the board forwarder that would turn a board's output into its stream is not written | the live path (`flank_udp`), Sensor Bridge, real time | VA-1, VA-8, VA-9, S-13 |
 | 4 | Batching 4, 8 or 12 boards, each on its own clock, and aligning them to 8.3 µs within a row and 0.87 µs between rows. Reached in simulation only (0.40 to 0.49 µs). The plan advises the custom 32-channel board beyond two boards | beams (within a row), elevation and depth (between rows) | S-3, VA-6 |
 | 5 | The synchronisation hardware: a reference generator, equal-delay lines and a circuit that sums the burst into the first hydrophone input of every board. Not designed. The plan's own scheme gives the reference an input to itself (7 hydrophones a board) | item 4; the 32-per-row harness on 4 boards | VA-6 |
-| 6 | The projector: none chosen. 197 dB re 1 µPa at 1 m rms over 4 to 6 kHz for 1 s is a requirement from the link budget, not a part's figure. Its position on every platform is a placeholder | reach, the 12 km design point, the direct sound, the blind range | S-4 |
+| 6 | The projector: none chosen. 197 dB re 1 µPa at 1 m rms over 4 to 6 kHz for 2 s (a hyperbolic sweep since D-262; 1 s before) is a requirement from the link budget, not a part's figure. By the sheets as read (via secondary) the TR-1075D gives it at 10.6 % duty, the TR-1075A with 0.1 dB to spare at 6 kHz, the T335 not; no sheet states the longest pulse at that drive and one amplifier's rating names a 1 s burst only; the response across 4-6 kHz that a hyperbolic sweep needs is not known. Its position on every platform is a placeholder | reach, the 12 km design point, the direct sound, the blind range | S-4 |
 | 7 | The projector's direct sound: 21 to 38 dB over the inputs' full scale at every placeholder position, on every hydrophone. Damage threshold, clamp, gain switching and recovery time of the inputs are unknown | survival of the inputs; the first usable range; the first synchronisation burst (0.8 ms after the direct sound ends on the face) | S-4, VA-7 |
 | 8 | The hydrophones: none chosen. −208 dB re 1 V/µPa is the plan's figure for its calibration hydrophone, used here for every array hydrophone. Self-noise, band, depth rating and vertical pattern are unknown | full-scale pressure, overload, noise floor, link budget | no numbered question (parts list, "Array hydrophones"); issue `sonar-mu3` |
 | 9 | The transmit trigger: who fires the projector, and how the transmit instant reaches the sample stream to the sample | cutting pings (`PingAssembler` needs `tx_sample`), range zero, every time stamp | VA-5, RD-5 |
 | 10 | One clock: board capture time and navigation time are assumed to be the same time base. The transmit time is capture start plus sample index over the nominal rate, so a 25 ppm board clock moves it 90 ms an hour against true time (section 6.4; tested since D-185: 0.18 m of pose at 2 m/s). A configured rate takes it out (`clock_ppm`, default 0); the rates are not measured. Boards on free-running clocks also drift apart: 50 ppm apart leaves the synchronisation search (2 ms) 40 s after capture start unless their rates are configured or captures restart | the pose and attitude taken for each ping; tracks that drift with ownship | VA-4, VA-11 |
 | 11 | The navigation unit: named by the owner (SPRINT-Nav); no datasheet or interface document seen. Message, rate, time base, latency and accuracy are unknown. The mapping is a template (`configs/nav/sprintnav_template.yaml`). The test AUV's unit is not named | pose, roll in every elevation, water depth, local sound speed | S-6, VA-10 to VA-13, VA-15 |
 | 12 | The lever arm and mounting rotation from the navigation unit to the array are zero until surveyed (D-167). The array's velocity is not corrected for the lever arm | array position; a constant bias in every bearing and elevation | VA-14 |
-| 13 | Rows on the face: one row is 1.1 dB short at 12 km (detection probability 0.22 on one ping); two rows cannot tell elevations 11.5° apart | how many boards and hydrophones are bought | S-1 |
+| 13 | Rows on the face: with the 2 s baseline one row has +1.9 dB at 12 km (detection probability 0.94 on one ping; with the 1 s sweep it was 1.1 dB short, 0.22), a point echo in noise; two rows cannot tell elevations 11.5° apart | how many boards and hydrophones are bought | S-1 |
 | 14 | Row pitch 0.15 m is 0.60 wavelengths at 6 kHz: no grating lobe only within ±42° of broadside, while every deployment file steers to ±60° (a validator warning on five of six builds) | false bearings beyond ±42° at the top of the band | S-31; issue `sonar-68e` |
 | 15 | The static frame: size, hanging depth, tilt sensor or not, projector on the frame or apart, cabling, where the compute sits | builds 2 and 3 | S-5 |
 | 16 | Sound speed and water depth sensing: which sensors, where they sit, their accuracy. The sound-speed sensor is taken to sit at the navigation unit | beamforming, depth, the elevation search sector | S-6, S-9 |
@@ -179,7 +179,7 @@ through `base:` (D-127). Build spec fields are in `configs/builds/<build>.yaml`;
 | # | Assumption, value | Status, source | File and key | Consumed by | If wrong | Confirm by |
 | --- | --- | --- | --- | --- | --- | --- |
 | B1 | Band 4 to 6 kHz, centre 5 kHz | ours (D-49; `docs/DESIGN.md` Sec. 5: absorption above, noise and array length below). The board is specified for 10 to 100 kHz per the plan (via secondary): **unconfirmed that the inputs work here** (audit G-5) | `configs/sonars/popoto_long_range.yaml: transmit.waveform.f_start, f_stop`; build spec `projector.band_hz` | simulator, pulse compression, the decimation plan (`libs/live/include/sonar/live/decimate.hpp`: factor 17, 6023.5 Hz), `sync.alignment_tolerance`, the noise level of the budget | another band changes the pitch, the projector, the reference's place in the spectrum; the software follows the file | the board maker's statement on gain and noise at 4 to 6 kHz; a tone sweep into an input |
-| B2 | Linear FM sweep, Tukey taper `window_alpha: 0.1`; 1 s on the face, 0.1 s on the test AUV and the static frame | ours; `transmit.waveform.duration` is flagged unconfirmed | sonar file `transmit.waveform.type, duration, window_alpha`; build spec `projector.waveform` | the replica of pulse compression; blind range c T / 2 = 750 m or 75 m; processing gain 10 log BT | 3 dB of budget per factor of two in length; the blind range | what the amplifier and projector can sustain (longest pulse at full drive) |
+| B2 | The face: a hyperbolic sweep of 2 s (`type: sampled, source: hfm`; build spec `projector.waveform.type: hfm`; the owner's decision D-256, in the files since D-262; a 1 s linear sweep before). Linear FM sweep, Tukey taper `window_alpha: 0.1`, 0.1 s on the test AUV and the static frame; 4 s linear on the sea-state-5 placeholder | ours; `transmit.waveform.duration` is flagged unconfirmed | sonar file `transmit.waveform.type, source, duration, window_alpha`; build spec `projector.waveform` | the replica of pulse compression (the record carries the hyperbolic sweep as `Arbitrary` with its replica); blind range c T / 2 = 1500 m (face) or 75 m; processing gain 10 log BT; a mover's range reads f_stop T / B = 6 m per m/s of range rate off on the face, which the plain filter cannot correct | 3 dB of budget per factor of two in length; the blind range | what the amplifier and projector can sustain (longest pulse at full drive); the projector's response across 4-6 kHz |
 | B3 | Earlier stage files: `popoto_8` 20 to 35 kHz, 0.5 s, 190 dB; `popoto_8_low` 6 to 10 kHz, 175 dB; `flank_32` 6 to 10 kHz, 1 s, 200 dB | the 20 to 35 kHz, 190 dB transmit: via secondary (the plan quoting the board's specification with its PMT-28 transducer); the rest ours, flagged | those files' `transmit.waveform` | tests and older scenarios use them as fixtures | nothing in the six builds | not needed unless those stages are built |
 
 ### C. Converter and front end
@@ -204,17 +204,17 @@ through `base:` (D-127). Build spec fields are in `configs/builds/<build>.yaml`;
 | # | Assumption, value | Status, source | File and key | Consumed by | If wrong | Confirm by |
 | --- | --- | --- | --- | --- | --- | --- |
 | D1 | One projector, separate from the array, a point source with no beam pattern | ours; **no projector is chosen** (`projector.model: null`) | sonar file `transmit.kind: point`; build spec `projector` | simulator; direct sound (an omnidirectional source is the pessimistic case, D-125) | a directional source lowers the electrical power and may lower the direct sound | `docs/design/projector_selection.md`; the chosen part's beam pattern |
-| D2 | Source level 197 dB re 1 µPa at 1 m, rms | ours: a requirement from the 12 km budget (D-49), stated as rms (D-102). Since D-247 the transmitter is specified by energy and chosen for the sea state: by the model, for a point target, the shipped 1 s 197 dB holds 12 km at the illustrative deep site only up to sea state 3 (measured, it does not hold the resolved hull or the moving ship there, D-260; the owner's fix, a 2 s hyperbolic sweep at 197 dB, D-256, not merged); 203, 206 and 212 dB re 1 uPa^2 s at 1 m a ping for sea states 4, 5 and 6 with the bubble law, with the projectors that give each option (or none) in `docs/design/popoto_trade_study.md` section 0 (via secondary: the sheets as read in `projector_selection.md`). A hyperbolic sweep's 1 / f^2 spectrum needs the projector's response across 4-6 kHz, not known (`STATUS.md` question 61) | `popoto_long_range.yaml: transmit.waveform.source_level_db_rms`; build spec `projector.source_level_db_rms`; a typed copy in each face deployment file, `chain.coverage.budget.source_level_db` | `sonar.peak_pressure_at_1m` (the only place the √2 is applied); `buildspec.budget`; the coverage picture. A record stores the peak level, 200.01 (`docs/RECORD_FORMAT.md`) | margin moves dB for dB; 417 W acoustic if omnidirectional | the reference hydrophone at a measured distance |
+| D2 | Source level 197 dB re 1 µPa at 1 m, rms | ours: a requirement from the 12 km budget (D-49), stated as rms (D-102). Since D-247 the transmitter is specified by energy and chosen for the sea state: by the model, for a point target, the 1 s 197 dB shipped until D-262 held 12 km at the illustrative deep site only up to sea state 3 (measured, it did not hold the resolved hull or the moving ship there, D-260); the 2 s hyperbolic sweep at 197 dB in the files since D-262 (D-256) holds every target there at sea state 3 measured, thinly (+1.28 / +0.73 dB on the resolved hulls, one seed), not at sea state 4; 203, 206 and 212 dB re 1 uPa^2 s at 1 m a ping for sea states 4, 5 and 6 with the bubble law, with the projectors that give each option (or none) in `docs/design/popoto_trade_study.md` section 0 (via secondary: the sheets as read in `projector_selection.md`). A hyperbolic sweep's 1 / f^2 spectrum needs the projector's response across 4-6 kHz, not known (`STATUS.md` question 61) | `popoto_long_range.yaml: transmit.waveform.source_level_db_rms`; build spec `projector.source_level_db_rms`; a typed copy in each face deployment file, `chain.coverage.budget.source_level_db` | `sonar.peak_pressure_at_1m` (the only place the √2 is applied); `buildspec.budget`; the coverage picture. A record stores the peak level, 200.01 (`docs/RECORD_FORMAT.md`) | margin moves dB for dB; 417 W acoustic if omnidirectional | the reference hydrophone at a measured distance |
 | D3 | Projector position, body frame [along, starboard, down] from the array's centre: face [4.0, 0, 0] m; static frame [0, 0, 1.0]; test AUV [0, 0, 0.3]; the base file [0, 0, 1.5] | ours, placeholders | sonar file `transmit.lever_arm`; build spec `projector.position_m` | record `geometry/tx_lever_arm`; the backprojection and the elevation search hold the true path projector to target to hydrophone | range and elevation biased by the position error; the direct-sound level; the multipath bias on depth (`docs/DESIGN.md`, "Position and the multipath depth bias") | a tape; the direct arrival's delay per hydrophone (section 7, step 9) |
-| D4 | Amplifier, matching, energy storage, duty (1 s every 17.9 s, 5.6 %) | not chosen; duty is arithmetic on the files | build spec `projector.amplifier: null` | nothing in software | power design | the projector's efficiency and impedance |
+| D4 | Amplifier, matching, energy storage, duty (2 s every 18.9 s, 10.6 %, since D-262; 1 s every 17.9 s, 5.6 %, before) | not chosen; duty is arithmetic on the files | build spec `projector.amplifier: null` | nothing in software | power design | the projector's efficiency and impedance |
 | D5 | FLS and SAS source levels 210 and 215 dB | ours, design values | `fls_120k/170k/330k.yaml`, `sas_minsas120.yaml`: `transmit.waveform.source_level_db_rms` | `docs/DESIGN.md` Sec. 5 | the range at which the SNR holds | a projector design |
 
 ### E. Ping timing and receive windows
 
 | # | Assumption, value | Status, source | File and key | Consumed by | If wrong | Confirm by |
 | --- | --- | --- | --- | --- | --- | --- |
-| E1 | Receive window: 75 to 2000 m (test AUV), 75 to 3000 m (static), 750 to 12700 m (face); it opens at the pulse's blind range | ours ("a choice made here, not the owner's"); flagged `unconfirmed: receive.window` | sonar file `receive.window.range`; build spec `operation.range_m` | `PingAssembler` (window start and length in samples), the detector's false-alarm budget, storage | ping interval, samples a ping, recording size | S-11 |
-| E2 | Shortest ping interval 2 R / c + T: 2.77 s, 4.10 s, 17.93 s. Nothing in the software schedules pings | arithmetic (`buildspec.describe` `ping_interval_s`) | derived; deployment `source.timeout` follows from it | idle timeout; the tracker takes time from the records | overlapping pings give the earlier one up (`PingAssembler`) | the trigger's design (VA-5) |
+| E1 | Receive window: 75 to 2000 m (test AUV), 75 to 3000 m (static), 1500 to 12700 m (face, since D-262; 750 m with the 1 s pulse); it opens at the pulse's blind range | ours ("a choice made here, not the owner's"); flagged `unconfirmed: receive.window` | sonar file `receive.window.range`; build spec `operation.range_m` | `PingAssembler` (window start and length in samples), the detector's false-alarm budget, storage | ping interval, samples a ping, recording size | S-11 |
+| E2 | Shortest ping interval 2 R / c + T: 2.77 s, 4.10 s, 18.93 s (17.93 s with the 1 s pulse). Nothing in the software schedules pings | arithmetic (`buildspec.describe` `ping_interval_s`) | derived; deployment `source.timeout` follows from it | idle timeout; the tracker takes time from the records | overlapping pings give the earlier one up (`PingAssembler`) | the trigger's design (VA-5) |
 | E3 | Nominal sound speed 1500 m/s | ours | sonar file `nominal_sound_speed`; build spec `sound_speed.nominal_m_s` | window in samples, range scale when no measured value arrives | ranges scale with the error | the platform's sensor |
 | E4 | Blanking after the pulse: none configured in the shipped deployment files | open: follows C10 | `chain.blanking` (absent) | the same code as C10; the report's `blanking.min_range_m` | the first usable range | C10 |
 
@@ -306,7 +306,7 @@ What is measured, and where (seconds per ping for one, two, three rows of 32):
 | The same with the decimate-first stage, CPU | the same | 13.1 / 22.9 / 44.2 | the same, `chain_decimate_first.seconds` |
 | Jetson (Orin, Thor), DGX Spark, any aarch64 machine | — | **not measured; never built there** | `docs/JETSON.md` ("Untested") |
 
-The ping interval on the face is 17.9 s, so one L4 has a margin of more than ten on a full-length ping. That
+The ping interval on the face is 18.9 s with the 2 s baseline (17.9 s with the 1 s pulse, when these were timed), so one L4 has a margin of more than ten on a full-length ping. That
 figure is one run on a loaded rented machine and says nothing about an embedded GPU: Jetson GPUs run float64
 much more slowly than float32 and the kernel does part of its work in float64 (`docs/JETSON.md`, "What to
 expect").
@@ -334,7 +334,13 @@ variant (every board on its own clock, for rehearsals), a deployment file and si
 `COMMANDS.txt`, `chain.options`, `listen.options`, `parts.md` and `performance.json`:
 `tools/build_from_spec.py configs/builds/<build>.yaml --out DIR`, and `--self-test` to run its simulated trials
 through both engines. The self-tests are not part of the test suite; all six builds passed them, 42 of 42 on
-both engines, at D-142 and D-143 (`docs/STATUS.md`, milestone 14).
+both engines, at D-142 and D-143 with the 1 s sweep (`docs/STATUS.md`, milestone 14). **With the 2 s baseline
+(D-262) two fail** (not loosened): the three-row rehearsal's depth honesty at 1.7 km (28 m, 35 m and none for 60 m
+true; the geometry the blind range forces, `sonar-9035`) and the one- and two-row "free" range check, which misses
+3 m by about 0.06 m (the leading edge about 3.0 m early with a 2 s pulse, `sonar-8h09`); the three-row "free" range
+check compares with the truth displaced by the predicted bias. The trials' near target moved from 1000 m to
+1700 m, outside the 1.5 km blind range. `hardware_builds.json` still evaluates the face builds `at_range` 1000 m,
+inside it.
 
 Common to all six (section 3 has the status of each): Popoto PMM6081 boards of 8 inputs at 102.4 kHz and
 24 bits, 43 dB gain, 2.61 V full scale at the ADC; hydrophones at −208 dB re 1 V/µPa; one projector at 197 dB
@@ -517,7 +523,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.4 `popoto_face_1x32` (stage 4: full face, 1 x 32)
 
-**At risk:** At 12 km one row has −1.1 dB of margin: a detection probability of 0.22 on one ping. At the far end of its own 12.7 km window, −2.6 dB (0.05). No elevation.
+**At risk:** Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km one row has +1.9 dB of margin: a detection probability of 0.94 on one ping (−1.1 dB, 0.22, with the 1 s sweep); at the far end of its own 12.7 km window +0.5 dB (0.64). Its self-test's 3 m range check misses by about 0.06 m with the 2 s pulse (D-262, `sonar-8h09`). No elevation.
 
 **For:** The face to start with: one long row on the vehicle with the vehicle's navigation and the projector in its place (what the direct sound does); the 12 km detection.
 
@@ -565,7 +571,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.5 `popoto_face_2x32` (stage 5: full face, 2 x 32)
 
-**At risk:** Two rows are ambiguous in deep water at short range (a list of angles, not a depth). At 12 km the margin is +1.4 dB; at the far end of the window it is zero.
+**At risk:** Two rows are ambiguous in deep water at short range (a list of angles, not a depth). Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km the margin is +4.4 dB (+1.4 dB with the 1 s sweep); at the far end of the window +3.0 dB (zero with the 1 s sweep). Its self-test's 3 m range check misses by about 0.06 m with the 2 s pulse (D-262, `sonar-8h09`).
 
 **For:** Elevation on the vehicle where water is shallow against the range: attitude at each echo's arrival, the list of possible elevation angles and the water-depth bound that reduces it to one, under way.
 
@@ -613,7 +619,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.6 `popoto_face_3x32` (stage 6: full face, 3 x 32)
 
-**At risk:** Depth at 12 km is not knowable in metres without a sound-speed profile along the path (±2400 m from the gradient prior alone); roll accuracy (0.2° assumed) is 42 m of depth there. The 12-board synchronisation, the projector and the direct sound are as in section 1.
+**At risk:** Depth at 12 km is not knowable in metres without a sound-speed profile along the path (±2400 m from the gradient prior alone); roll accuracy (0.2° assumed) is 42 m of depth there; with the 2 s baseline no depth at 12 km is measured, and its rehearsal's depth check fails at 1.7 km (D-262, `sonar-9035`); blind inside 1.5 km. The 12-board synchronisation, the projector and the direct sound are as in section 1.
 
 **For:** The recommended end state: everything, at range. One elevation angle instead of a list, and 1.5 dB of detection over two rows.
 
@@ -689,22 +695,26 @@ rig's first hardware-run checklist is `docs/HOLOSCAN_NOTES.md` section 11.
 
 ## 5. Link budget and the 12 km design point
 
-**What is at risk first: measured, the shipped baseline does not hold the resolved hull at 12 km at the deep
-site** (D-260; simulator and both chain engines on an L4, `popoto_12km_deep_sea_state_5` at sea state 3 with the
-apl_1994 bubble law, one seed, 6 pings; `docs/tasks/doppler_deep12_eval.json`; illustrative site, assumed class
-values). The face (3 x 32, 1 s, 197 dB, linear sweep, plain filter) holds neither the closing nor the oblique
-`large_submerged` hull nor the ship (0 of 6 pings each); it holds the crossing hull (+2.95 dB) and an unresolved
-+25 dB point (+3.41 dB against +2.79 predicted). Every margin in this section is the budget's or the planner's for
-a steady point echo: the class's hull, five highlights that resolve in range against a detector testing 0.375 m and
-2 m cells, is 3.8 to 6.0 dB under the point in the same case, and the linear sweep with the plain filter loses more
-on movers. The owner (D-256): the baseline's waveform becomes a 2 s hyperbolic sweep at the same 197 dB (measured:
-every target on 6 of 6 at sea state 3, +1.28 / +0.73 dB on the hulls, one seed; not at sea state 4; blind range 1.5
-km; a range bias of 6 m per m/s on movers; its 1 / f² spectrum on a projector whose response across 4-6 kHz is not
-known, `docs/STATUS.md` question 61). Not merged (branch `hfmbase`): every shipped file still has the 1 s linear
-sweep. On the reverberation-limited shelf the 1 s sweep holds every hull (8.0 to 11.4 dB, D-243).
+**What is at risk first: the face's baseline since D-262, a 2 s hyperbolic sweep at 197 dB with the plain filter,
+holds the resolved hull at 12 km at the deep site only thinly, and is blind inside 1.5 km** (D-262; simulator and
+both chain engines on an L4, `popoto_12km_deep_sea_state_5` at sea state 3 with the apl_1994 bubble law, one seed,
+6 pings; illustrative site, assumed class values). Worse with it: nothing inside 1.5 km (c T / 2; 0.75 km at 1 s);
+no depth at 12 km measured (the elevation scenes keep the 1 s sweep); two face self-checks fail (section 4); a
+mover's range reads 6 m per m/s off, with no range rate; the projector (via secondary): no sheet states the longest
+pulse at that drive, the TR-1075A has 0.1 dB to spare at 6 kHz, the T335 drops out; its 1 / f² spectrum on a
+projector whose response across 4-6 kHz is not known (`docs/STATUS.md` question 61). Measured from its own
+configuration: every target 6 of 6 at sea state 3 (closing hull +1.28 dB, crossing +5.13, point +6.12, ship +6.26,
+the oblique hull +0.73 dB as D-260's `ss3_hfm2`: thin); sea state 4 the two hulls 0 of 6; sea state 5 nothing
+held (a larger transmitter not yet identified). Every margin in this section is the budget's or the planner's for
+a steady point echo: the class's hull, five highlights that resolve in range against a detector testing 0.375 m
+and 2 m cells, came 3.8 to 6.0 dB under the point in the same case (D-260). The 1 s linear sweep it replaced held
+neither the closing nor the oblique hull nor the ship there (0 of 6, D-260). On the reverberation-limited shelf the
+baseline gives 9.84 / 10.0 / 12.61 dB (closing / oblique / crossing), all tracked as movers (D-262; 7.98 to 11.41
+dB with the 1 s sweep, D-243).
 
-One long row at 197 dB is 1.1 dB short at 12 km: a detection probability of 0.22
-on one ping. Two rows have +1.4 dB (0.87), three +2.9 dB (0.99). The budget is still about 0.45 dB kind
+With the 2 s baseline one long row at 197 dB has +1.9 dB at 12 km: a detection probability of 0.94 on one ping.
+Two rows have +4.4 dB (1.00), three +5.9 dB (1.00). With the 1 s sweep these were -1.1 dB (0.22), +1.4 dB (0.87)
+and +2.9 dB (0.99). The budget is still about 0.45 dB kind
 against the chain (three small terms stated and not added, D-117). These are figures for a steady point echo
 in noise with a placeholder target strength; a fluctuating or extended echo and reverberation are not in them
 (`docs/STATUS.md`, "The 12 km design point"). **The free-field budget below
@@ -717,7 +727,7 @@ noise-limited at 12 km (their planned margins 0.6 to 1.4 dB lower). Example: `fl
 over background by the noise-only budget, 10.3 dB with the term, 6.9 dB in the simulated data; it is not detected. **Water decides more than the design does**: in simulation the
 ship is detected at 12 km on 6 of 6 pings in 100 m over sand and in the gravel and winter-sand waters, and on
 0 of 6 in the deep-silt and summer-mud waters, with three rows as with one (`docs/design/popoto_12km.json`,
-`tools/popoto_12km_study.py`).
+`tools/popoto_12km_study.py`; of the 1 s sweep, not regenerated with the 2 s baseline).
 
 The budget, as `python/gpusonar/buildspec.py` (`budget`, `performance`, `detection`) computes it for the face:
 
@@ -729,11 +739,11 @@ The budget, as `python/gpusonar/buildspec.py` (`budget`, `performance`, `detecti
 | Absorption | 0.32 dB/km (Ainslie-McColm, 12 °C, 50 m) | `buildspec.budget`; typed copy in `chain.coverage.budget.absorption_db_per_km` | ours |
 | Noise spectrum level | 51.5 dB re 1 µPa²/Hz at 5 kHz, 5 m/s of wind | `gpusonar.sim.noise` ambient-noise fit; `chain.coverage.budget.noise_spectrum_db` | ours; the platform's own noise is not in it |
 | One row's gain against sea noise | 15.05 dB (long row); 12.9 dB (short row) | `sonar_equation.isotropic_noise_gain_db` | ours, a closed form (`tests/python/test_buildspec.py::test_array_gain_against_isotropic_noise_closed_forms`) |
-| Pulse | 1 s (the matched filter's gain; 0.1 s on builds 1 to 3 is 10 dB less) | `transmit.waveform.duration` | ours |
-| **One row's SNR at 12 km, ship** | **14.6 dB** (−5.4 dB for the small target) | `hardware_builds.json`, `at_range.12000` | arithmetic on the above |
+| Pulse | 2 s hyperbolic sweep since D-262 (the matched filter's gain; 1 s before, 3 dB less; 0.1 s on builds 1 to 3 is 13 dB less) | `transmit.waveform.duration` | ours |
+| **One row's SNR at 12 km, ship** | **17.6 dB** (14.6 dB with the 1 s pulse; the small target 20 dB lower) | `hardware_builds.json`, `at_range.12000` | arithmetic on the above |
 | Detector needs, 1 / 2 / 3 rows | 15.8 / 13.2 / 11.8 dB for a detection probability of 0.5 on one ping; 17.4 / 14.8 / 13.4 dB for 0.9 | `buildspec.detection`, from the chain's own detector with the deployment file's settings, 0.001 false alarms a ping (D-117, recounted at D-134) | ours, computed, not typed |
-| **Margin at 12 km, ship, 1 / 2 / 3 rows** | **−1.1 / +1.4 / +2.9 dB; detection probability 0.22 / 0.87 / 0.99** | `hardware_builds.json`; `docs/DESIGN.md`, "The 12 km design point" | arithmetic |
-| Noise-limited reach, ship / small | 11.5 / 4.7 km, 12.7 / 5.3 km, 13.4 / 5.7 km | the same | arithmetic |
+| **Margin at 12 km, ship, 1 / 2 / 3 rows** | **+1.9 / +4.4 / +5.9 dB; detection probability 0.94 / 1.00 / 1.00** (with the 1 s pulse −1.1 / +1.4 / +2.9 dB, 0.22 / 0.87 / 0.99) | `hardware_builds.json`; `docs/DESIGN.md`, "The 12 km design point" | arithmetic |
+| Noise-limited reach, ship / small | 12.9 / 5.4 km, 14.2 / 6.1 km, 15.0 / 6.5 km (with the 1 s pulse 11.5 / 4.7, 12.7 / 5.3, 13.4 / 5.7 km) | the same | arithmetic |
 
 ![Link budgets of the shipped sonars](../design/link_budgets.png)
 
@@ -753,8 +763,8 @@ What would change them:
 
 | Change | Effect | Source |
 | --- | --- | --- |
-| Projector delivers less or more than 197 dB rms | dB for dB on every margin; 32 hydrophones in one row need 198 dB for a margin of zero (about 515 W acoustic, omnidirectional) | `docs/DESIGN.md` Sec. 3, "Row modules" table |
-| Pulse length | 3 dB per doubling; the blind range doubles with it (750 m at 1 s) | the same |
+| Projector delivers less or more than 197 dB rms | dB for dB on every margin; with the 2 s pulse one row of 32 hydrophones has +1.9 dB at 197 dB (with the 1 s pulse it needed 198 dB for a margin of zero, about 515 W acoustic, omnidirectional) | `docs/DESIGN.md` Sec. 3, "Row modules" table |
+| Pulse length | 3 dB per doubling; the blind range doubles with it (1500 m at 2 s, 750 m at 1 s); a hyperbolic sweep's range bias on a mover grows with it (f_stop T / B) | the same |
 | Rows | +2.5 dB (two), +4.0 dB (three) at the detector over one row | `buildspec.performance` `rows_detection_gain_db` |
 | Hydrophone or input noise above the sea's (C8) | margin falls by the excess | `docs/design/popoto_parts.md` |
 | Hydrophone sensitivity other than −208 dB | no change to SNR while sea noise dominates; the overload figures and C8's limit move | `docs/DESIGN.md`, "The projector's direct sound" |

@@ -419,7 +419,9 @@ targets at 20 and 120 m:
 Measured here on 4 CPU threads of a shared machine with a load average of 9 to 17 while it
 ran: runs of one configuration differed by up to 30%, each figure is the shorter of two, and
 the ratios mean more than the seconds. One full-length ping, 0.5 to 13 km at 102.4 kHz, ideal
-clocks, C++ chain (`tools/popoto_elevation_bench.py --full-rate`). The ping interval is 17.9 s.
+clocks, C++ chain (`tools/popoto_elevation_bench.py --full-rate`). The ping interval was 17.9 s with the 1 s
+pulse when this was measured; since D-262 the face transmits a 2 s hyperbolic sweep, the window opens at 1.5 km and
+the shortest interval is 18.93 s (`docs/handoff/hardware_builds.json`); the table was not re-measured.
 (On the idle machine the chain as it is took 15.5 / 23.5 / 37.7 s with the earlier geometry.)
 
 | | 1 row (32) | 2 rows (64) | 3 rows (96) |

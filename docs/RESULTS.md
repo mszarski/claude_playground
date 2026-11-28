@@ -273,6 +273,26 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
   offset is uniform; the challenge's own reference images show it too (peaks at 10.175, 20.155,
   40.188 mm), so it is a property of the data, not of the kernel.
 
+## Gallery regenerated with the 2 s hyperbolic baseline (D-262)
+
+Full-size gallery on an L4 at the ninth batch's tree (Hugging Face job 6b0a8a776c5d61fff18bd237, tree `dfe9733`,
+committed whole as `4720050`), `docs/figures/`, against the gallery of D-253 below. One run, one seed per scene. Every
+number is read from `gallery.json`. Only the long-range scenes on `popoto_long_range` changed transmission (a 2 s
+hyperbolic sweep at 197 dB for the 1 s linear sweep).
+- What got worse: **`popoto_env_winter_sand_200m` the ship's track 2.76 -> 9.29 m from the hull** (from its centre
+  19.4 -> 13.2 m), confirmed tracks 5 -> 6 (uncertain 0 -> 1), speed 5.99 ± 0.06 -> 6.26 ± 0.48 m/s (true 6.0);
+  **`popoto_env_deep_silt_1000m` confirmed tracks 3 -> 2** (multipath 2 -> 1), its ship still not tracked at its
+  true position (the nearest track 301.2 -> 304.6 m off), detections a ping [2,2,3,3,3,2] -> [1,1,1,2,3,3];
+  `popoto_12km` one multipath track now uncertain (multipath 11 -> 10, uncertain 0 -> 1); `popoto_env_gravel_30m`
+  confirmed tracks 2 -> 3 (multipath 1 -> 2), speed 5.79 ± 0.07 -> 4.41 ± 0.56 m/s (true 6.0).
+- Better: `popoto_12km` the ship 2.10 -> 1.14 m from the hull (10.9 -> 7.2 m from its centre), speed 5.67 ± 0.50 ->
+  6.13 ± 0.24 m/s; `popoto_env_gravel_30m` 10.02 -> 8.37 m from the hull.
+- Peak over the median, 32 hydrophones: `popoto_12km` 25.6 -> 28.2 dB, winter sand 30.4 -> 31.2, gravel 31.4 ->
+  29.9, deep silt 11.9 -> 11.9, summer mud 12.4 -> 12.5 (no detection before or after).
+- Unchanged: every named target is tracked as before with the same class; `popoto_far_mover` (6-10 kHz),
+  `popoto_trial_1000m`, the FLS, SAS, flank, pool and rail scenes numerically as before. The `seconds` entries sum
+  to 639 s (498 before): the simulator is slower with the sampled 2 s pulse.
+
 ## Gallery regenerated with the per-frequency reverberation Doppler (D-251, D-253)
 
 Full-size gallery on an L4 at the seventh batch's tree (Hugging Face job 6b0947c46c5d61fff188c465, tree
@@ -1984,11 +2004,14 @@ combines walls with that bottom, so no result in this file changes.
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
-(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4 at the seventh batch's tree `81364e0`,
-job 6b0947c46c5d61fff188c465, D-253; range from the leading edge in the flank and Popoto scenes, D-178).
-Against the D-178 gallery (worst first): `fls_170k_traffic` one mover not on a moving object (`sonar-4pon`),
-`popoto_env_gravel_30m` 3 -> 2 tracks; the rest in "Gallery regenerated with the per-frequency reverberation
-Doppler" above.
+(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4 at the ninth batch's tree `dfe9733`,
+job 6b0a8a776c5d61fff18bd237, D-262, with the 2 s hyperbolic long-range baseline; range from the leading edge in
+the flank and Popoto scenes, D-178). Against the gallery of D-253 (worst first): `popoto_env_deep_silt_1000m` 3 ->
+2 tracks, `popoto_env_winter_sand_200m` one more uncertain track, `popoto_12km` one multipath track now uncertain,
+`popoto_env_gravel_30m` 2 -> 3 tracks; the FLS and flank rows as before ("Gallery regenerated with the 2 s
+hyperbolic baseline" above). Against the D-178 gallery, D-253's (worst first): `fls_170k_traffic` one mover not on
+a moving object (`sonar-4pon`), `popoto_env_gravel_30m` 3 -> 2 tracks; the rest in "Gallery regenerated with the
+per-frequency reverberation Doppler" above.
 
 | Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -2000,13 +2023,13 @@ Doppler" above.
 | `fls_170k_traffic` | 13 | 4 | 5 | 1 | — | 3 | 1 |
 | `flank_patrol` | 5 | 1 | 3 | — | 0 | 1 | 0 |
 | `popoto_far_mover` | 3 | 1 | 0 | — | 2 | 0 | 0 |
-| `popoto_12km` | 12 | 1 | 0 | — | 11 | 0 | 0 |
-| `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 4 | 0 | 0 |
-| `popoto_env_gravel_30m` | 2 | 1 | 0 | — | 1 | 0 | 0 |
-| `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 2 | 0 | 1 (the ship is not tracked at its true position) |
+| `popoto_12km` | 12 | 1 | 0 | — | 10 | 1 | 0 |
+| `popoto_env_winter_sand_200m` | 6 | 1 | 0 | — | 4 | 1 | 0 |
+| `popoto_env_gravel_30m` | 3 | 1 | 0 | — | 2 | 0 | 0 |
+| `popoto_env_deep_silt_1000m` | 2 | 1 | 0 | — | 1 | 0 | 1 (the ship is not tracked at its true position) |
 
-In the gallery of D-253 the `popoto_12km` ship is a mover at 5.67 ± 0.50 m/s, 2.1 m from its hull (10.9 m
-from its centre); `flank_patrol`'s submarine a mover at 3.03 ± 0.03 m/s, 1.0 m from its outline, the wreck
+In the gallery of D-262 the `popoto_12km` ship is a mover at 6.13 ± 0.24 m/s, 1.1 m from its hull (7.2 m from its
+centre; in D-253's 5.67 ± 0.50 m/s, 2.1 m and 10.9 m); `flank_patrol`'s submarine a mover at 3.03 ± 0.03 m/s, 1.0 m from its outline, the wreck
 static. Regenerated with D-178 (L4, job 6b054768c97b8ed4fcd78015): the counts and every Popoto and flank
 position equal the gallery seed of D-178's ten-seed run; against the D-174 gallery only
 `popoto_far_mover` changed (4 -> 3 tracks, one multipath fewer) and `flank_patrol` is new. The
@@ -3608,6 +3631,24 @@ JSON in the approved dataset, not committed); the CPU measurements are in `docs/
 | Audio by record | time stretch for records under 0.5 s: a 0.27 ms rail record x1833 (0.50 s), a 3 ms FLS record at 3.75-6.25 MHz x391 (1.17 s); the four `rail_*` scenes 290 WAV files, none all zero (272 silent before); nobody has listened | D-253; VISUALIZATION.md 15.1 |
 | Full GPU suite, three shards, seventh batch's tree `81364e0` | **3392 passed, 122 skipped, 4 xfailed, none failed**; the tracker-view branch alone 3357 passed | D-254 (jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461) |
 
+## Measured in D-262 and D-263 (the ninth batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records; device runs NVIDIA L4 jobs through Hugging Face; one seed, 6 pings
+a case at the deep site; illustrative site, assumed class values. `docs/tasks/DOPPLER.md` HB.1 to HB.4.
+
+| What | Result | Source |
+| --- | --- | --- |
+| **What the 2 s hyperbolic baseline (197 dB, plain filter) cost** | **nothing seen inside 1.5 km** (0.75 km before); the three elevation scenes keep the 1 s linear sweep, no depth at 12 km measured; the face builds' trials at 1700 m (1000 m before): the three-row rehearsal's depth 28 m, 35 m and none for 60 m true (fails; with the 1 s sweep at 1.7 km no depth, at 1.0 km 59, 60, 63 m); the one- and two-row 3 m range check missed by about 0.06 m (the leading edge 3.0 m early at 2 s, 1.6 m at 1 s); a mover's range 6 m per m/s off, no range rate; the simulator 5 to 17 times slower on a CPU, the chain's cost a ping unchanged (0.9 to 2.8 s, C++, CPU) | D-262; HB.1 |
+| The baseline from its own configuration, deep site, sea state 3, bubble law, 12 km | **every target 6 of 6**: closing hull +1.28 dB, crossing +5.13, point +6.12, ship +6.26; the oblique hull +0.73 dB as D-260's `ss3_hfm2` (the same transmission; detected and not tracked there): **thin, one seed** | D-262 (job 6b0a8a7854072e8b716cb7a8); not yet in `doppler_deep12_eval.json` (`sonar-n8ho`) |
+| The same, sea state 4 / sea state 5 | sea state 4 the two hulls 0 of 6; sea state 5 nothing held (needs a larger transmitter not yet identified) | D-262 |
+| The baseline on the 12 km shelf (`popoto_12km_large_submerged` with the 2 s hyperbolic sweep set) | closing 9.84 dB, oblique 10.0, crossing 12.61, all 6 of 6 and tracked as movers (the 1 s linear sweep 7.98, 9.22, 11.41 dB, D-243) | D-262 (job 6b0a8a7954072e8b716cb7aa) |
+| Quick forms before -> after, CPU, 3 pings (`tools/doppler_bank_eval.py`) | margins up 1.55 to 3.49 dB on the six long-range cases (for example `popoto_12km` 8.08 -> 11.57 dB); the range error moves by about (6 - 2.5) m per m/s times the range rate as predicted; no false detection on 1 target-free ping | HB.2 |
+| The planner, free field, the ship-sized +25 dB at 12 km | one row's SNR 14.6 -> 17.6 dB; margins one / two / three rows -1.1 / +1.4 / +2.9 -> **+1.9 / +4.4 / +5.9 dB** (detection probability 0.22 / 0.87 / 0.99 -> 0.94 / 1.00 / 1.00); the model's, for an unresolved, non-moving target | HB.3; `DESIGN.md` |
+| The depth plan, three rows | +3.0 dB at the noise-limited sites, +1.6 to +2.9 at the reverberation-limited ones; held at the same 4 of 6 sites by both classes; `deep_no_bottom_return_sea_state_5` -4.0 / -3.1 dB (`large_submerged` / `ship`; -7.1 / -6.1 before) | HB.3 |
+| Projector (via secondary, the repository's sheets) | 2 s at 197 dB: the TR-1075D gives it (201.7 dB at its 30 % rating; 10.6 % duty needed); the TR-1075A 0.1 dB to spare at 6 kHz; the T335 out (10 % duty rating); no sheet states the longest pulse at that drive | D-262; `docs/design/projector_selection.md` |
+| The gallery | "Gallery regenerated with the 2 s hyperbolic baseline" above: worse first the winter-sand ship's track 2.76 -> 9.29 m, deep silt 3 -> 2 tracks | D-262 (job 6b0a8a776c5d61fff18bd237) |
+| Full GPU suite, three shards, ninth batch's tree `dfe9733` | **3507 passed, 124 skipped, 4 xfailed, none failed**; the slowest shard 60 minutes of tests (40 before) | D-263 (jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3) |
+
 ## Measured in D-255 to D-261 (the eighth batch; a summary, worst first; the entries and files named hold the rest)
 
 Every number here is ours, on simulated records; the device runs are NVIDIA L4 jobs through Hugging Face (their JSON
@@ -3616,8 +3657,8 @@ The deep site's measurement is in the section after "Not yet measured".
 
 | What | Result | Source |
 | --- | --- | --- |
-| **The shipped baseline at the deep site, sea state 3, 12 km** | **does not hold the closing or the oblique `large_submerged` hull or the ship (0 of 6 pings each)**; the planner's margins are for an unresolved, non-moving target ("Measured by the deep-site package") | D-260; `docs/tasks/doppler_deep12_eval.json` |
-| The owner's decisions | the baseline at sea state 3, an alternate at sea state 5, an FLS deployment block (D-255); after the measurement the baseline's waveform a 2 s hyperbolic sweep at 197 dB, plain filter, and sea state 5 as needing a larger transmitter not yet identified (D-256; **not merged**, branch `hfmbase`; every result in this file is of the 1 s linear sweep) | D-255, D-256 |
+| **The baseline then shipped (1 s linear) at the deep site, sea state 3, 12 km** | **does not hold the closing or the oblique `large_submerged` hull or the ship (0 of 6 pings each)**; the planner's margins are for an unresolved, non-moving target ("Measured by the deep-site package") | D-260; `docs/tasks/doppler_deep12_eval.json` |
+| The owner's decisions | the baseline at sea state 3, an alternate at sea state 5, an FLS deployment block (D-255); after the measurement the baseline's waveform a 2 s hyperbolic sweep at 197 dB, plain filter, and sea state 5 as needing a larger transmitter not yet identified (D-256; done in D-262, merged D-263: the ninth batch's section above; the results before it in this file are of the 1 s linear sweep) | D-255, D-256 |
 | The outputs D-251 made stale, regenerated on an L4 | **worse:** the closing hull untracked at the last alternating ping of `popoto_12km_large_submerged` (was `uncertain`); `popoto_12km_doppler`'s default chain 4 false detections on 4 target-free pings at the default budget (1 in 2 before); the rest within 0.2 dB (the rows marked "Regenerated on an L4 under D-251" above) | D-260 (jobs 6b0a02356c5d61fff18a11a6, 6b0a02366c5d61fff18a11aa); `docs/tasks/DOPPLER.md` "The outputs D-251 made stale, regenerated" |
 | `fls_170k_traffic`'s false mover over seeds, full size, CPU | a wake track a mover in **5 of 8** seeds under the default reverberation law, 3 of 8 under `doppler: centre` (two discordant seeds, sign test p = 0.5); it hops between two wake clusters 11 m apart, 2.54 +- 0.33 m/s against 2.31 m/s needed; the three boats classed right on all 16 runs; best existing options (`significance` 8 or `linear.width` 6 m) 2 of 8 | D-259 |
 | The gallery's other differences | `flank_patrol`: `bistatic_rule: mean_angle` restores [6,5,5,5,3,4] and its classes exactly (D-216's); `popoto_env_gravel_30m`'s lost static track was on no object (four rows of 11 to 15 dB arrivals about 100 m beyond the ship) | D-259 |
@@ -3631,12 +3672,13 @@ The deep site's measurement is in the section after "Not yet measured".
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-261) ran its affected test files.
-The full GPU suite last ran on the eighth batch's tree (`3fb6bf4`, D-261) as three shards: 3494
-passed, 124 skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b0a30146c5d61fff18ac1ab,
-6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae); before it 3392 passed, 122 skipped, 4 xfailed on the
-seventh batch's tree (D-254). Also not measured: **the decided baseline waveform (a 2 s hyperbolic sweep at
-197 dB, D-256) on every long-range scene** (its package, branch `hfmbase`, regenerates them), the deep site on
+rerun since, and each later package (D-158 to D-263) ran its affected test files.
+The full GPU suite last ran on the ninth batch's tree (`dfe9733`, D-263) as three shards: 3507
+passed, 124 skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b0a8a766c5d61fff18bd22e,
+6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3); before it 3494 passed, 124 skipped, 4 xfailed on the
+eighth batch's tree (D-261). Also not measured: **a depth at 12 km with the 2 s baseline** (the elevation scenes
+keep the 1 s sweep; `sonar-9035`), anything inside 1.5 km with it (a short-range mode, `sonar-9ed5`), the
+leading-edge range offset's correction (`sonar-8h09`), the deep site on
 more than one seed (the resolved hulls' margins with it 0.2 to 1.3 dB), why the oblique hull is detected and not
 tracked there and why the closing hull is untracked at the last alternating ping (`sonar-2bjq`), the tone path's
 false-alarm rate on a train scene over more than 4 target-free pings (D-252 counts 4), the reverberation's
