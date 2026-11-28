@@ -5683,3 +5683,33 @@ agreeing.
 - Asked whether the forward-looking sonar should get its own deployment settings (the chain's
   default look is a flank array's and mirrors an FLS's echoes astern, D-253), **the owner: "yes."**
   (issue sonar-tpex).
+
+### D-256 The owner's decisions on the baseline waveform and on sea state 5, after the deep-site measurement (follows D-255; a default will move)
+
+2026-11-28. The measurements are ours (NVIDIA L4, one seed, 6 pings a case, the illustrative deep
+site, assumed target strengths); their account, files and decision entry come with the deep-site
+package (branch `deepsea`, not yet merged when this is written).
+
+- **What was found, worst first.** Both designs of D-255 fail their acceptance at the deep site at
+  12 km for a realistic hull. Baseline (1 s, 197 dB, linear sweep, plain filter) at sea state 3:
+  the closing hull, the oblique hull and the ship 0 of 6 pings each; the crossing hull and the
+  planner's point 6 of 6. Alternate (4 s, 200 dB) at sea state 5: closing and oblique hulls not
+  held with any filter. Causes: the class's highlights resolve in range and the detector tests
+  0.375 m and 2 m cells only (the hull 4 to 6 dB under the point), and the linear sweep's loss on
+  movers. The planner's point is reproduced within 0.62 dB: its margins are for an unresolved,
+  non-moving target.
+- Candidates measured (jobs 6b0a0234...a1, ...a4, 6b0a19496c5d61fff18a650c): at sea state 3 a
+  hyperbolic sweep of 2 s at 197 dB with the plain filter holds every target on 6 of 6 pings
+  (oblique +0.73 dB, closing +1.28 dB); 1 s at 200 dB holds them on 5 or 6; at sea state 4 the 2 s
+  hyperbolic sweep does not hold the two hulls. At sea state 5: hyperbolic 4 s at 203 dB holds
+  them (4 and 5 of 6) but no single listed projector reaches it; 8 s at 200 dB misses the oblique
+  hull (2 of 6) with a 6 km blind range; 8 s at 203 dB holds all.
+- The orchestrator recommended: (1) the baseline's waveform becomes a 2 s hyperbolic sweep at the
+  shipped level, plain filter (costs: blind range 1.5 km for 0.75 km; a range bias of 6 m per m/s
+  on movers that the plain filter cannot correct; no range rate); (2) sea state 5 is recorded as
+  needing a larger transmitter not yet identified, and is not claimed as met. **The owner: "i agree
+  with your recommendation", and, told that the hyperbolic sweep needs no Doppler bank and that the
+  change goes in as its own package with every long-range result regenerated: "Agreed".**
+- So a default will move: the shipped long-range waveform. It is done as its own package (issue
+  filed) with a before -> after table on every long-range scene, worst first, and its own GPU
+  suite. Until that package merges every shipped file keeps the 1 s linear sweep.
