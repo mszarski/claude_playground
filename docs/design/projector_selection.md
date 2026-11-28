@@ -24,6 +24,11 @@ duty = 2 s every 18.9 s; level unchanged, so the drive voltages and volt-amperes
   study's working efficiencies); cavitation and the direct sound's level are unchanged (they follow the level); the direct
   sound lasts 2 s. The HFM puts its energy as 1 / f^2 across the band (2.6 dB more at 4.25 than at 5.75 kHz,
   docs/tasks/DOPPLER.md HFM.1 item 6): whether the projector sends it at the same peak level is not known.
+- **(Added by the document sweep after D-267.) The opt-in short-range mode (D-265, `docs/design/short_range_mode.md`)
+  sends the same sweep cut to 0.25 s after each 2 s ping, at the same level** (9.0 dB less energy, the cycle 23.2 s for
+  18.93 s). Not known, for the makers (`docs/STATUS.md` questions 73 and 74): whether the projector and its drive board
+  can change the pulse length from one ping to the next, and how soon after a transmission the receiver can listen
+  (`projector.blanking_after_s` of a build spec is null). Nothing in this document's tables includes the mode.
 - Not caused by this change, found on the way: the committed `projector_candidates.json` before this change gave the
   direct sound 3 dB lower than the tool gives today at the same level (22.1 against 25.1 dB, worst hydrophone, rms
   convention) for every candidate: it was older than a change to `buildspec.describe`'s convention. Not investigated.

@@ -95,8 +95,13 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    simulated. Reverberation-limited range is measured only in the shipped 12 km scenarios, not predicted for a
    new build (`performance.json` is noise-limited, spherical spreading). The bias multipath puts on elevation
    in a shallow channel is in the depth sigma only where `elevation.multipath_sigma` is on (every generated
-   stacked-row file), with boundaries taken as perfect mirrors; it is not corrected. Depth beyond a few hundred metres needs a sound-speed profile
-   nobody is assumed to have. Curved arrays, towed arrays, more than one projector, directional hydrophones,
+   stacked-row file), with boundaries taken as perfect mirrors; it is not corrected. Measured against range on the
+   three-row face (D-266, `docs/tasks/DEPTH_RANGE.md`): with that term on, the depth is still dishonest in 100 m of
+   water at 1 to 2 km (22 of 28 depths; a ship 4 m deep at 1.7 km read 95.7 +- 27.4 m, called submerged), because the
+   term adds nothing where no echo explains the reading; the 3 x 32 face's `rehearsal` self-test fails at 1.7 km for
+   that reason. Depth beyond a few hundred metres needs a sound-speed profile
+   nobody is assumed to have: with the gradient prior the depth sigma is 2400 m at 12 km, and depth then cannot tell a
+   submerged target from one at the surface beyond about 2 km. Curved arrays, towed arrays, more than one projector, directional hydrophones,
    boards whose samples are not 24-bit, and a `port` look direction have not been run through the self-tests.
    The sparse Bayesian bearing kernels take at most 64 channels and raise an error for more (64 in a row; passive
    listening with stacked rows must run with `elevation=1`, as the generated `listen.options` do). Chain thresholds (`cfar`, `tracker`,

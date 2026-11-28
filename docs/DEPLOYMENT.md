@@ -159,7 +159,7 @@ its numbers, and the choice between two rows and three: `DESIGN.md`, Sec. 3.
 | 2: static drop-in array, two rows of 32, 1.5 m apart | `popoto_static_2row` | `configs/deploy/popoto_static_2row.yaml` | `--scenario popoto_static_trial_2row` |
 | 3: static drop-in array, three rows | `popoto_static_3row` | `configs/deploy/popoto_static_3row.yaml` | `--scenario popoto_static_trial_3row`; `popoto_static_free`, `popoto_static_passing` (baseband pings: see the tests) |
 | 4: 2 m × 9 m face, two rows 1.5 m apart within 7 m of its length | `popoto_long_range_2row` | `configs/deploy/popoto_face_2row.yaml` | `popoto_face_2row_shallow` (baseband pings: see the tests) |
-| 5: the face, three rows (recommended) | `popoto_long_range_3row` | `configs/deploy/popoto_vehicle_elevation.yaml` | `configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal` |
+| 5: the face, three rows (recommended; its depth in shallow water at 1 to 2 km is dishonest and beyond about 2 km uninformative as deployed, D-266) | `popoto_long_range_3row` | `configs/deploy/popoto_vehicle_elevation.yaml` | `configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal` |
 
 ```bash
 tools/sonar_live.py configs/deploy/popoto_testauv_1row.yaml                          # the boards, over UDP
@@ -646,7 +646,15 @@ waters, the measurement itself taken as exact; `docs/design/refraction_depth_stu
   Where the flag is true the rows are reading the surface or the sea bed, not the target: in 100 m of water at 3 km from
   30 m the two-row face reads 0 to 11 m or 93 to 99 m for a target anywhere between 10 and 95 m, and states 19 to 48 m
   of sigma for it (the generator's `rehearsal` self-test, and the sweep in `PHYSICS_NOTES.md` Sec. 29). At 1 km with
-  three rows the same target is resolved and the term is under 2 m. `depth_unresolved_span_m` gives the depths that
+  three rows the same target is resolved and the term is under 2 m. **Measured against range (D-266,
+  `docs/tasks/DEPTH_RANGE.md`): the flag and the term do not make the three-row depth safe in shallow water.** In
+  100 m of water from 30 m the deployed depth is dishonest (the truth more than 2 sigma off) on 22 of the 28 depths
+  given at 1 to 2 km: 70.4 +- 3.5 m for a 60 m target at 1 km; a ship 4 m deep at 1.7 km reads 95.7 +- 27.4 m and is
+  called submerged on 4 of 4 pings. Where no echo explains the reading the term adds nothing
+  (`depth_unresolved_sigma_m` null) and the stated sigma is the angle's. Not fixed (issue `sonar-4e2h`; the fix moves
+  a default). And with the deployment files' gradient prior (`gradient_sigma_per_s` 0.05) the depth sigma is 48 m at
+  1.7 km and 2400 m at 12 km: beyond about 2 km the rows' depth does not tell a submerged target from a ship. Treat a
+  stacked-row depth inside 2 km in shallow water as unverified. `depth_unresolved_span_m` gives the depths that
   could have given the reading. Without a water depth the chain has no bottom in this picture and says so in
   `depth_unresolved_assumed`: give it one (`elevation.water_depth`, or navigation) wherever the bottom is within reach.
 - **Shallow water without `multipath_depth.bottom`: `withhold_flagged: true`** (what the generator writes, with
@@ -1508,7 +1516,8 @@ block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like 
 | `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
 | `chain.tracker.association` | how detections are shared out among tracks: `likelihood` (default, D-141) or `in_order` (the rule before it) |
 | `chain.cfar.false_alarms_per_ping`, `chain.min_snr_db` | the false-alarm rate wanted: expected false detections per ping in noise (10⁻³), and a floor on `snr_db` (9 dB). `chain.cfar.pfa` is for `cell_statistic: mean` and `peak` only |
-| `chain.cfar.range_estimate` | `first` (default with `multiscale`, D-160): a detection's range is its leading edge, or with stacked rows the elevation's own range where the elevation places it; `centroid` puts it at the energy-weighted mean of its samples, behind the target by the multipath spread (on `popoto_12km`, chain `popoto_vehicle`: +49.5 m against +0.9 m with `first`, D-157). A strong point echo reads a metre or two short with `first` where no elevation places it. Leave it out unless output from before D-160 is wanted for comparison |
+| `chain.cfar.range_estimate` | `first` (default with `multiscale`, D-160): a detection's range is its leading edge, or with stacked rows the elevation's own range where the elevation places it; `centroid` puts it at the energy-weighted mean of its samples, behind the target by the multipath spread (on `popoto_12km`, chain `popoto_vehicle`: +49.5 m against +0.9 m with `first`, D-157). A strong point echo reads a metre or two short with `first` where no elevation places it; the shortfall grows with the echo's SNR, not with the pulse length (D-264). Leave it out unless output from before D-160 is wanted for comparison |
+| `chain.cfar.range_edge_correction` | `off` (default): as before. `pulse` (opt-in, D-264, both engines): the leading edge referenced to the compressed pulse's own skirt, so a point echo reads at its peak (within 2 mm on average) and a nearer real arrival is kept; worse with it, two tracks 0.006 and 0.019 m further from the truth, and a weak highlight within 3 dB of a stronger arrival's skirt is read as that skirt; not tested in clutter. Whether it becomes the default is the owner's (`docs/STATUS.md` question 69) |
 | `chain.range_doppler` | `off` (default), `ownship` or `full` (D-181, opt-in): the LFM range-Doppler coupling, an echo closing at v reading f0·v·T/B nearer with an up-chirp. `ownship` corrects each detection's range, placement and time by the ownship's closing speed from navigation's velocity; `full` also moves each reported track along its line of sight by its own fitted closing speed. Measured on gallery captures replayed offline only, with one scene worse (`far_mover` 0.4 -> 0.9 m); the live chain is held by its tests, not measured on scenes. The factor is ours (textbook unconfirmed). Nothing on the report line says which setting made it. Keys: `CONFIGURATION.md` |
 | `chain.cfar.merge_m`, `sidelobe_floor_db` | what is one detection: echoes of one bearing within the tracker's range sigma (15 m) are merged; the bearing sidelobe floor (−40 dB) is an assumption about the array's gain and phase errors until it is measured |
 | `chain.sync.reference`, `search_time`, `tolerance_us`, `min_quality` | several boards: the reference burst above the band, how far apart the boards can start (2 ms), how well they must agree (a twentieth of a period; tighter for rows) |

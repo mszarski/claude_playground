@@ -27,7 +27,14 @@ face builds) transmits a sampled hyperbolic sweep of 2 s at 197 dB** (`{type: sa
 simulator is 5 to 17 times slower on a CPU with it than with the analytic 1 s sweep; the scenes that exist for the
 linear sweep state the 1 s sweep by override (the three elevation scenes, `popoto_12km_large_submerged`); the
 trains and the 0.1 s builds are unchanged; FLS, SAS and flank records hash identical (D-262, `docs/STATUS.md` items
-96 to 100).
+96 to 100). Brought to D-267 the same day (the merge `cd620b4` of the tenth batch): **the depth study (D-266) put
+the stacked rows' depth through the simulator from 1 to 12 km and found it dishonest in 100 m of water at 1 to 2 km**
+(a ship 4 m deep at 1.7 km read 95.7 +- 27.4 m, called submerged); its cases are image source with a flat surface
+that reflects -1 (the worst case for the surface pair), a point target, no profile and no sea state, so what it
+measured is the chain's response to the simulator's cleanest multipath. The short-range mode (D-265) runs two kinds
+of ping in one record set; **the simulator makes each ping on its own, so the short ping's echoes from beyond its
+window that arrive in the next long ping's window are not simulated** (the same holds today for the long ping's
+echoes from beyond 12.7 km). Two scenes (102 files): `popoto_short_range_mode`, `popoto_elevation_short_range`.
 
 Everything in this project that looks like a result is a result on simulated data. This file says
 what makes that data, which parts were checked against what, and which parts are known to be wrong
@@ -75,6 +82,7 @@ placeholder or a class default until then.
 | The basin's late reverberation tail (D-106) | No Doppler; none behind the direct sound or the boundary reverberation; its numbers are one fjord, one night, 4 to 8 kHz | `STATUS.md` "Simulator limits so far" |
 | Direct sound and receiver overload (D-125) | The model exists; no hardware value in it is measured | `SCENARIOS.md`, direct-overload group |
 | `fls_300k` analogue gain ramp | A placeholder so that a 300 m echo registers in 16 bits; flagged unconfirmed in its config | `STATUS.md` |
+| Each ping is simulated on its own (D-265) | One ping's echoes arriving in the next ping's window are not made. With the short-range mode the short ping's echoes from 3 km out to the long range would fall in the next long window: uncounted; by the model it matters where the bottom reverberates. Also the long ping's echoes from beyond 12.7 km today | `docs/design/short_range_mode.md`, item 1; `STATUS.md` item 104; `sonar-qsna` |
 | Navigation errors | Sway and heave unknown to navigation, DVL altitude noise, rail position errors and attitude rates are simulated. An along-track (surge) error is not simulated (estimating one is issue `sonar-7k2`), nor a drifting INS, nor a navigation-to-sonar clock offset | `sim/simulator.py` `simulate_collection` |
 | What no scenario has | Wall multipath in the gallery pool scenes (`pool_fls_p4_2v_walls`, not in the gallery, has it); bounce paths to objects in the free-field FLS sea scenes (the four at `image_source` have first-order ones); multipath in a gallery SAS scene (`sas_auv_multipath` has it); waves that move as waves; a long-range clutter scene (`sonar-kal`); a sampled transmit pulse in a shipped scenario | `SCENARIOS.md` "What no scenario has yet" |
 | Parts still in NumPy | Ambient noise (2.0 s of a 15 to 31 s ping), the reverberation's random draws, time spreading's taps, scene modifiers, ADC, board clocks. Path pairing has no CUDA backend | `RESULTS.md` "What in the simulator still runs in NumPy" |
@@ -136,7 +144,7 @@ Notes on the diagram, each checked in `simulator.py`:
 
 - **Bellhop is never linked.** It is an external program run as a separate process
   (`GPUSONAR_BELLHOP` names it; `tools/build_oracles.sh` builds it). It has two roles: the ray
-  tracer of the `eigenray` tier (33 of the 100 shipped scenarios, counted at D-261 as files stating `fidelity: eigenray`, as at D-245 of 98; without it they and their tests skip; Bellhop3D runs the opt-in `eigenray3d` tier of six more: `flank_seamount_3d` and the five 3-D scenes of `sonar-d7sw`), and
+  tracer of the `eigenray` tier (33 of the 102 shipped scenarios, counted at D-267 as files stating `fidelity: eigenray`, as at D-261 of 100 and D-245 of 98; without it they and their tests skip; Bellhop3D runs the opt-in `eigenray3d` tier of six more: `flank_seamount_3d` and the five 3-D scenes of `sonar-d7sw`), and
   the oracle the `image_source` tier is tested against. KRAKEN, Bellhop3D and PyRAM are oracles
   only (`tests/python/kraken_oracle.py`, `bellhop3d_oracle.py`, `test_ram_crosscheck.py`).
 - **Two engines.** Path pairing, reverberation and sampled-pulse synthesis exist in NumPy and in
@@ -333,6 +341,12 @@ The first four's parameters are ours and marked `unconfirmed` in the files: TR 0
 | `popoto_elevation_rehearsal` | `popoto_long_range_3row_clocks` | image | raw 102.4 kHz samples on twelve boards with their own clocks, rolling; the 1 s linear sweep by override since D-262 | `elevation`, `deployment_defaults` | not recorded |
 | `popoto_face_2row_shallow` | `popoto_long_range_2row` | image | the geometry in which two rows cannot separate direct, surface and bottom echoes | `elevation` | not recorded |
 | `popoto_elevation_short_range` | `popoto_long_range_3row` with `short_range` | free | `popoto_elevation_free`'s targets near 1 km with the shipped 2 s sweep and the short-range mode: the depths from the short pings | `short_range_mode` | not recorded |
+
+These scenes show the stacked rows' depth at about 1 km with the short pulse (`popoto_elevation_short_range`:
+within 2 m from the short pings, D-265). They are not a measurement against range: `tools/depth_range_sweep.py`
+(D-266, `docs/tasks/DEPTH_RANGE.md`) builds its own cases from 1 to 12 km and found the deployed depth dishonest in
+100 m of water at 1 to 2 km and, with the deployed gradient prior, uninformative beyond about 2 km
+(`docs/STATUS.md` item 101).
 
 ### Staged builds: trials in open water (5)
 

@@ -3631,6 +3631,29 @@ JSON in the approved dataset, not committed); the CPU measurements are in `docs/
 | Audio by record | time stretch for records under 0.5 s: a 0.27 ms rail record x1833 (0.50 s), a 3 ms FLS record at 3.75-6.25 MHz x391 (1.17 s); the four `rail_*` scenes 290 WAV files, none all zero (272 silent before); nobody has listened | D-253; VISUALIZATION.md 15.1 |
 | Full GPU suite, three shards, seventh batch's tree `81364e0` | **3392 passed, 122 skipped, 4 xfailed, none failed**; the tracker-view branch alone 3357 passed | D-254 (jobs 6b0947c254072e8b71697a54, 6b0947c254072e8b71697a58, 6b0947c36c5d61fff188c461) |
 
+## Measured in D-264 to D-267 (the tenth batch; a summary, worst first; the entries and files named hold the rest)
+
+Every number here is ours, on simulated records: depth against range on the CPU (both chain engines, the 1 s linear
+sweep on the grid, 8 spot cases of the 2 s hyperbolic sweep; `tools/depth_range_sweep.py`, `docs/tasks/DEPTH_RANGE.md`,
+`docs/tasks/depth_range_sweep.json`); the GPU grid with the 2 s sweep (job 6b0aaa826c5d61fff18c3ee2) agrees by
+D-266 and its tables are not committed. "Dishonest": the truth more than 2 sigma from the stated depth. Image source,
+a flat surface reflecting -1, a +25 dB point, four pings a case.
+
+| What | Result | Source |
+| --- | --- | --- |
+| **The deployed stacked-row depth, 100 m of water, own depth 30 m, 1 to 2 km (F1)** | **dishonest on 22 of the 28 depths given** (24 of 68 in all, 7 wrong calls): 70.4 +- 3.5 m for 60 m at 1 km; 83.9 +- 11.6 m for 30 m at 1.7 km; 7.1 +- 12.3 m for 60 m at 2 km; **a ship 4 m deep at 1.7 km 95.7 +- 27.4 m, called submerged on 4 of 4 pings** (2 s sweep 99.8 +- 30.4 m), at 8 km on 2 of 4; two seeds the same to 0.1 m; not fixed (`sonar-4e2h`); five strict expected failures | D-266; DR.1, DR.4 |
+| The same, deep water, own depth 30 m | 6 dishonest of 132, all at 1.7 km: a 30 m target 3.4 +- 10.2 m, called surface on 4 of 4 | DR.4 |
+| The same, deep water, own depth 225 m | 3 dishonest of 140, all at 12 km (3 of 12 submerged pings 2.2 to 2.6 sigma off); no wrong call; 16 dishonest ghost detections (a deep target's surface pair) at 1 to 2 km | DR.4 |
+| **As deployed (gradient prior 0.05 /s)** | the depth sigma 17.0 / 48.5 / 67.0 / 150.4 / 417 / 1067 / 2401 m at 1 / 1.7 / 2 / 3 / 5 / 8 / 12 km: no target of the class told from the surface beyond 2 km; **at 12 km depth cannot tell a submerged target from a ship** | DR.2, DR.5 |
+| Where the rows tell a target from the surface, water known | own depth 225 m, deep water: 30 m to 2 km, 60 m to 5 km, 150 m to 8 km, 300 m to 12 km; own depth 30 m: 30 m only at 1 km; 100 m of water: nowhere honestly | DR.5 |
+| The opt-in multipath timing stage (no shipped build) | from 225 m, deep water: every depth 1.7 to 12 km, sigma 0.2 to 1.2 m; dishonest 16 of 28, 22 of 84, 23 of 108 (100 m; deep at 30 m; deep at 225 m); a ship 8.0 +- 0.3 m at 3 km (called submerged), 67.0 +- 1.5 m at 2 km in 100 m of water (called submerged); 304.5 +- 0.7 m for 300 m at 1 km (`sonar-1l0m`) | D-266 F2, F3; DR.4 |
+| The 1.7 km rehearsal failure (D-262) | F1 on one ping (35.4 +- 11.7 m for 60 m), no depth on another; the direct echo leads the surface and bottom pairs by 2.8 and 4.4 range cells (4.8 and 7.4 at 1 km) | D-266; DR.3 |
+| **The leading-edge range's offset (corrected cause)** | set by the echo's SNR, not by the pulse length: about (c / 2 pi B) sqrt(S / F) before the peak; at equal SNR pulses of 0.1 to 4 s read alike, -1.4 to -1.9 m at 37 dB; the simulator's replica peaks within 6 mm of 2R/c | D-264 |
+| `cfar.range_edge_correction: pulse` (opt-in) | **worse:** two tracks 0.006 m and 0.019 m further from the truth (`popoto_12km_two_ships` ship_b, `flank_patrol` wreck); point echoes within 2 mm on average (36 cases, 4 seeds); the face builds' "free" range self-check -3.06 m (1x32) and -3.31 m (2x32), failing, -> within 0.06 m, passing; long-range ranges move 0.5 to 0.8 m on some pings; an FLS scene at most 0.09 m; default `off`: 12 of 12 report hashes equal the base | D-264 |
+| The short-range mode (opt-in; 0.25 s after each 2 s ping) | **worse:** the long mode's update rate 82 % (a cycle of 23.2 s for 18.93 s); the 0.25 s pulse 9.0 dB less energy; the short ping's echoes in the next long window not simulated; a 4 m/s mover's range about 21 m apart between the two kinds. On `popoto_short_range_mode`: without it nothing inside 1500 m; with it the object at 800 m on 5 of 5 short pings and tracked, a mover opening through 1.5 km one track, the 12 km ship as the baseline alone; `popoto_elevation_short_range`: 10, 60 and 160 m at 1 km within 2 m | D-265; `docs/design/short_range_mode.md` |
+| The engines on `popoto_face_2row_shallow` without `elevation` | **disagree: C++ 2 detections, Python 1** (also on the base; not fixed, `sonar-hygi`) | D-264 |
+| Full GPU suite, three shards, tenth batch's tree `904c744` | **3567 passed, 126 skipped, 9 xfailed, none failed** (the five more expected failures D-266's) | D-267 (jobs 6b0aaa8054072e8b716d27fd, 6b0aaa8054072e8b716d27ff, 6b0aaa816c5d61fff18c3ede) |
+
 ## Measured in D-262 and D-263 (the ninth batch; a summary, worst first; the entries and files named hold the rest)
 
 Every number here is ours, on simulated records; device runs NVIDIA L4 jobs through Hugging Face; one seed, 6 pings
@@ -3638,7 +3661,7 @@ a case at the deep site; illustrative site, assumed class values. `docs/tasks/DO
 
 | What | Result | Source |
 | --- | --- | --- |
-| **What the 2 s hyperbolic baseline (197 dB, plain filter) cost** | **nothing seen inside 1.5 km** (0.75 km before); the three elevation scenes keep the 1 s linear sweep, no depth at 12 km measured; the face builds' trials at 1700 m (1000 m before): the three-row rehearsal's depth 28 m, 35 m and none for 60 m true (fails; with the 1 s sweep at 1.7 km no depth, at 1.0 km 59, 60, 63 m); the one- and two-row 3 m range check missed by about 0.06 m (the leading edge 3.0 m early at 2 s, 1.6 m at 1 s); a mover's range 6 m per m/s off, no range rate; the simulator 5 to 17 times slower on a CPU, the chain's cost a ping unchanged (0.9 to 2.8 s, C++, CPU) | D-262; HB.1 |
+| **What the 2 s hyperbolic baseline (197 dB, plain filter) cost** | **nothing seen inside 1.5 km** (0.75 km before); the three elevation scenes keep the 1 s linear sweep, no depth at 12 km measured (measured since, D-266: the tenth batch's section above); the face builds' trials at 1700 m (1000 m before): the three-row rehearsal's depth 28 m, 35 m and none for 60 m true (fails; with the 1 s sweep at 1.7 km no depth, at 1.0 km 59, 60, 63 m); the one- and two-row 3 m range check missed by about 0.06 m (the leading edge 3.0 m early at 2 s, 1.6 m at 1 s; corrected by D-264: -3.06 / -3.31 m, the offset set by the echo's SNR, not the pulse length); a mover's range 6 m per m/s off, no range rate; the simulator 5 to 17 times slower on a CPU, the chain's cost a ping unchanged (0.9 to 2.8 s, C++, CPU) | D-262; HB.1 |
 | The baseline from its own configuration, deep site, sea state 3, bubble law, 12 km | **every target 6 of 6**: closing hull +1.28 dB, crossing +5.13, point +6.12, ship +6.26; the oblique hull +0.73 dB as D-260's `ss3_hfm2` (the same transmission; detected and not tracked there): **thin, one seed** | D-262 (job 6b0a8a7854072e8b716cb7a8); not yet in `doppler_deep12_eval.json` (`sonar-n8ho`) |
 | The same, sea state 4 / sea state 5 | sea state 4 the two hulls 0 of 6; sea state 5 nothing held (needs a larger transmitter not yet identified) | D-262 |
 | The baseline on the 12 km shelf (`popoto_12km_large_submerged` with the 2 s hyperbolic sweep set) | closing 9.84 dB, oblique 10.0, crossing 12.61, all 6 of 6 and tracked as movers (the 1 s linear sweep 7.98, 9.22, 11.41 dB, D-243) | D-262 (job 6b0a8a7954072e8b716cb7aa) |
@@ -3672,13 +3695,14 @@ The deep site's measurement is in the section after "Not yet measured".
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.
 The full CPU suite at the present tree: the last whole CPU run on record is on the tree of
 D-157 (commit `605a4e1`, 2026-11-22; 157 of 157 ctest entries, `STATUS.md`); it has not been
-rerun since, and each later package (D-158 to D-263) ran its affected test files.
-The full GPU suite last ran on the ninth batch's tree (`dfe9733`, D-263) as three shards: 3507
-passed, 124 skipped, 4 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b0a8a766c5d61fff18bd22e,
-6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3); before it 3494 passed, 124 skipped, 4 xfailed on the
-eighth batch's tree (D-261). Also not measured: **a depth at 12 km with the 2 s baseline** (the elevation scenes
-keep the 1 s sweep; `sonar-9035`), anything inside 1.5 km with it (a short-range mode, `sonar-9ed5`), the
-leading-edge range offset's correction (`sonar-8h09`), the deep site on
+rerun since, and each later package (D-158 to D-267) ran its affected test files.
+The full GPU suite last ran on the tenth batch's tree (`904c744`, D-267) as three shards: 3567
+passed, 126 skipped, 9 xfailed, none failed, on an NVIDIA L4 (Hugging Face jobs 6b0aaa8054072e8b716d27fd,
+6b0aaa8054072e8b716d27ff, 6b0aaa816c5d61fff18c3ede); before it 3507 passed, 124 skipped, 4 xfailed on the
+ninth batch's tree (D-263). Also not measured: depth against range with the 2 s sweep on the whole grid on a CPU,
+the `eigenray` tier, a rough surface, an extended target, a profile or sea states (D-266; the GPU grid's tables not
+committed, `sonar-1l0m`); the short-range mode on a reverberating site, with its inter-ping echoes, or on a device
+(`sonar-qsna`); the range correction on all scenes with several seeds on a device (`sonar-82nx`); the deep site on
 more than one seed (the resolved hulls' margins with it 0.2 to 1.3 dB), why the oblique hull is detected and not
 tracked there and why the closing hull is untracked at the last alternating ping (`sonar-2bjq`), the tone path's
 false-alarm rate on a train scene over more than 4 target-free pings (D-252 counts 4), the reverberation's

@@ -22,6 +22,16 @@ D-240 name no matrix row and the batch did not edit this file. The `penetration:
 cap; the sea-state labels (D-235) and the rest of the batch (the rows' gain against reverberation, Doppler D3, POP-3,
 the sharding) touch no conformance item.
 
+**State 2026-11-28, after the merge `cd620b4` of the tenth batch (D-264 to D-267; full GPU suite as three shards
+3567 passed, 126 skipped, 9 xfailed; jobs 6b0aaa8054072e8b716d27fd, 6b0aaa8054072e8b716d27ff,
+6b0aaa816c5d61fff18c3ede; the ninth batch, D-262 and D-263, had 3507 passed, 124 skipped, 4 xfailed):** D-262 to D-267
+name no matrix row and neither batch edited this file. The tenth batch's changes are the chain's and a tool's, all
+ours: the opt-in pulse reference for the leading edge (D-264; it also finds the simulator right, its replica peaks
+within 6 mm of 2R/c), the opt-in short-range mode (D-265; the simulator follows a ping schedule and still makes each
+ping on its own, so one ping's echoes in the next window are not simulated), and the depth study (D-266), which
+changed no default; its five more expected failures are chain defects (the stacked rows' depth in shallow water, the
+timing stage's floor), not conformance items. No row's verdict changes.
+
 **State 2026-11-28, after the merge `08ddfab` of the eighth batch (D-255 to D-261; full GPU suite as three shards
 3494 passed, 124 skipped, 4 xfailed; jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00,
 6b0a30156c5d61fff18ac1ae):** D-255 to D-261 name no matrix row and the batch did not edit this file. The FLS

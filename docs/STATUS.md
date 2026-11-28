@@ -2,20 +2,52 @@
 
 What exists, how each part was checked, and what is open or known to be wrong. Numbers and
 the commands that produce them are in `RESULTS.md`; reasons for choices in `DECISIONS.md`
-(now to D-263); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 33); keys in
+(now to D-267); derivations in `PHYSICS_NOTES.md` (Secs. 12 to 33); keys in
 `CONFIGURATION.md`.
 
-**Read first (D-262, D-263): since the ninth merge the 12 km long-range baseline in the tree is a 2 s
+**Read first (D-264 to D-267, the tenth merge `cd620b4`): the deployed stacked-row depth states wrong depths
+confidently in shallow water, and as deployed it cannot tell a submerged target from a ship at 12 km** (D-266;
+`docs/tasks/DEPTH_RANGE.md`, `docs/tasks/depth_range_sweep.json`; ours: simulation through both chain engines, the
+1 s sweep on the grid and spot cases of the 2 s; no default moved). F1, in every stacked-row deployment file: in
+100 m of water with own depth 30 m the rows' depth is dishonest (the truth more than 2 sigma from the stated depth)
+on 22 of the 28 depths given at 1 to 2 km; **a ship 4 m deep at 1.7 km reads the sea bed, 95.7 +- 27.4 m, and is
+called submerged on 4 of 4 pings** (the 2 s sweep: 99.8 +- 30.4 m), and again at 8 km on 2 of 4; in deep water
+from own depth 30 m a 30 m target at 1.7 km reads 3.4 +- 10.2 m and is called surface on 4 of 4. Two seeds agree
+to 0.1 m: not noise. Cause: the direct echo leads its surface and bottom pairs by only 2.8 and 4.4 range cells at
+1.7 km, the rows read a mixture that matches no path, and the multipath term (D-133) adds nothing when no echo
+explains the reading. **Not fixed** (issue `sonar-4e2h`): the fix moves a default and waits on the owner (question
+70); held by five strict expected-failure tests (`tests/python/test_depth_range_sweep.py`; the suite's 9 xfailed).
+**As deployed, depth cannot tell a submerged target from a ship at 12 km**: the deployment files' sound-speed
+gradient prior (0.05 /s, unconfirmed) adds 48 m of sigma at 1.7 km and 2400 m at 12 km, so the rows tell nothing
+from the surface beyond about 2 km; and the rows' 1.5 m aperture separates the direct and surface paths in angle
+only for a target deeper than a tenth of the range (1200 m at 12 km). Where the rows' depth was shown to work:
+about 1 km, with the short pulse, in the geometry of the elevation scenes (`popoto_elevation_free`, `_rehearsal`;
+`popoto_elevation_short_range` within 2 m from the short pings, D-265); with the water known, from a deep own depth
+(225 m, deep water) the rows tell 30 m from the surface to 2 km, 60 m to 5 km, 150 m to 8 km, 300 m to 12 km. **A
+case for the three-row face from depth at 12 km is not shown.** The opt-in multipath timing stage (in no shipped
+build) would tell 30 to 300 m at 12 km from 225 m with 0.2 to 1.2 m of sigma if the water is known, and has its own
+defects (F2 to F4: a ship read 8.0 +- 0.3 m at 3 km, called submerged; `sonar-1l0m`). Also merged, opt-in, no
+default moved: a pulse-referenced leading-edge range (`cfar.range_edge_correction: pulse`, D-264; the offset
+depends on the echo's SNR, not on the pulse length, which corrects the account of D-262 and of the last version of
+this file; the face builds' "free" range self-check passes with it, -3.06 / -3.31 m -> within 0.06 m, and still
+fails by default; two tracks end 0.006 and 0.019 m further from the truth with it; question 69) and a short-range
+mode (D-265: a 0.25 s ping after each 2 s ping; it costs the long mode 18 % of its update rate; the short ping's
+echoes from beyond 3 km in the next long window are not simulated; questions 73 to 75). Found, not fixed: the
+engines disagree on `popoto_face_2row_shallow` without `elevation` (C++ 2 detections, Python 1; `sonar-hygi`).
+Nothing is on a side branch. Suite: 3567 passed, 126 skipped, 9 xfailed (D-267). Open items 101 to 107.
+
+**Read first too (D-262, D-263): since the ninth merge the 12 km long-range baseline in the tree is a 2 s
 hyperbolic sweep (4-6 kHz) at 197 dB rms with the plain matched filter, every Doppler option off**
 (`configs/sonars/popoto_long_range.yaml`; the owner's decision D-256; ours). **What got worse with it, first:**
 nothing is seen inside 1.5 km (c T / 2; 0.75 km with the former 1 s pulse). The three elevation scenes
 (`popoto_elevation_free`, `_shallow`, `_rehearsal`, targets at about 1 km) keep the 1 s linear sweep by stated
-override, so the stacked rows' elevation is demonstrated with the short pulse only, and no depth at 12 km has been
-measured. The face builds' own trials moved their near target from 1000 m to 1700 m and two of their self-checks
+override, so the stacked rows' elevation is demonstrated with the short pulse only (depth against range to 12 km was
+measured since, D-266: above). The face builds' own trials moved their near target from 1000 m to 1700 m and two of their self-checks
 fail (they are not suite tests; not loosened): the three-row rehearsal's depth honesty at 1.7 km (28 m, 35 m and
 none for 60 m true; it fails there with the 1 s sweep too: the geometry, not the sweep) and the one- and two-row
-"free" range check, which misses 3 m by about 0.06 m (the leading-edge range sits about 3.0 m early with a 2 s
-pulse); the three-row "free" range check's criterion changed (it compares with the truth displaced by the
+"free" range check, which misses its 3 m limit: -3.06 m (1x32) and -3.31 m (2x32) by D-264's measurement (D-262's
+"about 0.06 m" was the 1x32's miss; the offset depends on the echo's SNR, not the pulse length, D-264; it passes
+with the opt-in `cfar.range_edge_correction: pulse`); the three-row "free" range check's criterion changed (it compares with the truth displaced by the
 predicted bias). A mover's range reads 6 m per m/s of range rate off (f_stop T / B), which the plain filter cannot
 correct, and the chain gives no range rate (the sweep bank takes a linear sweep only). On the regenerated gallery
 (job 6b0a8a776c5d61fff18bd237) the winter-sand ship's track moved from 2.8 to 9.3 m from its outline (the hull) and the
@@ -38,10 +70,9 @@ The planner's figures (free field one / two / three rows +1.9 / +4.4 / +5.9 dB, 
 sweep; the trade study's "up to sea state 3"; POP-3's "partly met") remain the model's, **for an unresolved,
 non-moving target**: the class's hull, whose highlights resolve in range against a detector that tests 0.375 m and
 2 m cells, came 3.8 to 6.0 dB under the point in the same case (D-260). The former baseline (1 s, 197 dB, linear)
-held neither the closing nor the oblique hull nor the ship at sea state 3 (0 of 6 each, D-260). Started on this
-tree and not merged, each on its own branch: the depth estimate against range (`depthrange`, `sonar-9035`), the
-leading-edge range offset (`rangeedge`, `sonar-8h09`), a short-range mode (`shortmode`, `sonar-9ed5`): the owner,
-2026-11-28: "do all 3". Open items 96 to 100.
+held neither the closing nor the oblique hull nor the ship at sea state 3 (0 of 6 each, D-260). The owner's "do all 3"
+(2026-11-28: the depth estimate against range, the leading-edge range offset, a short-range mode) was done and
+merged with the tenth batch (above). Open items 96 to 100.
 
 Everything here is simulation and analysis. **Nothing has run on a vehicle, on the Popoto
 boards, on a DGX Spark, a Jetson or any Sensor Bridge hardware. No sonar described here is
@@ -70,7 +101,9 @@ Results after the shallow trials keep their whole bounce series and the self-tes
 
 The C++ live chain on the device takes 0.0155, 0.0282 and 0.0395 s a ping for one, two and three rows (`e10b17f`), against 0.0097, 0.0212 and 0.0310 s at `15f1121`. Measured (`tools/live_chain_ablation.py` on an L4, `docs/benchmarks/live_chain_ablation_l4_e8d30de.json`): the 6 to 7 ms are the multiscale detector of the detector rework (D-93). It runs on the CPU (`libs/live` `multiscale_detect`, no backend) and needs the fine power map back from the device every ping, where the earlier `cell_statistic: mean` ran CFAR on the device: `mean` saves 6.0, 6.3 and 7.2 ms, and the 15f1121 chain section with `mean` gives 9.8, 21.2 and 30.3 ms, the first run's times. Coverage, the ray-limited elevation search, the finer elevation step and the gradient terms each move it by under 0.6 ms. Not a fault: the cost of the detector chosen, 0.04 % of the 17.9 s ping interval; moving it to the device is a possible optimisation (issue `sonar-01u`). `gpu_benchmark_all_l4.json`, which the design report reads, is now that run; the first run is kept as `gpu_benchmark_all_l4_15f1121.*`. Since D-150 the multiscale statistic runs on the device: 12.73, 25.92 and 37.52 ms a ping as deployed (`docs/benchmarks/live_chain_ablation_l4_b2a918e.json`). These benchmark pings have ideal clocks and the benchmark leaves the board synchronisation stage out (`tools/gpu_benchmark_all.py`, `group_live`), so D-190 to D-195, which made that stage and the decimate-first correction faster, do not apply to them and the files were not re-measured. **With board synchronisation, on the Popoto trials' pings** (L4, chain time a ping after the first, median): C++ 0.048 / 0.054 / 0.065 s at 32 / 64 / 96 channels, Python 0.084 / 0.18 / 0.25 s (the one-row build decimates first: D-195; 64 and 96 channels: D-192; `tools/live_chain_timing.py`). Before D-191 the C++ engine took 1.05 to 1.83 s a ping at 64 and 96 channels there. **With the Doppler bank on, on the scenes' pings** (L4, C++ chain, `tools/live_chain_timing.py`, bank off -> `max` -> `cfar`): `flank_patrol` 0.115 -> 0.393 -> 0.418 s, `popoto_far_mover` 0.062 -> 0.349 -> 0.374 s, `popoto_12km` 0.019 -> 0.097 -> 0.108 s with the batched form of D-242 (job 6b090cd56c5d61fff1888217), still 3.4 to 6.0 times the chain (D-245's correction); before it 3.558 -> 3.935, 2.410 -> 2.766 and 0.372 -> 0.532 s with `max` and `cfar` (job 6b08c9d954072e8b71685cd6, D-241).
 
-**Last full suite: 3507 passed, 124 skipped, 4 xfailed, none failed**, as three shards on the ninth batch's tree (D-262; branch `batch9` at `dfe9733`, merged as `e16e214`; NVIDIA L4, Hugging Face jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; the same switches as D-261; D-263). The suite takes longer with the 2 s pulse: the slowest shard 60 minutes of tests (40 before). No merge conflict; the gallery was regenerated on this tree and committed whole (job 6b0a8a776c5d61fff18bd237, `4720050`).
+**Last full suite: 3567 passed, 126 skipped, 9 xfailed, none failed**, as three shards on the tenth batch's tree (D-264 to D-266; branch `batch10` at `904c744`, merged as `cd620b4`; NVIDIA L4, Hugging Face jobs 6b0aaa8054072e8b716d27fd, 6b0aaa8054072e8b716d27ff, 6b0aaa816c5d61fff18c3ede; the same switches as D-263; D-267). The five more expected failures are D-266's strict ones (the shallow-water depth dishonesty F1 and the timing stage's floor F2: they fail as the code stands and hold it). One conflict in building the batch (`docs/handoff/SIMULATION.md`), resolved by keeping both sides' rows. At this tree: 102 scenario files, 179 Python test files (2147 `def test_` functions), GoogleTest 220 cases by the sources' count (219 `TEST` and 1 `TEST_P`).
+
+The suite before it: **3507 passed, 124 skipped, 4 xfailed, none failed**, as three shards on the ninth batch's tree (D-262; branch `batch9` at `dfe9733`, merged as `e16e214`; NVIDIA L4, Hugging Face jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; the same switches as D-261; D-263). The suite takes longer with the 2 s pulse: the slowest shard 60 minutes of tests (40 before). No merge conflict; the gallery was regenerated on this tree and committed whole (job 6b0a8a776c5d61fff18bd237, `4720050`).
 
 The suite before it: **3494 passed, 124 skipped, 4 xfailed, none failed**, as three shards on the eighth batch's tree (D-257 to D-260; branch `batch8` at `3fb6bf4`, merged as `08ddfab`; NVIDIA L4, Hugging Face jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae; the same switches as D-254; D-261). **The first suite on that batch (at `ff04b58`) failed 3 tests**, 3488 passed: all three from the deep-site package's new files in test files its agent had not run (a list of shipped sonars; D-227's "a scene states its site once"; a no-bottom warning), fixed in the scenes and the list with the records unchanged (hashes; D-260). One conflict in building the batch (`docs/tasks/DOPPLER.md`: both appended sections kept). The container was restarted during the batch (2026-11-27); two agents' background runs were lost, no committed work (D-261).
 
@@ -202,8 +235,8 @@ How things are verified, in the words used below:
 | 11 Holoscan integration | **partly** | Operators in Python and C++ and pipelines fed by the simulator, file replay and an emulated board over UDP ran on a T4 and an L4 with Holoscan SDK 4.6.0. The ultrasound source runs against the reference's simulated hardware. Sensor Bridge 2.7.0 loopback carried six pings with reports equal to the direct chain's at half real time; the loopback test has passed in a job at half real time; at real time the emulated board's spread catch-up lost nothing in 20 runs (open item 34). At a Popoto build's rate (32 to 96 channels, 102.4 kHz) the loopback loses frames only at the start of a run (D-186 to D-188) and both engines are real time on an L4 (D-190 to D-192); every receiver, the Holoscan source operator among them, merges per-board streams (D-200). Not done: the reference's SDK build, any hardware run, a host with Sensor Bridge's own socket setup (D-189), the RoCE receiver. The Holoscan `ConditionOp` applies the chain's gain step when asked (open item 33, closed) |
 | 12 Realistic propagation, reverberation and noise | **done as far as open literature allows** (audited item by item 2026-11-25; issues sonar-dzu and sonar-k7m closed, the remaining work split into sonar-rcq, sonar-pup, sonar-7iy, sonar-6t5, sonar-6fc, sonar-ugc, sonar-9le, sonar-3k1, sonar-5wa, sonar-f3mi, sonar-5bf2, sonar-yus6, with sonar-nyn and sonar-kob for stale documents); most of the gap to SST (APL-UW TR 0702) is closed in the simulator | Bellhop provider (also range-dependent bathymetry and, new, range-dependent sound speed); bottom, surface and volume reverberation; time, angle and frequency spreading; one-way sources; noise with spectrum and array coherence; a basin's late reverberation; validation against TR 0702 (`test_sst_validation.py`) and against three sets of measured channels. Not done: the APL-UW boundary models as published (TR 9407 is limited-distribution and unread). 3-D propagation: the shipped tiers are N×2-D at most (over a seamount 3 to 4 dB too loud on bearings over the flanks, against Bellhop3D, `test_seamount_3d.py`; explained further in D-197); since 2026-11-26 an opt-in `eigenray3d` tier runs Bellhop3D as a separate process (the owner's approval; `docs/tasks/PROPAGATION_3D.md` P1 to P6, issue sonar-rcq in progress), used only by the illustrative `flank_seamount_3d`, with no reverberation over relief at that tier. Done since: the PE cross-check against PyRAM 1.3.0 (`test_ram_crosscheck.py`: 500 m windows from 0.5 to 5 km within 1.42 dB, depth means within 0.44 dB, 6 to 10 kHz; bottom density not exercised). Since 2026-11-26 the boundary models, the sediment tier and time spreading are aligned to the read references and four owner-supplied papers (D-204 to D-224; `docs/references/CONFORMANCE.md`), with what got worse in each entry |
 | 13 Performance | **partly** | Benchmarks on T4, L4, A10G, A100 and two A10Gs; every stage with a CUDA backend benchmarked on an L4, before and after the batched reverberation and beamformer kernels. Not done: any DGX Spark or Jetson measurement; FLOP/s from hardware counters (Nsight Compute is refused on the Hugging Face jobs, ERR_NVGPUCTRPERM; derived backprojection figures in RESULTS); the synthesis kernel's FLOP count; the Ceres solve of motion estimation is CPU only (its delay estimation has a CUDA path, D-148). The multiscale detector's statistic runs on the device (D-150). `docs/JETSON.md` is untested |
-| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds passed every self-test on both engines with the 1 s sweep (42 of 42, D-142 and D-143; open item 38); **with the 2 s baseline (D-262) two self-checks fail** (the three-row rehearsal's depth at 1.7 km, the one- and two-row 3 m range check by about 0.06 m; open item 97). A seventh spec, the sea-state-5 alternate `popoto_face_3x32_ss5` (D-260), is a placeholder that measured does not meet sea state 5 (open item 91); D-260 records no self-test run for it. **The baseline since D-262 (2 s hyperbolic, 197 dB) measured holds every target at the deep site at sea state 3, thinly (one seed), not at sea state 4; blind inside 1.5 km** (open item 96; the 1 s linear sweep before it did not hold the resolved hull, item 90) |
-| 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water** | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py` |
+| 14 The Popoto long-range array as a staged build (not in the original milestone list) | design and software exist; **nothing is built** | Six build specs (`configs/builds/`), generated sonar and deployment files, a parts list, a plan (`DESIGN.md`, `REFERENCE_DESIGN.md`), self-tests per build (`tools/build_from_spec.py`); all six builds passed every self-test on both engines with the 1 s sweep (42 of 42, D-142 and D-143; open item 38); **with the 2 s baseline (D-262) two self-checks fail** (the three-row rehearsal's depth at 1.7 km: D-266's F1, the rows' depth dishonest there; the one- and two-row 3 m range check, -3.06 / -3.31 m, which passes with the opt-in `cfar.range_edge_correction: pulse` of D-264 and still fails by default; open items 97, 101, 103). A seventh spec, the sea-state-5 alternate `popoto_face_3x32_ss5` (D-260), is a placeholder that measured does not meet sea state 5 (open item 91); D-260 records no self-test run for it. **The baseline since D-262 (2 s hyperbolic, 197 dB) measured holds every target at the deep site at sea state 3, thinly (one seed), not at sea state 4; blind inside 1.5 km** (open item 96; the 1 s linear sweep before it did not hold the resolved hull, item 90) |
+| 15 Refraction in operation (depth, coverage; not in the original list) | built, opt-in except three deployment defaults; **limited by what is known of the water**; **measured against range (D-266): the deployed stacked-row depth is dishonest in 100 m of water at 1 to 2 km and, as deployed, uninformative beyond about 2 km (it cannot tell a submerged target from a ship at 12 km)** (open item 101) | `test_multipath_depth.py`, `test_raytrace.py`, `test_raytrace_cpp.py`, `test_refraction_rays.py`, `test_coverage.py`, `test_profile_ladder.py`, `test_ssp_range.py`, `test_deployment_defaults.py`, `test_depth_range_sweep.py` (five strict expected failures) |
 
 ## What works, component by component, and how it was checked
 
@@ -416,7 +449,9 @@ sections further down.
   list of possible elevations unless water depth rules the others out. With
   `elevation.multipath_sigma` (D-133; on in every stacked-row deployment file) the depth
   sigma holds what unresolved boundary echoes add, and `depth_multipath_limited` says when
-  the rows read the surface or the sea bed (`test_multipath_sigma.py`).
+  the rows read the surface or the sea bed (`test_multipath_sigma.py`). **Measured against range (D-266, open item
+  101): the term does not hold it in 100 m of water at 1 to 2 km** (dishonest on 22 of 28 depths; a reading no
+  echo explains gets no term), and as deployed the gradient prior ends depth by about 2 km.
 - **Stage 2** (D-129): navigation from an inertial unit with a Doppler log through an
   adapter (`tools/nav_adapter.py`; the mapping for the vehicle's own unit is a template),
   water depth from altitude plus depth, the sound-speed ladder, decimate-first processing
@@ -425,7 +460,8 @@ sections further down.
   and report lines equal before and after on three scenarios, both engines.
 - **Depth from multipath timing** (D-109, D-112, D-113), **coverage** (D-114), **the
   profile ensemble** (D-115), **the ray-limited elevation search** (D-116). Both engines;
-  the C++ is tested through its bindings (no GoogleTest was added for these).
+  the C++ is tested through its bindings (no GoogleTest was added for these). The timing stage, opt-in and in no
+  shipped build, has dishonest cases measured by D-266 (F2 to F4, open item 102, `sonar-1l0m`).
 - **Deployment defaults approved by the owner** (D-118 to D-120): `sector_from_rays` in
   every stacked-row file; multipath depth through rays with flagged depths withheld
   wherever a build enables it (none does); coverage on the face and vehicle files with
@@ -937,6 +973,12 @@ Grouped; within a group the most consequential first.
    (RESULTS). Its `class_cases` half is rerun separately (`--classes`).
 
 ### Depth
+
+**Read with item 101 (D-266): the items of this group describe single scenes; measured against range, the deployed
+three-row depth is dishonest in 100 m of water at 1 to 2 km (a ship 4 m deep at 1.7 km read 95.7 +- 27.4 m and
+called submerged on 4 of 4 pings) and, with the deployed gradient prior, tells nothing from the surface beyond about
+2 km.** Where it holds: about 1 km with the short pulse in the elevation scenes' geometry, and with the water known
+from a deep own depth out to the ranges of D-266's table (300 m to 12 km from 225 m; 30 m only to 2 km).
 
 6. **Two rows at 3 km in 100 m of water read a boundary, and now say so** (D-133). Rows
    1.5 m apart cannot separate the direct, surface and bottom echoes of a target there;
@@ -1689,7 +1731,8 @@ Grouped; within a group the most consequential first.
     `e16e214`, D-263; issue `sonar-7h6q`, closed; `docs/tasks/DOPPLER.md` HB.1 to HB.4; ours; a default moved, the
     owner's decision D-256). **Worse, first:** nothing is seen inside 1.5 km (c T / 2; 0.75 km before); the three
     elevation scenes keep the 1 s linear sweep by stated override (targets at about 1 km), so the stacked rows'
-    elevation is shown with the short pulse only and no depth at 12 km is measured; two build self-checks fail and
+    elevation is shown with the short pulse only and no depth at 12 km is measured (measured since: D-266, item 101,
+    dishonest in shallow water at 1 to 2 km and uninformative beyond about 2 km as deployed); two build self-checks fail and
     one's criterion changed (item 97); a mover's range reads 6 m per m/s of range rate off and the plain filter
     cannot correct it; no range rate (the bank takes a linear sweep only); the gallery's changes (item 100); the
     projector (via secondary, the sheets as read in `docs/design/projector_selection.md`): the TR-1075D gives 2 s at
@@ -1716,17 +1759,22 @@ Grouped; within a group the most consequential first.
 97. **Two of the face builds' self-checks fail with the baseline, and one criterion changed** (D-262; not suite
     tests; not loosened). The trials' near target moved from 1000 m to 1700 m (outside the blind range). (1) The
     three-row rehearsal's depth honesty at 1.7 km: 28 m, 35 m and none for 60 m true (it fails there with the 1 s
-    sweep too and passes at 1.0 km: the geometry, not the sweep); issue `sonar-9035` (the depth estimate against
-    range, branch `depthrange`). (2) The one- and two-row "free" range check misses 3 m by about 0.06 m: the
-    leading-edge range sits about 3.0 m early with a 2 s pulse (1.6 m with 1 s, either sweep); issue `sonar-8h09`
-    (branch `rangeedge`). (3) The three-row "free" range check now compares with the truth displaced by the
+    sweep too and passes at 1.0 km: the geometry, not the sweep); explained by D-266 (item 101): F1's dishonesty on
+    one ping (35.4 +- 11.7 m for 60 m) and "no depth" on another; `sonar-9035` closed, the fix `sonar-4e2h`. (2) The
+    one- and two-row "free" range check misses its 3 m limit: -3.06 m (1x32) and -3.31 m (2x32) by D-264's
+    measurement (D-262's "about 0.06 m" was the 1x32's miss; the 2x32 missed by 0.31 m). **Corrected by D-264: the
+    offset does not grow with the pulse length**; it depends on the echo's SNR (about (c / 2 pi B) sqrt(S / F)
+    before the peak, capped one cell before it; at equal SNR pulses of 0.1 to 4 s read alike, -1.4 to -1.9 m at
+    37 dB; the 2 s sweep read earlier because it carries 3 dB more energy). With the opt-in
+    `cfar.range_edge_correction: pulse` both builds pass (within 0.06 m); by default they still fail (item 103). (3) The three-row "free" range check now compares with the truth displaced by the
     hyperbolic sweep's predicted range bias (f_stop T / B, 6 m per m/s), keeping the raw error and the bias in its
     output; reviewed by the orchestrator. The statement in the "Where things stand" table that all six builds pass
     every self-test (42 of 42, D-142, D-143) is of the 1 s sweep.
 98. **Not merged, each on its own branch, started on the ninth batch's tree** (D-263): the depth estimate against
     range (`depthrange`, `sonar-9035`), the leading-edge range offset (`rangeedge`, `sonar-8h09`), a short-range mode
     for the long-range sonar (`shortmode`, `sonar-9ed5`). The owner, 2026-11-28, shown the two failing self-checks
-    and the blind range: "do all 3". Nothing of them is in the tree.
+    and the blind range: "do all 3". **All three merged since with the tenth batch (D-267; items 101 to 104); nothing
+    is on a side branch (item 106).**
 99. **Stale with the baseline** (D-262): `docs/tasks/doppler_deep12_eval.json` lacks the baseline's own three
     deep-site cases (job 6b0a8a7854072e8b716cb7a8) and the shelf case (job 6b0a8a7954072e8b716cb7aa): its
     `acceptance.baseline` is still the stand-in `ss3_hfm2` (the same transmission) and says `ss3_baseline` is not
@@ -1745,6 +1793,99 @@ Grouped; within a group the most consequential first.
     speed estimate 5.79 -> 4.41 m/s (true 6.0); `popoto_env_summer_mud_60m` 0 detections before and after. Every named target is
     tracked as before with the same class. FLS, SAS, flank and pool scenes numerically as before; `popoto_far_mover`
     (6-10 kHz) unchanged.
+
+### After the tenth merge (D-264 to D-267)
+
+101. **The deployed stacked-row depth is dishonest in shallow water, and as deployed it cannot tell a submerged target
+    from a ship at 12 km** (D-266; issue `sonar-9035` closed, the fix `sonar-4e2h`, P1, open; `docs/tasks/DEPTH_RANGE.md`
+    DR.1, DR.4, DR.5; ours: image source, a +25 dB point, flat surface, the face's deployed chain told the water, both
+    engines equal to 0.003 m; the 1 s linear sweep on the grid, the 2 s hyperbolic sweep on 8 spot cases, which read
+    alike). "Dishonest": the truth more than 2 sigma from the stated depth. **F1, deployed in every stacked-row
+    deployment file:** in 100 m of water at own depth 30 m the rows' depth is dishonest on 22 of the 28 depths given
+    at 1, 1.7 and 2 km (24 of 68 in all, 7 wrong calls): 70.4 +- 3.5 m for 60 m at 1 km; 83.9 +- 11.6 m for 30 m at
+    1.7 km; 7.1 +- 12.3 m for 60 m at 2 km; a ship 4 m deep at 1.7 km reads the sea bed, 95.7 +- 27.4 m, called
+    submerged on 4 of 4 pings (2 s sweep 99.8 +- 30.4 m), and at 8 km on 2 of 4. In deep water at own depth 30 m a
+    30 m target at 1.7 km reads 3.4 +- 10.2 m, called surface on 4 of 4. Two seeds agree to 0.1 m. Cause: at 1.7 km
+    the direct echo leads the direct-surface pair by 2.8 range cells and the direct-bottom pair by 4.4 (4.8 and 7.4
+    at 1 km); the rows read a phase mixture that matches no path, and the multipath term (`multipath_depth_limit`,
+    D-133) either finds no echo that explains the reading and adds nothing, or a band that leaves the truth out. The
+    3x32 rehearsal's failure at 1.7 km (item 97) is this. **Not fixed:** the remedy (a reading nothing explains
+    widens the sigma or withholds the depth) moves a default result: question 70. Held by five strict
+    expected-failure tests (`tests/python/test_depth_range_sweep.py`: three cases of
+    `test_stacked_row_depth_is_honest_in_shallow_water`, two of `test_multipath_timing_is_honest_above_its_search_floor`).
+    **As deployed** the gradient prior (0.05 /s, unconfirmed) adds 48 m of sigma at 1.7 km, 150 m at 3 km and 2400 m
+    at 12 km: honest, and no target of the class is told from the surface beyond 2 km by the rows. The aperture
+    (1.5 m, 11.5 deg at 5 kHz) separates the direct and surface paths in angle only for a target deeper than about a
+    tenth of the range (1200 m at 12 km). **With the water known** (a profile through the column; the owner: a dive
+    must never be needed; question 72): from own depth 225 m in deep water the rows tell 30 m from the surface to
+    2 km, 60 m to 5 km, 150 m to 8 km, 300 m to 12 km; from own depth 30 m the direct echo's lead is 7.5 times
+    smaller and 30 m is lost at 1.7 km. In 100 m of water: nowhere honestly. More bandwidth (50 kHz for the rows) or
+    more aperture (60 m) would extend it (model): not at a realistic size. A short-range mode restores the deep-water
+    1 km behaviour, not the shallow-water one. Uncertain: at 12 km in deep water 3 of 12 submerged pings lie 2.2 to
+    2.6 sigma off, so the angle's sigma there may be some 25 % small (four pings a case). Not run: the 2 s sweep on
+    the whole grid on a CPU, the `eigenray` tier, a rough surface, an extended target, a profile, sea states. **What
+    this means for the hardware:** the three-row face is recommended in `docs/DESIGN.md` (generated) for one
+    elevation angle instead of a list and 1.5 dB of detection; a case for it from depth at 12 km is not shown.
+102. **The opt-in multipath timing stage has its own dishonest cases** (D-266 F2 to F4; `chain.multipath_depth`, one
+    C++ stage for both engines, in no shipped build; issue `sonar-1l0m`). F2: a target shallower than its search's
+    floor reads the floor with a small sigma (a ship at 4 m: 5.1 +- 0.2 m at 1.7 km, 8.0 +- 0.3 m at 3 km from own
+    depth 225 m, called submerged at 3 km; held by the strict expected failure above). F3: in 100 m of water it pairs
+    the wrong arrivals (a ship at 2 km: 67.0 +- 1.5 m, called submerged) and slips carrier fringes with sub-fringe
+    sigma (304.5 +- 0.7 m for 300 m at 1 km); of its depths 16 of 28, 22 of 84 and 23 of 108 are dishonest (100 m of
+    water; deep at 30 m; deep at 225 m); no test yet. F4: a deep target's surface pair is reported as a detection of
+    its own with a folded depth and the angle's sigma (16 such pings). Where it works (water known, own depth 225 m,
+    deep water): every depth of 30 to 300 m from 1.7 to 12 km with 0.2 to 1.2 m of sigma; its own gradient term at
+    12 km (0.05 /s) is 282 m for 30 m and 1371 m for 300 m. Fixing it and deploying it is question 71.
+103. **The leading-edge range: an opt-in pulse reference** (D-264; issue `sonar-8h09` closed; the default question
+    `sonar-82nx`; ours). **Worse or uncertain, first:** with the option on two tracks end 0.006 m and 0.019 m further
+    from the truth (`popoto_12km_two_ships` ship_b, `flank_patrol` wreck); a real weak highlight within 3 dB of a
+    stronger arrival's skirt is read as that skirt; the rule rests on judgement constants (the 3 dB allowance, two
+    adjacent unexplained samples as an onset), no real data, not tested in clutter; the first version read 1.2 m late
+    on `popoto_face_2row_shallow` and was corrected in the package. **The cause, corrected:** the offset does not grow
+    with the pulse length (the account given to the owner, and this file's item 97 before this sweep, were wrong); the
+    leading edge is the first sample over the threshold F on the compressed pulse's own skirt, about
+    (c / 2 pi B) sqrt(S / F) before the peak for an echo of SNR S, capped one cell before the peak's cell; at equal S
+    pulses of 0.1 to 4 s read alike (-1.4 to -1.9 m at 37 dB); the 2 s sweep read earlier because it carries 3 dB more
+    energy. The simulator is right (replica peaks within 6 mm of 2R/c). `cfar.range_edge_correction: off | pulse`,
+    both engines, default `off` (12 of 12 report hashes equal the base). With `pulse`: point echoes within 2 mm on
+    average (36 cases, 4 seeds); the face builds' "free" range self-check -3.06 m (1x32) and -3.31 m (2x32), failing,
+    -> within 0.06 m, passing, the 3 m limit unchanged; by default they still fail. Long-range ranges move 0.5 to
+    0.8 m on some pings; an FLS scene at most 0.09 m; the gallery's long-range scenes use a different estimate and are
+    not affected. Whether it becomes the default: question 69, after a device run on all scenes with several seeds.
+    Tests: `tests/python/test_range_edge.py`, GoogleTest `Detector.ThePulseReferencedEdge...`.
+104. **A short-range mode for the long-range sonar, opt-in** (D-265; `sonar-9ed5` closed, the follow-ups `sonar-qsna`;
+    `docs/design/short_range_mode.md` and `.json`; the sonar's `short_range` block, `docs/CONFIGURATION.md`).
+    **Worse, uncertain or not built, first:** it costs the long mode 18 % of its update rate (a cycle of 23.2 s for
+    18.93 s); the short pulse (0.25 s) has 9.0 dB less energy; the simulator makes each ping on its own, so the short
+    ping's echoes from beyond 3 km in the next long ping's window are NOT simulated (uncounted; by the model it
+    matters where the bottom reverberates); the tracker counts a ping that cannot see a track as a miss, so with a
+    short ping less often than every other ping tracks seen only by short pings are dropped; `xl_auv` at +5 dB barely
+    hands over at 1.5 to 2.25 km; a 4 m/s mover's range differs by about 21 m between the two kinds (it stays one
+    track; the speed estimate not measured). Not built: a build-spec key; survey legs, raster and motion runs with the
+    mode (refused by name); no device run. Chosen: alternating pings, each in its own slot (not chosen, on the model's
+    numbers: the short ping inside the long listening time, two pulses in one ping in one band, a selectable mode
+    alone). Both chains now plan the detector for each ping's own pulse (before, a second kind with equal cell counts
+    kept the first's plan, 0.002 dB off). Acceptance on `popoto_short_range_mode`: without the mode nothing inside
+    1500 m; with it the object at 800 m on 5 of 5 short pings and tracked; a mover opening through 1.5 km stays one
+    track; the 12 km ship as with the baseline alone. `popoto_elevation_short_range`: depths of 10, 60 and 160 m at
+    1 km within 2 m from the short pings. Mode off: records and reports equal the base. Owner questions 73 to 75.
+105. **The engines disagree on `popoto_face_2row_shallow` without `elevation`** (found by D-264 on its base too; issue
+    `sonar-hygi`, P1, open; not fixed): C++ reports 2 detections, Python 1 (an extra C++ detection at 3116.9 m,
+    32.48 dB, against Python's one at 33.23 dB, by the issue). The two engines must stay equal (a binding rule).
+106. **Nothing is on a side branch** (D-267). The three branches of item 98 (`depthrange`, `rangeedge`, `shortmode`)
+    are merged as the tenth batch (`batch10` at `904c744`, merged as `cd620b4`); the suite: 3567 passed, 126 skipped,
+    9 xfailed, none failed (the five more expected failures are D-266's). New: the GPU job mode
+    `GPUSONAR_JOB=depthrange` (`tools/gpu_job.sh --help`), `tools/depth_range_sweep.py`, `tools/short_range_study.py`,
+    the scenes `popoto_short_range_mode` and `popoto_elevation_short_range` (102 scenario files), the test files
+    `test_depth_range_sweep.py`, `test_range_edge.py`, `test_short_range_mode.py`.
+107. **Still stale** (item 99, issue `sonar-n8ho`, still open): `docs/tasks/doppler_deep12_eval.json` lacks the
+    baseline's own deep-site and shelf cases; `docs/handoff/examples/live_popoto_12km_*` (`sonar-tmvu`);
+    `docs/handoff/hardware_builds.json` evaluates the face builds at 1000 m, inside the 1.5 km blind range;
+    `docs/design/popoto_12km.json` is of the 1 s sweep. **Not committed:** the GPU depth grid with the 2 s sweep (job
+    6b0aaa826c5d61fff18c3ee2, which D-266 says agrees with the CPU sweeps): its tables are not in
+    `docs/tasks/` (issue `sonar-1l0m`). `docs/DESIGN.md` (generated) still says of three rows "Deep water, short range:
+    works" and gives "one answer without help": true of the angle, not shown honest for the depth in shallow water at
+    1 to 2 km (item 101); changing it is a change to `tools/design_report.py`.
 
 API audit (2026-11-20/21, `API_AUDIT.md`): every approved group is merged (D-145, D-146);
 what is left undone is listed at the top of that file. One result moved, none committed:
@@ -1774,7 +1915,10 @@ Decisions already taken are in `DECISIONS.md` and are not repeated here.
    surface or the sea bed, not the target, and now say so with a sigma of 24 to 41 m
    (open item 6), and at 12 km one row was 1.1 dB short with the 1 s sweep (+1.9 dB with the 2 s baseline
    since D-262). Does the face go straight from
-   one row to three?
+   one row to three? Measured since (D-266, open item 101): three rows in 100 m of water at 1 to 2 km give
+   dishonest depths too, and as deployed (the gradient prior) neither two nor three rows tell a submerged target
+   from a ship beyond about 2 km; a case for three rows from depth at 12 km is not shown. What three rows buy as
+   shown: one elevation angle instead of a list, and 1.5 dB of detection (`DESIGN.md`).
 2. **4 to 6 kHz on a board specified for 10 to 100 kHz.** The plan asked Popoto only about
    6 to 10 kHz; the design uses the inputs an octave below their specification and no key
    flags it on the receive side (audit item G-5).
@@ -2084,8 +2228,9 @@ and the standing of sea state 5 (D-256, under question 56).
     issue `sonar-9ed5`): the 2 s pulse, the baseline since D-262, blinds the first 1.5 km (0.75 km at 1 s). Is a
     short-range mode wanted, and what is the longest pulse a candidate projector gives at full drive?
     **The short-range mode answered by the owner, 2026-11-28 (D-263): "do all 3"** (with the depth against range
-    and the range offset); in progress on branch `shortmode`, not merged (item 98). **Still open:** the
-    projector's longest pulse at full drive (to confirm with the maker).
+    and the range offset). **Done: built, opt-in, merged with the tenth batch** (D-265, item 104; no default
+    moved; its own hardware questions are 73 to 75). **Still open:** the projector's longest pulse at full drive
+    (to confirm with the maker).
 67. **How should the resolved hull be handled in the detector?** (D-260; issue `sonar-2bjq`; open item 90): the
     detector tests 0.375 m and 2 m cells, so a hull's highlights that resolve in range are tested alone (the
     oblique and closing hulls 3.8 to 6.0 dB under the point in the same case).
@@ -2101,17 +2246,54 @@ and the standing of sea state 5 (D-256, under question 56).
 **Raised by the ninth merge** (D-262, D-263). Answered: the short-range mode, the depth against range and the
 range offset ("do all 3", D-263; question 66, item 98).
 
-69. **Does the leading-edge range correction become the default?** (D-262, D-263; issue `sonar-8h09`, branch
-    `rangeedge`; open item 97): the leading-edge range sits about 3.0 m early with a 2 s pulse (1.6 m with 1 s);
-    a correction moves every long-range range. To be asked with before -> after numbers when `sonar-8h09`
-    reports.
+69. **Does the leading-edge range correction become the default?** (D-262, D-263, D-264; issue `sonar-82nx`;
+    open items 97, 103): built and merged opt-in (`cfar.range_edge_correction: pulse`, D-264). The offset depends
+    on the echo's SNR, not on the pulse length (D-264 corrects the earlier "3.0 m at 2 s"). Before -> after with
+    it on: point echoes within 2 mm on average (36 cases, 4 seeds); the face builds' "free" range self-check -3.06
+    / -3.31 m -> within 0.06 m (passing); long-range ranges move 0.5 to 0.8 m on some pings, an FLS scene at most
+    0.09 m; worse: two tracks end 0.006 m and 0.019 m further from the truth. D-264 asks for a device run on all
+    scenes with several seeds before the owner decides. **Still open.**
+
+**Raised by the tenth merge** (D-264 to D-267). Answered and done: the short-range mode (question 66; built,
+opt-in, D-265).
+
+70. **Fix the shallow-water depth dishonesty?** (D-266 F1; issue `sonar-4e2h`, P1; open item 101): change the
+    multipath term so that a reading no echo explains widens the sigma or withholds the depth. It moves a default
+    result in every stacked-row deployment file (a ship 4 m deep at 1.7 km in 100 m of water now reads 95.7 +-
+    27.4 m, called submerged); the orchestrator recommends it. Before -> after on the cases of DR.4 to come with the
+    change.
+71. **Fix and deploy the multipath timing stage?** (D-266 F2 to F4; issue `sonar-1l0m`; open item 102): with the
+    water known and from own depth 225 m in deep water it tells 30 to 300 m from 1.7 to 12 km (0.2 to 1.2 m of
+    sigma), where the rows tell only 300 m at 12 km; first its search floor, its shallow-water pairing and fringe
+    slips must be fixed. Deploying it on the face would move a default.
+72. **A source for the sound speed through the water column that needs no dive** (D-266; open item 101): the
+    deployed gradient prior ends depth by about 2 km (48 m of sigma at 1.7 km, 2400 m at 12 km); the owner has said
+    a dive must never be needed. What source is there (a cast before the mission, a model, a sensor)?
+73. **Can the projector and its drive board send 2 s and 0.25 s pulses in turn?** (D-265; issue `sonar-qsna`;
+    open item 104): the short-range mode needs the pulse length to change from one ping to the next.
+74. **The receiver's recovery time after a transmission** (D-265; `sonar-qsna`): how soon after transmitting can
+    the receiver listen? (`projector.blanking_after_s` in a build spec is null.) The mode and the baseline both
+    need it.
+75. **Is 82 % of the long mode's update rate acceptable?** (D-265; `sonar-qsna`): one 0.25 s ping after every 2 s
+    ping makes a cycle of 23.2 s for 18.93 s; one short ping after every three long keeps 93 %, but then tracks
+    seen only by the short pings are dropped between them (the tracker's miss count).
+
+Still open from earlier, with these: the detection and false-alarm probabilities, the operating area and the
+slowest radial speed (51, 52, 44), `--check` on "partly met" (55), the wake rule (64, `sonar-ya9s`), FLS tuning
+(65, `sonar-w3fq`), the resolved hull (67, `sonar-2bjq`), a larger transmitter for sea state 5 (68), the
+projector's longest pulse (66) and its response across 4-6 kHz (61), the far-sidelobe remedy (57, `sonar-wntj`).
 
 ## What is next
 
-1. **The three branches started on the ninth batch's tree** (D-263; the owner: "do all 3"; open item 98): the
-   depth estimate against range at 2, 5 and 12 km with the baseline (`depthrange`, `sonar-9035`, P1), the
-   leading-edge range offset (`rangeedge`, `sonar-8h09`, P1; whether it becomes the default is question 69), a
-   short-range mode (`shortmode`, `sonar-9ed5`). Then the baseline's own cases merged into
+1. **The shallow-water depth dishonesty of the deployed stacked rows** (D-266 F1; `sonar-4e2h`, P1; open item 101):
+   the fix moves a default and waits on the owner (question 70). With it: the engines' disagreement on
+   `popoto_face_2row_shallow` (`sonar-hygi`, P1, item 105); the timing stage's defects and the GPU depth grid's
+   tables committed (`sonar-1l0m`, item 102, question 71); the range correction's device run on all scenes with
+   several seeds before the owner decides the default (`sonar-82nx`, question 69); the short-range mode's
+   follow-ups (`sonar-qsna`: the inter-ping leakage on a reverberating site, window-aware miss counting, a
+   build-spec key; questions 73 to 75). The tenth batch merged the three packages the owner asked for ("do all 3",
+   D-263): depth against range (D-266, `sonar-9035` closed), the range offset (D-264, `sonar-8h09` closed), a
+   short-range mode (D-265, `sonar-9ed5` closed); nothing is on a side branch (item 106). Then the baseline's own cases merged into
    `docs/tasks/doppler_deep12_eval.json` and the 12 km examples regenerated (`sonar-n8ho`, item 99). The ninth
    batch merged the baseline's waveform change (D-262: a 2 s hyperbolic sweep at 197 dB, plain filter; `sonar-7h6q`
    closed; open item 96); two face self-checks fail with it (item 97). The eighth batch merged the FLS deployment files
@@ -2120,7 +2302,7 @@ range offset ("do all 3", D-263; question 66, item 98).
    `sonar-rctz` and `sonar-evd4` are closed. Follow-ups open: `sonar-2bjq` (the resolved hull in the
    detector, the oblique hull not tracked, several seeds; question 67), `sonar-ya9s` (a wake or hop rule,
    question 64), `sonar-w3fq` (the Python chain refusing sub-three-cell windows, FLS 300k and 750k files, FLS
-   tuning; question 65), `sonar-9ed5` (a short-range mode, the projector's longest pulse; question 66),
+   tuning; question 65), `sonar-9ed5` (closed: the short-range mode built opt-in, D-265; the projector's longest pulse is still question 66),
    `sonar-wntj` (the tone's far-sidelobe false detections; not shown to be needed on the 12 km scene, D-252),
    `sonar-j1f9` (batch the backprojection across hypotheses), `sonar-bbqr` (the software diagrams miss
    `doppler_cuda.cu`), `sonar-6k79` (the visualization: page clutter, the short scenes' sound remade,
@@ -2137,12 +2319,14 @@ range offset ("do all 3", D-263; question 66, item 98).
    depth planner file and `DESIGN.md` were regenerated with D-227. What got worse in the gallery is open
    item 87 (and item 16 for earlier regenerations).
 3. The whole CPU suite (`tools/test.sh`) on the present tree: last run whole on the tree of D-157
-   (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the ninth batch's tree
-   `dfe9733` as three shards (3507 passed, 124 skipped, 4 xfailed, HF jobs 6b0a8a766c5d61fff18bd22e,
-   6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; D-263; the slowest shard 60 minutes of tests); before it on
+   (`605a4e1`, 157 of 157 ctest entries), not since. The GPU suite last ran on the tenth batch's tree
+   `904c744` as three shards (3567 passed, 126 skipped, 9 xfailed, HF jobs 6b0aaa8054072e8b716d27fd,
+   6b0aaa8054072e8b716d27ff, 6b0aaa816c5d61fff18c3ede; D-267); before it on the ninth batch's tree `dfe9733`
+   (3507 passed, 124 skipped, 4 xfailed, HF jobs 6b0a8a766c5d61fff18bd22e, 6b0a8a766c5d61fff18bd232,
+   6b0a8a7754072e8b716cb7a3; D-263; the slowest shard 60 minutes of tests); before it on
    the eighth batch's tree `3fb6bf4` (3494 passed, 124 skipped, 4 xfailed; D-261; the first run on that batch
    failed 3, D-260).
-4. The owner's answers on rows, band, converter, projector and site (questions 1 to 12), on Doppler (44 to 49; 43 answered), on the 12 km requirement (51 answered in part, D-235: `large_submerged` first, `ship` second; the worst sea state answered by D-255: the baseline sea state 3, an alternate sea state 5; still open: the detection and false-alarm probabilities, the slowest radial speed), the operating area (52), 32 a row (53), whether `--check` fails on "partly met" (55; `sonar-bh5c`), the tone path's far-sidelobe remedy (57, `sonar-wntj`; not shown to be needed on the 12 km scene, D-252), the projector's response across 4-6 kHz (61; needed now that the hyperbolic sweep is the baseline, D-262), the POP-3 wording the trade study supports (62; measured, it does not hold for the resolved hull), a wake or hop rule for the FLS classifier (64, `sonar-ya9s`; moves a default), FLS tracker tuning (65, `sonar-w3fq`), the projector's longest pulse at full drive (66; the short-range mode answered "do it", in progress, `sonar-9ed5`), the resolved hull in the detector (67, `sonar-2bjq`), a larger transmitter for sea state 5 (68), whether the leading-edge range correction becomes the default (69, when `sonar-8h09` reports), and the real values still wanted under 38 and 40. D-244 answered the baseline, the wording of the requirement, the transmitter by energy and the tone path's default (56); D-248 three.js from the npm registry (58) and time stretch for short records (59, done in D-253); D-249 the reverberation Doppler (60: fix it, done in D-251); D-255 the worst sea state (51, 56) and the FLS deployment block (63, done in D-257); D-256 the baseline's waveform (a 2 s hyperbolic sweep at 197 dB; done, D-262) and sea state 5 as needing a larger transmitter not yet identified; D-263 the short-range mode, the depth against range and the range offset ("do all 3"; in progress).
+4. The owner's answers on rows, band, converter, projector and site (questions 1 to 12), on Doppler (44 to 49; 43 answered), on the 12 km requirement (51 answered in part, D-235: `large_submerged` first, `ship` second; the worst sea state answered by D-255: the baseline sea state 3, an alternate sea state 5; still open: the detection and false-alarm probabilities, the slowest radial speed), the operating area (52), 32 a row (53), whether `--check` fails on "partly met" (55; `sonar-bh5c`), the tone path's far-sidelobe remedy (57, `sonar-wntj`; not shown to be needed on the 12 km scene, D-252), the projector's response across 4-6 kHz (61; needed now that the hyperbolic sweep is the baseline, D-262), the POP-3 wording the trade study supports (62; measured, it does not hold for the resolved hull), a wake or hop rule for the FLS classifier (64, `sonar-ya9s`; moves a default), FLS tracker tuning (65, `sonar-w3fq`), the projector's longest pulse at full drive (66; the short-range mode answered "do it", in progress, `sonar-9ed5`), the resolved hull in the detector (67, `sonar-2bjq`), a larger transmitter for sea state 5 (68), whether the leading-edge range correction becomes the default (69, `sonar-82nx`; built opt-in, D-264), the tenth merge's: fix the shallow-water depth dishonesty (70, `sonar-4e2h`; moves a default; recommended), fix and deploy the multipath timing stage (71, `sonar-1l0m`), a source for the sound speed through the column that needs no dive (72), the short-range mode's hardware (73 to 75, `sonar-qsna`: pulses of 2 s and 0.25 s in turn, the receiver's recovery time, 82 % of the long update rate), and the real values still wanted under 38 and 40. D-244 answered the baseline, the wording of the requirement, the transmitter by energy and the tone path's default (56); D-248 three.js from the npm registry (58) and time stretch for short records (59, done in D-253); D-249 the reverberation Doppler (60: fix it, done in D-251); D-255 the worst sea state (51, 56) and the FLS deployment block (63, done in D-257); D-256 the baseline's waveform (a 2 s hyperbolic sweep at 197 dB; done, D-262) and sea state 5 as needing a larger transmitter not yet identified; D-263 the short-range mode, the depth against range and the range offset ("do all 3"; done, D-264 to D-266, merged D-267).
 5. Real data: a first Popoto recording through `tools/sonar_live.py`, a cast and one
    sounding of a pinger at the trial site, a first FLS log or SAS image through
    `tools/calibrate_sim.py`. Everything in those paths has only seen simulated input or
@@ -2362,7 +2546,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `popoto_far_mover_doppler`, `popoto_12km_doppler`), `flank_patrol_doppler_tone` (D-237) and the two
   12 km large-submerged scenes `popoto_12km_large_submerged` and `popoto_12km_large_submerged_tone` (D-243),
   and the two deep-site scenes `popoto_12km_deep` and `popoto_12km_deep_sea_state_5` (D-260).
-  All 100 files are listed in `SCENARIOS.md`, "Every scenario file".
+  All 102 files are listed in `SCENARIOS.md`, "Every scenario file".
 - Gaps in those scenes: no surface or floor multipath in the gallery pool scenes
   (`pool_fls_p4_2v_walls`, not in the gallery, has wall ghosts, D-201); first-order surface and
   bottom bounces to objects only in the four forward-looking sea scenes at `image_source` (the
