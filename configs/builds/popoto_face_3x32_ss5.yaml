@@ -1,0 +1,141 @@
+# Build spec: the ALTERNATE design for sea state 5 (opt-in; the owner, 2026-11-27, D-255: "Make it sea state 5 but have
+# that as an alternate and the baseline is sea state 3"). The shipped full face (configs/builds/popoto_face_3x32.yaml,
+# the BASELINE: 1 s at 197 dB, 12 km up to sea state 3) with ONLY the transmit energy changed: 4 s at 200 dB.
+# Nothing shipped changes; this file and the files generated from it are new.
+#
+# Why 4 s at 200 dB (docs/design/popoto_trade_study.md section 0, `tools/popoto_trade_study.py --transmit`; ours, model;
+# sites illustrative, target strengths assumed): the least energy a ping that holds `large_submerged` and `ship` at 12 km
+# at the deep site at sea state 5 with the apl_1994 bubble law is 206 dB re 1 uPa^2 s at 1 m (+9 dB over the shipped
+# 197). Three options give it: 2 s at 203 dB (no single listed projector: two TR-1075D in phase, unconfirmed), 4 s at
+# 200 dB (the Massa TR-1075D gives 201.7 dB at its rated drive at 19 % duty, free of cavitation below 29 m by its maker's
+# statement scaled with static pressure; via secondary: the sheets as read in docs/design/projector_selection.md,
+# tools/projector_candidates.py), 8 s at 197 dB (0.0 dB short at 32 % duty, a 6 km blind range). The planner's margins for
+# this option at sea state 5 with the law: +2.0 dB (`large_submerged`) / +2.9 dB (`ship`), for an echo with no radial speed.
+# What it costs (the same table): blind range c T / 2 = 3.0 km (the receive window opens there: operation.range_m null);
+# ping interval 20.9 s, duty 19.1 %; 817 W acoustic, 1923 W from the supply in the pulse, 367 W mean (omnidirectional; 50 %
+# transducer and 85 % amplifier efficiency, working values); the planner's own depths at this site (225 m for `ship`, 395 m
+# for `large_submerged`) are far below the 29 m cavitation depth. The plain matched filter's peak loss on a mover grows
+# with the pulse: 14.8 / 20.9 dB at 2 / 8 m/s for a 4 s linear sweep (closed form; 8.8 / 14.8 dB at 1 s).
+# The waveform's SHAPE is TO BE CHOSEN FROM THE deep12 RUN (tools/doppler_gpu_runs.sh `deep12`; docs/tasks/DOPPLER.md
+# "Deep site at 12 km"): linear (as here, the shipped shape) with the plain filter, linear with the sweep bank
+# (`doppler: {mode: sweep_bank, combine: cfar}`, 173 hypotheses a beam at 8 m/s), or hyperbolic (`source: hfm`: no bank,
+# a range bias of 3 T = 12 m per m/s at 4 s, and an unknown projector response across the band for its 1 / f^2 spectrum).
+# The projector itself is not chosen: projector.model stays null and every projector figure here is unconfirmed.
+build: popoto_face_3x32_ss5
+title: "Full face, three rows of 32, sea-state-5 transmitter (alternate)"
+stage: "6a: full face, 3 x 32, alternate for sea state 5"
+base_sonar: popoto_long_range    # the generated sonar file extends this shipped one: only what differs is written
+names: {sonar: popoto_long_range_3row_ss5, deploy: popoto_vehicle_elevation_ss5}
+
+platform:
+  kind: vehicle
+  max_depth_m: 500.0             # the owner: "Depth no further than 500m": the planner searches no deeper; the depth rating every wet part needs
+  name: full_face
+  mounting: flat vertical face
+  span_m: 9.0                    # the owner: "a vertical straight face 2m high and 9m long" (stated)
+  height_m: 2.0
+  usable_span_m: 7.0             # the owner: "Need way more margin. Projector etc, I think probably try like a 7m horizontal" (a working value)
+  confirmed: [span_m, height_m, max_depth_m]
+
+array:
+  module: long_4p8m             # the row design (count, pitch, hydrophone): configs/builds/modules/long_4p8m.yaml
+  rows: 3
+  heights_m: [-0.75, -0.20, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
+  look: starboard
+  wiring: row_by_row             # the owner: "Probably row by row": every board serves one row
+
+boards:
+  model: Popoto PMM6081
+  inputs: 8                      # the plan (PMM6081 ICD): "8 single-ended hydrophone inputs, 43 dB preamp, 37 mVpp full scale, 100 Hz high-pass"
+  gain_db: 43.0
+  input_full_scale_vpp: 0.037
+  adc_full_scale_v: 2.61         # 18.5 mV peak x 10^(43/20): what the records carry
+  highpass_hz: 100.0             # the ICD's value; 10 Hz has also been quoted
+  sample_rate_hz: 102400.0       # NOT in the plan ("ADC sample rate" is a question for Popoto): an assumption
+  adc_bits: 24                   # an assumption
+  clock_tolerance_ppm: 25.0      # assumptions: whether boards can be batched at all is a question for Popoto
+  clock_offset_max_s: 3.0e-4
+  jitter_rms_s: 2.0e-8
+  clocks: 
+    explicit:                    # [offset s, drift ppm] of each board, the first the reference: as typed in when these builds were first made
+      - [0.00e+00, 0]
+      - [-1.50e-04, 22.3]
+      - [-1.86e-04, -16.0]
+      - [-9.00e-05, -13.5]
+      - [1.02e-04, -19.2]
+      - [2.38e-04, 17.9]
+      - [-2.98e-04, 2.1]
+      - [-2.36e-04, -12.1]
+      - [-5.00e-05, -2.3]
+      - [-1.90e-05, 21.4]
+      - [-1.45e-04, -15.6]
+      - [1.02e-04, 22.3]
+  confirmed: [model, inputs, gain_db, input_full_scale_vpp]
+
+sync:
+  scheme: shared_reference       # one electrical burst wired to every board and summed into its first input, above the acoustic band
+  reference: {f_start_hz: 38.0e+3, f_stop_hz: 48.0e+3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
+  elevation_error_deg: 0.05      # the elevation error allowed from clock error between rows: sets the required agreement
+
+projector:
+  model: null                    # not chosen (the plan's PMT-28 covers 20-35 kHz only)
+  amplifier: null
+  source_level_db_rms: 200.0         # RMS level, dB re 1 uPa at 1 m: the alternate's 4 s at 200 dB (206 dB re 1 uPa^2 s at 1 m a ping; see the head); not a part's figure
+  band_hz: [4000.0, 6000.0]
+  waveform: {type: lfm, duration_s: 4.0, window_alpha: 0.1}   # the shape (lfm, or hfm) to be chosen from the deep12 run
+  blanking_after_s: null         # recovery of the inputs after the direct sound: NOT KNOWN (a bench measurement)
+  position_m: [4.0, 0, 0]        # body frame [along, out, down] from the array's centre: a placeholder
+
+navigation:
+  unit: SPRINT-Nav               # the owner: "sprintnav IMU and dvl". Its figures are from its datasheet - to be supplied
+  adapter: json_udp
+  roll_sigma_deg: 0.2            # a placeholder until the datasheet figure is supplied
+  attitude_time: arrival
+  attitude_rate_sigma_deg_s: 0.5
+  confirmed: [unit]
+
+sound_speed:
+  nominal_m_s: 1500.0
+  rung: gradient_prior           # the owner: no long-range profile; the platform measures the local value (navigation datagram)
+  gradient_per_s: 0.017          # isothermal water: an assumption ("Won't always we need to handle it")
+  gradient_sigma_per_s: 0.05
+
+water_depth:
+  source: navigation
+  sigma_m: 5.0                   # the owner: "some idea of water depth"
+
+network: {stream_port: 5700, nav_port: 5702, report_udp: [127.0.0.1, 5701]}
+
+storage:
+  record: raw                    # the owner's decision: record raw during trials (a decimated recording has lost the synchronisation reference for good); `decimated` for storage-limited runs
+  recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5
+  report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl
+  taps_dir: /data/sonar/taps
+  taps_pings: 2
+
+compute:
+  option: gpu                    # the owner's decision on the stage-2 timings: two or three rows over the full window need a GPU (decimate-first on a CPU: slower than the ping interval)
+  unit: null                     # not chosen
+
+operation:
+  range_m: [null, 12700.0]       # the receive window; null: from the pulse's blind range. A choice made here, not the owner's
+  # The coverage picture on the report line (chain.coverage), on for the face builds (the owner). It needs a SITE: water depth,
+  # bottom and wind have no default anywhere, and the generator refuses a site that lacks one. No site is chosen: this is the
+  # illustrative shelf of the 12 km design point, and the deployment file flags it unconfirmed. Name the real site's
+  # environment here (or write it inline: {environment: {name, water_depth_m, bottom, wind_speed_m_s}}) before a deployment.
+  coverage: {environment: shelf_100m_sand}
+
+trial:                           # the water the simulated trials are in: placeholders for a site that is not chosen
+  water_depth_m: 100.0
+  own_depth_m: 30.0
+  ranges_m: [4000.0]             # beyond the 4 s pulse's 3.0 km blind range (the shipped build's 1000 m is inside it)
+  target_depths_m: [10.0, 30.0, 60.0]
+  roll_deg: 3.0
+  roll_rate_deg_s: 1.5
+  speed_m_s: 1.5
+  seed: 11
+
+# What the build is planned against (tools/popoto_depth_planner.py; they change no generated sonar or deployment file).
+# Every target strength, depth, speed, water and operating depth limit in these two files is an ASSUMED PLACEHOLDER.
+targets: reference_classes        # configs/builds/targets/reference_classes.yaml: ship, xl_auv, large_submerged
+environments: illustrative        # configs/builds/environments/illustrative.yaml

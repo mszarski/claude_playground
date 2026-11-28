@@ -1,0 +1,52 @@
+# popoto_12km_deep at the planning site `deep_no_bottom_return_sea_state_5` of configs/builds/environments/illustrative.yaml
+# (no bottom return, isovelocity, sea state 5: 12.6 m/s wind; the apl_1994 bubble law), by name (issue sonar-rctz;
+# docs/tasks/DOPPLER.md "Deep site at 12 km"). Everything else is popoto_12km_deep's (its comments say what the planner
+# assumes and how the file holds it). The site's bubble law is applied at each surface bounce through
+# time_spread.surface.bubble_loss_db (the simulator does not take `bubble_model` from an environment by itself;
+# tests/python/test_deep12_scenes.py holds the two equal). Sea states 3 and 4 with the same law, as the trade study's
+# table: --set environment.sea_state=3 (tools/doppler_bank_eval.py; the wind then moves the noise, the surface's
+# roughness, its reverberation and the bubble loss together).
+name: popoto_12km_deep_sea_state_5
+sonar: popoto_long_range_3row
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [11300.0, 12700.0]}}
+environment: {base: deep_no_bottom_return_sea_state_5, temperature_c: 12.0, salinity_psu: 35.0, reference_depth_m: 50.0, shipping: 0.5, absorption: ainslie_mccolm}
+propagation: {surface_z: 0.0, max_order: 1}
+time_spread:
+  surface:
+    bubble_loss_db: {model: apl_1994}   # the site's bubble_model (deep_no_bottom_return_sea_state_5), at the site's wind
+platform: {position: [0, 0, 225.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 19.9}
+scene:
+  - type: points
+    label: closing
+    positions: [[-3170.5, 11832.6, 50.0], [-3164.1, 11808.4, 50.0], [-3157.6, 11784.3, 50.0], [-3151.1, 11760.1, 50.0], [-3144.7, 11736.0, 50.0]]
+    target_strength_db: 18.01       # 18.01 + 10 log10(5) = 25.00 dB, the class's low end
+    velocity: [1.5529, -5.7956, 0.0]
+  - type: points
+    label: oblique
+    positions: [[-48.4, 12012.5, 50.0], [-24.2, 12006.2, 50.0], [0.0, 12000.0, 50.0], [24.2, 11993.8, 50.0], [48.4, 11987.5, 50.0]]
+    target_strength_db: 18.01
+    velocity: [1.9365, -0.5, 0.0]
+  - type: points
+    label: crossing
+    positions: [[3057.5, 11604.1, 50.0], [3081.7, 11597.6, 50.0], [3105.8, 11591.1, 50.0], [3130.0, 11584.6, 50.0], [3154.1, 11578.2, 50.0]]
+    target_strength_db: 18.01
+    velocity: [1.9319, -0.5176, 0.0]
+  - type: points
+    label: ship
+    positions: [[5740.0, 10392.3, 4.0], [5770.0, 10392.3, 4.0], [5800.0, 10392.3, 4.0], [5830.0, 10392.3, 4.0], [5860.0, 10392.3, 4.0]]
+    target_strength_db: 18.0        # as popoto_12km's ship: 24.99 dB in all, the class's low end
+    velocity: [-6.0, 0.0, 0.0]
+  - type: points
+    label: point
+    positions: [[-6000.0, 10392.3, 50.0]]
+    target_strength_db: 25.0
+    velocity: [1.5, 0.0, 0.0]
+reverberation:                        # the site's boundaries by the one rule, typed (D-227: a shipped scene states its site once):
+  - {model: chapman_harris}           # the surface at the site's wind; the site states no bottom, so no bottom item
+receiver:
+  adc: false
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
+seed: 61

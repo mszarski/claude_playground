@@ -136,6 +136,12 @@ def test_the_mode_in_its_quick_host_form(tmp_path):
     assert [r["variant"] for r in tone_t] == ["off", "tone"]
     for name in ("tone", "falsealarm", "timing"):
         assert "exit 0" in (out / f"{name}.log").read_text()
+    # D5: the second pass on the same cached pings, the tracker taking the tone's rate; the classes ping by ping in both.
+    rate = json.loads((out / "doppler_tone_eval_rate.json").read_text())
+    assert rate["tracker_range_rate"] == "update" and rate["background"] == {} and rate["pings"] == tone["pings"]
+    for res in (tone, rate):
+        for s in res["engines"]["cpp"]["on"]["targets"].values():
+            assert len(s["kinds"]) == res["pings"] and "first_mover_ping" in s and "velocity_error_m_s" in s
 
 
 # --- the tone path's false detections attributed to the grating lobes (tools/doppler_tone_eval.py) ----------------------
@@ -151,6 +157,23 @@ def test_tone_eval_passes_the_lobe_notch_switch_and_the_ls12_run_has_both_passes
         doppler_tone_eval.LOBE_NOTCH = old
     runs = (ROOT / "tools" / "doppler_gpu_runs.sh").read_text()
     assert "--tone-lobe-notch off" in runs and "ls12_tone_train_lobe_off.json" in runs and "ls12_tone_train.json" in runs
+
+
+def test_tone_eval_passes_the_tracker_range_rate_switch_and_the_runs_have_the_second_pass():
+    """D5: --tracker-range-rate reaches the chain with the tone path on only; not given, the configuration is as before; the
+    tone and ls12 sub-runs each take a second pass on the same cache with it (before -> after of the classes)."""
+    old = doppler_tone_eval.TRACKER_RATE
+    try:
+        assert "tracker" not in doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)          # as before
+        doppler_tone_eval.TRACKER_RATE = "update"
+        assert doppler_tone_eval.chain_config("cpp", {"tone": "bank"}, 3.0)["tracker"] == {"range_rate": "update"}
+        assert "tracker" not in doppler_tone_eval.chain_config("cpp", None, 3.0)
+    finally:
+        doppler_tone_eval.TRACKER_RATE = old
+    runs = (ROOT / "tools" / "doppler_gpu_runs.sh").read_text()
+    for name in ("doppler_tone_eval_rate.json", "ls12_tone_train_rate.json", "ls12_tone_alternate12_rate.json"):
+        assert name in runs
+    assert runs.count("--tracker-range-rate update") == 4          # the header's line and the three calls
 
 
 def test_the_attribution_kinds_on_a_made_geometry():
@@ -293,3 +316,96 @@ def test_the_hfm12_sub_run_in_its_quick_host_form(tmp_path):
     # The energy bookkeeping: the eq runs 10 log10 4 under the shipped level (same energy as 1 s), the others at it.
     assert peak["hfm4eq_plain"] == pytest.approx(peak["hfm1_plain"] - 10 * np.log10(4.0), abs=0.01)
     assert peak["lfm4eq_plain"] == pytest.approx(peak["lfm4_cfar"] - 10 * np.log10(4.0), abs=0.01) and peak["hfm4_plain"] == peak["lfm1_cfar"]
+
+
+# --- doppler_bank_eval's --chain-set and the deep12 sub-run (DOPPLER.md "Deep site at 12 km"; issue sonar-rctz) -------------
+
+def test_bank_eval_chain_set_changes_every_chain_and_nothing_without_it():
+    old = list(doppler_bank_eval.CHAIN_SETS)
+    try:
+        assert "elevation" not in doppler_bank_eval.chain_config("cpp", False, 3.0)               # the default, as before
+        doppler_bank_eval.CHAIN_SETS = ["elevation={}", "cfar.guard_m=5.0"]
+        for cfg in (doppler_bank_eval.chain_config("cpp", False, 3.0), doppler_bank_eval.chain_config("python", True, 3.0, 3.0, "cfar")):
+            assert cfg["elevation"] == {} and cfg["cfar"]["guard_m"] == 5.0
+        assert doppler_bank_eval.chain_config("cpp", False, 3.0, 3.0)["cfar"] == {"false_alarms_per_ping": 3.0, "guard_m": 5.0}
+    finally:
+        doppler_bank_eval.CHAIN_SETS = old
+
+
+def test_the_deep12_sub_run_in_its_quick_host_form(tmp_path):
+    """GPUSONAR_DOPPLER_RUNS=deep12, GPUSONAR_DOPPLER_QUICK=1 on the host, four of its cases (one free-field ping and one
+    target-free ping each, the bank to 0.3 m/s): each case's JSON with its sea state, transmit, filter and the rows added in
+    power; the bank case reads the plain case's records from the cache (no new record file); an unknown case fails the
+    sub-run without stopping the others. It measures nothing."""
+    out = tmp_path / "doppler"
+    env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="deep12", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_DEEP12_CASES="ss3_lfm1,ss5_hfm1,ss5_lfm4p200,ss5_lfm4p200_cfar,ss6_lfm1,ss3_hfm2")
+    env.pop("GPUSONAR_UPLOAD_REPO", None)
+    got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True,
+                         timeout=1500)
+    assert got.returncode == 2, got.stdout[-4000:] + got.stderr[-2000:]           # the unknown case, and only it
+    assert "deep12: unknown case ss6_lfm1" in got.stdout and got.stdout.count("=== doppler deep12: exit 0") == 5
+    want = {"ss3_lfm1": (3, "Lfm", 1.0, 197.0, True), "ss5_hfm1": (5, "Arbitrary", 1.0, 197.0, True),
+            "ss5_lfm4p200": (5, "Lfm", 4.0, 200.0, True), "ss5_lfm4p200_cfar": (5, "Lfm", 4.0, 200.0, False),
+            "ss3_hfm2": (3, "Arbitrary", 2.0, 197.0, True)}          # a 2 s sampled pulse (DM.5's candidate baseline)
+    for name, (ss, kind, dur, level, off_only) in want.items():
+        res = json.loads((out / f"deep12_{name}.json").read_text())
+        assert res["scene"] == "popoto_12km_deep_sea_state_5" and f"environment.sea_state={ss}" in res["set"], name
+        assert res["transmit"]["type"] == kind and res["transmit"]["duration"] == dur and res["off_only"] == off_only, name
+        assert res["chain_set"] == ["elevation={}"] and res["channels"] == 96 and res["truth_at"] == "reflection", name
+        assert set(res["engines"]) == ({"python", "cpp"} if name == "ss3_lfm1" else {"cpp"}), name
+        assert set(res["engines"]["cpp"]["summary"]) == {"closing", "oblique", "crossing", "ship", "point"}, name
+        assert res["background"]["default"]["pings"] == 1, name
+        if kind == "Lfm":
+            assert res["transmit"]["source_level_db_peak"] == pytest.approx(level + 10 * np.log10(2.0), abs=0.01), name    # rms + 3 dB
+    a, b = (json.loads((out / f"deep12_{n}.json").read_text()) for n in ("ss5_lfm4p200", "ss5_lfm4p200_cfar"))
+    assert a["engines"]["cpp"]["off"]["detections_per_ping"] == b["engines"]["cpp"]["off"]["detections_per_ping"]
+    assert len(list((out / "cache").glob("*.h5"))) == 2 * 4                     # four plain cases, scene and background each: the bank made none
+
+
+# --- the regen sub-run: the outputs D-251 made stale (issue sonar-rar0) -----------------------------------------------------
+
+import regen_stale  # noqa: E402
+
+# Keys of each file that are not results (metadata), for the inventory below.
+_META = {"docs/tasks/doppler_bank_eval.json": {"tool"}, "docs/tasks/doppler_d3_eval.json": {"status", "commands", "not_measured"},
+         "docs/tasks/doppler_large_submerged_eval.json": {"what", "commands"}, "docs/tasks/doppler_baseline.json": {"what", "status", "tree", "environment", "notes"}}
+_META = {k: v | {"regenerated"} for k, v in _META.items()}       # the block regen_stale.py's merge adds (the files regenerated, sonar-rar0)
+
+
+def test_the_stale_inventory_names_every_part_of_each_file_once():
+    """Each committed file's parts are either stale (rerun) or kept with a reason: none left out, none in both, every one there."""
+    for path, items in regen_stale.STALE.items():
+        d = json.loads((ROOT / path).read_text())
+        stale = {k for k, *_ in items}
+        kept = set(regen_stale.KEPT.get(path, {}))
+        assert not stale & kept, path
+        if stale == {"*"}:
+            continue
+        for key in stale | kept:
+            regen_stale._get(d, key)                                     # present
+        top = {k.split(".")[0] for k in stale | kept}
+        for parent in {k.split(".")[0] for k in stale | kept if "." in k}:
+            assert set(d[parent]) == {k.split(".", 1)[1] for k in stale | kept if k.startswith(parent + ".")}, (path, parent)
+        assert set(d) - _META[path] == top, path
+
+
+def test_the_regen_sub_run_in_its_quick_host_form(tmp_path):
+    """GPUSONAR_DOPPLER_RUNS=regen, quick, on the host: one free-field ping of a part of each file; the merge writes the committed
+    files' names with the parts run replaced, the rest as committed, and says what was replaced and what was not. Measures nothing."""
+    out = tmp_path / "doppler"
+    env = dict(os.environ, GPUSONAR_DOPPLER_RUNS="regen", GPUSONAR_DOPPLER_QUICK="1", GPUSONAR_DOPPLER_BACKEND="host", OMP_NUM_THREADS="1",
+               PYTHON=sys.executable, GPUSONAR_DOPPLER_REGEN_PARTS="bank,d3,ls,baseline")
+    env.pop("GPUSONAR_UPLOAD_REPO", None)
+    got = subprocess.run(["bash", str(ROOT / "tools" / "doppler_gpu_runs.sh"), str(out)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=1500)
+    assert got.returncode == 0, got.stdout[-4000:] + got.stderr[-2000:]
+    for path, replaced in (("docs/tasks/doppler_bank_eval.json", ["scenes.popoto_12km"]), ("docs/tasks/doppler_d3_eval.json", ["cfar_scenes.popoto_12km"]),
+                           ("docs/tasks/doppler_large_submerged_eval.json", ["bank"]), ("docs/tasks/doppler_baseline.json", ["runs.rs_mono"])):
+        new, old = json.loads((out / pathlib.Path(path).name).read_text()), json.loads((ROOT / path).read_text())
+        assert new["regenerated"]["replaced"] == replaced and new["regenerated"]["backend"] == "host", path
+        assert set(new) == set(old) | {"regenerated"}, path
+        for key in regen_stale.KEPT[path]:
+            assert regen_stale._get(new, key) == regen_stale._get(old, key), (path, key)          # kept parts as committed
+        assert regen_stale._get(new, replaced[0]) != regen_stale._get(old, replaced[0]), path
+    assert not (out / "popoto_12km.json").exists()                                                 # not asked for
+    assert json.loads((out / "doppler_baseline.json").read_text())["runs"]["rs_mono"]["command"].endswith("--sim-backend host")

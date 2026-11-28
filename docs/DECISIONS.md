@@ -5713,3 +5713,132 @@ package (branch `deepsea`, not yet merged when this is written).
 - So a default will move: the shipped long-range waveform. It is done as its own package (issue
   filed) with a before -> after table on every long-range scene, worst first, and its own GPU
   suite. Until that package merges every shipped file keeps the 1 s linear sweep.
+
+### D-257 FLS deployment settings and `look: boresight` (issue sonar-tpex; branch `flsdeploy`; the owner's "yes" of D-255; no default moved)
+
+2026-11-28. Ours. The account is `docs/DEPLOYMENT.md`, "A forward-looking sonar".
+
+- **Not done or wrong, first.** No files for `fls_300k` or `fls_750k`: one range resolution a cell
+  gives 3591 detections a ping on the quick `harbour_fls_750k`, and a target-sized cell for them
+  is a choice nobody has made. With the DEFAULTS the two engines disagree on the pool scenes, as
+  before this package: C++ refuses ("receive window is shorter than three range cells"), Python
+  raises an IndexError on one and runs on the other; not fixed here. The pool files are untuned.
+  No source exists for an FLS stream: the files replay recordings and are marked unconfirmed. One
+  existing test narrowed, said plainly: `test_deployment_defaults.py` skips
+  `buildspec.describe_shipped` for FLS files (it crashes on a sonar without boards) and checks only
+  that they have no elevation block. "Fails before" for the new option was argued, not run.
+- `look` is not a side of the vehicle: it turns the array's own axis by 90 degrees. An FLS lies
+  across the bow, so `starboard` pointed its broadside astern and `port` gave "ahead" by the
+  numbering of its elements. New value `look: boresight`, opt-in, both engines: each ping takes the
+  side the record's elements face. The default stays `starboard`; flank and long-range reports are
+  byte for byte as before (8 of 8 hashes).
+- Five deployment files: `fls_120k`, `fls_170k`, `fls_330k` (the gallery's transit settings, now
+  read by the gallery from the files; quick gallery identical on three FLS scenes in both simulator
+  engines) and `l12_5d`, `p4_2v` (the derived floors written out; the pool scenes now run, the
+  engines alike). With the file every track on the quick `fls_120k_transit` is ahead, 0.36 to 1.85 m
+  from its object; with the defaults every track is astern, 219 to 471 m off.
+- Tests: `tests/python/test_fls_deploy.py` (15).
+
+### D-258 Tracks use the measured range rate, opt-in (issue sonar-evd4, Doppler D5; branch `d5rate`)
+
+2026-11-28. Ours. The account is `docs/tasks/DOPPLER.md` "D5".
+
+- **Worse or not known, first.** On alternating pings at 12 km the oblique target's class flickers
+  (mover, static, mover, static) on four pings before settling, and the crossing target (which the
+  tone cannot see) is `uncertain`. The navigation velocity accuracy is assumed
+  (`tracker.range_rate_nav_sigma_m_s` 0.05 m/s, unconfirmed). One classifier rule was added
+  (`mover_range_rate`): the existing rules read only the line fitted through the measured
+  positions (D-157), so a better filter velocity could not change a class. `update_and_gate` is
+  tested on a made case only.
+- `tracker.range_rate: off | update | update_and_gate`, `range_rate_from: tone | any`. The rate is
+  a scalar measurement h = u . (v - v_own) over ground, sequential after the position update;
+  trusted only from `doppler_path` tone or both by default (the sweep bank's rates on extended
+  hulls are not a measurement, D-232).
+- On the device (job 6b0a0d1f6c5d61fff18a381b, both engines): `flank_patrol_doppler_tone` small
+  vehicle static on every ping -> mover from ping 3, speed 1.09 -> 2.03 m/s (true 2.0), velocity
+  error 1.37 -> 0.53 m/s; submarine and wreck unchanged. `popoto_12km_large_submerged_tone`: the
+  oblique target a mover from ping 3 (speed 2.09 against 2.0). This closes the defect of D-241 and
+  D-243.
+- Off is byte for byte as before (10 of 10 hashes against `c77190e`). Tests:
+  `tests/python/test_tracker_range_rate.py` (29, all failing on the base), GoogleTest
+  `Tracker.RangeRateGivesTheClosedFormVelocityVarianceAlongTheLineOfSight`.
+
+### D-259 The gallery's differences explained: a wake track, an earlier decision, a spurious track (issue sonar-4pon; branch `mover`; no default moved; corrects D-253 and D-254)
+
+2026-11-28. Ours (CPU, host backend; the full `fls_170k_traffic` and the gravel scene reproduced
+the L4 gallery exactly).
+
+- **Worse, first.** `fls_170k_traffic` calls a track on the crossing boat's wake a mover in 5 of 8
+  full-size seeds under the default reverberation Doppler law and in 3 of 8 under `doppler: centre`.
+  The committed gallery's 0 before D-251 was a favourable draw. The difference between the laws is
+  not significant (two discordant seeds, sign test p = 0.5). No existing option removes the wake
+  false movers without a default change (best: `significance` 8 or `linear.width` 6 m, 2 of 8). A
+  wake or hop rule would move a default: the owner's call.
+- The false mover: the wake is fixed bubble points; the track hops between two wake clusters 11 m
+  apart and reads 2.54 +- 0.33 m/s against 2.31 m/s needed. The three boats are classed right on
+  all 16 runs.
+- `flank_patrol`'s gallery difference is D-216's (`bistatic_rule: geometric_mean` the default):
+  `mean_angle` restores [6,5,5,5,3,4] and its classes exactly. D-216 recorded the level but not the
+  gallery's detections; D-253's "superseded by the new realisation, not explained" is corrected
+  for this scene. `popoto_env_gravel_30m`'s lost static track was on no object (a four-row track of
+  11 to 15 dB arrivals about 100 m beyond the ship).
+- New, opt-in: gallery `--evidence` (each track's classifier evidence) and `--reverb` (restore an
+  old law for comparison); a guard test holding the false movers on the quick scene over three
+  seeds (232 s in the suite). Not verified: D-216 on `fls_120k_transit` and
+  `popoto_env_winter_sand_200m`.
+
+### D-260 The deep site at 12 km measured: both designs of D-255 fail for the resolved hull; the D-251-stale outputs regenerated (issues sonar-rctz, sonar-rar0; branch `deepsea`; no default, chain or class file changed)
+
+2026-11-28. Ours (NVIDIA L4, jobs 6b0a02346c5d61fff18a11a1, 6b0a02356c5d61fff18a11a4,
+6b0a19496c5d61fff18a650c; one seed, 6 pings and 4 target-free pings a case;
+`docs/tasks/doppler_deep12_eval.json`). The account is `docs/tasks/DOPPLER.md` DM.1 to DM.7. The
+owner's decisions that followed are D-256.
+
+- **Worse, first.** The baseline (1 s, 197 dB, linear, plain filter) at sea state 3 holds neither
+  the closing nor the oblique `large_submerged` hull nor the ship (0 of 6 each); it holds the
+  crossing hull (+2.95 dB) and the planner's point (+3.41 dB against +2.79 predicted). The
+  alternate (4 s, 200 dB) at sea state 5 holds neither hull with any filter (linear plain, linear
+  with the bank, hyperbolic plain).
+- Causes, measured: the hull's highlights resolve in range and the detector tests a 0.375 m and a
+  2 m cell only (hull minus point in the same case: -3.8 to -6.0 dB; crossing -0.2 to +1.0 dB);
+  the linear sweep's loss on movers with the plain filter (at 4 s against the hyperbolic sweep: 9.3
+  dB on the ship, 6.0 dB on the closing hull). Ruled out: the threshold, the own depth, the
+  surface image. The planner's point agrees within 0.62 dB in the 11 cases where it is detected on
+  every ping: the table's margins hold for an unresolved, non-moving target only.
+- Candidates, predicted before the run and then measured (closing / oblique hull, of 6 pings): sea
+  state 3 hyperbolic 2 s at 197 dB 6 / 6 (+1.28, +0.73 dB; the oblique hull detected but not
+  tracked); hyperbolic 1 s at 200 dB 5 / 5; linear 2 s with the bank 5 / 5; sea state 4 hyperbolic
+  2 s 0 / 0; sea state 5 hyperbolic 4 s at 203 dB 5 / 4, 8 s at 200 dB 5 / 2 (not held), 8 s at
+  203 dB 6 / 6. No single listed projector gives any of the three sea-state-5 options. No false
+  detection at the default budget in any case. One seed; the hulls' margins at sea state 3 are
+  0.2 to 1.3 dB.
+- The scenes `popoto_12km_deep`, `popoto_12km_deep_sea_state_5` (100 scenario files); the alternate
+  build `popoto_face_3x32_ss5` with its generated sonar and deployment files (a placeholder, D-256).
+  The site's `bubble_model` reaches the simulator only through the scene's `time_spread`; a test
+  holds the two equal. POP-3 and the trade study state what was measured; `met` and `--check`
+  unchanged.
+- Regenerated on the device (jobs 6b0a02356c5d61fff18a11a6, 6b0a02366c5d61fff18a11aa): the stale
+  parts of `docs/tasks/doppler_{baseline,bank_eval,d3_eval,large_submerged_eval}.json` and
+  `docs/design/popoto_12km.json`. Worse: the closing hull is untracked at the last ping of the
+  alternating run; `popoto_12km_doppler` gives 4 false detections on 4 target-free pings with the
+  default chain. The rest within 0.2 dB. Every `flank_patrol` part was not stale (still platform;
+  record hash identical under both laws).
+- A first suite on this batch had 3 failures, all from this package's new files in test files its
+  agent had not run (a list of shipped sonars; D-227's "a scene states its site once"; a
+  no-bottom warning): fixed in the scenes and the list, records unchanged (hashes).
+
+### D-261 The merge of D-257 to D-260 (the eighth batch)
+
+2026-11-28.
+
+- Full GPU suite on the batch's tree (branch `batch8` at `3fb6bf4`; NVIDIA L4; three shards,
+  Hugging Face jobs 6b0a30146c5d61fff18ac1ab, 6b0a301554072e8b716b9b00, 6b0a30156c5d61fff18ac1ae; the
+  same switches as D-254): **3494 passed, 124 skipped, 4 xfailed, none failed**. Before: 3392
+  passed, 122 skipped (D-254). The first run of this batch (at `ff04b58`): 3488 passed, 3 failed
+  (D-260).
+- One conflict in building the batch (`docs/tasks/DOPPLER.md`: both appended sections kept).
+- At this tree: 100 scenario files; 175 Python test files (2106 `def test_` functions); GoogleTest
+  219 cases (218 `TEST` and 1 `TEST_P`).
+- The container was restarted during this batch (2026-11-27); two agents' background runs were lost
+  and no committed work.
+- Not in this merge: the baseline's waveform change of D-256 (branch `hfmbase`).

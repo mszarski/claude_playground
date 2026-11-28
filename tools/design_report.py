@@ -240,10 +240,24 @@ def requirements(D: dict) -> list:
         value += (f" **At the {n} illustrative sites** of the depth plan (three rows, own depth planned; `docs/design/popoto_depth_planner.json`; ours, illustrative): "
                   + "; ".join(f"`{c}` held at {n - len(X['failing'][c])} of {n}" + ((", not at " + ", ".join(f"`{s}` ({X['rows'][(s, c)]['margin_db']:+.1f} dB)" for s in X["failing"][c])) if X["failing"][c] else "")
                               for c in cls)
-                  + ". Per site: *The 12 km design point*. Still open with the owner: " + rp.REQUIREMENT_OPEN + ".")
-        bad = [s for s in X["sites"] if any(s in X["failing"][c] for c in cls)]
+                  + ". Per site: *The 12 km design point*. " + rp.designs_text(X) + " Still open with the owner: " + rp.REQUIREMENT_OPEN + ".")
+        # What each design holds (D-255): a site the baseline misses and the alternate holds is said as such; "partly met" stays only for
+        # what neither design holds. `met` (design_ok, what --check holds) is the free-field design point as before.
+        missed = [s for s in X["sites"] if any(s in X["failing"][c] for c in cls)]
+        covered = [s for s in missed if s in X["covered_by_alternate"]]
+        bad = [s for s in missed if s not in covered]
+        Dz = X["designs"]
         met_text = ((f"free field: yes, both classes (three rows; one row: {'yes' if one_row >= 0.0 else 'no'}); " if design_ok else "free field: **NO**; ")
-                    + (("illustrative sites: **not** at " + ", ".join(f"`{s}`" for s in bad) + f" ({n - len(bad)} of {n} held by both; per site: *The 12 km design point*)") if bad else f"illustrative sites: yes, {n} of {n}"))
+                    + f"baseline (`{Dz['baseline']['build']}`, {Dz['baseline']['option']}) up to sea state {Dz['baseline']['sea_state']} at the deep site: planner "
+                    + ("yes" if all(v >= 0.0 for v in Dz["baseline"]["margins_db"].values()) else "**no**")
+                    + (f", measured {rp.measured_words(Dz['baseline']['measured'])}" if Dz["baseline"].get("measured") else "")
+                    + (("; illustrative sites: the baseline **not** at " + ", ".join(f"`{s}`" for s in missed) + f" ({n - len(missed)} of {n} held by both classes)") if missed else f"; illustrative sites: the baseline at {n} of {n}")
+                    + (f"; alternate (`{Dz['alternate']['build']}`, {Dz['alternate']['option']}) at sea state {Dz['alternate']['sea_state']}: planner "
+                       + ("yes" if all(v >= 0.0 for v in Dz["alternate"]["margins_db"].values()) else "**no**")
+                       + (", holding " + ", ".join(f"`{s}`" for s in covered) if covered else "")
+                       + (f"; measured (linear, plain filter) {rp.measured_words(Dz['alternate']['measured'])}" if Dz["alternate"].get("measured") else ""))
+                    + (("; held by neither design: " + ", ".join(f"`{s}`" for s in bad)) if bad else "")
+                    + "; per site: *The 12 km design point*")
         status = ("partly met" if bad else "met") if design_ok else "not met"
     else:
         met_text, status = None, ("met" if design_ok else "not met")

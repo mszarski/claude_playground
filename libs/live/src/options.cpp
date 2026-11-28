@@ -245,7 +245,12 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (is("sbl_max_sources")) c.sbl.max_sources = p.sbl.max_sources = static_cast<std::int32_t>(i());
   else if (is("sbl_min_snr_db")) c.sbl.min_snr_db = p.sbl.min_snr_db = v();
   else if (is("sbl_dynamic_range_db")) c.sbl.dynamic_range_db = p.sbl.dynamic_range_db = v();
-  else if (is("look")) c.starboard = p.starboard = option_choice(key, value, {"starboard", "port"}) == "starboard";
+  else if (is("look")) {
+    // boresight (opt-in, sonar-tpex): the side the record's elements face, on every ping (chain.hpp look_starboard).
+    const std::string look = option_choice(key, value, {"starboard", "port", "boresight"});
+    c.look_boresight = p.look_boresight = look == "boresight";
+    c.starboard = p.starboard = look != "port";
+  }
   else if (is("elevation")) c.elevation.enabled = p.elevation.enabled = on();
   else if (is("elevation_first_deg")) c.elevation.first_deg = p.elevation.first_deg = v();
   else if (is("elevation_last_deg")) c.elevation.last_deg = p.elevation.last_deg = v();
@@ -396,6 +401,23 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
     if (!(std::isfinite(s) && s > 0.0)) throw std::invalid_argument("tracker_ping_interval_s: seconds above 0, got '" + value + "' (leave the key out for off)");
     c.tracker_ping_interval_s = s;
   }
+  else if (is("tracker_range_rate")) {   // D5 (opt-in); the classifier's rule follows the tracker's option
+    try {
+      c.tracker.range_rate = parse_range_rate(value);
+    } catch (const std::invalid_argument& e) {
+      throw std::invalid_argument(std::string("tracker_range_rate: ") + e.what());
+    }
+    c.classify.range_rate = c.tracker.range_rate != RangeRate::Off;
+  }
+  else if (is("tracker_range_rate_from")) {
+    if (value != "tone" && value != "any") throw std::invalid_argument("tracker_range_rate_from: tone or any, got '" + value + "'");
+    c.tracker_range_rate_tone_only = value == "tone";
+  }
+  else if (is("tracker_range_rate_nav_sigma_m_s")) {
+    const double s = v();
+    if (!(std::isfinite(s) && s >= 0.0)) throw std::invalid_argument("tracker_range_rate_nav_sigma_m_s: m/s, finite, zero or more, got '" + value + "'");
+    c.tracker_range_rate_nav_sigma = s;
+  }
   else if (is("classify_min_speed")) c.classify.min_speed = c.classify.static_speed = v();
   else if (is("classify_static_speed")) c.classify.static_speed = v();   // after classify_min_speed, which sets both
   else if (is("classify_max_fit_rms")) c.classify.max_fit_rms = v();
@@ -531,7 +553,7 @@ class Json {
 std::string options_json(const ChainOptions& c) {
   Json j;
   j.num("bearing_first_deg", c.bearing_first_deg).num("bearing_last_deg", c.bearing_last_deg).num("bearing_step_deg", c.bearing_step_deg);
-  j.text("window", c.hann ? "hann" : "rect").text("look", c.starboard ? "starboard" : "port").text("beamformer", c.beamformer);
+  j.text("window", c.hann ? "hann" : "rect").text("look", c.look_boresight ? "boresight" : (c.starboard ? "starboard" : "port")).text("beamformer", c.beamformer);
   j.integer("mvdr_subbands", c.mvdr.n_subbands).num("mvdr_loading", c.mvdr.loading);
   j.num("range_cell_m", c.range_cell_m).num("cfar_pfa", c.cfar_pfa).num("cfar_guard_m", c.cfar_guard_m).num("cfar_train_m", c.cfar_train_m);
   j.flag("cell_peak", c.cell_peak).flag("cell_multiscale", c.cell_multiscale);
@@ -568,6 +590,11 @@ std::string options_json(const ChainOptions& c) {
       .integer("tracker_confirm_hits", t.confirm_hits).integer("tracker_max_misses", t.max_misses).num("tracker_initial_speed_sigma", t.initial_speed_sigma)
       .text("tracker_association", t.association == Association::InOrder ? "in_order" : "likelihood")
       .num("tracker_ping_interval_s", c.tracker_ping_interval_s);
+  // D5: written only when on, so that every line before D5 is the one it was.
+  if (t.range_rate != RangeRate::Off) {
+    j.text("tracker_range_rate", range_rate_name(t.range_rate)).text("tracker_range_rate_from", c.tracker_range_rate_tone_only ? "tone" : "any")
+        .num("tracker_range_rate_nav_sigma_m_s", c.tracker_range_rate_nav_sigma);
+  }
   const ClassifyOptions& k = c.classify;
   j.num("classify_min_speed", k.min_speed).num("classify_static_speed", k.static_speed).num("classify_max_fit_rms", k.max_fit_rms)
       .num("classify_min_mover_cells", k.min_mover_cells).num("classify_outlier_alpha", k.outlier_alpha)

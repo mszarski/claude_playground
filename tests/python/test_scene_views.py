@@ -58,7 +58,7 @@ def test_every_scenario_has_a_family_as_the_catalogue_lists_it():
     # docs/handoff/SIMULATION.md section 4 groups the scenarios under headings; catalogue.FAMILIES writes the same
     # groups out (the last heading split in two). Each heading's scenarios ("`a`, `_b`" means a and a's stem + _b)
     # must be one family's.
-    assert len(SCENARIOS) == 98
+    assert len(SCENARIOS) == 100
     assert all(catalogue.scenario_family(n)[1] != "other" for n in SCENARIOS)
     assert sorted(n for _, _, names in catalogue.FAMILIES for n in names) == SCENARIOS
     text = open(os.path.join(ROOT, "docs", "handoff", "SIMULATION.md"), encoding="utf-8").read()

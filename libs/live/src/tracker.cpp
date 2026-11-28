@@ -57,6 +57,21 @@ void take_depth(Track& t, const Detection& d) {
 
 }  // namespace
 
+RangeRate parse_range_rate(const std::string& name) {
+  if (name == "off") return RangeRate::Off;
+  if (name == "update") return RangeRate::Update;
+  if (name == "update_and_gate") return RangeRate::UpdateAndGate;
+  throw std::invalid_argument("tracker range_rate '" + name + "': one of off, update, update_and_gate");
+}
+
+const char* range_rate_name(RangeRate mode) {
+  switch (mode) {
+    case RangeRate::Update: return "update";
+    case RangeRate::UpdateAndGate: return "update_and_gate";
+    default: return "off";
+  }
+}
+
 Association parse_association(const std::string& name) {
   if (name == "likelihood") return Association::Likelihood;
   if (name == "in_order") return Association::InOrder;
@@ -90,6 +105,35 @@ Prior predict(const Track& t, double to, const TrackerOptions& o) {
   out.p = f * p * f.transpose() + q;
   out.depth_var = std::isfinite(t.depth_var) ? t.depth_var + o.depth_process_noise * o.depth_process_noise * std::abs(dt) : t.depth_var;
   return out;
+}
+
+// D5: the detection's range rate is a measurement for the tracker (detect.py rate_usable).
+bool rate_usable(const Detection& d) {
+  return std::isfinite(d.range_rate) && std::isfinite(d.range_rate_sigma) && std::isfinite(d.platform_x) && std::isfinite(d.platform_y) &&
+         std::isfinite(d.platform_vx) && std::isfinite(d.platform_vy) && d.range_rate_sigma > 0.0;
+}
+
+// D5's measurement (detect.py rate_model, ours): h(x) = u . (v - v_o), u = (p - o) / |p - o|; H = [w_t / R, u], w = v - v_o,
+// w_t = w - u (u . w). False with the target on the platform.
+bool rate_model(const V4& x, const Detection& d, double& h, V4& hh) {
+  const double dx = x[0] - d.platform_x, dy = x[1] - d.platform_y;
+  const double r = std::hypot(dx, dy);
+  if (!(r > 0.0)) return false;
+  const double ux = dx / r, uy = dy / r;
+  const double wx = x[2] - d.platform_vx, wy = x[3] - d.platform_vy;
+  h = ux * wx + uy * wy;
+  hh << (wx - ux * h) / r, (wy - uy * h) / r, ux, uy;
+  return true;
+}
+
+// D5 gate: y^2 / S of the rate at the predicted state (detect.py Tracker._rate_d2); NaN: not used.
+double rate_d2(const V4& x, const M4& p, const Detection& d) {
+  if (!rate_usable(d)) return std::numeric_limits<double>::quiet_NaN();
+  double h = 0.0;
+  V4 hh;
+  if (!rate_model(x, d, h, hh)) return std::numeric_limits<double>::quiet_NaN();
+  const double s = hh.dot(p * hh) + d.range_rate_sigma * d.range_rate_sigma;
+  return (d.range_rate - h) * (d.range_rate - h) / s;
 }
 
 TrackerTapTrack tap_track(const Track& t) {
@@ -128,8 +172,29 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
   // The position of the detection each track took this ping (NaN: none), for its history row (D-157).
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::vector<V2> took(tracks_.size(), V2(nan, nan));
+  const bool tap_rate = tap_ && opt_.range_rate != RangeRate::Off;
+  const bool rate_gate = opt_.range_rate == RangeRate::UpdateAndGate;
+  // D5: the scalar extended Kalman update with the detection's range rate, after the position update (detect.py
+  // Tracker._take_rate): y = z - h(x), S = H P H^T + sigma^2, K = P H^T / S, x += K y, P = (I - K H) P.
+  auto take_rate = [&](Track& t, const Detection& d, std::size_t j) {
+    if (opt_.range_rate == RangeRate::Off || !rate_usable(d)) return;
+    Eigen::Map<V4> x(t.state);
+    Eigen::Map<M4> p(t.cov);
+    double hr = 0.0;
+    V4 hh;
+    if (!rate_model(x, d, hr, hh)) return;
+    const V4 ph = p * hh;
+    const double s = hh.dot(ph) + d.range_rate_sigma * d.range_rate_sigma;
+    const V4 k = ph / s;
+    const double y = d.range_rate - hr;
+    x = x + k * y;
+    p = (M4::Identity() - k * hh.transpose()) * p;
+    ++t.rate_updates;
+    if (tap_rate) last_tap_.rate.push_back({t.id, static_cast<std::int64_t>(j), d.range_rate, hr, y, s, d.range_rate_sigma});
+  };
+  auto vetoes = [&](double d2r) { return rate_gate && std::isfinite(d2r) && d2r >= opt_.gate * opt_.gate; };
   // The Kalman update of one track, predicted to the detection's time, with that detection.
-  auto take = [&](Track& t, const Detection& d, const Prior& prior, double at) {
+  auto take = [&](Track& t, const Detection& d, std::size_t j, const Prior& prior, double at) {
     Eigen::Map<V4> x(t.state);
     Eigen::Map<M4> p(t.cov);
     x = prior.x;
@@ -142,6 +207,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     x = x + k * (z - h * x);
     p = (M4::Identity() - k * h) * p;
     took[static_cast<std::size_t>(&t - tracks_.data())] = z;
+    take_rate(t, d, j);
     ++t.hits;
     t.snr.push_back(d.snr_db);
     t.cells.push_back(d.cells);
@@ -165,7 +231,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       last_tap_.before.push_back(b);
     }
   }
-  auto record = [&](std::size_t ti, std::size_t j, double d2, double cost, const Prior& pr, const M2& s) {
+  auto record = [&](std::size_t ti, std::size_t j, double d2, double cost, const Prior& pr, const M2& s, double d2r) {
     TrackerTapPair q;
     q.track = tracks_[ti].id;
     q.detection = static_cast<std::int64_t>(j);
@@ -176,6 +242,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     q.sxx = s(0, 0);
     q.sxy = s(0, 1);
     q.syy = s(1, 1);
+    q.rate_d2 = d2r;
     compared.push_back(q);
   };
   std::vector<std::size_t> unused;
@@ -196,8 +263,9 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         const M2 s = h * pr.p * h.transpose() + measurement_cov(d, opt_);
         const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
-        if (d2 < opt_.gate * opt_.gate) pairs.push_back({!t.confirmed, d2 + std::log(s.determinant()), ti, j});
-        if (tap) record(ti, j, d2, d2 + std::log(s.determinant()), pr, s);
+        const double d2r = rate_gate ? rate_d2(pr.x, pr.p, d) : std::numeric_limits<double>::quiet_NaN();
+        if (d2 < opt_.gate * opt_.gate && !vetoes(d2r)) pairs.push_back({!t.confirmed, d2 + std::log(s.determinant()), ti, j});
+        if (tap) record(ti, j, d2, d2 + std::log(s.determinant()), pr, s, d2r);
       }
     }
     std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {
@@ -215,7 +283,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         const auto j = static_cast<std::size_t>(taken[ti]);
         const Prior pr = predicted(ti, when[j]);
         took_index[ti] = static_cast<std::ptrdiff_t>(j);
-        take(tracks_[ti], detections[j], pr, when[j]);
+        take(tracks_[ti], detections[j], j, pr, when[j]);
       } else {
         ++tracks_[ti].misses;
       }
@@ -241,8 +309,9 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
         const M2 s = h * pr.p * h.transpose() + measurement_cov(d, opt_);
         const V2 y = xy(d) - h * pr.x;
         const double d2 = y.dot(s.inverse() * y);
-        if (tap) record(ti, unused[k], d2, std::numeric_limits<double>::quiet_NaN(), pr, s);
-        if (d2 < best_d2) {
+        const double d2r = rate_gate ? rate_d2(pr.x, pr.p, d) : std::numeric_limits<double>::quiet_NaN();
+        if (tap) record(ti, unused[k], d2, std::numeric_limits<double>::quiet_NaN(), pr, s, d2r);
+        if (d2 < best_d2 && !vetoes(d2r)) {
           best = static_cast<std::ptrdiff_t>(k);
           best_d2 = d2;
         }
@@ -255,7 +324,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
       unused.erase(unused.begin() + best);
       const Prior pr = predicted(ti, when[j]);
       took_index[ti] = static_cast<std::ptrdiff_t>(j);
-      take(t, detections[j], pr, when[j]);
+      take(t, detections[j], j, pr, when[j]);
     }
   }
   for (std::size_t ti = 0; ti < tracks_.size(); ++ti) {
@@ -283,7 +352,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     }
     for (std::size_t i = 0; i < compared.size(); ++i) {
       TrackerTapPair q = compared[i];
-      q.gated = q.d2 < opt_.gate * opt_.gate;
+      q.gated = q.d2 < opt_.gate * opt_.gate && !vetoes(q.rate_d2);
       q.nearest = std::find(nearest.begin(), nearest.end(), static_cast<std::ptrdiff_t>(i)) != nearest.end();
       if (q.gated || q.nearest) last_tap_.pairs.push_back(q);
     }
@@ -319,6 +388,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p.setZero();
     p.topLeftCorner<2, 2>() = measurement_cov(d, opt_);
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
+    take_rate(tr, d, j);   // D5: a new track takes its first detection's rate too (none when off)
     tr.history.push_back({when[j], p0[0], p0[1], p0[0], p0[1], time});
     tr.snr.push_back(d.snr_db);
     tr.cells.push_back(d.cells);

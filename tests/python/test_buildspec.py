@@ -20,7 +20,8 @@ from gpusonar.sonar import SonarModel
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 EXAMPLE = ROOT / "docs" / "examples" / "reference_design" / "example_static_2x24.yaml"
-STAGES = ["popoto_testauv_1x32", "popoto_static_2x32", "popoto_static_3x32", "popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32"]
+STAGES = ["popoto_testauv_1x32", "popoto_static_2x32", "popoto_static_3x32", "popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32",
+          "popoto_face_3x32_ss5"]      # the last: the alternate design for sea state 5 (D-255; the shipped face with 4 s at 200 dB)
 
 
 def tool(name):

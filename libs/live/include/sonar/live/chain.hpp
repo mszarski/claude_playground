@@ -98,6 +98,9 @@ struct ChainOptions {
   std::string beamformer = "backprojection";
   MvdrOptions mvdr;
   bool starboard = true;       ///< which side of a line array the bearings are on
+  /// `look: boresight` (opt-in, sonar-tpex): the side is the one the record's elements face (look_starboard), on every
+  /// ping; `starboard` is then not read. An array across the bow (a forward-looking sonar) looks ahead with it.
+  bool look_boresight = false;
   // Sizes that follow from the sonar are left to be derived from the first record (derive.hpp); a number here wins.
   double range_cell_m = kDerive;   ///< power is averaged into cells this long before detection
   double cfar_pfa = 1e-5, cfar_guard_m = kDerive, cfar_train_m = kDerive;
@@ -142,6 +145,12 @@ struct ChainOptions {
   /// timestamps) advances by this instead (sonar-4bs; gpusonar.live `tracker.ping_interval_s`). 0: off, the default:
   /// such a ping is counted (Report::pings_without_time) and the clock stays where the transmit time puts it.
   double tracker_ping_interval_s = 0.0;
+  /// D5 (opt-in, with tracker.range_rate not Off): which detections' range rates the tracker takes: true, the tone path's
+  /// only (doppler_path 1 or 2; "tone", the default); false, every finite rate, the sweep bank's too ("any", D-232: those
+  /// scatter on extended targets). And the own ship's velocity error along the line of sight, m/s one sigma (an assumed
+  /// navigation accuracy, unconfirmed), in quadrature with the rate's step. live.py range_rate_sigma the same.
+  bool tracker_range_rate_tone_only = true;
+  double tracker_range_rate_nav_sigma = 0.05;
   // fit limit, multipath bearing, the fit limit's growth with range: derived
   ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, kDerive, false, 40.0, 2.0, true, 800.0, kDerive, 2.5, 0.0, 0.0, -1.0, -1.0,
                            std::numeric_limits<double>::quiet_NaN(), 0.0, kDerive};
@@ -359,7 +368,17 @@ struct PassiveOptions {
   ElevationOptions elevation;         ///< stacked rows: an elevation with every bearing
   TonalOptions tonal;                 ///< Goertzel lines and DEMON (tonal.hpp); off unless tonal.enabled
   bool starboard = true;
+  bool look_boresight = false;        ///< as ChainOptions::look_boresight
 };
+
+/// The side of the array its bearings are on, for one record: `starboard` as given, or with `from_boresight` (look:
+/// boresight) the side the elements face. `span` is the array's axis in the world (first element to last; only its
+/// horizontal part is read). Broadside on the starboard side is the axis turned 90 degrees clockwise seen from above,
+/// (-span.y, span.x); the elements' boresights (body frame, each turned into the world by the receive pose, summed) are
+/// on the starboard side when their horizontal part has a positive component along it. Throws std::invalid_argument
+/// when that component is not finite or within 1e-6 of zero (relative): a boresight along the array or straight up or
+/// down gives no side. python/gpusonar/live.py look_side is the same rule.
+bool look_starboard(const PingRecord& record, const Vec3d& span, bool starboard, bool from_boresight);
 
 struct PassiveFrame {
   double time = 0.0;                  ///< s into the record

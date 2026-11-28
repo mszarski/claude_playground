@@ -1142,14 +1142,91 @@ def waveform_section(R: dict) -> list:
         q = per[o["id"]]
         L.append(f"| {o['id']} | " + " / ".join(f"{q['lfm']['loss_db'][v]:.1f}" for v in sp) + f" dB | {q['lfm']['range_m_per_m_s']:.1f}; {q['lfm']['range_error_m'][sp[-1]]:+.0f} m | "
                  + " / ".join(f"{q['hfm']['loss_db'][v]:.2f}" for v in sp) + f" dB | {q['hfm']['range_m_per_m_s']:.1f}; {q['hfm']['range_error_m'][sp[-1]]:+.0f} m |")
+    M12 = deep12_measured()
     L += ["", "Not in this table: the LFM's loss as the chain's detector sees it (smaller: it integrates over cells), the sweep bank (section 0's zero-speed margins less "
-          "its threshold correction), crossing targets (0.4 m/s: section 0's cost table), several pings. Not run: the HFM at 12 km through the eigenray scene "
-          "(a GPU-job item: tools/doppler_gpu_runs.sh `hfm12`).", ""]
+          "its threshold correction), crossing targets (0.4 m/s: section 0's cost table), several pings. "
+          + (deep12_doppler_text(M12) if M12 else "Not run: the HFM at 12 km through the eigenray scene (a GPU-job item: tools/doppler_gpu_runs.sh `hfm12`)."), ""]
     return L
 
 
 def _ss(n):
     return "none of 2-6" if n is None else f"up to sea state {n}"
+
+
+DEEP12 = ROOT / "docs" / "tasks" / "doppler_deep12_eval.json"     # tools/deep12_eval.py: the deep site through the simulator and the chain
+
+
+def deep12_measured() -> dict | None:
+    """The deep site measured through the simulator and both chain engines (docs/tasks/doppler_deep12_eval.json), or None."""
+    return json.loads(DEEP12.read_text()) if DEEP12.exists() else None
+
+
+def _m12_rows(M: dict) -> dict:
+    return {(r["case"], r["target"]): r for r in M["rows"]}
+
+
+def deep12_bullet(M: dict) -> str:
+    """The lead bullet of section 0: what the table's margins are for, and the measured acceptance of both designs (computed)."""
+    R = _m12_rows(M)
+    pts = [abs(r["difference_db"]) for r in M["rows"] if r["target"] == "point" and r["measured_detected"] == r["measured_pings"] and r["difference_db"] is not None]
+    hull = [r["difference_db"] for r in M["rows"] if r["target"] in ("closing", "oblique", "ship") and r["measured_detected"] == r["measured_pings"]
+            and (r["filter"] != "plain" or "hfm" in r["case"]) and r["difference_db"] is not None]
+    scales = " and ".join(f"{s_['length_m']:g} m" for s_ in M["detector_scales"]["1 s"])
+
+    def fails(name):
+        a = M["acceptance"].get(name)
+        if not a:
+            return "not run"
+        bad = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "FAIL"]
+        good = [f"`{lb}` {v['detected']} of {v['pings']}" for lb, v in a["targets"].items() if v["verdict"] == "PASS"]
+        return f"{a['what']}: fails for " + (", ".join(bad) or "none") + "; passes for " + (", ".join(good) or "none")
+    return ("**MEASURED, and worse than the table: the table's margins are for an UNRESOLVED, NON-MOVING target of the stated strength.** "
+            "Through the simulator and both chain engines at the deep site (docs/tasks/doppler_deep12_eval.json; docs/tasks/DOPPLER.md \"Deep site at 12 km\"; "
+            f"ours, one seed, 6 pings a case), the planner's own +25 dB point is reproduced within {max(pts):.1f} dB wherever it is detected on every ping; a hull of the "
+            f"class's +25 dB made of five highlights that resolve in range (the detector tests {scales} cells only) comes {-max(hull):.1f} to {-min(hull):.1f} dB under its own "
+            "prediction with a filter that takes no Doppler loss (the bank, or a hyperbolic sweep), and the linear sweep with the plain filter loses more on a mover. "
+            "So " + fails("baseline") + "; " + fails("alternate") + " (" + fails("alternate_hfm").split(": ", 1)[1].replace("fails for", "with a hyperbolic sweep: fails for") + "). "
+            "Detected on half the pings or more counts as held (the design's 0.5 a ping)."
+            + ((" **Measured energy candidates** (hyperbolic unless said; no configuration changed): every target held by "
+                + ", ".join(v["what"].split(": ", 1)[-1] for k, v in M["acceptance"].items() if k.startswith("candidate_") and v["accepted"])
+                + "; not by " + ", ".join(v["what"].split(": ", 1)[-1] for k, v in M["acceptance"].items() if k.startswith("candidate_") and not v["accepted"])
+                + " (the table at the end of this section).") if any(k.startswith("candidate_") for k in M["acceptance"]) else ""))
+
+
+def deep12_table(M: dict) -> list:
+    """Section 0's measured table (replaces its "Not run." paragraph): each design's acceptance case per target, computed."""
+    R = _m12_rows(M)
+    L = ["**Measured at the deep site** (`popoto_12km_deep_sea_state_5`, the planning site with the bubble law, three rows at 225 m, the class's low +25 dB: "
+         "three hulls of five +18 dB highlights, the ship of five, and one +25 dB point moving with the platform; `" + M["command"] + "`; " + M.get("source", "") + "). "
+         "Each cell: detected of 6 pings, mean margin over the pings detected (dB over the chain's own threshold), and the planner's prediction for the same target "
+         "(`predict_point` at its geometry, less the plain filter's closed-form loss at its range rate). Held: detected on half the pings or more.", "",
+         "| Design (case) | " + " | ".join(f"`{lb}` ({R[(M['acceptance']['baseline']['case'], lb)]['planner_range_rate_m_s']:+.2f} m/s)" for lb in M["acceptance"]["baseline"]["targets"]) + " |",
+         "| --- | " + " | ".join("---" for _ in M["acceptance"]["baseline"]["targets"]) + " |"]
+    for name, a in M["acceptance"].items():
+        cells = []
+        for lb, v in a["targets"].items():
+            m = "—" if v["margin_db"] is None else f"{v['margin_db']:+.1f}"
+            cells.append(f"{'**' if v['verdict'] == 'FAIL' else ''}{v['verdict']}{'**' if v['verdict'] == 'FAIL' else ''} {v['detected']} of {v['pings']}, {m} (planner {v['predicted_db']:+.1f})")
+        L.append(f"| {a['what']} (`{a['case']}`) | " + " | ".join(cells) + " |")
+    L += ["", "The reverberation-limited shelf (`popoto_12km_large_submerged`, docs/tasks/DOPPLER.md HFM.8): every hull held on 6 of 6 pings with every "
+          "transmission tried; four times the energy bought 1 to 2.4 dB there.", ""]
+    return L
+
+
+def deep12_doppler_text(M: dict) -> str:
+    """Section 0a's measured sentence (replaces its "Not run" one): plain linear against hyperbolic and the bank, 4 s at 200 dB, sea state 3."""
+    R = _m12_rows(M)
+    out = []
+    for lb in ("ship", "closing", "oblique", "crossing"):
+        a, b, c = (R.get((k, lb)) for k in ("ss3_lfm4p200", "ss3_hfm4p200", "ss3_lfm4p200_cfar"))
+        if not (a and b and c) or b["measured_margin_db"] is None:
+            continue
+        lin = "not detected" if a["measured_margin_db"] is None else f"{a['measured_margin_db']:+.1f} dB ({a['measured_detected']} of 6)"
+        out.append(f"`{lb}` ({a['planner_range_rate_m_s']:+.2f} m/s): linear {lin}, hyperbolic {b['measured_margin_db']:+.1f}, bank {c['measured_margin_db']:+.1f} dB "
+                   f"(closed-form linear loss {a['planner_closed_form_loss_db']:.1f} dB)")
+    return ("Run through the chain: on the shelf scene (docs/tasks/DOPPLER.md HFM.8) and at the deep site (docs/tasks/doppler_deep12_eval.json; 4 s at 200 dB, sea state 3, "
+            "plain filter unless said): " + "; ".join(out) + ". The hyperbolic sweep with the plain filter held what the bank holds, at the plain chain's cost; the "
+            "linear sweep's loss through the chain is less than its closed form but grows with the speed.")
 
 
 def transmit_section(R: dict) -> list:
@@ -1195,7 +1272,8 @@ def transmit_section(R: dict) -> list:
                  + f". Its tolerance c / (2 B T) is {sh['costs']['doppler_tolerance_m_s']:.3f} m/s at 1 s and {min(o['costs']['doppler_tolerance_m_s'] for o in opts):.3f} m/s at 8 s: "
                  "**at every pulse length in the grid, the shipped 1 s included, the class's 2-8 m/s needs the bank** to keep the gain the table shows. "
                  "This is the closed form for the PEAK (the planner's statistic); the chain's multiscale detector sums cells and lost less on the one measured hull (docs/tasks/DOPPLER.md LS.3: "
-                 "bank off, closing at -5.61 m/s with a 1 s sweep, 3.4 dB under the crossing target; the bank gave back +0.8 dB net). Longer pulses through the chain are not measured.")
+                 "bank off, closing at -5.61 m/s with a 1 s sweep, 3.4 dB under the crossing target; the bank gave back +0.8 dB net). "
+                 + ("Longer pulses through the chain: measured (section 0a's last paragraph)." if deep12_measured() else "Longer pulses through the chain are not measured."))
     eb = A["energy_buys"]
     flat = [f"{s} `{c}` ({v['from_db']:+.1f} -> {v['to_db']:+.1f} dB for +{v['energy_added_db']:.1f} dB of energy; {v['limited_by_at_most']}"
             + (f", ceiling {v['ceiling_db']:+.1f}" if v.get("ceiling_db") is not None else "") + ")"
@@ -1205,6 +1283,9 @@ def transmit_section(R: dict) -> list:
         worst.append("**Where no option holds 12 km at the site's own conditions**: " + "; ".join(never) + ".")
     if flat:
         worst.append("**Where energy buys less than it costs** (reverberation sets a ceiling): " + "; ".join(flat) + ".")
+    M12 = deep12_measured()
+    if M12:
+        worst.insert(0, deep12_bullet(M12))
     L += [f"- {w}" for w in worst] + [""]
     # the tables
     def cell(r):
@@ -1288,6 +1369,9 @@ def transmit_section(R: dict) -> list:
     L += ["### The requirement as the model supports it (proposed, for the owner to accept)", "",
           "Derived from the tables above (`tx_requirement`, recomputed by `--report`), not typed. POP-3's text in `docs/DESIGN.md` is not changed here. For the shipped transmitter:", "",
           f"> {T['requirement'][ship_id]}", "",
+          *(["**Measured against this sentence (the measured table at the end of this section; docs/tasks/doppler_deep12_eval.json): it holds for an unresolved, non-moving target "
+              "of the stated strength (the point) and for the hull seen across the line of sight; it does NOT hold for the class's hull whose highlights resolve in range "
+              "(closing, oblique) nor, with the plain filter, for the moving ship: the baseline at sea state 3 fails for those three.**", ""] if deep12_measured() else []),
           "The same for each option (the highest whole sea state up to which both classes hold at the deep site, every lower state included; the sites held at their own conditions):", "",
           "| Option | Energy (dB) | Deep, with the " + str(law) + " law | Deep, no bubble law | Sites held as stated | Not held |", "| --- | --- | --- | --- | --- | --- |"]
     for o in opts:
@@ -1296,10 +1380,14 @@ def transmit_section(R: dict) -> list:
         L.append(f"| {o['id']}{' (shipped)' if o['shipped'] else ''} | {o['energy_db']:.1f} | {_ss(hs.get('bubble_law', {}).get(o['id']))} | {_ss(hs.get('no_bubble_law', {}).get(o['id']))} | "
                  f"{', '.join(ok_s) or 'none'} | {', '.join(s for s in eb if s not in ok_s) or 'none'} |")
     L.append("")
-    L += ["**Not run.** No transmit option other than the shipped 1 s was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item "
-          "(the CPU here took 27 min for six 1 s pings of `popoto_12km_large_submerged`, DOPPLER.md LS.1 item 8). The command, once the evaluation tool takes a sonar override "
-          "(follow-up): `python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100` with "
-          "`sonar_overrides.transmit.waveform.duration: 4.0` (and the window opening at 3 km).", ""]
+    M12 = deep12_measured()
+    if M12:
+        L += deep12_table(M12)
+    else:
+        L += ["**Not run.** No transmit option other than the shipped 1 s was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item "
+              "(the CPU here took 27 min for six 1 s pings of `popoto_12km_large_submerged`, DOPPLER.md LS.1 item 8). The command, once the evaluation tool takes a sonar override "
+              "(follow-up): `python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100` with "
+              "`sonar_overrides.transmit.waveform.duration: 4.0` (and the window opening at 3 km).", ""]
     return L
 
 

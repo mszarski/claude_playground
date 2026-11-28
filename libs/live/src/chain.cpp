@@ -57,6 +57,19 @@ void num(std::ostringstream& s, double v) {
 
 }  // namespace
 
+bool look_starboard(const PingRecord& record, const Vec3d& span, bool starboard, bool from_boresight) {
+  if (!from_boresight) return starboard;
+  Vec3d b{0.0, 0.0, 0.0};
+  for (const Element& e : record.geometry.rx) b += world_direction(record.geometry.rx_pose, e.boresight);
+  const double na = std::hypot(span.x, span.y), nb = std::hypot(b.x, b.y);
+  const double s = -span.y * b.x + span.x * b.y;          // (the starboard broadside, -span.y, span.x) . boresight
+  if (!(na > 0.0 && nb > 0.0 && std::isfinite(s)) || std::abs(s) <= 1e-6 * na * nb) {
+    throw std::invalid_argument("LiveChain: look: boresight: the elements' boresight lies along the array or straight up or down "
+                                "on this ping, so it gives no side; give look starboard or port");
+  }
+  return s > 0.0;
+}
+
 std::vector<float> range_bearing_power(const PingRecord& record, const std::vector<double>& ranges,
                                        const std::vector<double>& bearings, bool hann, Backend backend, int device);
 
@@ -772,6 +785,8 @@ Report LiveChain::process(PingRecord& record) {
   // World position of each detection, from the array's own position and heading in the record.
   Frame f = array_frame(record);
   Vec3d span = f.positions.back() - f.positions.front();
+  // The side the bearings are on: `look` as given, or (look: boresight) the side the elements face on this ping.
+  const bool starboard = look_starboard(record, span, opt_.starboard, opt_.look_boresight);
   ElevationOptions eo = opt_.elevation;
   std::vector<ElevationEstimate> els(hits.size());
   double water = eo.water_depth > 0.0 ? eo.water_depth : record.environment.water_depth;
@@ -787,7 +802,7 @@ Report LiveChain::process(PingRecord& record) {
   double limit_range_resolution = 0.0, limit_aperture = 0.0;
   if (stacked) {
     // Stacked rows: the elevation of the strongest detections, from the whole array.
-    const ElevationFrame ef = elevation_frame(record, rows, opt_.starboard);
+    const ElevationFrame ef = elevation_frame(record, rows, starboard);
     f.origin = ef.origin;
     span = ef.along;
     std::vector<std::size_t> order(hits.size());
@@ -913,7 +928,7 @@ Report LiveChain::process(PingRecord& record) {
   };
   // --- end hook ---
   const Vec3d axis = normalized(Vec3d{span.x, span.y, 0.0});
-  const double side = opt_.starboard ? 1.0 : -1.0;
+  const double side = starboard ? 1.0 : -1.0;
   const Vec3d broadside{-side * axis.y, side * axis.x, 0.0};
   if (!have_origin_) {
     origin_ = f.origin;
@@ -989,6 +1004,21 @@ Report LiveChain::process(PingRecord& record) {
     Detection m{0.0, 0.0, h.snr_db, h.cells};
     m.time = t + h_range / c_range;
     m.range_sigma = h.range_sigma;                         // a tone's coarse range (D3); NaN: the tracker's
+    if (opt_.tracker.range_rate != RangeRate::Off) {
+      // D5 (opt-in): the rate, its sigma when trusted (live.py range_rate_sigma: the tone path's unless "any"; one step and
+      // the navigation's error in quadrature), and the platform in the tracker's frame (east, north from the first ping's
+      // origin) with its velocity over ground (not finite: the rate is not used).
+      m.range_rate = h.range_rate;
+      m.range_rate_step = h.range_rate_step;
+      const bool trusted = !opt_.tracker_range_rate_tone_only || h.doppler_path == 1 || h.doppler_path == 2;
+      if (trusted && std::isfinite(h.range_rate) && std::isfinite(h.range_rate_step)) {
+        m.range_rate_sigma = std::sqrt(h.range_rate_step * h.range_rate_step + opt_.tracker_range_rate_nav_sigma * opt_.tracker_range_rate_nav_sigma);
+      }
+      m.platform_x = f.origin.y - origin_.y;
+      m.platform_y = f.origin.x - origin_.x;
+      m.platform_vx = v_own.y;
+      m.platform_vy = v_own.x;
+    }
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
       const Vec3d& u = e.world;
@@ -1385,7 +1415,9 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
   }
   const auto n_lines = static_cast<std::int64_t>(subs.size());
   subs.clear();
-  const ElevationFrame ef = elevation_frame(record, rows, o.starboard);
+  const Frame af = array_frame(record);
+  const bool starboard = look_starboard(record, af.positions.back() - af.positions.front(), o.starboard, o.look_boresight);
+  const ElevationFrame ef = elevation_frame(record, rows, starboard);
   const std::int64_t span = o.n_fft + (o.n_average - 1) * o.hop;
   std::vector<PassiveFrame> out(frames.size());
   for (std::size_t i = 0; i < frames.size(); ++i) {
@@ -1401,7 +1433,7 @@ std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const Passi
     for (const DoaPeak& peak : r.peaks) {
       const PassiveElevation pe = passive_elevation(record, rows, peak.bearing, f_low, f_high, o.n_fft, o.hop,
                                                     static_cast<std::int64_t>(i) * span, o.n_average, o.elevation.first_deg,
-                                                    o.elevation.last_deg, o.elevation.step_deg, o.starboard);
+                                                    o.elevation.last_deg, o.elevation.step_deg, starboard);
       const Vec3d dir = arrival_direction(ef, std::sin(peak.bearing), std::sin(pe.elevation));
       out[i].elevations.push_back(std::asin(std::clamp(-dir.z, -1.0, 1.0)));   // level-referenced: the record's roll and pitch applied
       out[i].elevation_quality.push_back(pe.quality);

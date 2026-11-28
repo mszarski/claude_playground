@@ -32,8 +32,10 @@ core = gs.core
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "configs" / "deploy"
 SAND = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}
-STACKED = {"popoto_static_2row", "popoto_static_3row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_elevation_rehearsal"}
-WITH_COVERAGE = {"popoto_face_1row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_vehicle", "popoto_elevation_rehearsal"}
+STACKED = {"popoto_static_2row", "popoto_static_3row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_elevation_rehearsal",
+           "popoto_vehicle_elevation_ss5"}       # the last: the alternate design for sea state 5 (D-255)
+WITH_COVERAGE = {"popoto_face_1row", "popoto_face_2row", "popoto_vehicle_elevation", "popoto_vehicle", "popoto_elevation_rehearsal",
+                 "popoto_vehicle_elevation_ss5"}
 
 
 def deployed() -> dict:
@@ -52,6 +54,9 @@ def test_every_stacked_row_deployment_file_searches_only_where_rays_arrive_from(
     """Found by the sonar's rows, not by a list of names: a new stacked-row file without the key fails here."""
     stacked = set()
     for name, cfg in deployed().items():
+        if SonarModel.load(cfg["source"]["sonar"]).config.get("mode") == "fls":
+            assert "elevation" not in cfg["chain"], name      # one row (sonar-tpex's files); buildspec describes board arrays only
+            continue
         if bs.describe_shipped(cfg["source"]["sonar"])["rows"] > 1:
             stacked.add(name)
             assert cfg["chain"]["elevation"]["sector_from_rays"] == {}, name      # {}: two bounces, a degree of margin, to 500 m

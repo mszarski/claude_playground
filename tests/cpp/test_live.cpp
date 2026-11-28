@@ -89,6 +89,49 @@ TEST(Tracker, FollowsAMoverAndAStandingObjectAndClassifiesThem) {
   EXPECT_STREQ(kind_name(classes[0].kind), "mover");
 }
 
+TEST(Tracker, RangeRateGivesTheClosedFormVelocityVarianceAlongTheLineOfSight) {
+  // D5 (ours; tests/python/test_tracker_range_rate.py holds the same case in both engines): a still target straight
+  // ahead at 3 km, noise-free detections, no process noise, six pings 12 s apart. Along the line of sight the velocity
+  // variance is (J^-1)_vv with J = sum_k [1, t_k]^T [1, t_k] / sigma_r^2 + diag(0, 1 / sigma0^2) and the rates adding
+  // N / sigma_rate^2 to J_vv; across nothing changes. Off: the tracker as before.
+  const double R = 3000.0, sr = 2.0, s0 = 8.0, srate = 0.06, T = 12.0;
+  const int N = 6;
+  auto closed = [&](double sigma, double rate_sigma) {
+    double j00 = 0.0, j01 = 0.0, j11 = 1.0 / (s0 * s0);
+    for (int k = 0; k < N; ++k) {
+      j00 += 1.0 / (sigma * sigma);
+      j01 += T * k / (sigma * sigma);
+      j11 += T * k * T * k / (sigma * sigma);
+    }
+    if (rate_sigma > 0.0) j11 += N / (rate_sigma * rate_sigma);
+    return j00 / (j00 * j11 - j01 * j01);
+  };
+  for (RangeRate mode : {RangeRate::Off, RangeRate::Update}) {
+    TrackerOptions o;
+    o.process_noise = 0.0;
+    o.range_sigma = sr;
+    o.bearing_sigma = 1.0 * kDeg;
+    o.initial_speed_sigma = s0;
+    o.confirm_hits = 1;
+    o.range_rate = mode;
+    Tracker tracker(o);
+    for (int k = 0; k < N; ++k) {
+      Detection d{R, 0.0, 20.0, 2};
+      d.range_rate = 0.0;
+      d.range_rate_sigma = srate;
+      d.platform_x = d.platform_y = d.platform_vx = d.platform_vy = 0.0;
+      tracker.update(T * k, {d});
+    }
+    const Track& t = tracker.tracks().at(0);
+    EXPECT_NEAR(t.cov[10], closed(R * 1.0 * kDeg, 0.0), 1e-9 * closed(R * 1.0 * kDeg, 0.0));
+    const double want = closed(sr, mode == RangeRate::Off ? 0.0 : srate);
+    EXPECT_NEAR(t.cov[15], want, 1e-9 * want);
+    EXPECT_EQ(t.rate_updates, mode == RangeRate::Off ? 0 : N);
+  }
+  EXPECT_EQ(parse_range_rate("update_and_gate"), RangeRate::UpdateAndGate);
+  EXPECT_THROW(parse_range_rate("on"), std::invalid_argument);
+}
+
 TEST(Tracker, TakesEachDetectionAtItsOwnTimeAndClassifiesAtThePing) {
   // D-156: a ship at 12 km crossing at 6 m/s, pinged every 20 s by a monostatic sonar at the origin; each detection
   // shows it where it was when the sound reached it, transmit + R/c. Stamped so, the track holds at its detections'

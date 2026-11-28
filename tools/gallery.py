@@ -11,6 +11,8 @@ numbers for each: simulate, condition, (estimate motion,) image, (detect, track)
 
 Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out DIR]
                         [--quick]   thinned scenes and fewer pings, for a CPU
+                        [--evidence]  each track's classifier evidence in gallery.json (opt-in)
+                        [--reverb doppler=centre] [--reverb bistatic_rule=mean_angle]  an old reverberation law (opt-in)
 
 Writes <out>/<scenario>.png and <out>/gallery.json. --out defaults to docs/figures (the committed
 full-size gallery) for a full run and to build/gallery_quick under the repository (not committed)
@@ -778,15 +780,58 @@ def count_false_movers(classes, moving_ends, gate):
     return int(sum(c.kind == "mover" and all(far(c, e) for e in moving_ends) for c in classes))
 
 
+# `--reverb KEY=VALUE` (opt-in, repeatable, sonar-4pon): a law put on the scenario's reverberation items before the run,
+# to rerun a gallery scene under a law before a default moved: `doppler=centre` (every item: the reverberation Doppler
+# before D-251) and `bistatic_rule=mean_angle` (the items whose law reads it, sim/simulator.py: the bistatic surface and
+# bottom laws before D-216 A3). Nothing else is accepted.
+REVERB_OPTIONS = {"doppler": ("centre", "per_frequency"), "bistatic_rule": ("geometric_mean", "mean_angle")}
+BISTATIC_MODELS = ("chapman_harris", "kraus_surface", "searay_bottom", "bubble_layer_surface")
+
+
+def apply_reverb_options(cfg, options):
+    """Put each `KEY=VALUE` of `options` (REVERB_OPTIONS) on the scenario `cfg`'s reverberation items, in place:
+    `doppler` on every item, `bistatic_rule` on those of BISTATIC_MODELS. Returns `cfg`; refuses anything else."""
+    for opt in options:
+        key, _, value = str(opt).partition("=")
+        if value not in REVERB_OPTIONS.get(key, ()):
+            raise ValueError(f"--reverb {opt!r}: one of " + ", ".join(f"{k}={v}" for k, vs in REVERB_OPTIONS.items() for v in vs))
+        for item in cfg.get("reverberation") or []:
+            if key == "doppler" or item.get("model", "lambert") in BISTATIC_MODELS:
+                item[key] = value
+    return cfg
+
+
+# `--evidence` (opt-in, sonar-4pon): classify_and_score adds `classification.evidence`, one row per track: the classifier
+# tap's numbers (classify.CLASS_EVIDENCE: the rule that gave the kind and the numbers it compared), the track's position
+# and velocity in world (x, y) at the last ping, whether it is one of the false movers counted, and its nearest true
+# object (label, distance from its outline at the last ping). Read only; off: the output as before.
+EVIDENCE = False
+
+
+def class_evidence(classes, evidence, truth, t_last, moving_ends, gate):
+    """`classification.evidence` rows (EVIDENCE): `evidence` (classify_tracks' tap, one dict per class, in order) with
+    each class's world position and velocity, its false-mover flag (count_false_movers' test) and nearest true object."""
+    rows = []
+    for c, e in zip(classes, evidence):
+        xy = (float(c.position[1]), float(c.position[0]))
+        near = min(((outline_distance(xy, object_outline(o, t_last))[0], label) for label, o in truth.items()), default=None)
+        rows.append(dict(e, position_xy=list(xy), velocity_xy=[float(c.velocity[1]), float(c.velocity[0])],
+                         false_mover=bool(c.kind == "mover" and all(outline_distance(xy, m)[0] >= gate for m in moving_ends)),
+                         nearest=None if near is None else {"label": near[1], "distance_m": float(near[0])}))
+    return rows
+
+
 def classify_and_score(tracks, truth, t_last, gate, **kw):
     """Classify the tracks (gpusonar.classify) and score the result against the scene:
     the kind given to each true object's track (object_track) and how many tracks called
     movers are not on an object that moves (count_false_movers, against each moving object's outline at the last
     ping: D-157). The classes' positions are taken at the last ping (`t_last`), as the live report gives them (D-156).
     `range_doppler` ({"factor", "origin"}, target_doppler; None: off): the target's part of the LFM coupling correction
-    (sonar-fyj), applied to the classes' positions before they are scored."""
+    (sonar-fyj), applied to the classes' positions before they are scored. With EVIDENCE, also `evidence`
+    (class_evidence), after the shift."""
     rd = kw.pop("range_doppler", None)
-    classes = classify.classify_tracks(tracks, time=t_last, **kw)
+    evidence = [] if EVIDENCE else None
+    classes = classify.classify_tracks(tracks, time=t_last, evidence=evidence, **kw)
     if rd is not None:
         classify.shift_for_target_doppler(classes, float(rd["factor"]), tuple(rd["origin"]))
     by_id = {c.id: c for c in classes}
@@ -802,6 +847,8 @@ def classify_and_score(tracks, truth, t_last, gate, **kw):
             out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
                                      "truly_moving": bool(np.hypot(*vel[:2]) > 0.0)}
     out["movers_not_on_a_moving_object"] = count_false_movers(classes, moving_ends, gate)
+    if evidence is not None:
+        out["evidence"] = class_evidence(classes, evidence, truth, t_last, moving_ends, gate)
     return classes, out
 
 
@@ -831,18 +878,42 @@ def plot_tracks(ax, tracks, truth, own, t_last, title, classes=None):
     ax.set_aspect("equal", adjustable="datalim")
 
 
+# The image each transit scene is detected on: first and last range and the sampling step along range (m). The detector's
+# cell, CFAR window, false-alarm probability, SNR floor and bearing fan, the tracker and the classifier's speed and fit
+# limits are the sonar's deployment file's (`fls_settings`).
 FLS_TRANSIT = {
-    "fls_120k_transit": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
-    "fls_170k_transit": dict(r=(30.0, 446.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
-    "fls_330k_transit": dict(r=(20.0, 298.0, 0.04), cell=12, guard_m=6.0, train_m=30.0),
-    "fls_120k_cluttered_seabed": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
-    "fls_120k_rough_surface": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
-    "fls_170k_traffic": dict(r=(30.0, 446.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_120k_transit": dict(r=(20.0, 298.0, 0.06)),
+    "fls_170k_transit": dict(r=(30.0, 446.0, 0.06)),
+    "fls_330k_transit": dict(r=(20.0, 298.0, 0.04)),
+    "fls_120k_cluttered_seabed": dict(r=(20.0, 298.0, 0.06)),
+    "fls_120k_rough_surface": dict(r=(20.0, 298.0, 0.06)),
+    "fls_170k_traffic": dict(r=(30.0, 446.0, 0.06)),
 }
+DEPLOY_DIR = Path(__file__).resolve().parents[1] / "configs" / "deploy"
 
 
-# The transit scenes' tracker (`world_tracks`), and what its detections are merged by before it sees them.
-FLS_TRACKER = dict(range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0, process_noise=0.3)
+def fls_settings(sonar: str) -> dict:
+    """The transit scenes' detector, tracker and classifier settings, from the sonar's deployment file
+    (configs/deploy/<sonar>.yaml, its `chain` block: one source for the gallery and the live chain, sonar-tpex). The
+    gallery's own pipeline (fan image, cell means, CA-CFAR, world-frame tracker) reads the keys it shares with the chain;
+    the numbers are the ones it typed before (FLS_TRACKER; cell 8 x 0.06 m, 12 x 0.04 m; guard 6 m, train 30 m; pfa
+    1e-7; SNR over 13 dB; bearings -60 to 60 by 0.4 degrees; min_speed 0.5 m/s, fit 2.5 m), and the gallery's results do
+    not move (tests/python/test_fls_deploy.py). What has no chain key stays here: the image's range span and sampling,
+    the two-cell minimum, the scoring gate, the row test and merging."""
+    from gpusonar.config import load_yaml
+    ch = load_yaml(DEPLOY_DIR / f"{sonar}.yaml")["chain"]
+    t, cf, c = ch["tracker"], ch["cfar"], ch["classify"]
+    if ch.get("cell_statistic") != "mean":
+        raise ValueError(f"configs/deploy/{sonar}.yaml: the gallery's detector tests cell means (cell_statistic: mean)")
+    return {"bearings_deg": [float(v) for v in ch["bearings_deg"]], "range_cell_m": float(ch["range_cell_m"]),
+            "pfa": float(cf["pfa"]), "guard_m": float(cf["guard_m"]), "train_m": float(cf["train_m"]), "min_snr_db": float(ch["min_snr_db"]),
+            "tracker": dict(range_sigma=float(t["range_sigma"]), bearing_sigma=np.radians(float(t["bearing_sigma_deg"])),
+                            confirm_hits=int(t["confirm_hits"]), max_misses=int(t["max_misses"]),
+                            initial_speed_sigma=float(t["initial_speed_sigma"]), process_noise=float(t["process_noise"])),
+            "classify": dict(min_speed=float(c["min_speed"]), static_speed=float(c["static_speed"]), max_fit_rms=float(c["max_fit_rms"]))}
+
+
+# What the transit scenes' detections are merged by before the tracker sees them.
 # Merging is OFF. It was the fix proposed for the anchored boat's track swap (D-121) and it does cure that: the thinned
 # `fls_170k_traffic` reads 0.29 m/s for the boat with it, 1.92 m/s without. But measured on the six full transit scenes
 # (CPU, one simulation each, detections and tracks both ways) it is not a gain overall: flagged cells within 1.9 m in
@@ -855,7 +926,7 @@ FLS_TRACKER = dict(range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=
 FLS_MERGE = False
 
 
-def fls_merge(record, n_cells, samples_per_cell, step, bearings, guard, train):
+def fls_merge(record, n_cells, samples_per_cell, step, bearings, guard, train, range_sigma):
     """(merge_cells, merge_u) for the transit scenes' detections: the live chain's own rule (DECISIONS D-95) from its
     own plan (`core.live_detector_plan`, libs/live detector.hpp) for this array and map: flagged cells within the
     tracker's range sigma in range and half the beam's half-power width in bearing are one detection. A hull whose
@@ -863,23 +934,28 @@ def fls_merge(record, n_cells, samples_per_cell, step, bearings, guard, train):
     others: two tracks on one hull swap clusters when a ping joins them, and read a speed (the anchored boat of
     `fls_170k_traffic`: 4.2 m in 2.25 s, 1.9 m/s)."""
     plan = gs.core.live_detector_plan(record, int(n_cells), int(samples_per_cell), float(step), [float(b) for b in bearings], 1, int(guard), int(train), True,
-                                      {"merge_m": float(FLS_TRACKER["range_sigma"])})
+                                      {"merge_m": float(range_sigma)})
     return int(plan["merge_cells"]), float(plan["merge_u"])
 
 
 def run_fls_transit(name, cfg, backend, quick):
     p = dict(FLS_TRANSIT[name])
+    s = fls_settings(cfg["sonar"])
     if quick:                                             # half the range sampling, same cell size
         p["r"] = (p["r"][0], p["r"][1], 2 * p["r"][2])
-        p["cell"] = p["cell"] // 2
+    p["cell"] = int(round(s["range_cell_m"] / p["r"][2]))   # samples of the image a cell
+    if abs(p["cell"] * p["r"][2] - s["range_cell_m"]) > 1e-9:
+        raise ValueError(f"{name}: the deployment file's range cell {s['range_cell_m']} m is not a whole number of {p['r'][2]} m samples")
     result = run_scenario(cfg, backend=backend)
     ranges = np.arange(*p["r"])
     ranges = ranges[:len(ranges) // p["cell"] * p["cell"]]
-    bearings = np.radians(np.arange(-60.0, 60.01, 0.4))
+    b0, b1, db_ = s["bearings_deg"]
+    bearings = np.radians(np.arange(b0, b1 + 0.01, db_))
     cell_m = p["cell"] * p["r"][2]
-    guard, train = int(round(p["guard_m"] / cell_m)), int(round(p["train_m"] / cell_m))
+    guard, train = int(round(s["guard_m"] / cell_m)), int(round(s["train_m"] / cell_m))
     per_ping, first, polar = [], None, []
-    merge = fls_merge(result.records[0], len(ranges) // p["cell"], p["cell"], p["r"][2], bearings, guard, train) if FLS_MERGE else None
+    merge = (fls_merge(result.records[0], len(ranges) // p["cell"], p["cell"], p["r"][2], bearings, guard, train, s["tracker"]["range_sigma"])
+             if FLS_MERGE else None)
     for rec in result.records:
         origin = rec.rx_positions().mean(axis=0)
         img = recon.fan_image([rec], ranges, bearings, interp="linear", window="hann", backend=backend)
@@ -887,9 +963,9 @@ def run_fls_transit(name, cfg, backend, quick):
         # Power in range cells of about half a metre; rows are bearings for the detector.
         power = fine.reshape(-1, p["cell"], fine.shape[1]).mean(axis=1).T
         r_cells = ranges.reshape(-1, p["cell"]).mean(axis=1)
-        hits = detect.cluster(detect.cfar(power, pfa=1e-7, guard=guard, train=train), power, r_cells, bearings,
+        hits = detect.cluster(detect.cfar(power, pfa=s["pfa"], guard=guard, train=train), power, r_cells, bearings,
                               guard=guard, train=train, merge=merge)
-        hits = [h for h in hits if h.snr_db > 13.0 and h.cells >= 2]
+        hits = [h for h in hits if h.snr_db > s["min_snr_db"] and h.cells >= 2]
         for h in hits:
             h.range = doppler_range(rec, h.range, (np.cos(h.bearing), np.sin(h.bearing)))     # sonar-fyj, opt-in
         per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db,
@@ -897,7 +973,7 @@ def run_fls_transit(name, cfg, backend, quick):
         if first is None:
             first = (r_cells, power, origin)
         polar.append((display(power.T * r_cells[:, None] ** 3), origin))
-    tracks = world_tracks(per_ping, result.times, **FLS_TRACKER)
+    tracks = world_tracks(per_ping, result.times, **s["tracker"])
     truth = scene_truth(cfg)
     t_last = float(result.times[-1])
     metrics = {"pings": len(result.records), "scatterers": len(result.scene),
@@ -907,7 +983,7 @@ def run_fls_transit(name, cfg, backend, quick):
     # ruling after the ten-seed evaluation: no target lost, the cluttered boat a mover on every seed).
     own_last = result.records[-1].rx_positions().mean(axis=0)
     classes, metrics["classification"] = classify_and_score(
-        tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
+        tracks, truth, t_last, 15.0, **s["classify"],
         linear={"length": 40.0, "width": 2.0}, detections={"row_snr_db": 6.0},
         range_doppler=target_doppler(result.records[-1], (own_last[1], own_last[0])))
     metrics["targets"] = score_tracks(tracks, truth, t_last, 15.0, kinds={c.id: c.kind for c in classes})
@@ -1286,10 +1362,16 @@ def main():
                     help="detection range in flank_patrol and the Popoto tracking scenes (RANGE_ESTIMATE; default %(default)s)")
     ap.add_argument("--range-doppler", choices=RANGE_DOPPLERS, default="off",
                     help="LFM range-Doppler coupling correction in the tracking scenes (RANGE_DOPPLER, sonar-fyj; default %(default)s)")
+    ap.add_argument("--evidence", action="store_true",
+                    help="add each track's classifier evidence to the tracking scenes' classification (EVIDENCE, sonar-4pon)")
+    ap.add_argument("--reverb", action="append", default=[], metavar="KEY=VALUE",
+                    help="a law on every reverberation item that reads it: doppler=centre (before D-251), "
+                         "bistatic_rule=mean_angle (before D-216 A3); repeatable (REVERB_OPTIONS, sonar-4pon)")
     args = ap.parse_args()
-    global RANGE_ESTIMATE, RANGE_DOPPLER
+    global RANGE_ESTIMATE, RANGE_DOPPLER, EVIDENCE
     RANGE_ESTIMATE = args.range_estimate
     RANGE_DOPPLER = args.range_doppler
+    EVIDENCE = args.evidence
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
     out = output_dir(args.out, args.quick)
     out.mkdir(parents=True, exist_ok=True)
@@ -1303,6 +1385,7 @@ def main():
         cfg = load_scenario_config(name)
         if args.quick and name in QUICK:
             QUICK[name](cfg)
+        apply_reverb_options(cfg, args.reverb)
         t = time.perf_counter()
         out_ = RUNNERS[name](name, cfg, backend, args.quick)
         fig, metrics = out_[0], out_[1]
@@ -1323,6 +1406,8 @@ def main():
             metrics["range_estimate"] = args.range_estimate                # a gallery.json without it: centroid
         if args.range_doppler != "off" and RUNNERS[name] in (run_flank, run_popoto_far, run_fls_transit):
             metrics["range_doppler"] = args.range_doppler                  # opt-in: said only when on
+        if args.reverb:
+            metrics["reverb"] = list(args.reverb)                          # opt-in: said only when given
         fig.savefig(out / f"{name}.png", dpi=110)
         plt.close(fig)
         summary[name] = metrics

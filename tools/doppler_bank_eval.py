@@ -5,6 +5,7 @@ track with the bank off and on, the false detections on the scene's background, 
     tools/doppler_bank_eval.py SCENE [--pings 6] [--engines python cpp] [--background 4] [--max-rate 3.0] [--combine max|cfar]
                                [--cache DIR] [--truth-at ping|reflection] [--gate-range-m 60] [--json FILE]
                                [--backend host|cuda|auto] [--sim-backend host|cuda] [--set KEY=VALUE ...] [--off-only]
+                               [--chain-set KEY=VALUE ...]
 
 What is run (ours). The scene as shipped (`configs/scenarios/SCENE.yaml`, its own seed and pings; the eigenray scenes
 need GPUSONAR_BELLHOP) is simulated once; its records go through `LiveChain` with the deployment defaults (bearings -40
@@ -44,6 +45,11 @@ runs (KEY dotted into the scenario, VALUE read as YAML; doppler_tone_eval.apply_
 sonar_overrides.transmit.waveform.source=hfm` (docs/tasks/DOPPLER.md "HFM"); the cache's file names carry the changes.
 `--off-only`: the chain without the bank only (for a transmit the bank refuses: it takes a linear sweep only). The result
 names the backends, the changes and `off_only` when any of these is given.
+
+`--chain-set KEY=VALUE` (opt-in, repeatable): a key of the chain's configuration (dotted, VALUE read as YAML) set for every
+chain this tool runs, the background's too: e.g. `--chain-set elevation={}` for an array of stacked rows, whose rows'
+maps the chain then adds in power (the detector the planner's threshold for those rows assumes: buildspec.detection).
+Without it the chain is the deployment default, as before. The result names the changes (`chain_set`).
 """
 from __future__ import annotations
 
@@ -66,6 +72,7 @@ from gpusonar.sim.simulator import run_scenario  # noqa: E402
 
 GATE_RANGE_M, GATE_BEARING_DEG, TRACK_GATE_M = 60.0, 1.5, 100.0
 BACKEND = "host"      # --backend: the chain's
+CHAIN_SETS: list = []  # --chain-set: KEY=VALUE changes to every chain's configuration
 
 
 def say(text: str) -> None:
@@ -113,6 +120,17 @@ def chain_config(engine: str, bank: bool, max_rate: float, budget: float | None 
             cfg["doppler"]["combine"] = combine
     if budget is not None:
         cfg["cfar"] = {"false_alarms_per_ping": budget}
+    if CHAIN_SETS:
+        import yaml
+        for item in CHAIN_SETS:
+            key, sep, value = item.partition("=")
+            if not sep or not key:
+                raise ValueError(f"--chain-set {item!r}: KEY=VALUE")
+            *path, last = key.split(".")
+            node = cfg
+            for k in path:
+                node = node.setdefault(k, {})
+            node[last] = yaml.safe_load(value)
     return cfg
 
 
@@ -189,9 +207,10 @@ def main(argv=None) -> int:
     ap.add_argument("--sim-backend", default="host", choices=["host", "cuda"], help="the simulator's backend (default host)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="change the scene before anything runs")
     ap.add_argument("--off-only", action="store_true", help="the chain without the bank only (a transmit the bank refuses)")
+    ap.add_argument("--chain-set", action="append", default=[], metavar="KEY=VALUE", help="change the chain's configuration (every chain run)")
     a = ap.parse_args(argv)
-    global GATE_RANGE_M, BACKEND
-    GATE_RANGE_M, BACKEND = a.gate_range_m, a.backend
+    global GATE_RANGE_M, BACKEND, CHAIN_SETS
+    GATE_RANGE_M, BACKEND, CHAIN_SETS = a.gate_range_m, a.backend, list(a.chain_set)
     sys.path.insert(0, str(ROOT / "tools"))
     import doppler_tone_eval                           # imported here: it imports this module's truth()
     sim = None
@@ -218,6 +237,8 @@ def main(argv=None) -> int:
         result.update(backend=a.backend, sim_backend=a.sim_backend, set=a.set, off_only=a.off_only,
                       transmit={"type": str(w.type).split(".")[-1], "f_start": w.f_start, "f_stop": w.f_stop, "duration": w.duration,
                                 "source_level_db_peak": w.source_level_db})
+    if a.chain_set:
+        result["chain_set"] = list(a.chain_set)
     banks = (False,) if a.off_only else (False, True)
     for engine in a.engines:
         res = {}

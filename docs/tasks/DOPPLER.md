@@ -1637,3 +1637,520 @@ tree `81364e0`, `popoto_12km_large_submerged_tone`, 4 target-free pings, default
 engines): tone path off 1 false detection; on with the lobe notch off 17, all on a lobe's ridge; on
 with the notch (auto) 0. At 3 a ping: off 16; on with the notch 25, of which 3 are the tone's. Not
 shown: more pings, the far-sidelobe case on a real scene.
+
+## D5: tracks use the measured range rate (2026-11-27, branch `d5rate`, issue `sonar-evd4`; opt-in, both engines)
+
+### D5.1 What failed, is uncertain or was not run (read first)
+
+1. **The defect is not shown removed on the scenes that showed it.** `flank_patrol_doppler_tone` (D-241) and
+   `popoto_12km_large_submerged` with alternating pings (D-243) need eigenray simulation that does not finish on this
+   CPU, and no cached records of them exist here. The GPU job's `tone` and `ls12` sub-runs now take a second pass with
+   the option on (section D5.4); not run.
+2. **Free-field forms do not reproduce it** (labelled: `--set fidelity=free_field --set reverberation=[]`, not a
+   measurement of the scenes). `flank_patrol_doppler_tone` free field, 6 pings, both engines: with the tone path on the
+   small vehicle is already a mover from ping 3 (0-based) without the rate (the line fit suffices at its free-field
+   signal), and the submarine too; with `range_rate: update` every class, ping by ping, is the same (the fit's mover
+   rule comes first, so the reported velocities are the fit's too); the wreck static in both. The 12 km scene free field
+   with alternating pings detects its targets on 0 to 2 of 12 pings and tracks none: says nothing either way.
+3. **Where it is shown (ours, synthetic):** the chain on alternating tone and sweep pings of `test_doppler_tone.py`
+   (flank_32, a 1.56 m/s mover at 600 m, 2 s pings): without the rate the one track is static on pings 4 to 7, with it a
+   mover on the same pings, both engines, still platform and under way at 1.5 m/s. The tracker alone (a 2 m/s target at
+   3 km, -1.2 m/s along the line of sight, 12 s pings, range sigma 20 m, bearing 1 degree, rate sigma 0.04 m/s, 20
+   seeds): first a mover on ping 9 to 14 (median 12) without the rate, on ping 4 (min_points) on 18 seeds and 5, 6 on
+   the others with it.
+4. **The 12 km oblique target may stay static even with the rate**: its radial part is 0.50 m/s, below `min_speed`
+   (1.0 m/s), and the rule tests |v|, whose part across the line of sight comes from the positions (about 200 m of
+   bearing error at 12 km). Expected from the design; to be seen on the GPU pass.
+5. **Not measured:** what `update_and_gate` does on a scene (it is tested on a made case: a wrong rate's pair refused, a
+   new track born); false movers from an overconfident covariance on extended targets; the navigation accuracy (the
+   0.05 m/s default is assumed, unconfirmed). The design adds one classifier rule (D5.2: the existing rules cannot read
+   the filter).
+6. Off is the chain as before: 10 of 10 report hashes (processing_seconds removed) equal a build of the base
+   `c77190e`, with the defaults and with `tracker.range_rate: off` said explicitly: `flank_patrol` and `popoto_12km`
+   (3 pings each, defaults), the tone path on `popoto_12km_doppler` (3 pings) and on alternating synthetic pings (8,
+   still and under way), each in both engines.
+
+### D5.2 Design
+
+- **Frame.** The tracker's state is (x, y, vx, vy) in its horizontal, world-fixed frame: x across = east (the record's y),
+  y forward = north (the record's x), metres from the array's centre at the first ping, velocities over ground
+  (`live.py` and `chain.cpp` build each tracker detection there; unchanged).
+- **The measurement** (ours, from the geometry). A detection's `range_rate` is the bank's, relative to the platform,
+  opening positive (a still scatterer reads -v_o . u: `doppler.hpp`). With the track's position p, velocity v, the
+  platform's position o (the array's centre at the ping) and velocity v_o (the mean of the transmit and receive poses'
+  velocities from navigation, the one the bank centres its hypotheses on), all in the tracker's frame:
+
+      z = h(x) + e,   h(x) = u . (v - v_o),   u = (p - o) / |p - o|
+
+  Its Jacobian (an extended Kalman update) is H = [w_t / R, u], R = |p - o|, w = v - v_o, w_t = w - u (u . w) (the
+  part across the line of sight). The vertical is left out: the slant's elevation (cos 0.5 degree = 0.99996) and
+  v_z u_z. The still target seen from a moving platform is the test of the sign: z = -u . v_o, h = -u . v_o at v = 0,
+  no innovation; read as over ground (v_o withheld) the same rate makes the track a mover or breaks it
+  (`test_tracker_range_rate.py`).
+- **Its variance.** sigma^2 = step^2 + sigma_nav^2: `range_rate_step` (the tone bank's hypothesis step c / (4 f T),
+  half the resolution; the parabola refines within it, and the errors measured on the scenes stayed within one step:
+  1.964 to 1.997 against 1.996 m/s at a step of 0.036 m/s, D-241; -0.454 to -0.551 against -0.50 at 0.058, D-243)
+  and `tracker.range_rate_nav_sigma_m_s`, the own ship's velocity error along the line of sight (default 0.05 m/s: an
+  assumed navigation accuracy, unconfirmed; the hardware's goes there; D5's plan asked for better than 0.075). Left
+  out: the track's bearing error times its speed across the line of sight in u (the EKF's position part of H carries
+  it to first order), the bank's quantisation correlation from ping to ping, and the clock (DOPPLER.md D7: 10 ppm is
+  0.0075 m/s at the scale of these numbers).
+- **Which rates are trusted.** Per detection: `Detection.range_rate_sigma` (both engines), NaN = not used. The chain
+  sets it only with `tracker.range_rate` on, for a finite rate and step, and with `range_rate_from: tone` (default)
+  only for `doppler_path` tone or both: the tone bank's. The sweep bank's (`doppler_path` sweep with `mode:
+  sweep_bank`) scatter by several m/s on extended hulls (D-232) and are not a measurement; `range_rate_from: any`
+  takes them too (not recommended). A ping without a finite velocity gives no rate.
+- **The update** (sequential: the noises of the position and the rate are independent). The position update as before,
+  then a scalar EKF update linearised at the updated state: y = z - h(x), S = H P H^T + sigma^2, K = P H^T / S,
+  x += K y, P = (I - K H) P (the position update's own form). A new track takes its first detection's rate too.
+- **Gating** (`update_and_gate`, opt-in within the option, since a wrong gate loses tracks): a (track, detection)
+  pair whose rate innovation at the predicted state has y^2 / S >= gate^2 (the tracker's gate, 4 sigma) is no
+  candidate. S is the rate's marginal; its correlation with the position's innovation is left out (ours). It only
+  vetoes: the association's cost is the position's, as before.
+- **The classifier: why a rule.** Every existing rule reads the line fitted through the track's measured positions
+  (D-157): its speed and sigma come from the positions alone, so a better filter velocity cannot reach them (the
+  filter's state is used today only to move a track shorter than three points). Hence one rule, `mover_range_rate`,
+  active only with the option on: a track that took a rate (`rate_updates` > 0), whose filter velocity v and covariance
+  P (state[2:4], cov[2:4, 2:4]) give v^T P^-1 v >= significance^2 (25: 2 degrees of freedom, 3.7e-6 for a still target
+  if P is right) at |v| >= min_speed and seen on min_seen of its pings (min_points and the fit limit as for any track),
+  is a mover where the fit does not already make it one; its reported velocity, speed and speed sigma are then the
+  filter's (sqrt(u^T P u), u = v / |v|). The static rules are untouched: a still target with the rate keeps the fit's
+  class (tested). Risks: an overconfident P (highlights jumping on a hull, process noise 0.05) gives false movers;
+  `min_speed` reads |v|, whose part across the line of sight comes from positions, so a slow radial component (the 12 km
+  oblique target: -0.50 m/s) alone does not reach min_speed 1.0 m/s.
+- **Taps** (opt-in, both engines; with the option off they are as before): the tracker tap gains `range_rate` and
+  `rate` [{track, detection, z, predicted, innovation, s, sigma}], and with `update_and_gate` each pair `rate_d2`; the
+  classifier's evidence `rate_updates`, `filter_speed`, `filter_chi2` and the rule name `mover_range_rate`.
+- **Unchanged:** no record field, no report-line field (a track's kind, velocity and speed change only with the option
+  on), every default. The tracker and the classifier run on the host in both engines (`detect.py`, `tracker.cpp` with
+  Eigen, called after the detector in `chain.cpp`); no `.cu` file changed.
+- **Keys:** `chain.tracker.range_rate: off | update | update_and_gate`, `range_rate_from: tone | any`,
+  `range_rate_nav_sigma_m_s` (`docs/CONFIGURATION.md`; `sonar_live` `tracker_range_rate*`).
+
+### D5.3 Tests (both engines; each fails on the branch's base `c77190e`: 29 of 29 in the new file)
+
+`tests/python/test_tracker_range_rate.py`: the measurement and its Jacobian (numerical); the closed-form covariance
+(a still target ahead at 3 km, noise-free, no process noise, six pings 12 s apart, range sigma 2 m, rate sigma
+0.06 m/s: the velocity sigma along the line of sight 0.0398 -> 0.0209 m/s, across 1.034 m/s either way, to 1e-9, both
+engines; GoogleTest `Tracker.RangeRateGivesTheClosedFormVelocityVarianceAlongTheLineOfSight` the same); the velocity
+error with noise (40 seeds: more than three times smaller along the line of sight, within 1.5 times the covariance's);
+pings to a mover (D5.1 item 3); a still target stays static (never a mover; the fit's class on every ping); a still
+target from a platform at 1.5 m/s stays static, and a naive form (the rate read as over ground) is wrong on at least
+18 of 20 seeds (measured 20: a mover on 5, uncertain or broken on 6, a static track that lost detections on 9); an
+untrusted rate (NaN sigma, the bank's scatter) changes nothing, bit for bit; `update_and_gate` refuses a wrong rate's
+pair; the taps (the rate's members only with the option on); the two trackers and classifiers equal (1e-8, three modes,
+both associations); off bit for bit as a tracker given no rate; the chain (both engines; alternating pings, still and
+moving platform) static -> mover; the two chains' report lines and taps equal with `update` and `update_and_gate`;
+which rates the chain trusts; the keys (said only when on, refused when wrong, in the binding and in `sonar_live`'s
+options). `test_doppler_gpu_job.py`: the eval tool's switch and the second passes.
+
+### D5.4 The GPU job (not run)
+
+`GPUSONAR_JOB=doppler GPUSONAR_DOPPLER_RUNS=tone,ls12` (tools/gpu_job.sh with GPUSONAR_ORACLES=1 for Bellhop): the `tone`
+sub-run runs `flank_patrol_doppler_tone` as before (-> `doppler_tone_eval.json`) and then again on the same cached
+pings with `--tracker-range-rate update --background 0` (-> `doppler_tone_eval_rate.json`); `ls12` adds the same second
+pass to `popoto_12km_large_submerged_tone` and to the alternating 12 pings of `popoto_12km_large_submerged`
+(`ls12_tone_train_rate.json`, `ls12_tone_alternate12_rate.json`; its default limit 80 -> 110 min). Each JSON gives per
+target the class ping by ping (`kinds`), `first_mover_ping`, and the last ping's speed, true speed and velocity error:
+the before -> after of D-241's small vehicle and D-243's oblique target in one job.
+
+## Deep site at 12 km: the transmit table's noise-limited claims through the simulator and the chain (2026-11-27, branch `deepsea`, issue `sonar-rctz`; prepared, the device run not yet made)
+
+Appended; nothing above was rewritten. The trade study's transmit table (`docs/design/popoto_trade_study.md` sections 0
+and 0a; D-247) rests on the deep, noise-limited site, but the only real-scene run (HFM.8) was the reverberation-limited
+shelf. The owner has since set the requirement's sea state (D-255): the **baseline** is the shipped face (1 s, 197 dB)
+up to sea state 3; an **alternate**, `configs/builds/popoto_face_3x32_ss5.yaml` (the same face with 4 s at 200 dB, the
+least energy with a single listed projector that holds both classes at sea state 5 with the bubble law: +2.0 / +2.9 dB
+by the planner), at sea state 5. This section is the acceptance check of both. Every number is **ours**.
+
+### DS.1 Where the scene and the planner differ, and what is not known (read first)
+
+1. **The ambient noise is the planner's at the band centre and not across the band.** Both are Wenz at the site's wind
+   and shipping 0.5 (`tests/python/test_deep12_scenes.py`, to 1e-9 dB at 5 kHz, sea states 3, 4, 5 and 5 m/s). The
+   simulator's spectrum is +1.62 dB at 4 kHz and -1.37 dB at 6 kHz against the centre; its band mean is +0.13 dB, the
+   planner's flat: the scene is 0.13 dB noisier.
+2. Absorption is the planner's at 5 kHz (Ainslie-McColm at 12 C, 50 m: equal to 1e-12); across the band two-way at
+   12 km 5.96 / 7.79 / 9.96 dB at 4 / 5 / 6 kHz; on the compressed peak that is +0.02 dB against the centre's figure.
+   Sound speed: 1497.6 m/s in the scene (Mackenzie at 12 C, 35 PSU, 50 m) against the planner's 1500.
+3. The surface: the rough surface's height and the bubble loss at a bounce are the planner's (`lloyd.Surface`; the
+   bubble loss from the simulator's table within 2 %). The planner's peak keeps only the coherent part; the simulator
+   adds the scattered rest as later taps (`time_spread.surface`), which the chain's detector may collect.
+4. **The site's `bubble_model` does not reach the simulator by itself**: the scene states it again in
+   `time_spread.surface.bubble_loss_db` (the test holds the two equal). Changing that would change the simulator's
+   reading of every environment with a bubble law (none shipped); not done.
+5. The detector: the chain's single-sample threshold in this 11.3-12.7 km window is 9.45 dB (three rows added in power,
+   `--chain-set elevation={}`), the planner's 9.89 dB for the build's 0.75-12.7 km window: `tools/deep12_eval.py`
+   predicts the chain's margin against the threshold the chain used.
+6. Geometry: one own depth, 225 m (the planner's for `ship` at both deep sites; for `large_submerged` alone it
+   recommends 245 m at 5 m/s, 395 m at sea state 5, 445 m at sea state 3); the hulls at 50 m, the ship at 4 m. The
+   planner's figure at the scene's geometry is not the table's (worst over the class's depths): at sea state 3 the point
+   +2.74 against the table's +2.36 dB, the ship +9.01 against +3.32 dB (a near-surface target in a constructive lobe).
+7. Not in the planner: the hulls' five highlights resolve in range off broadside (DOPPLER.md LS.3: 3 to 6 dB under a
+   point); the chain's multiscale detector sums cells, so the linear sweep loses less on a mover than the closed form.
+8. The bank with rows runs the per-hypothesis path, not D8's batched one (which takes one row): its cost on the device
+   with 3 rows and 173 hypotheses a beam at 4 s is not measured.
+
+### DS.2 The scenes (`configs/scenarios/`, opt-in, new files)
+
+`popoto_12km_deep` (the planning site `deep_no_bottom_return` by name) and `popoto_12km_deep_sea_state_5`
+(`deep_no_bottom_return_sea_state_5` by name, the apl_1994 law); sea states 3 and 4 by `--set environment.sea_state=N`.
+Image-source paths, direct and surface image only: the cheapest tier that carries the surface path, its roughness, the
+bubble loss and the site's noise, and the planner's own paths ("direct path and surface image (no bottom return),
+isovelocity"); no Bellhop is needed (the water has no profile). The three-row face at 225 m under way at 1.5 m/s;
+`popoto_12km_large_submerged`'s three hulls unchanged, a ship at +29.2 degrees (range rate -3.65 m/s) and a +25 dB point
+moving with the platform (range rate 0: the planner's zero-speed prediction for every waveform). Cost on this CPU:
+17 s a ping (1 s linear, 96 channels), 567 s a ping (4 s hyperbolic, sampled).
+
+### DS.3 The run (`tools/doppler_gpu_runs.sh` sub-run `deep12`; `tools/deep12_eval.py` sets each case against the planner)
+
+Cases `ss{3,4,5}_{lfm1, lfm4p200, hfm4p200, hfm1}` with the plain filter and `_cfar` (the bank, 8 m/s) for the linear ones;
+6 pings and 4 target-free pings each; C++ chain, and the Python chain on `ss3_lfm1` (the baseline's acceptance). The 4 s
+cases are the alternate's energy (200 dB); the 4 s at 197 dB of the first brief is dropped for it. CPU trials of one to
+three pings (not results; plumbing): at sea state 3 the baseline's point +3.29 dB against +2.79 predicted (3 of 3), the
+crossing hull +2.53 against +1.76 (3 of 3), and the closing hull, the oblique hull and the ship not detected on any of
+3 pings with the plain filter (predicted -11.5, +1.1, -2.1 dB with the closed form's loss).
+
+### DS.4 The stale outputs of D-251 (issue `sonar-rar0`; `tools/regen_stale.py --list`)
+
+Stale (a moving platform and boundary reverberation), rerun by the `regen` sub-run: `doppler_bank_eval.json`'s
+`popoto_far_mover` and `popoto_12km`; `doppler_d3_eval.json`'s two `cfar_scenes` and `tone_p12`;
+`doppler_large_submerged_eval.json`'s `bank`, `alternate` and `train_one_ping`; `doppler_baseline.json`'s runs with a
+moving platform (`fp_v15`, `fp_v15_lfm`, `fm_*`, `k12_*`, `sp_scene`, `rs_mono`, `rs_bi`); `docs/design/popoto_12km.json`
+whole. Not stale: every part from `flank_patrol` (platform still; one ping's record SHA-256 equal under `doppler:
+per_frequency` and `doppler: centre` here), the noise-only and planner parts. Kept as they were and not reproducible at
+this tree: `tone_p12_wholetrain` (before 51d2b12 and 80df69d) and the first run's truth summary (LS.1 item 7).
+Regenerated here: `docs/handoff/examples/gallery_quick_fls_120k_transit.json` (confirmed tracks 7 -> 10, the three more
+`uncertain` and `static` clutter; detections a ping [10, 11, 10, 13] -> [11, 9, 9, 15]; with `doppler: centre` the old
+numbers come back exactly); `examples/classify_rules_eval_quick.md` rerun: unchanged.
+
+## Deep site at 12 km: measured (appended 2026-11-27; jobs 6b0a02346c5d61fff18a11a1, 6b0a02356c5d61fff18a11a4; nothing above rewritten)
+
+NVIDIA L4, tree `deepsea` at `1166ca6`, simulator and chain on cuda, `popoto_12km_deep_sea_state_5` at sea states 3, 4,
+5 (`--set environment.sea_state`), 6 pings and 4 target-free pings a case, the C++ chain (the Python chain on `ss3_lfm1`:
+equal to 6e-7 dB and the same detections). Ours; one seed; site illustrative; class values assumed. Every figure:
+`docs/tasks/doppler_deep12_eval.json` (`tools/deep12_eval.py`). Held: detected on half the pings or more (the design's
+detection probability, 0.5 on one ping).
+
+### DM.1 What failed (read first)
+
+1. **The baseline fails its acceptance at sea state 3.** The shipped 1 s, 197 dB linear sweep with the plain filter:
+   the closing hull 0 of 6, the oblique hull 0 of 6, the ship 0 of 6. It holds the crossing hull (6 of 6, +2.95 dB) and
+   the planner's own +25 dB point (6 of 6, +3.41 dB against +2.79 predicted). With the bank (`combine: cfar`, not the
+   baseline: every Doppler option is off in it) the ship comes back (6 of 6, +2.62 dB); the closing and oblique hulls
+   stay at 0 of 6.
+2. **The alternate fails its acceptance at sea state 5**, with every waveform tried at its energy (4 s, 200 dB):
+   linear plain: closing 0, oblique 0, ship 0 of 6 (crossing 4, point 5 of 6); linear with the bank: closing 0, oblique 0
+   (ship 5, crossing 5, point 6); hyperbolic plain: closing 2, oblique 0 (ship 6, crossing 5, point 6 of 6).
+3. So **the transmit table's margins hold for an unresolved, non-moving target of the stated strength, and only for
+   that**: the point is reproduced within 0.62 dB wherever it is detected on every ping (11 cases); a hull of the class's
+   +25 dB whose five highlights resolve in range falls 2.4 to 6.3 dB under its own prediction with a filter that takes
+   no Doppler loss, and the linear sweep with the plain filter loses more on a mover.
+4. No false detection on any of the 72 target-free pings at the default budget (18 cases); at 3 a ping 0 to 9.
+5. Not shown: more than one seed; the hull's high target strength near broadside (+41.5 dB); targets at other depths
+   (the scene's hulls at 50 m, the ship at 4 m, the array at 225 m); sea state 4 and 5 without the bubble law.
+
+### DM.2 Why, separated (evidence)
+
+**(a) The hull's highlights resolve, and the detector tests no scale long enough to add them.** In this window the
+multiscale detector tests two scales only: the single sample (0.375 m, threshold 9.45 dB) and a 2 m cell (5.5 looks,
+4.88 dB on its mean) (`detector_scales`; `live.detector_plan`). The hulls' extent along the line of sight: crossing
+0.1 m, oblique 25 m (highlights 6.3 m apart), ship 58.5 m (14.6 m), closing 100 m (25 m): every hull but the crossing
+one puts each of its five +18.0 dB highlights in its own cell, 6.99 dB under the whole. Measured, hull less the point
+in the SAME case, with a filter that takes no Doppler loss (bank or hyperbolic): crossing -0.2 to +1.0 dB; oblique
+-6.0 / -5.9 / -4.8 / -4.2 dB (sea state 3 hyperbolic, 3 bank, 4 hyperbolic, 4 bank); closing -5.4 / -5.1 / -3.9 / -3.8.
+The ship's own prediction is 6 dB over the point's (a near-surface target in a constructive surface-image lobe at this
+geometry: factor +8.9 against +2.8 dB at 50 m); measured it is level with the point (-0.5 to +1.2 dB), i.e. 4.9 to 6.3 dB
+under its own prediction, the same loss. Against the one-highlight prediction (the prediction less 6.99 dB) the resolved
+hulls come out +0.6 to +4.6 dB above it (+0.6 to +2.9 where the margin is high; the larger figures at sea state 4, where
+the mean is over the stronger pings only): the chain sees about one highlight and some of the rest (not separated: the
+2 m cell, the highlights' surface images, the strongest-of-five draw). At sea state 3 with the baseline the oblique
+hull's one-highlight prediction is -4.2 dB and the closing hull's -5.6: below the threshold, as measured (0 of 6).
+
+**(b) Doppler mismatch, the linear sweep with the plain filter** (same case, linear plain / hyperbolic plain / bank):
+
+| Sea state, pulse | `ship` (-3.44 m/s) | `closing` (-5.60) | `oblique` (-0.50) | `crossing` (-0.39) | `point` (0) |
+| --- | --- | --- | --- | --- | --- |
+| 3, 1 s 197 dB | 0 of 6 / +4.05 / +2.62 | 0 / 0 / 0 of 6 | 0 / 0 / 0 of 6 | +2.95 / +3.82 / +2.75 | +3.41 / +2.84 / +2.77 |
+| 3, 4 s 200 dB | +2.38 / +11.67 / +10.89 | +0.25 (2 of 6) / +6.26 / +5.71 | +2.29 / +5.62 / +4.91 | +9.24 / +11.42 / +10.65 | +11.69 / +11.63 / +10.84 |
+| 4, 4 s 200 dB | 0 of 6 / +6.21 / +5.28 | 0 of 6 / +1.54 (5) / +0.88 | +0.33 (1) / +0.58 (5) / +0.56 | +4.04 / +5.64 / +4.97 | +5.39 / +5.41 / +4.72 |
+| 5, 4 s 200 dB | 0 / +1.64 / +0.85 (5) | 0 / +0.17 (2) / 0 | 0 / 0 / 0 | +0.76 (4) / +2.38 (5) / +2.26 (5) | +2.12 (5) / +2.17 / +1.29 |
+
+At 4 s the linear sweep's plain filter loses 9.3 dB on the ship (closed form 17.2), 6.0 on the closing hull (19.3),
+3.3 on the oblique (8.8), 2.2 on the crossing (7.6): less than the closed form (the detector's cells), growing with the
+speed. At 1 s the ship is lost (0 of 6) where the hyperbolic sweep and the bank hold it. The bank costs its threshold
+shift (9.45 -> 10.10 dB at 1 s, 10.31 at 4 s: the point 0.6 to 0.9 dB under the plain filter) and, with three rows (the
+per-hypothesis path, not D8's batched one), 3.4 s a ping at 1 s and 25.6 to 25.8 s at 4 s on the L4 against 0.05 to
+0.14 s plain. The hyperbolic sweep equals the plain filter on the point at 4 s (+11.63 against +11.69; -0.57 dB at 1 s)
+and leads the bank by 0.1 to 0.8 dB on every mover.
+
+**(c) Anything else.** The chain's threshold in the 1.4 km window (9.45 dB, against the planner's 9.89 for its 0.75-12.7 km
+window) is in the prediction, and the point agrees: not a cause. Own depth: the scene's 225 m is the planner's for the
+ship; for this class it recommends 245 to 445 m, but the planner's margin at the scene's geometry is no worse than the
+table's (sea state 3: +2.74 against +2.36 dB): not a cause. The surface image at 50 m: in the prediction (+2.8 dB at sea
+state 3), and the point agrees: not a cause. The scene's noise 0.13 dB over the planner's flat figure (DS.1): within the
+point's agreement.
+
+### DM.3 What it means for the two designs, and what would accept the resolved hull
+
+- Accepted, measured: the baseline at sea state 3 for a point (unresolved) of +25 dB with +3.4 dB to spare, so down to
+  about +21.6 dB; the hull of the class's +25 dB is accepted only across the line of sight. The alternate at sea state 5:
+  the point with +2.2 dB (so about +22.8 dB); the hull across the line of sight; the ship with the hyperbolic sweep or the
+  bank.
+- **What the resolved hull needs (measured bracket):** with a filter that takes no Doppler loss the closing and oblique
+  hulls are held (5 or 6 of 6) where the point's margin is +5.4 dB (sea state 4, 4 s at 200 dB) and not held where it is
+  +2.2 to +3.4 dB. So the hull needs about **+2 to +3 dB more than the table gives at sea state 3 with the baseline**, and
+  **about +3 dB more than the alternate at sea state 5**:
+  - baseline, sea state 3: about 200 dB re 1 uPa^2 s at 1 m a ping (1 s at 200 dB, or 2 s at 197 dB; the table's cells
+    +5.4 / +6.3 dB), with the hyperbolic sweep or the bank for the ship (model and the bracket; not run at that energy);
+  - alternate, sea state 5: about 209 dB (4 s at 203 dB or 8 s at 200 dB; no single listed projector gives either,
+    the table's projector column); the closest measured stand-in is sea state 4 at 206 dB, whose noise is 3.15 dB
+    lower (point +5.4 dB): there the hulls are held with the hyperbolic sweep or the bank.
+  - In target strength: the resolved hull behaves as a point 5 to 6 dB weaker; the class's low end would have to be about
+    +27 dB (baseline, sea state 3) or +28 dB (alternate, sea state 5) for these designs as they are.
+- Processing instead of energy (proposals; nothing changed): (i) the hyperbolic sweep or the bank removes the ship's
+  loss (measured, above); (ii) a detector scale over the hull: a plain cell as long as the hull gains little (model: a
+  25 m cell's mean of about 67 looks needs about as much total energy as the strongest highlight alone), a test that sums
+  only five highlight cells would gain about 4.5 dB (model; needs the spacing, i.e. the aspect: not general); (iii)
+  several pings combined: 1.2 / 2.6 / 4.4 dB for 2 / 4 / 8 pings by the trade study's own figure (not implemented).
+- **The alternate's sweep: hyperbolic** (`source: hfm`), from the sea-state-5 cases: the ship 6 of 6 (bank 5, linear 0),
+  the crossing hull 5 of 6 (bank 5, linear 4), the point +2.17 dB (bank +1.29); at the plain chain's cost. What it costs:
+  no bank; a range bias of 3 T = 12 m per m/s at 4 s (-67 m at 5.6 m/s closing); its 1 / f^2 spectrum on a projector
+  whose response across 4-6 kHz is not known. It does not accept the resolved hull at sea state 5 either. The config
+  (`configs/builds/popoto_face_3x32_ss5.yaml`) still carries the linear sweep: the owner's choice.
+
+### DM.4 Every case and target, worst first (measured less predicted)
+
+Predicted: `predict_point` at the target's geometry less the plain filter's closed-form loss (zero for the bank); the
+planner's own figure at the scene / the table's (worst over the class's depths at its recommended own depth).
+
+| Case | Design | Filter | Target (range rate m/s) | Verdict | Detected | Measured margin dB | Predicted, zero speed | Closed-form loss | Predicted | Measured - predicted | One highlight, predicted | Planner at the scene / table's worst depth | Tracked (class) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.63 | 0.20 | +1.44 | - | -5.55 | +1.58 / +2.36 | no (-) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.79 | 0.02 | +2.77 | - | -4.22 | +2.74 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.63 | 13.16 | -11.53 | - | -18.52 | +1.58 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.79 | 1.73 | +1.05 | - | -5.94 | +2.74 / +2.36 | no (-) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | +9.06 | 11.18 | -2.12 | - | -9.11 | +9.01 / +3.32 | no (-) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | +0.99 | 0.00 | +0.99 | - | -6.00 | +1.58 / +2.36 | no (-) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | +2.14 | 0.00 | +2.14 | - | -4.85 | +2.74 / +2.36 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | -4.85 | 0.20 | -5.05 | - | -12.04 | -4.90 / -3.95 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -3.74 | 0.02 | -3.75 | - | -10.74 | -3.79 / -3.95 | no (-) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | FAIL | 0 of 6 | - | -3.74 | -0.00 | -3.74 | - | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | -4.85 | 13.16 | -18.02 | - | -25.01 | -4.90 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -3.74 | 1.73 | -5.47 | - | -12.46 | -3.79 / -3.95 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | +3.29 | 11.18 | -7.90 | - | -14.89 | +3.24 / -1.90 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | -5.50 | 0.00 | -5.50 | - | -12.49 | -4.90 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | -4.38 | 0.00 | -4.38 | - | -11.37 | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | FAIL | 0 of 6 | - | +2.64 | 0.00 | +2.64 | - | -4.35 | +3.24 / -1.90 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 0 of 6 | - | +4.17 | 19.30 | -15.14 | - | -22.13 | +4.15 / +5.10 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | FAIL | 0 of 6 | - | +12.31 | 17.25 | -4.94 | - | -11.93 | +12.29 / +7.16 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | closing (-5.60) | FAIL | 0 of 6 | - | -7.75 | 0.20 | -7.95 | - | -14.94 | -7.80 / -7.05 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -6.93 | 0.02 | -6.95 | - | -13.94 | -6.98 / -7.05 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | FAIL | 0 of 6 | - | -2.01 | 0.12 | -2.13 | - | -9.12 | -2.06 / -6.15 | no (-) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | FAIL | 0 of 6 | - | -6.93 | -0.00 | -6.93 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.08 | 0.02 | +2.07 | - | -4.92 | +2.07 / +1.99 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | closing (-5.60) | FAIL | 0 of 6 | - | -7.75 | 13.16 | -20.92 | - | -27.90 | -7.80 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | oblique (-0.50) | FAIL | 0 of 6 | - | -6.93 | 1.73 | -8.67 | - | -15.66 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | FAIL | 0 of 6 | - | -6.93 | 1.03 | -7.96 | - | -14.95 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | ship (-3.44) | FAIL | 0 of 6 | - | -2.01 | 11.18 | -13.20 | - | -20.19 | -2.06 / -6.15 | no (-) |
+| ss5_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | FAIL | 0 of 6 | - | -6.93 | -0.00 | -6.93 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | -8.40 | 0.00 | -8.40 | - | -15.39 | -7.80 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | -14.57 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | -14.57 | -6.98 / -7.05 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | FAIL | 0 of 6 | - | -2.66 | 0.00 | -2.66 | - | -9.65 | -2.06 / -6.15 | no (-) |
+| ss5_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | FAIL | 0 of 6 | - | -7.58 | 0.00 | -7.58 | - | - | -6.98 / -7.05 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 0 of 6 | - | +1.26 | 19.30 | -18.04 | - | -25.03 | +1.25 / +1.99 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | FAIL | 0 of 6 | - | +2.08 | 8.80 | -6.72 | - | -13.71 | +2.07 / +1.99 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | FAIL | 0 of 6 | - | +7.00 | 17.25 | -10.24 | - | -17.23 | +6.99 / +2.91 | no (-) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | FAIL | 0 of 6 | - | +0.41 | 0.00 | +0.41 | - | -6.58 | +1.25 / +1.99 | no (-) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | FAIL | 0 of 6 | - | +1.23 | 0.00 | +1.23 | - | -5.76 | +2.07 / +1.99 | no (-) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 6 of 6 | +10.89 | +17.23 | 0.00 | +17.23 | -6.33 | +10.24 | +18.07 / +12.38 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +11.67 | +18.08 | 0.12 | +17.96 | -6.29 | +10.97 | +18.07 / +12.38 | yes (mover) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 6 of 6 | +5.28 | +11.45 | 0.00 | +11.45 | -6.17 | +4.47 | +12.29 / +7.16 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | PASS | 6 of 6 | +5.62 | +11.81 | 0.02 | +11.79 | -6.17 | +4.80 | +11.79 / +11.42 | yes (mover) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | PASS | 6 of 6 | +4.91 | +10.96 | 0.00 | +10.96 | -6.04 | +3.97 | +11.79 / +11.42 | yes (static) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +6.21 | +12.31 | 0.12 | +12.19 | -5.98 | +5.20 | +12.29 / +7.16 | yes (mover) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | ship (-3.44) | PASS | 6 of 6 | +2.62 | +8.41 | 0.00 | +8.41 | -5.80 | +1.43 | +9.01 / +3.32 | yes (mover) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | ship (-3.44) | PASS | 5 of 6 | +0.85 | +6.15 | 0.00 | +6.15 | -5.31 | -0.84 | +6.99 / +2.91 | yes (uncertain) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | ship (-3.44) | PASS | 6 of 6 | +1.64 | +7.00 | 0.12 | +6.88 | -5.24 | -0.11 | +6.99 / +2.91 | yes (mover) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | PASS | 6 of 6 | +4.05 | +9.06 | 0.12 | +8.94 | -4.89 | +1.95 | +9.01 / +3.32 | yes (mover) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | oblique (-0.50) | PASS | 5 of 6 | +0.58 | +5.28 | 0.02 | +5.26 | -4.68 | -1.72 | +5.27 / +5.10 | yes (static) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | PASS | 6 of 6 | +6.26 | +10.65 | 0.20 | +10.46 | -4.19 | +3.47 | +10.64 / +11.42 | yes (multipath) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | PASS | 6 of 6 | +5.71 | +9.80 | 0.00 | +9.80 | -4.09 | +2.81 | +10.64 / +11.42 | yes (multipath) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | oblique (-0.50) | PASS | 6 of 6 | +0.56 | +4.43 | 0.00 | +4.43 | -3.87 | -2.56 | +5.27 / +5.10 | yes (uncertain) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | ship (-3.44) | FAIL | 1 of 6 | +0.23 | +3.29 | 0.12 | +3.17 | -2.94 | -3.82 | +3.24 / -1.90 | no (-) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | closing (-5.60) | PASS | 6 of 6 | +0.88 | +3.31 | 0.00 | +3.31 | -2.43 | -3.68 | +4.15 / +5.10 | yes (uncertain) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | PASS | 5 of 6 | +1.54 | +4.17 | 0.20 | +3.97 | -2.42 | -3.02 | +4.15 / +5.10 | yes (uncertain) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | closing (-5.60) | FAIL | 2 of 6 | +0.17 | +1.26 | 0.20 | +1.07 | -0.89 | -5.92 | +1.25 / +1.99 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | PASS | 6 of 6 | +2.29 | +11.81 | 8.80 | +3.01 | -0.71 | -3.98 | +11.79 / +11.42 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 6 of 6 | +11.42 | +11.81 | 0.01 | +11.79 | -0.37 | +4.80 | +11.79 / +11.42 | yes (static) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +10.65 | +10.96 | 0.00 | +10.96 | -0.31 | +3.97 | +11.79 / +11.42 | yes (mover) |
+| ss3_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +11.63 | +11.81 | -0.00 | +11.81 | -0.18 | - | +11.79 / +11.42 | yes (static) |
+| ss3_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +10.84 | +10.96 | 0.00 | +10.96 | -0.12 | - | +11.79 / +11.42 | yes (mover) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 6 of 6 | +11.69 | +11.81 | -0.00 | +11.81 | -0.12 | - | +11.79 / +11.42 | yes (mover) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 5 of 6 | +2.12 | +2.08 | -0.00 | +2.08 | +0.04 | - | +2.07 / +1.99 | no (-) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | point (+0.00) | PASS | 6 of 6 | +2.84 | +2.79 | -0.00 | +2.79 | +0.05 | - | +2.74 / +2.36 | yes (static) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +1.29 | +1.23 | 0.00 | +1.23 | +0.05 | - | +2.07 / +1.99 | yes (static) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +2.17 | +2.08 | -0.00 | +2.08 | +0.09 | - | +2.07 / +1.99 | yes (static) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | point (+0.00) | PASS | 6 of 6 | +5.39 | +5.28 | -0.00 | +5.28 | +0.11 | - | +5.27 / +5.10 | yes (mover) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | point (+0.00) | PASS | 6 of 6 | +5.41 | +5.28 | -0.00 | +5.28 | +0.13 | - | +5.27 / +5.10 | yes (static) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | point (+0.00) | PASS | 6 of 6 | +4.72 | +4.43 | 0.00 | +4.43 | +0.29 | - | +5.27 / +5.10 | yes (mover) |
+| ss5_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 5 of 6 | +2.38 | +2.08 | 0.01 | +2.07 | +0.31 | -4.92 | +2.07 / +1.99 | no (-) |
+| ss4_hfm4p200 | sea-state-5 alternate (4 s, 200 dB), hyperbolic | plain | crossing (-0.39) | PASS | 6 of 6 | +5.64 | +5.28 | 0.01 | +5.27 | +0.37 | -1.72 | +5.27 / +5.10 | yes (static) |
+| ss4_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +4.97 | +4.43 | 0.00 | +4.43 | +0.54 | -2.56 | +5.27 / +5.10 | yes (mover) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | PASS | 6 of 6 | +2.75 | +2.14 | 0.00 | +2.14 | +0.61 | -4.85 | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | PASS | 6 of 6 | +3.41 | +2.79 | -0.00 | +2.79 | +0.62 | - | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | PASS | 6 of 6 | +2.77 | +2.14 | 0.00 | +2.14 | +0.62 | - | +2.74 / +2.36 | yes (static) |
+| ss5_lfm4p200_cfar | sea-state-5 alternate (4 s, 200 dB), linear | bank cfar | crossing (-0.39) | PASS | 5 of 6 | +2.26 | +1.23 | 0.00 | +1.23 | +1.02 | -5.76 | +2.07 / +1.99 | yes (uncertain) |
+| ss3_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | PASS | 5 of 6 | +3.82 | +2.79 | 0.01 | +2.77 | +1.05 | -4.22 | +2.74 / +2.36 | yes (static) |
+| ss3_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | PASS | 6 of 6 | +2.95 | +2.79 | 1.03 | +1.76 | +1.19 | -5.23 | +2.74 / +2.36 | yes (uncertain) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | ship (-3.44) | PASS | 6 of 6 | +2.38 | +18.08 | 17.25 | +0.83 | +1.55 | -6.16 | +18.07 / +12.38 | yes (mover) |
+| ss4_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | PASS | 3 of 6 | +0.05 | -3.74 | 0.01 | -3.75 | +3.80 | -10.74 | -3.79 / -3.95 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | oblique (-0.50) | FAIL | 1 of 6 | +0.33 | +5.28 | 8.80 | -3.52 | +3.85 | -10.51 | +5.27 / +5.10 | no (-) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | point (+0.00) | FAIL | 1 of 6 | +0.94 | -3.74 | -0.00 | -3.74 | +4.67 | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | point (+0.00) | FAIL | 1 of 6 | +0.29 | -4.38 | 0.00 | -4.38 | +4.67 | - | -3.79 / -3.95 | no (-) |
+| ss4_lfm1_cfar | baseline (shipped: 1 s, 197 dB) | bank cfar | crossing (-0.39) | FAIL | 2 of 6 | +0.47 | -4.38 | 0.00 | -4.38 | +4.86 | -11.37 | -3.79 / -3.95 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 6 of 6 | +9.24 | +11.81 | 7.55 | +4.26 | +4.99 | -2.73 | +11.79 / +11.42 | yes (mover) |
+| ss4_lfm1 | baseline (shipped: 1 s, 197 dB) | plain | crossing (-0.39) | FAIL | 2 of 6 | +0.87 | -3.74 | 1.03 | -4.77 | +5.63 | -11.76 | -3.79 / -3.95 | no (-) |
+| ss5_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 4 of 6 | +0.76 | +2.08 | 7.55 | -5.47 | +6.23 | -12.46 | +2.07 / +1.99 | no (-) |
+| ss4_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | crossing (-0.39) | PASS | 6 of 6 | +4.04 | +5.28 | 7.55 | -2.27 | +6.31 | -9.26 | +5.27 / +5.10 | yes (static) |
+| ss5_hfm1 | hyperbolic 1 s, 197 dB | plain | crossing (-0.39) | FAIL | 1 of 6 | -0.41 | -6.93 | 0.01 | -6.95 | +6.54 | -13.94 | -6.98 / -7.05 | no (-) |
+| ss3_lfm4p200 | sea-state-5 alternate (4 s, 200 dB), linear | plain | closing (-5.60) | FAIL | 2 of 6 | +0.25 | +10.65 | 19.30 | -8.65 | +8.90 | -15.64 | +10.64 / +11.42 | no (-) |
+
+| Case | Target-free pings | False detections, default budget | At 3 a ping |
+| --- | --- | --- | --- |
+| ss3_hfm1 | 4 | 0 | 0 |
+| ss3_hfm4p200 | 4 | 0 | 0 |
+| ss3_lfm1 | 4 | 0 | 0 |
+| ss3_lfm1_cfar | 4 | 0 | 2 |
+| ss3_lfm4p200 | 4 | 0 | 0 |
+| ss3_lfm4p200_cfar | 4 | 0 | 9 |
+| ss4_hfm1 | 4 | 0 | 0 |
+| ss4_hfm4p200 | 4 | 0 | 0 |
+| ss4_lfm1 | 4 | 0 | 0 |
+| ss4_lfm1_cfar | 4 | 0 | 2 |
+| ss4_lfm4p200 | 4 | 0 | 0 |
+| ss4_lfm4p200_cfar | 4 | 0 | 9 |
+| ss5_hfm1 | 4 | 0 | 0 |
+| ss5_hfm4p200 | 4 | 0 | 0 |
+| ss5_lfm1 | 4 | 0 | 0 |
+| ss5_lfm1_cfar | 4 | 0 | 2 |
+| ss5_lfm4p200 | 4 | 0 | 0 |
+| ss5_lfm4p200_cfar | 4 | 0 | 8 |
+
+
+## The outputs D-251 made stale, regenerated (appended 2026-11-27; issue `sonar-rar0`; jobs 6b0a02356c5d61fff18a11a6, 6b0a02366c5d61fff18a11aa; nothing above rewritten)
+
+`tools/doppler_gpu_runs.sh` sub-run `regen` on an NVIDIA L4, tree `deepsea` at `1166ca6`, simulator and chain on cuda
+(the old runs: this CPU, host backend). Only the stale parts replaced (`tools/regen_stale.py --list`); each file carries
+a `regenerated` block (what was replaced, what was kept and why). Old -> new of every number the sections above and
+`docs/RESULTS.md` quote, worst first. The change mixes D-251 with the device (cuda against host) and the decisions since
+the old runs; they are not separated.
+
+1. **Worse.** `doppler_large_submerged_eval.json` `alternate` (alternating tone and sweep pings, LS.3): the closing hull is
+   **no longer tracked at the last ping** (was `uncertain`, 17.5 m from the truth; both engines), with the tone path off
+   and on; its detections are as before (3 of 3 sweep pings, 3 of 3 tone pings, rates -5.602 / -5.582 / -5.595 m/s). Not
+   investigated.
+2. `doppler_d3_eval.json` `tone_p12` (`popoto_12km_doppler`, D3): the background is now 4 pings (the committed one had 2,
+   the recorded command says 4): tone path off 1 -> 4 false detections at the default budget (0.5 -> 1.0 a ping), 11 -> 30
+   at 3 a ping (5.5 -> 7.5 a ping); tone path on 0 -> 0 at the default budget, 8 -> 24 at 3 a ping (24 attributed: 21 the
+   sweep's, 3 the tone's, none on a lobe's ridge). The ship as before: 0 of 6 with the default chain, 6 of 6 with the
+   tone path, the rate on 1 ping (-0.573 m/s), snr within 0.1 dB.
+3. `combine: cfar` background at 3 a ping (D3.2): `popoto_12km` off 20 -> 16, cfar 7 -> 12; `popoto_far_mover` off 18 -> 16,
+   cfar 17 -> 11; `popoto_12km_large_submerged` off 20 -> 16, cfar 7 -> 8. At the default budget 0 -> 0 everywhere.
+4. Margins (9.4, D3.2, LS.3), both engines equal as before: `popoto_12km` ship off 9.11 -> 9.11, max 5.57 -> 5.57, cfar
+   9.63 -> 9.63 dB; `popoto_far_mover` ship 12.35 -> 12.36, max 8.84 -> 8.83, cfar 13.65 -> 13.63; large submerged off
+   7.98 -> 7.99 (closing), 9.22 -> 9.22 (oblique), 11.41 -> 11.38 (crossing), cfar 8.78 -> 8.81, 10.08 -> 10.09,
+   12.00 -> 11.99; classes as before (the crossing hull `static` with cfar). The train ping (LS.3): closing snr 17.8 -> 17.9
+   (bank off), 18.5 -> 18.3 (tone path); crossing 24.5 -> 24.3; tone margins and rates as before.
+5. The bank's cost (9.5): the regenerated scenes' times are now the L4's, not this CPU's: `popoto_12km` C++ 0.020 s plain,
+   0.098 s with the bank (5.0 times; the CPU's 25 times, table 9.5, is no longer in the file), cfar 0.108 s (5.8 times);
+   `popoto_far_mover` 0.060 / 0.348 s (5.8 times; CPU 51), cfar 0.376 s (6.3 times).
+6. `doppler_baseline.json` (section 3.2): within 0.1 dB everywhere but `sst_pursuit`'s bank 12.7 -> 12.5 dB (gain over its
+   zero hypothesis 28.3 -> 28.1); `popoto_12km` 24.0 / 25.9 (the trade study's +1.9 dB bank credit, unchanged),
+   `popoto_far_mover` 27.2 / 27.8, the flank under way (`fp_v15*`) as before; the reverberation spectra (2.1) the same
+   peaks, two -10 dB edges moved by 0.4 and 0.06 Hz.
+7. `docs/design/popoto_12km.json` (RESULTS "The 12 km study, rerun"): every case's pings detected, median SNR and track
+   ping as before (winter sand two rows 31.4 -> 31.5 dB; Bellhop two rows "several possible elevations" on 5 -> 4 pings);
+   class cases: the same detections and classes; speed errors moved by up to 0.5 m/s (the cylinder -1.95 -> -1.17 m/s);
+   the Bellhop submerged mover's reported depth 27 -> 9 m (sigma 2.5 km, truth 60 m inside two sigma, as before).
+   `docs/DESIGN.md` regenerated from it (the class table's speed and heading errors).
+8. Not stale and kept (`regenerated.kept` in each file): every `flank_patrol` part (platform still: one ping's record
+   SHA-256 equal under both laws), the noise-only and planner parts; not reproducible, kept as they were:
+   `tone_p12_wholetrain`, the first run's truth summary.
+
+### DM.5 The energy candidates, predicted before they are run (appended 2026-11-27; issue `sonar-rctz`; not run yet)
+
+DM.3's "what the resolved hull needs" is the model and a bracket. These cases measure it; each prediction below was
+written before the run (`tools/deep12_eval.py --predict-cases --json docs/tasks/deep12_round3_predictions.json`; `tools/deep12_eval.py`
+puts it beside the measured verdict when the results are summarised). Point: the planner's predicted chain margin of the +25 dB
+point (`predict_point` at its geometry, the chain's 9.45 dB threshold; for the bank less 0.75 dB, its threshold shift measured
+0.65 / 0.86 dB at 1 / 4 s). Bracket (DM.3): the resolved hulls held where the point's margin is 5.4 dB or more, not at 3.4 dB
+or less. One highlight: the hull's prediction less 10 log10(5). Duty: the pulse over the two-way time to 12.7 km plus the
+pulse. Projector: the trade study's column (via secondary: the sheets in docs/design/projector_selection.md). Ours.
+
+| Case | Energy (dB re 1 uPa^2 s at 1 m) | Point, predicted | One highlight: closing / oblique / ship | Bracket's verdict for the resolved hulls | Blind range | Duty | Range bias (m per m/s) | A single listed projector |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ss3_hfm2` (hyperbolic 2 s, 197 dB) | 200.0 | +5.80 dB | -2.5 / -1.2 / +5.0 | held | 1.50 km | 10.6 % | 6 | yes |
+| `ss3_lfm2_cfar` (linear 2 s, 197 dB, bank) | 200.0 | +5.05 dB | -3.1 / -1.9 / +4.3 | inside the bracket (between 3.4 and 5.4 dB) | 1.50 km | 10.6 % | — | yes |
+| `ss3_hfm1p200` (hyperbolic 1 s, 200 dB) | 200.0 | +5.79 dB | -2.6 / -1.2 / +5.0 | held | 0.75 km | 5.6 % | 3 | yes |
+| `ss4_hfm2` (hyperbolic 2 s, 197 dB) | 200.0 | -0.73 dB | -9.0 / -7.7 / -0.8 | not held | 1.50 km | 10.6 % | 6 | yes |
+| `ss5_hfm8p200` (hyperbolic 8 s, 200 dB) | 209.0 | +5.09 dB | -2.9 / -1.9 / +2.9 | inside the bracket (between 3.4 and 5.4 dB) | 6.00 km | 32.1 % | 24 | no |
+| `ss5_hfm4p203` (hyperbolic 4 s, 203 dB) | 209.0 | +5.08 dB | -2.9 / -1.9 / +2.9 | inside the bracket (between 3.4 and 5.4 dB) | 3.00 km | 19.1 % | 12 | no |
+| `ss5_hfm8p203` (hyperbolic 8 s, 203 dB) | 212.0 | +8.08 dB | +0.1 / +1.1 / +5.9 | held | 6.00 km | 32.1 % | 24 | no |
+
+The one-highlight figures are under the threshold in every case but the ship's: on DM.4's runs the resolved hulls came out
+0.6 to 4.6 dB above their one-highlight prediction, so the bracket, not that figure, is the prediction to test. Neither way
+to 209 dB has a single listed projector (4 s at 203 dB: two TR-1075D in phase; 8 s at 200 dB: 3.0 dB short at 32 % duty).
+The run: the `deep12` sub-run with these cases, the sea-state-3 candidates first (GPUSONAR_DOPPLER_DEEP12_CASES); each
+case limited to 45 min; on the L4 the 4 s hyperbolic cases simulated 6 pings in 27 s (DM), the 8 s ones are untimed.
+
+### DM.6 The energy candidates, measured (appended 2026-11-28; job 6b0a19496c5d61fff18a650c, NVIDIA L4, tree `7aa84e1`; nothing above rewritten)
+
+The seven cases of DM.5, 6 pings and 4 target-free pings each, C++ chain on cuda; merged into `docs/tasks/doppler_deep12_eval.json`
+(`acceptance.candidate_*`, each with the prediction written before the run). DM.3's "what the resolved hull needs" was the model
+and a bracket; this is the measurement. Ours; one seed.
+
+**What it does not show, first.** One seed. The resolved hulls are held with little to spare: at sea state 3 the oblique hull by
++0.2 to +0.7 dB and the closing hull by +0.8 to +1.3 dB (mean over the pings detected): a second seed may move a verdict. **The
+oblique hull is detected on 6 of 6 pings and NOT tracked** in `ss3_hfm2` and in all three sea-state-5 cases (tracked, `static`, in
+`ss3_hfm1p200` and `ss3_lfm2_cfar`); not investigated: `tools/doppler_bank_eval.py` keeps per ping only the strongest detection in
+the gate and the tracks within 100 m of the hull's centre at the last ping, so whether a track exists elsewhere on the 100 m hull,
+or none confirms, is not in the output (a follow-up: write the tracks' positions; a CPU rerun of one case takes about 30 min).
+
+| Case | Predicted before the run (point; bracket) | closing | oblique | crossing | ship | point | Resolved hulls held? | False detections, 4 target-free pings (default / 3 a ping) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ss3_hfm2` (hyperbolic 2 s, 197 dB (200 dB a ping), plain filter, at sea state 3) | +5.80 dB; held | 6 of 6, +1.28 | 6 of 6, +0.73, not tracked | 6 of 6, +5.13 | 6 of 6, +6.26 | 6 of 6, +6.12 | **yes** | 0 / 1 |
+| `ss3_hfm1p200` (hyperbolic 1 s, 200 dB (200 dB a ping), plain filter, at sea state 3) | +5.79 dB; held | 5 of 6, +1.23 | 5 of 6, +0.66 | 6 of 6, +5.71 | 6 of 6, +6.58 | 6 of 6, +5.71 | **yes** | 0 / 0 |
+| `ss3_lfm2_cfar` (linear 2 s, 197 dB (200 dB a ping) with the bank, at sea state 3) | +5.05 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +0.83 | 5 of 6, +0.22 | 6 of 6, +4.81 | 6 of 6, +5.73 | 6 of 6, +5.05 | **yes** | 0 / 3 |
+| `ss4_hfm2` (the hyperbolic 2 s, 197 dB candidate at sea state 4) | -0.73 dB; not held | 0 of 6, —, not tracked | 0 of 6, —, not tracked | 3 of 6, +1.46 | 6 of 6, +1.27 | 5 of 6, +0.90, not tracked | **NO** | 0 / 1 |
+| `ss5_hfm4p203` (hyperbolic 4 s, 203 dB (209 dB a ping), plain filter, at sea state 5) | +5.08 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +1.22 | 4 of 6, +0.56, not tracked | 6 of 6, +4.71 | 6 of 6, +4.18 | 6 of 6, +5.07 | **yes** | 0 / 0 |
+| `ss5_hfm8p200` (hyperbolic 8 s, 200 dB (209 dB a ping), plain filter, at sea state 5) | +5.09 dB; inside the bracket (between 3.4 and 5.4 dB) | 5 of 6, +0.33 | 2 of 6, +1.20, not tracked | 5 of 6, +5.12 | 6 of 6, +4.01 | 6 of 6, +4.90 | **NO** | 0 / 0 |
+| `ss5_hfm8p203` (hyperbolic 8 s, 203 dB (212 dB a ping), plain filter, at sea state 5) | +8.08 dB; held | 6 of 6, +2.64 | 6 of 6, +2.40, not tracked | 6 of 6, +7.21 | 6 of 6, +6.67 | 6 of 6, +7.91 | **yes** | 0 / 0 |
+
+Against the predictions: the three "held" predictions held (`ss3_hfm2`, `ss3_hfm1p200`, `ss5_hfm8p203`), the "not held" one did not
+(`ss4_hfm2`: closing and oblique 0 of 6); of the three inside the bracket, two held (`ss3_lfm2_cfar`, `ss5_hfm4p203`, the oblique hull
+on 4 of 6) and one did not (`ss5_hfm8p200`, the oblique hull on 2 of 6). The point came out within -0.19 to +0.33 dB of its prediction
+where detected on every ping (`ss3_hfm2` +6.12 against +5.80; `ss5_hfm4p203` +5.07 against +5.08).
+
+### DM.7 What the owner chooses, measured (replaces DM.3's model figures; nothing configured)
+
+- **Sea state 3 (the baseline's).** +3 dB of energy, 200 dB re 1 uPa^2 s at 1 m a ping, with a filter that takes no Doppler loss,
+  holds every target on 5 or 6 of 6 pings: hyperbolic 2 s at 197 dB (the shipped level: a TR-1075D or TR-1075A class source by
+  the sheets, via secondary; blind range 1.5 km; duty 10.6 %; range bias 6 m per m/s), hyperbolic 1 s at 200 dB (TR-1075D only,
+  free of cavitation below 29 m; blind 0.75 km; duty 5.6 %; 3 m per m/s), or linear 2 s at 197 dB with the bank (87 hypotheses
+  a beam: 7.3 s a ping with three rows on the L4, against 0.05 s plain). The shipped 1 s, 197 dB linear sweep holds the
+  crossing hull and the point only (DM.1). The candidate does not reach sea state 4 (`ss4_hfm2`: closing and oblique 0 of 6).
+- **Sea state 5 (the alternate's).** 209 dB a ping holds the resolved hulls only as 4 s at 203 dB (oblique 4 of 6); 8 s at
+  200 dB does not (oblique 2 of 6). 212 dB (8 s at 203 dB) holds every target on 6 of 6. **No single listed projector gives
+  any of the three** (4 s at 203 dB: two TR-1075D in phase, unconfirmed; 8 s: 32 % duty, a 6 km blind range).
+- **What a decision would change** (the owner's; none made here):
+  - a hyperbolic sweep in a build: `python/gpusonar/buildspec.py` first (its `projector.waveform.type` takes `lfm` or `cw`
+    only: an `hfm` type writing `{type: sampled, source: hfm}` into the generated sonar, with tests); then the build
+    (`configs/builds/popoto_face_3x32.yaml` for the baseline, `popoto_face_3x32_ss5.yaml` for the alternate) and
+    `tools/build_from_spec.py --write-shipped` (`configs/sonars/popoto_long_range_3row*.yaml` with the window opening at the
+    new blind range, `configs/deploy/popoto_vehicle_elevation*.yaml`); then the generated documents (`docs/DESIGN.md`,
+    `docs/handoff/hardware_builds.json`, `docs/design/projector_requirements.json`, the depth plan) and every result of the
+    three-row face. The chain needs no change for the hyperbolic sweep (HFM.3); the bank refuses it;
+  - the bank in the baseline instead: the deployment file's `chain.doppler: {mode: sweep_bank, combine: cfar}`, which reverses
+    D-244's "every Doppler option off" baseline, at 87 hypotheses a beam for 2 s;
+  - either way a default result moves: the owner's approval with before -> after first.

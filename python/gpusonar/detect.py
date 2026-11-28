@@ -88,6 +88,15 @@ class Detection:
     range_sigma: float = float("nan")       # m, the tracker's range sigma for this detection (a tone's coarse range, D3); NaN:
                                             # the tracker's own (libs/live detections.hpp)
     doppler_path: int = 0                   # D3: 0 the sweep's map, 1 the tone's bank alone, 2 both
+    # D5 (opt-in, Tracker range_rate): the tracker takes `range_rate` as a measurement of the track's velocity with this
+    # one-sigma (m/s), where the platform (the array in the tracker's frame at the ping: across, forward, m, and their rates
+    # over ground, m/s) is given and finite. NaN: the rate is not used (no rate, or one not trusted: the sweep bank's on an
+    # extended target, D-232). libs/live detections.hpp the same.
+    range_rate_sigma: float = float("nan")
+    platform_x: float = float("nan")
+    platform_y: float = float("nan")
+    platform_vx: float = float("nan")
+    platform_vy: float = float("nan")
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -351,6 +360,7 @@ class Track:
     depth: float = float("nan")                   # m, from the detections that carried one
     depth_var: float = float("inf")
     time: float = float("nan")                    # s, when `state` holds: its last detection's time, or the ping's after a miss
+    rate_updates: int = 0                         # D5: range-rate measurements the track took (Tracker range_rate; 0 when off)
 
 
 ASSOCIATIONS = ("likelihood", "in_order")
@@ -364,8 +374,39 @@ ASSOCIATIONS = ("likelihood", "in_order")
 #   took [{track, detection}]; missed [ids]; dropped [{track..., reason}]; born [{track, detection}];
 #   confirmed_now [ids]; after [{id, state [4], cov [16], hits, misses, confirmed, time}] (every track, tentative too).
 # `detection` is the index into the detections given to the update (the report line's order in the live chain).
+# With the range rate on (D5, `range_rate` not "off"), and only then: `range_rate` (the mode) and
+#   rate [{track, detection, z, predicted, innovation, s, sigma}]: each range-rate update made (z the measured rate, m/s,
+#     relative to the platform; predicted h(x) before the update; s its innovation variance, (m/s)^2; sigma the
+#     measurement's), births included; with "update_and_gate" every pair also carries rate_d2 (innovation^2 / s at the
+#     predicted state; null when the detection's rate is not used), and a pair whose rate_d2 >= gate^2 is not gated.
 TRACKER_TAP = ("time_s", "gate", "association", "before", "pairs", "took", "missed", "dropped", "born",
                "confirmed_now", "after")
+RANGE_RATE = ("off", "update", "update_and_gate")      # Tracker range_rate (D5); libs/live parse_range_rate the same
+
+
+def rate_usable(d: "Detection") -> bool:
+    """D5: the detection's range rate is a measurement for the tracker: the rate, its sigma (above 0) and the platform's
+    position and velocity all finite. libs/live tracker.cpp the same."""
+    vals = (getattr(d, "range_rate", np.nan), getattr(d, "range_rate_sigma", np.nan), getattr(d, "platform_x", np.nan),
+            getattr(d, "platform_y", np.nan), getattr(d, "platform_vx", np.nan), getattr(d, "platform_vy", np.nan))
+    return bool(np.all(np.isfinite(vals))) and d.range_rate_sigma > 0.0
+
+
+def rate_model(x: np.ndarray, d: "Detection") -> tuple[float, np.ndarray] | None:
+    """D5's measurement of a range rate (ours, from the geometry): the rate relative to the platform, opening positive, of a
+    target at p = x[0:2] with velocity v = x[2:4] seen from a platform at o with velocity v_o (the tracker's horizontal,
+    world-fixed frame: across, forward) is h(x) = u . (v - v_o), u = (p - o) / |p - o|. Its Jacobian (an extended Kalman
+    update) is H = [w_t / R, u, ], R = |p - o|, w = v - v_o, w_t = w - u (u . w) its part across the line of sight. Returns
+    (h, H [4]), or None with the target on the platform (R = 0). The slant's elevation is left out (the horizontal plane):
+    cos 0.5 degree is 0.99996. libs/live tracker.cpp rate_model the same."""
+    dx, dy = float(x[0]) - d.platform_x, float(x[1]) - d.platform_y
+    r = float(np.hypot(dx, dy))
+    if not r > 0.0:
+        return None
+    ux, uy = dx / r, dy / r
+    wx, wy = float(x[2]) - d.platform_vx, float(x[3]) - d.platform_vy
+    h = ux * wx + uy * wy
+    return h, np.array([(wx - ux * h) / r, (wy - uy * h) / r, ux, uy])
 
 
 def _tap_track(t: "Track") -> dict:
@@ -373,20 +414,23 @@ def _tap_track(t: "Track") -> dict:
             "hits": int(t.hits), "misses": int(t.misses), "confirmed": bool(t.confirmed), "time": float(t.time)}
 
 
-def _tap_pairs_kept(rows, gate: float) -> list:
-    """The pairs the tap keeps (TRACKER_TAP): inside the gate, or a track's nearest."""
+def _tap_pairs_kept(rows, gate: float, rate_gate: bool = False) -> list:
+    """The pairs the tap keeps (TRACKER_TAP): inside the gate, or a track's nearest. `rate_gate` (D5 update_and_gate):
+    each pair carries rate_d2 and a pair whose rate_d2 >= gate^2 is not gated."""
     nearest = {}
     for i, r in enumerate(rows):
         if r[0] not in nearest or r[2] < rows[nearest[r[0]]][2]:
             nearest[r[0]] = i
     keep = set(nearest.values())
     out = []
-    for i, (tid, j, d2, cost, x, s) in enumerate(rows):
-        gated = d2 < gate**2
+    for i, (tid, j, d2, cost, x, s, rd2) in enumerate(rows):
+        gated = d2 < gate**2 and not (rate_gate and np.isfinite(rd2) and rd2 >= gate**2)
         if gated or i in keep:
             out.append({"track": tid, "detection": int(j), "d2": float(d2), "cost": float(cost) if np.isfinite(cost) else None,
                         "gated": bool(gated), "nearest": i in keep, "x": [float(x[0]), float(x[1])],
                         "s": [float(s[0, 0]), float(s[0, 1]), float(s[1, 1])]})
+            if rate_gate:
+                out[-1]["rate_d2"] = float(rd2) if np.isfinite(rd2) else None
     return out
 
 
@@ -408,10 +452,16 @@ class Tracker:
     def __init__(self, process_noise: float = 0.05, range_sigma: float = 2.0,
                  bearing_sigma: float = np.radians(1.0), gate: float = 4.0, confirm_hits: int = 3,
                  max_misses: int = 3, initial_speed_sigma: float = 10.0, depth_process_noise: float = 0.5,
-                 association: str = "likelihood"):
+                 association: str = "likelihood", range_rate: str = "off"):
         if association not in ASSOCIATIONS:
             raise ValueError(f"tracker association {association!r}: one of {ASSOCIATIONS}")
+        if range_rate not in RANGE_RATE:
+            raise ValueError(f"tracker range_rate {range_rate!r}: one of {RANGE_RATE}")
         self.association = association
+        # D5 (opt-in): "update": after its position update a track takes a detection's range rate (rate_usable) as a
+        # second, scalar Kalman update (sequential: the noises are independent; rate_model); "update_and_gate": also a
+        # pair whose rate is gate sigmas or more from the track's predicted rate is no candidate. "off": as before.
+        self.range_rate = range_rate
         self.q = process_noise
         self.depth_q = depth_process_noise     # m per sqrt(s)
         self.range_sigma = range_sigma
@@ -429,6 +479,8 @@ class Tracker:
         self.tap = False
         self.last_tap: dict | None = None
         self._tap_pairs: list | None = None
+        self._tap_rate: list | None = None
+        self._took_detection = None
 
     def _measurement_cov(self, d: Detection) -> np.ndarray:
         # Polar measurement noise rotated into Cartesian.
@@ -502,6 +554,8 @@ class Tracker:
             tap = {"time_s": float(time), "gate": float(self.gate), "association": self.association,
                    "before": [{"id": t.id, "hits": t.hits, "misses": t.misses, "confirmed": t.confirmed} for t in self.tracks]}
             self._tap_pairs = []
+        self._tap_rate = [] if (tap is not None and self.range_rate != "off") else None
+        self._took_detection = None
         if self.association == "likelihood":
             unused = self._associate_by_likelihood(detections, whens, h, predicted)
         else:
@@ -515,7 +569,7 @@ class Tracker:
             z = self._took.get(t.id)
             t.measured.append((float(z[0]), float(z[1])) if z is not None else (float("nan"), float("nan")))
         if tap is not None:
-            tap["pairs"] = _tap_pairs_kept(self._tap_pairs, self.gate)
+            tap["pairs"] = _tap_pairs_kept(self._tap_pairs, self.gate, self.range_rate == "update_and_gate")
             self._tap_pairs = None
             tap["took"] = [{"track": t.id, "detection": int(self._took_index[t.id])} for t in self.tracks if t.id in self._took_index]
             tap["missed"] = [t.id for t in self.tracks if t.misses > 0]
@@ -532,6 +586,7 @@ class Tracker:
             cov[2, 2] = cov[3, 3] = self.initial_speed_sigma**2
             xy = d.xy()
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov, time=whens[j])
+            self._take_rate(tr, d, j)              # D5: a new track takes its first detection's rate too (none when off)
             tr.history.append((whens[j], float(xy[0]), float(xy[1])))
             tr.pings.append(float(time))
             tr.measured.append((float(xy[0]), float(xy[1])))
@@ -544,6 +599,10 @@ class Tracker:
         if tap is not None:
             tap["born"] = born
             tap["after"] = [_tap_track(t) for t in self.tracks]
+            if self.range_rate != "off":
+                tap["range_rate"] = self.range_rate
+                tap["rate"] = self._tap_rate
+            self._tap_rate = None
             self.last_tap = tap
         return [t for t in self.tracks if t.confirmed]
 
@@ -568,12 +627,52 @@ class Tracker:
         t.state = t.state + k @ (z - h @ t.state)
         t.cov = (np.eye(4) - k @ h) @ t.cov
         self._took[t.id] = z
+        self._take_rate(t, d, self._took_detection)
         t.hits += 1
         t.snr.append(d.snr_db)
         t.cells.append(int(d.cells))
         self._take_depth(t, d)
         t.misses = 0
         t.confirmed = t.confirmed or t.hits >= self.confirm_hits
+
+    def _take_rate(self, t: Track, d: Detection, j) -> None:
+        """D5: the scalar extended Kalman update of a track with its detection's range rate, after the position update
+        (sequential: the two measurements' noises are independent). y = z - h(x), S = H P H^T + sigma^2, K = P H^T / S,
+        x += K y, P = (I - K H) P (the position update's form). Off, or a rate not usable (rate_usable): nothing."""
+        if self.range_rate == "off" or not rate_usable(d):
+            return
+        m = rate_model(t.state, d)
+        if m is None:
+            return
+        h, hh = m
+        r = d.range_rate_sigma**2
+        ph = t.cov @ hh
+        s = float(hh @ ph) + r
+        k = ph / s
+        y = d.range_rate - h
+        t.state = t.state + k * y
+        t.cov = (np.eye(4) - np.outer(k, hh)) @ t.cov
+        t.rate_updates += 1
+        if self._tap_rate is not None:
+            self._tap_rate.append({"track": t.id, "detection": -1 if j is None else int(j), "z": float(d.range_rate),
+                                   "predicted": float(h), "innovation": float(y), "s": float(s),
+                                   "sigma": float(d.range_rate_sigma)})
+
+    def _rate_d2(self, x: np.ndarray, p: np.ndarray, d: Detection) -> float:
+        """D5 gate: the squared normalised innovation of the detection's rate at the track's predicted state, y^2 / S
+        (the marginal of the rate alone; its correlation with the position's innovation left out: ours). NaN: not used."""
+        if not rate_usable(d):
+            return float("nan")
+        m = rate_model(x, d)
+        if m is None:
+            return float("nan")
+        h, hh = m
+        s = float(hh @ p @ hh) + d.range_rate_sigma**2
+        return float((d.range_rate - h) ** 2 / s)
+
+    def _rate_vetoes(self, rate_d2: float) -> bool:
+        """update_and_gate: a rate gate sigmas or more from the prediction argues against the pair."""
+        return self.range_rate == "update_and_gate" and np.isfinite(rate_d2) and rate_d2 >= self.gate**2
 
     def _associate_by_likelihood(self, detections: list[Detection], whens: list[float], h: np.ndarray, predicted) -> list[int]:
         """Most probable gated pairs first, confirmed tracks before tentative ones, each track predicted to each
@@ -585,10 +684,11 @@ class Tracker:
                 s = h @ p @ h.T + self._measurement_cov(d)
                 y = d.xy() - h @ x
                 d2 = float(y @ np.linalg.solve(s, y))
-                if d2 < self.gate**2:
+                rd2 = self._rate_d2(x, p, d) if self.range_rate == "update_and_gate" else float("nan")
+                if d2 < self.gate**2 and not self._rate_vetoes(rd2):
                     pairs.append((not t.confirmed, d2 + float(np.log(np.linalg.det(s))), ti, j))
                 if self._tap_pairs is not None:          # the tap: reads only
-                    self._tap_pairs.append((t.id, j, d2, d2 + float(np.log(np.linalg.det(s))), x, s))
+                    self._tap_pairs.append((t.id, j, d2, d2 + float(np.log(np.linalg.det(s))), x, s, rd2))
         pairs.sort()
         self._took_index = {}
         taken: dict[int, int] = {}
@@ -602,6 +702,7 @@ class Tracker:
             if ti in taken:
                 j = taken[ti]
                 self._took_index[t.id] = j
+                self._took_detection = j
                 self._take(t, detections[j], h, predicted(ti, whens[j]), whens[j])
             else:
                 t.misses += 1
@@ -622,14 +723,16 @@ class Tracker:
                 s = h @ p @ h.T + self._measurement_cov(d)
                 y = d.xy() - h @ x
                 d2 = float(y @ np.linalg.solve(s, y))
+                rd2 = self._rate_d2(x, p, d) if self.range_rate == "update_and_gate" else float("nan")
                 if self._tap_pairs is not None:          # the tap: reads only
-                    self._tap_pairs.append((t.id, j, d2, float("nan"), x, s))
-                if d2 < best_d2:
+                    self._tap_pairs.append((t.id, j, d2, float("nan"), x, s, rd2))
+                if d2 < best_d2 and not self._rate_vetoes(rd2):
                     best, best_d2 = j, d2
             if best is None:
                 t.misses += 1
                 continue
             self._took_index[t.id] = best
+            self._took_detection = best
             unused.remove(best)
             self._take(t, detections[best], h, predicted(ti, whens[best]), whens[best])
         return unused
