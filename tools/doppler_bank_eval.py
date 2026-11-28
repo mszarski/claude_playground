@@ -162,11 +162,13 @@ def per_target(reports, thresholds, truths: dict) -> dict:
             near = [d for d in rep["detections"] if abs(d["range_m"] - tr["range"]) < GATE_RANGE_M and abs(d["bearing_deg"] - tr["bearing"]) < GATE_BEARING_DEG]
             d = max(near, key=lambda q: q["snr_db"]) if near else None
             pings.append({"snr_db": d["snr_db"] if d else None, "threshold_db": thr, "margin_db": d["snr_db"] - thr if d else None,
-                          "range_rate_m_s": d.get("range_rate_m_s") if d else None, "true_range_rate_m_s": tr["range_rate"]})
+                          "range_rate_m_s": d.get("range_rate_m_s") if d else None, "true_range_rate_m_s": tr["range_rate"],
+                          "range_error_m": d["range_m"] - tr["range"] if d else None})       # the detection's range less the truth's (D-256: the HFM's bias)
         last, tr = reports[-1], rows[len(reports) - 1]
         tracks = [t for t in last["tracks"] if np.hypot(t["x"] - tr["x"], t["y"] - tr["y"]) < TRACK_GATE_M]
         out[label] = {"pings": pings, "detected": sum(p["snr_db"] is not None for p in pings),
-                      "tracked": bool(tracks), "kind": tracks[0]["kind"] if tracks else None}
+                      "tracked": bool(tracks), "kind": tracks[0]["kind"] if tracks else None,
+                      "track_error_m": float(min(np.hypot(t["x"] - tr["x"], t["y"] - tr["y"]) for t in tracks)) if tracks else None}
     return out
 
 

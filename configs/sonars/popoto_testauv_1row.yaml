@@ -10,7 +10,7 @@ platform: {name: test_auv, kind: vehicle, span_m: 3.0, height_m: 0.4, mounting: 
 array: {layout: uniform_line, pitch: 0.09}
 transmit:
   lever_arm: [0, 0, 0.3]
-  waveform: {duration: 0.1}
+  waveform: {type: lfm, duration: 0.1, source: null}
 receive:
   window:
     range: [75.0, 2000.0]

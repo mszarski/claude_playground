@@ -1,7 +1,18 @@
 # The Popoto-board array sized for 12 km (tools/popoto_range_study.py, docs/DESIGN.md):
-# 32 hydrophones at half-wavelength spacing for 5 kHz (4.8 m), a 4-6 kHz sweep of 1 s from
-# a separate projector at 197 dB (about 420 W acoustic if omnidirectional). The boards sample at 102.4 kHz and are AC-coupled far
-# below this band, so only the hydrophones, the projector and its amplifier change.
+# 32 hydrophones at half-wavelength spacing for 5 kHz (4.8 m), a 4-6 kHz HYPERBOLIC sweep of 2 s from a separate projector
+# at 197 dB rms (about 420 W acoustic if omnidirectional, for twice as long as the former 1 s pulse: 200 dB re 1 uPa^2 s at
+# 1 m a ping). The boards sample at 102.4 kHz and are AC-coupled far below this band, so only the hydrophones, the
+# projector and its amplifier change.
+#
+# The waveform is the owner's decision of 2026-11-28 (D-256): the baseline transmits a hyperbolic sweep of 2 s at the
+# shipped level, plain matched filter, every Doppler option off. Measured at the deep site at sea state 3 (ours, one seed,
+# 6 pings; docs/tasks/DOPPLER.md DM.6, case ss3_hfm2) it holds every target on 6 of 6 pings, the two resolved hulls by
+# +1.28 dB (closing) and +0.73 dB (oblique): thin. Costs accepted by the owner: the blind range is c T / 2 = 1.5 km
+# (0.75 km before); an up-sweep reads a closing echo nearer by f_stop T / B = 6 m per m/s (gpusonar.doppler.hfm_range_factor),
+# which the plain filter cannot correct; no range rate (the sweep bank takes a linear sweep only). Until D-256 this file
+# sent a 1 s linear sweep (`type: lfm`); a scene that exists for the linear sweep states it by override.
+# The record carries it as WaveformType.Arbitrary with its replica (gpusonar/sim/waveform.py; no schema change); the chain
+# compresses with that replica in both engines (docs/tasks/DOPPLER.md HFM.3).
 base: popoto_array
 name: popoto_long_range
 
@@ -12,11 +23,13 @@ array:
 transmit:
   lever_arm: [0, 0, 1.5]
   waveform:
+    type: sampled
+    source: hfm                      # the hyperbolic sweep: instantaneous period linear in time from 1 / f_start to 1 / f_stop
     f_start: 4.0e+3
     f_stop: 6.0e+3
-    duration: 1.0
-    source_level_db_rms: 197.0       # dB re 1 uPa at 1 m, RMS: sized as 13 dB in one row at 12 km with spherical spreading, plus 2 dB. What the chain's detector needs of that SNR is not typed: docs/DESIGN.md, the 12 km design point
+    duration: 2.0e+0                 # s (D-256; 1.0 until then)
+    source_level_db_rms: 197.0       # dB re 1 uPa at 1 m, RMS: sized as 13 dB in one row at 12 km with spherical spreading, plus 2 dB (for the former 1 s pulse; the 2 s pulse carries 3 dB more energy). What the chain's detector needs of that SNR is not typed: docs/DESIGN.md, the 12 km design point
 
 unconfirmed:
-  - transmit                     # no projector chosen; 197 dB at 5 kHz is a large, heavy source
+  - transmit                     # no projector chosen; 197 dB at 5 kHz for 2 s is a large, heavy source. By the sheets as read (via secondary): the Massa TR-1075D gives it (201.7 dB at its 30 % rating, 10.6 % duty needed), the TR-1075A with 0.1 dB to spare at 6 kHz, the Neptune T335 not (10 % duty rating); no sheet states the longest pulse at that drive
   - array.pitch

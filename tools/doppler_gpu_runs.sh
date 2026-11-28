@@ -24,12 +24,14 @@
 #               update, no background) -> ls12_tone_train_rate.json, ls12_tone_alternate12_rate.json (the classes before
 #               and after) (GPUSONAR_DOPPLER_TIMEOUT_LS12, default 110m (80m before D5); GPUSONAR_DOPPLER_LS12_ARGS appended)
 #   hfm12       (only when named) popoto_12km_large_submerged with the plain matched filter against the sweep bank, the
-#               linear (shipped) and the hyperbolic sweep (--set ...waveform.type=sampled, source=hfm; the bank refuses an
+#               linear (the scene's own, stated in it; shipped until D-256) and the hyperbolic sweep (--set ...waveform.type=sampled, source=hfm; the bank refuses an
 #               HFM: --off-only), at 1 s and 4 s (--set ...waveform.duration=4.0), tools/doppler_bank_eval.py in this order:
 #               HFM 1 s plain, HFM 4 s plain, HFM 4 s and LFM 4 s plain at the 1 s pulse's energy (source level 190.98 dB,
 #               197 - 10 log10 4), LFM 1 s plain and combine cfar, LFM 4 s plain and combine cfar -> hfm12_<wave><T>[eq]_*.json.
 #               Energy: the 4 s runs at the shipped level carry +6.02 dB over 1 s (197 + 10 log10(4 x 0.9375) dB re 1 uPa^2 s
-#               at 1 m against 196.72), the `eq` runs the 1 s pulse's 196.72. (GPUSONAR_DOPPLER_TIMEOUT_HFM12, default 150m;
+#               at 1 m against 196.72), the `eq` runs the 1 s pulse's 196.72. GPUSONAR_DOPPLER_HFM12_BASELINE=1 adds, first,
+#               the shipped baseline's transmission since D-256 (hyperbolic 2 s, 197 dB, plain) -> hfm12_baseline2_plain.json;
+#               =only runs that alone. (GPUSONAR_DOPPLER_TIMEOUT_HFM12, default 150m;
 #               GPUSONAR_DOPPLER_HFM12_ARGS appended to each call; docs/tasks/DOPPLER.md "HFM")
 #   deep12      (only when named) the trade study's noise-limited site (issue sonar-rctz; DOPPLER.md "Deep site at 12 km"):
 #               popoto_12km_deep_sea_state_5 (the deep planning site with the apl_1994 bubble law, the three-row face at
@@ -42,9 +44,12 @@
 #                 ss3_lfm1 ss5_lfm4p200 ss5_hfm4p200 ss5_lfm1 ss4_lfm1 ss4_lfm4p200 ss4_hfm4p200 ss3_lfm4p200
 #                 ss3_hfm4p200 ss3_hfm1 ss4_hfm1 ss5_hfm1, then the banks ss3_lfm1_cfar ss5_lfm4p200_cfar ss5_lfm1_cfar
 #                 ss4_lfm1_cfar ss4_lfm4p200_cfar ss3_lfm4p200_cfar
-#               (lfm1: the shipped 1 s at 197 dB, the BASELINE; lfm4p200 / hfm4p200: the sea-state-5 ALTERNATE's 4 s at
-#               200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). Any case <ss>_<lfm|hfm><seconds>[p<level>][_cfar]
-#               is accepted, e.g. the energy candidates of DOPPLER.md DM.5 (only when named): ss3_hfm2, ss3_lfm2_cfar,
+#               (lfm1: the 1 s linear sweep at 197 dB, the FORMER baseline (shipped until D-256); lfm4p200 / hfm4p200: the
+#               sea-state-5 ALTERNATE's 4 s at 200 dB, linear / hyperbolic; hfm1: hyperbolic 1 s at 197 dB). <ss>_baseline is
+#               the SHIPPED sonar with no waveform set (since D-256 the hyperbolic 2 s sweep at 197 dB; only when named:
+#               ss3_baseline ss4_baseline ss5_baseline; ss3_baseline through both engines). Every other case states its
+#               transmission whole (type, source, length, level), so it does not follow the shipped sonar. Any case
+#               <ss>_baseline or <ss>_<lfm|hfm><seconds>[p<level>][_cfar] is accepted, e.g. the energy candidates of DOPPLER.md DM.5 (only when named): ss3_hfm2, ss3_lfm2_cfar,
 #               ss3_hfm1p200, ss4_hfm2, ss5_hfm8p200, ss5_hfm4p203, ss5_hfm8p203 (their predictions, written before the run:
 #               docs/tasks/deep12_round3_predictions.json). (GPUSONAR_DOPPLER_TIMEOUT_DEEP12, a case's limit, default 45m;
 #               GPUSONAR_DOPPLER_DEEP12_ARGS appended to each call)
@@ -155,8 +160,11 @@ if [[ $runs == *,timing,* ]]; then
         --json "$out/timing_trial.json" ${GPUSONAR_DOPPLER_TIMING_ARGS:-} || rc=$?
     for e in $engines; do                   # every scene with the C++ engine first, then the Python engine (records cached)
       for s in $scenes; do
+        # D-256: popoto_12km's sonar sends a 2 s hyperbolic sweep, which the bank refuses: the bank's timing states the 1 s linear sweep
+        lfm=""
+        [ "$s" != popoto_12km ] || lfm="--set sonar_overrides.transmit.waveform.type=lfm --set sonar_overrides.transmit.waveform.source=null --set sonar_overrides.transmit.waveform.duration=1.0"
         # shellcheck disable=SC2086
-        "$py" tools/live_chain_timing.py --scene "$s" $scene_args --repeats 1 --engine "$e" --doppler --doppler-combine off max cfar \
+        "$py" tools/live_chain_timing.py --scene "$s" $scene_args $lfm --repeats 1 --engine "$e" --doppler --doppler-combine off max cfar \
             --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/timing_${s}_$e.json" ${GPUSONAR_DOPPLER_TIMING_ARGS:-} || rc=$?
       done
     done
@@ -228,6 +236,13 @@ if [[ $runs == *,hfm12,* ]]; then
       "$py" tools/doppler_bank_eval.py popoto_12km_large_submerged $hfm12_args --truth-at reflection --gate-range-m 250 \
           --backend "$be" --sim-backend "$be" --cache "$cache" --json "$out/hfm12_$name.json" "$@" ${GPUSONAR_DOPPLER_HFM12_ARGS:-} || rc=$?
     }
+    # D-256's baseline transmission (hyperbolic 2 s at 197 dB, plain filter) on this scene, which keeps its 1 s linear sweep
+    # as the bank's scene: GPUSONAR_DOPPLER_HFM12_BASELINE=1 runs it first, =only runs it alone -> hfm12_baseline2_plain.json
+    if [ -n "${GPUSONAR_DOPPLER_HFM12_BASELINE:-}" ]; then
+      # shellcheck disable=SC2086
+      one baseline2_plain --off-only $hfm $w.duration=2.0
+      if [ "${GPUSONAR_DOPPLER_HFM12_BASELINE}" = only ]; then set +f; return "$rc"; fi
+    fi
     # shellcheck disable=SC2086
     one hfm1_plain --off-only $hfm
     # shellcheck disable=SC2086
@@ -259,21 +274,25 @@ if [[ $runs == *,deep12,* ]]; then
     case "$ss" in ss3|ss4|ss5) ;; *) echo "deep12: unknown case $case (sea state ss3, ss4 or ss5)"; [ "$status" -ne 0 ] || status=2; continue;; esac
     # <lfm|hfm><seconds>[p<level dB>]: the pulse (default 1 s) and its rms level (default the shipped 197 dB); the --set list is
     # written in one order (duration, level, then the hyperbolic sweep's keys) so that a case's records are one cache file
-    if [[ $wave =~ ^(lfm|hfm)([0-9]+)(p([0-9]+))?$ ]]; then
-      shape=${BASH_REMATCH[1]}; pulse=${BASH_REMATCH[2]}; level=${BASH_REMATCH[4]:-197}; sets=""
-      [ "$pulse" = 1 ] || sets="$sets $w.duration=$pulse.0"
+    # (D-256: the shipped sonar is the hyperbolic 2 s sweep, so every case but `baseline` states its transmission whole, in
+    # tools/deep12_eval.py parse_case's order: type, source, length, level; `baseline` sets nothing: the shipped sonar as it is)
+    if [ "$wave" = baseline ]; then
+      sets=""
+    elif [[ $wave =~ ^(lfm|hfm)([0-9]+)(p([0-9]+))?$ ]]; then
+      shape=${BASH_REMATCH[1]}; pulse=${BASH_REMATCH[2]}; level=${BASH_REMATCH[4]:-197}
+      if [ "$shape" = lfm ]; then sets="$w.type=lfm $w.source=null"; else sets="$w.type=sampled $w.source=hfm"; fi
+      sets="$sets $w.duration=$pulse.0"
       [ "$level" = 197 ] || sets="$sets $w.source_level_db_rms=$level.0"
-      [ "$shape" = lfm ] || sets="$sets $w.type=sampled $w.source=hfm"
     else
       echo "deep12: unknown case $case (waveform <lfm|hfm><seconds>[p<level>], e.g. lfm1, hfm4p200)"; [ "$status" -ne 0 ] || status=2; continue
     fi
     if [ "$filt" = cfar ]; then
-      case "$wave" in lfm*) mode="--combine cfar";; *) echo "deep12: $case: the bank takes a linear sweep only"; [ "$status" -ne 0 ] || status=2; continue;; esac
+      case "$wave" in lfm[0-9]*) mode="--combine cfar";; *) echo "deep12: $case: the bank takes a linear sweep only"; [ "$status" -ne 0 ] || status=2; continue;; esac
     else
       mode="--off-only"
     fi
     engines="--engines cpp"
-    [ "$case" != ss3_lfm1 ] || engines="--engines python cpp"     # the baseline's acceptance through both engines
+    [ "$case" != ss3_baseline ] || engines="--engines python cpp"     # the baseline's acceptance through both engines
     # shellcheck disable=SC2086
     run deep12 "${GPUSONAR_DOPPLER_TIMEOUT_DEEP12:-45m}" "$py" tools/doppler_bank_eval.py popoto_12km_deep_sea_state_5 $deep12_args $engines $mode \
         --truth-at reflection --gate-range-m 250 --chain-set 'elevation={}' --backend "$be" --sim-backend "$be" --cache "$cache" \

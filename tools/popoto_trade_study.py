@@ -55,7 +55,14 @@ BASE = {1: "popoto_face_1x32", 2: "popoto_face_2x32", 3: "popoto_face_3x32"}
 LENGTHS = (32, 64, 96)
 ROWS = (1, 2, 3)
 RANGE_M = 12000.0
-SHIPPED = {"band_hz": (4000.0, 6000.0), "pulse_s": 1.0, "source_level_db": 197.0}
+# The shipped transmitter: since D-256 (the owner, 2026-11-28) a HYPERBOLIC sweep of 2 s at 197 dB rms
+# (configs/sonars/popoto_long_range.yaml; tests/python/test_hfm_baseline.py holds the two together). Until then a 1 s LINEAR
+# sweep at 197 dB: FORMER below, the waveform the grid of sections 1 to 6 was run at (`--grid`, `--sensitivity`, `--coverage`:
+# their stored figures are of that waveform and stay reproducible from the JSON; the planner is waveform-blind, so a cell
+# differs from the 2 s hyperbolic sweep's only by the energy and the detector's window: section 0's `2 s 197 dB` column).
+SHIPPED = {"band_hz": (4000.0, 6000.0), "pulse_s": 2.0, "source_level_db": 197.0, "waveform": "hfm"}
+FORMER = {"band_hz": (4000.0, 6000.0), "pulse_s": 1.0, "source_level_db": 197.0, "waveform": "lfm"}
+FORMER_WORDS = "4-6 kHz, 1 s linear, 197 dB: the shipped waveform until D-256, at which the grid was run"
 # Band options (centre kept at 5 kHz). docs/design/projector_selection.md Sec. 1.2: "A narrower sweep is the fallback if no projector
 # covers the band ... A 1 kHz band (20%) needs Q <= 5"; the 4 kHz band (3-7 kHz) is inside the stated operating ranges of the Neptune
 # T335 ("3-8 kHz") and Massa TR-1075 ("2.5-10 kHz") of Sec. 3.1, but no level at 3 or 7 kHz is given there (Sec. 5 asks for the TVR
@@ -124,16 +131,19 @@ def git_head() -> str | None:
 
 # --- variants ------------------------------------------------------------------------------------------------
 
-def variant_spec(rows: int, per_row: int, band="2k", pulse_s: float = 1.0, source_level_db: float | None = None) -> dict:
+def variant_spec(rows: int, per_row: int, band="2k", pulse_s: float = 1.0, source_level_db: float | None = None, waveform: str = "lfm") -> dict:
     """A face build spec with `rows` rows of `per_row` hydrophones at the module's pitch, the band, pulse and source level
-    given; everything else is the shipped face build of that many rows. In memory only."""
+    given; everything else is the shipped face build of that many rows. In memory only. `waveform` (the spec's
+    `projector.waveform.type`): `lfm` by default, the sweep every stored grid of this study was run with; the planner is
+    waveform-blind but for the detector's template record (1e-4 dB between an `lfm` and an `hfm` of the same length), so the
+    stored figures stay reproducible to their printed digits and beyond since the shipped face became `hfm` (D-256)."""
     bs, _, _ = _imports()
     spec = copy.deepcopy(bs.load(BASE[rows]))
     spec["array"]["count"] = int(per_row)
     if int(per_row) != 32:
         spec["boards"]["clocks"] = {"seed": 1}          # the explicit list has one entry per shipped board; clocks do not touch the budget or the detector
     spec["projector"]["band_hz"] = [float(v) for v in BANDS[band]["band_hz"]]
-    spec["projector"]["waveform"] = dict(spec["projector"]["waveform"], duration_s=float(pulse_s))
+    spec["projector"]["waveform"] = dict(spec["projector"]["waveform"], type=str(waveform), duration_s=float(pulse_s))
     spec["projector"]["source_level_db_rms"] = float(PULSES.get(float(pulse_s), SHIPPED["source_level_db"]) if source_level_db is None else source_level_db)
     spec["build"] = f"trade_{rows}x{per_row}_{band}_{pulse_s:g}s_{spec['projector']['source_level_db_rms']:g}dB"
     return spec
@@ -765,6 +775,7 @@ def tx_options() -> list:
     for p, lv in sorted(set(opts), key=lambda o: (round(o[1] + 10.0 * np.log10(o[0]), 6), o[0])):
         out.append({"id": f"{p:g} s {lv:g} dB", "variant": variant_id(TX_GEOMETRY[0], TX_GEOMETRY[1], "2k", p, lv), "pulse_s": float(p), "source_level_db": float(lv),
                     "energy_db": float(lv + 10.0 * np.log10(p)), "shipped": bool(p == SHIPPED["pulse_s"] and lv == SHIPPED["source_level_db"]),
+                    "former_shipped": bool(p == FORMER["pulse_s"] and lv == FORMER["source_level_db"]),
                     "paired": bool((p, lv) == TX_PAIRED)})
     return out
 
@@ -986,7 +997,8 @@ def tx_requirement(T: dict) -> dict:
             return f"at none of sea states {TX_SEA_STATES[0]} to {TX_SEA_STATES[-1]}" if n is None else f"up to sea state {n}"
         out[o["id"]] = (f"With {o['id']} (4-6 kHz sweep; {o['energy_db']:.1f} dB re 1 uPa^2 s at 1 m a ping) the shipped 3 x 32 face holds 12 km against "
                         f"`large_submerged` and `ship` (each at the low end of its assumed target strength, detection probability 0.5 on one ping at the chain's false-alarm budget, "
-                        f"an echo with no radial speed: a mover needs the sweep bank on) in non-ducting deep water (no bottom return, isovelocity) {ss(n_bub)} with the "
+                        f"an echo with no radial speed: on a mover a linear sweep needs the sweep bank on, a hyperbolic sweep (the shipped one since D-256) loses 0.2 dB or less "
+                        f"at 8 m/s and reads it 3 T m nearer per m/s closing) in non-ducting deep water (no bottom return, isovelocity) {ss(n_bub)} with the "
                         f"{T.get('bubble_law')} bubble law ({ss(n_plain)} without it); at the illustrative sites' own conditions at {', '.join(held) if held else 'none'}"
                         + (f", not at {', '.join(not_held)}" if not_held else "") + ".")
     return out
@@ -1074,6 +1086,7 @@ def waveform_section(R: dict) -> list:
     W = T.get("waveforms")
     if not W:
         return []
+    tx_flags(T)
     opts, law = T["options"], T.get("bubble_law")
     per, least = W["per_option"], W["least_energy"]
     sh = next(o for o in opts if o["shipped"])["id"]
@@ -1086,9 +1099,9 @@ def waveform_section(R: dict) -> list:
     L = ["## 0a. The plain filter on a mover: linear against hyperbolic sweep (no sweep bank)", "",
          "The owner's baseline has every Doppler option off, so a moving target meets the plain matched filter. This section is **derived at `--report`** from the "
          "transmit grid above (`tx_waveforms`; no new planner run): each cell is the grid's margin less the closed-form PEAK loss of the waveform on a target closing "
-         f"at {' / '.join(sp)} m/s (the class's assumed speeds), for the shipped linear sweep (LFM) and a hyperbolic sweep (HFM: `transmit.waveform: {{type: sampled, "
+         f"at {' / '.join(sp)} m/s (the class's assumed speeds), for the linear sweep (LFM; shipped until D-256) and the hyperbolic sweep (HFM: `transmit.waveform: {{type: sampled, "
          "source: hfm}`, the same band, length, taper and level, so the same energy). Status: **ours** (closed forms held to direct correlation in "
-         "tests/python/test_doppler_bank.py and tests/python/test_hfm_doppler.py). No default moves: the shipped sweep stays linear; HFM is an option.", ""]
+         f"tests/python/test_doppler_bank.py and tests/python/test_hfm_doppler.py). **Since D-256 the shipped sweep is the HFM ({sh}).**", ""]
     worst = []
     for table, label in (("bubble_law", f"with the {law} law"), ("no_bubble_law", "without a bubble law")):
         never = [str(n) for n in TX_SEA_STATES if str(n) in least.get(table, {}) and least[table][str(n)]["lfm"][sp[-1]]["energy_db"] is None]
@@ -1100,7 +1113,7 @@ def waveform_section(R: dict) -> list:
     worst.append(f"**What the HFM costs: a range bias it cannot remove without a rate.** The plain filter reads an HFM echo closing at v nearer by f1 T / B per m/s "
                  f"({h['range_m_per_m_s']:.1f} m per m/s at the shipped {sh.split(' s ')[0]} s, i.e. 3 T at 4-6 kHz: "
                  + ", ".join(f"{o['id'].split(' s')[0]} s: {per[o['id']]['hfm']['range_error_m'][sp[-1]]:.0f} m" for o in opts if o["source_level_db"] == 197.0)
-                 + f" at {sp[-1]} m/s); the linear sweep's coupling is f_c T / B ({l_['range_m_per_m_s']:.1f} m per m/s at 1 s), and its peak is smeared besides. "
+                 + f" at {sp[-1]} m/s); the linear sweep's coupling is f_c T / B ({l_['range_m_per_m_s']:.1f} m per m/s at {sh.split(' s ')[0]} s), and its peak is smeared besides. "
                  "With no bank neither gives a range rate to correct it. Also: the HFM's energy density falls as 1 / f^2 across the band (2.6 dB from 4.25 to 5.75 kHz; "
                  "the projector's response across 4-6 kHz is not known), its compressed main lobe is 2 % wider and its first sidelobe 0.6 dB higher than the linear "
                  "sweep's (Tukey 0.1, unwindowed filter; test_hfm_doppler.py), and the sweep bank refuses it (it takes a linear sweep only).")
@@ -1115,7 +1128,7 @@ def waveform_section(R: dict) -> list:
             return "—"
         t = " / ".join(f"{x[c]:+.1f}" for c in TX_CLASSES)
         return f"**{t}**" if all(x[c] >= 0.0 for c in TX_CLASSES) else t
-    head = "| Sea state | Waveform, closing speed | " + " | ".join(f"{o['id']}{' (shipped)' if o['shipped'] else ''}: {o['energy_db']:.1f} dB" for o in opts) + " |"
+    head = "| Sea state | Waveform, closing speed | " + " | ".join(f"{o['id']}{_tag(o)}: {o['energy_db']:.1f} dB" for o in opts) + " |"
     sep = "| --- | --- | " + " | ".join("---" for _ in opts) + " |"
     for table, label in (("bubble_law", f"with the {law} bubble law"), ("no_bubble_law", "without a bubble law")):
         rows = W["deep"].get(table, {})
@@ -1229,17 +1242,32 @@ def deep12_doppler_text(M: dict) -> str:
             "linear sweep's loss through the chain is less than its closed form but grows with the speed.")
 
 
+def tx_flags(T: dict) -> None:
+    """The options' `shipped` / `former_shipped` flags from SHIPPED and FORMER (D-256 moved the shipped one after the grid ran:
+    the stored flags are the grid's; the report says what is shipped now)."""
+    for o in T.get("options", []):
+        o["shipped"] = bool(o["pulse_s"] == SHIPPED["pulse_s"] and o["source_level_db"] == SHIPPED["source_level_db"])
+        o["former_shipped"] = bool(o["pulse_s"] == FORMER["pulse_s"] and o["source_level_db"] == FORMER["source_level_db"])
+
+
+def _tag(o: dict) -> str:
+    return " (shipped, hyperbolic)" if o["shipped"] else " (shipped until D-256, linear)" if o.get("former_shipped") else ""
+
+
 def transmit_section(R: dict) -> list:
     """## 0: the transmit options by sea state, for the owner (the table first, then what each costs and where energy does not help)."""
     T = R.get("transmit")
     if not T:
         return []
+    tx_flags(T)
     opts, res, A = T["options"], T["grid"]["results"], T["answers"]
     ship_id = next(o["id"] for o in opts if o["shipped"])
     law = T.get("bubble_law")
     L = ["## 0. Transmit options by sea state (`--transmit`)", "",
          f"The owner, 2026-11-27: \"lets have options for the transmit in different sea states, like a table. you can keep the default we have now but lets make sure the trade study covers options.\" "
-         f"No default moves: the shipped transmitter ({ship_id}, 4-6 kHz) and every file stay as they are. Grid: `{T['command']}`, {T['date']}, tree `{T['git_head_when_run']}`. "
+         f"(When the grid ran no default moved.) **Since D-256 (the owner, 2026-11-28) the shipped transmitter is {ship_id}, a hyperbolic sweep (HFM), plain matched filter; until then "
+         f"{next(o['id'] for o in opts if o.get('former_shipped'))}, linear.** The planner is waveform-blind (the energy a ping and the detector's window), so every cell holds for either sweep "
+         f"at zero radial speed; what a mover costs each sweep is section 0a. Grid: `{T['command']}`, {T['date']}, tree `{T['git_head_when_run']}`. "
          f"Every figure is **ours** (the repository's model: `depthplan.plan` of the shipped {T['geometry']} face at the own depth it recommends for each option, worst over the class's depths, at the LOW end of its assumed strength, bound A); "
          "sites **illustrative**, target strengths **assumed**. Each cell: margin at 12 km, dB, `large_submerged` / `ship`; **bold** where both hold. A margin is for ONE ping and an echo with no radial speed "
          "(or the sweep bank on); what a mover costs the plain matched filter is in the second table.", ""]
@@ -1266,11 +1294,13 @@ def transmit_section(R: dict) -> list:
         if need:
             worst.append(f"**The least energy that holds both classes needs a level no single listed projector gives** ({label}): " + "; ".join(need)
                          + " (the projector column says what it would take; unconfirmed).")
+    fo = next(o for o in opts if o.get("former_shipped"))
     sh = next(o for o in opts if o["shipped"])
-    worst.append(f"**Without the sweep bank (the owner's baseline) a mover pays the plain matched filter's peak loss**, and it grows with the pulse as fast as the energy does: "
+    worst.append(f"**Without the sweep bank (every Doppler option is off in the baseline) a mover pays a LINEAR sweep's plain matched filter peak loss**, and it grows with the pulse as fast as the energy does: "
                  + "; ".join(f"{o['id']}: {o['costs']['mismatch_loss_db']['2']:.1f} / {o['costs']['mismatch_loss_db']['8']:.1f} dB at 2 / 8 m/s" for o in opts if o["source_level_db"] == 197.0)
-                 + f". Its tolerance c / (2 B T) is {sh['costs']['doppler_tolerance_m_s']:.3f} m/s at 1 s and {min(o['costs']['doppler_tolerance_m_s'] for o in opts):.3f} m/s at 8 s: "
-                 "**at every pulse length in the grid, the shipped 1 s included, the class's 2-8 m/s needs the bank** to keep the gain the table shows. "
+                 + f". Its tolerance c / (2 B T) is {fo['costs']['doppler_tolerance_m_s']:.3f} m/s at 1 s and {min(o['costs']['doppler_tolerance_m_s'] for o in opts):.3f} m/s at 8 s: "
+                 "**at every pulse length in the grid, the former shipped 1 s included, the class's 2-8 m/s needs the bank with a linear sweep**; the shipped hyperbolic sweep (D-256) "
+                 "needs none (section 0a: 0.2 dB or less at 8 m/s at every length; its cost is a range bias). "
                  "This is the closed form for the PEAK (the planner's statistic); the chain's multiscale detector sums cells and lost less on the one measured hull (docs/tasks/DOPPLER.md LS.3: "
                  "bank off, closing at -5.61 m/s with a 1 s sweep, 3.4 dB under the crossing target; the bank gave back +0.8 dB net). "
                  + ("Longer pulses through the chain: measured (section 0a's last paragraph)." if deep12_measured() else "Longer pulses through the chain are not measured."))
@@ -1293,7 +1323,7 @@ def transmit_section(R: dict) -> list:
             return "—"
         t = " / ".join(f"{r[c]['margin_db']:+.1f}" for c in TX_CLASSES)
         return f"**{t}**" if all(r[c]["margin_db"] >= 0.0 for c in TX_CLASSES) else t
-    head = "| Sea state (wind) | " + " | ".join(f"{o['id']}{' (shipped)' if o['shipped'] else ''}{' (option B pairing)' if o['paired'] else ''}: {o['energy_db']:.1f} dB" for o in opts) + " | Least energy holding both |"
+    head = "| Sea state (wind) | " + " | ".join(f"{o['id']}{_tag(o)}{' (option B pairing)' if o['paired'] else ''}: {o['energy_db']:.1f} dB" for o in opts) + " | Least energy holding both |"
     sep = "| --- | " + " | ".join("---" for _ in opts) + " | --- |"
     from gpusonar import acoustics
     for table, suffix, label in (("bubble_law", f"__{law}", f"with the {law} bubble law (as `{TX_BUBBLE_SITE}` states it)"), ("no_bubble_law", "", "without a bubble law (as `deep_no_bottom_return` states)")):
@@ -1377,14 +1407,14 @@ def transmit_section(R: dict) -> list:
     for o in opts:
         hs = A["highest_sea_state"]
         ok_s = [s for s in eb if all((((res.get(f"{s}__as_stated") or {}).get(o["id"]) or {}).get(c) or {}).get("margin_db", -1e9) >= 0.0 for c in TX_CLASSES)]
-        L.append(f"| {o['id']}{' (shipped)' if o['shipped'] else ''} | {o['energy_db']:.1f} | {_ss(hs.get('bubble_law', {}).get(o['id']))} | {_ss(hs.get('no_bubble_law', {}).get(o['id']))} | "
+        L.append(f"| {o['id']}{_tag(o)} | {o['energy_db']:.1f} | {_ss(hs.get('bubble_law', {}).get(o['id']))} | {_ss(hs.get('no_bubble_law', {}).get(o['id']))} | "
                  f"{', '.join(ok_s) or 'none'} | {', '.join(s for s in eb if s not in ok_s) or 'none'} |")
     L.append("")
     M12 = deep12_measured()
     if M12:
         L += deep12_table(M12)
     else:
-        L += ["**Not run.** No transmit option other than the shipped 1 s was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item "
+        L += ["**Not run.** No transmit option other than the 1 s linear sweep (shipped until D-256) was run through the simulator and the chain: a 4 s or 8 s sweep scene at 12 km is a GPU-job item "
               "(the CPU here took 27 min for six 1 s pings of `popoto_12km_large_submerged`, DOPPLER.md LS.1 item 8). The command, once the evaluation tool takes a sonar override "
               "(follow-up): `python3 tools/doppler_bank_eval.py popoto_12km_large_submerged --combine cfar --max-rate 8 --truth-at reflection --gate-range-m 100` with "
               "`sonar_overrides.transmit.waveform.duration: 4.0` (and the window opening at 3 km).", ""]
@@ -1487,7 +1517,7 @@ def lead(R: dict) -> list:
         rev = [s for s in miss if (res.get(ship, {}).get(s) or {}).get("classes", {}).get(c, {}).get("A", {}).get("limited_by") == "reverberation"]
         ceil = [s for s in miss if ((res.get(ship, {}).get(s) or {}).get("classes", {}).get(c, {}).get("A", {}).get("reverberation_only_ceiling_db") or 1.0) < 0.0]
         if miss:
-            t = (f"**`{c}`: 12 km is NOT met by the shipped 3 x 32 at {len(miss)} of {len(sites)} sites** ({', '.join(miss)}). ")
+            t = (f"**`{c}`: 12 km is NOT met by the shipped 3 x 32 at the grid's 1 s linear sweep at {len(miss)} of {len(sites)} sites** ({', '.join(miss)}). ")
             if never:
                 t += (f"At {', '.join(never)} **no variant in the grid reaches it**, under either rows bound, with the sweep bank and a baffle"
                       + (f"; only the Doppler-resolving tone (a mover with radial speed of {CREDITS['tone']['min_radial_m_s']:g} m/s or more, and a transmitter that sends a tone outside the sweep's band) does at {', '.join(tone_only)}" if tone_only else "")
@@ -1514,12 +1544,12 @@ def lead(R: dict) -> list:
             bad.append(t)
         if held:
             worst = min(held, key=lambda s: per[s]["shipped_3x32"]["A"]["margin_db"])
-            good.append(f"`{c}`: met by the shipped 3 x 32 at {len(held)} of {len(sites)} sites; the least margin {per[worst]['shipped_3x32']['A']['margin_db']:+.1f} dB at {worst} "
+            good.append(f"`{c}`: met by the shipped 3 x 32 at the grid's 1 s linear sweep at {len(held)} of {len(sites)} sites; the least margin {per[worst]['shipped_3x32']['A']['margin_db']:+.1f} dB at {worst} "
                         f"({per[worst]['shipped_3x32']['A']['limited_by']}-limited).")
     out = ["**The answer, worst first.**", ""] + [f"- {t}" for t in bad] + [f"- {t}" for t in good]
     # how many hydrophones: per class, per site, the smallest geometry at the shipped waveform that holds 12 km
     geo = A.get("smallest_geometry", {})
-    hyd = ["", "**How many hydrophones** (shipped waveform: 4-6 kHz, 1 s, 197 dB; own depth planned for each; the smallest geometry that holds 12 km, bound A / bound B):", ""]
+    hyd = ["", f"**How many hydrophones** (the grid's waveform: {FORMER_WORDS}; own depth planned for each; the smallest geometry that holds 12 km, bound A / bound B):", ""]
     order = [f"{r}x{n}" for r, n in sorted(((r, n) for r in ROWS for n in LENGTHS), key=lambda t: (t[0] * t[1], t[0]))]
     for c in [c["name"] for c in R.get("classes", [])]:
         parts_ = []
@@ -1531,7 +1561,7 @@ def lead(R: dict) -> list:
                 pick.append(k or "none")
             parts_.append(f"{s}: {pick[0]} / {pick[1]}")
         hyd.append(f"- `{c}`: " + "; ".join(parts_) + ".")
-    hyd += ["", "*none* = no row length (32, 64, 96) and no row count (1, 2, 3) at the shipped waveform holds it; the smallest change with the waveform, "
+    hyd += ["", "*none* = no row length (32, 64, 96) and no row count (1, 2, 3) at the grid's waveform holds it; the smallest change with the waveform, "
             "source level and credits as well is in the table *Where it is not met*. Only 32 a row fits the face at the same pitch.", ""]
     sens = (R.get("sensitivity") or {}).get("results") or {}
     if sens:
@@ -1571,7 +1601,7 @@ def transmitter_section(R: dict) -> list:
             for k, x in row.items():
                 if k.startswith(("A", "B")) and isinstance(x, dict) and x.get("smallest"):
                     cands.setdefault(x["smallest"], set()).add(f"{c} at {s} ({k})")
-    cands.setdefault(variant_id(3, 32, "2k", 1.0, 197.0), set()).add("the shipped design")
+    cands.setdefault(variant_id(3, 32, "2k", 1.0, 197.0), set()).add("the design as shipped until D-256 (1 s linear)")
     L = ["## 6a. What each candidate design asks of the transmitter", "",
          "The owner (2026-11-26): \"We can [do] whatever is possible with a transducer and board and software we need to choose to go along with the popoto\". "
          "So band, level, pulse, duty and waveform are design variables; the rows below are REQUIREMENTS a projector and its drive must meet, computed from each "
@@ -1673,7 +1703,9 @@ def report(R: dict) -> str:
          "reverberation term off. *Ceiling* = the margin with infinite source level (reverberation alone): where it is below 0, no source level closes 12 km.", "",
          REQUIREMENT, ""] + lead(R) + transmit_section(R) + waveform_section(R) + ["## 1. The answer in tables", ""]
     # 1a: the shipped design per class and site
-    L += ["### Is 12 km met by the shipped design (3 x 32, 4-6 kHz, 1 s, 197 dB)?", "",
+    L += ["### Is 12 km met by the shipped design (3 x 32) at the grid's waveform (4-6 kHz, 1 s linear, 197 dB: shipped until D-256)?", "",
+          "The grid below was run at the former 1 s linear sweep; the shipped 2 s hyperbolic sweep (D-256) carries 3 dB more energy and opens the window at 1.5 km: "
+          "its margins at every site are section 0's `2 s 197 dB` column (the planner is waveform-blind), and the depth plan (`docs/design/popoto_depth_planner.json`) is of it.", "",
           "| Site (all illustrative) | " + " | ".join(f"{c}: A / B / noise-only (limit; ceiling A)" for c in classes) + " |", "| --- | " + " | ".join("---" for _ in classes) + " |"]
     for s in sites:
         r = (res.get(ship, {}).get(s) or {})
@@ -1713,7 +1745,7 @@ def report(R: dict) -> str:
             L.append(f"| {c} | {s} | {cell('A')} | {cell('B')} | {cell('A+sweep_bank')} | {cell('A+baffle')} | {cell('A+bank_and_baffle')} | {cell('A+tone')} |")
     L.append("")
     # 1c: hydrophones
-    L += ["### How many hydrophones", "", "At the shipped waveform (4-6 kHz, 1 s, 197 dB), each geometry, the sites at which 12 km is met (bound A / bound B):", "",
+    L += ["### How many hydrophones", "", f"At the grid's waveform ({FORMER_WORDS}), each geometry, the sites at which 12 km is met (bound A / bound B):", "",
           "| Geometry | Hydrophones | Fits the face | " + " | ".join(classes) + " |", "| --- | --- | --- | " + " | ".join("---" for _ in classes) + " |"]
     geo = A.get("smallest_geometry", {})
     for r_ in ROWS:
@@ -1730,7 +1762,7 @@ def report(R: dict) -> str:
     sens = (R.get("sensitivity") or {}).get("results")
     if sens:
         L += ["### Sensitivity to the illustrative site values", "", f"`{R['sensitivity']['command']}`: each site's Lambert value +-3 dB and wind one sea state either side, "
-              "every geometry at the shipped waveform. Margin at 12 km, bound A, for 1x32 / 3x32 / 3x96 (and whether any geometry's met/not-met changes against the site as shipped):", "",
+              "every geometry at the grid's waveform (1 s linear, shipped until D-256). Margin at 12 km, bound A, for 1x32 / 3x32 / 3x96 (and whether any geometry's met/not-met changes against the site as shipped):", "",
               "| Site | Perturbation | " + " | ".join(classes) + " | Answer changes? |", "| --- | --- | " + " | ".join("---" for _ in classes) + " | --- |"]
         for s, per in sens.items():
             if "skipped" in per:
@@ -1779,7 +1811,7 @@ def report(R: dict) -> str:
     L += ["", "Processing options (credits, applied on top): " + "; ".join(f"**{k}**: {v['applies_to']} ({v['source']}; {v['status']})" for k, v in CREDITS.items()) + ".", ""]
     # 3: per site tables
     L += ["## 3. The grid, site by site", "", "Each cell: A / B / noise-only margin at 12 km (dB), then the limiting term under A and the reach under A (km) where 12 km is not met. "
-          "Rows: geometry at the shipped waveform, then one change at a time on the 3 x 32 face.", ""]
+          "Rows: geometry at the grid's waveform (1 s linear, shipped until D-256), then one change at a time on the 3 x 32 face.", ""]
     for s in sites:
         L += [f"### {s}: {titles.get(s, '')}", ""]
         if g.get("skipped", {}).get(s):
@@ -1962,6 +1994,7 @@ def main(argv=None) -> int:
         if R.get("grid"):
             R["answers"] = answers(R["grid"], R.get("classes") or classes)          # from the grid as it stands (the rule may be newer than the run)
         if R.get("transmit"):                                                    # the same for the transmit table
+            tx_flags(R["transmit"])                                              # which option is shipped now (D-256), not when the grid ran
             R["transmit"]["answers"] = tx_answers(R["transmit"])
             R["transmit"]["requirement"] = tx_requirement(R["transmit"])
             R["transmit"]["waveforms"] = tx_waveforms(R["transmit"])           # LFM against HFM on a mover, no bank (section 0a)

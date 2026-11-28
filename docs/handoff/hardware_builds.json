@@ -642,7 +642,7 @@
     4000.0,
     6000.0
    ],
-   "pulse_s": 1.0,
+   "pulse_s": 2.0,
    "source_level_db_rms": 197.0,
    "sample_rate_hz": 102400.0,
    "adc_bits": 24,
@@ -662,21 +662,21 @@
     "volts": 33.6125,
     "over_full_scale_db": 22.1972,
     "over_full_scale_farthest_db": 10.6563,
-    "ends_s": 1.0042,
-    "min_range_memoryless_m": 753.1625,
+    "ends_s": 2.0042,
+    "min_range_memoryless_m": 1503.1625,
     "source_level_for_full_scale_db": 174.8028,
     "distance_for_full_scale_m": 21.5712
    },
-   "blind_range_m": 750.0,
+   "blind_range_m": 1500.0,
    "window_m": [
-    750.0,
+    1500.0,
     12700.0
    ],
-   "ping_interval_s": 17.933,
+   "ping_interval_s": 18.933,
    "samples_per_ping": 1733974,
    "reference_times_s": [
-    1.005,
-    17.91933333333333
+    2.005,
+    18.91933333333333
    ],
    "rate_board_bit_s": 19660800.0,
    "rate_total_bit_s": 78643200.0,
@@ -690,8 +690,8 @@
     "socket_buffer_asked_bytes": 8388608
    },
    "record_bytes_per_ping": 221948672,
-   "record_bytes_per_hour_raw": 44554752000.0,
-   "record_bytes_per_hour_decimated": 5241762736.05948,
+   "record_bytes_per_hour_raw": 42201508056.33803,
+   "record_bytes_per_hour_decimated": 4964909070.422535,
    "recording_mode": "raw",
    "clock_tolerance_within_row_us": 8.33,
    "clock_tolerance_between_rows_us": null,
@@ -711,30 +711,30 @@
     "needs_for_0p9_db": 17.4,
     "false_alarms_per_ping": 0.001
    },
-   "reach_ship_m": 11468,
-   "reach_small_m": 4675,
+   "reach_ship_m": 12928,
+   "reach_small_m": 5414,
    "noise_spectrum_db": 51.5,
    "assumptions": "spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 15.8 dB of one row's SNR (17.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small)",
    "at_range": {
     "1000": {
-     "row_snr_ship_db": 64.9,
-     "margin_ship_db": 49.2,
+     "row_snr_ship_db": 68.0,
+     "margin_ship_db": 52.2,
      "pd_ship": 1.0,
-     "margin_small_db": 29.2,
+     "margin_small_db": 32.2,
      "pd_small": 1.0
     },
     "12000": {
-     "row_snr_ship_db": 14.6,
-     "margin_ship_db": -1.1,
-     "pd_ship": 0.22,
-     "margin_small_db": -21.1,
+     "row_snr_ship_db": 17.6,
+     "margin_ship_db": 1.9,
+     "pd_ship": 0.94,
+     "margin_small_db": -18.1,
      "pd_small": 0.0
     },
     "12700": {
-     "row_snr_ship_db": 13.2,
-     "margin_ship_db": -2.6,
-     "pd_ship": 0.05,
-     "margin_small_db": -22.6,
+     "row_snr_ship_db": 16.2,
+     "margin_ship_db": 0.5,
+     "pd_ship": 0.64,
+     "margin_small_db": -19.5,
      "pd_small": 0.0
     }
    },
@@ -833,7 +833,7 @@
     4000.0,
     6000.0
    ],
-   "pulse_s": 1.0,
+   "pulse_s": 2.0,
    "source_level_db_rms": 197.0,
    "sample_rate_hz": 102400.0,
    "adc_bits": 24,
@@ -853,21 +853,21 @@
     "volts": 30.6776,
     "over_full_scale_db": 21.4036,
     "over_full_scale_farthest_db": 10.5956,
-    "ends_s": 1.0042,
-    "min_range_memoryless_m": 753.1847,
+    "ends_s": 2.0042,
+    "min_range_memoryless_m": 1503.1847,
     "source_level_for_full_scale_db": 175.5964,
     "distance_for_full_scale_m": 21.5712
    },
-   "blind_range_m": 750.0,
+   "blind_range_m": 1500.0,
    "window_m": [
-    750.0,
+    1500.0,
     12700.0
    ],
-   "ping_interval_s": 17.933,
+   "ping_interval_s": 18.933,
    "samples_per_ping": 1733974,
    "reference_times_s": [
-    1.005,
-    17.91933333333333
+    2.005,
+    18.91933333333333
    ],
    "rate_board_bit_s": 19660800.0,
    "rate_total_bit_s": 157286400.0,
@@ -881,8 +881,8 @@
     "socket_buffer_asked_bytes": 9830400
    },
    "record_bytes_per_ping": 443897344,
-   "record_bytes_per_hour_raw": 89109504000.0,
-   "record_bytes_per_hour_decimated": 10483525472.11896,
+   "record_bytes_per_hour_raw": 84403016112.67606,
+   "record_bytes_per_hour_decimated": 9929818140.84507,
    "recording_mode": "raw",
    "clock_tolerance_within_row_us": 8.33,
    "clock_tolerance_between_rows_us": 0.87,
@@ -909,30 +909,30 @@
     "needs_for_0p9_db": 14.8,
     "false_alarms_per_ping": 0.001
    },
-   "reach_ship_m": 12682,
-   "reach_small_m": 5287,
+   "reach_ship_m": 14240,
+   "reach_small_m": 6103,
    "noise_spectrum_db": 51.5,
    "assumptions": "spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 13.2 dB of one row's SNR with 2 rows added (14.8 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small)",
    "at_range": {
     "1000": {
-     "row_snr_ship_db": 64.9,
-     "margin_ship_db": 51.7,
+     "row_snr_ship_db": 68.0,
+     "margin_ship_db": 54.7,
      "pd_ship": 1.0,
-     "margin_small_db": 31.7,
+     "margin_small_db": 34.7,
      "pd_small": 1.0
     },
     "12000": {
-     "row_snr_ship_db": 14.6,
-     "margin_ship_db": 1.4,
-     "pd_ship": 0.87,
-     "margin_small_db": -18.6,
+     "row_snr_ship_db": 17.6,
+     "margin_ship_db": 4.4,
+     "pd_ship": 1.0,
+     "margin_small_db": -15.6,
      "pd_small": 0.0
     },
     "12700": {
-     "row_snr_ship_db": 13.2,
-     "margin_ship_db": -0.0,
-     "pd_ship": 0.49,
-     "margin_small_db": -20.0,
+     "row_snr_ship_db": 16.2,
+     "margin_ship_db": 3.0,
+     "pd_ship": 0.99,
+     "margin_small_db": -17.0,
      "pd_small": 0.0
     }
    },
@@ -1041,7 +1041,7 @@
     4000.0,
     6000.0
    ],
-   "pulse_s": 1.0,
+   "pulse_s": 2.0,
    "source_level_db_rms": 197.0,
    "sample_rate_hz": 102400.0,
    "adc_bits": 24,
@@ -1061,21 +1061,21 @@
     "volts": 33.3754,
     "over_full_scale_db": 22.1357,
     "over_full_scale_farthest_db": 10.5956,
-    "ends_s": 1.0042,
-    "min_range_memoryless_m": 753.1847,
+    "ends_s": 2.0042,
+    "min_range_memoryless_m": 1503.1847,
     "source_level_for_full_scale_db": 174.8643,
     "distance_for_full_scale_m": 21.5712
    },
-   "blind_range_m": 750.0,
+   "blind_range_m": 1500.0,
    "window_m": [
-    750.0,
+    1500.0,
     12700.0
    ],
-   "ping_interval_s": 17.933,
+   "ping_interval_s": 18.933,
    "samples_per_ping": 1733974,
    "reference_times_s": [
-    1.005,
-    17.91933333333333
+    2.005,
+    18.91933333333333
    ],
    "rate_board_bit_s": 19660800.0,
    "rate_total_bit_s": 235929600.0,
@@ -1089,8 +1089,8 @@
     "socket_buffer_asked_bytes": 14745600
    },
    "record_bytes_per_ping": 665846016,
-   "record_bytes_per_hour_raw": 133664256000.0,
-   "record_bytes_per_hour_decimated": 15725288208.178438,
+   "record_bytes_per_hour_raw": 126604524169.01408,
+   "record_bytes_per_hour_decimated": 14894727211.267605,
    "recording_mode": "raw",
    "clock_tolerance_within_row_us": 8.33,
    "clock_tolerance_between_rows_us": 0.87,
@@ -1117,30 +1117,30 @@
     "needs_for_0p9_db": 13.4,
     "false_alarms_per_ping": 0.001
    },
-   "reach_ship_m": 13417,
-   "reach_small_m": 5668,
+   "reach_ship_m": 15031,
+   "reach_small_m": 6531,
    "noise_spectrum_db": 51.5,
    "assumptions": "spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.8 dB of one row's SNR with 3 rows added (13.4 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small)",
    "at_range": {
     "1000": {
-     "row_snr_ship_db": 64.9,
-     "margin_ship_db": 53.2,
+     "row_snr_ship_db": 68.0,
+     "margin_ship_db": 56.2,
      "pd_ship": 1.0,
-     "margin_small_db": 33.2,
+     "margin_small_db": 36.2,
      "pd_small": 1.0
     },
     "12000": {
-     "row_snr_ship_db": 14.6,
-     "margin_ship_db": 2.9,
-     "pd_ship": 0.99,
-     "margin_small_db": -17.1,
+     "row_snr_ship_db": 17.6,
+     "margin_ship_db": 5.9,
+     "pd_ship": 1.0,
+     "margin_small_db": -14.1,
      "pd_small": 0.0
     },
     "12700": {
-     "row_snr_ship_db": 13.2,
-     "margin_ship_db": 1.4,
-     "pd_ship": 0.87,
-     "margin_small_db": -18.6,
+     "row_snr_ship_db": 16.2,
+     "margin_ship_db": 4.4,
+     "pd_ship": 1.0,
+     "margin_small_db": -15.6,
      "pd_small": 0.0
     }
    },
