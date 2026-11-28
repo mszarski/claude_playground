@@ -49,7 +49,7 @@ value, the file and key, the code that reads it, and how to confirm it.
 | 10 | One clock: board capture time and navigation time are assumed to be the same time base. The transmit time is capture start plus sample index over the nominal rate, so a 25 ppm board clock moves it 90 ms an hour against true time (section 6.4; tested since D-185: 0.18 m of pose at 2 m/s). A configured rate takes it out (`clock_ppm`, default 0); the rates are not measured. Boards on free-running clocks also drift apart: 50 ppm apart leaves the synchronisation search (2 ms) 40 s after capture start unless their rates are configured or captures restart | the pose and attitude taken for each ping; tracks that drift with ownship | VA-4, VA-11 |
 | 11 | The navigation unit: named by the owner (SPRINT-Nav); no datasheet or interface document seen. Message, rate, time base, latency and accuracy are unknown. The mapping is a template (`configs/nav/sprintnav_template.yaml`). The test AUV's unit is not named | pose, roll in every elevation, water depth, local sound speed | S-6, VA-10 to VA-13, VA-15 |
 | 12 | The lever arm and mounting rotation from the navigation unit to the array are zero until surveyed (D-167). The array's velocity is not corrected for the lever arm | array position; a constant bias in every bearing and elevation | VA-14 |
-| 13 | Rows on the face: with the 2 s baseline one row has +1.9 dB at 12 km (detection probability 0.94 on one ping; with the 1 s sweep it was 1.1 dB short, 0.22), a point echo in noise; two rows cannot tell elevations 11.5° apart | how many boards and hydrophones are bought | S-1 |
+| 13 | Rows on the face: with the 2 s baseline one row has +1.9 dB at 12 km (detection probability 0.94 on one ping; with the 1 s sweep it was 1.1 dB short, 0.22), a point echo in noise; two rows cannot tell elevations 11.5° apart. **Depth does not justify a third row at 12 km, as shown:** three rows buy one elevation angle instead of a list and 1.5 dB of detection (`docs/DESIGN.md`); measured (D-266), the deployed three-row depth is dishonest in 100 m of water at 1 to 2 km and, with the deployed gradient prior, cannot tell a submerged target from a ship beyond about 2 km (2400 m of sigma at 12 km); with the water known it tells 300 m from the surface to 12 km from own depth 225 m, 30 m only to 2 km | how many boards and hydrophones are bought | S-1 |
 | 14 | Row pitch 0.15 m is 0.60 wavelengths at 6 kHz: no grating lobe only within ±42° of broadside, while every deployment file steers to ±60° (a validator warning on five of six builds) | false bearings beyond ±42° at the top of the band | S-31; issue `sonar-68e` |
 | 15 | The static frame: size, hanging depth, tilt sensor or not, projector on the frame or apart, cabling, where the compute sits | builds 2 and 3 | S-5 |
 | 16 | Sound speed and water depth sensing: which sensors, where they sit, their accuracy. The sound-speed sensor is taken to sit at the navigation unit | beamforming, depth, the elevation search sector | S-6, S-9 |
@@ -250,7 +250,7 @@ through `base:` (D-127). Build spec fields are in `configs/builds/<build>.yaml`;
 | # | Assumption, value | Status, source | File and key | Consumed by | If wrong | Confirm by |
 | --- | --- | --- | --- | --- | --- | --- |
 | H1 | The platform measures the local sound speed and sends it in the navigation datagram; the sensor sits at the navigation unit | the owner states the vehicle measures it; the sensor, its place and accuracy unknown (`sonar-vjq`). No default accuracy exists (D-129) | datagram `sound_speed`; else `chain.sound_speed`; record `environment/sound_speed` (the local value, D-111) | beamforming and the angle at the array; the profile ladder | bearing and range scale; the `built` rung refuses to work without an accuracy | the sensor's datasheet; a cast |
-| H2 | No sound-speed profile along the path: a mean gradient 0.017 /s (isothermal) known to ±0.05 /s | ours, placeholders, flagged; the owner: no long-range profile | deployment `chain.elevation.gradient_per_s`, `gradient_sigma_per_s`; build spec `sound_speed.rung: gradient_prior` | the depth sigma: range² × sigma / 2c (2400 m at 12 km) | depth in metres beyond a few hundred metres | S-9; an optional dive or cast |
+| H2 | No sound-speed profile along the path: a mean gradient 0.017 /s (isothermal) known to ±0.05 /s | ours, placeholders, flagged; the owner: no long-range profile | deployment `chain.elevation.gradient_per_s`, `gradient_sigma_per_s`; build spec `sound_speed.rung: gradient_prior` | the depth sigma: range² × sigma / 2c (48 m at 1.7 km, 2400 m at 12 km): measured (D-266), with it the rows tell no target of the class from the surface beyond about 2 km | depth in metres beyond a few hundred metres; whether depth tells a submerged target from a ship beyond 2 km | S-9 (a source that needs no dive: `docs/STATUS.md` question 72); an optional dive or cast |
 | H3 | Water depth: from the Doppler log's altitude plus depth on the vehicle, typed on the frame; known to 5 m | ours (the owner: "some idea of water depth"); flagged | datagram `altitude`, `bottom_lock`, `water_depth`; `nav.water_depth: {source: altitude}`; `chain.elevation.water_depth`, `water_depth_sigma_m` | the elevation search sector, folding of bottom bounces; two rows need it to choose among their candidates | two rows stay ambiguous; bottom-bounce depths | the echo sounder or chart |
 
 ### I. Data link
@@ -336,8 +336,10 @@ variant (every board on its own clock, for rehearsals), a deployment file and si
 through both engines. The self-tests are not part of the test suite; all six builds passed them, 42 of 42 on
 both engines, at D-142 and D-143 with the 1 s sweep (`docs/STATUS.md`, milestone 14). **With the 2 s baseline
 (D-262) two fail** (not loosened): the three-row rehearsal's depth honesty at 1.7 km (28 m, 35 m and none for 60 m
-true; the geometry the blind range forces, `sonar-9035`) and the one- and two-row "free" range check, which misses
-3 m by about 0.06 m (the leading edge about 3.0 m early with a 2 s pulse, `sonar-8h09`); the three-row "free" range
+true; the geometry the blind range forces; D-266 found it the deployed depth's dishonesty in shallow water, F1,
+`sonar-4e2h`) and the one- and two-row "free" range check, -3.06 m and -3.31 m against its 3 m limit (D-264: the
+offset depends on the echo's SNR, not on the pulse length; with the opt-in `cfar.range_edge_correction: pulse` both
+pass, within 0.06 m; by default they fail); the three-row "free" range
 check compares with the truth displaced by the predicted bias. The trials' near target moved from 1000 m to
 1700 m, outside the 1.5 km blind range. `hardware_builds.json` still evaluates the face builds `at_range` 1000 m,
 inside it.
@@ -523,7 +525,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.4 `popoto_face_1x32` (stage 4: full face, 1 x 32)
 
-**At risk:** Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km one row has +1.9 dB of margin: a detection probability of 0.94 on one ping (−1.1 dB, 0.22, with the 1 s sweep); at the far end of its own 12.7 km window +0.5 dB (0.64). Its self-test's 3 m range check misses by about 0.06 m with the 2 s pulse (D-262, `sonar-8h09`). No elevation.
+**At risk:** Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km one row has +1.9 dB of margin: a detection probability of 0.94 on one ping (−1.1 dB, 0.22, with the 1 s sweep); at the far end of its own 12.7 km window +0.5 dB (0.64). Its self-test's 3 m range check fails with the 2 s pulse: -3.06 m against the 3 m limit (D-264; the offset is set by the echo's SNR, not the pulse length); it passes with the opt-in `cfar.range_edge_correction: pulse` (within 0.06 m; `sonar-82nx`). No elevation.
 
 **For:** The face to start with: one long row on the vehicle with the vehicle's navigation and the projector in its place (what the direct sound does); the 12 km detection.
 
@@ -571,7 +573,7 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.5 `popoto_face_2x32` (stage 5: full face, 2 x 32)
 
-**At risk:** Two rows are ambiguous in deep water at short range (a list of angles, not a depth). Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km the margin is +4.4 dB (+1.4 dB with the 1 s sweep); at the far end of the window +3.0 dB (zero with the 1 s sweep). Its self-test's 3 m range check misses by about 0.06 m with the 2 s pulse (D-262, `sonar-8h09`).
+**At risk:** Two rows are ambiguous in deep water at short range (a list of angles, not a depth). Blind inside 1.5 km with the 2 s baseline (D-262). At 12 km the margin is +4.4 dB (+1.4 dB with the 1 s sweep); at the far end of the window +3.0 dB (zero with the 1 s sweep). Its self-test's 3 m range check fails with the 2 s pulse: -3.31 m against the 3 m limit (D-264; D-262's "about 0.06 m" was the one-row build's miss); it passes with the opt-in `cfar.range_edge_correction: pulse` (`sonar-82nx`).
 
 **For:** Elevation on the vehicle where water is shallow against the range: attitude at each echo's arrival, the list of possible elevation angles and the water-depth bound that reduces it to one, under way.
 
@@ -619,9 +621,9 @@ Both are drawn by `tools/build_diagrams.py` from the sonar and deployment files.
 
 ### 4.6 `popoto_face_3x32` (stage 6: full face, 3 x 32)
 
-**At risk:** Depth at 12 km is not knowable in metres without a sound-speed profile along the path (±2400 m from the gradient prior alone); roll accuracy (0.2° assumed) is 42 m of depth there; with the 2 s baseline no depth at 12 km is measured, and its rehearsal's depth check fails at 1.7 km (D-262, `sonar-9035`); blind inside 1.5 km. The 12-board synchronisation, the projector and the direct sound are as in section 1.
+**At risk:** **The deployed depth states wrong depths confidently in shallow water** (D-266 F1, `docs/tasks/DEPTH_RANGE.md`): in 100 m of water from own depth 30 m dishonest on 22 of 28 depths at 1 to 2 km; a ship 4 m deep at 1.7 km reads 95.7 +- 27.4 m and is called submerged on 4 of 4 pings; not fixed (`sonar-4e2h`, the owner's: it moves a default); its rehearsal's depth check fails at 1.7 km for that reason. **As deployed, depth cannot tell a submerged target from a ship at 12 km**: ±2400 m from the gradient prior alone (48 m at 1.7 km); roll accuracy (0.2° assumed) is 42 m of depth there; the 1.5 m aperture separates the direct and surface paths only for a target deeper than a tenth of the range. With the water known, from own depth 225 m in deep water, the rows tell 30 m from the surface to 2 km, 60 m to 5 km, 150 m to 8 km, 300 m to 12 km. Blind inside 1.5 km (the opt-in short-range mode of D-265 sees inside it at 82 % of the long update rate; the projector's and receiver's part unconfirmed). The 12-board synchronisation, the projector and the direct sound are as in section 1.
 
-**For:** The recommended end state: everything, at range. One elevation angle instead of a list, and 1.5 dB of detection over two rows.
+**For:** The recommended end state: everything, at range. One elevation angle instead of a list, and 1.5 dB of detection over two rows. Depth from the rows is shown at about 1 km (the trials below) and, with the water known, from a deep own depth out to the ranges above; a case for three rows from depth at 12 km is not shown (D-266).
 
 Files: `configs/builds/popoto_face_3x32.yaml` (spec), `configs/sonars/popoto_long_range_3row.yaml`, `configs/sonars/popoto_long_range_3row_clocks.yaml`, `configs/deploy/popoto_vehicle_elevation.yaml`; row module `configs/builds/modules/long_4p8m.yaml`.
 
@@ -699,7 +701,8 @@ rig's first hardware-run checklist is `docs/HOLOSCAN_NOTES.md` section 11.
 holds the resolved hull at 12 km at the deep site only thinly, and is blind inside 1.5 km** (D-262; simulator and
 both chain engines on an L4, `popoto_12km_deep_sea_state_5` at sea state 3 with the apl_1994 bubble law, one seed,
 6 pings; illustrative site, assumed class values). Worse with it: nothing inside 1.5 km (c T / 2; 0.75 km at 1 s);
-no depth at 12 km measured (the elevation scenes keep the 1 s sweep); two face self-checks fail (section 4); a
+depth at 12 km measured since (D-266): as deployed it cannot tell a submerged target from a ship there, and in
+shallow water at 1 to 2 km it is dishonest; two face self-checks fail (section 4); a
 mover's range reads 6 m per m/s off, with no range rate; the projector (via secondary): no sheet states the longest
 pulse at that drive, the TR-1075A has 0.1 dB to spare at 6 kHz, the T335 drops out; its 1 / f² spectrum on a
 projector whose response across 4-6 kHz is not known (`docs/STATUS.md` question 61). Measured from its own

@@ -13,12 +13,25 @@ of every other document).
 described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
 Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU, 12
 (propagation and reverberation) as far as open literature allows (audited 2026-11-25), and
-the CUDA backend has been run and benchmarked on rented GPUs. **Since D-262 (merged
+the CUDA backend has been run and benchmarked on rented GPUs. **Worst first, since the tenth merge (D-264 to
+D-267): the deployed stacked-row depth estimate states wrong depths confidently in shallow water** (D-266 F1,
+`docs/tasks/DEPTH_RANGE.md`; simulation): a ship 4 m deep at 1.7 km in 100 m of water reads 95.7 +- 27.4 m and is
+called submerged on 4 of 4 pings; the depth is dishonest (the truth more than 2 sigma off) on 22 of 28 depths at
+1 to 2 km there. Not fixed (issue `sonar-4e2h`): the fix moves a default and waits on the owner; five strict
+expected-failure tests hold it. **And as deployed, depth cannot tell a submerged target from a ship at 12 km**: the
+sound-speed gradient prior adds 2400 m of sigma there (48 m at 1.7 km), and the rows' 1.5 m aperture separates the
+direct and surface paths only for a target deeper than a tenth of the range. The rows' depth was shown to work at
+about 1 km with the short pulse in the geometry of the elevation scenes, and, with the water known, from a deep own
+depth (225 m) out to 2 km for a 30 m target and 12 km for 300 m; a case for the three-row face from depth at 12 km
+is not shown. Also merged, opt-in: a pulse-referenced leading-edge range (D-264: the offset depends on the echo's
+SNR, not the pulse length; the face builds' range self-check passes with it and still fails by default) and a
+short-range mode (D-265: a 0.25 s ping after each 2 s ping, seeing inside 1.5 km, at 18 % of the long update rate;
+the short ping's echoes in the next long window are not simulated). **Since D-262 (merged
 with the ninth batch, D-263) the 12 km long-range baseline is a 2 s hyperbolic sweep at 197 dB with the plain
 filter** (the owner's decision, D-256). Worst first, what it cost: nothing is seen inside 1.5 km (0.75 km
-before); the three elevation scenes keep the 1 s linear sweep (targets at about 1 km), so no depth at 12 km has
-been measured; two of the face builds' self-checks fail (the three-row rehearsal's depth at 1.7 km; the one- and
-two-row 3 m range check, by about 0.06 m) and one's criterion changed; a mover's range reads 6 m per m/s of range
+before); the three elevation scenes keep the 1 s linear sweep (targets at about 1 km); two of the face builds'
+self-checks fail (the three-row rehearsal's depth at 1.7 km, which is D-266's F1; the one- and two-row 3 m range
+check, -3.06 / -3.31 m by D-264) and one's criterion changed; a mover's range reads 6 m per m/s of range
 rate off, with no range rate; on the regenerated gallery the winter-sand ship's track moved from 2.8 to 9.3 m from
 its outline and the deep-silt scene lost a confirmed track; no projector sheet states the longest pulse at that
 drive (via secondary); the simulator is 5 to 17 times slower on a CPU. What it holds, measured through the
@@ -28,18 +41,19 @@ the oblique hull detected but not tracked in D-260's run); not at sea state 4; s
 transmitter not yet identified; the summer mud's shadow is held by neither design. On the reverberation-limited
 12 km shelf scene the hulls give 9.84 to 12.61 dB, all tracked as movers. The 1 s linear sweep it replaced held
 neither the closing nor the oblique hull nor the ship at the deep site (0 of 6, D-260). The planner's margins
-are the model's, for an unresolved, non-moving target. Started and not merged (branches `depthrange`,
-`rangeedge`, `shortmode`): the depth estimate against range, the leading-edge range offset, a short-range mode.
+are the model's, for an unresolved, non-moving target. Nothing is on a side branch (D-267).
 The long-range design is honest about where it stands in its budget too: by the planner one long row at 197 dB
 has +1.9 dB at 12 km on the chain's own detector with the 2 s pulse (free field, the ship-sized target; -1.1 dB
 with the 1 s pulse); the 12 km requirement is for
 `large_submerged` first and `ship` second (the owner, 2026-11-26), and by the planner three rows hold it for
 both in free field but not at two of the six illustrative sites (`docs/DESIGN.md`, POP-3, "partly met"; since
 D-260 the cell also states what was measured, since D-262 with the 2 s baseline), depth at range is limited by what is known of the sound-speed
-profile, and two stacked rows at 3 km in shallow water read the surface or the sea bed
-(the depth sigma now says so). The full GPU suite last ran on the ninth batch's tree, decision D-262, as three
-jobs on an NVIDIA L4 (3507 passed, 124 skipped, 4 xfailed, none failed; Hugging Face jobs 6b0a8a766c5d61fff18bd22e,
-6b0a8a766c5d61fff18bd232, 6b0a8a7754072e8b716cb7a3; D-263; the slowest shard 60 minutes of tests; the first run on
+profile, two stacked rows at 3 km in shallow water read the surface or the sea bed
+(the depth sigma says so), and three rows in 100 m of water at 1 to 2 km give dishonest depths (D-266, above). The
+full GPU suite last ran on the tenth batch's tree, decision D-267, as three jobs on an NVIDIA L4 (3567 passed, 126
+skipped, 9 xfailed, none failed; Hugging Face jobs 6b0aaa8054072e8b716d27fd, 6b0aaa8054072e8b716d27ff,
+6b0aaa816c5d61fff18c3ede; the five more expected failures are D-266's; before it, D-263: 3507 passed, 124 skipped,
+4 xfailed; the slowest shard 60 minutes of tests; the first run on
 the eighth batch had failed 3 tests in its new files, fixed with the records unchanged, D-260), the opt-in
 3-D propagation tier and the slow Bellhop3D checks included; the first suite on the fifth batch had
 failed 4 tests, because new device code had made two programs built from one library disagree in the
@@ -117,8 +131,9 @@ default sound for records under 0.5 s (the owner, 2026-11-27).
 - **A long-range chain for a towed or hull-mounted line array** (`libs/live`, in C++ and
   mirrored in Python): board synchronisation, beamforming (backprojection, far-field,
   MVDR, sparse Bayesian bearings), a detector with a stated false-alarm budget, tracking,
-  classification, a report per ping. For two or three stacked rows: elevation and depth.
-  Depth from the timing of the surface echo. Rays through the sound-speed profile the
+  classification, a report per ping. For two or three stacked rows: elevation and depth
+  (shown at about 1 km; dishonest in 100 m of water at 1 to 2 km and uninformative beyond about 2 km as
+  deployed, D-266). Depth from the timing of the surface echo (opt-in, in no shipped build). Rays through the sound-speed profile the
   vehicle holds. A coverage picture (where it can and cannot detect). Passive bearings
   and tonal analysis (Goertzel lines, DEMON). The same program runs on a simulation, a
   recording, an emulated board over UDP, and as Holoscan operators.
@@ -237,6 +252,8 @@ tools/direct_sound_study.py                                 # the projector's di
 tools/popoto_12km_study.py                                  # the 12 km design point through the chain (needs Bellhop)
 tools/coverage_map.py --build popoto_face_1x32 --environment shelf_100m_sand --own-depth 50   # where a build can detect (prints; --json, --figure to write)
 tools/multipath_depth_study.py; tools/refraction_depth_study.py --bellhop   # depth from the surface echo; depth against profile knowledge
+tools/depth_range_sweep.py --physics                       # the closed forms of depth against range on the three-row face (docs/tasks/DEPTH_RANGE.md)
+tools/short_range_study.py --no-bellhop                    # the short-range mode's model figures, the sites with a profile skipped (docs/design/short_range_mode.md)
 tools/ssp_range_study.py; tools/fjord_rehearsal.py          # water that changes with range; a trial in fjord-type water
 tools/nav_adapter.py --help                                 # a vendor's navigation stream to the chain's datagrams
 tools/tonal_range_study.py                                  # passive detection range of a tonal (model figures; prints only)
@@ -276,7 +293,7 @@ Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto
 | `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
 | `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
 | `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
-| `configs/sonars`, `configs/scenarios` | named sonars and the 100 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 102 scenarios (`docs/SCENARIOS.md` lists every one) |
 | `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
 | `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
 | `tools/` | study, design, validation and benchmark programs (listed above) |

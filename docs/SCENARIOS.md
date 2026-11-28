@@ -1192,16 +1192,26 @@ decides); the other shallow scenarios still state one far below what that rule w
 | `popoto_env_summer_mud_60m` | Gallery. At 4 km under a summer thermocline over mud: not detected. Needs Bellhop. |
 | `popoto_env_gravel_30m` | Gallery. At 3 km in 30 m over gravel. Needs Bellhop. Keeps arrivals by energy: 64, the cap (14 % left out; D-137). |
 | `popoto_env_deep_silt_1000m` | Gallery. At 10 km in 1000 m over silt. Needs Bellhop. |
-| `popoto_short_range_mode` | The short-range mode (opt-in; `docs/design/short_range_mode.md`): the shipped 2 s hyperbolic sweep (blind inside 1.5 km) alternating with the same sweep cut to 0.25 s (blind inside 187.5 m), stated in `sonar_overrides.short_range`; free field and ambient noise; a ship-sized mover at 12 km, a still +10 dB object at 800 m and a +10 dB mover opening from 1300 m at 4 m/s; ten pings, long and short in turn. Measured (ours, both engines, the same report): the near object on 5 of 5 short pings and tracked; the mover one track across 1.5 km from both kinds; the ship on 5 of 5 long pings, its detections the baseline's to the printed digit; without the block the near object is in no record. `tests/python/test_short_range_mode.py`. |
+| `popoto_short_range_mode` | The short-range mode (opt-in; `docs/design/short_range_mode.md`): the shipped 2 s hyperbolic sweep (blind inside 1.5 km) alternating with the same sweep cut to 0.25 s (blind inside 187.5 m), stated in `sonar_overrides.short_range`; free field and ambient noise; a ship-sized mover at 12 km, a still +10 dB object at 800 m and a +10 dB mover opening from 1300 m at 4 m/s; ten pings, long and short in turn. Measured (ours, both engines, the same report): the near object on 5 of 5 short pings and tracked; the mover one track across 1.5 km from both kinds; the ship on 5 of 5 long pings, its detections the baseline's to the printed digit; without the block the near object is in no record. `tests/python/test_short_range_mode.py`. Worse or not shown (D-265): the mode costs the long mode 18 % of its update rate; the simulator makes each ping on its own, so the short ping's echoes from beyond 3 km in the next long window are not simulated (the scene is free field; a reverberating site with the mode is not run); no device run. |
 
 ### Stacked rows: elevation and depth
+
+**What these scenes show, and what they do not (D-266, `docs/tasks/DEPTH_RANGE.md`).** They show the stacked rows'
+depth at about 1 km with a short pulse (the 1 s sweep by override, or the short-range mode's 0.25 s pings), in
+their own geometry. They are not a measurement against range. Measured against range with the face's deployed
+chain, the depth is **dishonest in 100 m of water at 1 to 2 km** (22 of 28 depths; a ship 4 m deep at 1.7 km reads
+95.7 +- 27.4 m and is called submerged on 4 of 4 pings; even at 1 km a 60 m target reads 70.4 +- 3.5 m), and **as
+deployed it cannot tell a submerged target from a ship at 12 km** (the gradient prior: 2400 m of sigma there). With
+the water known, from own depth 225 m in deep water, the rows tell 30 m from the surface to 2 km and 300 m to 12 km.
+`popoto_elevation_shallow`'s 50 m target at 1 km is held by its test only to within 10 m
+(`tests/python/test_elevation.py`). Not fixed: `sonar-4e2h`.
 
 | Scenario | What it is |
 | --- | --- |
 | `popoto_elevation_free` | Three rows on the face, rolled 3 degrees, three targets near 1 km above, level with and below the vehicle, free field: the reported depths must be the targets'. Keeps the 1 s linear sweep by stated override since D-262 (the 2 s baseline sees nothing inside 1.5 km). |
 | `popoto_elevation_shallow` | Three rows at 30 m in 100 m of water over sand, a target at 50 m depth 1 km away; image-source multipath to second order. The 1 s linear sweep by stated override since D-262. |
 | `popoto_elevation_rehearsal` | The full stacked-row system as it would run: raw 102.4 kHz samples on twelve boards with their own clocks, the vehicle rolled and rolling, a deep and a shallow target near 1 km. Chain: `configs/deploy/popoto_elevation_rehearsal.yaml`. The 1 s linear sweep by stated override since D-262. |
-| `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes, and the depth sigma now says so (`STATUS.md`, open item 6). |
+| `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes, and the depth sigma now says so (`STATUS.md`, open item 6). Without `elevation` the two engines disagree on it (C++ 2 detections, Python 1; found by D-264, not fixed, `sonar-hygi`). |
 | `popoto_elevation_short_range` | `popoto_elevation_free`'s three targets near 1 km with the shipped 2 s sweep and the short-range mode (the same sweep at 0.25 s in turn): the targets are inside the long pulse's blind range, the short pings give each its depth within 2 m in both engines. |
 
 ### The staged builds: trials in open water

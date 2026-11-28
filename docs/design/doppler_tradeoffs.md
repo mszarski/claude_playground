@@ -11,7 +11,9 @@ where it is recorded. "GPU 2026-11-27" marks numbers from that day's L4 runs tha
   first: nothing is seen inside 1.5 km (0.75 km before); a mover's range reads 6 m per m/s of range rate off, which the
   plain filter cannot correct; no range rate from the sweep (the bank takes a linear sweep only, and `range_doppler:
   ownship | full` is now refused on a sampled pulse in both engines, where it applied 0 silently); the elevation scenes
-  keep the 1 s linear sweep, so no depth at 12 km is measured; two face self-checks fail. Measured from its own
+  keep the 1 s linear sweep, so no depth at 12 km was measured then (measured since, D-266: as deployed the stacked rows'
+  depth cannot tell a submerged target from a ship at 12 km, and in 100 m of water at 1 to 2 km it is dishonest;
+  `docs/tasks/DEPTH_RANGE.md`); two face self-checks fail (one passes with the opt-in range correction of D-264). Measured from its own
   configuration (one seed, 6 pings, L4): at the deep site at sea state 3 every target 6 of 6, the resolved hulls by
   +1.28 / +0.73 dB (thin); sea state 4 not held; sea state 5 nothing held; on the 12 km shelf 9.84 / 10.0 / 12.61 dB,
   all tracked as movers (the 1 s linear sweep 7.98 / 9.22 / 11.41 dB). **The "Plain sweep (default)" column below

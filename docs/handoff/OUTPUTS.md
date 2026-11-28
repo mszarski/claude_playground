@@ -1,7 +1,7 @@
 # What the system produces today
 
 Part of the handoff set ([README](README.md)). This page shows the outputs as they stand at
-decision D-181 (the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245, D-250 and D-254 the same day, to D-261 on 2026-11-28 and to D-263 the same day; the gallery was regenerated whole at the ninth batch's tree with the 2 s hyperbolic long-range baseline, D-262, and its long-range tables re-read from `gallery.json` at D-263): the gallery pictures, the scene pages and chain views of the visualization (section 1.11, D-248, D-253), the headline numbers with their sources, what a
+decision D-181 (the text was brought to D-201 on 2026-11-26, to D-229 and D-234 the same day, to D-240 on 2026-11-27 and to D-245, D-250 and D-254 the same day, to D-261 on 2026-11-28 and to D-263 and D-267 the same day; the gallery was regenerated whole at the ninth batch's tree with the 2 s hyperbolic long-range baseline, D-262, and its long-range tables re-read from `gallery.json` at D-263): the gallery pictures, the scene pages and chain views of the visualization (section 1.11, D-248, D-253), the headline numbers with their sources, what a
 live-chain report looks like, and how to make each of them again.
 
 **Everything on this page is simulated.** No picture, track or timing here comes from a
@@ -362,7 +362,8 @@ Left: the first ping's range-bearing map with truth circled and detections cross
 - 100 m of isovelocity water over sand carries about 14 dB more each way than spherical
   spreading: this scene has margin the link budget does not count, and other waters do
   not (1.9).
-- The depth of the ship cannot be read at 12 km (section 2.1).
+- The depth of the ship cannot be read at 12 km (section 2.1); as deployed, depth cannot tell a submerged target
+  from a ship there (D-266).
 
 ![popoto_far_mover](../figures/popoto_far_mover.png)
 
@@ -532,10 +533,19 @@ is recorded only there (not in `RESULTS.md`, and with no committed JSON); that i
 
 ### 2.1 Detection at the 12 km design point
 
-**What is wrong first: the 12 km baseline since D-262, a 2 s hyperbolic sweep at 197 dB with the plain filter,
+**What is wrong first: depth (D-266, `docs/tasks/DEPTH_RANGE.md`, `docs/tasks/depth_range_sweep.json`; simulation
+through both engines).** The deployed stacked-row depth is dishonest in 100 m of water at 1 to 2 km (22 of 28
+depths; a ship 4 m deep at 1.7 km reads 95.7 +- 27.4 m and is called submerged on 4 of 4 pings) and, as deployed,
+cannot tell a submerged target from a ship at 12 km: the gradient prior gives a sigma of 2400 m there. With the water
+known, from own depth 225 m in deep water, the rows tell 300 m from the surface to 12 km and 30 m only to 2 km. Not
+fixed (`sonar-4e2h`). The GPU grid with the 2 s sweep (job 6b0aaa826c5d61fff18c3ee2) agrees, by D-266; its tables
+are not committed.
+
+**Then: the 12 km baseline since D-262, a 2 s hyperbolic sweep at 197 dB with the plain filter,
 holds the resolved hull at the deep site only thinly, and costs range.** Nothing is seen inside 1.5 km (0.75 km
-with the 1 s pulse); no depth at 12 km is measured (the elevation scenes keep the 1 s sweep); two face self-checks
-fail (the three-row rehearsal's depth at 1.7 km; the one- and two-row 3 m range check by about 0.06 m); a mover's
+with the 1 s pulse; the opt-in short-range mode of D-265 sees inside it); depth against range measured since (D-266,
+above); two face self-checks fail (the three-row rehearsal's depth at 1.7 km, D-266's F1; the one- and two-row 3 m
+range check, -3.06 / -3.31 m by D-264, which passes with the opt-in `cfar.range_edge_correction: pulse`); a mover's
 range reads 6 m per m/s off, with no range rate. Measured from its own configuration (D-262; L4, one seed, 6 pings;
 illustrative site, assumed class values): at sea state 3 with the apl_1994 bubble law every target 6 of 6, closing
 hull +1.28 dB, crossing +5.13, point +6.12, ship +6.26, the oblique hull +0.73 dB as D-260's `ss3_hfm2` (detected
@@ -549,9 +559,10 @@ crossing), all tracked as movers (D-262; 7.98 / 9.22 / 11.41 with the 1 s sweep,
 `docs/tasks/doppler_large_submerged_eval.json`). Then: with the 2 s baseline one row of 32 hydrophones has +1.9 dB
 at 12 km (detection probability 0.94 on one ping; -1.1 dB and 0.22 with the 1 s sweep). The target strength (+25 dB) is a placeholder, the source
 level (197 dB) is of a projector not yet chosen, and the boards are used an octave below
-their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 12 km is
-not measured: with three rows it reads 8 to 35 m for a true 4 m (D-160), and the depth
-sigma there is 2960 to 3010 m (`RESULTS.md`, "The 12 km study, rerun").
+their specified band (`STATUS.md`, owner questions 2 to 4). The ship's depth at 12 km in
+the 12 km study: with three rows it reads 8 to 35 m for a true 4 m (D-160), and the depth
+sigma there is 2960 to 3010 m (`RESULTS.md`, "The 12 km study, rerun"); D-266's sweep gives the deployed sigma at
+12 km as 2401 m (`DEPTH_RANGE.md` DR.2).
 
 **The table below is noise-only** (`SonarEquation` without `reverberation_db`: a free-field budget
 has no site and nothing to scatter): it is optimistic wherever reverberation dominates. At the builds' site
