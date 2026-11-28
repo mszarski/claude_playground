@@ -12,6 +12,8 @@ sonar: popoto_long_range_3row
 fidelity: image_source
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 8.0e+3, window: {range: [700.0, 1300.0]}}
+  transmit:
+    waveform: {type: lfm, source: null, duration: 1.0e+0}   # D-256: the shipped sonar sends a 2 s hyperbolic sweep, blind inside 1.5 km; this scene shows the rows' elevation at 1 km, so it keeps the former 1 s linear sweep (blind inside 0.75 km), stated here
 environment: {base: coastal_12c_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0

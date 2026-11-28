@@ -30,19 +30,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 QUICK_SET = ["--set", "fidelity=free_field", "--set", "reverberation=[]"]
+# D-256: popoto_long_range sends a 2 s hyperbolic sweep since; the committed bank and margin runs on popoto_12km were made with its
+# former 1 s linear sweep (and the bank takes a linear sweep only): their commands state it.
+LFM1 = ("--set sonar_overrides.transmit.waveform.type=lfm --set sonar_overrides.transmit.waveform.source=null "
+        "--set sonar_overrides.transmit.waveform.duration=1.0")
 
 # file -> [(part key in the file, regen json name, command (the committed one), quick variant)]
 #   the part key: "scenes.popoto_12km" is d["scenes"]["popoto_12km"]; "runs.k12_scene" is d["runs"]["k12_scene"] ({command, result})
 STALE = {
     "docs/tasks/doppler_bank_eval.json": [
         ("scenes.popoto_far_mover", "bank_popoto_far_mover", "tools/doppler_bank_eval.py popoto_far_mover --background 4", None),
-        ("scenes.popoto_12km", "bank_popoto_12km", "tools/doppler_bank_eval.py popoto_12km --background 4",
-         "tools/doppler_bank_eval.py popoto_12km --pings 1 --background 1 --engines cpp --max-rate 0.3 " + " ".join(QUICK_SET)),
+        ("scenes.popoto_12km", "bank_popoto_12km", "tools/doppler_bank_eval.py popoto_12km --background 4 " + LFM1,
+         "tools/doppler_bank_eval.py popoto_12km --pings 1 --background 1 --engines cpp --max-rate 0.3 " + " ".join(QUICK_SET) + " " + LFM1),
     ],
     "docs/tasks/doppler_d3_eval.json": [
         ("cfar_scenes.popoto_far_mover", "d3_cfar_popoto_far_mover", "tools/doppler_bank_eval.py popoto_far_mover --combine cfar --background 4", None),
-        ("cfar_scenes.popoto_12km", "d3_cfar_popoto_12km", "tools/doppler_bank_eval.py popoto_12km --combine cfar --background 4",
-         "tools/doppler_bank_eval.py popoto_12km --combine cfar --pings 1 --background 1 --engines cpp --max-rate 0.3 " + " ".join(QUICK_SET)),
+        ("cfar_scenes.popoto_12km", "d3_cfar_popoto_12km", "tools/doppler_bank_eval.py popoto_12km --combine cfar --background 4 " + LFM1,
+         "tools/doppler_bank_eval.py popoto_12km --combine cfar --pings 1 --background 1 --engines cpp --max-rate 0.3 " + " ".join(QUICK_SET) + " " + LFM1),
         ("tone_p12", "d3_tone_p12", "tools/doppler_tone_eval.py popoto_12km_doppler --background 4", None),
     ],
     "docs/tasks/doppler_large_submerged_eval.json": [
@@ -58,8 +62,8 @@ STALE = {
         ("runs.fp_v15_lfm", "baseline_fp_v15_lfm", "tools/doppler_study.py margin flank_patrol --waveform scene --platform-speed 1.5 --target small_vehicle --radial -2 0.5 2 --pings 2 --vmax 4", None),
         ("runs.fm_scene", "baseline_fm_scene", "tools/doppler_study.py margin popoto_far_mover --waveform scene --pings 2 --vmax 3", None),
         ("runs.fm_cwhann", "baseline_fm_cwhann", "tools/doppler_study.py margin popoto_far_mover --waveform cw_hann --pings 6 --vmax 3", None),
-        ("runs.k12_scene", "baseline_k12_scene", "tools/doppler_study.py margin popoto_12km --waveform scene --pings 2 --vmax 3", None),
-        ("runs.k12_cwhann", "baseline_k12_cwhann", "tools/doppler_study.py margin popoto_12km --waveform cw_hann --pings 6 --vmax 3", None),
+        ("runs.k12_scene", "baseline_k12_scene", "tools/doppler_study.py margin popoto_12km --waveform scene --pings 2 --vmax 3 " + LFM1, None),
+        ("runs.k12_cwhann", "baseline_k12_cwhann", "tools/doppler_study.py margin popoto_12km --waveform cw_hann --pings 6 --vmax 3 " + LFM1, None),
         ("runs.sp_scene", "baseline_sp_scene", "tools/doppler_study.py margin sst_pursuit --waveform scene --pings 3 --vmax 25", None),
         ("runs.rs_mono", "baseline_rs_mono", "tools/doppler_study.py reverb-spectrum --speed 3", "tools/doppler_study.py reverb-spectrum --speed 3"),
         ("runs.rs_bi", "baseline_rs_bi", "tools/doppler_study.py reverb-spectrum --speed 3 --geometry bistatic", None),
